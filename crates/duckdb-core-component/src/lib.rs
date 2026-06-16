@@ -9,6 +9,19 @@ use std::slice;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
+/// Diagnostic logging that never aborts the component. The core runs as a
+/// reactor component whose host may not wire `wasi:cli/stderr`; the std
+/// `eprintln!` macro panics on a failed write, which would abort DuckDB
+/// mid-query. This swallows write errors instead.
+macro_rules! clog {
+    ($($arg:tt)*) => {{
+        use std::io::Write;
+        let _ = writeln!(std::io::stderr(), $($arg)*);
+    }};
+}
+
+pub(crate) use clog;
+
 mod bindings;
 mod extension_loader;
 
@@ -162,7 +175,7 @@ mod wasi_fs {
         let mut attempts = Vec::new();
 
         let direct = normalize_path(path).ok_or(ResolveError::EscapeSandbox)?;
-        eprintln!("[wasi-fs] resolve start path='{path}' normalized='{direct}'");
+        clog!("[wasi-fs] resolve start path='{path}' normalized='{direct}'");
         if direct.starts_with(':') {
             return Err(ResolveError::NotFound);
         }
@@ -204,7 +217,7 @@ mod wasi_fs {
         }
 
         if let Some((descriptor, relative, _, normalized)) = best_match {
-            eprintln!("[wasi-fs] resolved path '{path}' -> preopen relative='{relative}' normalized='{normalized}'");
+            clog!("[wasi-fs] resolved path '{path}' -> preopen relative='{relative}' normalized='{normalized}'");
             Ok(ResolvedPath {
                 descriptor,
                 relative_path: relative,
@@ -455,9 +468,9 @@ mod libc_overrides {
             }
         };
 
-        eprintln!("[wasi-fs] open path='{path_str}' flags=0x{flags:x}");
+        clog!("[wasi-fs] open path='{path_str}' flags=0x{flags:x}");
 
-        eprintln!("[wasi-fs] open path={path_str} flags={flags:#x}");
+        clog!("[wasi-fs] open path={path_str} flags={flags:#x}");
 
         let open_request = match wasi_fs::translate_open_flags(flags) {
             Ok(req) => req,
@@ -2373,24 +2386,24 @@ pub extern "C" fn duckdb_component_load_extension(name: *const c_char) -> bool {
     let extension_name = unsafe { CStr::from_ptr(name) }
         .to_string_lossy()
         .to_string();
-    eprintln!(
+    clog!(
         "[duckdb-core] requesting host load for '{}'",
         extension_name
     );
     let handled = bindings::duckdb::component::host_extension_loader::request_load(&extension_name);
     if !handled {
-        eprintln!(
+        clog!(
             "[duckdb-core] host declined extension '{}'; falling back to native path",
             extension_name
         );
         return false;
     }
-    eprintln!(
+    clog!(
         "[duckdb-core] host reported '{}' ready; fetching pending registrations",
         extension_name
     );
     let pending = extension_loader_hooks::get_pending_registrations();
-    eprintln!(
+    clog!(
         "[duckdb-core] '{}' pending registrations: scalars={}, tables={}, aggregates={}",
         extension_name,
         pending.scalars.len(),
@@ -2400,7 +2413,7 @@ pub extern "C" fn duckdb_component_load_extension(name: *const c_char) -> bool {
     match process_pending_registrations(&extension_name, pending) {
         Ok(()) => true,
         Err(err) => {
-            eprintln!("failed to register functions for extension {extension_name}: {err}");
+            clog!("failed to register functions for extension {extension_name}: {err}");
             false
         }
     }
@@ -2419,7 +2432,7 @@ fn process_pending_registrations(
     pending: extension_loader_hooks::PendingRegistrations,
 ) -> Result<(), Duckerror> {
     if pending.scalars.is_empty() && pending.tables.is_empty() && pending.aggregates.is_empty() {
-        eprintln!("[duckdb-core] no registrations returned for '{extension}'");
+        clog!("[duckdb-core] no registrations returned for '{extension}'");
     }
     for entry in pending.scalars.into_iter().collect::<Vec<_>>() {
         register_pending_scalar(entry)?;
@@ -2439,7 +2452,7 @@ fn register_pending_scalar(
     let arg_summary = summarize_loader_funcargs(&entry.arguments);
     let return_ty = describe_loader_logicaltype(&entry.returns);
     let option_summary = summarize_loader_funcopts(entry.options.as_ref());
-    eprintln!(
+    clog!(
         "[duckdb-core] registering scalar '{}' (callback={}, args={}, returns={}, opts={})",
         entry.name, entry.callback_handle, arg_summary, return_ty, option_summary
     );
@@ -2479,7 +2492,7 @@ fn register_pending_table(
     let arg_summary = summarize_loader_funcargs(&entry.arguments);
     let column_summary = summarize_loader_columns(&entry.columns);
     let option_summary = summarize_loader_extopts(entry.options.as_ref());
-    eprintln!(
+    clog!(
         "[duckdb-core] registering table '{}' (callback={}, args={}, columns={}, opts={})",
         entry.name, entry.callback_handle, arg_summary, column_summary, option_summary
     );
@@ -2531,7 +2544,7 @@ fn register_pending_aggregate(
     let arg_summary = summarize_loader_funcargs(&entry.arguments);
     let return_ty = describe_loader_logicaltype(&entry.returns);
     let option_summary = summarize_loader_funcopts(entry.options.as_ref());
-    eprintln!(
+    clog!(
         "[duckdb-core] registering aggregate '{}' (callback={}, args={}, returns={}, opts={})",
         entry.name, entry.callback_handle, arg_summary, return_ty, option_summary
     );

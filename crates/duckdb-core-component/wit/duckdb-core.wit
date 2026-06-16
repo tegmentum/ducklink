@@ -6,6 +6,8 @@ use duckdb:extension/runtime;
 use duckdb:extension/types;
 use duckdb:extension/callback-dispatch;
 use wasi:cli/environment@0.2.6;
+use wasi:cli/stdout@0.2.6;
+use wasi:cli/stderr@0.2.6;
 use wasi:filesystem/preopens@0.2.6;
 use wasi:io/streams@0.2.6;
 
@@ -132,6 +134,8 @@ interface extension-loader-hooks {
 
 world libduckdb {
     import wasi:cli/environment@0.2.6;
+    import wasi:cli/stdout@0.2.6;
+    import wasi:cli/stderr@0.2.6;
     import wasi:filesystem/preopens@0.2.6;
     import wasi:filesystem/types@0.2.6;
     import wasi:io/streams@0.2.6;

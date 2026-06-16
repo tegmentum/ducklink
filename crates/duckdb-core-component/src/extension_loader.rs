@@ -68,7 +68,7 @@ pub fn record_extension_registration(
     let wasm_path = locator.resolve(name);
     let capability_summary = summarize_capabilities(requires);
     let artifact_path = wasm_path.display().to_string();
-    eprintln!(
+    crate::clog!(
         "[duckdb-core] register_extension metadata request: name='{name}', requires={capability_summary}, artifact={artifact_path}"
     );
     let mut guard = registry()
@@ -77,17 +77,17 @@ pub fn record_extension_registration(
     if let Some(existing) = guard.iter_mut().find(|entry| entry.name == name) {
         if existing.requires.as_slice() != requires {
             let previous = summarize_capabilities(&existing.requires);
-            eprintln!(
+            crate::clog!(
                 "[duckdb-core] updating capabilities for '{name}': {previous} -> {capability_summary}"
             );
         } else {
-            eprintln!(
+            crate::clog!(
                 "[duckdb-core] '{name}' already registered with identical capabilities; refreshing entry"
             );
         }
         existing.requires = requires.to_vec();
     } else {
-        eprintln!(
+        crate::clog!(
             "[duckdb-core] recorded new extension '{name}' with artifact {artifact_path}"
         );
         guard.push(RegistryEntry {

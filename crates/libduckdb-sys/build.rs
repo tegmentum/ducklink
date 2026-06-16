@@ -25,6 +25,11 @@ fn main() {
     let lib_dst = out_dir.join("libduckdb.a");
     fs::copy(lib_src, &lib_dst).expect("Failed to copy libduckdb static library into OUT_DIR");
 
+    // Rebuild when the prebuilt archive (or the var pointing at it) changes,
+    // otherwise cargo keeps bundling a stale copy of libduckdb into the rlib.
+    println!("cargo:rerun-if-env-changed=DUCKDB_STATIC_LIB");
+    println!("cargo:rerun-if-changed={}", lib_src.display());
+
     println!("cargo:rustc-link-search=native={}", out_dir.display());
     println!("cargo:rustc-link-lib=static=duckdb");
     println!("cargo:rustc-link-arg=-Wl,--start-group");

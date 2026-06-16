@@ -28,32 +28,43 @@ rebuilt.
   world imports `catalog`/`files` and fails to instantiate (the host must
   satisfy every world import).
 
-## The blocker
+## The archive blocker — RESOLVED (2026-06)
 
-Rebuilding the core component against the 7-variant WIT requires recompiling
-`duckdb-core-component`, which links `artifacts/libduckdb-wasi.a`. The current
-archive (rebuilt 2025-11-10) is incomplete:
+Rebuilding the core component requires recompiling `duckdb-core-component`,
+which links `artifacts/libduckdb-wasi.a`. The 2025-11-10 archive was incomplete:
 
 ```
 rust-lld: error: ub_duckdb_main.cpp.obj: undefined symbol: _ZTVN6duckdb8HTTPUtilE
 ```
 
-`make_shared<duckdb::HTTPUtil>` is instantiated in the archive, but the
-translation unit that emits `HTTPUtil`'s vtable (its key function) is not
-included — so the vtable symbol is undefined. `llvm-nm artifacts/libduckdb-wasi.a`
-shows `U _ZTVN6duckdb8HTTPUtilE`.
+Root cause: the WASI toolchain sets `DUCKDB_SKIP_HTTP ON`
+(`cmake/toolchains/wasi-sdk.cmake`), which excludes `src/main/http/http_util.cpp`
+(the TU that emits `HTTPUtil`'s vtable) — but core DuckDB still constructed an
+`HTTPUtil` at `src/main/database.cpp:53` (`http_util = make_shared_ptr<HTTPUtil>()`),
+referencing the now-missing vtable.
 
-The working core wasm currently shipped in
-`target/wasm32-wasip2/release/duckdb_core_component.wasm` (2025-11-08) was built
-against an older, complete archive and uses the 5-variant model.
+Fix applied:
+- `cmake/toolchains/wasi-sdk.cmake`: add `-DDUCKDB_SKIP_HTTP` to the C/CXX flags.
+- `external/duckdb/src/main/database.cpp`: guard the construction with
+  `#ifndef DUCKDB_SKIP_HTTP` so `http_util` stays null when HTTP is skipped.
+- `crates/libduckdb-sys/build.rs`: add `rerun-if-changed`/`rerun-if-env-changed`
+  on `DUCKDB_STATIC_LIB` so cargo stops bundling a stale archive into the rlib.
 
-## To unblock
+The archive now rebuilds cleanly (`llvm-nm` shows no `_ZTVN6duckdb8HTTPUtilE`
+reference) and `duckdb-core-component` links and runs. A second issue surfaced
+and was fixed at the same time: the core is a reactor component whose host does
+not wire `wasi:cli/stderr`, so std `eprintln!` aborted DuckDB mid-load — core
+logging now goes through a non-panicking `clog!` macro (see `src/lib.rs`).
 
-1. Rebuild the static archive: `scripts/build-libduckdb-wasm.sh` (ensure the TU
-   defining `duckdb::HTTPUtil` is compiled in, or stop instantiating it for the
-   wasm build). Confirm with
-   `llvm-nm artifacts/libduckdb-wasi.a | grep _ZTVN6duckdb8HTTPUtilE` showing a
-   definition (`T`/`W`), not `U`.
-2. Re-apply the migration edits above.
-3. Rebuild core/cli/host + sample, then re-run the end-to-end checks in
+So the 5->7 migration is **no longer blocked**. Remaining work is just the
+re-apply steps:
+
+1. Re-apply the migration edits listed above (enum, world imports, Rust arms,
+   host `catalog`/`files` Host impls).
+2. Rebuild core/cli/host + sample, then re-run the end-to-end checks in
    `CURRENT_TASK.md`.
+
+Note: the core still does not actually import `wasi:cli/stderr`/`stdout` (the
+reactor adapter in the current `cargo-component` does not wire stdio even with
+the world imports added). That only affects visibility of the core's debug
+logs, not functionality. Restoring real core stdio is a separate follow-up.

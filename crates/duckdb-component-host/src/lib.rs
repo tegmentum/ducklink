@@ -4,6 +4,8 @@ pub mod duckdb_core_bindings {
         world: "duckdb:component/libduckdb",
         with: {
             "wasi:cli/environment": wasmtime_wasi::p2::bindings::cli::environment,
+            "wasi:cli/stdout": wasmtime_wasi::p2::bindings::cli::stdout,
+            "wasi:cli/stderr": wasmtime_wasi::p2::bindings::cli::stderr,
             "wasi:filesystem/preopens": wasmtime_wasi::p2::bindings::filesystem::preopens,
             "wasi:filesystem/types": wasmtime_wasi::p2::bindings::filesystem::types,
             "wasi:io/streams": wasmtime_wasi::p2::bindings::io::streams,
