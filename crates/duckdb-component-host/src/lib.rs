@@ -705,11 +705,14 @@ impl ExtensionManager {
             summarize_registration_names(&aggregated.tables, |entry| entry.name.as_str());
         let aggregate_names =
             summarize_registration_names(&aggregated.aggregates, |entry| entry.name.as_str());
+        let macro_names =
+            summarize_registration_names(&aggregated.macros, |entry| entry.name.as_str());
         eprintln!(
-            "[extension-manager] aggregated pending registrations: scalars={} ({scalar_names}), tables={} ({table_names}), aggregates={} ({aggregate_names})",
+            "[extension-manager] aggregated pending registrations: scalars={} ({scalar_names}), tables={} ({table_names}), aggregates={} ({aggregate_names}), macros={} ({macro_names})",
             aggregated.scalars.len(),
             aggregated.tables.len(),
-            aggregated.aggregates.len()
+            aggregated.aggregates.len(),
+            aggregated.macros.len()
         );
         aggregated
     }
@@ -728,6 +731,7 @@ struct ExtensionStoreState {
     pending_scalars: Vec<PendingScalar>,
     pending_tables: Vec<PendingTable>,
     pending_aggregates: Vec<PendingAggregate>,
+    pending_macros: Vec<PendingMacro>,
     callback_registry: Arc<Mutex<CallbackRegistry>>,
     extension_name: String,
 }
@@ -774,11 +778,20 @@ struct PendingAggregate {
     options: Option<core_runtime_exports::Funcopts>,
 }
 
+struct PendingMacro {
+    extension: String,
+    schema: String,
+    name: String,
+    parameters: Vec<String>,
+    definition_sql: String,
+}
+
 #[derive(Default)]
 struct PendingRegistrationsData {
     scalars: Vec<PendingScalar>,
     tables: Vec<PendingTable>,
     aggregates: Vec<PendingAggregate>,
+    macros: Vec<PendingMacro>,
 }
 
 impl PendingRegistrationsData {
@@ -786,6 +799,7 @@ impl PendingRegistrationsData {
         self.scalars.append(&mut other.scalars);
         self.tables.append(&mut other.tables);
         self.aggregates.append(&mut other.aggregates);
+        self.macros.append(&mut other.macros);
     }
 }
 
@@ -826,6 +840,7 @@ impl ExtensionStoreState {
             pending_scalars: Vec::new(),
             pending_tables: Vec::new(),
             pending_aggregates: Vec::new(),
+            pending_macros: Vec::new(),
             callback_registry,
             extension_name,
         }
@@ -882,21 +897,25 @@ impl ExtensionStoreState {
                 .drain()
                 .flat_map(|(_, registry)| registry.entries),
         );
+        let macros = std::mem::take(&mut self.pending_macros);
         let pending = PendingRegistrationsData {
             scalars,
             tables,
             aggregates,
+            macros,
         };
         let scalar_names = summarize_registration_names(&pending.scalars, |entry| entry.name.as_str());
         let table_names =
             summarize_registration_names(&pending.tables, |entry| entry.name.as_str());
         let aggregate_names = summarize_registration_names(&pending.aggregates, |entry| entry.name.as_str());
+        let macro_names = summarize_registration_names(&pending.macros, |entry| entry.name.as_str());
         eprintln!(
-            "[extension-runtime:{}] draining pending registrations: scalars={} ({scalar_names}), tables={} ({table_names}), aggregates={} ({aggregate_names})",
+            "[extension-runtime:{}] draining pending registrations: scalars={} ({scalar_names}), tables={} ({table_names}), aggregates={} ({aggregate_names}), macros={} ({macro_names})",
             self.extension_name,
             pending.scalars.len(),
             pending.tables.len(),
-            pending.aggregates.len()
+            pending.aggregates.len(),
+            pending.macros.len()
         );
         pending
     }
@@ -1626,12 +1645,19 @@ impl extension_catalog::Host for ExtensionStoreState {
 
     fn register_macro(&mut self, def: extension_catalog::MacroDef) -> Result<(), String> {
         eprintln!(
-            "[extension-manager] catalog register-macro '{}.{}' ({} params) for '{}' (captured; DuckDB wiring pending)",
+            "[extension-manager] catalog register-macro '{}.{}' ({} params) for '{}'",
             def.schema,
             def.name,
             def.parameters.len(),
             self.extension_name
         );
+        self.pending_macros.push(PendingMacro {
+            extension: self.extension_name.clone(),
+            schema: def.schema,
+            name: def.name,
+            parameters: def.parameters.into_iter().collect(),
+            definition_sql: def.definition_sql,
+        });
         Ok(())
     }
 }
@@ -1962,6 +1988,23 @@ fn convert_pending_registrations(
             .map(convert_pending_aggregate_registration)
             .collect::<Vec<_>>()
             .into(),
+        macros: data
+            .macros
+            .into_iter()
+            .map(convert_pending_macro_registration)
+            .collect::<Vec<_>>()
+            .into(),
+    }
+}
+
+fn convert_pending_macro_registration(
+    entry: PendingMacro,
+) -> core_extension_hooks::MacroRegistration {
+    core_extension_hooks::MacroRegistration {
+        schema: entry.schema,
+        name: entry.name,
+        parameters: entry.parameters.into(),
+        definition_sql: entry.definition_sql,
     }
 }
 
@@ -3146,6 +3189,14 @@ stderr:
             &mut linker,
             |state| state,
         )?;
+        extension_catalog::add_to_linker::<TestExtensionHost, TestExtensionHost>(
+            &mut linker,
+            |state| state,
+        )?;
+        extension_files::add_to_linker::<TestExtensionHost, TestExtensionHost>(
+            &mut linker,
+            |state| state,
+        )?;
 
         let component = Component::from_file(&engine, &artifact)?;
         let instance_pre = linker.instantiate_pre(&component)?;
@@ -3559,6 +3610,39 @@ stderr:
             _message: String,
             _fields: BindgenVec<extension_logging::Logfield>,
         ) {
+        }
+    }
+
+    impl extension_catalog::Host for TestExtensionHost {
+        fn register_logical_type(
+            &mut self,
+            _ty: extension_catalog::LogicalType,
+        ) -> Result<u32, String> {
+            Ok(0)
+        }
+
+        fn register_cast(&mut self, _spec: extension_catalog::CastSpec) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn register_macro(&mut self, _def: extension_catalog::MacroDef) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    impl extension_files::Host for TestExtensionHost {
+        fn register_replacement_scan(
+            &mut self,
+            _scan: extension_files::ReplacementScan,
+        ) -> Result<u32, String> {
+            Ok(0)
+        }
+
+        fn register_copy_handler(
+            &mut self,
+            _handler: extension_files::CopyHandler,
+        ) -> Result<u32, String> {
+            Ok(0)
         }
     }
 }

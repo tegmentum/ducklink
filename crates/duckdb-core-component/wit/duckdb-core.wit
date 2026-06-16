@@ -120,11 +120,20 @@ interface extension-loader-hooks {
         options: option<func-opts>,
     }
 
+    /// Pending macro registration captured during extension load.
+    record macro-registration {
+        schema: string,
+        name: string,
+        parameters: list<string>,
+        definition-sql: string,
+    }
+
     /// Bundled response describing all pending registrations.
     record pending-registrations {
         scalars: list<scalar-registration>,
         tables: list<table-registration>,
         aggregates: list<aggregate-registration>,
+        macros: list<macro-registration>,
     }
 
     /// Returns the pending registration requests the host captured while the extension was loading.

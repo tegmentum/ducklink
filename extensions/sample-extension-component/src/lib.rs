@@ -12,7 +12,7 @@ wit_bindgen::generate!({
     world: "duckdb:extension/duckdb-extension",
 });
 
-use duckdb::extension::{runtime, types};
+use duckdb::extension::{catalog, runtime, types};
 use exports::duckdb::extension::{callback_dispatch, guest};
 
 struct SampleExtension;
@@ -22,6 +22,7 @@ impl guest::Guest for SampleExtension {
         register_scalar_function()?;
         register_table_function()?;
         register_aggregate_function()?;
+        register_macro_definition()?;
         Ok(types::Loadresult {
             name: "sample_extension".into(),
             version: Some(env!("CARGO_PKG_VERSION").into()),
@@ -144,6 +145,19 @@ impl callback_dispatch::Guest for SampleExtension {
 }
 
 export!(SampleExtension);
+
+/// Registers a SQL macro via the `catalog` interface. Unlike the scalar/table/
+/// aggregate callbacks, a macro is pure SQL — the host forwards it to DuckDB as
+/// `CREATE MACRO`.
+fn register_macro_definition() -> Result<(), types::Duckerror> {
+    catalog::register_macro(&catalog::MacroDef {
+        schema: String::new(),
+        name: "sample_add_two".into(),
+        parameters: vec!["x".into()],
+        definition_sql: "x + 2".into(),
+    })
+    .map_err(types::Duckerror::Internal)
+}
 
 fn register_scalar_function() -> Result<(), types::Duckerror> {
     let capability = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| {

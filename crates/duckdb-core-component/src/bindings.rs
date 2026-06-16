@@ -166,12 +166,34 @@ pub mod duckdb {
                         .finish()
                 }
             }
+            /// Pending macro registration captured during extension load.
+            #[derive(Clone)]
+            pub struct MacroRegistration {
+                pub schema: _rt::String,
+                pub name: _rt::String,
+                pub parameters: _rt::Vec<_rt::String>,
+                pub definition_sql: _rt::String,
+            }
+            impl ::core::fmt::Debug for MacroRegistration {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("MacroRegistration")
+                        .field("schema", &self.schema)
+                        .field("name", &self.name)
+                        .field("parameters", &self.parameters)
+                        .field("definition-sql", &self.definition_sql)
+                        .finish()
+                }
+            }
             /// Bundled response describing all pending registrations.
             #[derive(Clone)]
             pub struct PendingRegistrations {
                 pub scalars: _rt::Vec<ScalarRegistration>,
                 pub tables: _rt::Vec<TableRegistration>,
                 pub aggregates: _rt::Vec<AggregateRegistration>,
+                pub macros: _rt::Vec<MacroRegistration>,
             }
             impl ::core::fmt::Debug for PendingRegistrations {
                 fn fmt(
@@ -182,6 +204,7 @@ pub mod duckdb {
                         .field("scalars", &self.scalars)
                         .field("tables", &self.tables)
                         .field("aggregates", &self.aggregates)
+                        .field("macros", &self.macros)
                         .finish()
                 }
             }
@@ -195,10 +218,10 @@ pub mod duckdb {
                     struct RetArea(
                         [::core::mem::MaybeUninit<
                             u8,
-                        >; 6 * ::core::mem::size_of::<*const u8>()],
+                        >; 8 * ::core::mem::size_of::<*const u8>()],
                     );
                     let mut ret_area = RetArea(
-                        [::core::mem::MaybeUninit::uninit(); 6
+                        [::core::mem::MaybeUninit::uninit(); 8
                             * ::core::mem::size_of::<*const u8>()],
                     );
                     let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
@@ -793,12 +816,106 @@ pub mod duckdb {
                         len90 * (8 + 11 * ::core::mem::size_of::<*const u8>()),
                         ::core::mem::size_of::<*const u8>(),
                     );
-                    let result91 = PendingRegistrations {
+                    let l91 = *ptr0
+                        .add(6 * ::core::mem::size_of::<*const u8>())
+                        .cast::<*mut u8>();
+                    let l92 = *ptr0
+                        .add(7 * ::core::mem::size_of::<*const u8>())
+                        .cast::<usize>();
+                    let base108 = l91;
+                    let len108 = l92;
+                    let mut result108 = _rt::Vec::with_capacity(len108);
+                    for i in 0..len108 {
+                        let base = base108
+                            .add(i * (8 * ::core::mem::size_of::<*const u8>()));
+                        let e108 = {
+                            let l93 = *base.add(0).cast::<*mut u8>();
+                            let l94 = *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let len95 = l94;
+                            let bytes95 = _rt::Vec::from_raw_parts(
+                                l93.cast(),
+                                len95,
+                                len95,
+                            );
+                            let l96 = *base
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l97 = *base
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let len98 = l97;
+                            let bytes98 = _rt::Vec::from_raw_parts(
+                                l96.cast(),
+                                len98,
+                                len98,
+                            );
+                            let l99 = *base
+                                .add(4 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l100 = *base
+                                .add(5 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base104 = l99;
+                            let len104 = l100;
+                            let mut result104 = _rt::Vec::with_capacity(len104);
+                            for i in 0..len104 {
+                                let base = base104
+                                    .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                                let e104 = {
+                                    let l101 = *base.add(0).cast::<*mut u8>();
+                                    let l102 = *base
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let len103 = l102;
+                                    let bytes103 = _rt::Vec::from_raw_parts(
+                                        l101.cast(),
+                                        len103,
+                                        len103,
+                                    );
+                                    _rt::string_lift(bytes103)
+                                };
+                                result104.push(e104);
+                            }
+                            _rt::cabi_dealloc(
+                                base104,
+                                len104 * (2 * ::core::mem::size_of::<*const u8>()),
+                                ::core::mem::size_of::<*const u8>(),
+                            );
+                            let l105 = *base
+                                .add(6 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l106 = *base
+                                .add(7 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let len107 = l106;
+                            let bytes107 = _rt::Vec::from_raw_parts(
+                                l105.cast(),
+                                len107,
+                                len107,
+                            );
+                            MacroRegistration {
+                                schema: _rt::string_lift(bytes95),
+                                name: _rt::string_lift(bytes98),
+                                parameters: result104,
+                                definition_sql: _rt::string_lift(bytes107),
+                            }
+                        };
+                        result108.push(e108);
+                    }
+                    _rt::cabi_dealloc(
+                        base108,
+                        len108 * (8 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result109 = PendingRegistrations {
                         scalars: result29,
                         tables: result62,
                         aggregates: result90,
+                        macros: result108,
                     };
-                    result91
+                    result109
                 }
             }
         }
@@ -15502,8 +15619,8 @@ pub(crate) use __export_libduckdb_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 9689] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xd9J\x01A\x02\x01A8\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 9769] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xa9K\x01A\x02\x01A8\x01\
 B\x0a\x01o\x02ss\x01p\0\x01@\0\0\x01\x04\0\x0fget-environment\x01\x02\x01ps\x01@\
 \0\0\x03\x04\0\x0dget-arguments\x01\x04\x01ks\x01@\0\0\x05\x04\0\x0binitial-cwd\x01\
 \x06\x03\0\x1awasi:cli/environment@0.2.6\x05\0\x01B\x04\x04\0\x05error\x03\x01\x01\
@@ -15619,7 +15736,7 @@ logfield\x03\0\x1f\x01m\x07\x06scalar\x05table\x09aggregate\x06pragma\x05macro\x
 catalog\x0bfile-format\x04\0\x0ecapabilitykind\x03\0!\x01p\"\x01r\x03\x04names\x07\
 version\x02\x08requires#\x04\0\x0aloadresult\x03\0$\x03\0\x16duckdb:extension/ty\
 pes\x05\x11\x02\x03\0\x0a\x0blogicaltype\x02\x03\0\x0a\x09columndef\x02\x03\0\x0a\
-\x09funcflags\x01B\x1f\x02\x03\x02\x01\x12\x04\0\x0blogicaltype\x03\0\0\x02\x03\x02\
+\x09funcflags\x01B\"\x02\x03\x02\x01\x12\x04\0\x0blogicaltype\x03\0\0\x02\x03\x02\
 \x01\x13\x04\0\x09columndef\x03\0\x02\x02\x03\x02\x01\x14\x04\0\x09funcflags\x03\
 \0\x04\x01ks\x01r\x02\x04name\x06\x07logical\x01\x04\0\x08func-arg\x03\0\x07\x01\
 ps\x01r\x03\x0bdescription\x06\x04tags\x09\x0aattributes\x05\x04\0\x09func-opts\x03\
@@ -15628,87 +15745,89 @@ ps\x01r\x03\x0bdescription\x06\x04tags\x09\x0aattributes\x05\x04\0\x09func-opts\
 options\x0f\x04\0\x13scalar-registration\x03\0\x10\x01p\x03\x01k\x0d\x01r\x05\x04\
 names\x09arguments\x0e\x07columns\x12\x0fcallback-handley\x07options\x13\x04\0\x12\
 table-registration\x03\0\x14\x01r\x05\x04names\x09arguments\x0e\x07returns\x01\x0f\
-callback-handley\x07options\x0f\x04\0\x16aggregate-registration\x03\0\x16\x01p\x11\
-\x01p\x15\x01p\x17\x01r\x03\x07scalars\x18\x06tables\x19\x0aaggregates\x1a\x04\0\
-\x15pending-registrations\x03\0\x1b\x01@\0\0\x1c\x04\0\x19get-pending-registrati\
-ons\x01\x1d\x03\0'duckdb:component/extension-loader-hooks\x05\x15\x02\x03\0\x0a\x09\
-duckerror\x02\x03\0\x0a\x09duckvalue\x02\x03\0\x0a\x0ainvokeinfo\x02\x03\0\x0a\x09\
-resultset\x02\x03\0\x0a\x08rowbatch\x01B\x17\x02\x03\x02\x01\x16\x04\0\x09ducker\
-ror\x03\0\0\x02\x03\x02\x01\x17\x04\0\x09duckvalue\x03\0\x02\x02\x03\x02\x01\x18\
-\x04\0\x0ainvokeinfo\x03\0\x04\x02\x03\x02\x01\x19\x04\0\x09resultset\x03\0\x06\x02\
-\x03\x02\x01\x1a\x04\0\x08rowbatch\x03\0\x08\x01p\x03\x01j\x01\x03\x01\x01\x01@\x03\
-\x06handley\x04args\x0a\x03ctx\x05\0\x0b\x04\0\x0bcall-scalar\x01\x0c\x01j\x01\x07\
-\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x0d\x04\0\x0acall-table\x01\x0e\x01@\x02\
-\x06handley\x04rows\x09\0\x0b\x04\0\x0ecall-aggregate\x01\x0f\x01k\x03\x01j\x01\x10\
-\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x11\x04\0\x0bcall-pragma\x01\x12\x03\0\
-\"duckdb:extension/callback-dispatch\x05\x1b\x02\x03\0\x0a\x0ecapabilitykind\x01\
-B3\x02\x03\x02\x01\x1c\x04\0\x0ecapabilitykind\x03\0\0\x02\x03\x02\x01\x13\x04\0\
-\x09columndef\x03\0\x02\x02\x03\x02\x01\x16\x04\0\x09duckerror\x03\0\x04\x02\x03\
-\x02\x01\x17\x04\0\x09duckvalue\x03\0\x06\x04\0\x0aconnection\x03\x01\x01p\x07\x04\
-\0\x03row\x03\0\x09\x01p\x03\x01p\x0a\x01r\x02\x07columns\x0b\x04rows\x0c\x04\0\x0c\
-query-result\x03\0\x0d\x04\0\x0dresult-stream\x03\x01\x01p\x01\x01r\x02\x04names\
-\x08requires\x10\x04\0\x0eextension-info\x03\0\x11\x01h\x0f\x01@\x01\x04self\x13\
-\0\x0b\x04\0\x1c[method]result-stream.schema\x01\x14\x01k\x0c\x01j\x01\x15\x01\x05\
-\x01@\x02\x04self\x13\x08max-rowsy\0\x16\x04\0\x1a[method]result-stream.next\x01\
-\x17\x01@\x01\x04self\x13\x01\0\x04\0\x1b[method]result-stream.close\x01\x18\x01\
-ks\x01i\x08\x01j\x01\x1a\x01s\x01@\x01\x04path\x19\0\x1b\x04\0\x04open\x01\x1c\x01\
-@\x01\x04conn\x1a\x01\0\x04\0\x05close\x01\x1d\x01h\x08\x01@\x01\x04conn\x1e\x01\
-\0\x04\0\x09interrupt\x01\x1f\x01j\x01\x0e\x01\x05\x01@\x02\x04conn\x1e\x03sqls\0\
-\x20\x04\0\x07execute\x01!\x01i\x0f\x01j\x01\"\x01\x05\x01@\x02\x04conn\x1e\x03s\
-qls\0#\x04\0\x0bopen-stream\x01$\x01j\x01\x7f\x01s\x01@\x02\x04names\x08requires\
-\x10\0%\x04\0\x12register-extension\x01&\x01p\x12\x01@\0\0'\x04\0\x1alist-regist\
-ered-extensions\x01(\x04\0\x19duckdb:component/database\x05\x1d\x02\x03\0\x0a\x0b\
-configerror\x01B$\x02\x03\x02\x01\x1e\x04\0\x0bconfigerror\x03\0\0\x01@\0\0s\x04\
-\0\x10provider-version\x01\x02\x01ks\x01ps\x01@\x01\x06prefix\x03\0\x04\x04\0\x09\
-list-keys\x01\x05\x01j\x01\x03\x01\x01\x01@\x01\x04paths\0\x06\x04\0\x0aget-stri\
-ng\x01\x07\x01k\x7f\x01j\x01\x08\x01\x01\x01@\x01\x04paths\0\x09\x04\0\x08get-bo\
-ol\x01\x0a\x01kx\x01j\x01\x0b\x01\x01\x01@\x01\x04paths\0\x0c\x04\0\x07get-i64\x01\
-\x0d\x01kw\x01j\x01\x0e\x01\x01\x01@\x01\x04paths\0\x0f\x04\0\x07get-u64\x01\x10\
-\x01ku\x01j\x01\x11\x01\x01\x01@\x01\x04paths\0\x12\x04\0\x07get-f64\x01\x13\x01\
-p}\x01k\x14\x01j\x01\x15\x01\x01\x01@\x01\x04paths\0\x16\x04\0\x09get-bytes\x01\x17\
-\x01k\x04\x01j\x01\x18\x01\x01\x01@\x01\x04paths\0\x19\x04\0\x0fget-string-list\x01\
-\x1a\x04\0\x17duckdb:extension/config\x05\x1f\x02\x03\0\x0a\x08logfield\x02\x03\0\
-\x0a\x08loglevel\x01B\x0a\x02\x03\x02\x01\x20\x04\0\x08logfield\x03\0\0\x02\x03\x02\
-\x01!\x04\0\x08loglevel\x03\0\x02\x01ks\x01@\x03\x05level\x03\x07messages\x06tar\
-get\x04\x01\0\x04\0\x03log\x01\x05\x01p\x01\x01@\x03\x05level\x03\x07messages\x06\
-fields\x06\x01\0\x04\0\x0alog-fields\x01\x07\x04\0\x18duckdb:extension/logging\x05\
-\"\x02\x03\0\x0a\x07extopts\x02\x03\0\x0a\x07funcarg\x02\x03\0\x0a\x08funcopts\x01\
-B_\x02\x03\x02\x01\x1c\x04\0\x0ecapabilitykind\x03\0\0\x02\x03\x02\x01\x16\x04\0\
-\x09duckerror\x03\0\x02\x02\x03\x02\x01\x17\x04\0\x09duckvalue\x03\0\x04\x02\x03\
-\x02\x01#\x04\0\x07extopts\x03\0\x06\x02\x03\x02\x01$\x04\0\x07funcarg\x03\0\x08\
-\x02\x03\x02\x01%\x04\0\x08funcopts\x03\0\x0a\x02\x03\x02\x01\x18\x04\0\x0ainvok\
-einfo\x03\0\x0c\x02\x03\x02\x01\x12\x04\0\x0blogicaltype\x03\0\x0e\x02\x03\x02\x01\
-\x19\x04\0\x09resultset\x03\0\x10\x02\x03\x02\x01\x1a\x04\0\x08rowbatch\x03\0\x12\
-\x02\x03\x02\x01\x13\x04\0\x09columndef\x03\0\x14\x04\0\x0fscalar-callback\x03\x01\
-\x04\0\x0etable-callback\x03\x01\x04\0\x12aggregate-callback\x03\x01\x04\0\x0fpr\
-agma-callback\x03\x01\x04\0\x0fscalar-registry\x03\x01\x04\0\x0etable-registry\x03\
-\x01\x04\0\x12aggregate-registry\x03\x01\x04\0\x0fpragma-registry\x03\x01\x04\0\x0e\
-macro-registry\x03\x01\x01i\x1a\x01i\x1b\x01i\x1c\x01i\x1d\x01i\x1e\x01q\x05\x06\
-scalar\x01\x1f\0\x05table\x01\x20\0\x09aggregate\x01!\0\x06pragma\x01\"\0\x05mac\
-ro\x01#\0\x04\0\x0acapability\x03\0$\x01i\x16\x01@\x01\x06handley\0&\x04\0\x1c[c\
-onstructor]scalar-callback\x01'\x01h\x16\x01p\x05\x01j\x01\x05\x01\x03\x01@\x03\x04\
-self(\x04args)\x03ctx\x0d\0*\x04\0\x1c[method]scalar-callback.call\x01+\x01i\x17\
-\x01@\x01\x06handley\0,\x04\0\x1b[constructor]table-callback\x01-\x01h\x17\x01j\x01\
-\x11\x01\x03\x01@\x02\x04self.\x04args)\0/\x04\0\x1b[method]table-callback.call\x01\
-0\x01i\x18\x01@\x01\x06handley\01\x04\0\x1f[constructor]aggregate-callback\x012\x01\
-h\x18\x01@\x02\x04self3\x04rows\x13\0*\x04\0\x1f[method]aggregate-callback.call\x01\
-4\x01i\x19\x01@\x01\x06handley\05\x04\0\x1c[constructor]pragma-callback\x016\x01\
-h\x19\x01k\x05\x01j\x018\x01\x03\x01@\x02\x04self7\x04args)\09\x04\0\x1c[method]\
-pragma-callback.call\x01:\x01h\x1a\x01p\x09\x01k\x0b\x01j\x01y\x01\x03\x01@\x06\x04\
-self;\x04names\x09arguments<\x07returns\x0f\x08callback&\x07options=\0>\x04\0\x20\
-[method]scalar-registry.register\x01?\x01h\x1b\x01p\x15\x01k\x07\x01@\x06\x04sel\
-f\xc0\0\x04names\x09arguments<\x07columns\xc1\0\x08callback,\x07options\xc2\0\0>\
-\x04\0\x1f[method]table-registry.register\x01C\x01h\x1c\x01@\x06\x04self\xc4\0\x04\
-names\x09arguments<\x07returns\x0f\x08callback1\x07options=\0>\x04\0#[method]agg\
-regate-registry.register\x01E\x01h\x1d\x01@\x06\x04self\xc6\0\x04names\x09argume\
-nts<\x07returns\x0f\x08callback5\x07options\xc2\0\0>\x04\0%[method]pragma-regist\
-ry.register-call\x01G\x01h\x1e\x01ps\x01j\x01\x7f\x01\x03\x01@\x05\x04self\xc8\0\
-\x04names\x0aparameters\xc9\0\x08body-sqls\x07options\xc2\0\0\xca\0\x04\0&[metho\
-d]macro-registry.register-scalar\x01K\x01k%\x01@\x01\x04kind\x01\0\xcc\0\x04\0\x0e\
-get-capability\x01M\x01p\x01\x01@\0\0\xce\0\x04\0\x11list-capabilities\x01O\x04\0\
-\x18duckdb:extension/runtime\x05&\x04\0\x1aduckdb:component/libduckdb\x04\0\x0b\x0f\
-\x01\0\x09libduckdb\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-compo\
-nent\x070.227.1\x10wit-bindgen-rust\x060.41.0";
+callback-handley\x07options\x0f\x04\0\x16aggregate-registration\x03\0\x16\x01r\x04\
+\x06schemas\x04names\x0aparameters\x09\x0edefinition-sqls\x04\0\x12macro-registr\
+ation\x03\0\x18\x01p\x11\x01p\x15\x01p\x17\x01p\x19\x01r\x04\x07scalars\x1a\x06t\
+ables\x1b\x0aaggregates\x1c\x06macros\x1d\x04\0\x15pending-registrations\x03\0\x1e\
+\x01@\0\0\x1f\x04\0\x19get-pending-registrations\x01\x20\x03\0'duckdb:component/\
+extension-loader-hooks\x05\x15\x02\x03\0\x0a\x09duckerror\x02\x03\0\x0a\x09duckv\
+alue\x02\x03\0\x0a\x0ainvokeinfo\x02\x03\0\x0a\x09resultset\x02\x03\0\x0a\x08row\
+batch\x01B\x17\x02\x03\x02\x01\x16\x04\0\x09duckerror\x03\0\0\x02\x03\x02\x01\x17\
+\x04\0\x09duckvalue\x03\0\x02\x02\x03\x02\x01\x18\x04\0\x0ainvokeinfo\x03\0\x04\x02\
+\x03\x02\x01\x19\x04\0\x09resultset\x03\0\x06\x02\x03\x02\x01\x1a\x04\0\x08rowba\
+tch\x03\0\x08\x01p\x03\x01j\x01\x03\x01\x01\x01@\x03\x06handley\x04args\x0a\x03c\
+tx\x05\0\x0b\x04\0\x0bcall-scalar\x01\x0c\x01j\x01\x07\x01\x01\x01@\x02\x06handl\
+ey\x04args\x0a\0\x0d\x04\0\x0acall-table\x01\x0e\x01@\x02\x06handley\x04rows\x09\
+\0\x0b\x04\0\x0ecall-aggregate\x01\x0f\x01k\x03\x01j\x01\x10\x01\x01\x01@\x02\x06\
+handley\x04args\x0a\0\x11\x04\0\x0bcall-pragma\x01\x12\x03\0\"duckdb:extension/c\
+allback-dispatch\x05\x1b\x02\x03\0\x0a\x0ecapabilitykind\x01B3\x02\x03\x02\x01\x1c\
+\x04\0\x0ecapabilitykind\x03\0\0\x02\x03\x02\x01\x13\x04\0\x09columndef\x03\0\x02\
+\x02\x03\x02\x01\x16\x04\0\x09duckerror\x03\0\x04\x02\x03\x02\x01\x17\x04\0\x09d\
+uckvalue\x03\0\x06\x04\0\x0aconnection\x03\x01\x01p\x07\x04\0\x03row\x03\0\x09\x01\
+p\x03\x01p\x0a\x01r\x02\x07columns\x0b\x04rows\x0c\x04\0\x0cquery-result\x03\0\x0d\
+\x04\0\x0dresult-stream\x03\x01\x01p\x01\x01r\x02\x04names\x08requires\x10\x04\0\
+\x0eextension-info\x03\0\x11\x01h\x0f\x01@\x01\x04self\x13\0\x0b\x04\0\x1c[metho\
+d]result-stream.schema\x01\x14\x01k\x0c\x01j\x01\x15\x01\x05\x01@\x02\x04self\x13\
+\x08max-rowsy\0\x16\x04\0\x1a[method]result-stream.next\x01\x17\x01@\x01\x04self\
+\x13\x01\0\x04\0\x1b[method]result-stream.close\x01\x18\x01ks\x01i\x08\x01j\x01\x1a\
+\x01s\x01@\x01\x04path\x19\0\x1b\x04\0\x04open\x01\x1c\x01@\x01\x04conn\x1a\x01\0\
+\x04\0\x05close\x01\x1d\x01h\x08\x01@\x01\x04conn\x1e\x01\0\x04\0\x09interrupt\x01\
+\x1f\x01j\x01\x0e\x01\x05\x01@\x02\x04conn\x1e\x03sqls\0\x20\x04\0\x07execute\x01\
+!\x01i\x0f\x01j\x01\"\x01\x05\x01@\x02\x04conn\x1e\x03sqls\0#\x04\0\x0bopen-stre\
+am\x01$\x01j\x01\x7f\x01s\x01@\x02\x04names\x08requires\x10\0%\x04\0\x12register\
+-extension\x01&\x01p\x12\x01@\0\0'\x04\0\x1alist-registered-extensions\x01(\x04\0\
+\x19duckdb:component/database\x05\x1d\x02\x03\0\x0a\x0bconfigerror\x01B$\x02\x03\
+\x02\x01\x1e\x04\0\x0bconfigerror\x03\0\0\x01@\0\0s\x04\0\x10provider-version\x01\
+\x02\x01ks\x01ps\x01@\x01\x06prefix\x03\0\x04\x04\0\x09list-keys\x01\x05\x01j\x01\
+\x03\x01\x01\x01@\x01\x04paths\0\x06\x04\0\x0aget-string\x01\x07\x01k\x7f\x01j\x01\
+\x08\x01\x01\x01@\x01\x04paths\0\x09\x04\0\x08get-bool\x01\x0a\x01kx\x01j\x01\x0b\
+\x01\x01\x01@\x01\x04paths\0\x0c\x04\0\x07get-i64\x01\x0d\x01kw\x01j\x01\x0e\x01\
+\x01\x01@\x01\x04paths\0\x0f\x04\0\x07get-u64\x01\x10\x01ku\x01j\x01\x11\x01\x01\
+\x01@\x01\x04paths\0\x12\x04\0\x07get-f64\x01\x13\x01p}\x01k\x14\x01j\x01\x15\x01\
+\x01\x01@\x01\x04paths\0\x16\x04\0\x09get-bytes\x01\x17\x01k\x04\x01j\x01\x18\x01\
+\x01\x01@\x01\x04paths\0\x19\x04\0\x0fget-string-list\x01\x1a\x04\0\x17duckdb:ex\
+tension/config\x05\x1f\x02\x03\0\x0a\x08logfield\x02\x03\0\x0a\x08loglevel\x01B\x0a\
+\x02\x03\x02\x01\x20\x04\0\x08logfield\x03\0\0\x02\x03\x02\x01!\x04\0\x08logleve\
+l\x03\0\x02\x01ks\x01@\x03\x05level\x03\x07messages\x06target\x04\x01\0\x04\0\x03\
+log\x01\x05\x01p\x01\x01@\x03\x05level\x03\x07messages\x06fields\x06\x01\0\x04\0\
+\x0alog-fields\x01\x07\x04\0\x18duckdb:extension/logging\x05\"\x02\x03\0\x0a\x07\
+extopts\x02\x03\0\x0a\x07funcarg\x02\x03\0\x0a\x08funcopts\x01B_\x02\x03\x02\x01\
+\x1c\x04\0\x0ecapabilitykind\x03\0\0\x02\x03\x02\x01\x16\x04\0\x09duckerror\x03\0\
+\x02\x02\x03\x02\x01\x17\x04\0\x09duckvalue\x03\0\x04\x02\x03\x02\x01#\x04\0\x07\
+extopts\x03\0\x06\x02\x03\x02\x01$\x04\0\x07funcarg\x03\0\x08\x02\x03\x02\x01%\x04\
+\0\x08funcopts\x03\0\x0a\x02\x03\x02\x01\x18\x04\0\x0ainvokeinfo\x03\0\x0c\x02\x03\
+\x02\x01\x12\x04\0\x0blogicaltype\x03\0\x0e\x02\x03\x02\x01\x19\x04\0\x09results\
+et\x03\0\x10\x02\x03\x02\x01\x1a\x04\0\x08rowbatch\x03\0\x12\x02\x03\x02\x01\x13\
+\x04\0\x09columndef\x03\0\x14\x04\0\x0fscalar-callback\x03\x01\x04\0\x0etable-ca\
+llback\x03\x01\x04\0\x12aggregate-callback\x03\x01\x04\0\x0fpragma-callback\x03\x01\
+\x04\0\x0fscalar-registry\x03\x01\x04\0\x0etable-registry\x03\x01\x04\0\x12aggre\
+gate-registry\x03\x01\x04\0\x0fpragma-registry\x03\x01\x04\0\x0emacro-registry\x03\
+\x01\x01i\x1a\x01i\x1b\x01i\x1c\x01i\x1d\x01i\x1e\x01q\x05\x06scalar\x01\x1f\0\x05\
+table\x01\x20\0\x09aggregate\x01!\0\x06pragma\x01\"\0\x05macro\x01#\0\x04\0\x0ac\
+apability\x03\0$\x01i\x16\x01@\x01\x06handley\0&\x04\0\x1c[constructor]scalar-ca\
+llback\x01'\x01h\x16\x01p\x05\x01j\x01\x05\x01\x03\x01@\x03\x04self(\x04args)\x03\
+ctx\x0d\0*\x04\0\x1c[method]scalar-callback.call\x01+\x01i\x17\x01@\x01\x06handl\
+ey\0,\x04\0\x1b[constructor]table-callback\x01-\x01h\x17\x01j\x01\x11\x01\x03\x01\
+@\x02\x04self.\x04args)\0/\x04\0\x1b[method]table-callback.call\x010\x01i\x18\x01\
+@\x01\x06handley\01\x04\0\x1f[constructor]aggregate-callback\x012\x01h\x18\x01@\x02\
+\x04self3\x04rows\x13\0*\x04\0\x1f[method]aggregate-callback.call\x014\x01i\x19\x01\
+@\x01\x06handley\05\x04\0\x1c[constructor]pragma-callback\x016\x01h\x19\x01k\x05\
+\x01j\x018\x01\x03\x01@\x02\x04self7\x04args)\09\x04\0\x1c[method]pragma-callbac\
+k.call\x01:\x01h\x1a\x01p\x09\x01k\x0b\x01j\x01y\x01\x03\x01@\x06\x04self;\x04na\
+mes\x09arguments<\x07returns\x0f\x08callback&\x07options=\0>\x04\0\x20[method]sc\
+alar-registry.register\x01?\x01h\x1b\x01p\x15\x01k\x07\x01@\x06\x04self\xc0\0\x04\
+names\x09arguments<\x07columns\xc1\0\x08callback,\x07options\xc2\0\0>\x04\0\x1f[\
+method]table-registry.register\x01C\x01h\x1c\x01@\x06\x04self\xc4\0\x04names\x09\
+arguments<\x07returns\x0f\x08callback1\x07options=\0>\x04\0#[method]aggregate-re\
+gistry.register\x01E\x01h\x1d\x01@\x06\x04self\xc6\0\x04names\x09arguments<\x07r\
+eturns\x0f\x08callback5\x07options\xc2\0\0>\x04\0%[method]pragma-registry.regist\
+er-call\x01G\x01h\x1e\x01ps\x01j\x01\x7f\x01\x03\x01@\x05\x04self\xc8\0\x04names\
+\x0aparameters\xc9\0\x08body-sqls\x07options\xc2\0\0\xca\0\x04\0&[method]macro-r\
+egistry.register-scalar\x01K\x01k%\x01@\x01\x04kind\x01\0\xcc\0\x04\0\x0eget-cap\
+ability\x01M\x01p\x01\x01@\0\0\xce\0\x04\0\x11list-capabilities\x01O\x04\0\x18du\
+ckdb:extension/runtime\x05&\x04\0\x1aduckdb:component/libduckdb\x04\0\x0b\x0f\x01\
+\0\x09libduckdb\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\
+\x070.227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

@@ -25,16 +25,49 @@ suite. Remaining work is the DuckDB-side wiring of catalog/files registrations
   `ensure_extension_loaded`, so extensions that import `catalog`/`files`
   instantiate. The host currently acknowledges and logs each registration.
 
-## Follow-up — forward catalog/files registrations into DuckDB
+## Forwarding catalog/files registrations into DuckDB
 
-The host's `catalog`/`files` Host impls accept and log requests but do not yet
-register anything in DuckDB. Completing them means, mirroring the
-scalar/table/aggregate pipeline: capture each request into per-store pending
-buffers, extend `extension-loader-hooks` (core WIT) with catalog/files
-registration records, drain them in `duckdb_component_load_extension`, and call
-the DuckDB C API to create logical types / casts / macros / replacement scans /
-copy handlers. A using-extension + test should land with that work (the current
-`sample-extension-component` does not exercise `catalog`/`files`).
+What the DuckDB C API actually supports (surveyed against `external/duckdb`):
+
+| Registration   | C API path | Status |
+|----------------|-----------|--------|
+| macro          | none — `CREATE MACRO` SQL only | pipeline wired; execution gated (see below) |
+| replacement scan | `duckdb_add_replacement_scan` | feasible; needs a file-reading table fn to demo |
+| logical type   | no named-type registration | not feasible as specified |
+| cast           | `duckdb_create_cast_function` needs a callback; WIT `cast-spec` carries none | not feasible as specified |
+| copy handler   | none | not feasible |
+
+### Macros — pipeline wired, execution gated on wasm exceptions
+
+The macro path is wired end-to-end: `sample-extension-component` calls
+`catalog.register-macro`; the host captures it (`ExtensionStoreState.pending_macros`),
+drains it, and forwards it through `extension-loader-hooks`
+(`macro-registration` record + `pending-registrations.macros`); the core
+(`register_pending_macro`) turns it into the exact
+`CREATE OR REPLACE MACRO …` SQL. Confirmed via the host logs
+(`… macros=1 (sample_add_two)`).
+
+Execution is **gated off** (`MACRO_EXECUTION_ENABLED = false` in
+`crates/duckdb-core-component/src/lib.rs`). DuckDB's macro binder uses C++
+exceptions for overload resolution, but the wasm archive was compiled without
+exception unwinding (no `-fwasm-exceptions`), so any thrown exception runs
+`__cxa_throw -> std::terminate -> abort` instead of being caught. Even a
+standalone `CREATE MACRO m(x) AS (x + 2); SELECT m(40)` aborts in
+`FunctionBinder::BindScalarFunction`. Enabling wasmtime's `wasm_exceptions`
+feature does not help (the archive uses the Itanium ABI, not wasm EH
+instructions). `register_pending_macro` would create the macro on a transient
+connection to the same database (`create_macro_on_active_databases`) — never the
+LOAD-busy connection — so it is ready to switch on once the build supports
+exceptions.
+
+### To enable macros (and make DuckDB errors recoverable in general)
+
+This is a whole-build property, not macro-specific: **any** thrown DuckDB
+exception currently aborts the module (e.g. `SELECT * FROM nonexistent` traps).
+Rebuild `libduckdb-wasi.a` (and the libc++ it links) with `-fwasm-exceptions`,
+enable `config.wasm_exceptions(true)` in the host (`build_engine`), and flip
+`MACRO_EXECUTION_ENABLED` to `true`. Feasibility hinges on whether wasi-sdk-28
+ships an exception-handling libc++; if not, libc++ must be built with EH first.
 
 ## The archive blocker — RESOLVED (2026-06)
 

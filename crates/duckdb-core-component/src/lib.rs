@@ -50,6 +50,10 @@ use libduckdb_sys as duckdb;
 use thiserror::Error;
 
 const DUCKDB_SUCCESS: duckdb::duckdb_state = 0;
+/// Whether `CREATE MACRO` may be executed. Gated off until the libduckdb wasm
+/// archive is rebuilt with working C++ exception handling (`-fwasm-exceptions`),
+/// since DuckDB's macro binder throws and this build aborts on any throw.
+const MACRO_EXECUTION_ENABLED: bool = false;
 
 static NEXT_SCALAR_FUNCTION_ID: AtomicU32 = AtomicU32::new(1);
 static SCALAR_FUNCTION_DEFINITIONS: OnceLock<Mutex<Vec<Arc<ScalarFunctionDefinition>>>> =
@@ -63,7 +67,7 @@ static AGGREGATE_FUNCTION_DEFINITIONS: OnceLock<Mutex<Vec<Arc<AggregateFunctionD
     OnceLock::new();
 
 #[derive(Clone, Copy)]
-struct ConnectionHandle(duckdb::duckdb_connection);
+struct ConnectionHandle(duckdb::duckdb_connection, duckdb::duckdb_database);
 
 unsafe impl Send for ConnectionHandle {}
 unsafe impl Sync for ConnectionHandle {}
@@ -2147,7 +2151,7 @@ impl ConnectionState {
                 return Err(DuckDbError::message(message));
             }
 
-            register_connection_handle(handle).map_err(|err| {
+            register_connection_handle(handle, database).map_err(|err| {
                 duckdb::duckdb_disconnect(&mut handle);
                 duckdb::duckdb_close(&mut database);
                 DuckDbError::from(err)
@@ -2258,12 +2262,15 @@ impl exported_database::GuestResultStream for QueryStream {
 
 struct Component;
 
-fn register_connection_handle(handle: duckdb::duckdb_connection) -> Result<(), Duckerror> {
+fn register_connection_handle(
+    handle: duckdb::duckdb_connection,
+    database: duckdb::duckdb_database,
+) -> Result<(), Duckerror> {
     {
         let mut guard = active_connections()
             .lock()
             .expect("active connections mutex poisoned");
-        guard.push(ConnectionHandle(handle));
+        guard.push(ConnectionHandle(handle, database));
     }
 
     let definitions = {
@@ -2431,7 +2438,11 @@ fn process_pending_registrations(
     extension: &str,
     pending: extension_loader_hooks::PendingRegistrations,
 ) -> Result<(), Duckerror> {
-    if pending.scalars.is_empty() && pending.tables.is_empty() && pending.aggregates.is_empty() {
+    if pending.scalars.is_empty()
+        && pending.tables.is_empty()
+        && pending.aggregates.is_empty()
+        && pending.macros.is_empty()
+    {
         clog!("[duckdb-core] no registrations returned for '{extension}'");
     }
     for entry in pending.scalars.into_iter().collect::<Vec<_>>() {
@@ -2442,6 +2453,9 @@ fn process_pending_registrations(
     }
     for entry in pending.aggregates.into_iter().collect::<Vec<_>>() {
         register_pending_aggregate(entry)?;
+    }
+    for entry in pending.macros.into_iter().collect::<Vec<_>>() {
+        register_pending_macro(entry)?;
     }
     Ok(())
 }
@@ -2579,6 +2593,128 @@ fn register_pending_aggregate(
     } else {
         Ok(())
     }
+}
+
+fn register_pending_macro(
+    entry: extension_loader_hooks::MacroRegistration,
+) -> Result<(), Duckerror> {
+    let extension_loader_hooks::MacroRegistration {
+        schema,
+        name,
+        parameters,
+        definition_sql,
+    } = entry;
+    let parameters: Vec<String> = parameters.into_iter().collect();
+    let sql = build_create_macro_sql(&schema, &name, &parameters, &definition_sql);
+
+    // The pipeline that gets us here is complete: the extension's
+    // `catalog.register-macro` call was captured by the host, forwarded through
+    // `extension-loader-hooks`, and turned into the exact `CREATE MACRO` SQL
+    // below. Executing it is gated, however: DuckDB's macro binder relies on C++
+    // exceptions for overload resolution, and this wasm build was compiled
+    // without exception unwinding, so any thrown exception aborts the whole
+    // module (`CREATE MACRO ... AS (x + 2)` traps in `BindScalarFunction`).
+    // Rebuild the libduckdb archive with `-fwasm-exceptions` to enable this.
+    // See docs/PLAN-capability-migration.md.
+    if MACRO_EXECUTION_ENABLED {
+        return create_macro_on_active_databases(&name, &sql);
+    }
+    clog!(
+        "[duckdb-core] macro '{name}' captured (SQL: {sql}); execution gated pending wasm exception support"
+    );
+    Ok(())
+}
+
+/// Runs `CREATE MACRO` on a transient connection to each active database, never
+/// the connection executing LOAD (which is a busy ClientContext). Macros live
+/// in the catalog, so they become visible to all connections of that database.
+/// Currently unreachable — see `MACRO_EXECUTION_ENABLED`.
+fn create_macro_on_active_databases(name: &str, sql: &str) -> Result<(), Duckerror> {
+    let databases: Vec<duckdb::duckdb_database> = {
+        let guard = active_connections()
+            .lock()
+            .expect("active connections mutex poisoned");
+        let mut seen: Vec<duckdb::duckdb_database> = Vec::new();
+        for conn in guard.iter() {
+            if !conn.1.is_null() && !seen.iter().any(|db| *db == conn.1) {
+                seen.push(conn.1);
+            }
+        }
+        seen
+    };
+
+    if databases.is_empty() {
+        return Err(Duckerror::Invalidstate(format!(
+            "no active database available to register macro '{name}'"
+        )));
+    }
+
+    for database in databases {
+        unsafe { execute_on_transient_connection(database, sql) }.map_err(|err| {
+            Duckerror::Internal(format!("failed to register macro '{name}': {err}"))
+        })?;
+    }
+    Ok(())
+}
+
+fn build_create_macro_sql(
+    schema: &str,
+    name: &str,
+    parameters: &[String],
+    definition_sql: &str,
+) -> String {
+    let mut sql = String::from("CREATE OR REPLACE MACRO ");
+    if !schema.is_empty() {
+        sql.push_str(&quote_ident(schema));
+        sql.push('.');
+    }
+    sql.push_str(&quote_ident(name));
+    sql.push('(');
+    for (idx, param) in parameters.iter().enumerate() {
+        if idx > 0 {
+            sql.push_str(", ");
+        }
+        sql.push_str(&quote_ident(param));
+    }
+    sql.push_str(") AS (");
+    sql.push_str(definition_sql);
+    sql.push(')');
+    sql
+}
+
+fn quote_ident(ident: &str) -> String {
+    let mut out = String::with_capacity(ident.len() + 2);
+    out.push('"');
+    for ch in ident.chars() {
+        if ch == '"' {
+            out.push('"');
+        }
+        out.push(ch);
+    }
+    out.push('"');
+    out
+}
+
+unsafe fn execute_on_transient_connection(
+    database: duckdb::duckdb_database,
+    sql: &str,
+) -> Result<(), String> {
+    let c_sql = CString::new(sql).map_err(|_| "macro SQL contained interior NUL".to_string())?;
+    let mut conn: duckdb::duckdb_connection = ptr::null_mut();
+    if duckdb::duckdb_connect(database, &mut conn) != DUCKDB_SUCCESS {
+        return Err("duckdb_connect failed for macro registration".to_string());
+    }
+    let mut result = std::mem::MaybeUninit::<duckdb::duckdb_result>::zeroed();
+    let state = duckdb::duckdb_query(conn, c_sql.as_ptr(), result.as_mut_ptr());
+    let mut result = result.assume_init();
+    let outcome = if state != DUCKDB_SUCCESS {
+        Err(extract_result_error(&result).unwrap_or_else(|| "duckdb_query failed".to_string()))
+    } else {
+        Ok(())
+    };
+    duckdb::duckdb_destroy_result(&mut result);
+    duckdb::duckdb_disconnect(&mut conn);
+    outcome
 }
 
 struct ConfigHost;
