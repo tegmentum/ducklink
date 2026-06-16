@@ -64,10 +64,46 @@ exceptions.
 
 This is a whole-build property, not macro-specific: **any** thrown DuckDB
 exception currently aborts the module (e.g. `SELECT * FROM nonexistent` traps).
-Rebuild `libduckdb-wasi.a` (and the libc++ it links) with `-fwasm-exceptions`,
-enable `config.wasm_exceptions(true)` in the host (`build_engine`), and flip
-`MACRO_EXECUTION_ENABLED` to `true`. Feasibility hinges on whether wasi-sdk-28
-ships an exception-handling libc++; if not, libc++ must be built with EH first.
+
+## SCOPE — wasm exception-handling rebuild (investigated 2026-06)
+
+Goal: make C++ `throw`/`catch` actually unwind (caught -> error) instead of
+`__cxa_throw -> std::terminate -> abort`. Payoff is large: it unblocks macros
+**and** turns every DuckDB SQL error from a fatal module abort into a
+recoverable error.
+
+Findings (all verified against `external/wasi-sdk-28.0-arm64-macos`):
+- clang 21 accepts `-fwasm-exceptions` and compiles try/catch objects fine.
+- But **the bundled libc++abi was built `-fno-exceptions`**: `llvm-nm
+  libc++abi.a` shows none of `__cxa_throw` / `__cxa_begin_catch` /
+  `_Unwind_RaiseException`. In the merged `libduckdb-wasi.a` those symbols are
+  `U` (undefined); the final link resolves them to an aborting stub.
+- The wasm-EH runtime symbols (`__wasm_lpad_context`, `_Unwind_CallPersonality`)
+  appear **nowhere** in the SDK, and there is no separate `libunwind` in the
+  sysroot. Linking a `-fwasm-exceptions` program fails with exactly those
+  undefined symbols.
+
+So this is **not a flag flip** — the bundled toolchain has no exception runtime.
+Required work, in order:
+1. Obtain an exception-enabled C++ runtime for `wasm32-wasip2`: either
+   (a) build `libunwind` + `libc++abi` (`-fexceptions`, wasm EH) + `libc++` from
+   the matching LLVM source against the wasi-sdk clang/sysroot, or
+   (b) source a prebuilt EH-enabled wasi-sysroot / newer wasi-sdk that ships one
+   (verify with `llvm-nm libc++abi.a | grep __cxa_throw`).
+2. Add `-fwasm-exceptions` to `cmake/toolchains/wasi-sdk.cmake` C/CXX flags and
+   point the link at the EH runtime; rebuild `libduckdb-wasi.a`
+   (`scripts/build-libduckdb-wasm.sh`) — this part is the same known-good rebuild
+   used for the HTTPUtil fix.
+3. `config.wasm_exceptions(true)` in `build_engine` (host) and rebuild components
+   for the EXCEPTIONS feature.
+4. Flip `MACRO_EXECUTION_ENABLED` to `true`; macros then create for real.
+
+Effort/risk: **high.** Step 1 is the crux — building the LLVM C++ runtimes for
+wasi is a multi-hour, uncertain build (needs llvm-project + wasi-libc sources
+matching clang 21, correct runtimes CMake, EH variants). Steps 2–4 are
+mechanical. Recommendation: before committing, spend a short timebox on path
+1(b) — check whether a newer/EH wasi-sdk exists — since a prebuilt EH sysroot
+collapses the whole task to steps 2–4.
 
 ## The archive blocker — RESOLVED (2026-06)
 
