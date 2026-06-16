@@ -50,11 +50,6 @@ use libduckdb_sys as duckdb;
 use thiserror::Error;
 
 const DUCKDB_SUCCESS: duckdb::duckdb_state = 0;
-/// Whether `CREATE MACRO` may be executed. Enabled now that the libduckdb wasm
-/// archive is built with working C++ exception handling (wasi-sdk-33 `eh`
-/// multilib + `-fwasm-exceptions`), so DuckDB's macro binder can throw/catch
-/// during overload resolution instead of aborting the module.
-const MACRO_EXECUTION_ENABLED: bool = true;
 
 static NEXT_SCALAR_FUNCTION_ID: AtomicU32 = AtomicU32::new(1);
 static SCALAR_FUNCTION_DEFINITIONS: OnceLock<Mutex<Vec<Arc<ScalarFunctionDefinition>>>> =
@@ -2612,29 +2607,18 @@ fn register_pending_macro(
     } = entry;
     let parameters: Vec<String> = parameters.into_iter().collect();
     let sql = build_create_macro_sql(&schema, &name, &parameters, &definition_sql);
-
-    // The pipeline that gets us here is complete: the extension's
-    // `catalog.register-macro` call was captured by the host, forwarded through
-    // `extension-loader-hooks`, and turned into the exact `CREATE MACRO` SQL
-    // below. Executing it is gated, however: DuckDB's macro binder relies on C++
-    // exceptions for overload resolution, and this wasm build was compiled
-    // without exception unwinding, so any thrown exception aborts the whole
-    // module (`CREATE MACRO ... AS (x + 2)` traps in `BindScalarFunction`).
-    // Rebuild the libduckdb archive with `-fwasm-exceptions` to enable this.
-    // See docs/PLAN-capability-migration.md.
-    if MACRO_EXECUTION_ENABLED {
-        return create_macro_on_active_databases(&name, &sql);
-    }
-    clog!(
-        "[duckdb-core] macro '{name}' captured (SQL: {sql}); execution gated pending wasm exception support"
-    );
-    Ok(())
+    // The extension's `catalog.register-macro` call was captured by the host,
+    // forwarded through `extension-loader-hooks`, and turned into the exact
+    // `CREATE MACRO` SQL below. This works because the libduckdb archive is built
+    // with wasm exception handling (wasi-sdk-33 `eh` multilib + `-fwasm-exceptions`);
+    // DuckDB's macro binder throws during overload resolution, which now unwinds
+    // and is caught instead of aborting the module.
+    create_macro_on_active_databases(&name, &sql)
 }
 
 /// Runs `CREATE MACRO` on a transient connection to each active database, never
 /// the connection executing LOAD (which is a busy ClientContext). Macros live
 /// in the catalog, so they become visible to all connections of that database.
-/// Currently unreachable — see `MACRO_EXECUTION_ENABLED`.
 fn create_macro_on_active_databases(name: &str, sql: &str) -> Result<(), Duckerror> {
     let databases: Vec<duckdb::duckdb_database> = {
         let guard = active_connections()
