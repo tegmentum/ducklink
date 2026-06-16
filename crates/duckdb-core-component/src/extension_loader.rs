@@ -124,5 +124,7 @@ fn describe_capability(kind: Capabilitykind) -> &'static str {
         Capabilitykind::Aggregate => "aggregate",
         Capabilitykind::Pragma => "pragma",
         Capabilitykind::Macro => "macro",
+        Capabilitykind::Catalog => "catalog",
+        Capabilitykind::FileFormat => "file-format",
     }
 }

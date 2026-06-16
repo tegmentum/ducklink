@@ -50,8 +50,8 @@ use duckdb_core_bindings::exports::duckdb::extension::{
     config as core_config_exports, logging as core_logging_exports, runtime as core_runtime_exports,
 };
 use duckdb_extension_bindings::duckdb::extension::{
-    config as extension_config, logging as extension_logging, runtime as extension_runtime,
-    types as extension_types,
+    catalog as extension_catalog, config as extension_config, files as extension_files,
+    logging as extension_logging, runtime as extension_runtime, types as extension_types,
 };
 use duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
 use wasmtime::component::__internal::Vec as BindgenVec;
@@ -622,6 +622,14 @@ impl ExtensionManager {
                 |state| state,
             )?;
             extension_logging::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
+                &mut linker,
+                |state| state,
+            )?;
+            extension_catalog::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
+                &mut linker,
+                |state| state,
+            )?;
+            extension_files::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
                 &mut linker,
                 |state| state,
             )?;
@@ -1589,6 +1597,71 @@ impl extension_logging::Host for ExtensionStoreState {
     }
 }
 
+// The `catalog` and `files` interfaces are part of the extension world so that
+// extensions can register logical types, casts, macros, replacement scans, and
+// copy handlers. The host satisfies the imports here so such extensions
+// instantiate and load; the requests are acknowledged and logged. Forwarding
+// them into DuckDB (via new core hooks + C API calls) is a follow-up — see
+// docs/PLAN-capability-migration.md.
+impl extension_catalog::Host for ExtensionStoreState {
+    fn register_logical_type(
+        &mut self,
+        ty: extension_catalog::LogicalType,
+    ) -> Result<u32, String> {
+        let handle = self.alloc_resource_id();
+        eprintln!(
+            "[extension-manager] catalog register-logical-type '{}' (physical={}) for '{}' -> handle {handle} (captured; DuckDB wiring pending)",
+            ty.name, ty.physical, self.extension_name
+        );
+        Ok(handle)
+    }
+
+    fn register_cast(&mut self, spec: extension_catalog::CastSpec) -> Result<(), String> {
+        eprintln!(
+            "[extension-manager] catalog register-cast {}->{} ({:?}) for '{}' (captured; DuckDB wiring pending)",
+            spec.from, spec.to, spec.kind, self.extension_name
+        );
+        Ok(())
+    }
+
+    fn register_macro(&mut self, def: extension_catalog::MacroDef) -> Result<(), String> {
+        eprintln!(
+            "[extension-manager] catalog register-macro '{}.{}' ({} params) for '{}' (captured; DuckDB wiring pending)",
+            def.schema,
+            def.name,
+            def.parameters.len(),
+            self.extension_name
+        );
+        Ok(())
+    }
+}
+
+impl extension_files::Host for ExtensionStoreState {
+    fn register_replacement_scan(
+        &mut self,
+        scan: extension_files::ReplacementScan,
+    ) -> Result<u32, String> {
+        let id = self.alloc_resource_id();
+        eprintln!(
+            "[extension-manager] files register-replacement-scan exts={:?} ({:?}) table-fn={} for '{}' -> id {id} (captured; DuckDB wiring pending)",
+            scan.extensions, scan.mode, scan.table_function, self.extension_name
+        );
+        Ok(id)
+    }
+
+    fn register_copy_handler(
+        &mut self,
+        handler: extension_files::CopyHandler,
+    ) -> Result<u32, String> {
+        let id = self.alloc_resource_id();
+        eprintln!(
+            "[extension-manager] files register-copy-handler ext='{}' fn={} for '{}' -> id {id} (captured; DuckDB wiring pending)",
+            handler.extension, handler.function, self.extension_name
+        );
+        Ok(id)
+    }
+}
+
 impl cli_db::HostConnection for HostState {
     fn drop(&mut self, rep: Resource<cli_db::Connection>) -> wasmtime::Result<()> {
         self.schedule_connection_drop(rep);
@@ -2006,6 +2079,8 @@ fn convert_core_capabilitykind(kind: core_types::Capabilitykind) -> cli_types::C
         core_types::Capabilitykind::Aggregate => cli_types::Capabilitykind::Aggregate,
         core_types::Capabilitykind::Pragma => cli_types::Capabilitykind::Pragma,
         core_types::Capabilitykind::Macro => cli_types::Capabilitykind::Macro,
+        core_types::Capabilitykind::Catalog => cli_types::Capabilitykind::Catalog,
+        core_types::Capabilitykind::FileFormat => cli_types::Capabilitykind::FileFormat,
     }
 }
 
@@ -2016,6 +2091,8 @@ fn convert_cli_capability(kind: cli_types::Capabilitykind) -> core_types::Capabi
         cli_types::Capabilitykind::Aggregate => core_types::Capabilitykind::Aggregate,
         cli_types::Capabilitykind::Pragma => core_types::Capabilitykind::Pragma,
         cli_types::Capabilitykind::Macro => core_types::Capabilitykind::Macro,
+        cli_types::Capabilitykind::Catalog => core_types::Capabilitykind::Catalog,
+        cli_types::Capabilitykind::FileFormat => core_types::Capabilitykind::FileFormat,
     }
 }
 
@@ -2041,6 +2118,8 @@ fn describe_cli_capability(kind: cli_types::Capabilitykind) -> &'static str {
         cli_types::Capabilitykind::Aggregate => "aggregate",
         cli_types::Capabilitykind::Pragma => "pragma",
         cli_types::Capabilitykind::Macro => "macro",
+        cli_types::Capabilitykind::Catalog => "catalog",
+        cli_types::Capabilitykind::FileFormat => "file-format",
     }
 }
 

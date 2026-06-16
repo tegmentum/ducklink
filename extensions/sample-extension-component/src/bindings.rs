@@ -333,6 +333,8 @@ pub mod duckdb {
                 Aggregate,
                 Pragma,
                 Macro,
+                Catalog,
+                FileFormat,
             }
             impl ::core::fmt::Debug for Capabilitykind {
                 fn fmt(
@@ -355,6 +357,12 @@ pub mod duckdb {
                         Capabilitykind::Macro => {
                             f.debug_tuple("Capabilitykind::Macro").finish()
                         }
+                        Capabilitykind::Catalog => {
+                            f.debug_tuple("Capabilitykind::Catalog").finish()
+                        }
+                        Capabilitykind::FileFormat => {
+                            f.debug_tuple("Capabilitykind::FileFormat").finish()
+                        }
                     }
                 }
             }
@@ -370,6 +378,8 @@ pub mod duckdb {
                         2 => Capabilitykind::Aggregate,
                         3 => Capabilitykind::Pragma,
                         4 => Capabilitykind::Macro,
+                        5 => Capabilitykind::Catalog,
+                        6 => Capabilitykind::FileFormat,
                         _ => panic!("invalid enum discriminant"),
                     }
                 }
@@ -5157,6 +5167,680 @@ pub mod duckdb {
                 }
             }
         }
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod catalog {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            #[derive(Clone)]
+            pub struct LogicalType {
+                pub name: _rt::String,
+                /// TODO: narrow this once we know which physical types we support
+                pub physical: _rt::String,
+            }
+            impl ::core::fmt::Debug for LogicalType {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("LogicalType")
+                        .field("name", &self.name)
+                        .field("physical", &self.physical)
+                        .finish()
+                }
+            }
+            pub type LogicalTypeHandle = u32;
+            #[repr(u8)]
+            #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+            pub enum CastKind {
+                Implicit,
+                Assignment,
+                Explicit,
+            }
+            impl ::core::fmt::Debug for CastKind {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    match self {
+                        CastKind::Implicit => {
+                            f.debug_tuple("CastKind::Implicit").finish()
+                        }
+                        CastKind::Assignment => {
+                            f.debug_tuple("CastKind::Assignment").finish()
+                        }
+                        CastKind::Explicit => {
+                            f.debug_tuple("CastKind::Explicit").finish()
+                        }
+                    }
+                }
+            }
+            impl CastKind {
+                #[doc(hidden)]
+                pub unsafe fn _lift(val: u8) -> CastKind {
+                    if !cfg!(debug_assertions) {
+                        return ::core::mem::transmute(val);
+                    }
+                    match val {
+                        0 => CastKind::Implicit,
+                        1 => CastKind::Assignment,
+                        2 => CastKind::Explicit,
+                        _ => panic!("invalid enum discriminant"),
+                    }
+                }
+            }
+            #[derive(Clone)]
+            pub struct CastSpec {
+                pub from: _rt::String,
+                pub to: _rt::String,
+                pub kind: CastKind,
+            }
+            impl ::core::fmt::Debug for CastSpec {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("CastSpec")
+                        .field("from", &self.from)
+                        .field("to", &self.to)
+                        .field("kind", &self.kind)
+                        .finish()
+                }
+            }
+            #[derive(Clone)]
+            pub struct MacroDef {
+                pub schema: _rt::String,
+                pub name: _rt::String,
+                pub parameters: _rt::Vec<_rt::String>,
+                pub definition_sql: _rt::String,
+            }
+            impl ::core::fmt::Debug for MacroDef {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("MacroDef")
+                        .field("schema", &self.schema)
+                        .field("name", &self.name)
+                        .field("parameters", &self.parameters)
+                        .field("definition-sql", &self.definition_sql)
+                        .finish()
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Register a logical type by name.
+            pub fn register_logical_type(
+                ty: &LogicalType,
+            ) -> Result<LogicalTypeHandle, _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let LogicalType { name: name0, physical: physical0 } = ty;
+                    let vec1 = name0;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let vec2 = physical0;
+                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                    let len2 = vec2.len();
+                    let ptr3 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "duckdb:extension/catalog")]
+                    unsafe extern "C" {
+                        #[link_name = "register-logical-type"]
+                        fn wit_import4(
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import4(
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import4(ptr1.cast_mut(), len1, ptr2.cast_mut(), len2, ptr3)
+                    };
+                    let l5 = i32::from(*ptr3.add(0).cast::<u8>());
+                    let result10 = match l5 {
+                        0 => {
+                            let e = {
+                                let l6 = *ptr3
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<i32>();
+                                l6 as u32
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l7 = *ptr3
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l8 = *ptr3
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len9 = l8;
+                                let bytes9 = _rt::Vec::from_raw_parts(
+                                    l7.cast(),
+                                    len9,
+                                    len9,
+                                );
+                                _rt::string_lift(bytes9)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result10
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Register a cast between logical types.
+            pub fn register_cast(spec: &CastSpec) -> Result<(), _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let CastSpec { from: from0, to: to0, kind: kind0 } = spec;
+                    let vec1 = from0;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let vec2 = to0;
+                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                    let len2 = vec2.len();
+                    let ptr3 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "duckdb:extension/catalog")]
+                    unsafe extern "C" {
+                        #[link_name = "register-cast"]
+                        fn wit_import4(
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: i32,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import4(
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: i32,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import4(
+                            ptr1.cast_mut(),
+                            len1,
+                            ptr2.cast_mut(),
+                            len2,
+                            kind0.clone() as i32,
+                            ptr3,
+                        )
+                    };
+                    let l5 = i32::from(*ptr3.add(0).cast::<u8>());
+                    let result9 = match l5 {
+                        0 => {
+                            let e = ();
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l6 = *ptr3
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l7 = *ptr3
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len8 = l7;
+                                let bytes8 = _rt::Vec::from_raw_parts(
+                                    l6.cast(),
+                                    len8,
+                                    len8,
+                                );
+                                _rt::string_lift(bytes8)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result9
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Register a default macro.
+            pub fn register_macro(def: &MacroDef) -> Result<(), _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let MacroDef {
+                        schema: schema0,
+                        name: name0,
+                        parameters: parameters0,
+                        definition_sql: definition_sql0,
+                    } = def;
+                    let vec1 = schema0;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let vec2 = name0;
+                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                    let len2 = vec2.len();
+                    let vec4 = parameters0;
+                    let len4 = vec4.len();
+                    let layout4 = _rt::alloc::Layout::from_size_align_unchecked(
+                        vec4.len() * (2 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result4 = if layout4.size() != 0 {
+                        let ptr = _rt::alloc::alloc(layout4).cast::<u8>();
+                        if ptr.is_null() {
+                            _rt::alloc::handle_alloc_error(layout4);
+                        }
+                        ptr
+                    } else {
+                        ::core::ptr::null_mut()
+                    };
+                    for (i, e) in vec4.into_iter().enumerate() {
+                        let base = result4
+                            .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                        {
+                            let vec3 = e;
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *base.add(0).cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                    }
+                    let vec5 = definition_sql0;
+                    let ptr5 = vec5.as_ptr().cast::<u8>();
+                    let len5 = vec5.len();
+                    let ptr6 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "duckdb:extension/catalog")]
+                    unsafe extern "C" {
+                        #[link_name = "register-macro"]
+                        fn wit_import7(
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import7(
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import7(
+                            ptr1.cast_mut(),
+                            len1,
+                            ptr2.cast_mut(),
+                            len2,
+                            result4,
+                            len4,
+                            ptr5.cast_mut(),
+                            len5,
+                            ptr6,
+                        )
+                    };
+                    let l8 = i32::from(*ptr6.add(0).cast::<u8>());
+                    let result12 = match l8 {
+                        0 => {
+                            let e = ();
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l9 = *ptr6
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l10 = *ptr6
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len11 = l10;
+                                let bytes11 = _rt::Vec::from_raw_parts(
+                                    l9.cast(),
+                                    len11,
+                                    len11,
+                                );
+                                _rt::string_lift(bytes11)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    if layout4.size() != 0 {
+                        _rt::alloc::dealloc(result4.cast(), layout4);
+                    }
+                    result12
+                }
+            }
+        }
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod files {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            pub type TableFunctionHandle = u32;
+            pub type CopyFunctionHandle = u32;
+            pub type ReplacementScanId = u32;
+            pub type CopyHandlerId = u32;
+            #[repr(u8)]
+            #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+            pub enum DetectionMode {
+                ExtensionOnly,
+                Signature,
+            }
+            impl ::core::fmt::Debug for DetectionMode {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    match self {
+                        DetectionMode::ExtensionOnly => {
+                            f.debug_tuple("DetectionMode::ExtensionOnly").finish()
+                        }
+                        DetectionMode::Signature => {
+                            f.debug_tuple("DetectionMode::Signature").finish()
+                        }
+                    }
+                }
+            }
+            impl DetectionMode {
+                #[doc(hidden)]
+                pub unsafe fn _lift(val: u8) -> DetectionMode {
+                    if !cfg!(debug_assertions) {
+                        return ::core::mem::transmute(val);
+                    }
+                    match val {
+                        0 => DetectionMode::ExtensionOnly,
+                        1 => DetectionMode::Signature,
+                        _ => panic!("invalid enum discriminant"),
+                    }
+                }
+            }
+            #[derive(Clone)]
+            pub struct ReplacementScan {
+                /// File extensions that should trigger this scan (e.g. "json", "jsonl").
+                pub extensions: _rt::Vec<_rt::String>,
+                /// Handle returned from runtime::register_table.
+                pub table_function: TableFunctionHandle,
+                pub mode: DetectionMode,
+            }
+            impl ::core::fmt::Debug for ReplacementScan {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("ReplacementScan")
+                        .field("extensions", &self.extensions)
+                        .field("table-function", &self.table_function)
+                        .field("mode", &self.mode)
+                        .finish()
+                }
+            }
+            #[derive(Clone)]
+            pub struct CopyHandler {
+                /// File extension this copy handler supports.
+                pub extension: _rt::String,
+                /// Handle returned from runtime::register_table or similar.
+                pub function: CopyFunctionHandle,
+            }
+            impl ::core::fmt::Debug for CopyHandler {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("CopyHandler")
+                        .field("extension", &self.extension)
+                        .field("function", &self.function)
+                        .finish()
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn register_replacement_scan(
+                scan: &ReplacementScan,
+            ) -> Result<ReplacementScanId, _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ReplacementScan {
+                        extensions: extensions0,
+                        table_function: table_function0,
+                        mode: mode0,
+                    } = scan;
+                    let vec2 = extensions0;
+                    let len2 = vec2.len();
+                    let layout2 = _rt::alloc::Layout::from_size_align_unchecked(
+                        vec2.len() * (2 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result2 = if layout2.size() != 0 {
+                        let ptr = _rt::alloc::alloc(layout2).cast::<u8>();
+                        if ptr.is_null() {
+                            _rt::alloc::handle_alloc_error(layout2);
+                        }
+                        ptr
+                    } else {
+                        ::core::ptr::null_mut()
+                    };
+                    for (i, e) in vec2.into_iter().enumerate() {
+                        let base = result2
+                            .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                        {
+                            let vec1 = e;
+                            let ptr1 = vec1.as_ptr().cast::<u8>();
+                            let len1 = vec1.len();
+                            *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len1;
+                            *base.add(0).cast::<*mut u8>() = ptr1.cast_mut();
+                        }
+                    }
+                    let ptr3 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "duckdb:extension/files")]
+                    unsafe extern "C" {
+                        #[link_name = "register-replacement-scan"]
+                        fn wit_import4(_: *mut u8, _: usize, _: i32, _: i32, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import4(
+                        _: *mut u8,
+                        _: usize,
+                        _: i32,
+                        _: i32,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import4(
+                            result2,
+                            len2,
+                            _rt::as_i32(table_function0),
+                            mode0.clone() as i32,
+                            ptr3,
+                        )
+                    };
+                    let l5 = i32::from(*ptr3.add(0).cast::<u8>());
+                    let result10 = match l5 {
+                        0 => {
+                            let e = {
+                                let l6 = *ptr3
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<i32>();
+                                l6 as u32
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l7 = *ptr3
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l8 = *ptr3
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len9 = l8;
+                                let bytes9 = _rt::Vec::from_raw_parts(
+                                    l7.cast(),
+                                    len9,
+                                    len9,
+                                );
+                                _rt::string_lift(bytes9)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    if layout2.size() != 0 {
+                        _rt::alloc::dealloc(result2.cast(), layout2);
+                    }
+                    result10
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn register_copy_handler(
+                handler: &CopyHandler,
+            ) -> Result<CopyHandlerId, _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let CopyHandler { extension: extension0, function: function0 } = handler;
+                    let vec1 = extension0;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let ptr2 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "duckdb:extension/files")]
+                    unsafe extern "C" {
+                        #[link_name = "register-copy-handler"]
+                        fn wit_import3(_: *mut u8, _: usize, _: i32, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import3(
+                        _: *mut u8,
+                        _: usize,
+                        _: i32,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import3(ptr1.cast_mut(), len1, _rt::as_i32(function0), ptr2)
+                    };
+                    let l4 = i32::from(*ptr2.add(0).cast::<u8>());
+                    let result9 = match l4 {
+                        0 => {
+                            let e = {
+                                let l5 = *ptr2
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<i32>();
+                                l5 as u32
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l6 = *ptr2
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l7 = *ptr2
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len8 = l7;
+                                let bytes8 = _rt::Vec::from_raw_parts(
+                                    l6.cast(),
+                                    len8,
+                                    len8,
+                                );
+                                _rt::string_lift(bytes8)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result9
+                }
+            }
+        }
     }
 }
 #[rustfmt::skip]
@@ -7492,92 +8176,108 @@ pub(crate) use __export_duckdb_extension_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 3742] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\x97\x1c\x01A\x02\x01\
-A\x1b\x01B&\x01m\x06\x07boolean\x05int64\x06uint64\x07float64\x04text\x04blob\x04\
-\0\x0blogicaltype\x03\0\0\x01ks\x01r\x02\x04name\x02\x07logical\x01\x04\0\x07fun\
-carg\x03\0\x03\x01n\x05\x0ddeterministic\x0bcommutative\x09stateless\x0dsideeffe\
-cting\x0adeprecated\x04\0\x09funcflags\x03\0\x05\x01ps\x01r\x03\x0bdescription\x02\
-\x04tags\x07\x0aattributes\x06\x04\0\x08funcopts\x03\0\x08\x01r\x02\x04names\x07\
-logical\x01\x04\0\x09columndef\x03\0\x0a\x01r\x02\x0bdescription\x02\x04tags\x07\
-\x04\0\x07extopts\x03\0\x0c\x01p}\x01q\x07\x04null\0\0\x07boolean\x01\x7f\0\x05i\
-nt64\x01x\0\x06uint64\x01w\0\x07float64\x01u\0\x04text\x01s\0\x04blob\x01\x0e\0\x04\
-\0\x09duckvalue\x03\0\x0f\x01p\x10\x01p\x11\x04\0\x09resultset\x03\0\x12\x01p\x11\
-\x04\0\x08rowbatch\x03\0\x14\x01kw\x01r\x02\x08rowindex\x16\x08iswindow\x7f\x04\0\
-\x0ainvokeinfo\x03\0\x17\x01q\x05\x0finvalidargument\x01s\0\x0bunsupported\x01s\0\
-\x0cinvalidstate\x01s\0\x02io\x01s\0\x08internal\x01s\0\x04\0\x09duckerror\x03\0\
-\x19\x01q\x04\x0ainvalidkey\x01s\0\x0ctypemismatch\x01s\0\x0bunavailable\x01s\0\x0e\
-internalconfig\x01s\0\x04\0\x0bconfigerror\x03\0\x1b\x01m\x05\x05trace\x05debug\x04\
-info\x04warn\x05error\x04\0\x08loglevel\x03\0\x1d\x01r\x02\x03keys\x05values\x04\
-\0\x08logfield\x03\0\x1f\x01m\x05\x06scalar\x05table\x09aggregate\x06pragma\x05m\
-acro\x04\0\x0ecapabilitykind\x03\0!\x01p\"\x01r\x03\x04names\x07version\x02\x08r\
-equires#\x04\0\x0aloadresult\x03\0$\x03\0\x16duckdb:extension/types\x05\0\x02\x03\
-\0\0\x0ecapabilitykind\x02\x03\0\0\x09duckerror\x02\x03\0\0\x09duckvalue\x02\x03\
-\0\0\x07extopts\x02\x03\0\0\x07funcarg\x02\x03\0\0\x08funcopts\x02\x03\0\0\x0ain\
-vokeinfo\x02\x03\0\0\x0blogicaltype\x02\x03\0\0\x09resultset\x02\x03\0\0\x08rowb\
-atch\x02\x03\0\0\x09columndef\x01B_\x02\x03\x02\x01\x01\x04\0\x0ecapabilitykind\x03\
-\0\0\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\0\x02\x02\x03\x02\x01\x03\x04\0\x09\
-duckvalue\x03\0\x04\x02\x03\x02\x01\x04\x04\0\x07extopts\x03\0\x06\x02\x03\x02\x01\
-\x05\x04\0\x07funcarg\x03\0\x08\x02\x03\x02\x01\x06\x04\0\x08funcopts\x03\0\x0a\x02\
-\x03\x02\x01\x07\x04\0\x0ainvokeinfo\x03\0\x0c\x02\x03\x02\x01\x08\x04\0\x0blogi\
-caltype\x03\0\x0e\x02\x03\x02\x01\x09\x04\0\x09resultset\x03\0\x10\x02\x03\x02\x01\
-\x0a\x04\0\x08rowbatch\x03\0\x12\x02\x03\x02\x01\x0b\x04\0\x09columndef\x03\0\x14\
-\x04\0\x0fscalar-callback\x03\x01\x04\0\x0etable-callback\x03\x01\x04\0\x12aggre\
-gate-callback\x03\x01\x04\0\x0fpragma-callback\x03\x01\x04\0\x0fscalar-registry\x03\
-\x01\x04\0\x0etable-registry\x03\x01\x04\0\x12aggregate-registry\x03\x01\x04\0\x0f\
-pragma-registry\x03\x01\x04\0\x0emacro-registry\x03\x01\x01i\x1a\x01i\x1b\x01i\x1c\
-\x01i\x1d\x01i\x1e\x01q\x05\x06scalar\x01\x1f\0\x05table\x01\x20\0\x09aggregate\x01\
-!\0\x06pragma\x01\"\0\x05macro\x01#\0\x04\0\x0acapability\x03\0$\x01i\x16\x01@\x01\
-\x06handley\0&\x04\0\x1c[constructor]scalar-callback\x01'\x01h\x16\x01p\x05\x01j\
-\x01\x05\x01\x03\x01@\x03\x04self(\x04args)\x03ctx\x0d\0*\x04\0\x1c[method]scala\
-r-callback.call\x01+\x01i\x17\x01@\x01\x06handley\0,\x04\0\x1b[constructor]table\
--callback\x01-\x01h\x17\x01j\x01\x11\x01\x03\x01@\x02\x04self.\x04args)\0/\x04\0\
-\x1b[method]table-callback.call\x010\x01i\x18\x01@\x01\x06handley\01\x04\0\x1f[c\
-onstructor]aggregate-callback\x012\x01h\x18\x01@\x02\x04self3\x04rows\x13\0*\x04\
-\0\x1f[method]aggregate-callback.call\x014\x01i\x19\x01@\x01\x06handley\05\x04\0\
-\x1c[constructor]pragma-callback\x016\x01h\x19\x01k\x05\x01j\x018\x01\x03\x01@\x02\
-\x04self7\x04args)\09\x04\0\x1c[method]pragma-callback.call\x01:\x01h\x1a\x01p\x09\
-\x01k\x0b\x01j\x01y\x01\x03\x01@\x06\x04self;\x04names\x09arguments<\x07returns\x0f\
-\x08callback&\x07options=\0>\x04\0\x20[method]scalar-registry.register\x01?\x01h\
-\x1b\x01p\x15\x01k\x07\x01@\x06\x04self\xc0\0\x04names\x09arguments<\x07columns\xc1\
-\0\x08callback,\x07options\xc2\0\0>\x04\0\x1f[method]table-registry.register\x01\
-C\x01h\x1c\x01@\x06\x04self\xc4\0\x04names\x09arguments<\x07returns\x0f\x08callb\
-ack1\x07options=\0>\x04\0#[method]aggregate-registry.register\x01E\x01h\x1d\x01@\
-\x06\x04self\xc6\0\x04names\x09arguments<\x07returns\x0f\x08callback5\x07options\
-\xc2\0\0>\x04\0%[method]pragma-registry.register-call\x01G\x01h\x1e\x01ps\x01j\x01\
-\x7f\x01\x03\x01@\x05\x04self\xc8\0\x04names\x0aparameters\xc9\0\x08body-sqls\x07\
-options\xc2\0\0\xca\0\x04\0&[method]macro-registry.register-scalar\x01K\x01k%\x01\
-@\x01\x04kind\x01\0\xcc\0\x04\0\x0eget-capability\x01M\x01p\x01\x01@\0\0\xce\0\x04\
-\0\x11list-capabilities\x01O\x03\0\x18duckdb:extension/runtime\x05\x0c\x02\x03\0\
-\0\x0bconfigerror\x01B$\x02\x03\x02\x01\x0d\x04\0\x0bconfigerror\x03\0\0\x01@\0\0\
-s\x04\0\x10provider-version\x01\x02\x01ks\x01ps\x01@\x01\x06prefix\x03\0\x04\x04\
-\0\x09list-keys\x01\x05\x01j\x01\x03\x01\x01\x01@\x01\x04paths\0\x06\x04\0\x0age\
-t-string\x01\x07\x01k\x7f\x01j\x01\x08\x01\x01\x01@\x01\x04paths\0\x09\x04\0\x08\
-get-bool\x01\x0a\x01kx\x01j\x01\x0b\x01\x01\x01@\x01\x04paths\0\x0c\x04\0\x07get\
--i64\x01\x0d\x01kw\x01j\x01\x0e\x01\x01\x01@\x01\x04paths\0\x0f\x04\0\x07get-u64\
-\x01\x10\x01ku\x01j\x01\x11\x01\x01\x01@\x01\x04paths\0\x12\x04\0\x07get-f64\x01\
-\x13\x01p}\x01k\x14\x01j\x01\x15\x01\x01\x01@\x01\x04paths\0\x16\x04\0\x09get-by\
-tes\x01\x17\x01k\x04\x01j\x01\x18\x01\x01\x01@\x01\x04paths\0\x19\x04\0\x0fget-s\
-tring-list\x01\x1a\x03\0\x17duckdb:extension/config\x05\x0e\x02\x03\0\0\x08logfi\
-eld\x02\x03\0\0\x08loglevel\x01B\x0a\x02\x03\x02\x01\x0f\x04\0\x08logfield\x03\0\
-\0\x02\x03\x02\x01\x10\x04\0\x08loglevel\x03\0\x02\x01ks\x01@\x03\x05level\x03\x07\
-messages\x06target\x04\x01\0\x04\0\x03log\x01\x05\x01p\x01\x01@\x03\x05level\x03\
-\x07messages\x06fields\x06\x01\0\x04\0\x0alog-fields\x01\x07\x03\0\x18duckdb:ext\
-ension/logging\x05\x11\x02\x03\0\0\x0aloadresult\x01B\x0d\x02\x03\x02\x01\x02\x04\
-\0\x09duckerror\x03\0\0\x02\x03\x02\x01\x12\x04\0\x0aloadresult\x03\0\x02\x01j\x01\
-\x03\x01\x01\x01@\0\0\x04\x04\0\x04load\x01\x05\x01ps\x01j\x01\x7f\x01\x01\x01@\x01\
-\x04keys\x06\0\x07\x04\0\x0breconfigure\x01\x08\x01@\0\0\x07\x04\0\x08shutdown\x01\
-\x09\x04\0\x16duckdb:extension/guest\x05\x13\x01B\x17\x02\x03\x02\x01\x02\x04\0\x09\
-duckerror\x03\0\0\x02\x03\x02\x01\x03\x04\0\x09duckvalue\x03\0\x02\x02\x03\x02\x01\
-\x07\x04\0\x0ainvokeinfo\x03\0\x04\x02\x03\x02\x01\x09\x04\0\x09resultset\x03\0\x06\
-\x02\x03\x02\x01\x0a\x04\0\x08rowbatch\x03\0\x08\x01p\x03\x01j\x01\x03\x01\x01\x01\
-@\x03\x06handley\x04args\x0a\x03ctx\x05\0\x0b\x04\0\x0bcall-scalar\x01\x0c\x01j\x01\
-\x07\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x0d\x04\0\x0acall-table\x01\x0e\x01\
-@\x02\x06handley\x04rows\x09\0\x0b\x04\0\x0ecall-aggregate\x01\x0f\x01k\x03\x01j\
-\x01\x10\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x11\x04\0\x0bcall-pragma\x01\x12\
-\x04\0\"duckdb:extension/callback-dispatch\x05\x14\x04\0!duckdb:extension/duckdb\
--extension\x04\0\x0b\x16\x01\0\x10duckdb-extension\x03\0\0\0G\x09producers\x01\x0c\
-processed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 4488] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\x81\"\x01A\x02\x01A\x1f\
+\x01B&\x01m\x06\x07boolean\x05int64\x06uint64\x07float64\x04text\x04blob\x04\0\x0b\
+logicaltype\x03\0\0\x01ks\x01r\x02\x04name\x02\x07logical\x01\x04\0\x07funcarg\x03\
+\0\x03\x01n\x05\x0ddeterministic\x0bcommutative\x09stateless\x0dsideeffecting\x0a\
+deprecated\x04\0\x09funcflags\x03\0\x05\x01ps\x01r\x03\x0bdescription\x02\x04tag\
+s\x07\x0aattributes\x06\x04\0\x08funcopts\x03\0\x08\x01r\x02\x04names\x07logical\
+\x01\x04\0\x09columndef\x03\0\x0a\x01r\x02\x0bdescription\x02\x04tags\x07\x04\0\x07\
+extopts\x03\0\x0c\x01p}\x01q\x07\x04null\0\0\x07boolean\x01\x7f\0\x05int64\x01x\0\
+\x06uint64\x01w\0\x07float64\x01u\0\x04text\x01s\0\x04blob\x01\x0e\0\x04\0\x09du\
+ckvalue\x03\0\x0f\x01p\x10\x01p\x11\x04\0\x09resultset\x03\0\x12\x01p\x11\x04\0\x08\
+rowbatch\x03\0\x14\x01kw\x01r\x02\x08rowindex\x16\x08iswindow\x7f\x04\0\x0ainvok\
+einfo\x03\0\x17\x01q\x05\x0finvalidargument\x01s\0\x0bunsupported\x01s\0\x0cinva\
+lidstate\x01s\0\x02io\x01s\0\x08internal\x01s\0\x04\0\x09duckerror\x03\0\x19\x01\
+q\x04\x0ainvalidkey\x01s\0\x0ctypemismatch\x01s\0\x0bunavailable\x01s\0\x0einter\
+nalconfig\x01s\0\x04\0\x0bconfigerror\x03\0\x1b\x01m\x05\x05trace\x05debug\x04in\
+fo\x04warn\x05error\x04\0\x08loglevel\x03\0\x1d\x01r\x02\x03keys\x05values\x04\0\
+\x08logfield\x03\0\x1f\x01m\x07\x06scalar\x05table\x09aggregate\x06pragma\x05mac\
+ro\x07catalog\x0bfile-format\x04\0\x0ecapabilitykind\x03\0!\x01p\"\x01r\x03\x04n\
+ames\x07version\x02\x08requires#\x04\0\x0aloadresult\x03\0$\x03\0\x16duckdb:exte\
+nsion/types\x05\0\x02\x03\0\0\x0ecapabilitykind\x02\x03\0\0\x09duckerror\x02\x03\
+\0\0\x09duckvalue\x02\x03\0\0\x07extopts\x02\x03\0\0\x07funcarg\x02\x03\0\0\x08f\
+uncopts\x02\x03\0\0\x0ainvokeinfo\x02\x03\0\0\x0blogicaltype\x02\x03\0\0\x09resu\
+ltset\x02\x03\0\0\x08rowbatch\x02\x03\0\0\x09columndef\x01B_\x02\x03\x02\x01\x01\
+\x04\0\x0ecapabilitykind\x03\0\0\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\0\x02\
+\x02\x03\x02\x01\x03\x04\0\x09duckvalue\x03\0\x04\x02\x03\x02\x01\x04\x04\0\x07e\
+xtopts\x03\0\x06\x02\x03\x02\x01\x05\x04\0\x07funcarg\x03\0\x08\x02\x03\x02\x01\x06\
+\x04\0\x08funcopts\x03\0\x0a\x02\x03\x02\x01\x07\x04\0\x0ainvokeinfo\x03\0\x0c\x02\
+\x03\x02\x01\x08\x04\0\x0blogicaltype\x03\0\x0e\x02\x03\x02\x01\x09\x04\0\x09res\
+ultset\x03\0\x10\x02\x03\x02\x01\x0a\x04\0\x08rowbatch\x03\0\x12\x02\x03\x02\x01\
+\x0b\x04\0\x09columndef\x03\0\x14\x04\0\x0fscalar-callback\x03\x01\x04\0\x0etabl\
+e-callback\x03\x01\x04\0\x12aggregate-callback\x03\x01\x04\0\x0fpragma-callback\x03\
+\x01\x04\0\x0fscalar-registry\x03\x01\x04\0\x0etable-registry\x03\x01\x04\0\x12a\
+ggregate-registry\x03\x01\x04\0\x0fpragma-registry\x03\x01\x04\0\x0emacro-regist\
+ry\x03\x01\x01i\x1a\x01i\x1b\x01i\x1c\x01i\x1d\x01i\x1e\x01q\x05\x06scalar\x01\x1f\
+\0\x05table\x01\x20\0\x09aggregate\x01!\0\x06pragma\x01\"\0\x05macro\x01#\0\x04\0\
+\x0acapability\x03\0$\x01i\x16\x01@\x01\x06handley\0&\x04\0\x1c[constructor]scal\
+ar-callback\x01'\x01h\x16\x01p\x05\x01j\x01\x05\x01\x03\x01@\x03\x04self(\x04arg\
+s)\x03ctx\x0d\0*\x04\0\x1c[method]scalar-callback.call\x01+\x01i\x17\x01@\x01\x06\
+handley\0,\x04\0\x1b[constructor]table-callback\x01-\x01h\x17\x01j\x01\x11\x01\x03\
+\x01@\x02\x04self.\x04args)\0/\x04\0\x1b[method]table-callback.call\x010\x01i\x18\
+\x01@\x01\x06handley\01\x04\0\x1f[constructor]aggregate-callback\x012\x01h\x18\x01\
+@\x02\x04self3\x04rows\x13\0*\x04\0\x1f[method]aggregate-callback.call\x014\x01i\
+\x19\x01@\x01\x06handley\05\x04\0\x1c[constructor]pragma-callback\x016\x01h\x19\x01\
+k\x05\x01j\x018\x01\x03\x01@\x02\x04self7\x04args)\09\x04\0\x1c[method]pragma-ca\
+llback.call\x01:\x01h\x1a\x01p\x09\x01k\x0b\x01j\x01y\x01\x03\x01@\x06\x04self;\x04\
+names\x09arguments<\x07returns\x0f\x08callback&\x07options=\0>\x04\0\x20[method]\
+scalar-registry.register\x01?\x01h\x1b\x01p\x15\x01k\x07\x01@\x06\x04self\xc0\0\x04\
+names\x09arguments<\x07columns\xc1\0\x08callback,\x07options\xc2\0\0>\x04\0\x1f[\
+method]table-registry.register\x01C\x01h\x1c\x01@\x06\x04self\xc4\0\x04names\x09\
+arguments<\x07returns\x0f\x08callback1\x07options=\0>\x04\0#[method]aggregate-re\
+gistry.register\x01E\x01h\x1d\x01@\x06\x04self\xc6\0\x04names\x09arguments<\x07r\
+eturns\x0f\x08callback5\x07options\xc2\0\0>\x04\0%[method]pragma-registry.regist\
+er-call\x01G\x01h\x1e\x01ps\x01j\x01\x7f\x01\x03\x01@\x05\x04self\xc8\0\x04names\
+\x0aparameters\xc9\0\x08body-sqls\x07options\xc2\0\0\xca\0\x04\0&[method]macro-r\
+egistry.register-scalar\x01K\x01k%\x01@\x01\x04kind\x01\0\xcc\0\x04\0\x0eget-cap\
+ability\x01M\x01p\x01\x01@\0\0\xce\0\x04\0\x11list-capabilities\x01O\x03\0\x18du\
+ckdb:extension/runtime\x05\x0c\x02\x03\0\0\x0bconfigerror\x01B$\x02\x03\x02\x01\x0d\
+\x04\0\x0bconfigerror\x03\0\0\x01@\0\0s\x04\0\x10provider-version\x01\x02\x01ks\x01\
+ps\x01@\x01\x06prefix\x03\0\x04\x04\0\x09list-keys\x01\x05\x01j\x01\x03\x01\x01\x01\
+@\x01\x04paths\0\x06\x04\0\x0aget-string\x01\x07\x01k\x7f\x01j\x01\x08\x01\x01\x01\
+@\x01\x04paths\0\x09\x04\0\x08get-bool\x01\x0a\x01kx\x01j\x01\x0b\x01\x01\x01@\x01\
+\x04paths\0\x0c\x04\0\x07get-i64\x01\x0d\x01kw\x01j\x01\x0e\x01\x01\x01@\x01\x04\
+paths\0\x0f\x04\0\x07get-u64\x01\x10\x01ku\x01j\x01\x11\x01\x01\x01@\x01\x04path\
+s\0\x12\x04\0\x07get-f64\x01\x13\x01p}\x01k\x14\x01j\x01\x15\x01\x01\x01@\x01\x04\
+paths\0\x16\x04\0\x09get-bytes\x01\x17\x01k\x04\x01j\x01\x18\x01\x01\x01@\x01\x04\
+paths\0\x19\x04\0\x0fget-string-list\x01\x1a\x03\0\x17duckdb:extension/config\x05\
+\x0e\x02\x03\0\0\x08logfield\x02\x03\0\0\x08loglevel\x01B\x0a\x02\x03\x02\x01\x0f\
+\x04\0\x08logfield\x03\0\0\x02\x03\x02\x01\x10\x04\0\x08loglevel\x03\0\x02\x01ks\
+\x01@\x03\x05level\x03\x07messages\x06target\x04\x01\0\x04\0\x03log\x01\x05\x01p\
+\x01\x01@\x03\x05level\x03\x07messages\x06fields\x06\x01\0\x04\0\x0alog-fields\x01\
+\x07\x03\0\x18duckdb:extension/logging\x05\x11\x01B\x13\x01r\x02\x04names\x08phy\
+sicals\x04\0\x0clogical-type\x03\0\0\x01y\x04\0\x13logical-type-handle\x03\0\x02\
+\x01m\x03\x08implicit\x0aassignment\x08explicit\x04\0\x09cast-kind\x03\0\x04\x01\
+r\x03\x04froms\x02tos\x04kind\x05\x04\0\x09cast-spec\x03\0\x06\x01ps\x01r\x04\x06\
+schemas\x04names\x0aparameters\x08\x0edefinition-sqls\x04\0\x09macro-def\x03\0\x09\
+\x01j\x01\x03\x01s\x01@\x01\x02ty\x01\0\x0b\x04\0\x15register-logical-type\x01\x0c\
+\x01j\0\x01s\x01@\x01\x04spec\x07\0\x0d\x04\0\x0dregister-cast\x01\x0e\x01@\x01\x03\
+def\x0a\0\x0d\x04\0\x0eregister-macro\x01\x0f\x03\0\x18duckdb:extension/catalog\x05\
+\x12\x01B\x15\x01y\x04\0\x15table-function-handle\x03\0\0\x01y\x04\0\x14copy-fun\
+ction-handle\x03\0\x02\x01y\x04\0\x13replacement-scan-id\x03\0\x04\x01y\x04\0\x0f\
+copy-handler-id\x03\0\x06\x01m\x02\x0eextension-only\x09signature\x04\0\x0edetec\
+tion-mode\x03\0\x08\x01ps\x01r\x03\x0aextensions\x0a\x0etable-function\x01\x04mo\
+de\x09\x04\0\x10replacement-scan\x03\0\x0b\x01r\x02\x09extensions\x08function\x03\
+\x04\0\x0ccopy-handler\x03\0\x0d\x01j\x01\x05\x01s\x01@\x01\x04scan\x0c\0\x0f\x04\
+\0\x19register-replacement-scan\x01\x10\x01j\x01\x07\x01s\x01@\x01\x07handler\x0e\
+\0\x11\x04\0\x15register-copy-handler\x01\x12\x03\0\x16duckdb:extension/files\x05\
+\x13\x02\x03\0\0\x0aloadresult\x01B\x0d\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\
+\0\0\x02\x03\x02\x01\x14\x04\0\x0aloadresult\x03\0\x02\x01j\x01\x03\x01\x01\x01@\
+\0\0\x04\x04\0\x04load\x01\x05\x01ps\x01j\x01\x7f\x01\x01\x01@\x01\x04keys\x06\0\
+\x07\x04\0\x0breconfigure\x01\x08\x01@\0\0\x07\x04\0\x08shutdown\x01\x09\x04\0\x16\
+duckdb:extension/guest\x05\x15\x01B\x17\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\
+\0\0\x02\x03\x02\x01\x03\x04\0\x09duckvalue\x03\0\x02\x02\x03\x02\x01\x07\x04\0\x0a\
+invokeinfo\x03\0\x04\x02\x03\x02\x01\x09\x04\0\x09resultset\x03\0\x06\x02\x03\x02\
+\x01\x0a\x04\0\x08rowbatch\x03\0\x08\x01p\x03\x01j\x01\x03\x01\x01\x01@\x03\x06h\
+andley\x04args\x0a\x03ctx\x05\0\x0b\x04\0\x0bcall-scalar\x01\x0c\x01j\x01\x07\x01\
+\x01\x01@\x02\x06handley\x04args\x0a\0\x0d\x04\0\x0acall-table\x01\x0e\x01@\x02\x06\
+handley\x04rows\x09\0\x0b\x04\0\x0ecall-aggregate\x01\x0f\x01k\x03\x01j\x01\x10\x01\
+\x01\x01@\x02\x06handley\x04args\x0a\0\x11\x04\0\x0bcall-pragma\x01\x12\x04\0\"d\
+uckdb:extension/callback-dispatch\x05\x16\x04\0!duckdb:extension/duckdb-extensio\
+n\x04\0\x0b\x16\x01\0\x10duckdb-extension\x03\0\0\0G\x09producers\x01\x0cprocess\
+ed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

@@ -97,5 +97,7 @@ interface types {
     aggregate,
     pragma,
     macro,
+    catalog,
+    file-format,
   }
 }

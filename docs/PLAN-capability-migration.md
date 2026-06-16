@@ -1,32 +1,40 @@
 # PLAN — capability-kind migration (5 -> 7) and catalog/files interfaces
 
-Parked work. The repo was mid-migration from 5 to 7 `capabilitykind` variants
-and adding two new extension-facing interfaces. It is **blocked on a DuckDB
-static-archive rebuild**, so it was reverted to keep the loader working on the
-existing core wasm. This doc captures what to re-apply once the archive is
-rebuilt.
+Status (2026-06): **applied.** The capability model is now 7-variant and the
+`catalog`/`files` interfaces are part of the extension world, satisfied by the
+host. Verified end-to-end (sample scalar/table/aggregate) plus the host test
+suite. Remaining work is the DuckDB-side wiring of catalog/files registrations
+(see "Follow-up" below).
 
-## What the migration adds
+## What the migration added (done)
 
-- `wit/duckdb-extension/types.wit`: extend `enum capabilitykind` with
-  `catalog` and `file-format`.
+- `wit/duckdb-extension/types.wit`: `enum capabilitykind` now includes
+  `catalog` and `file-format` (7 variants), synced to all crates and the sample.
 - `wit/duckdb-extension/catalog.wit`: `interface catalog`
-  (`register-logical-type`, `register-cast`, `register-macro`). Already rewritten
-  into valid WIT; currently present but unreferenced by the world.
+  (`register-logical-type`, `register-cast`, `register-macro`).
 - `wit/duckdb-extension/files.wit`: `interface files`
-  (`register-replacement-scan`, `register-copy-handler`). Same status.
-- `wit/duckdb-extension/worlds/duckdb-extension.wit`: re-add
-  `use catalog; use files;` and `import catalog; import files;`.
-- Rust: re-add the `Catalog` / `FileFormat` match arms in
+  (`register-replacement-scan`, `register-copy-handler`).
+- `wit/duckdb-extension/worlds/duckdb-extension.wit`: imports `catalog`/`files`
+  (also mirrored into the sample extension's world).
+- Rust: `Catalog`/`FileFormat` match arms restored in
   `crates/duckdb-component-host/src/lib.rs` (`convert_core_capabilitykind`,
   `convert_cli_capability`, `describe_cli_capability`) and in
   `crates/duckdb-core-component/src/extension_loader.rs` (`describe_capability`).
-- Host: implement `catalog::Host` + `files::Host` for `ExtensionStoreState` and
-  add them to the extension linker in `ensure_extension_loaded`, mirroring the
-  scalar/table/aggregate registry pattern (queue on register, retain on drop,
-  forward in `drain_pending`). Without this, any extension built against the new
-  world imports `catalog`/`files` and fails to instantiate (the host must
-  satisfy every world import).
+- Host: `extension_catalog::Host` + `extension_files::Host` implemented for
+  `ExtensionStoreState` and added to the extension linker in
+  `ensure_extension_loaded`, so extensions that import `catalog`/`files`
+  instantiate. The host currently acknowledges and logs each registration.
+
+## Follow-up — forward catalog/files registrations into DuckDB
+
+The host's `catalog`/`files` Host impls accept and log requests but do not yet
+register anything in DuckDB. Completing them means, mirroring the
+scalar/table/aggregate pipeline: capture each request into per-store pending
+buffers, extend `extension-loader-hooks` (core WIT) with catalog/files
+registration records, drain them in `duckdb_component_load_extension`, and call
+the DuckDB C API to create logical types / casts / macros / replacement scans /
+copy handlers. A using-extension + test should land with that work (the current
+`sample-extension-component` does not exercise `catalog`/`files`).
 
 ## The archive blocker — RESOLVED (2026-06)
 
