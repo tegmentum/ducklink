@@ -1,0 +1,1 @@
+wasi-preview2 = "0.2.6"  # supported by Wasmtime 37.0.2

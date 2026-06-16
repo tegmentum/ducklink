@@ -1,0 +1,306 @@
+use std::collections::HashMap;
+use std::sync::{
+    atomic::{AtomicU32, Ordering},
+    Mutex, OnceLock,
+};
+
+use wit_bindgen::rt::string::String;
+use wit_bindgen::rt::vec::Vec;
+
+wit_bindgen::generate!({
+    path: "./wit",
+    world: "duckdb:extension/duckdb-extension",
+});
+
+use duckdb::extension::{runtime, types};
+use exports::duckdb::extension::{callback_dispatch, guest};
+
+struct SampleExtension;
+
+impl guest::Guest for SampleExtension {
+    fn load() -> Result<types::Loadresult, types::Duckerror> {
+        register_scalar_function()?;
+        register_table_function()?;
+        register_aggregate_function()?;
+        Ok(types::Loadresult {
+            name: "sample_extension".into(),
+            version: Some(env!("CARGO_PKG_VERSION").into()),
+            requires: Vec::new().into(),
+        })
+    }
+
+    fn reconfigure(_keys: Vec<String>) -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
+
+    fn shutdown() -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
+}
+
+impl callback_dispatch::Guest for SampleExtension {
+    fn call_scalar(
+        handle: u32,
+        args: Vec<types::Duckvalue>,
+        _ctx: types::Invokeinfo,
+    ) -> Result<types::Duckvalue, types::Duckerror> {
+        let handler = scalar_handlers()
+            .lock()
+            .expect("scalar handler mutex poisoned")
+            .get(&handle)
+            .cloned()
+            .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
+
+        match handler {
+            ScalarHandler::AddOne => {
+                let value = match args.as_slice() {
+                    [types::Duckvalue::Int64(v)] => *v,
+                    _ => {
+                        return Err(types::Duckerror::Invalidargument(
+                            "sample_plus_one expects a single INT64 argument".into(),
+                        ))
+                    }
+                };
+                Ok(types::Duckvalue::Int64(value + 1))
+            }
+        }
+    }
+
+    fn call_table(
+        handle: u32,
+        args: Vec<types::Duckvalue>,
+    ) -> Result<types::Resultset, types::Duckerror> {
+        let handler = table_handlers()
+            .lock()
+            .expect("table handler mutex poisoned")
+            .get(&handle)
+            .copied()
+            .ok_or_else(|| types::Duckerror::Internal("unknown table handle".into()))?;
+
+        match handler {
+            TableHandler::EmitSequence => {
+                let limit = match args.as_slice() {
+                    [types::Duckvalue::Int64(v)] => *v,
+                    _ => {
+                        return Err(types::Duckerror::Invalidargument(
+                            "sample_emit_sequence expects a single INT64 argument".into(),
+                        ))
+                    }
+                };
+                if limit < 0 {
+                    return Err(types::Duckerror::Invalidargument(
+                        "sample_emit_sequence expects a non-negative argument".into(),
+                    ));
+                }
+                let mut rows = Vec::with_capacity(limit as usize);
+                for value in 0..limit {
+                    rows.push(vec![types::Duckvalue::Int64(value)]);
+                }
+                Ok(rows)
+            }
+        }
+    }
+
+    fn call_aggregate(
+        handle: u32,
+        rows: types::Rowbatch,
+    ) -> Result<types::Duckvalue, types::Duckerror> {
+        let handler = aggregate_handlers()
+            .lock()
+            .expect("aggregate handler mutex poisoned")
+            .get(&handle)
+            .copied()
+            .ok_or_else(|| types::Duckerror::Internal("unknown aggregate handle".into()))?;
+
+        match handler {
+            AggregateHandler::SumIntegers => {
+                let mut total: i64 = 0;
+                for row in rows {
+                    match row.first() {
+                        Some(types::Duckvalue::Int64(value)) => {
+                            total = total.saturating_add(*value);
+                        }
+                        Some(types::Duckvalue::Null) | None => {}
+                        other => {
+                            return Err(types::Duckerror::Invalidargument(format!(
+                                "sample_sum expects INT64 input, saw {other:?}"
+                            )));
+                        }
+                    }
+                }
+                Ok(types::Duckvalue::Int64(total))
+            }
+        }
+    }
+
+    fn call_pragma(
+        _handle: u32,
+        _args: Vec<types::Duckvalue>,
+    ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
+        Err(types::Duckerror::Unsupported(
+            "pragma callbacks not implemented in sample extension".into(),
+        ))
+    }
+}
+
+export!(SampleExtension);
+
+fn register_scalar_function() -> Result<(), types::Duckerror> {
+    let capability = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| {
+        types::Duckerror::Internal("host did not expose scalar capability".into())
+    })?;
+
+    let registry = match capability {
+        runtime::Capability::Scalar(registry) => registry,
+        _ => {
+            return Err(types::Duckerror::Internal(
+                "scalar capability returned unexpected variant".into(),
+            ))
+        }
+    };
+
+    let handle = NEXT_SCALAR_HANDLE.fetch_add(1, Ordering::Relaxed);
+    scalar_handlers()
+        .lock()
+        .expect("scalar handler mutex poisoned")
+        .insert(handle, ScalarHandler::AddOne);
+
+    let callback = runtime::ScalarCallback::new(handle);
+    let args = vec![runtime::Funcarg {
+        name: Some("value".into()),
+        logical: types::Logicaltype::Int64,
+    }];
+    let opts = runtime::Funcopts {
+        description: Some("Adds one to the input integer".into()),
+        tags: vec!["sample".into()],
+        attributes: types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS,
+    };
+
+    registry.register(
+        "sample_plus_one",
+        &args,
+        types::Logicaltype::Int64,
+        callback,
+        Some(&opts),
+    )?;
+    Ok(())
+}
+
+fn register_table_function() -> Result<(), types::Duckerror> {
+    let capability = runtime::get_capability(types::Capabilitykind::Table)
+        .ok_or_else(|| types::Duckerror::Internal("host did not expose table capability".into()))?;
+
+    let registry = match capability {
+        runtime::Capability::Table(registry) => registry,
+        _ => {
+            return Err(types::Duckerror::Internal(
+                "table capability returned unexpected variant".into(),
+            ))
+        }
+    };
+
+    let handle = NEXT_TABLE_HANDLE.fetch_add(1, Ordering::Relaxed);
+    table_handlers()
+        .lock()
+        .expect("table handler mutex poisoned")
+        .insert(handle, TableHandler::EmitSequence);
+
+    let callback = runtime::TableCallback::new(handle);
+    let args = vec![runtime::Funcarg {
+        name: Some("limit".into()),
+        logical: types::Logicaltype::Int64,
+    }];
+    let columns = vec![types::Columndef {
+        name: "value".into(),
+        logical: types::Logicaltype::Int64,
+    }];
+    let opts = runtime::Extopts {
+        description: Some("Emits integers from 0 up to the provided limit".into()),
+        tags: vec!["sample".into()],
+    };
+
+    registry.register(
+        "sample_emit_sequence",
+        &args,
+        &columns,
+        callback,
+        Some(&opts),
+    )?;
+    Ok(())
+}
+
+fn register_aggregate_function() -> Result<(), types::Duckerror> {
+    let capability =
+        runtime::get_capability(types::Capabilitykind::Aggregate).ok_or_else(|| {
+            types::Duckerror::Internal("host did not expose aggregate capability".into())
+        })?;
+
+    let registry = match capability {
+        runtime::Capability::Aggregate(registry) => registry,
+        _ => {
+            return Err(types::Duckerror::Internal(
+                "aggregate capability returned unexpected variant".into(),
+            ))
+        }
+    };
+
+    let handle = NEXT_AGGREGATE_HANDLE.fetch_add(1, Ordering::Relaxed);
+    aggregate_handlers()
+        .lock()
+        .expect("aggregate handler mutex poisoned")
+        .insert(handle, AggregateHandler::SumIntegers);
+
+    let callback = runtime::AggregateCallback::new(handle);
+    let args = vec![runtime::Funcarg {
+        name: Some("value".into()),
+        logical: types::Logicaltype::Int64,
+    }];
+    let opts = runtime::Funcopts {
+        description: Some("Sums INT64 inputs provided to the aggregate".into()),
+        tags: vec!["sample".into()],
+        attributes: types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS,
+    };
+
+    registry.register(
+        "sample_sum",
+        &args,
+        types::Logicaltype::Int64,
+        callback,
+        Some(&opts),
+    )?;
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+enum ScalarHandler {
+    AddOne,
+}
+
+#[derive(Clone, Copy)]
+enum TableHandler {
+    EmitSequence,
+}
+
+#[derive(Clone, Copy)]
+enum AggregateHandler {
+    SumIntegers,
+}
+
+static NEXT_SCALAR_HANDLE: AtomicU32 = AtomicU32::new(1);
+static SCALAR_HANDLERS: OnceLock<Mutex<HashMap<u32, ScalarHandler>>> = OnceLock::new();
+static NEXT_TABLE_HANDLE: AtomicU32 = AtomicU32::new(1);
+static TABLE_HANDLERS: OnceLock<Mutex<HashMap<u32, TableHandler>>> = OnceLock::new();
+static NEXT_AGGREGATE_HANDLE: AtomicU32 = AtomicU32::new(1);
+static AGGREGATE_HANDLERS: OnceLock<Mutex<HashMap<u32, AggregateHandler>>> = OnceLock::new();
+
+fn scalar_handlers() -> &'static Mutex<HashMap<u32, ScalarHandler>> {
+    SCALAR_HANDLERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn table_handlers() -> &'static Mutex<HashMap<u32, TableHandler>> {
+    TABLE_HANDLERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn aggregate_handlers() -> &'static Mutex<HashMap<u32, AggregateHandler>> {
+    AGGREGATE_HANDLERS.get_or_init(|| Mutex::new(HashMap::new()))
+}

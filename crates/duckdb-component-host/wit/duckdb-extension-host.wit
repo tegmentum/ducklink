@@ -1,0 +1,19 @@
+package duckdb:extension-host;
+
+use duckdb:extension/runtime;
+use duckdb:extension/callback-dispatch;
+use duckdb:extension/config;
+use duckdb:extension/logging;
+use duckdb:extension/catalog;
+use duckdb:extension/files;
+use duckdb:extension/guest;
+
+world duckdb-extension {
+  import duckdb:extension/runtime;
+  import duckdb:extension/config;
+  import duckdb:extension/logging;
+  import duckdb:extension/catalog;
+  import duckdb:extension/files;
+  export duckdb:extension/guest;
+  export callback-dispatch;
+}

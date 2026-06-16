@@ -1,0 +1,39 @@
+name: smoke-tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+env:
+  DUCKDB_STATIC_LIB: ${{ github.workspace }}/artifacts/libduckdb-wasi.a
+  DUCKDB_INCLUDE_DIR: ${{ github.workspace }}/external/duckdb/src/include
+
+jobs:
+  wasi-preview2-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+
+      - name: Install component tooling
+        run: |
+          cargo install cargo-component --locked
+          cargo install wac-cli --locked
+          cargo install wasmtime-cli --locked
+
+      - name: Build core and CLI components
+        run: make all
+
+      - name: Smoke test (:memory:)
+        run: scripts/smoke-cli.sh
+
+      - name: Smoke test (on-disk)
+        run: ON_DISK_SMOKE=1 scripts/smoke-cli.sh

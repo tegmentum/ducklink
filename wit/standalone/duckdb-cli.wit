@@ -1,0 +1,20 @@
+package duckdb:cli;
+
+use duckdb:component/database;
+use wasi:cli/environment@0.2.6;
+use wasi:cli/run@0.2.6;
+use wasi:cli/stderr@0.2.6;
+use wasi:cli/stdin@0.2.6;
+use wasi:cli/stdout@0.2.6;
+use wasi:filesystem/preopens@0.2.6;
+
+world duckdb-cli {
+    import duckdb:component/database;
+    import wasi:cli/environment@0.2.6;
+    import wasi:cli/stderr@0.2.6;
+    import wasi:cli/stdin@0.2.6;
+    import wasi:cli/stdout@0.2.6;
+    import wasi:filesystem/preopens@0.2.6;
+
+    export wasi:cli/run@0.2.6;
+}

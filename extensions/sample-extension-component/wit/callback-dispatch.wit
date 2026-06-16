@@ -1,0 +1,12 @@
+package duckdb:extension;
+
+use types;
+
+interface callback-dispatch {
+  use types.{duckerror, duckvalue, invokeinfo, resultset, rowbatch};
+
+  call-scalar: func(handle: u32, args: list<duckvalue>, ctx: invokeinfo) -> result<duckvalue, duckerror>;
+  call-table: func(handle: u32, args: list<duckvalue>) -> result<resultset, duckerror>;
+  call-aggregate: func(handle: u32, rows: rowbatch) -> result<duckvalue, duckerror>;
+  call-pragma: func(handle: u32, args: list<duckvalue>) -> result<option<duckvalue>, duckerror>;
+}

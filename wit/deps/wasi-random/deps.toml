@@ -1,0 +1,3 @@
+[package]
+name = "wasi:random"
+version = "0.2.6"

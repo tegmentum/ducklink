@@ -1,0 +1,35 @@
+[package]
+name = "duckdb-core-component"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+libduckdb-sys = { path = "../libduckdb-sys" }
+thiserror = "1.0"
+wit-bindgen-rt = { version = "0.41.0", features = ["bitflags"] }
+libc = { version = "0.2", default-features = false }
+
+[features]
+default = ["wasi"]
+wasi = ["fs_shims"]
+browser = []
+fs_shims = []
+
+[package.metadata.component]
+package = "duckdb:component"
+
+[package.metadata.component.target]
+path = "wit"
+world = "libduckdb"
+
+[package.metadata.component.target.dependencies]
+"duckdb:extension" = { path = "../../wit/duckdb-extension" }
+"wasi:cli" = { path = "wit/deps/wasi-cli" }
+"wasi:filesystem" = { path = "wit/deps/wasi-filesystem" }
+"wasi:io" = { path = "wit/deps/wasi-io" }
+"wasi:clocks" = { path = "wit/deps/wasi-clocks" }
+"wasi:sockets" = { path = "wit/deps/wasi-sockets" }
+"wasi:random" = { path = "wit/deps/wasi-random" }

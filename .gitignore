@@ -1,0 +1,17 @@
+/target/
+**/target/
+Cargo.lock
+/build/
+/generated/
+.DS_Store
+
+# Vendored upstream sources and toolchains (read-only, multi-GB)
+/external/
+/.rustup/
+/.cargo-home/
+
+# Build outputs (prebuilt static lib, componentized extensions)
+/artifacts/
+
+# Logs
+*.log

@@ -1,0 +1,3 @@
+[package]
+name = "wasi:sockets"
+version = "0.2.6"

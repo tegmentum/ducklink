@@ -1,0 +1,3 @@
+[package]
+name = "wasi:filesystem"
+version = "0.2.6"

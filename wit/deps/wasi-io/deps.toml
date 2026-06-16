@@ -1,0 +1,3 @@
+[package]
+name = "wasi:io"
+version = "0.2.6"

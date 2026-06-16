@@ -1,0 +1,27 @@
+[package]
+name = "duckdb-cli-component"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen-rt = { version = "0.41.0", features = ["bitflags"] }
+
+[package.metadata.component]
+package = "duckdb:cli"
+
+[package.metadata.component.target]
+path = "wit"
+world = "duckdb:cli/duckdb-cli"
+
+[package.metadata.component.target.dependencies]
+"duckdb:component" = { path = "wit/deps/duckdb" }
+"duckdb:extension" = { path = "wit/deps/duckdb/deps/duckdb-extension" }
+"wasi:cli" = { path = "wit/deps/wasi-cli" }
+"wasi:filesystem" = { path = "wit/deps/wasi-filesystem" }
+"wasi:io" = { path = "wit/deps/wasi-io" }
+"wasi:clocks" = { path = "wit/deps/wasi-clocks" }
+"wasi:sockets" = { path = "wit/deps/wasi-sockets" }
+"wasi:random" = { path = "wit/deps/wasi-random" }

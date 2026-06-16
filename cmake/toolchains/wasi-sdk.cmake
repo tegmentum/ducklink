@@ -1,0 +1,60 @@
+# Configure CMake to target wasm32-wasi using wasi-sdk.
+# Usage: cmake -S <duckdb_src> -B <build_dir> \
+#   -DCMAKE_TOOLCHAIN_FILE=/path/to/cmake/toolchains/wasi-sdk.cmake \
+#   -DWASI_SDK_PREFIX=/opt/wasi-sdk
+
+if(NOT DEFINED WASI_SDK_PREFIX)
+  if(DEFINED ENV{WASI_SDK_PREFIX})
+    set(WASI_SDK_PREFIX "$ENV{WASI_SDK_PREFIX}")
+  else()
+    message(FATAL_ERROR "Set WASI_SDK_PREFIX to the wasi-sdk installation root")
+  endif()
+endif()
+
+if(NOT DEFINED WASI_TARGET_TRIPLE)
+  if(DEFINED ENV{WASI_TARGET_TRIPLE})
+    set(WASI_TARGET_TRIPLE "$ENV{WASI_TARGET_TRIPLE}")
+  else()
+    set(WASI_TARGET_TRIPLE "wasm32-wasip1-threads")
+  endif()
+endif()
+
+set(CMAKE_SYSTEM_NAME WASI)
+set(CMAKE_SYSTEM_PROCESSOR wasm32)
+set(CMAKE_SYSROOT "${WASI_SDK_PREFIX}/share/wasi-sysroot")
+
+set(CMAKE_C_COMPILER "${WASI_SDK_PREFIX}/bin/clang" CACHE PATH "")
+set(CMAKE_CXX_COMPILER "${WASI_SDK_PREFIX}/bin/clang++" CACHE PATH "")
+set(CMAKE_AR "${WASI_SDK_PREFIX}/bin/llvm-ar" CACHE PATH "")
+set(CMAKE_RANLIB "${WASI_SDK_PREFIX}/bin/llvm-ranlib" CACHE PATH "")
+
+set(WASI_STUB_HEADER "${CMAKE_CURRENT_LIST_DIR}/wasi-shim.hpp")
+set(WASI_OVERRIDE_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}/../wasi-override/include")
+
+set(DUCKDB_SKIP_HTTP ON CACHE BOOL "Disable DuckDB HTTP subsystem for WASI builds")
+
+set(CMAKE_C_FLAGS
+    "${CMAKE_C_FLAGS} --target=${WASI_TARGET_TRIPLE} --sysroot=${CMAKE_SYSROOT} -D_WASI_EMULATED_MMAN -DDISABLE_DUCKDB_REMOTE_INSTALL -DDUCKDB_DISABLE_EXTENSION_LOAD -DDUCKDB_NO_THREADS -I${WASI_OVERRIDE_INCLUDE_DIR} -include${WASI_STUB_HEADER}")
+set(CMAKE_CXX_FLAGS
+    "${CMAKE_CXX_FLAGS} --target=${WASI_TARGET_TRIPLE} --sysroot=${CMAKE_SYSROOT} -stdlib=libc++ -D_WASI_EMULATED_MMAN -DDISABLE_DUCKDB_REMOTE_INSTALL -DDUCKDB_DISABLE_EXTENSION_LOAD -DDUCKDB_NO_THREADS -I${WASI_OVERRIDE_INCLUDE_DIR} -include${WASI_STUB_HEADER}")
+
+set(CMAKE_EXE_LINKER_FLAGS
+    "${CMAKE_EXE_LINKER_FLAGS} --target=${WASI_TARGET_TRIPLE} --sysroot=${CMAKE_SYSROOT} -D_WASI_EMULATED_MMAN -lwasi-emulated-mman")
+set(CMAKE_SHARED_LINKER_FLAGS
+    "${CMAKE_SHARED_LINKER_FLAGS} --target=${WASI_TARGET_TRIPLE} --sysroot=${CMAKE_SYSROOT} -D_WASI_EMULATED_MMAN -lwasi-emulated-mman")
+
+if(WASI_TARGET_TRIPLE MATCHES "threads")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pthread")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -pthread")
+  set(CMAKE_HAVE_THREADS_LIBRARY 1)
+  set(CMAKE_USE_PTHREADS_INIT 1)
+else()
+  # Non-threaded builds default to the single-threaded runtime.
+  set(CMAKE_THREAD_LIBS_INIT "")
+  set(CMAKE_HAVE_THREADS_LIBRARY 1)
+  set(CMAKE_USE_PTHREADS_INIT 0)
+endif()
+
+set(CMAKE_USE_WIN32_THREADS_INIT 0)
