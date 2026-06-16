@@ -30,7 +30,7 @@ cmake/toolchains/
    ```bash
    git clone https://github.com/duckdb/duckdb.git ~/src/duckdb
    ```
-2. **wasi-sdk** (tested with 28.0) with `WASI_SDK_PREFIX` pointing at the installation root. A predownloaded copy lives under `external/wasi-sdk-28.0-<platform>`; point the variable there if you do not have a global install.
+2. **wasi-sdk** (tested with 33.0; exception handling requires >= 33) with `WASI_SDK_PREFIX` pointing at the installation root. A predownloaded copy lives under `external/wasi-sdk-33.0-<platform>`; point the variable there if you do not have a global install.
 3. **Rust tooling**:
    - `rustup target add wasm32-wasi`
    - `cargo install cargo-component`
@@ -44,7 +44,7 @@ The component links against a statically built `libduckdb` compiled for `wasm32-
 
 ```bash
 export DUCKDB_SOURCE_DIR=~/src/duckdb
-export WASI_SDK_PREFIX="$(pwd)/external/wasi-sdk-28.0-arm64-macos"
+export WASI_SDK_PREFIX="$(pwd)/external/wasi-sdk-33.0-arm64-macos"
 export WASI_TARGET_TRIPLE=wasm32-wasip2
 export WASM_EXTENSIONS=json  # defaults to json if unset; comma‑separate to add more later
 scripts/build-libduckdb-wasm.sh

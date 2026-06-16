@@ -75,18 +75,22 @@ fn main() {
 
     if let Ok(prefix) = env::var("WASI_SDK_PREFIX") {
         let target = env::var("TARGET").unwrap_or_default();
-        let sysroot_path = if target.contains("wasip2") {
-            "share/wasi-sysroot/lib/wasm32-wasip2"
+        let triple_dir = if target.contains("wasip2") {
+            "wasm32-wasip2"
         } else if target.contains("wasip1") {
-            "share/wasi-sysroot/lib/wasm32-wasip1"
+            "wasm32-wasip1"
         } else {
-            "share/wasi-sysroot/lib/wasm32-wasi"
+            "wasm32-wasi"
         };
-        let sysroot_lib = Path::new(&prefix).join(sysroot_path);
-        if sysroot_lib.exists() {
-            println!("cargo:rustc-link-search=native={}", sysroot_lib.display());
-            println!("cargo:rustc-link-lib=static=c++abi");
-            println!("cargo:rustc-link-lib=static=c++");
+        // The merged libduckdb-wasi.a already bakes in the exception-handling
+        // libc++abi/libc++/libunwind (see scripts/build-libduckdb-wasm.sh), so
+        // linking them again here would duplicate __cxa_* symbols. Only libm is
+        // not baked in, so link just that from the base sysroot dir.
+        let base_lib = Path::new(&prefix)
+            .join("share/wasi-sysroot/lib")
+            .join(triple_dir);
+        if base_lib.exists() {
+            println!("cargo:rustc-link-search=native={}", base_lib.display());
             println!("cargo:rustc-link-lib=static=m");
         }
     }

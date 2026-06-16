@@ -2501,6 +2501,10 @@ fn instantiate_core(
 fn build_engine() -> Result<Engine> {
     let mut config = Config::new();
     config.wasm_component_model(true);
+    // DuckDB (compiled with -fwasm-exceptions, standardized encoding) uses wasm
+    // exception handling; enable the proposal so throws unwind and are caught
+    // instead of aborting the module.
+    config.wasm_exceptions(true);
     Engine::new(&config).context("failed to create Wasmtime engine")
 }
 
@@ -3161,6 +3165,37 @@ stderr:
         assert!(
             has_cell(&stdout, "total") && has_cell(&stdout, "10"),
             "expected aggregate callback output, got:\n{}",
+            stdout
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn cli_executes_sample_macro() -> Result<()> {
+        ensure_sample_extension_artifact()?;
+
+        let args = [
+            "duckdb-cli",
+            ":memory:",
+            "--load-extension",
+            "sample_extension",
+            "-c",
+            "select sample_add_two(40) as answer;",
+        ];
+
+        let mut harness = CliHarness::new(&args, &[])?;
+        let status = harness.run()?;
+        assert!(
+            status.is_ok(),
+            "CLI reported failure invoking sample_add_two macro: {:?}",
+            harness.stderr().ok()
+        );
+
+        let stdout = harness.stdout()?;
+        assert!(
+            has_cell(&stdout, "answer") && has_cell(&stdout, "42"),
+            "expected macro output, got:\n{}",
             stdout
         );
 

@@ -37,73 +37,53 @@ What the DuckDB C API actually supports (surveyed against `external/duckdb`):
 | cast           | `duckdb_create_cast_function` needs a callback; WIT `cast-spec` carries none | not feasible as specified |
 | copy handler   | none | not feasible |
 
-### Macros — pipeline wired, execution gated on wasm exceptions
+### Macros — WORKING (2026-06)
 
-The macro path is wired end-to-end: `sample-extension-component` calls
-`catalog.register-macro`; the host captures it (`ExtensionStoreState.pending_macros`),
-drains it, and forwards it through `extension-loader-hooks`
-(`macro-registration` record + `pending-registrations.macros`); the core
-(`register_pending_macro`) turns it into the exact
-`CREATE OR REPLACE MACRO …` SQL. Confirmed via the host logs
-(`… macros=1 (sample_add_two)`).
+The macro path works end-to-end on wasi-sdk-33 with exception handling enabled:
+`sample-extension-component` calls `catalog.register-macro`; the host captures it
+(`ExtensionStoreState.pending_macros`), drains and forwards it through
+`extension-loader-hooks` (`macro-registration` record + `pending-registrations.macros`);
+the core (`register_pending_macro`, gated by `MACRO_EXECUTION_ENABLED = true`)
+builds `CREATE OR REPLACE MACRO …` and runs it on a **transient connection** to
+each active database (never the LOAD-busy connection). Verified:
+`select sample_add_two(40)` → 42 (`cli_executes_sample_macro` test).
 
-Execution is **gated off** (`MACRO_EXECUTION_ENABLED = false` in
-`crates/duckdb-core-component/src/lib.rs`). DuckDB's macro binder uses C++
-exceptions for overload resolution, but the wasm archive was compiled without
-exception unwinding (no `-fwasm-exceptions`), so any thrown exception runs
-`__cxa_throw -> std::terminate -> abort` instead of being caught. Even a
-standalone `CREATE MACRO m(x) AS (x + 2); SELECT m(40)` aborts in
-`FunctionBinder::BindScalarFunction`. Enabling wasmtime's `wasm_exceptions`
-feature does not help (the archive uses the Itanium ABI, not wasm EH
-instructions). `register_pending_macro` would create the macro on a transient
-connection to the same database (`create_macro_on_active_databases`) — never the
-LOAD-busy connection — so it is ready to switch on once the build supports
-exceptions.
+This required enabling wasm C++ exceptions — see the SCOPE section, now done.
 
-### To enable macros (and make DuckDB errors recoverable in general)
-
-This is a whole-build property, not macro-specific: **any** thrown DuckDB
-exception currently aborts the module (e.g. `SELECT * FROM nonexistent` traps).
-
-## SCOPE — wasm exception-handling rebuild (investigated 2026-06)
+## wasm exception handling — RESOLVED via wasi-sdk-33 (2026-06)
 
 Goal: make C++ `throw`/`catch` actually unwind (caught -> error) instead of
-`__cxa_throw -> std::terminate -> abort`. Payoff is large: it unblocks macros
-**and** turns every DuckDB SQL error from a fatal module abort into a
-recoverable error.
+`__cxa_throw -> std::terminate -> abort`. Payoff is large: it unblocked macros
+**and** turned every DuckDB SQL error from a fatal module abort into a
+recoverable error (`SELECT * FROM nonexistent` now returns a Catalog Error).
 
-Findings (all verified against `external/wasi-sdk-28.0-arm64-macos`):
-- clang 21 accepts `-fwasm-exceptions` and compiles try/catch objects fine.
-- But **the bundled libc++abi was built `-fno-exceptions`**: `llvm-nm
-  libc++abi.a` shows none of `__cxa_throw` / `__cxa_begin_catch` /
-  `_Unwind_RaiseException`. In the merged `libduckdb-wasi.a` those symbols are
-  `U` (undefined); the final link resolves them to an aborting stub.
-- The wasm-EH runtime symbols (`__wasm_lpad_context`, `_Unwind_CallPersonality`)
-  appear **nowhere** in the SDK, and there is no separate `libunwind` in the
-  sysroot. Linking a `-fwasm-exceptions` program fails with exactly those
-  undefined symbols.
+wasi-sdk-28's bundled libc++ was `-fno-exceptions` (no exception runtime), so
+this was not a flag flip. **wasi-sdk-33 ships an exception-handling `eh`
+multilib** (`share/wasi-sysroot/lib/wasm32-wasip2/eh/{libc++,libc++abi,libunwind}.a`,
+built with the standardized `try_table`/`throw_ref` encoding). Switching to it
+made the path mechanical. What was done:
 
-So this is **not a flag flip** — the bundled toolchain has no exception runtime.
-Required work, in order:
-1. Obtain an exception-enabled C++ runtime for `wasm32-wasip2`: either
-   (a) build `libunwind` + `libc++abi` (`-fexceptions`, wasm EH) + `libc++` from
-   the matching LLVM source against the wasi-sdk clang/sysroot, or
-   (b) source a prebuilt EH-enabled wasi-sysroot / newer wasi-sdk that ships one
-   (verify with `llvm-nm libc++abi.a | grep __cxa_throw`).
-2. Add `-fwasm-exceptions` to `cmake/toolchains/wasi-sdk.cmake` C/CXX flags and
-   point the link at the EH runtime; rebuild `libduckdb-wasi.a`
-   (`scripts/build-libduckdb-wasm.sh`) — this part is the same known-good rebuild
-   used for the HTTPUtil fix.
-3. `config.wasm_exceptions(true)` in `build_engine` (host) and rebuild components
-   for the EXCEPTIONS feature.
-4. Flip `MACRO_EXECUTION_ENABLED` to `true`; macros then create for real.
+1. Toolchain (`cmake/toolchains/wasi-sdk.cmake`): add
+   `-fwasm-exceptions -mllvm -wasm-use-legacy-eh=false` to CXX flags — the
+   `-wasm-use-legacy-eh=false` is required because clang's default
+   `-fwasm-exceptions` still emits the *legacy* encoding, which wasmtime's
+   production `exceptions` feature rejects; the standardized encoding matches
+   wasi-sdk-33's `eh` libs.
+2. `scripts/build-libduckdb-wasm.sh`: merge the `eh` libc++/libc++abi + libunwind
+   into `libduckdb-wasi.a`.
+3. `crates/libduckdb-sys/build.rs`: stop separately linking c++abi/c++ (now baked
+   in the archive) to avoid duplicate `__cxa_*`; link only `m`.
+4. `crates/duckdb-core-component/src/lib.rs`: remove the old aborting `__cxa_*`
+   stubs (the real EH libc++abi now provides them).
+5. Host `build_engine`: `config.wasm_exceptions(true)`.
+6. `MACRO_EXECUTION_ENABLED = true`.
 
-Effort/risk: **high.** Step 1 is the crux — building the LLVM C++ runtimes for
-wasi is a multi-hour, uncertain build (needs llvm-project + wasi-libc sources
-matching clang 21, correct runtimes CMake, EH variants). Steps 2–4 are
-mechanical. Recommendation: before committing, spend a short timebox on path
-1(b) — check whether a newer/EH wasi-sdk exists — since a prebuilt EH sysroot
-collapses the whole task to steps 2–4.
+Also required for the toolchain bump (clang 21 -> 22): a one-line patch to
+DuckDB's bundled thrift (`third_party/thrift/thrift/Thrift.h`) adding
+`TEnumIterator::operator==` (newer libc++ requires equality-comparable
+iterators), and registering extension scalar/table/aggregate functions on a
+**transient connection** per database rather than the LOAD-busy active
+connection (which now surfaces a real error instead of being silently tolerated).
 
 ## The archive blocker — RESOLVED (2026-06)
 

@@ -35,8 +35,12 @@ set(DUCKDB_SKIP_HTTP ON CACHE BOOL "Disable DuckDB HTTP subsystem for WASI build
 
 set(CMAKE_C_FLAGS
     "${CMAKE_C_FLAGS} --target=${WASI_TARGET_TRIPLE} --sysroot=${CMAKE_SYSROOT} -D_WASI_EMULATED_MMAN -DDISABLE_DUCKDB_REMOTE_INSTALL -DDUCKDB_DISABLE_EXTENSION_LOAD -DDUCKDB_NO_THREADS -DDUCKDB_SKIP_HTTP -I${WASI_OVERRIDE_INCLUDE_DIR} -include${WASI_STUB_HEADER}")
+# `-fwasm-exceptions` with `-wasm-use-legacy-eh=false` emits the standardized
+# (try_table/throw_ref) wasm exception encoding, matching wasi-sdk-33's `eh`
+# multilib and wasmtime's production `exceptions` feature. Without this, DuckDB
+# throws (e.g. binder overload resolution) abort the whole module.
 set(CMAKE_CXX_FLAGS
-    "${CMAKE_CXX_FLAGS} --target=${WASI_TARGET_TRIPLE} --sysroot=${CMAKE_SYSROOT} -stdlib=libc++ -D_WASI_EMULATED_MMAN -DDISABLE_DUCKDB_REMOTE_INSTALL -DDUCKDB_DISABLE_EXTENSION_LOAD -DDUCKDB_NO_THREADS -DDUCKDB_SKIP_HTTP -I${WASI_OVERRIDE_INCLUDE_DIR} -include${WASI_STUB_HEADER}")
+    "${CMAKE_CXX_FLAGS} --target=${WASI_TARGET_TRIPLE} --sysroot=${CMAKE_SYSROOT} -stdlib=libc++ -fwasm-exceptions -mllvm -wasm-use-legacy-eh=false -D_WASI_EMULATED_MMAN -DDISABLE_DUCKDB_REMOTE_INSTALL -DDUCKDB_DISABLE_EXTENSION_LOAD -DDUCKDB_NO_THREADS -DDUCKDB_SKIP_HTTP -I${WASI_OVERRIDE_INCLUDE_DIR} -include${WASI_STUB_HEADER}")
 
 set(CMAKE_EXE_LINKER_FLAGS
     "${CMAKE_EXE_LINKER_FLAGS} --target=${WASI_TARGET_TRIPLE} --sysroot=${CMAKE_SYSROOT} -D_WASI_EMULATED_MMAN -lwasi-emulated-mman")

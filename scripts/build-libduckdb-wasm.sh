@@ -40,10 +40,12 @@ fi
 ARTIFACTS_DIR=${ARTIFACTS_DIR:-"$(pwd)/artifacts"}
 mkdir -p "$ARTIFACTS_DIR"
 # Merge DuckDB with the C++ runtime archives so downstream consumers
-# do not need to manually link libc++/libc++abi when building components.
-SYSROOT_LIBDIR="$WASI_SDK_PREFIX/share/wasi-sysroot/lib/${WASI_TARGET_TRIPLE:-wasm32-wasip1-threads}"
+# do not need to manually link libc++/libc++abi when building components. Use
+# the `eh` multilib (exception-handling) variants plus libunwind so the merged
+# archive carries the runtime that DuckDB's `-fwasm-exceptions` code needs.
+SYSROOT_LIBDIR="$WASI_SDK_PREFIX/share/wasi-sysroot/lib/${WASI_TARGET_TRIPLE:-wasm32-wasip1-threads}/eh"
 if [[ ! -d "$SYSROOT_LIBDIR" ]]; then
-  echo "Expected sysroot lib directory '$SYSROOT_LIBDIR' not found" >&2
+  echo "Expected exception-handling sysroot lib directory '$SYSROOT_LIBDIR' not found (needs wasi-sdk >= 33)" >&2
   exit 1
 fi
 
@@ -56,12 +58,14 @@ trap cleanup EXIT
 cp "$STATIC_LIB" "$TMPDIR/libduckdb_base.a"
 cp "$SYSROOT_LIBDIR/libc++abi.a" "$TMPDIR/libc++abi.a"
 cp "$SYSROOT_LIBDIR/libc++.a" "$TMPDIR/libc++.a"
+cp "$SYSROOT_LIBDIR/libunwind.a" "$TMPDIR/libunwind.a"
 pushd "$TMPDIR" >/dev/null
 cat <<EOF | "$WASI_SDK_PREFIX/bin/llvm-ar" -M
 CREATE libduckdb_combined.a
 ADDLIB libduckdb_base.a
 ADDLIB libc++abi.a
 ADDLIB libc++.a
+ADDLIB libunwind.a
 SAVE
 END
 EOF

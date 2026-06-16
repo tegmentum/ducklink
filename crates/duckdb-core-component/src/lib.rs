@@ -50,10 +50,11 @@ use libduckdb_sys as duckdb;
 use thiserror::Error;
 
 const DUCKDB_SUCCESS: duckdb::duckdb_state = 0;
-/// Whether `CREATE MACRO` may be executed. Gated off until the libduckdb wasm
-/// archive is rebuilt with working C++ exception handling (`-fwasm-exceptions`),
-/// since DuckDB's macro binder throws and this build aborts on any throw.
-const MACRO_EXECUTION_ENABLED: bool = false;
+/// Whether `CREATE MACRO` may be executed. Enabled now that the libduckdb wasm
+/// archive is built with working C++ exception handling (wasi-sdk-33 `eh`
+/// multilib + `-fwasm-exceptions`), so DuckDB's macro binder can throw/catch
+/// during overload resolution instead of aborting the module.
+const MACRO_EXECUTION_ENABLED: bool = true;
 
 static NEXT_SCALAR_FUNCTION_ID: AtomicU32 = AtomicU32::new(1);
 static SCALAR_FUNCTION_DEFINITIONS: OnceLock<Mutex<Vec<Arc<ScalarFunctionDefinition>>>> =
@@ -2455,7 +2456,12 @@ fn process_pending_registrations(
         register_pending_aggregate(entry)?;
     }
     for entry in pending.macros.into_iter().collect::<Vec<_>>() {
-        register_pending_macro(entry)?;
+        // A macro failure must not fail the whole extension load (which would
+        // make the loader hook return false and DuckDB report the unrelated
+        // "extension loading disabled" error). Log and continue.
+        if let Err(err) = register_pending_macro(entry) {
+            clog!("[duckdb-core] macro registration failed (continuing): {err:?}");
+        }
     }
     Ok(())
 }
@@ -2882,21 +2888,48 @@ fn remove_scalar_function_definition(id: u32) {
     guard.retain(|entry| entry.id != id);
 }
 
+/// Distinct databases backing the currently active connections.
+fn distinct_active_databases() -> Vec<duckdb::duckdb_database> {
+    let guard = active_connections()
+        .lock()
+        .expect("active connections mutex poisoned");
+    let mut seen: Vec<duckdb::duckdb_database> = Vec::new();
+    for conn in guard.iter() {
+        if !conn.1.is_null() && !seen.iter().any(|db| *db == conn.1) {
+            seen.push(conn.1);
+        }
+    }
+    seen
+}
+
+/// Runs `register` on a transient connection to each active database. Extension
+/// functions are registered while the active connection is mid-LOAD (a busy
+/// ClientContext), so registering on it directly fails; a fresh connection
+/// registers into the same catalog (functions are database-wide) and is closed.
+unsafe fn register_on_each_database<F>(register: F) -> Result<(), Duckerror>
+where
+    F: Fn(duckdb::duckdb_connection) -> Result<(), Duckerror>,
+{
+    for database in distinct_active_databases() {
+        let mut conn: duckdb::duckdb_connection = ptr::null_mut();
+        if duckdb::duckdb_connect(database, &mut conn) != DUCKDB_SUCCESS {
+            return Err(Duckerror::Internal(
+                "duckdb_connect failed for function registration".to_string(),
+            ));
+        }
+        let result = register(conn);
+        duckdb::duckdb_disconnect(&mut conn);
+        result?;
+    }
+    Ok(())
+}
+
 fn register_scalar_function_with_existing_connections(
     definition: &Arc<ScalarFunctionDefinition>,
 ) -> Result<(), Duckerror> {
-    let connections = {
-        let guard = active_connections()
-            .lock()
-            .expect("active connections mutex poisoned");
-        guard.clone()
-    };
-    for connection in connections {
-        unsafe {
-            register_scalar_function_on_connection(connection.0, definition)?;
-        }
+    unsafe {
+        register_on_each_database(|conn| register_scalar_function_on_connection(conn, definition))
     }
-    Ok(())
 }
 
 fn table_function_definitions() -> &'static Mutex<Vec<Arc<TableFunctionDefinition>>> {
@@ -2913,18 +2946,9 @@ fn push_table_function_definition(def: Arc<TableFunctionDefinition>) {
 fn register_table_function_with_existing_connections(
     definition: &Arc<TableFunctionDefinition>,
 ) -> Result<(), Duckerror> {
-    let connections = {
-        let guard = active_connections()
-            .lock()
-            .expect("active connections mutex poisoned");
-        guard.clone()
-    };
-    for connection in connections {
-        unsafe {
-            register_table_function_on_connection(connection.0, definition)?;
-        }
+    unsafe {
+        register_on_each_database(|conn| register_table_function_on_connection(conn, definition))
     }
-    Ok(())
 }
 
 fn aggregate_function_definitions() -> &'static Mutex<Vec<Arc<AggregateFunctionDefinition>>> {
@@ -2941,18 +2965,11 @@ fn push_aggregate_function_definition(def: Arc<AggregateFunctionDefinition>) {
 fn register_aggregate_function_with_existing_connections(
     definition: &Arc<AggregateFunctionDefinition>,
 ) -> Result<(), Duckerror> {
-    let connections = {
-        let guard = active_connections()
-            .lock()
-            .expect("active connections mutex poisoned");
-        guard.clone()
-    };
-    for connection in connections {
-        unsafe {
-            register_aggregate_function_on_connection(connection.0, definition)?;
-        }
+    unsafe {
+        register_on_each_database(|conn| {
+            register_aggregate_function_on_connection(conn, definition)
+        })
     }
-    Ok(())
 }
 
 impl runtime_exports::GuestScalarCallback for NoopScalarCallback {
@@ -4231,53 +4248,10 @@ unsafe fn duckdb_value_to_duckvalue(
     Ok(result)
 }
 
-const EXCEPTION_HEADER_SIZE: usize = core::mem::size_of::<usize>();
-const EXCEPTION_ALIGN: usize = core::mem::align_of::<usize>();
-
-#[no_mangle]
-pub unsafe extern "C" fn __cxa_allocate_exception(size: usize) -> *mut u8 {
-    let total = size
-        .checked_add(EXCEPTION_HEADER_SIZE)
-        .unwrap_or_else(|| std::process::abort());
-    let layout = Layout::from_size_align(total.max(EXCEPTION_HEADER_SIZE), EXCEPTION_ALIGN)
-        .unwrap_or_else(|_| std::process::abort());
-    let raw = alloc(layout);
-    if raw.is_null() {
-        handle_alloc_error(layout);
-    }
-    *(raw as *mut usize) = total;
-    raw.add(EXCEPTION_HEADER_SIZE)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn __cxa_free_exception(ptr: *mut u8) {
-    if ptr.is_null() {
-        return;
-    }
-    let raw = ptr.sub(EXCEPTION_HEADER_SIZE);
-    let total = *(raw as *mut usize);
-    let layout = Layout::from_size_align(total.max(EXCEPTION_HEADER_SIZE), EXCEPTION_ALIGN)
-        .unwrap_or_else(|_| std::process::abort());
-    dealloc(raw, layout);
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn __cxa_throw(_ptr: *mut u8, _type: *mut u8, _destructor: *mut u8) -> ! {
-    std::process::abort()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn __cxa_begin_catch(ptr: *mut u8) -> *mut u8 {
-    ptr
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn __cxa_end_catch() {}
-
-#[no_mangle]
-pub unsafe extern "C" fn __cxa_rethrow() -> ! {
-    std::process::abort()
-}
+// The `__cxa_*` exception ABI is now provided by the real exception-handling
+// libc++abi baked into libduckdb-wasi.a (wasi-sdk-33 `eh` multilib). The
+// previous abort-stubs here only existed because the old no-exceptions libc++
+// lacked them; defining them now would clash with the real runtime.
 
 fn extract_and_free_c_string(ptr: *mut std::os::raw::c_char) -> Option<String> {
     if ptr.is_null() {
