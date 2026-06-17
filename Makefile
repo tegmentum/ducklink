@@ -1,9 +1,9 @@
 WASI_TARGET?=wasm32-wasip2
 BROWSER_TARGET?=wasm32-unknown-unknown
 
-.PHONY: all core core-browser standalone-cli smoke-cli smoke-cli-disk sample-extension smoke-extension clean
+.PHONY: all core core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension clean
 
-all: core standalone-cli
+all: core standalone-cli loader-stub
 
 core:
 	./scripts/sync-core-wit.sh
@@ -19,6 +19,10 @@ core-browser:
 standalone-cli:
 	./scripts/sync-cli-wit.sh
 	cargo component build -p duckdb-cli-component --target $(WASI_TARGET) --release
+
+loader-stub:
+	./scripts/sync-stub-wit.sh
+	cargo component build -p duckdb-loader-stub --target $(WASI_TARGET) --release
 
 smoke-cli: all
 	./scripts/smoke-cli.sh

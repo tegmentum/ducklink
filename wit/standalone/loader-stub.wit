@@ -1,0 +1,14 @@
+package duckdb:loader-stub;
+
+// A no-op provider for the three host imports the core component declares for
+// dynamic extension loading. The standalone (wac-composed) deployment cannot
+// instantiate extension components at runtime, so it links this stub instead of
+// the native host: `request-load` always declines, no registrations are ever
+// pending, and the callback-dispatch entry points are never reached (nothing is
+// registered to invoke them). Plain SQL works; `LOAD <ext>` simply reports the
+// extension is unavailable.
+world loader-stub {
+    export duckdb:component/host-extension-loader;
+    export duckdb:component/extension-loader-hooks;
+    export duckdb:extension/callback-dispatch;
+}

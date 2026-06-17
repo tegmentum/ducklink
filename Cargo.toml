@@ -3,6 +3,7 @@ members = [
     "crates/libduckdb-sys",
     "crates/duckdb-core-component",
     "crates/duckdb-cli-component",
+    "crates/duckdb-loader-stub",
     "crates/duckdb-component-host",
     "extensions/sample-extension-component",
 ]

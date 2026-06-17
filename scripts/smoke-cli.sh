@@ -5,10 +5,13 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET_DIR="${TARGET_DIR:-$ROOT/target/wasm32-wasip2/release}"
 CLI_COMPONENT="${CLI_COMPONENT:-$TARGET_DIR/duckdb_cli_component.wasm}"
 CORE_COMPONENT="${CORE_COMPONENT:-$TARGET_DIR/duckdb_core_component.wasm}"
+STUB_COMPONENT="${STUB_COMPONENT:-$TARGET_DIR/duckdb_loader_stub.wasm}"
+CORE_LOADED_COMPONENT="${CORE_LOADED_COMPONENT:-$TARGET_DIR/duckdb_core_loaded.wasm}"
 OUTPUT_COMPONENT="${OUTPUT_COMPONENT:-$TARGET_DIR/duckdb_cli_standalone.wasm}"
 SQL="${SQL:-select 1 as answer;}"
 DB_PATH="${DB_PATH:-:memory:}"
-EXTRA_WASMTIME_FLAGS="${EXTRA_WASMTIME_FLAGS:-}"
+# The core component uses wasm C++ exceptions, so the standalone needs them on.
+EXTRA_WASMTIME_FLAGS="${EXTRA_WASMTIME_FLAGS:--W exceptions=y}"
 ON_DISK_SMOKE="${ON_DISK_SMOKE:-0}"
 TEMP_DB_DIR=""
 EXTENSIONS="${EXTENSIONS:-}"
@@ -30,8 +33,18 @@ if [[ ! -f "$CORE_COMPONENT" ]]; then
   exit 1
 fi
 
-echo "Creating composed CLI component via wac plug..." >&2
-wac plug "$CLI_COMPONENT" --plug "$CORE_COMPONENT" -o "$OUTPUT_COMPONENT"
+if [[ ! -f "$STUB_COMPONENT" ]]; then
+  echo "Loader-stub component not found at $STUB_COMPONENT (run: make loader-stub)" >&2
+  exit 1
+fi
+
+# The core declares three host imports for dynamic extension loading
+# (host-extension-loader / extension-loader-hooks / callback-dispatch). The
+# standalone has no native host to provide them, so first plug in the no-op
+# loader stub, then plug the resulting core into the CLI.
+echo "Composing standalone component via wac plug (core <- stub, cli <- core)..." >&2
+wac plug "$CORE_COMPONENT" --plug "$STUB_COMPONENT" -o "$CORE_LOADED_COMPONENT"
+wac plug "$CLI_COMPONENT" --plug "$CORE_LOADED_COMPONENT" -o "$OUTPUT_COMPONENT"
 
 db_dir="."
 if [[ "$ON_DISK_SMOKE" -ne 0 ]]; then
