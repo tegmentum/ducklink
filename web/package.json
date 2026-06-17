@@ -1,0 +1,14 @@
+{
+  "name": "duckdb-component-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Run the DuckDB Wasm component in JS runtimes / the browser via wasi-polyfill",
+  "scripts": {
+    "core": "node run-core.mjs"
+  },
+  "dependencies": {
+    "@tegmentum/wasi-polyfill": "file:../../../wasi-polyfill",
+    "@bytecodealliance/jco": "^1.23.0"
+  }
+}
