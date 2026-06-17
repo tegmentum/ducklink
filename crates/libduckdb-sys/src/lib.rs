@@ -8,6 +8,7 @@ pub type duckdb_state = i32;
 pub type duckdb_database = *mut c_void;
 pub type duckdb_connection = *mut c_void;
 pub type duckdb_config = *mut c_void;
+pub type duckdb_prepared_statement = *mut c_void;
 pub type idx_t = u64;
 pub type duckdb_data_chunk = *mut c_void;
 pub type duckdb_vector = *mut c_void;
@@ -158,6 +159,56 @@ extern "C" {
     ) -> duckdb_state;
 
     pub fn duckdb_destroy_result(result: *mut duckdb_result);
+
+    pub fn duckdb_prepare(
+        connection: duckdb_connection,
+        query: *const c_char,
+        out_prepared_statement: *mut duckdb_prepared_statement,
+    ) -> duckdb_state;
+    pub fn duckdb_destroy_prepare(prepared_statement: *mut duckdb_prepared_statement);
+    pub fn duckdb_prepare_error(prepared_statement: duckdb_prepared_statement) -> *const c_char;
+    pub fn duckdb_nparams(prepared_statement: duckdb_prepared_statement) -> idx_t;
+    pub fn duckdb_clear_bindings(prepared_statement: duckdb_prepared_statement) -> duckdb_state;
+    pub fn duckdb_bind_boolean(
+        prepared_statement: duckdb_prepared_statement,
+        param_idx: idx_t,
+        val: bool,
+    ) -> duckdb_state;
+    pub fn duckdb_bind_int64(
+        prepared_statement: duckdb_prepared_statement,
+        param_idx: idx_t,
+        val: i64,
+    ) -> duckdb_state;
+    pub fn duckdb_bind_uint64(
+        prepared_statement: duckdb_prepared_statement,
+        param_idx: idx_t,
+        val: u64,
+    ) -> duckdb_state;
+    pub fn duckdb_bind_double(
+        prepared_statement: duckdb_prepared_statement,
+        param_idx: idx_t,
+        val: f64,
+    ) -> duckdb_state;
+    pub fn duckdb_bind_varchar_length(
+        prepared_statement: duckdb_prepared_statement,
+        param_idx: idx_t,
+        val: *const c_char,
+        length: idx_t,
+    ) -> duckdb_state;
+    pub fn duckdb_bind_blob(
+        prepared_statement: duckdb_prepared_statement,
+        param_idx: idx_t,
+        data: *const c_void,
+        length: idx_t,
+    ) -> duckdb_state;
+    pub fn duckdb_bind_null(
+        prepared_statement: duckdb_prepared_statement,
+        param_idx: idx_t,
+    ) -> duckdb_state;
+    pub fn duckdb_execute_prepared(
+        prepared_statement: duckdb_prepared_statement,
+        out_result: *mut duckdb_result,
+    ) -> duckdb_state;
 
     pub fn duckdb_result_error(result: *mut duckdb_result) -> *const c_char;
 

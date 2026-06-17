@@ -2284,6 +2284,109 @@ impl exported_database::GuestResultStream for QueryStream {
     }
 }
 
+/// A compiled DuckDB prepared statement, reusable across executions with
+/// different bound parameters.
+struct PreparedStatementState {
+    stmt: RefCell<duckdb::duckdb_prepared_statement>,
+}
+
+impl PreparedStatementState {
+    fn prepare(conn: &ConnectionState, sql: &str) -> Result<Self, DuckDbError> {
+        let c_sql = CString::new(sql).map_err(|_| DuckDbError::EmbeddedNull)?;
+        unsafe {
+            let mut stmt: duckdb::duckdb_prepared_statement = ptr::null_mut();
+            let state = duckdb::duckdb_prepare(conn.handle, c_sql.as_ptr(), &mut stmt);
+            if state != DUCKDB_SUCCESS {
+                let message = prepare_error_message(stmt);
+                if !stmt.is_null() {
+                    duckdb::duckdb_destroy_prepare(&mut stmt);
+                }
+                return Err(DuckDbError::message(message));
+            }
+            Ok(PreparedStatementState {
+                stmt: RefCell::new(stmt),
+            })
+        }
+    }
+}
+
+unsafe fn prepare_error_message(stmt: duckdb::duckdb_prepared_statement) -> String {
+    if stmt.is_null() {
+        return "duckdb_prepare failed".to_string();
+    }
+    let ptr = duckdb::duckdb_prepare_error(stmt);
+    if ptr.is_null() {
+        "duckdb_prepare failed".to_string()
+    } else {
+        CStr::from_ptr(ptr).to_string_lossy().into_owned()
+    }
+}
+
+impl Drop for PreparedStatementState {
+    fn drop(&mut self) {
+        unsafe {
+            let mut stmt = *self.stmt.borrow();
+            if !stmt.is_null() {
+                duckdb::duckdb_destroy_prepare(&mut stmt);
+            }
+        }
+    }
+}
+
+impl exported_database::GuestPreparedStatement for PreparedStatementState {
+    fn parameter_count(&self) -> u32 {
+        unsafe { duckdb::duckdb_nparams(*self.stmt.borrow()) as u32 }
+    }
+
+    fn execute(&self, params: Vec<Duckvalue>) -> Result<QueryResult, Duckerror> {
+        unsafe {
+            let stmt = *self.stmt.borrow();
+            duckdb::duckdb_clear_bindings(stmt);
+            for (offset, value) in params.iter().enumerate() {
+                let idx = (offset + 1) as duckdb::idx_t;
+                let state = match value {
+                    Duckvalue::Null => duckdb::duckdb_bind_null(stmt, idx),
+                    Duckvalue::Boolean(v) => duckdb::duckdb_bind_boolean(stmt, idx, *v),
+                    Duckvalue::Int64(v) => duckdb::duckdb_bind_int64(stmt, idx, *v),
+                    Duckvalue::Uint64(v) => duckdb::duckdb_bind_uint64(stmt, idx, *v),
+                    Duckvalue::Float64(v) => duckdb::duckdb_bind_double(stmt, idx, *v),
+                    Duckvalue::Text(v) => duckdb::duckdb_bind_varchar_length(
+                        stmt,
+                        idx,
+                        v.as_ptr() as *const c_char,
+                        v.len() as duckdb::idx_t,
+                    ),
+                    Duckvalue::Blob(bytes) => duckdb::duckdb_bind_blob(
+                        stmt,
+                        idx,
+                        bytes.as_ptr() as *const c_void,
+                        bytes.len() as duckdb::idx_t,
+                    ),
+                };
+                if state != DUCKDB_SUCCESS {
+                    return Err(Duckerror::from(DuckDbError::message(format!(
+                        "failed to bind parameter {idx}"
+                    ))));
+                }
+            }
+
+            let mut result = MaybeUninit::<duckdb::duckdb_result>::zeroed();
+            let state = duckdb::duckdb_execute_prepared(stmt, result.as_mut_ptr());
+            let mut result = result.assume_init();
+            if state != DUCKDB_SUCCESS {
+                let message = extract_result_error(&result)
+                    .unwrap_or_else(|| "duckdb_execute_prepared failed".to_string());
+                duckdb::duckdb_destroy_result(&mut result);
+                return Err(Duckerror::from(DuckDbError::message(message)));
+            }
+            let marshalled = marshal_result(&result);
+            duckdb::duckdb_destroy_result(&mut result);
+            let (columns, rows) = marshalled.map_err(Duckerror::from)?;
+            Ok(QueryResult { columns, rows })
+        }
+    }
+}
+
 struct Component;
 
 fn register_connection_handle(
@@ -2358,6 +2461,7 @@ fn unregister_connection_handle(handle: duckdb::duckdb_connection) {
 impl exported_database::Guest for Component {
     type Connection = ConnectionState;
     type ResultStream = QueryStream;
+    type PreparedStatement = PreparedStatementState;
 
     fn open(path: Option<String>) -> Result<Connection, String> {
         let state = ConnectionState::open(path.as_deref()).map_err(|err| err.to_string())?;
@@ -2390,6 +2494,15 @@ impl exported_database::Guest for Component {
         Ok(exported_database::ResultStream::new(QueryStream::new(
             columns, rows,
         )))
+    }
+
+    fn prepare(
+        conn: ConnectionBorrow<'_>,
+        sql: String,
+    ) -> Result<exported_database::PreparedStatement, Duckerror> {
+        let state = PreparedStatementState::prepare(conn.get::<ConnectionState>(), &sql)
+            .map_err(Duckerror::from)?;
+        Ok(exported_database::PreparedStatement::new(state))
     }
 
     fn register_extension(name: String, requires: Vec<Capabilitykind>) -> Result<bool, String> {

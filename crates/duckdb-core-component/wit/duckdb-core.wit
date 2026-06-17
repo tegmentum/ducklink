@@ -38,6 +38,18 @@ interface database {
         close: func();
     }
 
+    /// A SQL statement compiled once for repeated parameterized execution.
+    /// Parameters are positional (`$1`, `$2`, ... or `?`).
+    resource prepared-statement {
+        /// Number of parameters the statement expects.
+        parameter-count: func() -> u32;
+
+        /// Binds `params` to the positional parameters in order and runs the
+        /// statement, returning all rows eagerly. May be called repeatedly with
+        /// different parameters; each call rebinds from scratch.
+        execute: func(params: list<duckvalue>) -> result<query-result, duckerror>;
+    }
+
     /// Opens a DuckDB database. Pass `none` for an in-memory database.
     open: func(path: option<string>) -> result<connection, string>;
 
@@ -52,6 +64,9 @@ interface database {
 
     /// Executes a SQL statement and returns a streaming cursor.
     open-stream: func(conn: borrow<connection>, sql: string) -> result<result-stream, duckerror>;
+
+    /// Compiles a SQL statement for repeated parameterized execution.
+    prepare: func(conn: borrow<connection>, sql: string) -> result<prepared-statement, duckerror>;
 
     /// Registers metadata about an extension along with the capabilities it intends to use.
     register-extension: func(name: string, requires: list<capabilitykind>) -> result<bool, string>;

@@ -9,7 +9,8 @@
     "predev": "npm run copy-wasm",
     "dev": "vite",
     "verify": "npm run copy-wasm && node verify.mjs",
-    "verify-ext": "npm run copy-wasm && node verify.mjs /index-ext.html"
+    "verify-ext": "npm run copy-wasm && node verify.mjs /index-ext.html",
+    "verify-prepared": "npm run copy-wasm && node verify.mjs /index-prepared.html"
   },
   "dependencies": {
     "@tegmentum/wasi-polyfill": "file:../../../wasi-polyfill",

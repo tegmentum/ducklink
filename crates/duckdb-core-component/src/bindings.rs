@@ -8087,6 +8087,133 @@ pub mod exports {
                         }
                     }
                 }
+                /// A SQL statement compiled once for repeated parameterized execution.
+                /// Parameters are positional (`$1`, `$2`, ... or `?`).
+                #[derive(Debug)]
+                #[repr(transparent)]
+                pub struct PreparedStatement {
+                    handle: _rt::Resource<PreparedStatement>,
+                }
+                type _PreparedStatementRep<T> = Option<T>;
+                impl PreparedStatement {
+                    /// Creates a new resource from the specified representation.
+                    ///
+                    /// This function will create a new resource handle by moving `val` onto
+                    /// the heap and then passing that heap pointer to the component model to
+                    /// create a handle. The owned handle is then returned as `PreparedStatement`.
+                    pub fn new<T: GuestPreparedStatement>(val: T) -> Self {
+                        Self::type_guard::<T>();
+                        let val: _PreparedStatementRep<T> = Some(val);
+                        let ptr: *mut _PreparedStatementRep<T> = _rt::Box::into_raw(
+                            _rt::Box::new(val),
+                        );
+                        unsafe { Self::from_handle(T::_resource_new(ptr.cast())) }
+                    }
+                    /// Gets access to the underlying `T` which represents this resource.
+                    pub fn get<T: GuestPreparedStatement>(&self) -> &T {
+                        let ptr = unsafe { &*self.as_ptr::<T>() };
+                        ptr.as_ref().unwrap()
+                    }
+                    /// Gets mutable access to the underlying `T` which represents this
+                    /// resource.
+                    pub fn get_mut<T: GuestPreparedStatement>(&mut self) -> &mut T {
+                        let ptr = unsafe { &mut *self.as_ptr::<T>() };
+                        ptr.as_mut().unwrap()
+                    }
+                    /// Consumes this resource and returns the underlying `T`.
+                    pub fn into_inner<T: GuestPreparedStatement>(self) -> T {
+                        let ptr = unsafe { &mut *self.as_ptr::<T>() };
+                        ptr.take().unwrap()
+                    }
+                    #[doc(hidden)]
+                    pub unsafe fn from_handle(handle: u32) -> Self {
+                        Self {
+                            handle: unsafe { _rt::Resource::from_handle(handle) },
+                        }
+                    }
+                    #[doc(hidden)]
+                    pub fn take_handle(&self) -> u32 {
+                        _rt::Resource::take_handle(&self.handle)
+                    }
+                    #[doc(hidden)]
+                    pub fn handle(&self) -> u32 {
+                        _rt::Resource::handle(&self.handle)
+                    }
+                    #[doc(hidden)]
+                    fn type_guard<T: 'static>() {
+                        use core::any::TypeId;
+                        static mut LAST_TYPE: Option<TypeId> = None;
+                        unsafe {
+                            assert!(! cfg!(target_feature = "atomics"));
+                            let id = TypeId::of::<T>();
+                            match LAST_TYPE {
+                                Some(ty) => {
+                                    assert!(
+                                        ty == id, "cannot use two types with this resource type"
+                                    )
+                                }
+                                None => LAST_TYPE = Some(id),
+                            }
+                        }
+                    }
+                    #[doc(hidden)]
+                    pub unsafe fn dtor<T: 'static>(handle: *mut u8) {
+                        Self::type_guard::<T>();
+                        let _ = unsafe {
+                            _rt::Box::from_raw(handle as *mut _PreparedStatementRep<T>)
+                        };
+                    }
+                    fn as_ptr<T: GuestPreparedStatement>(
+                        &self,
+                    ) -> *mut _PreparedStatementRep<T> {
+                        PreparedStatement::type_guard::<T>();
+                        T::_resource_rep(self.handle()).cast()
+                    }
+                }
+                /// A borrowed version of [`PreparedStatement`] which represents a borrowed value
+                /// with the lifetime `'a`.
+                #[derive(Debug)]
+                #[repr(transparent)]
+                pub struct PreparedStatementBorrow<'a> {
+                    rep: *mut u8,
+                    _marker: core::marker::PhantomData<&'a PreparedStatement>,
+                }
+                impl<'a> PreparedStatementBorrow<'a> {
+                    #[doc(hidden)]
+                    pub unsafe fn lift(rep: usize) -> Self {
+                        Self {
+                            rep: rep as *mut u8,
+                            _marker: core::marker::PhantomData,
+                        }
+                    }
+                    /// Gets access to the underlying `T` in this resource.
+                    pub fn get<T: GuestPreparedStatement>(&self) -> &T {
+                        let ptr = unsafe { &mut *self.as_ptr::<T>() };
+                        ptr.as_ref().unwrap()
+                    }
+                    fn as_ptr<T: 'static>(&self) -> *mut _PreparedStatementRep<T> {
+                        PreparedStatement::type_guard::<T>();
+                        self.rep.cast()
+                    }
+                }
+                unsafe impl _rt::WasmResource for PreparedStatement {
+                    #[inline]
+                    unsafe fn drop(_handle: u32) {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        unreachable!();
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            #[link(
+                                wasm_import_module = "[export]duckdb:component/database"
+                            )]
+                            unsafe extern "C" {
+                                #[link_name = "[resource-drop]prepared-statement"]
+                                fn drop(_: u32);
+                            }
+                            unsafe { drop(_handle) };
+                        }
+                    }
+                }
                 /// Extension metadata captured during registration.
                 #[derive(Clone)]
                 pub struct ExtensionInfo {
@@ -8532,6 +8659,484 @@ pub mod exports {
                     T::close(
                         unsafe { ResultStreamBorrow::lift(arg0 as u32 as usize) }.get(),
                     );
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_method_prepared_statement_parameter_count_cabi<
+                    T: GuestPreparedStatement,
+                >(arg0: *mut u8) -> i32 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::parameter_count(
+                        unsafe { PreparedStatementBorrow::lift(arg0 as u32 as usize) }
+                            .get(),
+                    );
+                    _rt::as_i32(result0)
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_method_prepared_statement_execute_cabi<
+                    T: GuestPreparedStatement,
+                >(arg0: *mut u8, arg1: *mut u8, arg2: usize) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let base12 = arg1;
+                    let len12 = arg2;
+                    let mut result12 = _rt::Vec::with_capacity(len12);
+                    for i in 0..len12 {
+                        let base = base12
+                            .add(i * (8 + 2 * ::core::mem::size_of::<*const u8>()));
+                        let e12 = {
+                            let l0 = i32::from(*base.add(0).cast::<u8>());
+                            use super::super::super::super::duckdb::extension::types::Duckvalue as V11;
+                            let v11 = match l0 {
+                                0 => V11::Null,
+                                1 => {
+                                    let e11 = {
+                                        let l1 = i32::from(*base.add(8).cast::<u8>());
+                                        _rt::bool_lift(l1 as u8)
+                                    };
+                                    V11::Boolean(e11)
+                                }
+                                2 => {
+                                    let e11 = {
+                                        let l2 = *base.add(8).cast::<i64>();
+                                        l2
+                                    };
+                                    V11::Int64(e11)
+                                }
+                                3 => {
+                                    let e11 = {
+                                        let l3 = *base.add(8).cast::<i64>();
+                                        l3 as u64
+                                    };
+                                    V11::Uint64(e11)
+                                }
+                                4 => {
+                                    let e11 = {
+                                        let l4 = *base.add(8).cast::<f64>();
+                                        l4
+                                    };
+                                    V11::Float64(e11)
+                                }
+                                5 => {
+                                    let e11 = {
+                                        let l5 = *base.add(8).cast::<*mut u8>();
+                                        let l6 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len7 = l6;
+                                        let bytes7 = _rt::Vec::from_raw_parts(
+                                            l5.cast(),
+                                            len7,
+                                            len7,
+                                        );
+                                        _rt::string_lift(bytes7)
+                                    };
+                                    V11::Text(e11)
+                                }
+                                n => {
+                                    debug_assert_eq!(n, 6, "invalid enum discriminant");
+                                    let e11 = {
+                                        let l8 = *base.add(8).cast::<*mut u8>();
+                                        let l9 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len10 = l9;
+                                        _rt::Vec::from_raw_parts(l8.cast(), len10, len10)
+                                    };
+                                    V11::Blob(e11)
+                                }
+                            };
+                            v11
+                        };
+                        result12.push(e12);
+                    }
+                    _rt::cabi_dealloc(
+                        base12,
+                        len12 * (8 + 2 * ::core::mem::size_of::<*const u8>()),
+                        8,
+                    );
+                    let result13 = T::execute(
+                        unsafe { PreparedStatementBorrow::lift(arg0 as u32 as usize) }
+                            .get(),
+                        result12,
+                    );
+                    let ptr14 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result13 {
+                        Ok(e) => {
+                            *ptr14.add(0).cast::<u8>() = (0i32) as u8;
+                            let QueryResult { columns: columns15, rows: rows15 } = e;
+                            let vec18 = columns15;
+                            let len18 = vec18.len();
+                            let layout18 = _rt::alloc::Layout::from_size_align_unchecked(
+                                vec18.len() * (3 * ::core::mem::size_of::<*const u8>()),
+                                ::core::mem::size_of::<*const u8>(),
+                            );
+                            let result18 = if layout18.size() != 0 {
+                                let ptr = _rt::alloc::alloc(layout18).cast::<u8>();
+                                if ptr.is_null() {
+                                    _rt::alloc::handle_alloc_error(layout18);
+                                }
+                                ptr
+                            } else {
+                                ::core::ptr::null_mut()
+                            };
+                            for (i, e) in vec18.into_iter().enumerate() {
+                                let base = result18
+                                    .add(i * (3 * ::core::mem::size_of::<*const u8>()));
+                                {
+                                    let super::super::super::super::duckdb::extension::types::Columndef {
+                                        name: name16,
+                                        logical: logical16,
+                                    } = e;
+                                    let vec17 = (name16.into_bytes()).into_boxed_slice();
+                                    let ptr17 = vec17.as_ptr().cast::<u8>();
+                                    let len17 = vec17.len();
+                                    ::core::mem::forget(vec17);
+                                    *base
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len17;
+                                    *base.add(0).cast::<*mut u8>() = ptr17.cast_mut();
+                                    *base
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (logical16.clone() as i32) as u8;
+                                }
+                            }
+                            *ptr14
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len18;
+                            *ptr14
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = result18;
+                            let vec23 = rows15;
+                            let len23 = vec23.len();
+                            let layout23 = _rt::alloc::Layout::from_size_align_unchecked(
+                                vec23.len() * (2 * ::core::mem::size_of::<*const u8>()),
+                                ::core::mem::size_of::<*const u8>(),
+                            );
+                            let result23 = if layout23.size() != 0 {
+                                let ptr = _rt::alloc::alloc(layout23).cast::<u8>();
+                                if ptr.is_null() {
+                                    _rt::alloc::handle_alloc_error(layout23);
+                                }
+                                ptr
+                            } else {
+                                ::core::ptr::null_mut()
+                            };
+                            for (i, e) in vec23.into_iter().enumerate() {
+                                let base = result23
+                                    .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                                {
+                                    let vec22 = e;
+                                    let len22 = vec22.len();
+                                    let layout22 = _rt::alloc::Layout::from_size_align_unchecked(
+                                        vec22.len() * (8 + 2 * ::core::mem::size_of::<*const u8>()),
+                                        8,
+                                    );
+                                    let result22 = if layout22.size() != 0 {
+                                        let ptr = _rt::alloc::alloc(layout22).cast::<u8>();
+                                        if ptr.is_null() {
+                                            _rt::alloc::handle_alloc_error(layout22);
+                                        }
+                                        ptr
+                                    } else {
+                                        ::core::ptr::null_mut()
+                                    };
+                                    for (i, e) in vec22.into_iter().enumerate() {
+                                        let base = result22
+                                            .add(i * (8 + 2 * ::core::mem::size_of::<*const u8>()));
+                                        {
+                                            use super::super::super::super::duckdb::extension::types::Duckvalue as V21;
+                                            match e {
+                                                V21::Null => {
+                                                    *base.add(0).cast::<u8>() = (0i32) as u8;
+                                                }
+                                                V21::Boolean(e) => {
+                                                    *base.add(0).cast::<u8>() = (1i32) as u8;
+                                                    *base.add(8).cast::<u8>() = (match e {
+                                                        true => 1,
+                                                        false => 0,
+                                                    }) as u8;
+                                                }
+                                                V21::Int64(e) => {
+                                                    *base.add(0).cast::<u8>() = (2i32) as u8;
+                                                    *base.add(8).cast::<i64>() = _rt::as_i64(e);
+                                                }
+                                                V21::Uint64(e) => {
+                                                    *base.add(0).cast::<u8>() = (3i32) as u8;
+                                                    *base.add(8).cast::<i64>() = _rt::as_i64(e);
+                                                }
+                                                V21::Float64(e) => {
+                                                    *base.add(0).cast::<u8>() = (4i32) as u8;
+                                                    *base.add(8).cast::<f64>() = _rt::as_f64(e);
+                                                }
+                                                V21::Text(e) => {
+                                                    *base.add(0).cast::<u8>() = (5i32) as u8;
+                                                    let vec19 = (e.into_bytes()).into_boxed_slice();
+                                                    let ptr19 = vec19.as_ptr().cast::<u8>();
+                                                    let len19 = vec19.len();
+                                                    ::core::mem::forget(vec19);
+                                                    *base
+                                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>() = len19;
+                                                    *base.add(8).cast::<*mut u8>() = ptr19.cast_mut();
+                                                }
+                                                V21::Blob(e) => {
+                                                    *base.add(0).cast::<u8>() = (6i32) as u8;
+                                                    let vec20 = (e).into_boxed_slice();
+                                                    let ptr20 = vec20.as_ptr().cast::<u8>();
+                                                    let len20 = vec20.len();
+                                                    ::core::mem::forget(vec20);
+                                                    *base
+                                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>() = len20;
+                                                    *base.add(8).cast::<*mut u8>() = ptr20.cast_mut();
+                                                }
+                                            }
+                                        }
+                                    }
+                                    *base
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len22;
+                                    *base.add(0).cast::<*mut u8>() = result22;
+                                }
+                            }
+                            *ptr14
+                                .add(4 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len23;
+                            *ptr14
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = result23;
+                        }
+                        Err(e) => {
+                            *ptr14.add(0).cast::<u8>() = (1i32) as u8;
+                            use super::super::super::super::duckdb::extension::types::Duckerror as V29;
+                            match e {
+                                V29::Invalidargument(e) => {
+                                    *ptr14
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                    let vec24 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr24 = vec24.as_ptr().cast::<u8>();
+                                    let len24 = vec24.len();
+                                    ::core::mem::forget(vec24);
+                                    *ptr14
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len24;
+                                    *ptr14
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr24.cast_mut();
+                                }
+                                V29::Unsupported(e) => {
+                                    *ptr14
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec25 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr25 = vec25.as_ptr().cast::<u8>();
+                                    let len25 = vec25.len();
+                                    ::core::mem::forget(vec25);
+                                    *ptr14
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len25;
+                                    *ptr14
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr25.cast_mut();
+                                }
+                                V29::Invalidstate(e) => {
+                                    *ptr14
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (2i32) as u8;
+                                    let vec26 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr26 = vec26.as_ptr().cast::<u8>();
+                                    let len26 = vec26.len();
+                                    ::core::mem::forget(vec26);
+                                    *ptr14
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len26;
+                                    *ptr14
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr26.cast_mut();
+                                }
+                                V29::Io(e) => {
+                                    *ptr14
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (3i32) as u8;
+                                    let vec27 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr27 = vec27.as_ptr().cast::<u8>();
+                                    let len27 = vec27.len();
+                                    ::core::mem::forget(vec27);
+                                    *ptr14
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len27;
+                                    *ptr14
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr27.cast_mut();
+                                }
+                                V29::Internal(e) => {
+                                    *ptr14
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (4i32) as u8;
+                                    let vec28 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr28 = vec28.as_ptr().cast::<u8>();
+                                    let len28 = vec28.len();
+                                    ::core::mem::forget(vec28);
+                                    *ptr14
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len28;
+                                    *ptr14
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr28.cast_mut();
+                                }
+                            }
+                        }
+                    };
+                    ptr14
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_method_prepared_statement_execute<
+                    T: GuestPreparedStatement,
+                >(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base5 = l1;
+                            let len5 = l2;
+                            for i in 0..len5 {
+                                let base = base5
+                                    .add(i * (3 * ::core::mem::size_of::<*const u8>()));
+                                {
+                                    let l3 = *base.add(0).cast::<*mut u8>();
+                                    let l4 = *base
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l3, l4, 1);
+                                }
+                            }
+                            _rt::cabi_dealloc(
+                                base5,
+                                len5 * (3 * ::core::mem::size_of::<*const u8>()),
+                                ::core::mem::size_of::<*const u8>(),
+                            );
+                            let l6 = *arg0
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l7 = *arg0
+                                .add(4 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base17 = l6;
+                            let len17 = l7;
+                            for i in 0..len17 {
+                                let base = base17
+                                    .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                                {
+                                    let l8 = *base.add(0).cast::<*mut u8>();
+                                    let l9 = *base
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let base16 = l8;
+                                    let len16 = l9;
+                                    for i in 0..len16 {
+                                        let base = base16
+                                            .add(i * (8 + 2 * ::core::mem::size_of::<*const u8>()));
+                                        {
+                                            let l10 = i32::from(*base.add(0).cast::<u8>());
+                                            match l10 {
+                                                0 => {}
+                                                1 => {}
+                                                2 => {}
+                                                3 => {}
+                                                4 => {}
+                                                5 => {
+                                                    let l11 = *base.add(8).cast::<*mut u8>();
+                                                    let l12 = *base
+                                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>();
+                                                    _rt::cabi_dealloc(l11, l12, 1);
+                                                }
+                                                _ => {
+                                                    let l13 = *base.add(8).cast::<*mut u8>();
+                                                    let l14 = *base
+                                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>();
+                                                    let base15 = l13;
+                                                    let len15 = l14;
+                                                    _rt::cabi_dealloc(base15, len15 * 1, 1);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _rt::cabi_dealloc(
+                                        base16,
+                                        len16 * (8 + 2 * ::core::mem::size_of::<*const u8>()),
+                                        8,
+                                    );
+                                }
+                            }
+                            _rt::cabi_dealloc(
+                                base17,
+                                len17 * (2 * ::core::mem::size_of::<*const u8>()),
+                                ::core::mem::size_of::<*const u8>(),
+                            );
+                        }
+                        _ => {
+                            let l18 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l18 {
+                                0 => {
+                                    let l19 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l20 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l19, l20, 1);
+                                }
+                                1 => {
+                                    let l21 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l22 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l21, l22, 1);
+                                }
+                                2 => {
+                                    let l23 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l24 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l23, l24, 1);
+                                }
+                                3 => {
+                                    let l25 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l26 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l25, l26, 1);
+                                }
+                                _ => {
+                                    let l27 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l28 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l27, l28, 1);
+                                }
+                            }
+                        }
+                    }
                 }
                 #[doc(hidden)]
                 #[allow(non_snake_case)]
@@ -9172,6 +9777,172 @@ pub mod exports {
                 }
                 #[doc(hidden)]
                 #[allow(non_snake_case)]
+                pub unsafe fn _export_prepare_cabi<T: Guest>(
+                    arg0: i32,
+                    arg1: *mut u8,
+                    arg2: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg2;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg1.cast(), len0, len0);
+                    let result1 = T::prepare(
+                        unsafe { ConnectionBorrow::lift(arg0 as u32 as usize) },
+                        _rt::string_lift(bytes0),
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<i32>() = (e).take_handle() as i32;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            use super::super::super::super::duckdb::extension::types::Duckerror as V8;
+                            match e {
+                                V8::Invalidargument(e) => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                    let vec3 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                                    let len3 = vec3.len();
+                                    ::core::mem::forget(vec3);
+                                    *ptr2
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len3;
+                                    *ptr2
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr3.cast_mut();
+                                }
+                                V8::Unsupported(e) => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec4 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                                    let len4 = vec4.len();
+                                    ::core::mem::forget(vec4);
+                                    *ptr2
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len4;
+                                    *ptr2
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr4.cast_mut();
+                                }
+                                V8::Invalidstate(e) => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (2i32) as u8;
+                                    let vec5 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr5 = vec5.as_ptr().cast::<u8>();
+                                    let len5 = vec5.len();
+                                    ::core::mem::forget(vec5);
+                                    *ptr2
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len5;
+                                    *ptr2
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr5.cast_mut();
+                                }
+                                V8::Io(e) => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (3i32) as u8;
+                                    let vec6 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr6 = vec6.as_ptr().cast::<u8>();
+                                    let len6 = vec6.len();
+                                    ::core::mem::forget(vec6);
+                                    *ptr2
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len6;
+                                    *ptr2
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr6.cast_mut();
+                                }
+                                V8::Internal(e) => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (4i32) as u8;
+                                    let vec7 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr7 = vec7.as_ptr().cast::<u8>();
+                                    let len7 = vec7.len();
+                                    ::core::mem::forget(vec7);
+                                    *ptr2
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len7;
+                                    *ptr2
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr7.cast_mut();
+                                }
+                            }
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_prepare<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l1 {
+                                0 => {
+                                    let l2 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                1 => {
+                                    let l4 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l5 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l4, l5, 1);
+                                }
+                                2 => {
+                                    let l6 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l7 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l6, l7, 1);
+                                }
+                                3 => {
+                                    let l8 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l9 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l8, l9, 1);
+                                }
+                                _ => {
+                                    let l10 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l11 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l10, l11, 1);
+                                }
+                            }
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
                 pub unsafe fn _export_register_extension_cabi<T: Guest>(
                     arg0: *mut u8,
                     arg1: usize,
@@ -9350,6 +10121,7 @@ pub mod exports {
                 pub trait Guest {
                     type Connection: GuestConnection;
                     type ResultStream: GuestResultStream;
+                    type PreparedStatement: GuestPreparedStatement;
                     /// Opens a DuckDB database. Pass `none` for an in-memory database.
                     fn open(
                         path: Option<_rt::String>,
@@ -9368,6 +10140,11 @@ pub mod exports {
                         conn: ConnectionBorrow<'_>,
                         sql: _rt::String,
                     ) -> Result<ResultStream, Duckerror>;
+                    /// Compiles a SQL statement for repeated parameterized execution.
+                    fn prepare(
+                        conn: ConnectionBorrow<'_>,
+                        sql: _rt::String,
+                    ) -> Result<PreparedStatement, Duckerror>;
                     /// Registers metadata about an extension along with the capabilities it intends to use.
                     fn register_extension(
                         name: _rt::String,
@@ -9477,6 +10254,61 @@ pub mod exports {
                     /// Releases resources associated with the stream.
                     fn close(&self) -> ();
                 }
+                pub trait GuestPreparedStatement: 'static {
+                    #[doc(hidden)]
+                    unsafe fn _resource_new(val: *mut u8) -> u32
+                    where
+                        Self: Sized,
+                    {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            let _ = val;
+                            unreachable!();
+                        }
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            #[link(
+                                wasm_import_module = "[export]duckdb:component/database"
+                            )]
+                            unsafe extern "C" {
+                                #[link_name = "[resource-new]prepared-statement"]
+                                fn new(_: *mut u8) -> u32;
+                            }
+                            unsafe { new(val) }
+                        }
+                    }
+                    #[doc(hidden)]
+                    fn _resource_rep(handle: u32) -> *mut u8
+                    where
+                        Self: Sized,
+                    {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            let _ = handle;
+                            unreachable!();
+                        }
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            #[link(
+                                wasm_import_module = "[export]duckdb:component/database"
+                            )]
+                            unsafe extern "C" {
+                                #[link_name = "[resource-rep]prepared-statement"]
+                                fn rep(_: u32) -> *mut u8;
+                            }
+                            unsafe { rep(handle) }
+                        }
+                    }
+                    /// Number of parameters the statement expects.
+                    fn parameter_count(&self) -> u32;
+                    /// Binds `params` to the positional parameters in order and runs the
+                    /// statement, returning all rows eagerly. May be called repeatedly with
+                    /// different parameters; each call rebinds from scratch.
+                    fn execute(
+                        &self,
+                        params: _rt::Vec<Duckvalue>,
+                    ) -> Result<QueryResult, Duckerror>;
+                }
                 #[doc(hidden)]
                 macro_rules! __export_duckdb_component_database_cabi {
                     ($ty:ident with_types_in $($path_to_types:tt)*) => {
@@ -9511,13 +10343,35 @@ pub mod exports {
                         { unsafe { $($path_to_types)*::
                         _export_method_result_stream_close_cabi::<<$ty as
                         $($path_to_types)*:: Guest >::ResultStream > (arg0) } } #[unsafe
-                        (export_name = "duckdb:component/database#open")] unsafe extern
-                        "C" fn export_open(arg0 : i32, arg1 : * mut u8, arg2 : usize,) ->
-                        * mut u8 { unsafe { $($path_to_types)*:: _export_open_cabi::<$ty
-                        > (arg0, arg1, arg2) } } #[unsafe (export_name =
-                        "cabi_post_duckdb:component/database#open")] unsafe extern "C" fn
-                        _post_return_open(arg0 : * mut u8,) { unsafe {
-                        $($path_to_types)*:: __post_return_open::<$ty > (arg0) } }
+                        (export_name =
+                        "duckdb:component/database#[method]prepared-statement.parameter-count")]
+                        unsafe extern "C" fn
+                        export_method_prepared_statement_parameter_count(arg0 : * mut
+                        u8,) -> i32 { unsafe { $($path_to_types)*::
+                        _export_method_prepared_statement_parameter_count_cabi::<<$ty as
+                        $($path_to_types)*:: Guest >::PreparedStatement > (arg0) } }
+                        #[unsafe (export_name =
+                        "duckdb:component/database#[method]prepared-statement.execute")]
+                        unsafe extern "C" fn
+                        export_method_prepared_statement_execute(arg0 : * mut u8, arg1 :
+                        * mut u8, arg2 : usize,) -> * mut u8 { unsafe {
+                        $($path_to_types)*::
+                        _export_method_prepared_statement_execute_cabi::<<$ty as
+                        $($path_to_types)*:: Guest >::PreparedStatement > (arg0, arg1,
+                        arg2) } } #[unsafe (export_name =
+                        "cabi_post_duckdb:component/database#[method]prepared-statement.execute")]
+                        unsafe extern "C" fn
+                        _post_return_method_prepared_statement_execute(arg0 : * mut u8,)
+                        { unsafe { $($path_to_types)*::
+                        __post_return_method_prepared_statement_execute::<<$ty as
+                        $($path_to_types)*:: Guest >::PreparedStatement > (arg0) } }
+                        #[unsafe (export_name = "duckdb:component/database#open")] unsafe
+                        extern "C" fn export_open(arg0 : i32, arg1 : * mut u8, arg2 :
+                        usize,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_open_cabi::<$ty > (arg0, arg1, arg2) } } #[unsafe
+                        (export_name = "cabi_post_duckdb:component/database#open")]
+                        unsafe extern "C" fn _post_return_open(arg0 : * mut u8,) { unsafe
+                        { $($path_to_types)*:: __post_return_open::<$ty > (arg0) } }
                         #[unsafe (export_name = "duckdb:component/database#close")]
                         unsafe extern "C" fn export_close(arg0 : i32,) { unsafe {
                         $($path_to_types)*:: _export_close_cabi::<$ty > (arg0) } }
@@ -9540,7 +10394,14 @@ pub mod exports {
                         "cabi_post_duckdb:component/database#open-stream")] unsafe extern
                         "C" fn _post_return_open_stream(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_open_stream::<$ty > (arg0) } }
-                        #[unsafe (export_name =
+                        #[unsafe (export_name = "duckdb:component/database#prepare")]
+                        unsafe extern "C" fn export_prepare(arg0 : i32, arg1 : * mut u8,
+                        arg2 : usize,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_prepare_cabi::<$ty > (arg0, arg1, arg2) } } #[unsafe
+                        (export_name = "cabi_post_duckdb:component/database#prepare")]
+                        unsafe extern "C" fn _post_return_prepare(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_prepare::<$ty >
+                        (arg0) } } #[unsafe (export_name =
                         "duckdb:component/database#register-extension")] unsafe extern
                         "C" fn export_register_extension(arg0 : * mut u8, arg1 : usize,
                         arg2 : * mut u8, arg3 : usize,) -> * mut u8 { unsafe {
@@ -9569,7 +10430,13 @@ pub mod exports {
                         "duckdb:component/database#[dtor]result-stream")]
                         #[allow(non_snake_case)] unsafe extern "C" fn dtor(rep : * mut
                         u8) { unsafe { $($path_to_types)*:: ResultStream::dtor::< <$ty as
-                        $($path_to_types)*:: Guest >::ResultStream > (rep) } } }; };
+                        $($path_to_types)*:: Guest >::ResultStream > (rep) } } }; const _
+                        : () = { #[doc(hidden)] #[unsafe (export_name =
+                        "duckdb:component/database#[dtor]prepared-statement")]
+                        #[allow(non_snake_case)] unsafe extern "C" fn dtor(rep : * mut
+                        u8) { unsafe { $($path_to_types)*:: PreparedStatement::dtor::<
+                        <$ty as $($path_to_types)*:: Guest >::PreparedStatement > (rep) }
+                        } }; };
                     };
                 }
                 #[doc(hidden)]
@@ -16621,8 +17488,8 @@ pub(crate) use __export_libduckdb_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 10155] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xabN\x01A\x02\x01A8\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 10337] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xe1O\x01A\x02\x01A8\x01\
 B\x0a\x01o\x02ss\x01p\0\x01@\0\0\x01\x04\0\x0fget-environment\x01\x02\x01ps\x01@\
 \0\0\x03\x04\0\x0dget-arguments\x01\x04\x01ks\x01@\0\0\x05\x04\0\x0binitial-cwd\x01\
 \x06\x03\0\x1awasi:cli/environment@0.2.6\x05\0\x01B\x04\x04\0\x05error\x03\x01\x01\
@@ -16767,77 +17634,80 @@ gs\x0a\0\x0d\x04\0\x0acall-table\x01\x0e\x01@\x02\x06handley\x04rows\x09\0\x0b\x
 \0\x0ecall-aggregate\x01\x0f\x01k\x03\x01j\x01\x10\x01\x01\x01@\x02\x06handley\x04\
 args\x0a\0\x11\x04\0\x0bcall-pragma\x01\x12\x01@\x02\x06handley\x05value\x03\0\x0b\
 \x04\0\x09call-cast\x01\x13\x03\0\"duckdb:extension/callback-dispatch\x05\x1b\x02\
-\x03\0\x0a\x0ecapabilitykind\x01B3\x02\x03\x02\x01\x1c\x04\0\x0ecapabilitykind\x03\
+\x03\0\x0a\x0ecapabilitykind\x01B>\x02\x03\x02\x01\x1c\x04\0\x0ecapabilitykind\x03\
 \0\0\x02\x03\x02\x01\x13\x04\0\x09columndef\x03\0\x02\x02\x03\x02\x01\x16\x04\0\x09\
 duckerror\x03\0\x04\x02\x03\x02\x01\x17\x04\0\x09duckvalue\x03\0\x06\x04\0\x0aco\
 nnection\x03\x01\x01p\x07\x04\0\x03row\x03\0\x09\x01p\x03\x01p\x0a\x01r\x02\x07c\
 olumns\x0b\x04rows\x0c\x04\0\x0cquery-result\x03\0\x0d\x04\0\x0dresult-stream\x03\
-\x01\x01p\x01\x01r\x02\x04names\x08requires\x10\x04\0\x0eextension-info\x03\0\x11\
-\x01h\x0f\x01@\x01\x04self\x13\0\x0b\x04\0\x1c[method]result-stream.schema\x01\x14\
-\x01k\x0c\x01j\x01\x15\x01\x05\x01@\x02\x04self\x13\x08max-rowsy\0\x16\x04\0\x1a\
-[method]result-stream.next\x01\x17\x01@\x01\x04self\x13\x01\0\x04\0\x1b[method]r\
-esult-stream.close\x01\x18\x01ks\x01i\x08\x01j\x01\x1a\x01s\x01@\x01\x04path\x19\
-\0\x1b\x04\0\x04open\x01\x1c\x01@\x01\x04conn\x1a\x01\0\x04\0\x05close\x01\x1d\x01\
-h\x08\x01@\x01\x04conn\x1e\x01\0\x04\0\x09interrupt\x01\x1f\x01j\x01\x0e\x01\x05\
-\x01@\x02\x04conn\x1e\x03sqls\0\x20\x04\0\x07execute\x01!\x01i\x0f\x01j\x01\"\x01\
-\x05\x01@\x02\x04conn\x1e\x03sqls\0#\x04\0\x0bopen-stream\x01$\x01j\x01\x7f\x01s\
-\x01@\x02\x04names\x08requires\x10\0%\x04\0\x12register-extension\x01&\x01p\x12\x01\
-@\0\0'\x04\0\x1alist-registered-extensions\x01(\x04\0\x19duckdb:component/databa\
-se\x05\x1d\x02\x03\0\x0a\x0bconfigerror\x01B$\x02\x03\x02\x01\x1e\x04\0\x0bconfi\
-gerror\x03\0\0\x01@\0\0s\x04\0\x10provider-version\x01\x02\x01ks\x01ps\x01@\x01\x06\
-prefix\x03\0\x04\x04\0\x09list-keys\x01\x05\x01j\x01\x03\x01\x01\x01@\x01\x04pat\
-hs\0\x06\x04\0\x0aget-string\x01\x07\x01k\x7f\x01j\x01\x08\x01\x01\x01@\x01\x04p\
-aths\0\x09\x04\0\x08get-bool\x01\x0a\x01kx\x01j\x01\x0b\x01\x01\x01@\x01\x04path\
-s\0\x0c\x04\0\x07get-i64\x01\x0d\x01kw\x01j\x01\x0e\x01\x01\x01@\x01\x04paths\0\x0f\
-\x04\0\x07get-u64\x01\x10\x01ku\x01j\x01\x11\x01\x01\x01@\x01\x04paths\0\x12\x04\
-\0\x07get-f64\x01\x13\x01p}\x01k\x14\x01j\x01\x15\x01\x01\x01@\x01\x04paths\0\x16\
-\x04\0\x09get-bytes\x01\x17\x01k\x04\x01j\x01\x18\x01\x01\x01@\x01\x04paths\0\x19\
-\x04\0\x0fget-string-list\x01\x1a\x04\0\x17duckdb:extension/config\x05\x1f\x02\x03\
-\0\x0a\x08logfield\x02\x03\0\x0a\x08loglevel\x01B\x0a\x02\x03\x02\x01\x20\x04\0\x08\
-logfield\x03\0\0\x02\x03\x02\x01!\x04\0\x08loglevel\x03\0\x02\x01ks\x01@\x03\x05\
-level\x03\x07messages\x06target\x04\x01\0\x04\0\x03log\x01\x05\x01p\x01\x01@\x03\
-\x05level\x03\x07messages\x06fields\x06\x01\0\x04\0\x0alog-fields\x01\x07\x04\0\x18\
-duckdb:extension/logging\x05\"\x02\x03\0\x0a\x07extopts\x02\x03\0\x0a\x07funcarg\
-\x02\x03\0\x0a\x08funcopts\x01Bf\x02\x03\x02\x01\x1c\x04\0\x0ecapabilitykind\x03\
-\0\0\x02\x03\x02\x01\x16\x04\0\x09duckerror\x03\0\x02\x02\x03\x02\x01\x17\x04\0\x09\
-duckvalue\x03\0\x04\x02\x03\x02\x01#\x04\0\x07extopts\x03\0\x06\x02\x03\x02\x01$\
-\x04\0\x07funcarg\x03\0\x08\x02\x03\x02\x01%\x04\0\x08funcopts\x03\0\x0a\x02\x03\
-\x02\x01\x18\x04\0\x0ainvokeinfo\x03\0\x0c\x02\x03\x02\x01\x12\x04\0\x0blogicalt\
-ype\x03\0\x0e\x02\x03\x02\x01\x19\x04\0\x09resultset\x03\0\x10\x02\x03\x02\x01\x1a\
-\x04\0\x08rowbatch\x03\0\x12\x02\x03\x02\x01\x13\x04\0\x09columndef\x03\0\x14\x04\
-\0\x0fscalar-callback\x03\x01\x04\0\x0etable-callback\x03\x01\x04\0\x12aggregate\
--callback\x03\x01\x04\0\x0fpragma-callback\x03\x01\x04\0\x0dcast-callback\x03\x01\
-\x04\0\x0fscalar-registry\x03\x01\x04\0\x0etable-registry\x03\x01\x04\0\x12aggre\
-gate-registry\x03\x01\x04\0\x0fpragma-registry\x03\x01\x04\0\x0emacro-registry\x03\
-\x01\x01i\x1b\x01i\x1c\x01i\x1d\x01i\x1e\x01i\x1f\x01q\x05\x06scalar\x01\x20\0\x05\
-table\x01!\0\x09aggregate\x01\"\0\x06pragma\x01#\0\x05macro\x01$\0\x04\0\x0acapa\
-bility\x03\0%\x01i\x16\x01@\x01\x06handley\0'\x04\0\x1c[constructor]scalar-callb\
-ack\x01(\x01h\x16\x01p\x05\x01j\x01\x05\x01\x03\x01@\x03\x04self)\x04args*\x03ct\
-x\x0d\0+\x04\0\x1c[method]scalar-callback.call\x01,\x01i\x17\x01@\x01\x06handley\
-\0-\x04\0\x1b[constructor]table-callback\x01.\x01h\x17\x01j\x01\x11\x01\x03\x01@\
-\x02\x04self/\x04args*\00\x04\0\x1b[method]table-callback.call\x011\x01i\x18\x01\
-@\x01\x06handley\02\x04\0\x1f[constructor]aggregate-callback\x013\x01h\x18\x01@\x02\
-\x04self4\x04rows\x13\0+\x04\0\x1f[method]aggregate-callback.call\x015\x01i\x19\x01\
-@\x01\x06handley\06\x04\0\x1c[constructor]pragma-callback\x017\x01h\x19\x01k\x05\
-\x01j\x019\x01\x03\x01@\x02\x04self8\x04args*\0:\x04\0\x1c[method]pragma-callbac\
-k.call\x01;\x01i\x1a\x01@\x01\x06handley\0<\x04\0\x1a[constructor]cast-callback\x01\
-=\x01h\x1a\x01@\x02\x04self>\x05value\x05\0+\x04\0\x1a[method]cast-callback.call\
-\x01?\x01h\x1b\x01p\x09\x01k\x0b\x01j\x01y\x01\x03\x01@\x06\x04self\xc0\0\x04nam\
-es\x09arguments\xc1\0\x07returns\x0f\x08callback'\x07options\xc2\0\0\xc3\0\x04\0\
-\x20[method]scalar-registry.register\x01D\x01h\x1c\x01p\x15\x01k\x07\x01@\x06\x04\
-self\xc5\0\x04names\x09arguments\xc1\0\x07columns\xc6\0\x08callback-\x07options\xc7\
-\0\0\xc3\0\x04\0\x1f[method]table-registry.register\x01H\x01h\x1d\x01@\x06\x04se\
-lf\xc9\0\x04names\x09arguments\xc1\0\x07returns\x0f\x08callback2\x07options\xc2\0\
-\0\xc3\0\x04\0#[method]aggregate-registry.register\x01J\x01h\x1e\x01@\x06\x04sel\
-f\xcb\0\x04names\x09arguments\xc1\0\x07returns\x0f\x08callback6\x07options\xc7\0\
-\0\xc3\0\x04\0%[method]pragma-registry.register-call\x01L\x01h\x1f\x01ps\x01j\x01\
-\x7f\x01\x03\x01@\x05\x04self\xcd\0\x04names\x0aparameters\xce\0\x08body-sqls\x07\
-options\xc7\0\0\xcf\0\x04\0&[method]macro-registry.register-scalar\x01P\x01k&\x01\
-@\x01\x04kind\x01\0\xd1\0\x04\0\x0eget-capability\x01R\x01p\x01\x01@\0\0\xd3\0\x04\
-\0\x11list-capabilities\x01T\x04\0\x18duckdb:extension/runtime\x05&\x04\0\x1aduc\
-kdb:component/libduckdb\x04\0\x0b\x0f\x01\0\x09libduckdb\x03\0\0\0G\x09producers\
-\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.41\
-.0";
+\x01\x04\0\x12prepared-statement\x03\x01\x01p\x01\x01r\x02\x04names\x08requires\x11\
+\x04\0\x0eextension-info\x03\0\x12\x01h\x0f\x01@\x01\x04self\x14\0\x0b\x04\0\x1c\
+[method]result-stream.schema\x01\x15\x01k\x0c\x01j\x01\x16\x01\x05\x01@\x02\x04s\
+elf\x14\x08max-rowsy\0\x17\x04\0\x1a[method]result-stream.next\x01\x18\x01@\x01\x04\
+self\x14\x01\0\x04\0\x1b[method]result-stream.close\x01\x19\x01h\x10\x01@\x01\x04\
+self\x1a\0y\x04\0*[method]prepared-statement.parameter-count\x01\x1b\x01p\x07\x01\
+j\x01\x0e\x01\x05\x01@\x02\x04self\x1a\x06params\x1c\0\x1d\x04\0\"[method]prepar\
+ed-statement.execute\x01\x1e\x01ks\x01i\x08\x01j\x01\x20\x01s\x01@\x01\x04path\x1f\
+\0!\x04\0\x04open\x01\"\x01@\x01\x04conn\x20\x01\0\x04\0\x05close\x01#\x01h\x08\x01\
+@\x01\x04conn$\x01\0\x04\0\x09interrupt\x01%\x01@\x02\x04conn$\x03sqls\0\x1d\x04\
+\0\x07execute\x01&\x01i\x0f\x01j\x01'\x01\x05\x01@\x02\x04conn$\x03sqls\0(\x04\0\
+\x0bopen-stream\x01)\x01i\x10\x01j\x01*\x01\x05\x01@\x02\x04conn$\x03sqls\0+\x04\
+\0\x07prepare\x01,\x01j\x01\x7f\x01s\x01@\x02\x04names\x08requires\x11\0-\x04\0\x12\
+register-extension\x01.\x01p\x13\x01@\0\0/\x04\0\x1alist-registered-extensions\x01\
+0\x04\0\x19duckdb:component/database\x05\x1d\x02\x03\0\x0a\x0bconfigerror\x01B$\x02\
+\x03\x02\x01\x1e\x04\0\x0bconfigerror\x03\0\0\x01@\0\0s\x04\0\x10provider-versio\
+n\x01\x02\x01ks\x01ps\x01@\x01\x06prefix\x03\0\x04\x04\0\x09list-keys\x01\x05\x01\
+j\x01\x03\x01\x01\x01@\x01\x04paths\0\x06\x04\0\x0aget-string\x01\x07\x01k\x7f\x01\
+j\x01\x08\x01\x01\x01@\x01\x04paths\0\x09\x04\0\x08get-bool\x01\x0a\x01kx\x01j\x01\
+\x0b\x01\x01\x01@\x01\x04paths\0\x0c\x04\0\x07get-i64\x01\x0d\x01kw\x01j\x01\x0e\
+\x01\x01\x01@\x01\x04paths\0\x0f\x04\0\x07get-u64\x01\x10\x01ku\x01j\x01\x11\x01\
+\x01\x01@\x01\x04paths\0\x12\x04\0\x07get-f64\x01\x13\x01p}\x01k\x14\x01j\x01\x15\
+\x01\x01\x01@\x01\x04paths\0\x16\x04\0\x09get-bytes\x01\x17\x01k\x04\x01j\x01\x18\
+\x01\x01\x01@\x01\x04paths\0\x19\x04\0\x0fget-string-list\x01\x1a\x04\0\x17duckd\
+b:extension/config\x05\x1f\x02\x03\0\x0a\x08logfield\x02\x03\0\x0a\x08loglevel\x01\
+B\x0a\x02\x03\x02\x01\x20\x04\0\x08logfield\x03\0\0\x02\x03\x02\x01!\x04\0\x08lo\
+glevel\x03\0\x02\x01ks\x01@\x03\x05level\x03\x07messages\x06target\x04\x01\0\x04\
+\0\x03log\x01\x05\x01p\x01\x01@\x03\x05level\x03\x07messages\x06fields\x06\x01\0\
+\x04\0\x0alog-fields\x01\x07\x04\0\x18duckdb:extension/logging\x05\"\x02\x03\0\x0a\
+\x07extopts\x02\x03\0\x0a\x07funcarg\x02\x03\0\x0a\x08funcopts\x01Bf\x02\x03\x02\
+\x01\x1c\x04\0\x0ecapabilitykind\x03\0\0\x02\x03\x02\x01\x16\x04\0\x09duckerror\x03\
+\0\x02\x02\x03\x02\x01\x17\x04\0\x09duckvalue\x03\0\x04\x02\x03\x02\x01#\x04\0\x07\
+extopts\x03\0\x06\x02\x03\x02\x01$\x04\0\x07funcarg\x03\0\x08\x02\x03\x02\x01%\x04\
+\0\x08funcopts\x03\0\x0a\x02\x03\x02\x01\x18\x04\0\x0ainvokeinfo\x03\0\x0c\x02\x03\
+\x02\x01\x12\x04\0\x0blogicaltype\x03\0\x0e\x02\x03\x02\x01\x19\x04\0\x09results\
+et\x03\0\x10\x02\x03\x02\x01\x1a\x04\0\x08rowbatch\x03\0\x12\x02\x03\x02\x01\x13\
+\x04\0\x09columndef\x03\0\x14\x04\0\x0fscalar-callback\x03\x01\x04\0\x0etable-ca\
+llback\x03\x01\x04\0\x12aggregate-callback\x03\x01\x04\0\x0fpragma-callback\x03\x01\
+\x04\0\x0dcast-callback\x03\x01\x04\0\x0fscalar-registry\x03\x01\x04\0\x0etable-\
+registry\x03\x01\x04\0\x12aggregate-registry\x03\x01\x04\0\x0fpragma-registry\x03\
+\x01\x04\0\x0emacro-registry\x03\x01\x01i\x1b\x01i\x1c\x01i\x1d\x01i\x1e\x01i\x1f\
+\x01q\x05\x06scalar\x01\x20\0\x05table\x01!\0\x09aggregate\x01\"\0\x06pragma\x01\
+#\0\x05macro\x01$\0\x04\0\x0acapability\x03\0%\x01i\x16\x01@\x01\x06handley\0'\x04\
+\0\x1c[constructor]scalar-callback\x01(\x01h\x16\x01p\x05\x01j\x01\x05\x01\x03\x01\
+@\x03\x04self)\x04args*\x03ctx\x0d\0+\x04\0\x1c[method]scalar-callback.call\x01,\
+\x01i\x17\x01@\x01\x06handley\0-\x04\0\x1b[constructor]table-callback\x01.\x01h\x17\
+\x01j\x01\x11\x01\x03\x01@\x02\x04self/\x04args*\00\x04\0\x1b[method]table-callb\
+ack.call\x011\x01i\x18\x01@\x01\x06handley\02\x04\0\x1f[constructor]aggregate-ca\
+llback\x013\x01h\x18\x01@\x02\x04self4\x04rows\x13\0+\x04\0\x1f[method]aggregate\
+-callback.call\x015\x01i\x19\x01@\x01\x06handley\06\x04\0\x1c[constructor]pragma\
+-callback\x017\x01h\x19\x01k\x05\x01j\x019\x01\x03\x01@\x02\x04self8\x04args*\0:\
+\x04\0\x1c[method]pragma-callback.call\x01;\x01i\x1a\x01@\x01\x06handley\0<\x04\0\
+\x1a[constructor]cast-callback\x01=\x01h\x1a\x01@\x02\x04self>\x05value\x05\0+\x04\
+\0\x1a[method]cast-callback.call\x01?\x01h\x1b\x01p\x09\x01k\x0b\x01j\x01y\x01\x03\
+\x01@\x06\x04self\xc0\0\x04names\x09arguments\xc1\0\x07returns\x0f\x08callback'\x07\
+options\xc2\0\0\xc3\0\x04\0\x20[method]scalar-registry.register\x01D\x01h\x1c\x01\
+p\x15\x01k\x07\x01@\x06\x04self\xc5\0\x04names\x09arguments\xc1\0\x07columns\xc6\
+\0\x08callback-\x07options\xc7\0\0\xc3\0\x04\0\x1f[method]table-registry.registe\
+r\x01H\x01h\x1d\x01@\x06\x04self\xc9\0\x04names\x09arguments\xc1\0\x07returns\x0f\
+\x08callback2\x07options\xc2\0\0\xc3\0\x04\0#[method]aggregate-registry.register\
+\x01J\x01h\x1e\x01@\x06\x04self\xcb\0\x04names\x09arguments\xc1\0\x07returns\x0f\
+\x08callback6\x07options\xc7\0\0\xc3\0\x04\0%[method]pragma-registry.register-ca\
+ll\x01L\x01h\x1f\x01ps\x01j\x01\x7f\x01\x03\x01@\x05\x04self\xcd\0\x04names\x0ap\
+arameters\xce\0\x08body-sqls\x07options\xc7\0\0\xcf\0\x04\0&[method]macro-regist\
+ry.register-scalar\x01P\x01k&\x01@\x01\x04kind\x01\0\xd1\0\x04\0\x0eget-capabili\
+ty\x01R\x01p\x01\x01@\0\0\xd3\0\x04\0\x11list-capabilities\x01T\x04\0\x18duckdb:\
+extension/runtime\x05&\x04\0\x1aduckdb:component/libduckdb\x04\0\x0b\x0f\x01\0\x09\
+libduckdb\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.\
+227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

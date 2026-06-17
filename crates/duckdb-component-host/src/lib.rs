@@ -230,6 +230,21 @@ impl CoreExecution {
         f(guest, store)
     }
 
+    fn with_prepared<F, R>(&mut self, f: F) -> R
+    where
+        F: FnOnce(
+            core_db_exports::GuestPreparedStatement<'_>,
+            wasmtime::StoreContextMut<'_, CoreStoreState>,
+        ) -> R,
+    {
+        let guest = self
+            .bindings
+            .duckdb_component_database()
+            .prepared_statement();
+        let store = self.store.as_context_mut();
+        f(guest, store)
+    }
+
     fn with_runtime<F, R>(&mut self, f: F) -> R
     where
         F: FnOnce(&core_runtime_exports::Guest, wasmtime::StoreContextMut<'_, CoreStoreState>) -> R,
@@ -266,6 +281,10 @@ struct ConnectionEntry {
 struct StreamEntry {
     handle: ResourceAny,
     closed: bool,
+}
+
+struct PreparedEntry {
+    handle: ResourceAny,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1039,8 +1058,10 @@ pub struct HostState {
     next_resource_id: u32,
     connections: HashMap<u32, ConnectionEntry>,
     streams: HashMap<u32, StreamEntry>,
+    prepared: HashMap<u32, PreparedEntry>,
     pending_connection_drops: Vec<Resource<cli_db::Connection>>,
     pending_stream_drops: Vec<Resource<cli_db::ResultStream>>,
+    pending_prepared_drops: Vec<Resource<cli_db::PreparedStatement>>,
 }
 
 impl WasiView for HostState {
@@ -1079,6 +1100,10 @@ impl HostState {
         let pending_streams = std::mem::take(&mut self.pending_stream_drops);
         for stream in pending_streams {
             self.drop_stream_resource(stream)?;
+        }
+        let pending_prepared = std::mem::take(&mut self.pending_prepared_drops);
+        for prepared in pending_prepared {
+            self.drop_prepared_resource(prepared)?;
         }
         Ok(())
     }
@@ -1147,6 +1172,23 @@ impl HostState {
 
     fn schedule_stream_drop(&mut self, stream: Resource<cli_db::ResultStream>) {
         self.pending_stream_drops.push(stream);
+    }
+
+    fn drop_prepared_resource(
+        &mut self,
+        rep: Resource<cli_db::PreparedStatement>,
+    ) -> Result<(), cli_types::Duckerror> {
+        if let Some(entry) = self.prepared.remove(&rep.rep()) {
+            self.with_core(|core| {
+                core.with_prepared(|_guest, store| entry.handle.resource_drop(store))
+            })
+            .map_err(|err| cli_types::Duckerror::Internal(trap_to_cli_string(err)))?;
+        }
+        Ok(())
+    }
+
+    fn schedule_prepared_drop(&mut self, prepared: Resource<cli_db::PreparedStatement>) {
+        self.pending_prepared_drops.push(prepared);
     }
 }
 
@@ -1934,6 +1976,50 @@ impl cli_db::HostResultStream for HostState {
     }
 }
 
+impl cli_db::HostPreparedStatement for HostState {
+    fn parameter_count(&mut self, rep: Resource<cli_db::PreparedStatement>) -> u32 {
+        let handle = match self.prepared.get(&rep.rep()) {
+            Some(entry) => entry.handle.clone(),
+            None => return 0,
+        };
+        self.with_core(|core| {
+            core.with_prepared(|guest, store| guest.call_parameter_count(store, handle))
+        })
+        .expect("failed to fetch prepared-statement parameter count")
+    }
+
+    fn execute(
+        &mut self,
+        rep: Resource<cli_db::PreparedStatement>,
+        params: wasmtime::component::__internal::Vec<cli_types::Duckvalue>,
+    ) -> Result<cli_db::QueryResult, cli_types::Duckerror> {
+        let handle = self
+            .prepared
+            .get(&rep.rep())
+            .ok_or_else(|| cli_types::Duckerror::Internal("unknown prepared statement".into()))?
+            .handle
+            .clone();
+        let core_params: Vec<core_types::Duckvalue> =
+            params.into_iter().map(convert_cli_duckvalue).collect();
+        let result = self
+            .with_core(|core| {
+                core.with_prepared(|guest, store| {
+                    guest.call_execute(store, handle, &core_params)
+                })
+            })
+            .map_err(convert_trap_to_duckerror)?;
+        match result {
+            Ok(value) => Ok(convert_core_query_result(value)),
+            Err(err) => Err(convert_core_duckerror(err)),
+        }
+    }
+
+    fn drop(&mut self, rep: Resource<cli_db::PreparedStatement>) -> wasmtime::Result<()> {
+        self.schedule_prepared_drop(rep);
+        Ok(())
+    }
+}
+
 impl cli_db::Host for HostState {
     fn open(&mut self, path: Option<CliString>) -> Result<Resource<cli_db::Connection>, CliString> {
         let owned: Option<String> = path.map(|s| s.into());
@@ -2031,6 +2117,32 @@ impl cli_db::Host for HostState {
                         closed: false,
                     },
                 );
+                Ok(Resource::new_own(id))
+            }
+            Err(err) => Err(convert_core_duckerror(err)),
+        }
+    }
+
+    fn prepare(
+        &mut self,
+        conn: Resource<cli_db::Connection>,
+        sql: CliString,
+    ) -> Result<Resource<cli_db::PreparedStatement>, cli_types::Duckerror> {
+        let entry = self
+            .connections
+            .get(&conn.rep())
+            .ok_or_else(|| cli_types::Duckerror::Internal("unknown connection".into()))?;
+        let prepared = self
+            .with_core(|core| {
+                core.with_database(|guest, store| {
+                    guest.call_prepare(store, entry.handle.clone(), &sql)
+                })
+            })
+            .map_err(convert_trap_to_duckerror)?;
+        match prepared {
+            Ok(handle) => {
+                let id = self.alloc_resource_id();
+                self.prepared.insert(id, PreparedEntry { handle });
                 Ok(Resource::new_own(id))
             }
             Err(err) => Err(convert_core_duckerror(err)),
@@ -2297,6 +2409,18 @@ fn convert_core_duckvalue(value: core_types::Duckvalue) -> cli_types::Duckvalue 
         core_types::Duckvalue::Float64(v) => cli_types::Duckvalue::Float64(v),
         core_types::Duckvalue::Text(v) => cli_types::Duckvalue::Text(v.into()),
         core_types::Duckvalue::Blob(v) => cli_types::Duckvalue::Blob(v.into()),
+    }
+}
+
+fn convert_cli_duckvalue(value: cli_types::Duckvalue) -> core_types::Duckvalue {
+    match value {
+        cli_types::Duckvalue::Null => core_types::Duckvalue::Null,
+        cli_types::Duckvalue::Boolean(v) => core_types::Duckvalue::Boolean(v),
+        cli_types::Duckvalue::Int64(v) => core_types::Duckvalue::Int64(v),
+        cli_types::Duckvalue::Uint64(v) => core_types::Duckvalue::Uint64(v),
+        cli_types::Duckvalue::Float64(v) => core_types::Duckvalue::Float64(v),
+        cli_types::Duckvalue::Text(v) => core_types::Duckvalue::Text(v.into()),
+        cli_types::Duckvalue::Blob(v) => core_types::Duckvalue::Blob(v.into()),
     }
 }
 
@@ -3068,8 +3192,10 @@ impl CliHarness {
             next_resource_id: 1,
             connections: HashMap::new(),
             streams: HashMap::new(),
+            prepared: HashMap::new(),
             pending_connection_drops: Vec::new(),
             pending_stream_drops: Vec::new(),
+            pending_prepared_drops: Vec::new(),
         };
         let mut store = Store::new(&engine, host_state);
 
@@ -3174,8 +3300,10 @@ pub fn run_cli_with_stdio(
         next_resource_id: 1,
         connections: HashMap::new(),
         streams: HashMap::new(),
+        prepared: HashMap::new(),
         pending_connection_drops: Vec::new(),
         pending_stream_drops: Vec::new(),
+        pending_prepared_drops: Vec::new(),
     };
     let mut store = Store::new(&engine, host_state);
 
@@ -3219,6 +3347,62 @@ mod tests {
         stdout
             .lines()
             .any(|line| line.split('|').map(str::trim).any(|cell| cell == value))
+    }
+
+    #[test]
+    fn core_prepared_statement_binds_and_reuses_under_wasmtime() -> Result<()> {
+        // Drives the core's prepared-statement API directly through wasmtime
+        // (the runtime the standalone and host use), complementing the browser
+        // (jco) verification of the same core component.
+        let engine = build_engine()?;
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &[])?;
+        let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
+        let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
+
+        let conn = core
+            .with_database(|guest, store| guest.call_open(store, None))?
+            .map_err(|e| anyhow::anyhow!("open failed: {e}"))?;
+
+        let stmt = core
+            .with_database(|guest, store| {
+                guest.call_prepare(
+                    store,
+                    conn.clone(),
+                    "SELECT CAST($1 AS BIGINT) + CAST($2 AS BIGINT) AS total",
+                )
+            })?
+            .map_err(|e| anyhow::anyhow!("prepare failed: {e:?}"))?;
+
+        let count =
+            core.with_prepared(|guest, store| guest.call_parameter_count(store, stmt.clone()))?;
+        assert_eq!(count, 2, "expected two parameters");
+
+        let run = |core: &mut CoreExecution, a: i64, b: i64| -> Result<String> {
+            let params = vec![
+                core_types::Duckvalue::Int64(a),
+                core_types::Duckvalue::Int64(b),
+            ];
+            let result = core
+                .with_prepared(|guest, store| guest.call_execute(store, stmt.clone(), &params))?
+                .map_err(|e| anyhow::anyhow!("execute failed: {e:?}"))?;
+            let cell = result
+                .rows
+                .first()
+                .and_then(|row| row.first())
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("no result cell"))?;
+            Ok(match cell {
+                core_types::Duckvalue::Text(v) => v,
+                core_types::Duckvalue::Int64(v) => v.to_string(),
+                other => format!("{other:?}"),
+            })
+        };
+
+        assert_eq!(run(&mut core, 40, 2)?, "42");
+        assert_eq!(run(&mut core, 100, 1)?, "101", "prepared statement reuse");
+
+        Ok(())
     }
 
     #[test]
