@@ -9,9 +9,8 @@ pub type duckdb_database = *mut c_void;
 pub type duckdb_connection = *mut c_void;
 pub type duckdb_config = *mut c_void;
 pub type duckdb_prepared_statement = *mut c_void;
-pub type duckdb_arrow = *mut c_void;
-pub type duckdb_arrow_schema = *mut c_void;
-pub type duckdb_arrow_array = *mut c_void;
+pub type duckdb_arrow_options = *mut c_void;
+pub type duckdb_error_data = *mut c_void;
 pub type idx_t = u64;
 pub type duckdb_data_chunk = *mut c_void;
 pub type duckdb_vector = *mut c_void;
@@ -213,23 +212,28 @@ extern "C" {
         out_result: *mut duckdb_result,
     ) -> duckdb_state;
 
-    // Arrow C Data Interface result API (deprecated in DuckDB but still exported);
-    // used to export query results as Arrow IPC stream bytes.
-    pub fn duckdb_query_arrow(
-        connection: duckdb_connection,
-        query: *const c_char,
-        out_result: *mut duckdb_arrow,
-    ) -> duckdb_state;
-    pub fn duckdb_query_arrow_schema(
-        result: duckdb_arrow,
-        out_schema: *mut duckdb_arrow_schema,
-    ) -> duckdb_state;
-    pub fn duckdb_query_arrow_array(
-        result: duckdb_arrow,
-        out_array: *mut duckdb_arrow_array,
-    ) -> duckdb_state;
-    pub fn duckdb_query_arrow_error(result: duckdb_arrow) -> *const c_char;
-    pub fn duckdb_destroy_arrow(result: *mut duckdb_arrow);
+    // Modern Arrow C Data Interface API: convert a duckdb_result + its data
+    // chunks to Arrow C Data Interface structs (ArrowSchema/ArrowArray passed as
+    // *mut c_void). Used to export query results as Arrow IPC stream bytes.
+    pub fn duckdb_result_get_arrow_options(result: *mut duckdb_result) -> duckdb_arrow_options;
+    pub fn duckdb_destroy_arrow_options(arrow_options: *mut duckdb_arrow_options);
+    pub fn duckdb_to_arrow_schema(
+        arrow_options: duckdb_arrow_options,
+        types: *mut duckdb_logical_type,
+        names: *mut *const c_char,
+        column_count: idx_t,
+        out_schema: *mut c_void,
+    ) -> duckdb_error_data;
+    pub fn duckdb_data_chunk_to_arrow(
+        arrow_options: duckdb_arrow_options,
+        chunk: duckdb_data_chunk,
+        out_arrow_array: *mut c_void,
+    ) -> duckdb_error_data;
+    pub fn duckdb_fetch_chunk(result: duckdb_result) -> duckdb_data_chunk;
+    pub fn duckdb_destroy_data_chunk(chunk: *mut duckdb_data_chunk);
+    pub fn duckdb_error_data_message(error_data: duckdb_error_data) -> *const c_char;
+    pub fn duckdb_error_data_has_error(error_data: duckdb_error_data) -> bool;
+    pub fn duckdb_destroy_error_data(error_data: *mut duckdb_error_data);
 
     pub fn duckdb_result_error(result: *mut duckdb_result) -> *const c_char;
 
