@@ -136,6 +136,13 @@ interface extension-loader-hooks {
         function-name: string,
     }
 
+    /// Pending logical-type (named type alias) registration captured during
+    /// extension load. `physical` is a SQL type expression, e.g. "INTEGER".
+    record logical-type-registration {
+        name: string,
+        physical: string,
+    }
+
     /// Bundled response describing all pending registrations.
     record pending-registrations {
         scalars: list<scalar-registration>,
@@ -143,6 +150,7 @@ interface extension-loader-hooks {
         aggregates: list<aggregate-registration>,
         macros: list<macro-registration>,
         replacement-scans: list<replacement-scan-registration>,
+        logical-types: list<logical-type-registration>,
     }
 
     /// Returns the pending registration requests the host captured while the extension was loading.

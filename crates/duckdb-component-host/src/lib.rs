@@ -733,6 +733,7 @@ struct ExtensionStoreState {
     pending_aggregates: Vec<PendingAggregate>,
     pending_macros: Vec<PendingMacro>,
     pending_replacement_scans: Vec<PendingReplacementScan>,
+    pending_logical_types: Vec<PendingLogicalType>,
     /// Maps the handle returned from `table-registry.register` to the table
     /// function name, so `files.register-replacement-scan` can resolve it.
     table_handle_names: HashMap<u32, String>,
@@ -796,6 +797,12 @@ struct PendingReplacementScan {
     function_name: String,
 }
 
+struct PendingLogicalType {
+    extension: String,
+    name: String,
+    physical: String,
+}
+
 #[derive(Default)]
 struct PendingRegistrationsData {
     scalars: Vec<PendingScalar>,
@@ -803,6 +810,7 @@ struct PendingRegistrationsData {
     aggregates: Vec<PendingAggregate>,
     macros: Vec<PendingMacro>,
     replacement_scans: Vec<PendingReplacementScan>,
+    logical_types: Vec<PendingLogicalType>,
 }
 
 impl PendingRegistrationsData {
@@ -812,6 +820,7 @@ impl PendingRegistrationsData {
         self.aggregates.append(&mut other.aggregates);
         self.macros.append(&mut other.macros);
         self.replacement_scans.append(&mut other.replacement_scans);
+        self.logical_types.append(&mut other.logical_types);
     }
 }
 
@@ -854,6 +863,7 @@ impl ExtensionStoreState {
             pending_aggregates: Vec::new(),
             pending_macros: Vec::new(),
             pending_replacement_scans: Vec::new(),
+            pending_logical_types: Vec::new(),
             table_handle_names: HashMap::new(),
             callback_registry,
             extension_name,
@@ -913,12 +923,14 @@ impl ExtensionStoreState {
         );
         let macros = std::mem::take(&mut self.pending_macros);
         let replacement_scans = std::mem::take(&mut self.pending_replacement_scans);
+        let logical_types = std::mem::take(&mut self.pending_logical_types);
         let pending = PendingRegistrationsData {
             scalars,
             tables,
             aggregates,
             macros,
             replacement_scans,
+            logical_types,
         };
         let scalar_names = summarize_registration_names(&pending.scalars, |entry| entry.name.as_str());
         let table_names =
@@ -1651,9 +1663,14 @@ impl extension_catalog::Host for ExtensionStoreState {
     ) -> Result<u32, String> {
         let handle = self.alloc_resource_id();
         eprintln!(
-            "[extension-manager] catalog register-logical-type '{}' (physical={}) for '{}' -> handle {handle} (captured; DuckDB wiring pending)",
+            "[extension-manager] catalog register-logical-type '{}' (physical={}) for '{}' -> handle {handle}",
             ty.name, ty.physical, self.extension_name
         );
+        self.pending_logical_types.push(PendingLogicalType {
+            extension: self.extension_name.clone(),
+            name: ty.name,
+            physical: ty.physical,
+        });
         Ok(handle)
     }
 
@@ -2038,6 +2055,21 @@ fn convert_pending_registrations(
             .map(convert_pending_replacement_scan_registration)
             .collect::<Vec<_>>()
             .into(),
+        logical_types: data
+            .logical_types
+            .into_iter()
+            .map(convert_pending_logical_type_registration)
+            .collect::<Vec<_>>()
+            .into(),
+    }
+}
+
+fn convert_pending_logical_type_registration(
+    entry: PendingLogicalType,
+) -> core_extension_hooks::LogicalTypeRegistration {
+    core_extension_hooks::LogicalTypeRegistration {
+        name: entry.name,
+        physical: entry.physical,
     }
 }
 
@@ -3280,6 +3312,37 @@ stderr:
         assert!(
             has_cell(&stdout, "hello.sample"),
             "expected replacement-scan output, got:\n{}",
+            stdout
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn cli_uses_registered_logical_type() -> Result<()> {
+        ensure_sample_extension_artifact()?;
+
+        let args = [
+            "duckdb-cli",
+            ":memory:",
+            "--load-extension",
+            "sample_extension",
+            "-c",
+            "select 7::sample_id as v;",
+        ];
+
+        let mut harness = CliHarness::new(&args, &[])?;
+        let status = harness.run()?;
+        assert!(
+            status.is_ok(),
+            "CLI reported failure casting to registered logical type: {:?}",
+            harness.stderr().ok()
+        );
+
+        let stdout = harness.stdout()?;
+        assert!(
+            has_cell(&stdout, "v") && has_cell(&stdout, "7"),
+            "expected logical-type cast output, got:\n{}",
             stdout
         );
 

@@ -23,6 +23,7 @@ impl guest::Guest for SampleExtension {
         register_table_function()?;
         register_aggregate_function()?;
         register_macro_definition()?;
+        register_logical_type_definition()?;
         register_replacement_scan()?;
         Ok(types::Loadresult {
             name: "sample_extension".into(),
@@ -171,6 +172,17 @@ fn register_macro_definition() -> Result<(), types::Duckerror> {
         parameters: vec!["x".into()],
         definition_sql: "x + 2".into(),
     })
+    .map_err(types::Duckerror::Internal)
+}
+
+/// Registers a named SQL type alias via the `catalog` interface. The host
+/// forwards it to DuckDB as `CREATE TYPE`.
+fn register_logical_type_definition() -> Result<(), types::Duckerror> {
+    catalog::register_logical_type(&catalog::LogicalType {
+        name: "sample_id".into(),
+        physical: "INTEGER".into(),
+    })
+    .map(|_| ())
     .map_err(types::Duckerror::Internal)
 }
 

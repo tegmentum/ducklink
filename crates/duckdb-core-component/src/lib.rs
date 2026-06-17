@@ -2479,6 +2479,28 @@ fn process_pending_registrations(
             clog!("[duckdb-core] replacement-scan registration failed (continuing): {err:?}");
         }
     }
+    for entry in pending.logical_types.into_iter().collect::<Vec<_>>() {
+        if let Err(err) = register_pending_logical_type(entry) {
+            clog!("[duckdb-core] logical-type registration failed (continuing): {err:?}");
+        }
+    }
+    Ok(())
+}
+
+fn register_pending_logical_type(
+    entry: extension_loader_hooks::LogicalTypeRegistration,
+) -> Result<(), Duckerror> {
+    let extension_loader_hooks::LogicalTypeRegistration { name, physical } = entry;
+    // DuckDB has no C API to register a named type, so create it as a SQL type
+    // alias on a transient connection (catalog-level, like macros). `physical`
+    // is a SQL type expression (e.g. "INTEGER"); the name is a quoted ident.
+    let sql = format!("CREATE TYPE {} AS {physical}", quote_ident(&name));
+    clog!("[duckdb-core] registering logical type '{name}' via: {sql}");
+    for database in distinct_active_databases() {
+        unsafe { execute_on_transient_connection(database, &sql) }.map_err(|err| {
+            Duckerror::Internal(format!("failed to register logical type '{name}': {err}"))
+        })?;
+    }
     Ok(())
 }
 

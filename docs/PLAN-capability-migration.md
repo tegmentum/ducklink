@@ -33,7 +33,7 @@ What the DuckDB C API actually supports (surveyed against `external/duckdb`):
 |----------------|-----------|--------|
 | macro          | none — `CREATE MACRO` SQL only | **working** (see below) |
 | replacement scan | `duckdb_add_replacement_scan` | **working** (see below) |
-| logical type   | no named-type registration | not feasible as specified |
+| logical type   | none — `CREATE TYPE` SQL alias | **working** (see below) |
 | cast           | `duckdb_create_cast_function` needs a callback; WIT `cast-spec` carries none | not feasible as specified |
 | copy handler   | none | not feasible |
 
@@ -66,6 +66,16 @@ argument. Verified: `select * from 'hello.sample'` → row `hello.sample`
 The required `duckdb_add_replacement_scan` / `duckdb_replacement_scan_*` /
 `duckdb_create_varchar` C-API entries were added to the curated
 `crates/libduckdb-sys` FFI bindings.
+
+### Logical types — WORKING (2026-06)
+
+`catalog.register-logical-type({name, physical})` is forwarded as a
+`logical-type-registration` and the core runs `CREATE TYPE <name> AS <physical>`
+on a transient connection (a named SQL type alias; DuckDB has no C API for this,
+but the SQL form works like macros). `physical` is a SQL type expression.
+Verified: the sample registers `sample_id AS INTEGER` and `select 7::sample_id`
+→ 7 (`cli_uses_registered_logical_type` test). (Supersedes the earlier "not
+feasible" note — `CREATE TYPE` is the path.)
 
 ## wasm exception handling — RESOLVED via wasi-sdk-33 (2026-06)
 
