@@ -5,10 +5,16 @@
   "type": "module",
   "description": "Run the DuckDB Wasm component in JS runtimes / the browser via wasi-polyfill",
   "scripts": {
-    "core": "node run-core.mjs"
+    "predev": "cp ../target/wasm32-wasip2/release/duckdb_core_component.wasm public/",
+    "dev": "vite",
+    "verify": "cp ../target/wasm32-wasip2/release/duckdb_core_component.wasm public/ && node verify.mjs"
   },
   "dependencies": {
     "@tegmentum/wasi-polyfill": "file:../../../wasi-polyfill",
     "@bytecodealliance/jco": "^1.23.0"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0",
+    "playwright": "^1.49.0"
   }
 }

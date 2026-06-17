@@ -20,32 +20,45 @@ npm install
 cp ../target/wasm32-wasip2/release/duckdb_core_component.wasm .
 ```
 
-## Verified so far
+## Run it
 
-Running `node run-core.mjs` (or stepping through `runQuery`) confirms:
+```bash
+npm install
+npm run dev      # vite dev server; open the URL and watch the <pre> fill in
+npm run verify   # headless Chromium: instantiates + runs a query, prints result
+```
 
-- **all 21 WASI interfaces** the component imports (`wasi:cli/*`, `wasi:io/*`,
-  `wasi:filesystem/*`, `wasi:clocks/*`, `wasi:random/*`, including the
-  `terminal-*` and `insecure-*` ones) resolve through the polyfill's plugins;
-- jco transpiles the ~40 MB component to core modules + JS;
-- instantiation proceeds through import binding.
+`npm run verify` prints:
 
-## Two known obstacles (both environment/packaging, not the component)
+```
+=== RESULT status: ok ===
+columns: answer, two
+rows: [[{"tag":"text","val":"42"},{"tag":"text","val":"2"}]]
+```
 
-1. **Node**: `RuntimeBindgen` imports the jco-generated module from a `blob:`
-   URL, which Node's ESM loader rejects (`ERR_UNSUPPORTED_ESM_URL_SCHEME`).
-   `blob:` import works in browsers, so this is a Node-only limitation.
-2. **Bundling**: esbuild cannot bundle jco's browser build —
-   `@bytecodealliance/jco/obj/js-component-bindgen-component.js` contains a
-   `const offset = …; offset = …` reassignment that esbuild flags statically.
-   (It would only throw at runtime if that path executes, so loading jco as
-   native ESM is fine; only ahead-of-time bundling trips on it.)
+i.e. `SELECT 42 AS answer, 1 + 1 AS two` ran inside headless Chromium — DuckDB
+executing real SQL in the browser via wasi-polyfill, no native host. (Values
+come back as WIT `duckvalue` variants; the core renders them as text.)
 
-## Next step
+## Why the vite config looks the way it does
 
-Serve `index.html` with **native ESM + an import map** (or a dev server that
-serves source rather than fully bundling jco) so the page loads
-`@tegmentum/wasi-polyfill` and jco unbundled, then open it / drive it with a
-headless browser to confirm `SELECT 42` returns in-browser. Once a plain query
-runs, wiring the custom `duckdb:*` imports to real implementations brings
-extension loading to the browser too.
+`vite.config.js` does two non-default things:
+
+- `optimizeDeps.exclude` for `@tegmentum/wasi-polyfill` and
+  `@bytecodealliance/jco` — jco's generated bindgen
+  (`js-component-bindgen-component.js`) has a runtime-only `const offset = …;
+  offset = …` reassignment that vite's esbuild pre-bundler rejects *statically*.
+  Serving it as native ESM is fine (that branch isn't hit), so it must skip dep
+  pre-bundling.
+- `server.fs.strict: false` — jco loads its own `.core.wasm` helpers from the
+  linked `wasi-polyfill` checkout, which is outside the project root.
+
+(The same `blob:` import jco uses is why this runs in browsers but not Node's
+ESM loader — `run-core.mjs` run directly under Node reaches transpilation then
+stops on `import(blob:)`.)
+
+## Next
+
+Wire the custom `duckdb:*` imports (`callback-dispatch`, the loader hooks) to
+real implementations to bring **extension loading** to the browser too — the
+same registration pipeline the native host drives.
