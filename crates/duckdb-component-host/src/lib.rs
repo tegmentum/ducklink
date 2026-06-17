@@ -2124,6 +2124,28 @@ impl cli_db::Host for HostState {
         }
     }
 
+    fn query_arrow(
+        &mut self,
+        conn: Resource<cli_db::Connection>,
+        sql: CliString,
+    ) -> Result<wasmtime::component::__internal::Vec<u8>, cli_types::Duckerror> {
+        let entry = self
+            .connections
+            .get(&conn.rep())
+            .ok_or_else(|| cli_types::Duckerror::Internal("unknown connection".into()))?;
+        let result = self
+            .with_core(|core| {
+                core.with_database(|guest, store| {
+                    guest.call_query_arrow(store, entry.handle.clone(), &sql)
+                })
+            })
+            .map_err(convert_trap_to_duckerror)?;
+        match result {
+            Ok(bytes) => Ok(bytes.into()),
+            Err(err) => Err(convert_core_duckerror(err)),
+        }
+    }
+
     fn open_stream(
         &mut self,
         conn: Resource<cli_db::Connection>,
@@ -3434,6 +3456,48 @@ mod tests {
 
         assert_eq!(run(&mut core, 40, 2)?, "42");
         assert_eq!(run(&mut core, 100, 1)?, "101", "prepared statement reuse");
+
+        Ok(())
+    }
+
+    #[test]
+    fn core_query_arrow_produces_valid_ipc_stream() -> Result<()> {
+        use arrow_array::cast::AsArray;
+        use arrow_array::types::Int32Type;
+
+        let engine = build_engine()?;
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &[])?;
+        let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
+        let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
+
+        let conn = core
+            .with_database(|guest, store| guest.call_open(store, None))?
+            .map_err(|e| anyhow::anyhow!("open failed: {e}"))?;
+
+        let bytes = core
+            .with_database(|guest, store| {
+                guest.call_query_arrow(
+                    store,
+                    conn,
+                    "SELECT i::INTEGER AS n FROM range(5) t(i)",
+                )
+            })?
+            .map_err(|e| anyhow::anyhow!("query_arrow failed: {e:?}"))?;
+
+        // Decode the IPC stream with an independent Arrow implementation.
+        let reader = arrow_ipc::reader::StreamReader::try_new(std::io::Cursor::new(bytes), None)
+            .context("arrow IPC stream did not decode")?;
+        let mut values = Vec::new();
+        for batch in reader {
+            let batch = batch?;
+            assert_eq!(batch.schema().field(0).name(), "n");
+            let col = batch.column(0).as_primitive::<Int32Type>();
+            for i in 0..batch.num_rows() {
+                values.push(col.value(i));
+            }
+        }
+        assert_eq!(values, vec![0, 1, 2, 3, 4], "round-tripped arrow column");
 
         Ok(())
     }

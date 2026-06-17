@@ -11,6 +11,10 @@ libduckdb-sys = { path = "../libduckdb-sys" }
 thiserror = "1.0"
 wit-bindgen-rt = { version = "0.41.0", features = ["bitflags"] }
 libc = { version = "0.2", default-features = false }
+arrow-array = { version = "53", default-features = false, features = ["ffi"] }
+arrow-schema = { version = "53", default-features = false, features = ["ffi"] }
+arrow-data = { version = "53", default-features = false, features = ["ffi"] }
+arrow-ipc = { version = "53", default-features = false }
 
 [features]
 default = ["wasi"]

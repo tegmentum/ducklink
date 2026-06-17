@@ -43,6 +43,17 @@ async function main() {
     check('open-with-config', cfg.rows, [[{ tag: 'text', val: 'DESC' }]])
     db.close(cfgConn)
 
+    // Arrow IPC: bytes come back as a Uint8Array; verify the Arrow IPC stream
+    // marker (0xFFFFFFFF continuation prefix). Full semantic decode is covered
+    // by the host test (arrow-rs); here we confirm jco marshals the bytes.
+    const arrow = db.queryArrow(conn, 'SELECT i::INTEGER AS n FROM range(3) t(i)')
+    const okArrow = arrow.length > 8 &&
+      arrow[0] === 0xff && arrow[1] === 0xff && arrow[2] === 0xff && arrow[3] === 0xff
+    if (!okArrow) failed++
+    lines.push((okArrow ? 'ok   ' : 'FAIL ') + 'query-arrow (IPC stream)'.padEnd(34) +
+      ' = ' + arrow.length + ' bytes, marker=' +
+      Array.from(arrow.slice(0, 4)).map((b) => b.toString(16)).join(''))
+
     db.close(conn)
     out.textContent = lines.join('\n')
     out.dataset.status = failed === 0 ? 'ok' : 'error'

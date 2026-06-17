@@ -11,6 +11,8 @@ wasmtime-wasi = { git = "https://github.com/bytecodealliance/wasmtime", rev = "1
 
 [dev-dependencies]
 tempfile = "3"
+arrow-ipc = { version = "53", default-features = false }
+arrow-array = { version = "53", default-features = false }
 
 [[bin]]
 name = "duckdb-host"

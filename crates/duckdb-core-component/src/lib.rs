@@ -2216,6 +2216,87 @@ impl ConnectionState {
         Ok(QueryResult { columns, rows })
     }
 
+    /// Runs `sql` and serializes the entire result to an Arrow IPC stream.
+    fn query_arrow_ipc(&self, sql: &str) -> Result<Vec<u8>, DuckDbError> {
+        use arrow_array::{ffi::from_ffi, RecordBatch, StructArray};
+        use arrow_data::ffi::FFI_ArrowArray;
+        use arrow_ipc::writer::StreamWriter;
+        use arrow_schema::{ffi::FFI_ArrowSchema, Schema};
+        use std::sync::Arc;
+
+        let c_sql = CString::new(sql).map_err(|_| DuckDbError::EmbeddedNull)?;
+
+        unsafe {
+            let mut arrow_result: duckdb::duckdb_arrow = ptr::null_mut();
+            let state = duckdb::duckdb_query_arrow(self.handle, c_sql.as_ptr(), &mut arrow_result);
+            if state != DUCKDB_SUCCESS {
+                let message = arrow_error_message(arrow_result);
+                duckdb::duckdb_destroy_arrow(&mut arrow_result);
+                return Err(DuckDbError::message(message));
+            }
+
+            let collected = (|| -> Result<Vec<u8>, DuckDbError> {
+                // DuckDB fills a caller-allocated ArrowSchema/ArrowArray via the
+                // pointer stored at *out_schema / *out_array.
+                let mut ffi_schema = FFI_ArrowSchema::empty();
+                let schema_ptr: duckdb::duckdb_arrow_schema =
+                    &mut ffi_schema as *mut FFI_ArrowSchema as *mut _;
+                if duckdb::duckdb_query_arrow_schema(
+                    arrow_result,
+                    &schema_ptr as *const _ as *mut duckdb::duckdb_arrow_schema,
+                ) != DUCKDB_SUCCESS
+                {
+                    return Err(DuckDbError::message("duckdb_query_arrow_schema failed"));
+                }
+
+                let schema = Arc::new(
+                    Schema::try_from(&ffi_schema)
+                        .map_err(|e| DuckDbError::message(format!("arrow schema: {e}")))?,
+                );
+
+                let mut batches: Vec<RecordBatch> = Vec::new();
+                loop {
+                    let mut ffi_array = FFI_ArrowArray::empty();
+                    let array_ptr: duckdb::duckdb_arrow_array =
+                        &mut ffi_array as *mut FFI_ArrowArray as *mut _;
+                    if duckdb::duckdb_query_arrow_array(
+                        arrow_result,
+                        &array_ptr as *const _ as *mut duckdb::duckdb_arrow_array,
+                    ) != DUCKDB_SUCCESS
+                    {
+                        return Err(DuckDbError::message("duckdb_query_arrow_array failed"));
+                    }
+                    // End of stream: DuckDB returns success without filling the
+                    // array, so it stays released (release == null).
+                    if ffi_array.is_released() {
+                        break;
+                    }
+                    let data = from_ffi(ffi_array, &ffi_schema)
+                        .map_err(|e| DuckDbError::message(format!("arrow import: {e}")))?;
+                    batches.push(RecordBatch::from(StructArray::from(data)));
+                }
+
+                let mut buffer: Vec<u8> = Vec::new();
+                {
+                    let mut writer = StreamWriter::try_new(&mut buffer, schema.as_ref())
+                        .map_err(|e| DuckDbError::message(format!("arrow ipc: {e}")))?;
+                    for batch in &batches {
+                        writer
+                            .write(batch)
+                            .map_err(|e| DuckDbError::message(format!("arrow ipc: {e}")))?;
+                    }
+                    writer
+                        .finish()
+                        .map_err(|e| DuckDbError::message(format!("arrow ipc: {e}")))?;
+                }
+                Ok(buffer)
+            })();
+
+            duckdb::duckdb_destroy_arrow(&mut arrow_result);
+            collected
+        }
+    }
+
     fn collect_rows(&self, sql: &str) -> Result<(Vec<Columndef>, Vec<Row>), DuckDbError> {
         let c_sql = CString::new(sql).map_err(|_| DuckDbError::EmbeddedNull)?;
 
@@ -2327,6 +2408,18 @@ impl PreparedStatementState {
                 stmt: RefCell::new(stmt),
             })
         }
+    }
+}
+
+unsafe fn arrow_error_message(result: duckdb::duckdb_arrow) -> String {
+    if result.is_null() {
+        return "duckdb_query_arrow failed".to_string();
+    }
+    let ptr = duckdb::duckdb_query_arrow_error(result);
+    if ptr.is_null() {
+        "duckdb_query_arrow failed".to_string()
+    } else {
+        CStr::from_ptr(ptr).to_string_lossy().into_owned()
     }
 }
 
@@ -2532,6 +2625,12 @@ impl exported_database::Guest for Component {
         let state = PreparedStatementState::prepare(conn.get::<ConnectionState>(), &sql)
             .map_err(Duckerror::from)?;
         Ok(exported_database::PreparedStatement::new(state))
+    }
+
+    fn query_arrow(conn: ConnectionBorrow<'_>, sql: String) -> Result<Vec<u8>, Duckerror> {
+        conn.get::<ConnectionState>()
+            .query_arrow_ipc(&sql)
+            .map_err(Duckerror::from)
     }
 
     fn register_extension(name: String, requires: Vec<Capabilitykind>) -> Result<bool, String> {

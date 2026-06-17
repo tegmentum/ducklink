@@ -9,6 +9,9 @@ pub type duckdb_database = *mut c_void;
 pub type duckdb_connection = *mut c_void;
 pub type duckdb_config = *mut c_void;
 pub type duckdb_prepared_statement = *mut c_void;
+pub type duckdb_arrow = *mut c_void;
+pub type duckdb_arrow_schema = *mut c_void;
+pub type duckdb_arrow_array = *mut c_void;
 pub type idx_t = u64;
 pub type duckdb_data_chunk = *mut c_void;
 pub type duckdb_vector = *mut c_void;
@@ -209,6 +212,24 @@ extern "C" {
         prepared_statement: duckdb_prepared_statement,
         out_result: *mut duckdb_result,
     ) -> duckdb_state;
+
+    // Arrow C Data Interface result API (deprecated in DuckDB but still exported);
+    // used to export query results as Arrow IPC stream bytes.
+    pub fn duckdb_query_arrow(
+        connection: duckdb_connection,
+        query: *const c_char,
+        out_result: *mut duckdb_arrow,
+    ) -> duckdb_state;
+    pub fn duckdb_query_arrow_schema(
+        result: duckdb_arrow,
+        out_schema: *mut duckdb_arrow_schema,
+    ) -> duckdb_state;
+    pub fn duckdb_query_arrow_array(
+        result: duckdb_arrow,
+        out_array: *mut duckdb_arrow_array,
+    ) -> duckdb_state;
+    pub fn duckdb_query_arrow_error(result: duckdb_arrow) -> *const c_char;
+    pub fn duckdb_destroy_arrow(result: *mut duckdb_arrow);
 
     pub fn duckdb_result_error(result: *mut duckdb_result) -> *const c_char;
 

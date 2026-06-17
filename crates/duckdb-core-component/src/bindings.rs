@@ -10043,6 +10043,189 @@ pub mod exports {
                 }
                 #[doc(hidden)]
                 #[allow(non_snake_case)]
+                pub unsafe fn _export_query_arrow_cabi<T: Guest>(
+                    arg0: i32,
+                    arg1: *mut u8,
+                    arg2: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg2;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg1.cast(), len0, len0);
+                    let result1 = T::query_arrow(
+                        unsafe { ConnectionBorrow::lift(arg0 as u32 as usize) },
+                        _rt::string_lift(bytes0),
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec3 = (e).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            use super::super::super::super::duckdb::extension::types::Duckerror as V9;
+                            match e {
+                                V9::Invalidargument(e) => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                    let vec4 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                                    let len4 = vec4.len();
+                                    ::core::mem::forget(vec4);
+                                    *ptr2
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len4;
+                                    *ptr2
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr4.cast_mut();
+                                }
+                                V9::Unsupported(e) => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec5 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr5 = vec5.as_ptr().cast::<u8>();
+                                    let len5 = vec5.len();
+                                    ::core::mem::forget(vec5);
+                                    *ptr2
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len5;
+                                    *ptr2
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr5.cast_mut();
+                                }
+                                V9::Invalidstate(e) => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (2i32) as u8;
+                                    let vec6 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr6 = vec6.as_ptr().cast::<u8>();
+                                    let len6 = vec6.len();
+                                    ::core::mem::forget(vec6);
+                                    *ptr2
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len6;
+                                    *ptr2
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr6.cast_mut();
+                                }
+                                V9::Io(e) => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (3i32) as u8;
+                                    let vec7 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr7 = vec7.as_ptr().cast::<u8>();
+                                    let len7 = vec7.len();
+                                    ::core::mem::forget(vec7);
+                                    *ptr2
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len7;
+                                    *ptr2
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr7.cast_mut();
+                                }
+                                V9::Internal(e) => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (4i32) as u8;
+                                    let vec8 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr8 = vec8.as_ptr().cast::<u8>();
+                                    let len8 = vec8.len();
+                                    ::core::mem::forget(vec8);
+                                    *ptr2
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len8;
+                                    *ptr2
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr8.cast_mut();
+                                }
+                            }
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_query_arrow<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base3 = l1;
+                            let len3 = l2;
+                            _rt::cabi_dealloc(base3, len3 * 1, 1);
+                        }
+                        _ => {
+                            let l4 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l4 {
+                                0 => {
+                                    let l5 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l6 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l5, l6, 1);
+                                }
+                                1 => {
+                                    let l7 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l8 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l7, l8, 1);
+                                }
+                                2 => {
+                                    let l9 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l10 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l9, l10, 1);
+                                }
+                                3 => {
+                                    let l11 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l12 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l11, l12, 1);
+                                }
+                                _ => {
+                                    let l13 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l14 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l13, l14, 1);
+                                }
+                            }
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
                 pub unsafe fn _export_register_extension_cabi<T: Guest>(
                     arg0: *mut u8,
                     arg1: usize,
@@ -10253,6 +10436,15 @@ pub mod exports {
                         conn: ConnectionBorrow<'_>,
                         sql: _rt::String,
                     ) -> Result<PreparedStatement, Duckerror>;
+                    /// Runs a query and returns the full result encoded as an Arrow IPC stream
+                    /// (schema message followed by record-batch messages). Consumers decode it
+                    /// with any Arrow implementation (e.g. apache-arrow in JS, arrow in Rust).
+                    /// True zero-copy is not possible across the component boundary, so the
+                    /// columnar buffers are serialized once into this byte stream.
+                    fn query_arrow(
+                        conn: ConnectionBorrow<'_>,
+                        sql: _rt::String,
+                    ) -> Result<_rt::Vec<u8>, Duckerror>;
                     /// Registers metadata about an extension along with the capabilities it intends to use.
                     fn register_extension(
                         name: _rt::String,
@@ -10519,6 +10711,15 @@ pub mod exports {
                         unsafe extern "C" fn _post_return_prepare(arg0 : * mut u8,) {
                         unsafe { $($path_to_types)*:: __post_return_prepare::<$ty >
                         (arg0) } } #[unsafe (export_name =
+                        "duckdb:component/database#query-arrow")] unsafe extern "C" fn
+                        export_query_arrow(arg0 : i32, arg1 : * mut u8, arg2 : usize,) ->
+                        * mut u8 { unsafe { $($path_to_types)*::
+                        _export_query_arrow_cabi::<$ty > (arg0, arg1, arg2) } } #[unsafe
+                        (export_name =
+                        "cabi_post_duckdb:component/database#query-arrow")] unsafe extern
+                        "C" fn _post_return_query_arrow(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_query_arrow::<$ty > (arg0) } }
+                        #[unsafe (export_name =
                         "duckdb:component/database#register-extension")] unsafe extern
                         "C" fn export_register_extension(arg0 : * mut u8, arg1 : usize,
                         arg2 : * mut u8, arg3 : usize,) -> * mut u8 { unsafe {
@@ -17605,8 +17806,8 @@ pub(crate) use __export_libduckdb_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 10386] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\x92P\x01A\x02\x01A8\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 10427] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xbbP\x01A\x02\x01A8\x01\
 B\x0a\x01o\x02ss\x01p\0\x01@\0\0\x01\x04\0\x0fget-environment\x01\x02\x01ps\x01@\
 \0\0\x03\x04\0\x0dget-arguments\x01\x04\x01ks\x01@\0\0\x05\x04\0\x0binitial-cwd\x01\
 \x06\x03\0\x1awasi:cli/environment@0.2.6\x05\0\x01B\x04\x04\0\x05error\x03\x01\x01\
@@ -17751,7 +17952,7 @@ gs\x0a\0\x0d\x04\0\x0acall-table\x01\x0e\x01@\x02\x06handley\x04rows\x09\0\x0b\x
 \0\x0ecall-aggregate\x01\x0f\x01k\x03\x01j\x01\x10\x01\x01\x01@\x02\x06handley\x04\
 args\x0a\0\x11\x04\0\x0bcall-pragma\x01\x12\x01@\x02\x06handley\x05value\x03\0\x0b\
 \x04\0\x09call-cast\x01\x13\x03\0\"duckdb:extension/callback-dispatch\x05\x1b\x02\
-\x03\0\x0a\x0ecapabilitykind\x01BB\x02\x03\x02\x01\x1c\x04\0\x0ecapabilitykind\x03\
+\x03\0\x0a\x0ecapabilitykind\x01BF\x02\x03\x02\x01\x1c\x04\0\x0ecapabilitykind\x03\
 \0\0\x02\x03\x02\x01\x13\x04\0\x09columndef\x03\0\x02\x02\x03\x02\x01\x16\x04\0\x09\
 duckerror\x03\0\x04\x02\x03\x02\x01\x17\x04\0\x09duckvalue\x03\0\x06\x04\0\x0aco\
 nnection\x03\x01\x01p\x07\x04\0\x03row\x03\0\x09\x01p\x03\x01p\x0a\x01r\x02\x07c\
@@ -17769,9 +17970,10 @@ ed-statement.execute\x01\x1e\x01ks\x01i\x08\x01j\x01\x20\x01s\x01@\x01\x04path\x
 \x01@\x01\x04conn'\x01\0\x04\0\x09interrupt\x01(\x01@\x02\x04conn'\x03sqls\0\x1d\
 \x04\0\x07execute\x01)\x01i\x0f\x01j\x01*\x01\x05\x01@\x02\x04conn'\x03sqls\0+\x04\
 \0\x0bopen-stream\x01,\x01i\x10\x01j\x01-\x01\x05\x01@\x02\x04conn'\x03sqls\0.\x04\
-\0\x07prepare\x01/\x01j\x01\x7f\x01s\x01@\x02\x04names\x08requires\x11\00\x04\0\x12\
-register-extension\x011\x01p\x13\x01@\0\02\x04\0\x1alist-registered-extensions\x01\
-3\x04\0\x19duckdb:component/database\x05\x1d\x02\x03\0\x0a\x0bconfigerror\x01B$\x02\
+\0\x07prepare\x01/\x01p}\x01j\x010\x01\x05\x01@\x02\x04conn'\x03sqls\01\x04\0\x0b\
+query-arrow\x012\x01j\x01\x7f\x01s\x01@\x02\x04names\x08requires\x11\03\x04\0\x12\
+register-extension\x014\x01p\x13\x01@\0\05\x04\0\x1alist-registered-extensions\x01\
+6\x04\0\x19duckdb:component/database\x05\x1d\x02\x03\0\x0a\x0bconfigerror\x01B$\x02\
 \x03\x02\x01\x1e\x04\0\x0bconfigerror\x03\0\0\x01@\0\0s\x04\0\x10provider-versio\
 n\x01\x02\x01ks\x01ps\x01@\x01\x06prefix\x03\0\x04\x04\0\x09list-keys\x01\x05\x01\
 j\x01\x03\x01\x01\x01@\x01\x04paths\0\x06\x04\0\x0aget-string\x01\x07\x01k\x7f\x01\

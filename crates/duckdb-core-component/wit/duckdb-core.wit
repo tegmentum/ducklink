@@ -77,6 +77,13 @@ interface database {
     /// Compiles a SQL statement for repeated parameterized execution.
     prepare: func(conn: borrow<connection>, sql: string) -> result<prepared-statement, duckerror>;
 
+    /// Runs a query and returns the full result encoded as an Arrow IPC stream
+    /// (schema message followed by record-batch messages). Consumers decode it
+    /// with any Arrow implementation (e.g. apache-arrow in JS, arrow in Rust).
+    /// True zero-copy is not possible across the component boundary, so the
+    /// columnar buffers are serialized once into this byte stream.
+    query-arrow: func(conn: borrow<connection>, sql: string) -> result<list<u8>, duckerror>;
+
     /// Registers metadata about an extension along with the capabilities it intends to use.
     register-extension: func(name: string, requires: list<capabilitykind>) -> result<bool, string>;
 
