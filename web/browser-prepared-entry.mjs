@@ -1,6 +1,7 @@
 // Browser entry: exercise the core's prepared-statement API directly (no host),
 // proving prepare + positional bind + repeated execution work in the browser.
 import { instantiateCore } from './run-core.mjs'
+import { tableFromIPC } from 'apache-arrow'
 
 async function bytes(url) {
   const r = await fetch(url)
@@ -43,16 +44,11 @@ async function main() {
     check('open-with-config', cfg.rows, [[{ tag: 'text', val: 'DESC' }]])
     db.close(cfgConn)
 
-    // Arrow IPC: bytes come back as a Uint8Array; verify the Arrow IPC stream
-    // marker (0xFFFFFFFF continuation prefix). Full semantic decode is covered
-    // by the host test (arrow-rs); here we confirm jco marshals the bytes.
+    // Arrow IPC: decode the bytes with apache-arrow and check the values.
     const arrow = db.queryArrow(conn, 'SELECT i::INTEGER AS n FROM range(3) t(i)')
-    const okArrow = arrow.length > 8 &&
-      arrow[0] === 0xff && arrow[1] === 0xff && arrow[2] === 0xff && arrow[3] === 0xff
-    if (!okArrow) failed++
-    lines.push((okArrow ? 'ok   ' : 'FAIL ') + 'query-arrow (IPC stream)'.padEnd(34) +
-      ' = ' + arrow.length + ' bytes, marker=' +
-      Array.from(arrow.slice(0, 4)).map((b) => b.toString(16)).join(''))
+    const table = tableFromIPC(arrow)
+    const decoded = Array.from(table.getChild('n').toArray(), Number)
+    check('query-arrow (decoded)', decoded, [0, 1, 2])
 
     db.close(conn)
     out.textContent = lines.join('\n')
