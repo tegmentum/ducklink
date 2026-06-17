@@ -1,7 +1,7 @@
 WASI_TARGET?=wasm32-wasip2
 BROWSER_TARGET?=wasm32-unknown-unknown
 
-.PHONY: all core core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension clean
+.PHONY: all core core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension ci-local clean
 
 all: core standalone-cli loader-stub
 
@@ -37,6 +37,10 @@ sample-extension: all
 
 smoke-extension:
 	cargo test -p duckdb-component-host load_sample_extension_component
+
+# Run the smoke-tests GitHub Actions workflow locally via nektos/act (Docker).
+ci-local:
+	./scripts/ci-local.sh
 
 clean:
 	cargo clean

@@ -1,0 +1,12 @@
+# Configuration for running the GitHub Actions workflows locally with
+# nektos/act (https://github.com/nektos/act). Used as a stopgap for CI until the
+# repository is public (free Actions) or Actions billing is enabled.
+#
+# Map GitHub's `ubuntu-latest` to a runner image that ships the basics the
+# smoke-tests workflow needs (apt, curl, git, sudo, node). cmake/ninja are
+# installed by the workflow itself.
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+
+# Keep build caches (actions/cache) and the apt/cargo work between runs so the
+# expensive DuckDB archive build only happens once.
+--reuse

@@ -215,6 +215,24 @@ To validate the preview2 filesystem adapter against real storage outside of `mak
 
 Continuous smoke coverage runs in CI via `.github/workflows/smoke-tests.yml`, which builds the components and executes both the in-memory and on-disk runs of `scripts/smoke-cli.sh` on every push and pull request.
 
+### Running CI locally with act
+
+Until hosted Actions are available (public repo / billing), the same workflow can
+run locally with [nektos/act](https://github.com/nektos/act) in Docker:
+
+```bash
+brew install act          # one-time (Docker must be running)
+make ci-local             # runs .github/workflows/smoke-tests.yml
+scripts/ci-local.sh -l    # list jobs without running
+```
+
+`.actrc` maps `ubuntu-latest` to `catthehacker/ubuntu:act-latest` and enables
+`--reuse` so caches persist between runs. The wasi-sdk download in the workflow
+is architecture-aware (`x86_64`/`arm64`), so it runs natively under act on Apple
+silicon as well as on GitHub's x86_64 runners. The first run is slow (it pulls
+the runner image, compiles the component tooling, and builds the patched DuckDB
+archive); afterwards the cached archive makes runs fast.
+
 ## Database interface
 
 Beyond `execute` / `open-stream`, the `database` interface exposes:

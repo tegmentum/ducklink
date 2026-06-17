@@ -66,9 +66,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          # wasi-sdk (provides the exception-handling sysroot the archive needs)
+          # wasi-sdk (provides the exception-handling sysroot the archive needs).
+          # Pick the asset matching the host arch so this also runs natively
+          # under `act` on arm64 (GitHub's hosted runners are x86_64).
+          case "$(uname -m)" in
+            x86_64) WASI_ARCH=x86_64 ;;
+            aarch64 | arm64) WASI_ARCH=arm64 ;;
+            *) echo "unsupported host arch: $(uname -m)" >&2; exit 1 ;;
+          esac
           curl -fsSL -o /tmp/wasi-sdk.tar.gz \
-            "https://github.com/WebAssembly/wasi-sdk/releases/download/${WASI_SDK_RELEASE}/${WASI_SDK_RELEASE}.0-x86_64-linux.tar.gz"
+            "https://github.com/WebAssembly/wasi-sdk/releases/download/${WASI_SDK_RELEASE}/${WASI_SDK_RELEASE}.0-${WASI_ARCH}-linux.tar.gz"
           mkdir -p "$HOME/wasi-sdk"
           tar xzf /tmp/wasi-sdk.tar.gz -C "$HOME/wasi-sdk" --strip-components=1
           export WASI_SDK_PREFIX="$HOME/wasi-sdk"
