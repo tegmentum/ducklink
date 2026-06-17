@@ -1849,19 +1849,31 @@ mod libc_overrides {
     }
 }
 
-static mut ERRNO_VALUE: i32 = 0;
+// wasi-libc declares `errno` as a regular (single-threaded) global symbol and
+// accesses it *directly* — `#include <__errno.h>` does `extern _Thread_local
+// int errno; #define errno errno`, NOT `*__errno_location()`. DuckDB's C++ reads
+// that same `errno` global. So the filesystem shims must set the real libc
+// `errno`; an internal copy would be invisible to DuckDB and every "file does
+// not exist yet" probe (open without O_CREAT) would read errno==0 ("Success")
+// instead of ENOENT, so DuckDB would never take its create-on-open path and
+// on-disk databases could not be created. The symbol is plain DATA (not TLS in
+// the threadless wasip2 build), so a normal extern static resolves to it.
+extern "C" {
+    #[link_name = "errno"]
+    static mut LIBC_ERRNO: c_int;
+}
 
 unsafe fn set_errno(code: i32) {
-    ERRNO_VALUE = code;
+    LIBC_ERRNO = code;
 }
 
 unsafe fn clear_errno() {
-    ERRNO_VALUE = 0;
+    LIBC_ERRNO = 0;
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn __errno_location() -> *mut c_int {
-    ptr::addr_of_mut!(ERRNO_VALUE)
+    ptr::addr_of_mut!(LIBC_ERRNO)
 }
 
 #[no_mangle]

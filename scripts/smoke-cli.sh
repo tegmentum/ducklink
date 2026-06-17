@@ -66,7 +66,9 @@ fi
 
 echo "Running wasmtime smoke test query..." >&2
 set -x
-cmd=(wasmtime run $EXTRA_WASMTIME_FLAGS "$OUTPUT_COMPONENT" --dir "$db_dir" --dir "$ROOT/artifacts" -- "$DB_PATH")
+# wasmtime options (incl. --dir preopens) MUST precede the module path; placed
+# after it they are parsed as guest arguments and no directories are preopened.
+cmd=(wasmtime run $EXTRA_WASMTIME_FLAGS --dir "$db_dir" --dir "$ROOT/artifacts" "$OUTPUT_COMPONENT" -- "$DB_PATH")
 if [[ ${#load_flags[@]} -gt 0 ]]; then
   cmd+=("${load_flags[@]}")
 fi

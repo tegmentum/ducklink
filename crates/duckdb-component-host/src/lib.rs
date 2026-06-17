@@ -3221,45 +3221,57 @@ mod tests {
             .any(|line| line.split('|').map(str::trim).any(|cell| cell == value))
     }
 
-    #[ignore]
     #[test]
     fn smoke_runs_sql_against_disk_database() -> Result<()> {
         let tempdir = tempdir().context("failed to create temporary directory")?;
         let db_host_path = tempdir.path().join("smoke.db");
-        let db_guest_path = ":memory:";
+        // The tempdir is preopened at guest path ".", so the database lives at a
+        // relative path inside it (an actual on-disk file, not :memory:).
+        let db_guest_path = "smoke.db";
 
-        let command = "CREATE TABLE items(v INTEGER); \
-                       INSERT INTO items VALUES (1), (2), (3); \
-                       SELECT SUM(v) AS total, COUNT(*) AS count FROM items;";
-
-        let args = ["duckdb-cli", db_guest_path, "-c", command];
-
+        // First process: create the database on disk and populate it.
+        let write_cmd = "CREATE TABLE items(v INTEGER); \
+                         INSERT INTO items VALUES (1), (2), (3);";
+        let write_args = ["duckdb-cli", db_guest_path, "-c", write_cmd];
         let preopens = [(tempdir.path(), ".")];
-
-        let mut harness = CliHarness::new(&args, &preopens)?;
-        let status = harness.run()?;
-        if status.is_err() {
-            let stdout_dump = harness.stdout().unwrap_or_default();
-            let stderr_dump = harness.stderr().unwrap_or_default();
+        let mut writer = CliHarness::new(&write_args, &preopens)?;
+        let write_status = writer.run()?;
+        if write_status.is_err() {
             panic!(
-                "CLI returned error status
-stdout:
-{stdout_dump}
-stderr:
-{stderr_dump}"
+                "writer CLI returned error status\nstdout:\n{}\nstderr:\n{}",
+                writer.stdout().unwrap_or_default(),
+                writer.stderr().unwrap_or_default()
+            );
+        }
+        assert!(
+            db_host_path.exists(),
+            "expected on-disk database file to be created at {}",
+            db_host_path.display()
+        );
+
+        // Second process: reopen the same file and read the data back, proving
+        // the data persisted to disk across connections.
+        let read_cmd = "SELECT SUM(v) AS total, COUNT(*) AS count FROM items;";
+        let read_args = ["duckdb-cli", db_guest_path, "-c", read_cmd];
+        let mut reader = CliHarness::new(&read_args, &preopens)?;
+        let read_status = reader.run()?;
+        if read_status.is_err() {
+            panic!(
+                "reader CLI returned error status\nstdout:\n{}\nstderr:\n{}",
+                reader.stdout().unwrap_or_default(),
+                reader.stderr().unwrap_or_default()
             );
         }
 
-        let stdout = harness.stdout()?;
+        let stdout = reader.stdout()?;
         assert!(
-            stdout.contains("| total | count |"),
+            has_cell(&stdout, "total") && has_cell(&stdout, "count"),
             "expected aggregated header in stdout, got:\n{stdout}"
         );
         assert!(
-            stdout.contains("| 6     | 3     |"),
+            has_cell(&stdout, "6") && has_cell(&stdout, "3"),
             "expected aggregated row in stdout, got:\n{stdout}"
         );
-        let _ = db_host_path;
 
         Ok(())
     }
@@ -4026,7 +4038,17 @@ pub mod duckdb_extension_bindings {
 }
 fn resolve_preopens_with_default(preopens: &[(&Path, &str)]) -> Result<Vec<(PathBuf, String)>> {
     let mut merged = Vec::with_capacity(preopens.len() + 1);
-    merged.push((std::env::current_dir()?, ".".to_string()));
+    // Only fall back to the current directory when the caller hasn't already
+    // mapped the guest cwd ("."). Otherwise the default would shadow an explicit
+    // "." preopen — the core's path resolver keeps the first match for equal
+    // scores, so files would be created in the host cwd instead of the caller's
+    // directory.
+    let caller_maps_cwd = preopens
+        .iter()
+        .any(|(_, guest)| *guest == "." || *guest == "./" || guest.is_empty());
+    if !caller_maps_cwd {
+        merged.push((std::env::current_dir()?, ".".to_string()));
+    }
     for (host, guest) in preopens {
         merged.push((host.to_path_buf(), guest.to_string()));
     }
