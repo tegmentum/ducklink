@@ -3608,6 +3608,53 @@ mod tests {
     }
 
     #[test]
+    fn cli_meta_commands_import_read_and_mode() -> Result<()> {
+        let tempdir = tempdir().context("failed to create temporary directory")?;
+        let preopens = [(tempdir.path(), ".")];
+
+        std::fs::write(
+            tempdir.path().join("people.csv"),
+            "id,name\n1,alice\n2,bob\n3,carol\n",
+        )?;
+        // A script exercising .import (reads the CSV via the core fs shims) and a
+        // trailing query, all run through .read.
+        std::fs::write(
+            tempdir.path().join("load.sql"),
+            "CREATE TABLE people(id INTEGER, name TEXT);\n\
+             .import people.csv people\n\
+             SELECT count(*) AS n FROM people;\n",
+        )?;
+        let mut h = CliHarness::new(
+            &["duckdb-cli", ":memory:", "-c", ".read load.sql"],
+            &preopens,
+        )?;
+        assert!(h.run()?.is_ok(), ".read/.import failed: {}", h.stderr()?);
+        let stdout = h.stdout()?;
+        assert!(
+            has_cell(&stdout, "3"),
+            "expected imported row count 3, got:\n{stdout}"
+        );
+
+        // .mode csv switches the output format (no box borders).
+        std::fs::write(
+            tempdir.path().join("csv.sql"),
+            ".mode csv\nSELECT 7 AS v, 'a,b' AS s;\n",
+        )?;
+        let mut csv = CliHarness::new(
+            &["duckdb-cli", ":memory:", "-c", ".read csv.sql"],
+            &preopens,
+        )?;
+        assert!(csv.run()?.is_ok(), ".mode csv failed: {}", csv.stderr()?);
+        let csv_out = csv.stdout()?;
+        assert!(
+            csv_out.contains("v,s") && csv_out.contains("7,\"a,b\"") && !csv_out.contains('|'),
+            "expected CSV output, got:\n{csv_out}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn cli_meta_commands_introspect_schema() -> Result<()> {
         let tempdir = tempdir().context("failed to create temporary directory")?;
         let preopens = [(tempdir.path(), ".")];

@@ -171,6 +171,57 @@ fn run_meta_command(conn: &duckdb::Connection, rest: &str) -> Result<(), String>
             );
             execute_and_print(conn, &sql)
         }
+        "read" => {
+            // DuckDB reads the file (via the core fs shims); run its contents as
+            // a script. Errors abort the script.
+            let path = arg.ok_or_else(|| ".read requires a file path".to_string())?;
+            let sql = format!(
+                "SELECT content FROM read_text('{}')",
+                escape_sql_literal(&path)
+            );
+            let result = duckdb::execute(conn, &sql).map_err(duckerror_to_string)?;
+            let content = match result
+                .rows
+                .into_iter()
+                .next()
+                .and_then(|mut r| (!r.is_empty()).then(|| r.remove(0)))
+            {
+                Some(duckdb::Duckvalue::Text(text)) => text,
+                Some(other) => format_duckvalue(other),
+                None => return Err(format!("could not read '{path}'")),
+            };
+            run_script(conn, &content)
+        }
+        "import" => {
+            // `.import FILE TABLE` bulk-loads a CSV into an existing table.
+            let file = arg.ok_or_else(|| ".import requires FILE and TABLE".to_string())?;
+            let table = parts
+                .next()
+                .map(|t| t.trim_end_matches(';').to_string())
+                .ok_or_else(|| ".import requires FILE and TABLE".to_string())?;
+            let sql = format!(
+                "COPY \"{}\" FROM '{}' (AUTO_DETECT true)",
+                table.replace('"', "\"\""),
+                escape_sql_literal(&file)
+            );
+            duckdb::execute(conn, &sql)
+                .map(|_| ())
+                .map_err(duckerror_to_string)
+        }
+        "mode" => {
+            let mode = arg
+                .ok_or_else(|| ".mode requires a format (table|csv|json)".to_string())?;
+            let selected = match mode.to_ascii_lowercase().as_str() {
+                "table" | "box" | "column" => OutputMode::Table,
+                "csv" => OutputMode::Csv,
+                "json" => OutputMode::Json,
+                other => {
+                    return Err(format!("unknown output mode '{other}' (table|csv|json)"))
+                }
+            };
+            OUTPUT_MODE.with(|m| m.set(selected));
+            Ok(())
+        }
         other => Err(format!("unknown command: .{other} (try .help)")),
     }
 }
@@ -222,7 +273,27 @@ fn run_repl(conn: &duckdb::Connection) -> Result<(), String> {
     Ok(())
 }
 
+/// Output format selected by `.mode`. Defaults to the box-style table.
+#[derive(Clone, Copy, PartialEq)]
+enum OutputMode {
+    Table,
+    Csv,
+    Json,
+}
+
+thread_local! {
+    static OUTPUT_MODE: std::cell::Cell<OutputMode> = std::cell::Cell::new(OutputMode::Table);
+}
+
 fn render_result(result: duckdb::QueryResult) -> Result<(), String> {
+    match OUTPUT_MODE.with(|m| m.get()) {
+        OutputMode::Table => render_table(result),
+        OutputMode::Csv => render_csv(result),
+        OutputMode::Json => render_json(result),
+    }
+}
+
+fn render_table(result: duckdb::QueryResult) -> Result<(), String> {
     let out = stdout::get_stdout();
 
     let duckdb::QueryResult { columns, rows } = result;
@@ -381,11 +452,14 @@ fn print_help() {
     let _ = write_line(
         &out,
         "Meta-commands:\n  \
-         .tables [LIKE]     List tables (optionally matching a LIKE pattern)\n  \
-         .schema [TABLE]    Show CREATE statements (optionally for one table)\n  \
-         .indexes [TABLE]   List indexes (optionally for one table)\n  \
-         .help              Show this help\n  \
-         .exit, .quit       Leave the shell",
+         .tables [LIKE]      List tables (optionally matching a LIKE pattern)\n  \
+         .schema [TABLE]     Show CREATE statements (optionally for one table)\n  \
+         .indexes [TABLE]    List indexes (optionally for one table)\n  \
+         .import FILE TABLE  Load a CSV file into an existing table\n  \
+         .read FILE          Execute SQL statements from a file\n  \
+         .mode FORMAT        Set output format: table, csv, or json\n  \
+         .help               Show this help\n  \
+         .exit, .quit        Leave the shell",
     );
 }
 
@@ -397,6 +471,114 @@ fn duckerror_to_string(err: duckdb::Duckerror) -> String {
         duckdb::Duckerror::Io(msg) => format!("io error: {msg}"),
         duckdb::Duckerror::Internal(msg) => format!("internal error: {msg}"),
     }
+}
+
+fn render_csv(result: duckdb::QueryResult) -> Result<(), String> {
+    let out = stdout::get_stdout();
+    let duckdb::QueryResult { columns, rows } = result;
+    let header: Vec<String> = columns.iter().map(|c| csv_field(&c.name)).collect();
+    write_line(&out, &header.join(","))?;
+    for row in rows {
+        let cells: Vec<String> = row
+            .into_iter()
+            .map(|v| csv_field(&format_duckvalue(v)))
+            .collect();
+        write_line(&out, &cells.join(","))?;
+    }
+    Ok(())
+}
+
+fn csv_field(value: &str) -> String {
+    if value.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
+}
+
+fn render_json(result: duckdb::QueryResult) -> Result<(), String> {
+    let out = stdout::get_stdout();
+    let duckdb::QueryResult { columns, rows } = result;
+    let mut json = String::from("[");
+    for (ri, row) in rows.into_iter().enumerate() {
+        if ri > 0 {
+            json.push(',');
+        }
+        json.push('{');
+        for (ci, value) in row.into_iter().enumerate() {
+            if ci > 0 {
+                json.push(',');
+            }
+            let name = columns.get(ci).map(|c| c.name.as_str()).unwrap_or("");
+            json.push_str(&json_string(name));
+            json.push(':');
+            json.push_str(&json_value(value));
+        }
+        json.push('}');
+    }
+    json.push(']');
+    write_line(&out, &json)
+}
+
+fn json_value(value: duckdb::Duckvalue) -> String {
+    match value {
+        duckdb::Duckvalue::Null => "null".to_string(),
+        duckdb::Duckvalue::Boolean(b) => b.to_string(),
+        duckdb::Duckvalue::Int64(v) => v.to_string(),
+        duckdb::Duckvalue::Uint64(v) => v.to_string(),
+        duckdb::Duckvalue::Float64(v) if v.is_finite() => v.to_string(),
+        // Text, Blob, and non-finite floats render as JSON strings.
+        other => json_string(&format_duckvalue(other)),
+    }
+}
+
+fn json_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for c in value.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => {
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// Execute a multi-statement SQL/meta-command script (used by `.read`),
+/// splitting on `;` like the REPL and dispatching each statement. Errors abort
+/// the script.
+fn run_script(conn: &duckdb::Connection, script: &str) -> Result<(), String> {
+    let mut statement = String::new();
+    for line in script.lines() {
+        let trimmed = line.trim();
+        if statement.trim().is_empty() && trimmed.starts_with('.') {
+            dispatch_statement(conn, trimmed)?;
+            continue;
+        }
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !statement.is_empty() {
+            statement.push(' ');
+        }
+        statement.push_str(trimmed);
+        if trimmed.ends_with(';') {
+            dispatch_statement(conn, &statement)?;
+            statement.clear();
+        }
+    }
+    if !statement.trim().is_empty() {
+        dispatch_statement(conn, &statement)?;
+    }
+    Ok(())
 }
 
 fn format_duckvalue(value: duckdb::Duckvalue) -> String {
