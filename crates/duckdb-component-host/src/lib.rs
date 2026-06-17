@@ -3277,6 +3277,56 @@ mod tests {
     }
 
     #[test]
+    fn cli_meta_commands_introspect_schema() -> Result<()> {
+        let tempdir = tempdir().context("failed to create temporary directory")?;
+        let preopens = [(tempdir.path(), ".")];
+        let db = "meta.db";
+
+        // Create schema on disk in one process.
+        let mut writer = CliHarness::new(
+            &[
+                "duckdb-cli",
+                db,
+                "-c",
+                "CREATE TABLE widgets(id INTEGER PRIMARY KEY, label TEXT); \
+                 CREATE INDEX idx_label ON widgets(label); \
+                 CREATE TABLE gadgets(id INTEGER);",
+            ],
+            &preopens,
+        )?;
+        assert!(writer.run()?.is_ok(), "writer failed: {}", writer.stderr()?);
+
+        // .tables lists both tables.
+        let mut tables = CliHarness::new(&["duckdb-cli", db, "-c", ".tables"], &preopens)?;
+        assert!(tables.run()?.is_ok(), "`.tables` failed: {}", tables.stderr()?);
+        let tables_out = tables.stdout()?;
+        assert!(
+            has_cell(&tables_out, "widgets") && has_cell(&tables_out, "gadgets"),
+            "expected both tables in `.tables`, got:\n{tables_out}"
+        );
+
+        // .schema shows the CREATE statement for a specific table.
+        let mut schema = CliHarness::new(&["duckdb-cli", db, "-c", ".schema widgets"], &preopens)?;
+        assert!(schema.run()?.is_ok(), "`.schema` failed: {}", schema.stderr()?);
+        let schema_out = schema.stdout()?;
+        assert!(
+            schema_out.contains("CREATE TABLE widgets"),
+            "expected CREATE TABLE in `.schema widgets`, got:\n{schema_out}"
+        );
+
+        // .indexes lists the index.
+        let mut indexes = CliHarness::new(&["duckdb-cli", db, "-c", ".indexes"], &preopens)?;
+        assert!(indexes.run()?.is_ok(), "`.indexes` failed: {}", indexes.stderr()?);
+        let indexes_out = indexes.stdout()?;
+        assert!(
+            has_cell(&indexes_out, "idx_label"),
+            "expected idx_label in `.indexes`, got:\n{indexes_out}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn cli_loads_component_extension_via_duckdb_loader() -> Result<()> {
         ensure_sample_extension_artifact()?;
 

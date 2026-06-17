@@ -84,7 +84,7 @@ fn run_cli() -> Result<(), String> {
     load_extensions(&connection, &preload_extensions)?;
 
     if let Some(sql) = command {
-        execute_and_print(&connection, &sql)?;
+        dispatch_statement(&connection, &sql)?;
         duckdb::close(connection);
         return Ok(());
     }
@@ -118,6 +118,68 @@ fn execute_and_print(conn: &duckdb::Connection, sql: &str) -> Result<(), String>
     render_result(result)
 }
 
+/// Run one complete input line: a `.`-prefixed meta-command, or SQL. `.quit`/
+/// `.exit` are loop control handled by the REPL and are no-ops here (e.g. via
+/// `-c`).
+fn dispatch_statement(conn: &duckdb::Connection, statement: &str) -> Result<(), String> {
+    let trimmed = statement.trim();
+    if let Some(rest) = trimmed.strip_prefix('.') {
+        return run_meta_command(conn, rest);
+    }
+    execute_and_print(conn, statement)
+}
+
+/// Translate a dot meta-command into the SQL that backs it, mirroring a subset
+/// of the native DuckDB/SQLite shell. The optional argument restricts the
+/// listing to a single table (a `LIKE` pattern for `.tables`).
+fn run_meta_command(conn: &duckdb::Connection, rest: &str) -> Result<(), String> {
+    let mut parts = rest.split_whitespace();
+    let cmd = parts.next().unwrap_or("").to_ascii_lowercase();
+    let arg = parts.next().map(|s| s.trim_end_matches(';').to_string());
+    let user_schema = "table_schema NOT IN ('information_schema', 'pg_catalog')";
+    match cmd.as_str() {
+        "help" => {
+            print_help();
+            Ok(())
+        }
+        // Loop control; handled by the REPL, no-op elsewhere.
+        "quit" | "exit" => Ok(()),
+        "tables" => {
+            let filter = arg
+                .map(|p| format!(" AND table_name LIKE '{}'", escape_sql_literal(&p)))
+                .unwrap_or_default();
+            let sql = format!(
+                "SELECT table_name AS name FROM information_schema.tables \
+                 WHERE {user_schema}{filter} ORDER BY name"
+            );
+            execute_and_print(conn, &sql)
+        }
+        "schema" => {
+            let filter = arg
+                .map(|t| format!(" WHERE table_name = '{}'", escape_sql_literal(&t)))
+                .unwrap_or_default();
+            let sql =
+                format!("SELECT sql FROM duckdb_tables(){filter} ORDER BY table_name");
+            execute_and_print(conn, &sql)
+        }
+        "indexes" | "indices" => {
+            let filter = arg
+                .map(|t| format!(" WHERE table_name = '{}'", escape_sql_literal(&t)))
+                .unwrap_or_default();
+            let sql = format!(
+                "SELECT index_name AS name FROM duckdb_indexes(){filter} ORDER BY name"
+            );
+            execute_and_print(conn, &sql)
+        }
+        other => Err(format!("unknown command: .{other} (try .help)")),
+    }
+}
+
+/// Escape single quotes for safe interpolation into a SQL string literal.
+fn escape_sql_literal(value: &str) -> String {
+    value.replace('\'', "''")
+}
+
 fn run_repl(conn: &duckdb::Connection) -> Result<(), String> {
     let input = stdin::get_stdin();
     let out = stdout::get_stdout();
@@ -127,12 +189,16 @@ fn run_repl(conn: &duckdb::Connection) -> Result<(), String> {
     write_prompt(&out)?;
     while let Some(line) = read_line(&input, &mut buffer)? {
         let trimmed = line.trim();
-        if trimmed.eq_ignore_ascii_case(".quit") || trimmed.eq_ignore_ascii_case(".exit") {
-            break;
-        }
-        if trimmed.eq_ignore_ascii_case(".help") {
-            print_help();
-            statement.clear();
+        // Meta-commands are single-line and only recognized at the start of a
+        // statement (so a `.` inside multi-line SQL is left untouched).
+        if statement.trim().is_empty() && trimmed.starts_with('.') {
+            if trimmed.eq_ignore_ascii_case(".quit") || trimmed.eq_ignore_ascii_case(".exit") {
+                break;
+            }
+            // Errors in the REPL are reported but do not end the session.
+            if let Err(err) = dispatch_statement(conn, trimmed) {
+                emit_error(&err).ok();
+            }
             write_prompt(&out)?;
             continue;
         }
@@ -145,7 +211,9 @@ fn run_repl(conn: &duckdb::Connection) -> Result<(), String> {
         }
 
         if !statement.trim().is_empty() {
-            execute_and_print(conn, &statement)?;
+            if let Err(err) = dispatch_statement(conn, &statement) {
+                emit_error(&err).ok();
+            }
         }
         statement.clear();
         write_prompt(&out)?;
@@ -310,7 +378,15 @@ fn print_help() {
         &out,
         "Options:\n  -c, --command SQL        Execute SQL and exit\n  --load-extension NAME   Preload a component extension before running SQL",
     );
-    let _ = write_line(&out, "Interactive commands: .help, .exit, .quit");
+    let _ = write_line(
+        &out,
+        "Meta-commands:\n  \
+         .tables [LIKE]     List tables (optionally matching a LIKE pattern)\n  \
+         .schema [TABLE]    Show CREATE statements (optionally for one table)\n  \
+         .indexes [TABLE]   List indexes (optionally for one table)\n  \
+         .help              Show this help\n  \
+         .exit, .quit       Leave the shell",
+    );
 }
 
 fn duckerror_to_string(err: duckdb::Duckerror) -> String {
