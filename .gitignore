@@ -13,5 +13,8 @@ Cargo.lock
 # Build outputs (prebuilt static lib, componentized extensions)
 /artifacts/
 
+# CI-only copy of DuckDB headers (populated by the smoke-tests workflow)
+/ci/duckdb-include/
+
 # Logs
 *.log

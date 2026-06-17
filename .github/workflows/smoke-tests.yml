@@ -7,9 +7,16 @@ on:
   pull_request:
   workflow_dispatch:
 
+# The DuckDB wasm archive is the expensive input: it requires building patched
+# DuckDB (pinned in ci/duckdb-commit.txt + ci/duckdb-wasm.patch) with wasi-sdk.
+# It is cached and only rebuilt when the pin, patch, or build inputs change, so
+# steady-state runs just build the Rust components and run the smoke tests.
 env:
+  WASI_TARGET_TRIPLE: wasm32-wasip2
+  WASI_SDK_RELEASE: wasi-sdk-33
   DUCKDB_STATIC_LIB: ${{ github.workspace }}/artifacts/libduckdb-wasi.a
-  DUCKDB_INCLUDE_DIR: ${{ github.workspace }}/external/duckdb/src/include
+  DUCKDB_BUILD_DIR: ${{ github.workspace }}/build/duckdb-wasi
+  DUCKDB_INCLUDE_DIR: ${{ github.workspace }}/ci/duckdb-include
 
 jobs:
   wasi-preview2-smoke:
@@ -18,22 +25,81 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install system build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-wasip2
 
+      - name: Cache cargo-installed tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin
+          key: cargo-tools-${{ runner.os }}-cargo-component-wac-wasmtime-v1
+
       - name: Install component tooling
         run: |
-          cargo install cargo-component --locked
-          cargo install wac-cli --locked
-          cargo install wasmtime-cli --locked
+          set -euo pipefail
+          command -v cargo-component >/dev/null || cargo install cargo-component --locked
+          command -v wac >/dev/null            || cargo install wac-cli --locked
+          command -v wasmtime >/dev/null        || cargo install wasmtime-cli --locked
 
-      - name: Build core and CLI components
+      - name: Cache DuckDB wasm archive
+        id: duckdb-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            artifacts/libduckdb-wasi.a
+            build/duckdb-wasi
+            ci/duckdb-include
+          key: >-
+            duckdb-wasi-${{ runner.os }}-${{ env.WASI_SDK_RELEASE }}-${{ hashFiles(
+              'ci/duckdb-commit.txt',
+              'ci/duckdb-wasm.patch',
+              'scripts/build-libduckdb-wasm.sh',
+              'cmake/toolchains/wasi-sdk.cmake') }}
+
+      - name: Build DuckDB wasm archive (on cache miss)
+        if: steps.duckdb-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+
+          # wasi-sdk (provides the exception-handling sysroot the archive needs)
+          curl -fsSL -o /tmp/wasi-sdk.tar.gz \
+            "https://github.com/WebAssembly/wasi-sdk/releases/download/${WASI_SDK_RELEASE}/${WASI_SDK_RELEASE}.0-x86_64-linux.tar.gz"
+          mkdir -p "$HOME/wasi-sdk"
+          tar xzf /tmp/wasi-sdk.tar.gz -C "$HOME/wasi-sdk" --strip-components=1
+          export WASI_SDK_PREFIX="$HOME/wasi-sdk"
+
+          # DuckDB source at the pinned commit + the wasm port patch
+          DUCKDB_SRC="$HOME/duckdb-src"
+          git init -q "$DUCKDB_SRC"
+          git -C "$DUCKDB_SRC" remote add origin https://github.com/duckdb/duckdb.git
+          git -C "$DUCKDB_SRC" fetch -q --depth 1 origin "$(cat ci/duckdb-commit.txt)"
+          git -C "$DUCKDB_SRC" checkout -q FETCH_HEAD
+          git -C "$DUCKDB_SRC" apply "$GITHUB_WORKSPACE/ci/duckdb-wasm.patch"
+
+          # Build the merged static archive (-> artifacts/libduckdb-wasi.a)
+          export DUCKDB_SOURCE_DIR="$DUCKDB_SRC"
+          export BUILD_DIR="$DUCKDB_BUILD_DIR"
+          export CMAKE_GENERATOR=Ninja
+          export WASM_EXTENSIONS=json
+          scripts/build-libduckdb-wasm.sh
+
+          # The FFI crate links the third_party static libs from the build dir by
+          # path and checks that duckdb.h exists; keep just those .a files (to
+          # shrink the cache) and a copy of the headers.
+          mkdir -p ci/duckdb-include
+          cp -R "$DUCKDB_SRC/src/include/." ci/duckdb-include/
+          find "$DUCKDB_BUILD_DIR" -type f ! -name '*.a' -delete
+
+      - name: Build components (core + standalone CLI + loader stub)
         run: make all
 
       - name: Smoke test (:memory:)
         run: scripts/smoke-cli.sh
 
-      - name: Smoke test (on-disk)
+      - name: Smoke test (on-disk persistence)
         run: ON_DISK_SMOKE=1 scripts/smoke-cli.sh

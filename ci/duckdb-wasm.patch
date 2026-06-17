@@ -1,0 +1,371 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index b85e8c1..b4c1f6e 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -22,7 +22,12 @@ endif()
+ 
+ project(DuckDB)
+ 
+-find_package(Threads REQUIRED)
++if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
++  set(Threads_FOUND TRUE)
++  set(CMAKE_THREAD_LIBS_INIT "")
++else()
++  find_package(Threads REQUIRED)
++endif()
+ 
+ set(DUCKDB_MODULE_BASE_DIR "${CMAKE_CURRENT_LIST_DIR}")
+ 
+@@ -826,6 +831,9 @@ function(link_extension_libraries LIBRARY LINKAGE)
+ endfunction()
+ 
+ function(link_threads LIBRARY LINKAGE)
++    if(CMAKE_SYSTEM_NAME STREQUAL "WASI")
++        return()
++    endif()
+     target_link_libraries(${LIBRARY} ${LINKAGE} Threads::Threads)
+ endfunction()
+ 
+diff --git a/src/common/encryption_key_manager.cpp b/src/common/encryption_key_manager.cpp
+index 482c4a0..2e72170 100644
+--- a/src/common/encryption_key_manager.cpp
++++ b/src/common/encryption_key_manager.cpp
+@@ -6,6 +6,8 @@
+ 
+ #if defined(_WIN32)
+ #include "duckdb/common/windows.hpp"
++#elif defined(__wasi__)
++#define DUCKDB_NO_MLOCK
+ #else
+ #include <sys/mman.h>
+ #undef MAP_TYPE
+@@ -31,7 +33,7 @@ EncryptionKey::~EncryptionKey() {
+ void EncryptionKey::LockEncryptionKey(data_ptr_t key, idx_t key_len) {
+ #if defined(_WIN32)
+ 	VirtualLock(key, key_len);
+-#else
++#elif !defined(DUCKDB_NO_MLOCK)
+ 	mlock(key, key_len);
+ #endif
+ }
+@@ -40,7 +42,7 @@ void EncryptionKey::UnlockEncryptionKey(data_ptr_t key, idx_t key_len) {
+ 	memset(key, 0, key_len);
+ #if defined(_WIN32)
+ 	VirtualUnlock(key, key_len);
+-#else
++#elif !defined(DUCKDB_NO_MLOCK)
+ 	munlock(key, key_len);
+ #endif
+ }
+diff --git a/src/common/file_system.cpp b/src/common/file_system.cpp
+index 926cfb6..0c65ecc 100644
+--- a/src/common/file_system.cpp
++++ b/src/common/file_system.cpp
+@@ -25,7 +25,9 @@
+ #include <string.h>
+ #include <limits.h>
+ #include <sys/stat.h>
++#ifndef __wasi__
+ #include <sys/statvfs.h>
++#endif
+ #include <sys/types.h>
+ #include <unistd.h>
+ 
+@@ -110,11 +112,15 @@ bool PathMatched(const string &path, const string &sub_path) {
+ #ifndef _WIN32
+ 
+ string FileSystem::GetEnvVariable(const string &name) {
++#if defined(__wasm__) || defined(__wasm32__) || defined(__wasi__) || defined(__EMSCRIPTEN__)
++	return string();
++#else
+ 	const char *env = getenv(name.c_str());
+ 	if (!env) {
+ 		return string();
+ 	}
+ 	return env;
++#endif
+ }
+ 
+ bool FileSystem::IsPathAbsolute(const string &path) {
+@@ -149,6 +155,9 @@ optional_idx FileSystem::GetAvailableMemory() {
+ }
+ 
+ optional_idx FileSystem::GetAvailableDiskSpace(const string &path) {
++#ifdef __wasi__
++	return optional_idx();
++#else
+ 	struct statvfs vfs;
+ 
+ 	auto ret = statvfs(path.c_str(), &vfs);
+@@ -164,6 +173,7 @@ optional_idx FileSystem::GetAvailableDiskSpace(const string &path) {
+ 		return optional_idx();
+ 	}
+ 	return available_disk_space;
++#endif
+ }
+ 
+ string FileSystem::GetWorkingDirectory() {
+diff --git a/src/common/local_file_system.cpp b/src/common/local_file_system.cpp
+index 8733e01..a54fb9c 100644
+--- a/src/common/local_file_system.cpp
++++ b/src/common/local_file_system.cpp
+@@ -185,8 +185,10 @@ static FileType GetFileTypeInternal(int fd) { // LCOV_EXCL_START
+ 		return FileType::FILE_TYPE_LINK;
+ 	case S_IFREG:
+ 		return FileType::FILE_TYPE_REGULAR;
++#if !defined(__wasi__) || (defined(S_IFSOCK) && (!defined(S_IFIFO) || S_IFSOCK != S_IFIFO))
+ 	case S_IFSOCK:
+ 		return FileType::FILE_TYPE_SOCKET;
++#endif
+ 	default:
+ 		return FileType::FILE_TYPE_INVALID;
+ 	}
+@@ -383,6 +385,9 @@ unique_ptr<FileHandle> LocalFileSystem::OpenFile(const string &path_p, FileOpenF
+ #endif
+ 
+ 	if (flags.Lock() != FileLockType::NO_LOCK) {
++#ifdef __wasi__
++		// WASI does not support POSIX file locks; proceed without locking.
++#else
+ 		// set lock on file
+ 		// but only if it is not an input/output stream
+ 		auto file_type = GetFileTypeInternal(fd);
+@@ -440,6 +445,7 @@ unique_ptr<FileHandle> LocalFileSystem::OpenFile(const string &path_p, FileOpenF
+ 				                  path, extended_error);
+ 			}
+ 		}
++#endif
+ 	}
+ 
+ 	auto file_handle = make_uniq<UnixFileHandle>(*this, path, fd, flags);
+diff --git a/src/common/printer.cpp b/src/common/printer.cpp
+index e07d3f8..a27cfcd 100644
+--- a/src/common/printer.cpp
++++ b/src/common/printer.cpp
+@@ -73,11 +73,15 @@ idx_t Printer::TerminalWidth() {
+ 	GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+ 	rows = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+ 	return rows;
++#else
++#ifdef __wasi__
++	return 80;
+ #else
+ 	struct winsize w;
+ 	ioctl(0, TIOCGWINSZ, &w);
+ 	return w.ws_col;
+ #endif
++#endif
+ #else
+ 	throw InternalException("TerminalWidth called while printing is disabled");
+ #endif
+diff --git a/src/include/duckdb/common/dl.hpp b/src/include/duckdb/common/dl.hpp
+index 0fe730b..b5044b9 100644
+--- a/src/include/duckdb/common/dl.hpp
++++ b/src/include/duckdb/common/dl.hpp
+@@ -12,7 +12,9 @@
+ #include "duckdb/common/local_file_system.hpp"
+ #include "duckdb/common/windows_util.hpp"
+ 
+-#ifndef _WIN32
++#if defined(__wasi__)
++#define DUCKDB_NO_DYNAMIC_LOADING
++#elif !defined(_WIN32)
+ #include <dlfcn.h>
+ #else
+ #define RTLD_NOW   0
+@@ -21,7 +23,7 @@
+ 
+ namespace duckdb {
+ 
+-#ifdef _WIN32
++#if defined(_WIN32)
+ 
+ inline void *dlopen(const char *file, int mode) {
+ 	if (!file) {
+@@ -45,6 +47,23 @@ inline void dlclose(void *handle) {
+ 	FreeLibrary((HINSTANCE)handle);
+ }
+ 
++#elif defined(DUCKDB_NO_DYNAMIC_LOADING)
++
++inline void *dlopen(const char *, int) {
++	return nullptr;
++}
++
++inline void *dlsym(void *, const char *) {
++	return nullptr;
++}
++
++inline std::string GetDLError(void) {
++	return "Dynamic loading is not supported on this platform";
++}
++
++inline void dlclose(void *) {
++}
++
+ #else
+ 
+ inline std::string GetDLError(void) {
+diff --git a/src/main/CMakeLists.txt b/src/main/CMakeLists.txt
+index 3095587..9ee12c4 100644
+--- a/src/main/CMakeLists.txt
++++ b/src/main/CMakeLists.txt
+@@ -2,7 +2,9 @@ if(NOT CLANG_TIDY)
+   add_subdirectory(capi)
+ endif()
+ add_subdirectory(extension)
+-add_subdirectory(http)
++if(NOT DUCKDB_SKIP_HTTP)
++  add_subdirectory(http)
++endif()
+ add_subdirectory(relation)
+ add_subdirectory(secret)
+ add_subdirectory(settings)
+diff --git a/src/main/database.cpp b/src/main/database.cpp
+index 3d644d4..a3c0a9b 100644
+--- a/src/main/database.cpp
++++ b/src/main/database.cpp
+@@ -50,7 +50,11 @@ DBConfig::DBConfig() {
+ 	index_types = make_uniq<IndexTypeSet>();
+ 	error_manager = make_uniq<ErrorManager>();
+ 	secret_manager = make_uniq<SecretManager>();
++#ifndef DUCKDB_SKIP_HTTP
++	// The HTTP subsystem (src/main/http) is excluded from the WASI build, so its
++	// HTTPUtil vtable is unavailable; leave http_util null when it is skipped.
+ 	http_util = make_shared_ptr<HTTPUtil>();
++#endif
+ 	storage_extensions["__open_file__"] = OpenFileStorageExtension::Create();
+ }
+ 
+diff --git a/src/main/extension/extension_helper.cpp b/src/main/extension/extension_helper.cpp
+index 74add53..84a3229 100644
+--- a/src/main/extension/extension_helper.cpp
++++ b/src/main/extension/extension_helper.cpp
+@@ -94,6 +94,8 @@
+ 
+ #endif
+ 
++extern "C" bool duckdb_component_load_extension(const char *name);
++
+ namespace duckdb {
+ 
+ //===--------------------------------------------------------------------===//
+@@ -431,6 +433,11 @@ ExtensionLoadResult ExtensionHelper::LoadExtension(DuckDB &db, const std::string
+ 
+ ExtensionLoadResult ExtensionHelper::LoadExtensionInternal(DuckDB &db, const std::string &extension,
+                                                            bool initial_load) {
++#if !defined(DUCKDB_DISABLE_EXTENSION_LOAD)
++	if (!initial_load && duckdb_component_load_extension(extension.c_str())) {
++		return ExtensionLoadResult::LOADED_EXTENSION;
++	}
++#endif
+ #ifdef DUCKDB_EXTENSIONS_TEST_WITH_LOADABLE
+ 	// Note: weird comma's are on purpose to do easy string contains on a list of extension names
+ 	if (!initial_load && StringUtil::Contains(DUCKDB_EXTENSIONS_TEST_WITH_LOADABLE, "," + extension + ",")) {
+diff --git a/src/main/extension/extension_load.cpp b/src/main/extension/extension_load.cpp
+index 96e559e..8850f96 100644
+--- a/src/main/extension/extension_load.cpp
++++ b/src/main/extension/extension_load.cpp
+@@ -11,6 +11,8 @@
+ #include "duckdb/main/settings.hpp"
+ #include "mbedtls_wrapper.hpp"
+ 
++extern "C" bool duckdb_component_load_extension(const char *name);
++
+ #ifndef DUCKDB_NO_THREADS
+ #include <thread>
+ #endif // DUCKDB_NO_THREADS
+@@ -517,6 +519,9 @@ string ExtensionHelper::GetExtensionName(const string &original_name) {
+ }
+ 
+ void ExtensionHelper::LoadExternalExtension(DatabaseInstance &db, FileSystem &fs, const string &extension) {
++	if (duckdb_component_load_extension(extension.c_str())) {
++		return;
++	}
+ 	auto &manager = ExtensionManager::Get(db);
+ 	auto info = manager.BeginLoad(extension);
+ 	if (!info) {
+diff --git a/src/main/secret/secret_manager.cpp b/src/main/secret/secret_manager.cpp
+index 8788b59..8b11c9a 100644
+--- a/src/main/secret/secret_manager.cpp
++++ b/src/main/secret/secret_manager.cpp
+@@ -43,6 +43,10 @@ void SecretManager::Initialize(DatabaseInstance &db) {
+ 	lock_guard<mutex> lck(manager_lock);
+ 
+ 	// Construct default path
++#if defined(__wasm__) || defined(__wasm32__) || defined(__wasi__) || defined(__EMSCRIPTEN__)
++	config.default_secret_path.clear();
++	config.secret_path.clear();
++#else
+ 	LocalFileSystem fs;
+ 	config.default_secret_path = fs.GetHomeDirectory();
+ 	vector<string> path_components = {".duckdb", "stored_secrets"};
+@@ -50,6 +54,7 @@ void SecretManager::Initialize(DatabaseInstance &db) {
+ 		config.default_secret_path = fs.JoinPath(config.default_secret_path, path_ele);
+ 	}
+ 	config.secret_path = config.default_secret_path;
++#endif
+ 
+ 	// Set the defaults for persistent storage
+ 	config.default_persistent_storage = LOCAL_FILE_STORAGE_NAME;
+diff --git a/src/parallel/task_scheduler.cpp b/src/parallel/task_scheduler.cpp
+index 9d8f94b..094b7e6 100644
+--- a/src/parallel/task_scheduler.cpp
++++ b/src/parallel/task_scheduler.cpp
+@@ -463,6 +463,8 @@ idx_t TaskScheduler::GetEstimatedCPUId() {
+ 	// this code comes from jemalloc
+ #if defined(_WIN32)
+ 	return (idx_t)GetCurrentProcessorNumber();
++#elif defined(__wasi__)
++	return 0;
+ #elif defined(_GNU_SOURCE)
+ 	auto cpu = sched_getcpu();
+ 	if (cpu < 0) {
+diff --git a/third_party/fsst/CMakeLists.txt b/third_party/fsst/CMakeLists.txt
+index 53ca14d..def484d 100644
+--- a/third_party/fsst/CMakeLists.txt
++++ b/third_party/fsst/CMakeLists.txt
+@@ -2,7 +2,9 @@ if(POLICY CMP0063)
+     cmake_policy(SET CMP0063 NEW)
+ endif()
+ 
+-find_package(Threads REQUIRED)
++if(NOT CMAKE_SYSTEM_NAME STREQUAL "WASI")
++    find_package(Threads REQUIRED)
++endif()
+ 
+ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+ 
+@@ -16,4 +18,4 @@ install(TARGETS duckdb_fsst
+         LIBRARY DESTINATION "${INSTALL_LIB_DIR}"
+         ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")
+ 
+-disable_target_warnings(duckdb_fsst)
+\ No newline at end of file
++disable_target_warnings(duckdb_fsst)
+diff --git a/third_party/thrift/thrift/Thrift.h b/third_party/thrift/thrift/Thrift.h
+index e9315f7..f6d45cd 100755
+--- a/third_party/thrift/thrift/Thrift.h
++++ b/third_party/thrift/thrift/Thrift.h
+@@ -64,12 +64,20 @@ public:
+ 
+   int operator++() { return ++ii_; }
+ 
+-  bool operator!=(const TEnumIterator& end) {
++  bool operator!=(const TEnumIterator& end) const {
+     THRIFT_UNUSED_VARIABLE(end);
+     assert(end.n_ == -1);
+     return (ii_ != n_);
+   }
+ 
++  // Newer libc++ requires iterators to be equality-comparable (e.g. map range
++  // insertion uses `__first == __last`); thrift only shipped operator!=.
++  bool operator==(const TEnumIterator& end) const {
++    THRIFT_UNUSED_VARIABLE(end);
++    assert(end.n_ == -1);
++    return (ii_ == n_);
++  }
++
+   std::pair<int, const char*> operator*() const { return std::make_pair(enums_[ii_], names_[ii_]); }
+ 
+ private:
