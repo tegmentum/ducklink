@@ -26,6 +26,17 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
+# act connects to /var/run/docker.sock by default, which may symlink to a
+# stopped engine (e.g. Docker Desktop) even when `docker` itself uses a
+# different active context (colima, etc.). Point act at the active context's
+# endpoint so it talks to the same daemon the docker CLI does.
+if [[ -z "${DOCKER_HOST:-}" ]]; then
+  ctx_sock="$(docker context inspect -f '{{.Endpoints.docker.Host}}' 2>/dev/null || true)"
+  if [[ -n "$ctx_sock" ]]; then
+    export DOCKER_HOST="$ctx_sock"
+  fi
+fi
+
 # --list short-circuits to job listing (validates the workflow parses).
 for arg in "$@"; do
   if [[ "$arg" == "--list" || "$arg" == "-l" ]]; then
