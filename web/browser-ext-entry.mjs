@@ -25,16 +25,33 @@ async function main() {
     const db = await instantiateCore(coreBytes, host.coreImports())
     const conn = db.open(undefined)
     db.execute(conn, 'LOAD sample_extension')
-    const scalar = db.execute(conn, 'SELECT sample_plus_one(41) AS scalar')
-    const macro = db.execute(conn, 'SELECT sample_add_two(40) AS macro')
-    const cast = db.execute(conn, "SELECT cast('id-7' AS sample_id) AS cast")
+
+    // Exercise every capability the sample extension registers — scalar / table
+    // / aggregate / cast dispatch back to the loaded extension instance, while
+    // macro and logical-type run as core SQL — all in the browser.
+    const cases = [
+      ['scalar      sample_plus_one(41)', 'SELECT sample_plus_one(41) AS v'],
+      ['macro       sample_add_two(40)', 'SELECT sample_add_two(40) AS v'],
+      ['cast        id-7 -> sample_id', "SELECT cast('id-7' AS sample_id) AS v"],
+      ['logical     7::sample_id', 'SELECT 7::sample_id AS v'],
+      ['table       sample_emit_sequence(4)', 'SELECT * FROM sample_emit_sequence(4)'],
+      ['aggregate   sample_sum(1..4)', 'SELECT sample_sum(v) AS v FROM (VALUES (1),(2),(3),(4)) AS t(v)'],
+      ["replacement FROM 'hello.sample'", "SELECT * FROM 'hello.sample'"],
+    ]
+    let failed = 0
+    const lines = cases.map(([label, sql]) => {
+      try {
+        const result = db.execute(conn, sql)
+        return label.padEnd(38) + ' = ' + JSON.stringify(result.rows)
+      } catch (e) {
+        failed++
+        return label.padEnd(38) + ' = ERROR ' + JSON.stringify((e && e.payload) || String(e))
+      }
+    })
     db.close(conn)
 
-    out.textContent =
-      'scalar sample_plus_one(41) = ' + JSON.stringify(scalar.rows) + '\n' +
-      'macro  sample_add_two(40)  = ' + JSON.stringify(macro.rows) + '\n' +
-      'cast   id-7 -> sample_id   = ' + JSON.stringify(cast.rows)
-    out.dataset.status = 'ok'
+    out.textContent = lines.join('\n')
+    out.dataset.status = failed === 0 ? 'ok' : 'error'
   } catch (e) {
     out.textContent = 'ERROR: ' + (e && (e.stack || e.message) || e)
     out.dataset.status = 'error'

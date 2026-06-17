@@ -65,10 +65,18 @@ drives, in the browser:
 
 ```
 === RESULT status: ok ===
-scalar sample_plus_one(41) = [[{"tag":"text","val":"42"}]]
-macro  sample_add_two(40)  = [[{"tag":"text","val":"42"}]]
-cast   id-7 -> sample_id   = [[{"tag":"text","val":"7"}]]
+scalar      sample_plus_one(41)        = [[{"tag":"text","val":"42"}]]
+macro       sample_add_two(40)         = [[{"tag":"text","val":"42"}]]
+cast        id-7 -> sample_id          = [[{"tag":"text","val":"7"}]]
+logical     7::sample_id               = [[{"tag":"text","val":"7"}]]
+table       sample_emit_sequence(4)    = 0,1,2,3
+aggregate   sample_sum(1..4)           = [[{"tag":"text","val":"10"}]]
+replacement FROM 'hello.sample'        = [[{"tag":"text","val":"hello.sample"}]]
 ```
+
+That is every capability the sample extension registers — scalar / table /
+aggregate / cast dispatch back to the loaded extension instance, while macro and
+logical-type run as core SQL — all in the browser.
 
 `extension-host.mjs` implements the host surface in JS:
 

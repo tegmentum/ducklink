@@ -21,6 +21,11 @@ export function createExtensionHost() {
   function buildExtensionImports(pending) {
     let nextId = 1
     const id = () => nextId++
+    // Map each table-function registration handle to its name, so a replacement
+    // scan can resolve the handle it was given back to a function name. Handles
+    // are drawn from the shared id() counter (scalars/aggregates/etc. consume it
+    // too), so a name lookup is required rather than index arithmetic.
+    const tableHandles = new Map()
 
     class ScalarCallback { constructor(h) { this.handle = h } }
     class TableCallback { constructor(h) { this.handle = h } }
@@ -36,8 +41,10 @@ export function createExtensionHost() {
     }
     class TableRegistry {
       register(name, args, columns, cb, options) {
+        const handle = id()
         pending.tables.push({ name, arguments: args, columns, callbackHandle: cb.handle, options })
-        return id()
+        tableHandles.set(handle, name)
+        return handle
       }
     }
     class AggregateRegistry {
@@ -89,12 +96,11 @@ export function createExtensionHost() {
 
     const files = {
       registerReplacementScan(scan) {
-        // scan.tableFunction is the handle the table register() returned; map it
-        // to the table function name captured above.
-        const fn = pending.tables[scan.tableFunction - pending._tableHandleBase]
+        // scan.tableFunction is the handle a TableRegistry.register() returned;
+        // resolve it to the function name the host needs.
         pending.replacementScans.push({
           extensions: scan.extensions,
-          functionName: fn ? fn.name : '',
+          functionName: tableHandles.get(scan.tableFunction) ?? '',
         })
         return id()
       },
@@ -103,9 +109,6 @@ export function createExtensionHost() {
       },
     }
 
-    // Table register() returns ids starting at the running counter; remember the
-    // base so register-replacement-scan can resolve handle -> table index.
-    pending._tableHandleBase = nextId
     return {
       'duckdb:extension/runtime': runtime,
       'duckdb:extension/catalog': catalog,
