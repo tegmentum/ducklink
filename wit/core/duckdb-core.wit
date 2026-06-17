@@ -128,12 +128,21 @@ interface extension-loader-hooks {
         definition-sql: string,
     }
 
+    /// Pending replacement-scan registration captured during extension load.
+    /// Maps file extensions to a previously registered table function (resolved
+    /// to its name by the host) so `FROM 'file.ext'` rewrites to that function.
+    record replacement-scan-registration {
+        extensions: list<string>,
+        function-name: string,
+    }
+
     /// Bundled response describing all pending registrations.
     record pending-registrations {
         scalars: list<scalar-registration>,
         tables: list<table-registration>,
         aggregates: list<aggregate-registration>,
         macros: list<macro-registration>,
+        replacement-scans: list<replacement-scan-registration>,
     }
 
     /// Returns the pending registration requests the host captured while the extension was loading.

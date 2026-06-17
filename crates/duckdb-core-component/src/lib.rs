@@ -61,12 +61,28 @@ static TABLE_FUNCTION_DEFINITIONS: OnceLock<Mutex<Vec<Arc<TableFunctionDefinitio
 static NEXT_AGGREGATE_FUNCTION_ID: AtomicU32 = AtomicU32::new(1);
 static AGGREGATE_FUNCTION_DEFINITIONS: OnceLock<Mutex<Vec<Arc<AggregateFunctionDefinition>>>> =
     OnceLock::new();
+/// Registered replacement scans (file extension -> table function name).
+static REPLACEMENT_SCANS: OnceLock<Mutex<Vec<ReplacementScanSpec>>> = OnceLock::new();
+/// Databases that already have the global replacement-scan callback installed.
+static REPLACEMENT_SCAN_DATABASES: OnceLock<Mutex<Vec<DatabaseHandle>>> = OnceLock::new();
 
 #[derive(Clone, Copy)]
 struct ConnectionHandle(duckdb::duckdb_connection, duckdb::duckdb_database);
 
 unsafe impl Send for ConnectionHandle {}
 unsafe impl Sync for ConnectionHandle {}
+
+#[derive(Clone, Copy)]
+struct DatabaseHandle(duckdb::duckdb_database);
+
+unsafe impl Send for DatabaseHandle {}
+unsafe impl Sync for DatabaseHandle {}
+
+#[derive(Clone)]
+struct ReplacementScanSpec {
+    extensions: Vec<String>,
+    function_name: String,
+}
 
 #[no_mangle]
 pub extern "C" fn _Znwm(size: usize) -> *mut u8 {
@@ -2458,6 +2474,11 @@ fn process_pending_registrations(
             clog!("[duckdb-core] macro registration failed (continuing): {err:?}");
         }
     }
+    for entry in pending.replacement_scans.into_iter().collect::<Vec<_>>() {
+        if let Err(err) = register_pending_replacement_scan(entry) {
+            clog!("[duckdb-core] replacement-scan registration failed (continuing): {err:?}");
+        }
+    }
     Ok(())
 }
 
@@ -2683,6 +2704,97 @@ fn quote_ident(ident: &str) -> String {
     }
     out.push('"');
     out
+}
+
+fn replacement_scans() -> &'static Mutex<Vec<ReplacementScanSpec>> {
+    REPLACEMENT_SCANS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn replacement_scan_databases() -> &'static Mutex<Vec<DatabaseHandle>> {
+    REPLACEMENT_SCAN_DATABASES.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn register_pending_replacement_scan(
+    entry: extension_loader_hooks::ReplacementScanRegistration,
+) -> Result<(), Duckerror> {
+    let extensions: Vec<String> = entry.extensions.into_iter().collect();
+    clog!(
+        "[duckdb-core] registering replacement scan {:?} -> '{}'",
+        extensions,
+        entry.function_name
+    );
+    {
+        let mut guard = replacement_scans()
+            .lock()
+            .expect("replacement scan registry poisoned");
+        guard.push(ReplacementScanSpec {
+            extensions,
+            function_name: entry.function_name,
+        });
+    }
+    // Install one global replacement-scan callback per database (idempotent).
+    for database in distinct_active_databases() {
+        unsafe { ensure_replacement_scan_callback(database) };
+    }
+    Ok(())
+}
+
+unsafe fn ensure_replacement_scan_callback(database: duckdb::duckdb_database) {
+    let mut installed = replacement_scan_databases()
+        .lock()
+        .expect("replacement scan databases poisoned");
+    if installed.iter().any(|d| d.0 == database) {
+        return;
+    }
+    duckdb::duckdb_add_replacement_scan(
+        database,
+        Some(replacement_scan_callback),
+        ptr::null_mut(),
+        None,
+    );
+    installed.push(DatabaseHandle(database));
+}
+
+/// Called by DuckDB when a query references an unknown table. If the name
+/// matches a registered file extension, rewrite it to the registered table
+/// function, passing the original name as the function's argument.
+unsafe extern "C" fn replacement_scan_callback(
+    info: duckdb::duckdb_replacement_scan_info,
+    table_name: *const c_char,
+    _data: *mut c_void,
+) {
+    if table_name.is_null() {
+        return;
+    }
+    let name = match CStr::from_ptr(table_name).to_str() {
+        Ok(name) => name,
+        Err(_) => return,
+    };
+    let function_name = {
+        let guard = match replacement_scans().lock() {
+            Ok(guard) => guard,
+            Err(_) => return,
+        };
+        guard.iter().find_map(|spec| {
+            let matches = spec
+                .extensions
+                .iter()
+                .any(|ext| name == ext || name.ends_with(&format!(".{ext}")));
+            matches.then(|| spec.function_name.clone())
+        })
+    };
+    let function_name = match function_name {
+        Some(name) => name,
+        None => return,
+    };
+    let func_c = match CString::new(function_name) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    duckdb::duckdb_replacement_scan_set_function_name(info, func_c.as_ptr());
+    let mut value = duckdb::duckdb_create_varchar(table_name);
+    duckdb::duckdb_replacement_scan_add_parameter(info, value);
+    duckdb::duckdb_destroy_value(&mut value);
 }
 
 unsafe fn execute_on_transient_connection(

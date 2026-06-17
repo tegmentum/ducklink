@@ -37,6 +37,14 @@ pub struct duckdb_blob {
 }
 
 pub type duckdb_delete_callback_t = Option<unsafe extern "C" fn(*mut c_void)>;
+pub type duckdb_replacement_scan_info = *mut c_void;
+pub type duckdb_replacement_callback_t = Option<
+    unsafe extern "C" fn(
+        info: duckdb_replacement_scan_info,
+        table_name: *const c_char,
+        data: *mut c_void,
+    ),
+>;
 pub type duckdb_copy_callback_t =
     Option<unsafe extern "C" fn(*mut c_void, *mut *mut c_void) -> duckdb_state>;
 pub type duckdb_scalar_function_t = Option<
@@ -381,4 +389,20 @@ extern "C" {
     pub fn duckdb_string_is_inlined(string: duckdb_string_t) -> bool;
     pub fn duckdb_string_t_length(string: duckdb_string_t) -> u32;
     pub fn duckdb_string_t_data(string: *mut duckdb_string_t) -> *const c_char;
+
+    pub fn duckdb_create_varchar(text: *const c_char) -> duckdb_value;
+    pub fn duckdb_add_replacement_scan(
+        db: duckdb_database,
+        replacement: duckdb_replacement_callback_t,
+        extra_data: *mut c_void,
+        delete_callback: duckdb_delete_callback_t,
+    );
+    pub fn duckdb_replacement_scan_set_function_name(
+        info: duckdb_replacement_scan_info,
+        function_name: *const c_char,
+    );
+    pub fn duckdb_replacement_scan_add_parameter(
+        info: duckdb_replacement_scan_info,
+        parameter: duckdb_value,
+    );
 }

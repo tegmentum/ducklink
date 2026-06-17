@@ -12,7 +12,7 @@ wit_bindgen::generate!({
     world: "duckdb:extension/duckdb-extension",
 });
 
-use duckdb::extension::{catalog, runtime, types};
+use duckdb::extension::{catalog, files, runtime, types};
 use exports::duckdb::extension::{callback_dispatch, guest};
 
 struct SampleExtension;
@@ -23,6 +23,7 @@ impl guest::Guest for SampleExtension {
         register_table_function()?;
         register_aggregate_function()?;
         register_macro_definition()?;
+        register_replacement_scan()?;
         Ok(types::Loadresult {
             name: "sample_extension".into(),
             version: Some(env!("CARGO_PKG_VERSION").into()),
@@ -99,6 +100,20 @@ impl callback_dispatch::Guest for SampleExtension {
                 }
                 Ok(rows)
             }
+            TableHandler::ReadPath => {
+                // Reached via the replacement scan: `FROM 'file.sample'` rewrites
+                // to `sample_read_path('file.sample')`. Echo the path back as one
+                // row (a real extension would open and read the file here).
+                let path = match args.as_slice() {
+                    [types::Duckvalue::Text(path)] => path.clone(),
+                    _ => {
+                        return Err(types::Duckerror::Invalidargument(
+                            "sample_read_path expects a single VARCHAR argument".into(),
+                        ))
+                    }
+                };
+                Ok(vec![vec![types::Duckvalue::Text(path)]])
+            }
         }
     }
 
@@ -157,6 +172,51 @@ fn register_macro_definition() -> Result<(), types::Duckerror> {
         definition_sql: "x + 2".into(),
     })
     .map_err(types::Duckerror::Internal)
+}
+
+/// Registers a `sample_read_path(VARCHAR)` table function and a replacement scan
+/// so that `SELECT * FROM 'anything.sample'` rewrites to
+/// `sample_read_path('anything.sample')`.
+fn register_replacement_scan() -> Result<(), types::Duckerror> {
+    let capability = runtime::get_capability(types::Capabilitykind::Table)
+        .ok_or_else(|| types::Duckerror::Internal("host did not expose table capability".into()))?;
+    let registry = match capability {
+        runtime::Capability::Table(registry) => registry,
+        _ => {
+            return Err(types::Duckerror::Internal(
+                "table capability returned unexpected variant".into(),
+            ))
+        }
+    };
+
+    let handle = NEXT_TABLE_HANDLE.fetch_add(1, Ordering::Relaxed);
+    table_handlers()
+        .lock()
+        .expect("table handler mutex poisoned")
+        .insert(handle, TableHandler::ReadPath);
+
+    let callback = runtime::TableCallback::new(handle);
+    let args = vec![runtime::Funcarg {
+        name: Some("path".into()),
+        logical: types::Logicaltype::Text,
+    }];
+    let columns = vec![types::Columndef {
+        name: "path".into(),
+        logical: types::Logicaltype::Text,
+    }];
+    let opts = runtime::Extopts {
+        description: Some("Returns the path it was given (replacement-scan demo)".into()),
+        tags: vec!["sample".into()],
+    };
+    let table_function = registry.register("sample_read_path", &args, &columns, callback, Some(&opts))?;
+
+    files::register_replacement_scan(&files::ReplacementScan {
+        extensions: vec!["sample".into()],
+        table_function,
+        mode: files::DetectionMode::ExtensionOnly,
+    })
+    .map_err(types::Duckerror::Internal)?;
+    Ok(())
 }
 
 fn register_scalar_function() -> Result<(), types::Duckerror> {
@@ -293,6 +353,7 @@ enum ScalarHandler {
 #[derive(Clone, Copy)]
 enum TableHandler {
     EmitSequence,
+    ReadPath,
 }
 
 #[derive(Clone, Copy)]

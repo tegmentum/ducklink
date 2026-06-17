@@ -732,6 +732,10 @@ struct ExtensionStoreState {
     pending_tables: Vec<PendingTable>,
     pending_aggregates: Vec<PendingAggregate>,
     pending_macros: Vec<PendingMacro>,
+    pending_replacement_scans: Vec<PendingReplacementScan>,
+    /// Maps the handle returned from `table-registry.register` to the table
+    /// function name, so `files.register-replacement-scan` can resolve it.
+    table_handle_names: HashMap<u32, String>,
     callback_registry: Arc<Mutex<CallbackRegistry>>,
     extension_name: String,
 }
@@ -786,12 +790,19 @@ struct PendingMacro {
     definition_sql: String,
 }
 
+struct PendingReplacementScan {
+    extension: String,
+    extensions: Vec<String>,
+    function_name: String,
+}
+
 #[derive(Default)]
 struct PendingRegistrationsData {
     scalars: Vec<PendingScalar>,
     tables: Vec<PendingTable>,
     aggregates: Vec<PendingAggregate>,
     macros: Vec<PendingMacro>,
+    replacement_scans: Vec<PendingReplacementScan>,
 }
 
 impl PendingRegistrationsData {
@@ -800,6 +811,7 @@ impl PendingRegistrationsData {
         self.tables.append(&mut other.tables);
         self.aggregates.append(&mut other.aggregates);
         self.macros.append(&mut other.macros);
+        self.replacement_scans.append(&mut other.replacement_scans);
     }
 }
 
@@ -841,6 +853,8 @@ impl ExtensionStoreState {
             pending_tables: Vec::new(),
             pending_aggregates: Vec::new(),
             pending_macros: Vec::new(),
+            pending_replacement_scans: Vec::new(),
+            table_handle_names: HashMap::new(),
             callback_registry,
             extension_name,
         }
@@ -898,11 +912,13 @@ impl ExtensionStoreState {
                 .flat_map(|(_, registry)| registry.entries),
         );
         let macros = std::mem::take(&mut self.pending_macros);
+        let replacement_scans = std::mem::take(&mut self.pending_replacement_scans);
         let pending = PendingRegistrationsData {
             scalars,
             tables,
             aggregates,
             macros,
+            replacement_scans,
         };
         let scalar_names = summarize_registration_names(&pending.scalars, |entry| entry.name.as_str());
         let table_names =
@@ -1335,6 +1351,7 @@ impl extension_runtime::HostTableRegistry for ExtensionStoreState {
             converted_options.as_ref(),
         );
 
+        let table_name = name.clone();
         registry.entries.push(PendingTable {
             extension: self.extension_name.clone(),
             name,
@@ -1344,7 +1361,12 @@ impl extension_runtime::HostTableRegistry for ExtensionStoreState {
             options: converted_options,
         });
 
-        Ok(self.alloc_resource_id())
+        // The returned handle is what the extension later passes to
+        // `files.register-replacement-scan`; remember which table function it
+        // names so we can resolve it.
+        let handle = self.alloc_resource_id();
+        self.table_handle_names.insert(handle, table_name);
+        Ok(handle)
     }
 
     fn drop(
@@ -1667,11 +1689,27 @@ impl extension_files::Host for ExtensionStoreState {
         &mut self,
         scan: extension_files::ReplacementScan,
     ) -> Result<u32, String> {
+        let function_name = self
+            .table_handle_names
+            .get(&scan.table_function)
+            .cloned()
+            .ok_or_else(|| {
+                format!(
+                    "replacement scan references unknown table-function handle {}",
+                    scan.table_function
+                )
+            })?;
         let id = self.alloc_resource_id();
+        let extensions: Vec<String> = scan.extensions.into_iter().collect();
         eprintln!(
-            "[extension-manager] files register-replacement-scan exts={:?} ({:?}) table-fn={} for '{}' -> id {id} (captured; DuckDB wiring pending)",
-            scan.extensions, scan.mode, scan.table_function, self.extension_name
+            "[extension-manager] files register-replacement-scan exts={:?} ({:?}) -> '{}' for '{}' (id {id})",
+            extensions, scan.mode, function_name, self.extension_name
         );
+        self.pending_replacement_scans.push(PendingReplacementScan {
+            extension: self.extension_name.clone(),
+            extensions,
+            function_name,
+        });
         Ok(id)
     }
 
@@ -1994,6 +2032,12 @@ fn convert_pending_registrations(
             .map(convert_pending_macro_registration)
             .collect::<Vec<_>>()
             .into(),
+        replacement_scans: data
+            .replacement_scans
+            .into_iter()
+            .map(convert_pending_replacement_scan_registration)
+            .collect::<Vec<_>>()
+            .into(),
     }
 }
 
@@ -2005,6 +2049,15 @@ fn convert_pending_macro_registration(
         name: entry.name,
         parameters: entry.parameters.into(),
         definition_sql: entry.definition_sql,
+    }
+}
+
+fn convert_pending_replacement_scan_registration(
+    entry: PendingReplacementScan,
+) -> core_extension_hooks::ReplacementScanRegistration {
+    core_extension_hooks::ReplacementScanRegistration {
+        extensions: entry.extensions.into(),
+        function_name: entry.function_name,
     }
 }
 
@@ -3196,6 +3249,37 @@ stderr:
         assert!(
             has_cell(&stdout, "answer") && has_cell(&stdout, "42"),
             "expected macro output, got:\n{}",
+            stdout
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn cli_executes_replacement_scan() -> Result<()> {
+        ensure_sample_extension_artifact()?;
+
+        let args = [
+            "duckdb-cli",
+            ":memory:",
+            "--load-extension",
+            "sample_extension",
+            "-c",
+            "select * from 'hello.sample';",
+        ];
+
+        let mut harness = CliHarness::new(&args, &[])?;
+        let status = harness.run()?;
+        assert!(
+            status.is_ok(),
+            "CLI reported failure running replacement scan: {:?}",
+            harness.stderr().ok()
+        );
+
+        let stdout = harness.stdout()?;
+        assert!(
+            has_cell(&stdout, "hello.sample"),
+            "expected replacement-scan output, got:\n{}",
             stdout
         );
 

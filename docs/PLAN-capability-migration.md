@@ -31,8 +31,8 @@ What the DuckDB C API actually supports (surveyed against `external/duckdb`):
 
 | Registration   | C API path | Status |
 |----------------|-----------|--------|
-| macro          | none — `CREATE MACRO` SQL only | pipeline wired; execution gated (see below) |
-| replacement scan | `duckdb_add_replacement_scan` | feasible; needs a file-reading table fn to demo |
+| macro          | none — `CREATE MACRO` SQL only | **working** (see below) |
+| replacement scan | `duckdb_add_replacement_scan` | **working** (see below) |
 | logical type   | no named-type registration | not feasible as specified |
 | cast           | `duckdb_create_cast_function` needs a callback; WIT `cast-spec` carries none | not feasible as specified |
 | copy handler   | none | not feasible |
@@ -49,6 +49,23 @@ each active database (never the LOAD-busy connection). Verified:
 `select sample_add_two(40)` → 42 (`cli_executes_sample_macro` test).
 
 This required enabling wasm C++ exceptions — see the SCOPE section, now done.
+
+### Replacement scans — WORKING (2026-06)
+
+`sample-extension-component` registers a `sample_read_path(VARCHAR)` table
+function and calls `files.register-replacement-scan({extensions: ["sample"],
+table-function: <handle>, …})`. The host resolves the table-function handle to
+its name (`table_handle_names` map) and forwards a
+`replacement-scan-registration` through `extension-loader-hooks`. The core
+(`register_pending_replacement_scan`) stores the spec and installs one global
+`duckdb_add_replacement_scan` callback per database; the callback rewrites
+`FROM 'file.ext'` to the registered table function, passing the name as its
+argument. Verified: `select * from 'hello.sample'` → row `hello.sample`
+(`cli_executes_replacement_scan` test).
+
+The required `duckdb_add_replacement_scan` / `duckdb_replacement_scan_*` /
+`duckdb_create_varchar` C-API entries were added to the curated
+`crates/libduckdb-sys` FFI bindings.
 
 ## wasm exception handling — RESOLVED via wasi-sdk-33 (2026-06)
 
