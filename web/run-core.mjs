@@ -85,5 +85,8 @@ if (typeof process !== 'undefined' && import.meta.url === `file://${process.argv
   )
   const result = await runQuery(wasm)
   console.log('columns:', result.columns.map((c) => c.name))
-  console.log('rows:', JSON.stringify(result.rows))
+  console.log(
+    'rows:',
+    JSON.stringify(result.rows, (_, v) => (typeof v === 'bigint' ? `${v}n` : v)),
+  )
 }

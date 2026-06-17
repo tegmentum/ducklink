@@ -19,24 +19,27 @@ async function main() {
 
     const lines = []
     let failed = 0
+    // BigInt-safe serialization (jco maps int64 to BigInt).
+    const ser = (x) => JSON.stringify(x, (_, v) => (typeof v === 'bigint' ? `${v}n` : v))
     const check = (label, got, want) => {
-      const ok = JSON.stringify(got) === JSON.stringify(want)
+      const ok = ser(got) === ser(want)
       if (!ok) failed++
-      lines.push((ok ? 'ok   ' : 'FAIL ') + label.padEnd(34) + ' = ' + JSON.stringify(got))
+      lines.push((ok ? 'ok   ' : 'FAIL ') + label.padEnd(34) + ' = ' + ser(got))
     }
 
     // Positional parameters, reused across executions with different bindings.
+    // Results come back typed: a BIGINT column is int64 (a BigInt in JS).
     const stmt = db.prepare(conn, 'SELECT CAST($1 AS BIGINT) + CAST($2 AS BIGINT) AS total')
     check('parameter-count', stmt.parameterCount(), 2)
     const a = stmt.execute([{ tag: 'int64', val: 40n }, { tag: 'int64', val: 2n }])
-    check('execute(40, 2)', a.rows, [[{ tag: 'text', val: '42' }]])
+    check('execute(40, 2)', a.rows, [[{ tag: 'int64', val: 42n }]])
     const b = stmt.execute([{ tag: 'int64', val: 100n }, { tag: 'int64', val: 1n }])
-    check('reuse execute(100, 1)', b.rows, [[{ tag: 'text', val: '101' }]])
+    check('reuse execute(100, 1)', b.rows, [[{ tag: 'int64', val: 101n }]])
 
-    // Mixed parameter types (text + null).
+    // Mixed types: a TEXT column and a BOOLEAN column (typed, not stringified).
     const stmt2 = db.prepare(conn, 'SELECT $1 AS label, $2 IS NULL AS is_null')
     const c = stmt2.execute([{ tag: 'text', val: 'hi' }, { tag: 'null' }])
-    check('text + null', c.rows, [[{ tag: 'text', val: 'hi' }, { tag: 'text', val: 'true' }]])
+    check('text + null', c.rows, [[{ tag: 'text', val: 'hi' }, { tag: 'boolean', val: true }]])
 
     // Config API: open a connection with options applied.
     const cfgConn = db.openWithConfig(undefined, [['default_order', 'desc']])

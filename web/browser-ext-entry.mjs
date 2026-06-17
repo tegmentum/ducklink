@@ -39,13 +39,15 @@ async function main() {
       ["replacement FROM 'hello.sample'", "SELECT * FROM 'hello.sample'"],
     ]
     let failed = 0
+    // BigInt-safe stringify: typed integer columns come back as JS BigInt.
+    const ser = (x) => JSON.stringify(x, (_, v) => (typeof v === 'bigint' ? `${v}n` : v))
     const lines = cases.map(([label, sql]) => {
       try {
         const result = db.execute(conn, sql)
-        return label.padEnd(38) + ' = ' + JSON.stringify(result.rows)
+        return label.padEnd(38) + ' = ' + ser(result.rows)
       } catch (e) {
         failed++
-        return label.padEnd(38) + ' = ERROR ' + JSON.stringify((e && e.payload) || String(e))
+        return label.padEnd(38) + ' = ERROR ' + ser((e && e.payload) || String(e))
       }
     })
     db.close(conn)

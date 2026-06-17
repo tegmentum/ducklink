@@ -9,9 +9,11 @@ async function main() {
     const resp = await fetch('./duckdb_core_component.wasm')
     const bytes = new Uint8Array(await resp.arrayBuffer())
     const result = await runQuery(bytes, 'SELECT 42 AS answer, 1 + 1 AS two')
+    // Typed integer columns come back as JS BigInt; serialize them safely.
+    const ser = (x) => JSON.stringify(x, (_, v) => (typeof v === 'bigint' ? `${v}n` : v))
     out.textContent =
       'columns: ' + result.columns.map((c) => c.name).join(', ') + '\n' +
-      'rows: ' + JSON.stringify(result.rows)
+      'rows: ' + ser(result.rows)
     out.dataset.status = 'ok'
   } catch (e) {
     out.textContent = 'ERROR: ' + (e && (e.stack || e.message) || e)

@@ -3689,6 +3689,22 @@ mod tests {
             "expected CSV output, got:\n{csv_out}"
         );
 
+        // .mode json emits typed values: numbers/booleans unquoted, text quoted.
+        std::fs::write(
+            tempdir.path().join("json.sql"),
+            ".mode json\nSELECT 1 AS i, true AS b, 'x' AS s;\n",
+        )?;
+        let mut json = CliHarness::new(
+            &["duckdb-cli", ":memory:", "-c", ".read json.sql"],
+            &preopens,
+        )?;
+        assert!(json.run()?.is_ok(), ".mode json failed: {}", json.stderr()?);
+        let json_out = json.stdout()?;
+        assert!(
+            json_out.contains(r#"{"i":1,"b":true,"s":"x"}"#),
+            "expected typed JSON (unquoted number/bool), got:\n{json_out}"
+        );
+
         Ok(())
     }
 

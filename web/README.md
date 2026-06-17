@@ -33,7 +33,7 @@ npm run verify   # headless Chromium: instantiates + runs a query, prints result
 ```
 === RESULT status: ok ===
 columns: answer, two
-rows: [[{"tag":"text","val":"42"},{"tag":"text","val":"2"}]]
+rows: [[{"tag":"int64","val":"42n"},{"tag":"int64","val":"2n"}]]
 ```
 
 i.e. `SELECT 42 AS answer, 1 + 1 AS two` ran inside headless Chromium — DuckDB
@@ -65,12 +65,12 @@ drives, in the browser:
 
 ```
 === RESULT status: ok ===
-scalar      sample_plus_one(41)        = [[{"tag":"text","val":"42"}]]
-macro       sample_add_two(40)         = [[{"tag":"text","val":"42"}]]
-cast        id-7 -> sample_id          = [[{"tag":"text","val":"7"}]]
-logical     7::sample_id               = [[{"tag":"text","val":"7"}]]
-table       sample_emit_sequence(4)    = 0,1,2,3
-aggregate   sample_sum(1..4)           = [[{"tag":"text","val":"10"}]]
+scalar      sample_plus_one(41)        = [[{"tag":"int64","val":"42n"}]]
+macro       sample_add_two(40)         = [[{"tag":"int64","val":"42n"}]]
+cast        id-7 -> sample_id          = [[{"tag":"int64","val":"7n"}]]
+logical     7::sample_id               = [[{"tag":"int64","val":"7n"}]]
+table       sample_emit_sequence(4)    = [[{"tag":"int64","val":"0n"}],...]
+aggregate   sample_sum(1..4)           = [[{"tag":"int64","val":"10n"}]]
 replacement FROM 'hello.sample'        = [[{"tag":"text","val":"hello.sample"}]]
 ```
 

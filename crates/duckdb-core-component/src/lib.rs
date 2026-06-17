@@ -4878,20 +4878,28 @@ pub unsafe extern "C" fn _ZN6duckdb8HTTPUtil8ShutdownEv() {}
 unsafe fn marshal_result(
     result: &duckdb::duckdb_result,
 ) -> Result<(Vec<Columndef>, Vec<Row>), DuckDbError> {
-    let column_count = duckdb::duckdb_column_count(result as *const _ as *mut _);
-    let row_count = duckdb::duckdb_row_count(result as *const _ as *mut _);
+    let result_mut = result as *const _ as *mut duckdb::duckdb_result;
+    let column_count = duckdb::duckdb_column_count(result_mut);
+    let row_count = duckdb::duckdb_row_count(result_mut);
 
+    // Resolve each column's DuckDB type once so values come back as the matching
+    // duckvalue variant (numbers/booleans typed instead of stringified).
     let mut columns = Vec::with_capacity(column_count as usize);
+    let mut type_ids = Vec::with_capacity(column_count as usize);
     for idx in 0..column_count {
-        let name_ptr = duckdb::duckdb_column_name(result as *const _ as *mut _, idx);
+        let name_ptr = duckdb::duckdb_column_name(result_mut, idx);
         let name = if name_ptr.is_null() {
             format!("column{}", idx)
         } else {
             CStr::from_ptr(name_ptr).to_string_lossy().into_owned()
         };
+        let mut logical_type = duckdb::duckdb_column_logical_type(result_mut, idx);
+        let type_id = duckdb::duckdb_get_type_id(logical_type);
+        duckdb::duckdb_destroy_logical_type(&mut logical_type);
+        type_ids.push(type_id);
         columns.push(Columndef {
             name,
-            logical: Logicaltype::Text,
+            logical: marshal_logical_for_type(type_id),
         });
     }
 
@@ -4899,25 +4907,69 @@ unsafe fn marshal_result(
     for row_idx in 0..row_count {
         let mut row = Vec::with_capacity(column_count as usize);
         for col_idx in 0..column_count {
-            let is_null =
-                duckdb::duckdb_value_is_null(result as *const _ as *mut _, col_idx, row_idx);
-            if is_null {
+            if duckdb::duckdb_value_is_null(result_mut, col_idx, row_idx) {
                 row.push(Duckvalue::Null);
                 continue;
             }
-
-            let value_ptr =
-                duckdb::duckdb_value_varchar(result as *const _ as *mut _, col_idx, row_idx);
-            if value_ptr.is_null() {
-                row.push(Duckvalue::Text(String::new()));
+            let value_ptr = duckdb::duckdb_value_varchar(result_mut, col_idx, row_idx);
+            let text = if value_ptr.is_null() {
+                String::new()
             } else {
                 let value = CStr::from_ptr(value_ptr).to_string_lossy().into_owned();
                 duckdb::duckdb_free(value_ptr.cast());
-                row.push(Duckvalue::Text(value));
-            }
+                value
+            };
+            row.push(marshal_value_for_type(type_ids[col_idx as usize], text));
         }
         rows.push(row);
     }
 
     Ok((columns, rows))
+}
+
+/// Maps a DuckDB column type to the `duckvalue` variant used for its values.
+/// Numeric and boolean types map to typed variants; everything else (VARCHAR,
+/// BLOB, DATE/TIMESTAMP/DECIMAL/LIST/STRUCT, ...) renders as text.
+fn marshal_logical_for_type(type_id: duckdb::duckdb_type) -> Logicaltype {
+    match type_id {
+        duckdb::DUCKDB_TYPE_BOOLEAN => Logicaltype::Boolean,
+        duckdb::DUCKDB_TYPE_TINYINT
+        | duckdb::DUCKDB_TYPE_SMALLINT
+        | duckdb::DUCKDB_TYPE_INTEGER
+        | duckdb::DUCKDB_TYPE_BIGINT => Logicaltype::Int64,
+        duckdb::DUCKDB_TYPE_UTINYINT
+        | duckdb::DUCKDB_TYPE_USMALLINT
+        | duckdb::DUCKDB_TYPE_UINTEGER
+        | duckdb::DUCKDB_TYPE_UBIGINT => Logicaltype::Uint64,
+        duckdb::DUCKDB_TYPE_FLOAT | duckdb::DUCKDB_TYPE_DOUBLE => Logicaltype::Float64,
+        _ => Logicaltype::Text,
+    }
+}
+
+/// Parses DuckDB's string rendering of a cell into the typed `duckvalue` variant
+/// for its column type. Falls back to text if the value does not parse (e.g.
+/// non-finite floats render as "inf"/"nan").
+fn marshal_value_for_type(type_id: duckdb::duckdb_type, text: String) -> Duckvalue {
+    match type_id {
+        duckdb::DUCKDB_TYPE_BOOLEAN => Duckvalue::Boolean(text == "true"),
+        duckdb::DUCKDB_TYPE_TINYINT
+        | duckdb::DUCKDB_TYPE_SMALLINT
+        | duckdb::DUCKDB_TYPE_INTEGER
+        | duckdb::DUCKDB_TYPE_BIGINT => match text.parse::<i64>() {
+            Ok(value) => Duckvalue::Int64(value),
+            Err(_) => Duckvalue::Text(text),
+        },
+        duckdb::DUCKDB_TYPE_UTINYINT
+        | duckdb::DUCKDB_TYPE_USMALLINT
+        | duckdb::DUCKDB_TYPE_UINTEGER
+        | duckdb::DUCKDB_TYPE_UBIGINT => match text.parse::<u64>() {
+            Ok(value) => Duckvalue::Uint64(value),
+            Err(_) => Duckvalue::Text(text),
+        },
+        duckdb::DUCKDB_TYPE_FLOAT | duckdb::DUCKDB_TYPE_DOUBLE => match text.parse::<f64>() {
+            Ok(value) => Duckvalue::Float64(value),
+            Err(_) => Duckvalue::Text(text),
+        },
+        _ => Duckvalue::Text(text),
+    }
 }
