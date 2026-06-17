@@ -35,7 +35,7 @@ What the DuckDB C API actually supports (surveyed against `external/duckdb`):
 | replacement scan | `duckdb_add_replacement_scan` | **working** (see below) |
 | logical type   | none — `CREATE TYPE` SQL alias | **working** (see below) |
 | cast           | `duckdb_create_cast_function` + cast callback | **working** (see below) |
-| copy handler   | none | not feasible |
+| copy handler   | none (DuckDB C API has no copy-function registration) | not feasible — `register-copy-handler` returns a clear error |
 
 ### Macros — WORKING (2026-06)
 

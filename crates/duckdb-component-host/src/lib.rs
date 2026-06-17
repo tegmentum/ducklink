@@ -1841,12 +1841,16 @@ impl extension_files::Host for ExtensionStoreState {
         &mut self,
         handler: extension_files::CopyHandler,
     ) -> Result<u32, String> {
-        let id = self.alloc_resource_id();
+        // DuckDB's C API exposes no copy-function registration, so this cannot
+        // be honoured. Fail loudly rather than silently pretending it worked.
         eprintln!(
-            "[extension-manager] files register-copy-handler ext='{}' fn={} for '{}' -> id {id} (captured; DuckDB wiring pending)",
-            handler.extension, handler.function, self.extension_name
+            "[extension-manager] files register-copy-handler ext='{}' for '{}' rejected: unsupported",
+            handler.extension, self.extension_name
         );
-        Ok(id)
+        Err(
+            "copy handlers are not supported: DuckDB's C API has no copy-function registration"
+                .to_string(),
+        )
     }
 }
 
