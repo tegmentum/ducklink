@@ -24,6 +24,7 @@ impl guest::Guest for SampleExtension {
         register_aggregate_function()?;
         register_macro_definition()?;
         register_logical_type_definition()?;
+        register_cast_definition()?;
         register_replacement_scan()?;
         Ok(types::Loadresult {
             name: "sample_extension".into(),
@@ -158,6 +159,33 @@ impl callback_dispatch::Guest for SampleExtension {
             "pragma callbacks not implemented in sample extension".into(),
         ))
     }
+
+    fn call_cast(handle: u32, value: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
+        let handler = cast_handlers()
+            .lock()
+            .expect("cast handler mutex poisoned")
+            .get(&handle)
+            .cloned()
+            .ok_or_else(|| types::Duckerror::Internal("unknown cast handle".into()))?;
+
+        match handler {
+            CastHandler::ParseId => match value {
+                types::Duckvalue::Null => Ok(types::Duckvalue::Null),
+                types::Duckvalue::Text(text) => {
+                    let digits = text.strip_prefix("id-").unwrap_or(&text);
+                    let parsed = digits.parse::<i64>().map_err(|_| {
+                        types::Duckerror::Invalidargument(format!(
+                            "cannot cast '{text}' to sample_id (expected id-<n>)"
+                        ))
+                    })?;
+                    Ok(types::Duckvalue::Int64(parsed))
+                }
+                other => Err(types::Duckerror::Invalidargument(format!(
+                    "sample_id cast expects VARCHAR, saw {other:?}"
+                ))),
+            },
+        }
+    }
 }
 
 export!(SampleExtension);
@@ -175,12 +203,34 @@ fn register_macro_definition() -> Result<(), types::Duckerror> {
     .map_err(types::Duckerror::Internal)
 }
 
+/// Registers a custom cast `VARCHAR -> sample_id` that parses "id-<n>" into
+/// the integer <n>. The built-in VARCHAR->integer cast would fail on "id-7", so
+/// a successful result proves the custom cast ran.
+fn register_cast_definition() -> Result<(), types::Duckerror> {
+    let handle = NEXT_CAST_HANDLE.fetch_add(1, Ordering::Relaxed);
+    cast_handlers()
+        .lock()
+        .expect("cast handler mutex poisoned")
+        .insert(handle, CastHandler::ParseId);
+
+    let callback = runtime::CastCallback::new(handle);
+    catalog::register_cast(
+        &catalog::CastSpec {
+            from: "VARCHAR".into(),
+            to: "sample_id".into(),
+            kind: catalog::CastKind::Explicit,
+        },
+        callback,
+    )
+    .map_err(types::Duckerror::Internal)
+}
+
 /// Registers a named SQL type alias via the `catalog` interface. The host
 /// forwards it to DuckDB as `CREATE TYPE`.
 fn register_logical_type_definition() -> Result<(), types::Duckerror> {
     catalog::register_logical_type(&catalog::LogicalType {
         name: "sample_id".into(),
-        physical: "INTEGER".into(),
+        physical: "BIGINT".into(),
     })
     .map(|_| ())
     .map_err(types::Duckerror::Internal)
@@ -373,12 +423,24 @@ enum AggregateHandler {
     SumIntegers,
 }
 
+#[derive(Clone, Copy)]
+enum CastHandler {
+    /// Parses "id-<n>" VARCHAR into the integer <n>.
+    ParseId,
+}
+
 static NEXT_SCALAR_HANDLE: AtomicU32 = AtomicU32::new(1);
 static SCALAR_HANDLERS: OnceLock<Mutex<HashMap<u32, ScalarHandler>>> = OnceLock::new();
 static NEXT_TABLE_HANDLE: AtomicU32 = AtomicU32::new(1);
 static TABLE_HANDLERS: OnceLock<Mutex<HashMap<u32, TableHandler>>> = OnceLock::new();
 static NEXT_AGGREGATE_HANDLE: AtomicU32 = AtomicU32::new(1);
 static AGGREGATE_HANDLERS: OnceLock<Mutex<HashMap<u32, AggregateHandler>>> = OnceLock::new();
+static NEXT_CAST_HANDLE: AtomicU32 = AtomicU32::new(1);
+static CAST_HANDLERS: OnceLock<Mutex<HashMap<u32, CastHandler>>> = OnceLock::new();
+
+fn cast_handlers() -> &'static Mutex<HashMap<u32, CastHandler>> {
+    CAST_HANDLERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 fn scalar_handlers() -> &'static Mutex<HashMap<u32, ScalarHandler>> {
     SCALAR_HANDLERS.get_or_init(|| Mutex::new(HashMap::new()))

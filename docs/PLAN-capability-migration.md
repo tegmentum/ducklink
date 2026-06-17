@@ -34,7 +34,7 @@ What the DuckDB C API actually supports (surveyed against `external/duckdb`):
 | macro          | none — `CREATE MACRO` SQL only | **working** (see below) |
 | replacement scan | `duckdb_add_replacement_scan` | **working** (see below) |
 | logical type   | none — `CREATE TYPE` SQL alias | **working** (see below) |
-| cast           | `duckdb_create_cast_function` needs a callback; WIT `cast-spec` carries none | not feasible as specified |
+| cast           | `duckdb_create_cast_function` + cast callback | **working** (see below) |
 | copy handler   | none | not feasible |
 
 ### Macros — WORKING (2026-06)
@@ -66,6 +66,29 @@ argument. Verified: `select * from 'hello.sample'` → row `hello.sample`
 The required `duckdb_add_replacement_scan` / `duckdb_replacement_scan_*` /
 `duckdb_create_varchar` C-API entries were added to the curated
 `crates/libduckdb-sys` FFI bindings.
+
+### Casts — WORKING (2026-06)
+
+The only catalog/files type needing a real transformation **callback** (no SQL
+form exists). It uses the same callback-dispatch machinery as scalar functions:
+- WIT: added a `cast-callback` resource (`runtime`), `call-cast`
+  (`callback-dispatch`), and a `callback` param on `catalog.register-cast`.
+- host: `CallbackKind::Cast`, `HostCastCallback`, `dispatch_cast`,
+  `CoreStoreState::call_cast`; `register_cast` captures `{source, target,
+  callback-handle}`.
+- core: `register_pending_cast` resolves the `source`/`target` type names to
+  `duckdb_logical_type` via `SELECT CAST(NULL AS <name>)` +
+  `duckdb_column_logical_type` (handles custom types like `sample_id`), creates a
+  `duckdb_create_cast_function` with `cast_function_callback`, and stores a
+  per-cast `CastFunctionEntry` via `set_extra_info`. The callback reads the input
+  vector, dispatches each value to the guest (`call-cast`), and writes the
+  output vector (reusing the scalar vector helpers).
+- FFI: added the `duckdb_*cast_function*` + `duckdb_column_logical_type` entries.
+- sample: a `VARCHAR -> sample_id` cast parsing `"id-<n>"` into `<n>`.
+
+Verified: `cast('id-7' as sample_id)` → 7 — the built-in VARCHAR→integer cast
+fails on `"id-7"`, so a 7 proves the custom callback ran
+(`cli_invokes_registered_cast` test).
 
 ### Logical types — WORKING (2026-06)
 

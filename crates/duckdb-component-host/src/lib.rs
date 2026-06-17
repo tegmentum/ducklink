@@ -185,6 +185,22 @@ impl core_callback_dispatch::Host for CoreStoreState {
             .map(|result| result.map(convert_extension_duckvalue_to_core))
             .map_err(convert_extension_duckerror_to_core)
     }
+
+    fn call_cast(
+        &mut self,
+        handle: u32,
+        value: core_types::Duckvalue,
+    ) -> Result<core_types::Duckvalue, core_types::Duckerror> {
+        let converted = convert_core_duckvalue_to_extension(value);
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_cast(handle, &converted)
+            .map(convert_extension_duckvalue_to_core)
+            .map_err(convert_extension_duckerror_to_core)
+    }
 }
 
 struct CoreExecution {
@@ -258,6 +274,7 @@ enum CallbackKind {
     Table,
     Aggregate,
     Pragma,
+    Cast,
 }
 
 #[derive(Clone, Debug)]
@@ -384,6 +401,19 @@ impl ExtensionInstance {
         let mut store = self.store.as_context_mut();
         guest
             .call_call_pragma(&mut store, dispatcher_handle, args)
+            .map_err(map_extension_trap)?
+            .map_err(|err| err)
+    }
+
+    fn dispatch_cast(
+        &mut self,
+        dispatcher_handle: u32,
+        value: &extension_types::Duckvalue,
+    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+        let guest = self.bindings.duckdb_extension_callback_dispatch();
+        let mut store = self.store.as_context_mut();
+        guest
+            .call_call_cast(&mut store, dispatcher_handle, value)
             .map_err(map_extension_trap)?
             .map_err(|err| err)
     }
@@ -560,6 +590,32 @@ impl ExtensionManager {
         instance.dispatch_pragma(entry.dispatcher_handle, args)
     }
 
+    fn dispatch_cast(
+        &mut self,
+        handle: u32,
+        value: &extension_types::Duckvalue,
+    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+        let entry = match self.lookup_callback(handle, CallbackKind::Cast) {
+            Some(entry) => entry,
+            None => {
+                eprintln!("[extension-manager] dispatch_cast received unknown handle {handle}");
+                return Err(extension_types::Duckerror::Invalidstate(format!(
+                    "unknown cast callback handle {handle}"
+                )));
+            }
+        };
+        let instance = match self.extensions.get_mut(&entry.extension) {
+            Some(instance) => instance,
+            None => {
+                return Err(extension_types::Duckerror::Invalidstate(format!(
+                    "extension {} is not loaded",
+                    entry.extension
+                )))
+            }
+        };
+        instance.dispatch_cast(entry.dispatcher_handle, value)
+    }
+
     fn lookup_callback(&self, handle: u32, kind: CallbackKind) -> Option<CallbackEntry> {
         let registry = self
             .callback_registry
@@ -734,6 +790,7 @@ struct ExtensionStoreState {
     pending_macros: Vec<PendingMacro>,
     pending_replacement_scans: Vec<PendingReplacementScan>,
     pending_logical_types: Vec<PendingLogicalType>,
+    pending_casts: Vec<PendingCast>,
     /// Maps the handle returned from `table-registry.register` to the table
     /// function name, so `files.register-replacement-scan` can resolve it.
     table_handle_names: HashMap<u32, String>,
@@ -803,6 +860,13 @@ struct PendingLogicalType {
     physical: String,
 }
 
+struct PendingCast {
+    extension: String,
+    source: String,
+    target: String,
+    callback_handle: u32,
+}
+
 #[derive(Default)]
 struct PendingRegistrationsData {
     scalars: Vec<PendingScalar>,
@@ -811,6 +875,7 @@ struct PendingRegistrationsData {
     macros: Vec<PendingMacro>,
     replacement_scans: Vec<PendingReplacementScan>,
     logical_types: Vec<PendingLogicalType>,
+    casts: Vec<PendingCast>,
 }
 
 impl PendingRegistrationsData {
@@ -821,6 +886,7 @@ impl PendingRegistrationsData {
         self.macros.append(&mut other.macros);
         self.replacement_scans.append(&mut other.replacement_scans);
         self.logical_types.append(&mut other.logical_types);
+        self.casts.append(&mut other.casts);
     }
 }
 
@@ -864,6 +930,7 @@ impl ExtensionStoreState {
             pending_macros: Vec::new(),
             pending_replacement_scans: Vec::new(),
             pending_logical_types: Vec::new(),
+            pending_casts: Vec::new(),
             table_handle_names: HashMap::new(),
             callback_registry,
             extension_name,
@@ -924,6 +991,7 @@ impl ExtensionStoreState {
         let macros = std::mem::take(&mut self.pending_macros);
         let replacement_scans = std::mem::take(&mut self.pending_replacement_scans);
         let logical_types = std::mem::take(&mut self.pending_logical_types);
+        let casts = std::mem::take(&mut self.pending_casts);
         let pending = PendingRegistrationsData {
             scalars,
             tables,
@@ -931,6 +999,7 @@ impl ExtensionStoreState {
             macros,
             replacement_scans,
             logical_types,
+            casts,
         };
         let scalar_names = summarize_registration_names(&pending.scalars, |entry| entry.name.as_str());
         let table_names =
@@ -1232,6 +1301,32 @@ impl extension_runtime::HostPragmaCallback for ExtensionStoreState {
     fn drop(
         &mut self,
         rep: wasmtime::component::Resource<extension_runtime::PragmaCallback>,
+    ) -> wasmtime::Result<()> {
+        self.release_callback_handle(rep.rep());
+        Ok(())
+    }
+}
+
+impl extension_runtime::HostCastCallback for ExtensionStoreState {
+    fn new(
+        &mut self,
+        handle: u32,
+    ) -> wasmtime::component::Resource<extension_runtime::CastCallback> {
+        let id = self.allocate_callback_handle(handle, CallbackKind::Cast);
+        wasmtime::component::Resource::new_own(id)
+    }
+
+    fn call(
+        &mut self,
+        _self_: wasmtime::component::Resource<extension_runtime::CastCallback>,
+        _value: extension_types::Duckvalue,
+    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+        Err(unsupported_runtime_error())
+    }
+
+    fn drop(
+        &mut self,
+        rep: wasmtime::component::Resource<extension_runtime::CastCallback>,
     ) -> wasmtime::Result<()> {
         self.release_callback_handle(rep.rep());
         Ok(())
@@ -1674,11 +1769,23 @@ impl extension_catalog::Host for ExtensionStoreState {
         Ok(handle)
     }
 
-    fn register_cast(&mut self, spec: extension_catalog::CastSpec) -> Result<(), String> {
+    fn register_cast(
+        &mut self,
+        spec: extension_catalog::CastSpec,
+        callback: wasmtime::component::Resource<extension_catalog::CastCallback>,
+    ) -> Result<(), String> {
+        let callback_handle = callback.rep();
+        std::mem::forget(callback);
         eprintln!(
-            "[extension-manager] catalog register-cast {}->{} ({:?}) for '{}' (captured; DuckDB wiring pending)",
+            "[extension-manager] catalog register-cast {}->{} ({:?}, callback={callback_handle}) for '{}'",
             spec.from, spec.to, spec.kind, self.extension_name
         );
+        self.pending_casts.push(PendingCast {
+            extension: self.extension_name.clone(),
+            source: spec.from,
+            target: spec.to,
+            callback_handle,
+        });
         Ok(())
     }
 
@@ -2061,6 +2168,12 @@ fn convert_pending_registrations(
             .map(convert_pending_logical_type_registration)
             .collect::<Vec<_>>()
             .into(),
+        casts: data
+            .casts
+            .into_iter()
+            .map(convert_pending_cast_registration)
+            .collect::<Vec<_>>()
+            .into(),
     }
 }
 
@@ -2070,6 +2183,16 @@ fn convert_pending_logical_type_registration(
     core_extension_hooks::LogicalTypeRegistration {
         name: entry.name,
         physical: entry.physical,
+    }
+}
+
+fn convert_pending_cast_registration(
+    entry: PendingCast,
+) -> core_extension_hooks::CastRegistration {
+    core_extension_hooks::CastRegistration {
+        source: entry.source,
+        target: entry.target,
+        callback_handle: entry.callback_handle,
     }
 }
 
@@ -2257,6 +2380,7 @@ fn describe_callback_kind(kind: CallbackKind) -> &'static str {
         CallbackKind::Table => "table",
         CallbackKind::Aggregate => "aggregate",
         CallbackKind::Pragma => "pragma",
+        CallbackKind::Cast => "cast",
     }
 }
 
@@ -3350,6 +3474,39 @@ stderr:
     }
 
     #[test]
+    fn cli_invokes_registered_cast() -> Result<()> {
+        ensure_sample_extension_artifact()?;
+
+        // The built-in VARCHAR->integer cast fails on "id-7"; a 7 here proves the
+        // extension's custom cast callback ran.
+        let args = [
+            "duckdb-cli",
+            ":memory:",
+            "--load-extension",
+            "sample_extension",
+            "-c",
+            "select cast('id-7' as sample_id) as v;",
+        ];
+
+        let mut harness = CliHarness::new(&args, &[])?;
+        let status = harness.run()?;
+        assert!(
+            status.is_ok(),
+            "CLI reported failure invoking custom cast: {:?}",
+            harness.stderr().ok()
+        );
+
+        let stdout = harness.stdout()?;
+        assert!(
+            has_cell(&stdout, "v") && has_cell(&stdout, "7"),
+            "expected custom cast output, got:\n{}",
+            stdout
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn load_sample_extension_component() -> Result<()> {
         let artifact = ensure_sample_extension_artifact()?;
         let engine = build_engine()?;
@@ -3623,6 +3780,30 @@ stderr:
         }
     }
 
+    impl extension_runtime::HostCastCallback for TestExtensionHost {
+        fn new(
+            &mut self,
+            _handle: u32,
+        ) -> wasmtime::component::Resource<extension_runtime::CastCallback> {
+            wasmtime::component::Resource::new_own(self.alloc_resource_id())
+        }
+
+        fn call(
+            &mut self,
+            _self_: wasmtime::component::Resource<extension_runtime::CastCallback>,
+            _value: extension_types::Duckvalue,
+        ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+            Err(unsupported_runtime_error())
+        }
+
+        fn drop(
+            &mut self,
+            _rep: wasmtime::component::Resource<extension_runtime::CastCallback>,
+        ) -> wasmtime::Result<()> {
+            Ok(())
+        }
+    }
+
     impl extension_runtime::HostScalarRegistry for TestExtensionHost {
         fn register(
             &mut self,
@@ -3803,7 +3984,11 @@ stderr:
             Ok(0)
         }
 
-        fn register_cast(&mut self, _spec: extension_catalog::CastSpec) -> Result<(), String> {
+        fn register_cast(
+            &mut self,
+            _spec: extension_catalog::CastSpec,
+            _callback: wasmtime::component::Resource<extension_catalog::CastCallback>,
+        ) -> Result<(), String> {
             Ok(())
         }
 

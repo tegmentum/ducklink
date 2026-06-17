@@ -9,4 +9,5 @@ interface callback-dispatch {
   call-table: func(handle: u32, args: list<duckvalue>) -> result<resultset, duckerror>;
   call-aggregate: func(handle: u32, rows: rowbatch) -> result<duckvalue, duckerror>;
   call-pragma: func(handle: u32, args: list<duckvalue>) -> result<option<duckvalue>, duckerror>;
+  call-cast: func(handle: u32, value: duckvalue) -> result<duckvalue, duckerror>;
 }

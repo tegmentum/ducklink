@@ -25,6 +25,11 @@ interface runtime {
     call: func(args: list<duckvalue>) -> result<option<duckvalue>, duckerror>;
   }
 
+  resource cast-callback {
+    constructor(handle: u32);
+    call: func(value: duckvalue) -> result<duckvalue, duckerror>;
+  }
+
   resource scalar-registry {
     register: func(
                    name: string,

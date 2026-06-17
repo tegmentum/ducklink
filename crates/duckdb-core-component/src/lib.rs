@@ -2484,6 +2484,166 @@ fn process_pending_registrations(
             clog!("[duckdb-core] logical-type registration failed (continuing): {err:?}");
         }
     }
+    for entry in pending.casts.into_iter().collect::<Vec<_>>() {
+        if let Err(err) = register_pending_cast(entry) {
+            clog!("[duckdb-core] cast registration failed (continuing): {err:?}");
+        }
+    }
+    Ok(())
+}
+
+struct CastFunctionEntry {
+    callback_handle: u32,
+    source: Logicaltype,
+    target: Logicaltype,
+}
+
+fn duckdb_type_to_logical(type_id: duckdb::duckdb_type) -> Option<Logicaltype> {
+    match type_id {
+        duckdb::DUCKDB_TYPE_BOOLEAN => Some(Logicaltype::Boolean),
+        duckdb::DUCKDB_TYPE_BIGINT => Some(Logicaltype::Int64),
+        duckdb::DUCKDB_TYPE_UBIGINT => Some(Logicaltype::Uint64),
+        duckdb::DUCKDB_TYPE_DOUBLE => Some(Logicaltype::Float64),
+        duckdb::DUCKDB_TYPE_VARCHAR => Some(Logicaltype::Text),
+        duckdb::DUCKDB_TYPE_BLOB => Some(Logicaltype::Blob),
+        _ => None,
+    }
+}
+
+/// Resolves a SQL type name (base or custom) to its logical type and physical
+/// enum by asking DuckDB the type of `CAST(NULL AS <name>)`.
+unsafe fn resolve_logical_type(
+    conn: duckdb::duckdb_connection,
+    type_name: &str,
+) -> Result<(duckdb::duckdb_logical_type, Logicaltype), String> {
+    let sql = format!("SELECT CAST(NULL AS {type_name}) AS x");
+    let c_sql = CString::new(sql).map_err(|_| "type name contained NUL".to_string())?;
+    let mut result = std::mem::MaybeUninit::<duckdb::duckdb_result>::zeroed();
+    let state = duckdb::duckdb_query(conn, c_sql.as_ptr(), result.as_mut_ptr());
+    let mut result = result.assume_init();
+    if state != DUCKDB_SUCCESS {
+        let msg =
+            extract_result_error(&result).unwrap_or_else(|| "type resolution failed".to_string());
+        duckdb::duckdb_destroy_result(&mut result);
+        return Err(msg);
+    }
+    let logical = duckdb::duckdb_column_logical_type(&mut result, 0);
+    duckdb::duckdb_destroy_result(&mut result);
+    if logical.is_null() {
+        return Err(format!("could not resolve type '{type_name}'"));
+    }
+    let type_id = duckdb::duckdb_get_type_id(logical);
+    match duckdb_type_to_logical(type_id) {
+        Some(enum_ty) => Ok((logical, enum_ty)),
+        None => {
+            let mut logical_mut = logical;
+            duckdb::duckdb_destroy_logical_type(&mut logical_mut);
+            Err(format!(
+                "unsupported physical type id {type_id} for '{type_name}'"
+            ))
+        }
+    }
+}
+
+fn register_pending_cast(entry: extension_loader_hooks::CastRegistration) -> Result<(), Duckerror> {
+    let extension_loader_hooks::CastRegistration {
+        source,
+        target,
+        callback_handle,
+    } = entry;
+    clog!("[duckdb-core] registering cast {source} -> {target} (callback={callback_handle})");
+    for database in distinct_active_databases() {
+        unsafe { register_cast_on_database(database, &source, &target, callback_handle) }.map_err(
+            |err| Duckerror::Internal(format!("failed to register cast {source}->{target}: {err}")),
+        )?;
+    }
+    Ok(())
+}
+
+unsafe fn register_cast_on_database(
+    database: duckdb::duckdb_database,
+    source: &str,
+    target: &str,
+    callback_handle: u32,
+) -> Result<(), String> {
+    let mut conn: duckdb::duckdb_connection = ptr::null_mut();
+    if duckdb::duckdb_connect(database, &mut conn) != DUCKDB_SUCCESS {
+        return Err("duckdb_connect failed for cast registration".to_string());
+    }
+    let outcome = (|| {
+        let (mut source_lt, source_enum) = resolve_logical_type(conn, source)?;
+        let (mut target_lt, target_enum) = resolve_logical_type(conn, target)?;
+        let cast = duckdb::duckdb_create_cast_function();
+        duckdb::duckdb_cast_function_set_source_type(cast, source_lt);
+        duckdb::duckdb_cast_function_set_target_type(cast, target_lt);
+        duckdb::duckdb_cast_function_set_function(cast, Some(cast_function_callback));
+        let entry = Box::new(CastFunctionEntry {
+            callback_handle,
+            source: source_enum,
+            target: target_enum,
+        });
+        duckdb::duckdb_cast_function_set_extra_info(
+            cast,
+            Box::into_raw(entry) as *mut c_void,
+            Some(cast_entry_destroy),
+        );
+        let state = duckdb::duckdb_register_cast_function(conn, cast);
+        let mut cast_mut = cast;
+        duckdb::duckdb_destroy_cast_function(&mut cast_mut);
+        duckdb::duckdb_destroy_logical_type(&mut source_lt);
+        duckdb::duckdb_destroy_logical_type(&mut target_lt);
+        if state != DUCKDB_SUCCESS {
+            return Err("duckdb_register_cast_function failed".to_string());
+        }
+        Ok(())
+    })();
+    duckdb::duckdb_disconnect(&mut conn);
+    outcome
+}
+
+unsafe extern "C" fn cast_entry_destroy(ptr: *mut c_void) {
+    if !ptr.is_null() {
+        let _ = Box::from_raw(ptr as *mut CastFunctionEntry);
+    }
+}
+
+unsafe extern "C" fn cast_function_callback(
+    info: duckdb::duckdb_function_info,
+    count: duckdb::idx_t,
+    input: duckdb::duckdb_vector,
+    output: duckdb::duckdb_vector,
+) -> bool {
+    match execute_cast(info, count, input, output) {
+        Ok(()) => true,
+        Err(err) => {
+            if let Ok(message) = sanitize_error_message(&format_duckerror(&err)) {
+                duckdb::duckdb_function_set_error(info, message.as_ptr());
+            }
+            false
+        }
+    }
+}
+
+unsafe fn execute_cast(
+    info: duckdb::duckdb_function_info,
+    count: duckdb::idx_t,
+    input: duckdb::duckdb_vector,
+    output: duckdb::duckdb_vector,
+) -> Result<(), Duckerror> {
+    let entry_ptr = duckdb::duckdb_cast_function_get_extra_info(info);
+    if entry_ptr.is_null() {
+        return Err(Duckerror::Internal("cast missing dispatcher entry".to_string()));
+    }
+    let entry = &*(entry_ptr as *const CastFunctionEntry);
+    let column = ScalarInputColumn {
+        vector: input,
+        logical: entry.source,
+    };
+    for row in 0..count {
+        let value = read_scalar_argument(&column, row)?;
+        let result = callback_dispatch::call_cast(entry.callback_handle, &value)?;
+        write_duckvalue_to_vector(output, &entry.target, row, result)?;
+    }
     Ok(())
 }
 
@@ -2901,6 +3061,7 @@ struct NoopScalarCallback;
 struct NoopTableCallback;
 struct NoopAggregateCallback;
 struct NoopPragmaCallback;
+struct NoopCastCallback;
 
 #[derive(Default)]
 struct ScalarRegistry;
@@ -3134,6 +3295,16 @@ impl runtime_exports::GuestPragmaCallback for NoopPragmaCallback {
     }
 }
 
+impl runtime_exports::GuestCastCallback for NoopCastCallback {
+    fn new(_handle: u32) -> Self {
+        NoopCastCallback
+    }
+
+    fn call(&self, _value: Duckvalue) -> Result<Duckvalue, Duckerror> {
+        Err(runtime_unavailable_error())
+    }
+}
+
 impl runtime_exports::GuestScalarRegistry for ScalarRegistry {
     fn register(
         &self,
@@ -3311,6 +3482,7 @@ impl runtime_exports::Guest for RuntimeHost {
     type TableCallback = NoopTableCallback;
     type AggregateCallback = NoopAggregateCallback;
     type PragmaCallback = NoopPragmaCallback;
+    type CastCallback = NoopCastCallback;
     type ScalarRegistry = ScalarRegistry;
     type TableRegistry = ComponentTableRegistry;
     type AggregateRegistry = ComponentAggregateRegistry;

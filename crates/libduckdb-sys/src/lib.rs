@@ -45,6 +45,15 @@ pub type duckdb_replacement_callback_t = Option<
         data: *mut c_void,
     ),
 >;
+pub type duckdb_cast_function = *mut c_void;
+pub type duckdb_cast_function_t = Option<
+    unsafe extern "C" fn(
+        info: duckdb_function_info,
+        count: idx_t,
+        input: duckdb_vector,
+        output: duckdb_vector,
+    ) -> bool,
+>;
 pub type duckdb_copy_callback_t =
     Option<unsafe extern "C" fn(*mut c_void, *mut *mut c_void) -> duckdb_state>;
 pub type duckdb_scalar_function_t = Option<
@@ -405,4 +414,34 @@ extern "C" {
         info: duckdb_replacement_scan_info,
         parameter: duckdb_value,
     );
+
+    pub fn duckdb_column_logical_type(result: *mut duckdb_result, col: idx_t) -> duckdb_logical_type;
+    pub fn duckdb_create_cast_function() -> duckdb_cast_function;
+    pub fn duckdb_destroy_cast_function(cast_function: *mut duckdb_cast_function);
+    pub fn duckdb_cast_function_set_source_type(
+        cast_function: duckdb_cast_function,
+        source_type: duckdb_logical_type,
+    );
+    pub fn duckdb_cast_function_set_target_type(
+        cast_function: duckdb_cast_function,
+        target_type: duckdb_logical_type,
+    );
+    pub fn duckdb_cast_function_set_implicit_cast_cost(
+        cast_function: duckdb_cast_function,
+        cost: i64,
+    );
+    pub fn duckdb_cast_function_set_function(
+        cast_function: duckdb_cast_function,
+        function: duckdb_cast_function_t,
+    );
+    pub fn duckdb_cast_function_set_extra_info(
+        cast_function: duckdb_cast_function,
+        extra_info: *mut c_void,
+        destroy: duckdb_delete_callback_t,
+    );
+    pub fn duckdb_cast_function_get_extra_info(info: duckdb_function_info) -> *mut c_void;
+    pub fn duckdb_register_cast_function(
+        con: duckdb_connection,
+        cast_function: duckdb_cast_function,
+    ) -> duckdb_state;
 }

@@ -143,6 +143,14 @@ interface extension-loader-hooks {
         physical: string,
     }
 
+    /// Pending cast registration captured during extension load. `source` and
+    /// `target` are SQL type names; `callback-handle` dispatches the transform.
+    record cast-registration {
+        source: string,
+        target: string,
+        callback-handle: u32,
+    }
+
     /// Bundled response describing all pending registrations.
     record pending-registrations {
         scalars: list<scalar-registration>,
@@ -151,6 +159,7 @@ interface extension-loader-hooks {
         macros: list<macro-registration>,
         replacement-scans: list<replacement-scan-registration>,
         logical-types: list<logical-type-registration>,
+        casts: list<cast-registration>,
     }
 
     /// Returns the pending registration requests the host captured while the extension was loading.
