@@ -11,7 +11,9 @@ const server = await createServer({
   server: { port: 5188, fs: { strict: false } },
 })
 await server.listen()
-const url = server.resolvedUrls?.local?.[0] ?? 'http://localhost:5188/'
+const page_path = process.argv[2] ?? '/'
+const base = server.resolvedUrls?.local?.[0] ?? 'http://localhost:5188/'
+const url = new URL(page_path, base).href
 console.log('serving at', url)
 
 const browser = await chromium.launch()

@@ -57,8 +57,29 @@ come back as WIT `duckvalue` variants; the core renders them as text.)
 ESM loader — `run-core.mjs` run directly under Node reaches transpilation then
 stops on `import(blob:)`.)
 
-## Next
+## Extension loading in the browser (working)
 
-Wire the custom `duckdb:*` imports (`callback-dispatch`, the loader hooks) to
-real implementations to bring **extension loading** to the browser too — the
-same registration pipeline the native host drives.
+`npm run verify-ext` loads the **sample extension component** into the in-browser
+DuckDB and calls its registered functions — the full pipeline the native host
+drives, in the browser:
+
+```
+=== RESULT status: ok ===
+scalar sample_plus_one(41) = [[{"tag":"text","val":"42"}]]
+macro  sample_add_two(40)  = [[{"tag":"text","val":"42"}]]
+cast   id-7 -> sample_id   = [[{"tag":"text","val":"7"}]]
+```
+
+`extension-host.mjs` implements the host surface in JS:
+
+- it instantiates the extension *component* (a second jco-transpiled component)
+  with JS implementations of `duckdb:extension/{runtime,catalog,files}` — the
+  registry/callback resource classes capture what `load()` registers;
+- it provides the *core's* `duckdb:component/{host-extension-loader,
+  extension-loader-hooks}` + `duckdb:extension/callback-dispatch` imports, so the
+  core sees the captured registrations and dispatches scalar/table/aggregate/cast
+  callbacks straight back to the extension instance.
+
+Because component instantiation is async but the core calls `request-load`
+synchronously, extensions are **pre-loaded**; `request-load` then returns the
+cached result and callbacks dispatch synchronously.

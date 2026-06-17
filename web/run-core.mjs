@@ -57,15 +57,19 @@ export const duckdbStubImports = {
   },
 }
 
-// Instantiate the core component and run a query. `componentBytes` is the
-// duckdb_core_component.wasm; works wherever `RuntimeBindgen` can import the
-// jco output (browsers).
-export async function runQuery(componentBytes, sql = 'SELECT 42 AS answer, 1 + 1 AS two') {
+// Instantiate the core component. `additionalImports` defaults to the stubs;
+// pass an extension host's `coreImports()` to enable extension loading.
+export async function instantiateCore(componentBytes, additionalImports = duckdbStubImports) {
   const polyfill = configurePolyfill()
-  const bindgen = createRuntimeBindgen({ polyfill, additionalImports: duckdbStubImports })
+  const bindgen = createRuntimeBindgen({ polyfill, additionalImports })
   const instance = await bindgen.instantiate(componentBytes)
   const root = instance.exports ?? instance
-  const db = root.database
+  return root.database
+}
+
+// Instantiate the core component and run a query (no extension loading).
+export async function runQuery(componentBytes, sql = 'SELECT 42 AS answer, 1 + 1 AS two') {
+  const db = await instantiateCore(componentBytes)
   const conn = db.open(undefined) // none -> in-memory database
   const result = db.execute(conn, sql)
   db.close(conn)

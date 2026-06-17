@@ -1,5 +1,7 @@
 node_modules/
 dist/
 gen/
+gen-ext/
+public/
 package-lock.json
 *.wasm
