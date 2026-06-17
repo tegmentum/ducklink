@@ -1973,7 +1973,18 @@ unsafe fn configure_wasi_sandbox_config(
     config: duckdb::duckdb_config,
     preopens: &[(Descriptor, String)],
 ) -> Result<(), DuckDbError> {
-    // TODO: re-enable sandbox configuration once WASI preopen paths are stable.
+    // Intentionally a no-op. The filesystem sandbox is provided by the wasi-fs
+    // shims, which confine *all* DuckDB file access (open, read_csv/read_text,
+    // COPY, attached databases) to the WASI preopened directories — nothing can
+    // be reached outside them regardless of DuckDB settings.
+    //
+    // DuckDB's own `allowed_directories` allowlist cannot add finer scoping in
+    // this wasm build: `duckdb_set_config("allowed_directories", ...)` is
+    // rejected at config-creation time, and setting it at runtime does not
+    // actually enforce (a path outside the allowlist is still read). The only
+    // working DuckDB-level knob is the coarse `enable_external_access` boolean,
+    // which is exposed to callers as an opt-in via `open-with-config`
+    // (`enable_external_access=false` disables read_csv/read_text/COPY/attach).
     let _ = (config, preopens);
     Ok(())
 }

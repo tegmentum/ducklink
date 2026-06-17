@@ -3503,6 +3503,44 @@ mod tests {
     }
 
     #[test]
+    fn core_open_with_config_can_disable_external_access() -> Result<()> {
+        // The filesystem sandbox is the WASI preopen shims; this verifies the
+        // one DuckDB-level hardening knob that works in wasm — disabling external
+        // file access (read_csv/read_text/COPY) as an opt-in via open-with-config.
+        let engine = build_engine()?;
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let tempdir = tempdir().context("failed to create temporary directory")?;
+        std::fs::write(tempdir.path().join("d.csv"), "a,b\n1,x\n2,y\n")?;
+        let preopens = [(tempdir.path(), ".")];
+        let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
+        let read = "SELECT count(*) AS n FROM read_csv_auto('d.csv')";
+
+        // Default: external access enabled, read_csv works.
+        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &preopens)?;
+        let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager.clone())?;
+        let conn = core
+            .with_database(|g, s| g.call_open(s, None))?
+            .map_err(|e| anyhow::anyhow!("open: {e}"))?;
+        let allowed = core.with_database(|g, s| g.call_execute(s, conn, read))?;
+        assert!(allowed.is_ok(), "read_csv should work by default: {allowed:?}");
+
+        // Opt-in hardening: enable_external_access=false blocks read_csv.
+        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &preopens)?;
+        let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
+        let opts = vec![("enable_external_access".to_string(), "false".to_string())];
+        let conn = core
+            .with_database(|g, s| g.call_open_with_config(s, None, &opts))?
+            .map_err(|e| anyhow::anyhow!("open_with_config: {e}"))?;
+        let blocked = core.with_database(|g, s| g.call_execute(s, conn, read))?;
+        assert!(
+            blocked.is_err(),
+            "read_csv should be blocked when external access is disabled, got {blocked:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn core_open_with_config_applies_and_rejects_options() -> Result<()> {
         let engine = build_engine()?;
         let artifacts = ComponentArtifacts::resolve_default()?;
