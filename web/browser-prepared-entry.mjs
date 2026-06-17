@@ -37,6 +37,12 @@ async function main() {
     const c = stmt2.execute([{ tag: 'text', val: 'hi' }, { tag: 'null' }])
     check('text + null', c.rows, [[{ tag: 'text', val: 'hi' }, { tag: 'text', val: 'true' }]])
 
+    // Config API: open a connection with options applied.
+    const cfgConn = db.openWithConfig(undefined, [['default_order', 'desc']])
+    const cfg = db.execute(cfgConn, "SELECT current_setting('default_order') AS v")
+    check('open-with-config', cfg.rows, [[{ tag: 'text', val: 'DESC' }]])
+    db.close(cfgConn)
+
     db.close(conn)
     out.textContent = lines.join('\n')
     out.dataset.status = failed === 0 ? 'ok' : 'error'

@@ -2106,6 +2106,13 @@ mod config_tests {
 
 impl ConnectionState {
     fn open(path: Option<&str>) -> Result<Self, DuckDbError> {
+        Self::open_with_config(path, &[])
+    }
+
+    fn open_with_config(
+        path: Option<&str>,
+        options: &[(String, String)],
+    ) -> Result<Self, DuckDbError> {
         #[cfg(feature = "browser")]
         if let Some(_) = path {
             return Err(DuckDbError::message(
@@ -2139,6 +2146,19 @@ impl ConnectionState {
             #[cfg(not(feature = "browser"))]
             {
                 configure_wasi_sandbox_config(config_guard.0, preopen_dirs)?;
+            }
+
+            for (name, value) in options {
+                let c_name = CString::new(name.as_str()).map_err(|_| DuckDbError::EmbeddedNull)?;
+                let c_value =
+                    CString::new(value.as_str()).map_err(|_| DuckDbError::EmbeddedNull)?;
+                if duckdb::duckdb_set_config(config_guard.0, c_name.as_ptr(), c_value.as_ptr())
+                    != DUCKDB_SUCCESS
+                {
+                    return Err(DuckDbError::message(format!(
+                        "invalid configuration option '{name}'"
+                    )));
+                }
             }
 
             let c_path = match path {
@@ -2465,6 +2485,15 @@ impl exported_database::Guest for Component {
 
     fn open(path: Option<String>) -> Result<Connection, String> {
         let state = ConnectionState::open(path.as_deref()).map_err(|err| err.to_string())?;
+        Ok(Connection::new(state))
+    }
+
+    fn open_with_config(
+        path: Option<String>,
+        options: Vec<(String, String)>,
+    ) -> Result<Connection, String> {
+        let state = ConnectionState::open_with_config(path.as_deref(), &options)
+            .map_err(|err| err.to_string())?;
         Ok(Connection::new(state))
     }
 

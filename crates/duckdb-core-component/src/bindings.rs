@@ -9207,6 +9207,106 @@ pub mod exports {
                 }
                 #[doc(hidden)]
                 #[allow(non_snake_case)]
+                pub unsafe fn _export_open_with_config_cabi<T: Guest>(
+                    arg0: i32,
+                    arg1: *mut u8,
+                    arg2: usize,
+                    arg3: *mut u8,
+                    arg4: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let base7 = arg3;
+                    let len7 = arg4;
+                    let mut result7 = _rt::Vec::with_capacity(len7);
+                    for i in 0..len7 {
+                        let base = base7
+                            .add(i * (4 * ::core::mem::size_of::<*const u8>()));
+                        let e7 = {
+                            let l1 = *base.add(0).cast::<*mut u8>();
+                            let l2 = *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let len3 = l2;
+                            let bytes3 = _rt::Vec::from_raw_parts(l1.cast(), len3, len3);
+                            let l4 = *base
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l5 = *base
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let len6 = l5;
+                            let bytes6 = _rt::Vec::from_raw_parts(l4.cast(), len6, len6);
+                            (_rt::string_lift(bytes3), _rt::string_lift(bytes6))
+                        };
+                        result7.push(e7);
+                    }
+                    _rt::cabi_dealloc(
+                        base7,
+                        len7 * (4 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result8 = T::open_with_config(
+                        match arg0 {
+                            0 => None,
+                            1 => {
+                                let e = {
+                                    let len0 = arg2;
+                                    let bytes0 = _rt::Vec::from_raw_parts(
+                                        arg1.cast(),
+                                        len0,
+                                        len0,
+                                    );
+                                    _rt::string_lift(bytes0)
+                                };
+                                Some(e)
+                            }
+                            _ => _rt::invalid_enum_discriminant(),
+                        },
+                        result7,
+                    );
+                    let ptr9 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result8 {
+                        Ok(e) => {
+                            *ptr9.add(0).cast::<u8>() = (0i32) as u8;
+                            *ptr9
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<i32>() = (e).take_handle() as i32;
+                        }
+                        Err(e) => {
+                            *ptr9.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec10 = (e.into_bytes()).into_boxed_slice();
+                            let ptr10 = vec10.as_ptr().cast::<u8>();
+                            let len10 = vec10.len();
+                            ::core::mem::forget(vec10);
+                            *ptr9
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len10;
+                            *ptr9
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr10.cast_mut();
+                        }
+                    };
+                    ptr9
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_open_with_config<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
                 pub unsafe fn _export_close_cabi<T: Guest>(arg0: i32) {
                     #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
                     T::close(unsafe { Connection::from_handle(arg0 as u32) });
@@ -10126,6 +10226,14 @@ pub mod exports {
                     fn open(
                         path: Option<_rt::String>,
                     ) -> Result<Connection, _rt::String>;
+                    /// Opens a DuckDB database applying the given configuration options (e.g.
+                    /// `access_mode=read_only`, `threads=4`, `max_memory=1GB`) before connecting.
+                    /// Each option is a `(name, value)` pair; an unknown name or invalid value
+                    /// fails the open.
+                    fn open_with_config(
+                        path: Option<_rt::String>,
+                        options: _rt::Vec<(_rt::String, _rt::String)>,
+                    ) -> Result<Connection, _rt::String>;
                     /// Explicitly closes the database connection.
                     fn close(conn: Connection) -> ();
                     /// Interrupts any running query on the provided connection.
@@ -10372,23 +10480,32 @@ pub mod exports {
                         (export_name = "cabi_post_duckdb:component/database#open")]
                         unsafe extern "C" fn _post_return_open(arg0 : * mut u8,) { unsafe
                         { $($path_to_types)*:: __post_return_open::<$ty > (arg0) } }
-                        #[unsafe (export_name = "duckdb:component/database#close")]
-                        unsafe extern "C" fn export_close(arg0 : i32,) { unsafe {
-                        $($path_to_types)*:: _export_close_cabi::<$ty > (arg0) } }
-                        #[unsafe (export_name = "duckdb:component/database#interrupt")]
-                        unsafe extern "C" fn export_interrupt(arg0 : i32,) { unsafe {
-                        $($path_to_types)*:: _export_interrupt_cabi::<$ty > (arg0) } }
-                        #[unsafe (export_name = "duckdb:component/database#execute")]
-                        unsafe extern "C" fn export_execute(arg0 : i32, arg1 : * mut u8,
-                        arg2 : usize,) -> * mut u8 { unsafe { $($path_to_types)*::
-                        _export_execute_cabi::<$ty > (arg0, arg1, arg2) } } #[unsafe
-                        (export_name = "cabi_post_duckdb:component/database#execute")]
-                        unsafe extern "C" fn _post_return_execute(arg0 : * mut u8,) {
-                        unsafe { $($path_to_types)*:: __post_return_execute::<$ty >
-                        (arg0) } } #[unsafe (export_name =
-                        "duckdb:component/database#open-stream")] unsafe extern "C" fn
-                        export_open_stream(arg0 : i32, arg1 : * mut u8, arg2 : usize,) ->
-                        * mut u8 { unsafe { $($path_to_types)*::
+                        #[unsafe (export_name =
+                        "duckdb:component/database#open-with-config")] unsafe extern "C"
+                        fn export_open_with_config(arg0 : i32, arg1 : * mut u8, arg2 :
+                        usize, arg3 : * mut u8, arg4 : usize,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_open_with_config_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3, arg4) } } #[unsafe (export_name =
+                        "cabi_post_duckdb:component/database#open-with-config")] unsafe
+                        extern "C" fn _post_return_open_with_config(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*::
+                        __post_return_open_with_config::<$ty > (arg0) } } #[unsafe
+                        (export_name = "duckdb:component/database#close")] unsafe extern
+                        "C" fn export_close(arg0 : i32,) { unsafe { $($path_to_types)*::
+                        _export_close_cabi::<$ty > (arg0) } } #[unsafe (export_name =
+                        "duckdb:component/database#interrupt")] unsafe extern "C" fn
+                        export_interrupt(arg0 : i32,) { unsafe { $($path_to_types)*::
+                        _export_interrupt_cabi::<$ty > (arg0) } } #[unsafe (export_name =
+                        "duckdb:component/database#execute")] unsafe extern "C" fn
+                        export_execute(arg0 : i32, arg1 : * mut u8, arg2 : usize,) -> *
+                        mut u8 { unsafe { $($path_to_types)*:: _export_execute_cabi::<$ty
+                        > (arg0, arg1, arg2) } } #[unsafe (export_name =
+                        "cabi_post_duckdb:component/database#execute")] unsafe extern "C"
+                        fn _post_return_execute(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_execute::<$ty > (arg0) } }
+                        #[unsafe (export_name = "duckdb:component/database#open-stream")]
+                        unsafe extern "C" fn export_open_stream(arg0 : i32, arg1 : * mut
+                        u8, arg2 : usize,) -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_open_stream_cabi::<$ty > (arg0, arg1, arg2) } } #[unsafe
                         (export_name =
                         "cabi_post_duckdb:component/database#open-stream")] unsafe extern
@@ -17488,8 +17605,8 @@ pub(crate) use __export_libduckdb_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 10337] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xe1O\x01A\x02\x01A8\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 10386] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\x92P\x01A\x02\x01A8\x01\
 B\x0a\x01o\x02ss\x01p\0\x01@\0\0\x01\x04\0\x0fget-environment\x01\x02\x01ps\x01@\
 \0\0\x03\x04\0\x0dget-arguments\x01\x04\x01ks\x01@\0\0\x05\x04\0\x0binitial-cwd\x01\
 \x06\x03\0\x1awasi:cli/environment@0.2.6\x05\0\x01B\x04\x04\0\x05error\x03\x01\x01\
@@ -17634,7 +17751,7 @@ gs\x0a\0\x0d\x04\0\x0acall-table\x01\x0e\x01@\x02\x06handley\x04rows\x09\0\x0b\x
 \0\x0ecall-aggregate\x01\x0f\x01k\x03\x01j\x01\x10\x01\x01\x01@\x02\x06handley\x04\
 args\x0a\0\x11\x04\0\x0bcall-pragma\x01\x12\x01@\x02\x06handley\x05value\x03\0\x0b\
 \x04\0\x09call-cast\x01\x13\x03\0\"duckdb:extension/callback-dispatch\x05\x1b\x02\
-\x03\0\x0a\x0ecapabilitykind\x01B>\x02\x03\x02\x01\x1c\x04\0\x0ecapabilitykind\x03\
+\x03\0\x0a\x0ecapabilitykind\x01BB\x02\x03\x02\x01\x1c\x04\0\x0ecapabilitykind\x03\
 \0\0\x02\x03\x02\x01\x13\x04\0\x09columndef\x03\0\x02\x02\x03\x02\x01\x16\x04\0\x09\
 duckerror\x03\0\x04\x02\x03\x02\x01\x17\x04\0\x09duckvalue\x03\0\x06\x04\0\x0aco\
 nnection\x03\x01\x01p\x07\x04\0\x03row\x03\0\x09\x01p\x03\x01p\x0a\x01r\x02\x07c\
@@ -17647,13 +17764,14 @@ self\x14\x01\0\x04\0\x1b[method]result-stream.close\x01\x19\x01h\x10\x01@\x01\x0
 self\x1a\0y\x04\0*[method]prepared-statement.parameter-count\x01\x1b\x01p\x07\x01\
 j\x01\x0e\x01\x05\x01@\x02\x04self\x1a\x06params\x1c\0\x1d\x04\0\"[method]prepar\
 ed-statement.execute\x01\x1e\x01ks\x01i\x08\x01j\x01\x20\x01s\x01@\x01\x04path\x1f\
-\0!\x04\0\x04open\x01\"\x01@\x01\x04conn\x20\x01\0\x04\0\x05close\x01#\x01h\x08\x01\
-@\x01\x04conn$\x01\0\x04\0\x09interrupt\x01%\x01@\x02\x04conn$\x03sqls\0\x1d\x04\
-\0\x07execute\x01&\x01i\x0f\x01j\x01'\x01\x05\x01@\x02\x04conn$\x03sqls\0(\x04\0\
-\x0bopen-stream\x01)\x01i\x10\x01j\x01*\x01\x05\x01@\x02\x04conn$\x03sqls\0+\x04\
-\0\x07prepare\x01,\x01j\x01\x7f\x01s\x01@\x02\x04names\x08requires\x11\0-\x04\0\x12\
-register-extension\x01.\x01p\x13\x01@\0\0/\x04\0\x1alist-registered-extensions\x01\
-0\x04\0\x19duckdb:component/database\x05\x1d\x02\x03\0\x0a\x0bconfigerror\x01B$\x02\
+\0!\x04\0\x04open\x01\"\x01o\x02ss\x01p#\x01@\x02\x04path\x1f\x07options$\0!\x04\
+\0\x10open-with-config\x01%\x01@\x01\x04conn\x20\x01\0\x04\0\x05close\x01&\x01h\x08\
+\x01@\x01\x04conn'\x01\0\x04\0\x09interrupt\x01(\x01@\x02\x04conn'\x03sqls\0\x1d\
+\x04\0\x07execute\x01)\x01i\x0f\x01j\x01*\x01\x05\x01@\x02\x04conn'\x03sqls\0+\x04\
+\0\x0bopen-stream\x01,\x01i\x10\x01j\x01-\x01\x05\x01@\x02\x04conn'\x03sqls\0.\x04\
+\0\x07prepare\x01/\x01j\x01\x7f\x01s\x01@\x02\x04names\x08requires\x11\00\x04\0\x12\
+register-extension\x011\x01p\x13\x01@\0\02\x04\0\x1alist-registered-extensions\x01\
+3\x04\0\x19duckdb:component/database\x05\x1d\x02\x03\0\x0a\x0bconfigerror\x01B$\x02\
 \x03\x02\x01\x1e\x04\0\x0bconfigerror\x03\0\0\x01@\0\0s\x04\0\x10provider-versio\
 n\x01\x02\x01ks\x01ps\x01@\x01\x06prefix\x03\0\x04\x04\0\x09list-keys\x01\x05\x01\
 j\x01\x03\x01\x01\x01@\x01\x04paths\0\x06\x04\0\x0aget-string\x01\x07\x01k\x7f\x01\

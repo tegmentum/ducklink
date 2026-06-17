@@ -997,6 +997,139 @@ pub mod duckdb {
                 }
             }
             #[allow(unused_unsafe, clippy::all)]
+            /// Opens a DuckDB database applying the given configuration options (e.g.
+            /// `access_mode=read_only`, `threads=4`, `max_memory=1GB`) before connecting.
+            /// Each option is a `(name, value)` pair; an unknown name or invalid value
+            /// fails the open.
+            pub fn open_with_config(
+                path: Option<&str>,
+                options: &[(_rt::String, _rt::String)],
+            ) -> Result<Connection, _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let (result1_0, result1_1, result1_2) = match path {
+                        Some(e) => {
+                            let vec0 = e;
+                            let ptr0 = vec0.as_ptr().cast::<u8>();
+                            let len0 = vec0.len();
+                            (1i32, ptr0.cast_mut(), len0)
+                        }
+                        None => (0i32, ::core::ptr::null_mut(), 0usize),
+                    };
+                    let vec5 = options;
+                    let len5 = vec5.len();
+                    let layout5 = _rt::alloc::Layout::from_size_align_unchecked(
+                        vec5.len() * (4 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result5 = if layout5.size() != 0 {
+                        let ptr = _rt::alloc::alloc(layout5).cast::<u8>();
+                        if ptr.is_null() {
+                            _rt::alloc::handle_alloc_error(layout5);
+                        }
+                        ptr
+                    } else {
+                        ::core::ptr::null_mut()
+                    };
+                    for (i, e) in vec5.into_iter().enumerate() {
+                        let base = result5
+                            .add(i * (4 * ::core::mem::size_of::<*const u8>()));
+                        {
+                            let (t2_0, t2_1) = e;
+                            let vec3 = t2_0;
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *base.add(0).cast::<*mut u8>() = ptr3.cast_mut();
+                            let vec4 = t2_1;
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            *base
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *base
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr4.cast_mut();
+                        }
+                    }
+                    let ptr6 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "duckdb:component/database")]
+                    unsafe extern "C" {
+                        #[link_name = "open-with-config"]
+                        fn wit_import7(
+                            _: i32,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import7(
+                        _: i32,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import7(result1_0, result1_1, result1_2, result5, len5, ptr6)
+                    };
+                    let l8 = i32::from(*ptr6.add(0).cast::<u8>());
+                    let result13 = match l8 {
+                        0 => {
+                            let e = {
+                                let l9 = *ptr6
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<i32>();
+                                unsafe { Connection::from_handle(l9 as u32) }
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l10 = *ptr6
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l11 = *ptr6
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len12 = l11;
+                                let bytes12 = _rt::Vec::from_raw_parts(
+                                    l10.cast(),
+                                    len12,
+                                    len12,
+                                );
+                                _rt::string_lift(bytes12)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    if layout5.size() != 0 {
+                        _rt::alloc::dealloc(result5.cast(), layout5);
+                    }
+                    result13
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
             /// Explicitly closes the database connection.
             pub fn close(conn: Connection) -> () {
                 unsafe {
@@ -7277,8 +7410,8 @@ pub(crate) use __export_duckdb_cli_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 6799] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\x8e4\x01A\x02\x01A%\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 6848] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xbf4\x01A\x02\x01A%\x01\
 B&\x01m\x06\x07boolean\x05int64\x06uint64\x07float64\x04text\x04blob\x04\0\x0blo\
 gicaltype\x03\0\0\x01ks\x01r\x02\x04name\x02\x07logical\x01\x04\0\x07funcarg\x03\
 \0\x03\x01n\x05\x0ddeterministic\x0bcommutative\x09stateless\x0dsideeffecting\x0a\
@@ -7298,7 +7431,7 @@ fo\x04warn\x05error\x04\0\x08loglevel\x03\0\x1d\x01r\x02\x03keys\x05values\x04\0
 ro\x07catalog\x0bfile-format\x04\0\x0ecapabilitykind\x03\0!\x01p\"\x01r\x03\x04n\
 ames\x07version\x02\x08requires#\x04\0\x0aloadresult\x03\0$\x03\0\x16duckdb:exte\
 nsion/types\x05\0\x02\x03\0\0\x0ecapabilitykind\x02\x03\0\0\x09columndef\x02\x03\
-\0\0\x09duckerror\x02\x03\0\0\x09duckvalue\x01B>\x02\x03\x02\x01\x01\x04\0\x0eca\
+\0\0\x09duckerror\x02\x03\0\0\x09duckvalue\x01BB\x02\x03\x02\x01\x01\x04\0\x0eca\
 pabilitykind\x03\0\0\x02\x03\x02\x01\x02\x04\0\x09columndef\x03\0\x02\x02\x03\x02\
 \x01\x03\x04\0\x09duckerror\x03\0\x04\x02\x03\x02\x01\x04\x04\0\x09duckvalue\x03\
 \0\x06\x04\0\x0aconnection\x03\x01\x01p\x07\x04\0\x03row\x03\0\x09\x01p\x03\x01p\
@@ -7311,13 +7444,14 @@ ames\x08requires\x11\x04\0\x0eextension-info\x03\0\x12\x01h\x0f\x01@\x01\x04self
 \x01h\x10\x01@\x01\x04self\x1a\0y\x04\0*[method]prepared-statement.parameter-cou\
 nt\x01\x1b\x01p\x07\x01j\x01\x0e\x01\x05\x01@\x02\x04self\x1a\x06params\x1c\0\x1d\
 \x04\0\"[method]prepared-statement.execute\x01\x1e\x01ks\x01i\x08\x01j\x01\x20\x01\
-s\x01@\x01\x04path\x1f\0!\x04\0\x04open\x01\"\x01@\x01\x04conn\x20\x01\0\x04\0\x05\
-close\x01#\x01h\x08\x01@\x01\x04conn$\x01\0\x04\0\x09interrupt\x01%\x01@\x02\x04\
-conn$\x03sqls\0\x1d\x04\0\x07execute\x01&\x01i\x0f\x01j\x01'\x01\x05\x01@\x02\x04\
-conn$\x03sqls\0(\x04\0\x0bopen-stream\x01)\x01i\x10\x01j\x01*\x01\x05\x01@\x02\x04\
-conn$\x03sqls\0+\x04\0\x07prepare\x01,\x01j\x01\x7f\x01s\x01@\x02\x04names\x08re\
-quires\x11\0-\x04\0\x12register-extension\x01.\x01p\x13\x01@\0\0/\x04\0\x1alist-\
-registered-extensions\x010\x03\0\x19duckdb:component/database\x05\x05\x01B\x0a\x01\
+s\x01@\x01\x04path\x1f\0!\x04\0\x04open\x01\"\x01o\x02ss\x01p#\x01@\x02\x04path\x1f\
+\x07options$\0!\x04\0\x10open-with-config\x01%\x01@\x01\x04conn\x20\x01\0\x04\0\x05\
+close\x01&\x01h\x08\x01@\x01\x04conn'\x01\0\x04\0\x09interrupt\x01(\x01@\x02\x04\
+conn'\x03sqls\0\x1d\x04\0\x07execute\x01)\x01i\x0f\x01j\x01*\x01\x05\x01@\x02\x04\
+conn'\x03sqls\0+\x04\0\x0bopen-stream\x01,\x01i\x10\x01j\x01-\x01\x05\x01@\x02\x04\
+conn'\x03sqls\0.\x04\0\x07prepare\x01/\x01j\x01\x7f\x01s\x01@\x02\x04names\x08re\
+quires\x11\00\x04\0\x12register-extension\x011\x01p\x13\x01@\0\02\x04\0\x1alist-\
+registered-extensions\x013\x03\0\x19duckdb:component/database\x05\x05\x01B\x0a\x01\
 o\x02ss\x01p\0\x01@\0\0\x01\x04\0\x0fget-environment\x01\x02\x01ps\x01@\0\0\x03\x04\
 \0\x0dget-arguments\x01\x04\x01ks\x01@\0\0\x05\x04\0\x0binitial-cwd\x01\x06\x03\0\
 \x1awasi:cli/environment@0.2.6\x05\x06\x01B\x04\x04\0\x05error\x03\x01\x01h\0\x01\

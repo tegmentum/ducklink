@@ -2044,6 +2044,39 @@ impl cli_db::Host for HostState {
         }
     }
 
+    fn open_with_config(
+        &mut self,
+        path: Option<CliString>,
+        options: wasmtime::component::__internal::Vec<(CliString, CliString)>,
+    ) -> Result<Resource<cli_db::Connection>, CliString> {
+        let owned_path: Option<String> = path.map(|s| s.into());
+        let owned_options: Vec<(String, String)> = options
+            .into_iter()
+            .map(|(name, value)| (name.into(), value.into()))
+            .collect();
+        let result = self
+            .with_core(|core| {
+                core.with_database(|guest, store| {
+                    guest.call_open_with_config(store, owned_path.as_deref(), &owned_options)
+                })
+            })
+            .map_err(trap_to_cli_string)?;
+        match result {
+            Ok(handle) => {
+                let id = self.alloc_resource_id();
+                self.connections.insert(
+                    id,
+                    ConnectionEntry {
+                        handle,
+                        closed: false,
+                    },
+                );
+                Ok(Resource::new_own(id))
+            }
+            Err(err) => Err(err),
+        }
+    }
+
     fn close(&mut self, conn: Resource<cli_db::Connection>) {
         let handle = match self.connections.get(&conn.rep()) {
             Some(entry) if !entry.closed => entry.handle.clone(),
@@ -3401,6 +3434,56 @@ mod tests {
 
         assert_eq!(run(&mut core, 40, 2)?, "42");
         assert_eq!(run(&mut core, 100, 1)?, "101", "prepared statement reuse");
+
+        Ok(())
+    }
+
+    #[test]
+    fn core_open_with_config_applies_and_rejects_options() -> Result<()> {
+        let engine = build_engine()?;
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
+
+        // A valid option is applied to the connection.
+        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &[])?;
+        let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager.clone())?;
+        // default_order defaults to ASC; setting it at open time should stick.
+        let options = vec![("default_order".to_string(), "desc".to_string())];
+        let conn = core
+            .with_database(|guest, store| guest.call_open_with_config(store, None, &options))?
+            .map_err(|e| anyhow::anyhow!("open_with_config failed: {e}"))?;
+        let result = core
+            .with_database(|guest, store| {
+                guest.call_execute(
+                    store,
+                    conn,
+                    "SELECT current_setting('default_order') AS v",
+                )
+            })?
+            .map_err(|e| anyhow::anyhow!("execute failed: {e:?}"))?;
+        let cell = result
+            .rows
+            .first()
+            .and_then(|row| row.first())
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("no result cell"))?;
+        let rendered = match cell {
+            core_types::Duckvalue::Text(v) => v,
+            core_types::Duckvalue::Int64(v) => v.to_string(),
+            other => format!("{other:?}"),
+        };
+        assert_eq!(rendered, "DESC", "default_order config option should be applied");
+
+        // An invalid value for a known option fails the open.
+        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &[])?;
+        let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
+        let bad = vec![("access_mode".to_string(), "definitely_not_a_mode".to_string())];
+        let outcome =
+            core.with_database(|guest, store| guest.call_open_with_config(store, None, &bad))?;
+        assert!(
+            outcome.is_err(),
+            "expected an invalid config value to fail the open, got {outcome:?}"
+        );
 
         Ok(())
     }

@@ -53,6 +53,15 @@ interface database {
     /// Opens a DuckDB database. Pass `none` for an in-memory database.
     open: func(path: option<string>) -> result<connection, string>;
 
+    /// Opens a DuckDB database applying the given configuration options (e.g.
+    /// `access_mode=read_only`, `threads=4`, `max_memory=1GB`) before connecting.
+    /// Each option is a `(name, value)` pair; an unknown name or invalid value
+    /// fails the open.
+    open-with-config: func(
+        path: option<string>,
+        options: list<tuple<string, string>>,
+    ) -> result<connection, string>;
+
     /// Explicitly closes the database connection.
     close: func(conn: connection);
 
