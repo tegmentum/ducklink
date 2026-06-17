@@ -215,8 +215,21 @@ To validate the preview2 filesystem adapter against real storage outside of `mak
 
 Continuous smoke coverage runs in CI via `.github/workflows/smoke-tests.yml`, which builds the components and executes both the in-memory and on-disk runs of `scripts/smoke-cli.sh` on every push and pull request.
 
+## Database interface
+
+Beyond `execute` / `open-stream`, the `database` interface exposes:
+
+- **Prepared statements** — `prepare(conn, sql)` returns a reusable
+  `prepared-statement` resource; `execute(params)` binds positional parameters
+  (`$1`, `$2`, ...) and runs it, rebinding from scratch each call.
+- **Configuration** — `open-with-config(path, options)` opens a database applying
+  `(name, value)` options (e.g. `access_mode`, `default_order`, `max_memory`).
+- **Arrow** — `query-arrow(conn, sql)` returns the result as an Arrow IPC stream
+  (`list<u8>`), decodable by any Arrow implementation (apache-arrow in JS,
+  arrow-rs in Rust). Zero-copy is not possible across the component boundary, so
+  buffers are serialized once into IPC bytes.
+
 ## Next steps
 
-- Expand the exported WIT interfaces (prepared statements, Arrow streams, configuration)
-- Flesh out CLI meta-commands and scripting parity with the native shell
-- Add integration tests that run under wasmtime`s preview2 support
+- Flesh out remaining CLI scripting parity with the native shell
+- Resolve GitHub Actions billing so the smoke-tests workflow can run
