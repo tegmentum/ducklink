@@ -44,5 +44,16 @@ for arg in "$@"; do
   fi
 done
 
+# act bind-mounts a Docker socket into the runner container. The smoke workflow
+# never uses docker-in-docker, and some engines (colima) cannot bind-mount a unix
+# socket file ("operation not supported" — a Lima VM limitation); act 0.2.89 also
+# ignores `--container-daemon-socket -` when DOCKER_HOST is set, falling back to
+# mounting it anyway. Point act at a dummy *regular file* under $HOME (mountable
+# on colima and Docker Desktop alike, and never actually used) to sidestep both.
+noop_sock="$HOME/.cache/act/noop-docker.sock"
+mkdir -p "$(dirname "$noop_sock")"
+: > "$noop_sock"
+
 # Default GitHub event for a workflow is `push`. Pass through any extra flags.
-exec act push -W .github/workflows/smoke-tests.yml "$@"
+exec act push -W .github/workflows/smoke-tests.yml \
+  --container-daemon-socket="$noop_sock" "$@"
