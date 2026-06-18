@@ -86,13 +86,33 @@ The resulting component binaries are generated in `target/wasm32-wasi/release/`:
 
 ## Developing component extensions
 
-If you want to build your own DuckDB Wasm extension, start from the sample template:
+Extensions live under `extensions/<name>-component`, register imperatively in
+`load()` against the `duckdb:extension` world, and are tracked by the tooling in
+`tooling/` + `registry/` (mirrors `~/git/sqlite-wasm`'s system). The full
+roadmap is in [PLAN-duckdb-extensions.md](PLAN-duckdb-extensions.md).
 
 ```bash
-scripts/new-component-extension.sh my_extension
+# Scaffold a skeleton (consults tooling/compat-registry.json for crate status,
+# registers the workspace member, and cargo-checks that it compiles):
+make ext-scaffold NAME=myext CRATE=base32,bs58
+
+# Edit extensions/myext-component/src/lib.rs + smoke.sql, then build + smoke:
+make ext NAME=myext-component
+
+# Seed assertions from current output, review, and re-run to assert:
+python3 tooling/smoke.py --seed-expected myext
+python3 tooling/smoke.py myext
+
+make ext-smoke-all        # smoke every extension
+make ext-list-broken      # crates flagged un-buildable on wasm32-wasip2
+python3 tooling/t-status.py   # tooling-improvement items from build experience
 ```
 
-Then follow the steps in [docs/component-extension-guide.md](docs/component-extension-guide.md) to hook the crate into the workspace, implement your logic, and package the resulting `.wasm` artifact.
+Extensions load through the **native host runner** (`duckdb-host`); the
+wac-composed standalone CLI links a no-op loader stub and cannot instantiate
+them. `isin` (hand-rolled) and `baseN` (crate-backed) are worked examples. See
+[docs/component-extension-guide.md](docs/component-extension-guide.md) for the
+capability surface and packaging details.
 
 ## Using the components
 

@@ -1,0 +1,179 @@
+{
+  "version": "0.1.0",
+  "updated": "2026-06-18",
+  "registry_url": "https://github.com/tegmentum/duckdb-webassembly-component",
+  "_schema": {
+    "description": "Catalog of componentized DuckDB-wasm extensions. Each entry describes one extension component built against the duckdb:extension world. The full planned roadmap (with per-extension batch + native-coverage notes) lives in PLAN-duckdb-extensions.md.",
+    "status_values": {
+      "planned": "in the roadmap; not yet scaffolded",
+      "scaffolded": "tooling/scaffold.py has generated a skeleton that compiles",
+      "working": "implemented + smoke.sql asserts via smoke.expected",
+      "shipped": "published as an OCI artifact"
+    },
+    "fields": {
+      "exports": "registered SQL function / type names",
+      "requires": "capabilitykinds the extension uses (scalar/table/aggregate/pragma/macro/catalog/file-format)",
+      "crates": "upstream Rust crates wired in (see tooling/compat-registry.json)",
+      "artifact": "path to the built component under artifacts/extensions/"
+    }
+  },
+  "builtins": {
+    "_comment": "DuckDB's own in-tree (C++) extensions, statically linked into the wasm core via cmake/wasm-extension-config.cmake (NOT components). See docs/duckdb-official-extensions.md. status: working = verified on wasm32-wasip2.",
+    "core_functions": {"status": "working", "notes": "always linked"},
+    "parquet": {"status": "working", "notes": "read_parquet + COPY ... TO ... (FORMAT parquet)"},
+    "json": {"status": "working", "notes": "scalars, ::JSON, ->/->>, json_group_array macro, read_json"},
+    "tpch": {"status": "working", "notes": "dbgen verified (sf=0.01 -> nation=25, lineitem=60175); tpch_queries()=22; needs -D_WASI_EMULATED_SIGNAL"},
+    "tpcds": {"status": "working", "notes": "dsdgen verified at sf>=0.01 (income_band=20); needs -D_WASI_EMULATED_SIGNAL. NOTE: sf=0.001 hangs (dsdgen tiny-scale edge case, not wasm-specific) -- use sf>=0.01."},
+    "autocomplete": {"status": "working", "notes": "sql_auto_complete('SELE') -> SELECT"},
+    "icu": {"status": "working", "notes": "timezones + collations verified: AT TIME ZONE DST-correct (NY EDT/EST), 134 collations, default zone from TZ env (TZ=Asia/Tokyo -> Asia/Tokyo, else UTC) + SET TimeZone. wasm patches: tzname stub (wasi-shim.hpp), putil.cpp U_TZSET/U_TIMEZONE undef, double-conversion __wasm__ arch, emulated-mman link."}
+  },
+  "out_of_tree": {
+    "_comment": "DuckDB's official extensions that live in separate repos (fetched via duckdb_extension_load GIT_URL). wasm32-wasip2 HAS sockets + TLS now (wasi:sockets via grafted wasip2 libc socket objects + openssl-wasm; see httpfs). verdict: working|gated-on-httpfs|hard|very-hard|infeasible.",
+    "inet": {"verdict": "working", "deps": "pure C++ INET type/functions", "notes": "host()/netmask()/broadcast()/<<= + IPv6 verified (duckdb-inet @fe7f60b). CAVEAT: bare INET-typed results render empty in the CLI (duckdb_value_varchar doesn't invoke the custom INET->VARCHAR cast); use ::VARCHAR. Affects any custom type; core-marshaler follow-up."},
+    "fts": {"verdict": "working", "deps": "snowball stemmer + BM25 + SQL macros", "notes": "stem() + create_fts_index + match_bm25 verified (BM25 ranking correct). duckdb-fts @39376623, INCLUDE_DIR extension/fts/include (nested layout)."},
+    "vss": {"verdict": "working", "deps": "pure C++ HNSW (usearch)", "notes": "CREATE INDEX ... USING HNSW + array_distance NN search verified (exact match dist=0). duckdb-vss @c8a4efe, INCLUDE_DIR src/include."},
+    "excel": {"verdict": "deferred", "deps": "C++ xlsx reader + vcpkg dep", "notes": "CMakeLists find_package + vcpkg.json -> needs a vcpkg native dep built for wasi; no vcpkg toolchain. @8504be9."},
+    "avro": {"verdict": "deferred", "deps": "Apache Avro C lib + vcpkg", "notes": "CMakeLists find_path + vcpkg.json -> needs the Avro C lib via vcpkg built for wasi; no vcpkg toolchain. @0c97a61."},
+    "sqlite_scanner": {"verdict": "working", "deps": "vendored sqlite3 + WASI VFS", "notes": "sqlite_scan() + ATTACH (TYPE SQLITE) read real .sqlite files. Fixed via -DSQLITE_OS_OTHER=1 + a WASI VFS reused from ~/git/sqlite-wasm (cmake/sqlite-wasi-vfs/) registered by sqlite3_os_init. @833e105."},
+    "httpfs": {"verdict": "working", "deps": "curl-wasm (libcurl+nghttp2/ngtcp2/nghttp3+brotli) + openssl-wasm + wasip2 libc BSD sockets + wasi:sockets", "notes": "VERIFIED: read_csv_auto('https://...iris.csv') -> 150 rows fetched over HTTPS via wasi:sockets + parsed (avg SepalLength 5.843). Works out of the box: curl is the default client on wasi (build script patches httpfs LoadInternal; the vendored httplib client COMPILES but fails at runtime -- non-blocking connect select/poll gap -- so SET httpfs_client_implementation='httplib' is not usable on wasi). Sockets: cargo-component builds a wasip1 core module (no BSD sockets in wasip1 libc), so scripts/build-libduckdb-wasm.sh grafts the wasip2 libc socket+binding objects (socket/connect/.../wasip2.c.obj/wasip2_component_type.o) into libduckdb-wasi.a; they import wasi:sockets/io/clocks which the host grants (inherit_network + allow_ip_name_lookup). Cert verification works secure-by-default: an embedded Mozilla CA bundle (cmake/ca-bundle/cacert.pem, 121 certs) is loaded in-memory via CURLOPT_CAINFO_BLOB (the build script patches httpfs_curl_client.cpp); verified that self-signed.badssl.com is rejected + valid certs accepted, no runtime --dir needed. openssl-wasm can't load a CA *file* (its stdio/file-BIO doesn't reach the host FS that DuckDB's wrapped open/stat use), hence the in-memory blob. @354d3f43."},
+    "iceberg": {"verdict": "gated-on-httpfs", "deps": "catalog + remote storage (httpfs)"},
+    "ducklake": {"verdict": "gated-on-httpfs", "deps": "catalog + remote storage"},
+    "mysql_scanner": {"verdict": "hard", "deps": "libmysqlclient + network", "notes": "transport solved by openssl-wasm; still needs libmysqlclient ported to wasi"},
+    "postgres_scanner": {"verdict": "hard", "deps": "libpq + network", "notes": "transport solved by openssl-wasm; still needs libpq ported to wasi"},
+    "aws": {"verdict": "very-hard", "deps": "AWS SDK + network", "notes": "transport solved; AWS C++ SDK is huge"},
+    "azure": {"verdict": "very-hard", "deps": "Azure SDK + network", "notes": "transport solved; Azure C++ SDK is huge"},
+    "spatial": {"verdict": "infeasible", "deps": "GEOS + GDAL + PROJ", "notes": "huge native geo stack; not a network problem"},
+    "ui": {"verdict": "n/a", "deps": "embedded HTTP server", "notes": "needs inbound sockets + a browser"}
+  },
+  "extensions": [
+    {
+      "name": "sample_extension",
+      "version": "0.1.0",
+      "description": "Reference extension exercising every capability: scalar, table, aggregate, macro, logical-type, cast, and a replacement scan.",
+      "license": "MIT",
+      "authors": ["Tegmentum"],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": ["sample", "reference", "template"],
+      "categories": ["utility"],
+      "source": "builtin",
+      "status": "working",
+      "artifact": "artifacts/extensions/sample_extension.wasm",
+      "exports": [
+        "sample_plus_one",
+        "sample_emit_sequence",
+        "sample_sum",
+        "sample_add_two",
+        "sample_id",
+        "sample_read_path"
+      ],
+      "requires": ["scalar", "table", "aggregate", "macro", "catalog"],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "isin",
+      "version": "0.1.0",
+      "description": "ISIN (ISO 6166) securities identifier validation and field extraction. Luhn check-digit over the letter-expanded body.",
+      "license": "MIT",
+      "authors": ["Tegmentum"],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": ["isin", "validation", "securities", "finance", "iso6166"],
+      "categories": ["validators", "data-types"],
+      "source": "extensions/isin-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/isin.wasm",
+      "exports": ["isin_validate", "isin_check_digit", "isin_country", "isin_nsin"],
+      "requires": ["scalar"],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "baseN",
+      "version": "0.1.0",
+      "description": "Compact base-N codecs: base32 (RFC 4648, no pad) and base58 (Bitcoin alphabet) for BLOB<->VARCHAR. Decode errors return NULL.",
+      "license": "MIT",
+      "authors": ["Tegmentum"],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": ["base32", "base58", "encoding", "codec", "bitcoin"],
+      "categories": ["encoding"],
+      "source": "extensions/baseN-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/baseN.wasm",
+      "exports": ["base32_encode", "base32_decode", "base58_encode", "base58_decode"],
+      "requires": ["scalar"],
+      "crates": ["base32", "bs58"],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "iban",
+      "version": "0.0.0",
+      "description": "IBAN (ISO 13616) validation + country/BBAN extraction (mod-97).",
+      "categories": ["validators"],
+      "status": "planned",
+      "exports": ["iban_validate", "iban_country", "iban_bban"],
+      "requires": ["scalar"],
+      "crates": []
+    },
+    {
+      "name": "creditcard",
+      "version": "0.0.0",
+      "description": "Payment card number validation (Luhn) + network detection (Visa/MC/Amex/...).",
+      "categories": ["validators"],
+      "status": "planned",
+      "exports": ["cc_validate", "cc_network"],
+      "requires": ["scalar"],
+      "crates": []
+    },
+    {
+      "name": "uuid-extras",
+      "version": "0.0.0",
+      "description": "UUID v7 generation + parse/extract helpers (DuckDB ships v4 + gen_random_uuid).",
+      "categories": ["data-types"],
+      "status": "planned",
+      "exports": ["uuid_v7", "uuid_version", "uuid_timestamp"],
+      "requires": ["scalar"],
+      "crates": ["uuid"]
+    },
+    {
+      "name": "crypto",
+      "version": "0.0.0",
+      "description": "Hash digests beyond DuckDB's md5/sha256: sha1, sha512, sha3, blake3, crc32.",
+      "categories": ["cryptography"],
+      "status": "planned",
+      "exports": ["sha1", "sha512", "sha3_256", "blake3", "crc32"],
+      "requires": ["scalar"],
+      "crates": ["sha1", "sha2", "sha3", "blake3", "crc32fast"]
+    },
+    {
+      "name": "case",
+      "version": "0.0.0",
+      "description": "Identifier case conversions: snake/camel/pascal/kebab/title.",
+      "categories": ["text-processing"],
+      "status": "planned",
+      "exports": ["to_snake_case", "to_camel_case", "to_pascal_case", "to_kebab_case"],
+      "requires": ["scalar"],
+      "crates": ["heck"]
+    },
+    {
+      "name": "csscolor",
+      "version": "0.0.0",
+      "description": "CSS color parsing + format conversion (hex/rgb/hsl/named).",
+      "categories": ["data-types"],
+      "status": "planned",
+      "exports": ["css_parse", "css_to_rgb", "css_to_hex"],
+      "requires": ["scalar"],
+      "crates": ["csscolorparser"]
+    }
+  ],
+  "categories": {
+    "validators": "Identifier + checksum validation (ISIN, IBAN, credit cards, ...)",
+    "data-types": "Type parsing, extraction, and conversion helpers",
+    "encoding": "Base-N codecs and (de)serialization",
+    "cryptography": "Hashes, HMAC/auth, signatures",
+    "text-processing": "Case, escaping, NLP, templating",
+    "networking": "HTTP, DNS, URL/HTML parsing",
+    "math": "Sketches, statistics, numeric helpers",
+    "aggregates": "Custom aggregate functions",
+    "utility": "Tooling, reference, and management"
+  }
+}

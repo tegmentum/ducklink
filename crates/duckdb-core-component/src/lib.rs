@@ -4813,6 +4813,13 @@ unsafe fn write_duckvalue_to_vector(
     let validity = duckdb::duckdb_vector_get_validity(vector);
     match value {
         Duckvalue::Null => {
+            // DuckDB allocates the validity mask lazily; a result vector that
+            // has only seen valid rows has a NULL mask, and
+            // duckdb_validity_set_row_invalid on it is a silent no-op (the row
+            // stays "valid" over uninitialized data -> garbage blob/int/text).
+            // Force the mask to exist, then re-fetch and mark the row invalid.
+            duckdb::duckdb_vector_ensure_validity_writable(vector);
+            let validity = duckdb::duckdb_vector_get_validity(vector);
             duckdb::duckdb_validity_set_row_invalid(validity, row);
             Ok(())
         }

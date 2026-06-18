@@ -3040,6 +3040,10 @@ fn build_wasi_ctx_with_pipes(
     builder.stdout(stdout);
     builder.stderr(stderr);
     builder.inherit_env();
+    // Grant outbound network so wasi:sockets-backed code (e.g. httpfs over the
+    // linked openssl/mbedtls + wasi-libc BSD sockets) can connect + resolve DNS.
+    builder.inherit_network();
+    builder.allow_ip_name_lookup(true);
     for (host, guest) in preopens {
         builder
             .preopened_dir(host, guest, DirPerms::all(), FilePerms::all())
@@ -3061,6 +3065,8 @@ fn build_wasi_ctx_inherit(args: &[String], preopens: &[(&Path, &str)]) -> Result
     builder.inherit_stdin();
     builder.inherit_stdout();
     builder.inherit_stderr();
+    builder.inherit_network();
+    builder.allow_ip_name_lookup(true);
     for (host, guest) in preopens {
         builder
             .preopened_dir(host, guest, DirPerms::all(), FilePerms::all())

@@ -59,8 +59,6 @@ fn main() {
         ("third_party/yyjson", "duckdb_yyjson"),
         ("third_party/libpg_query", "duckdb_pg_query"),
         ("third_party/fastpforlib", "duckdb_fastpforlib"),
-        ("extension/core_functions", "core_functions_extension"),
-        ("extension/parquet", "parquet_extension"),
     ];
 
     for (rel_dir, lib_name) in auxiliary_libs.iter() {
@@ -72,6 +70,36 @@ fn main() {
             println!("cargo:rustc-link-lib=static={}", lib_name);
         }
     }
+
+    // Auto-discover the in-tree DuckDB extension archives the build produced
+    // (extension/<name>/lib<name>_extension.a). Which extensions exist is driven
+    // by cmake/wasm-extension-config.cmake -> DuckDB's generated builtin loader,
+    // which is compiled into this crate; linking every produced archive keeps
+    // build.rs in sync automatically (add a duckdb_extension_load() there and
+    // rebuild -- no edit needed here). core_functions + parquet are always
+    // present; json/icu/tpch/... appear as they are enabled.
+    let ext_root = build_dir.join("extension");
+    if let Ok(entries) = std::fs::read_dir(&ext_root) {
+        let mut ext_dirs: Vec<PathBuf> = entries
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.is_dir())
+            .collect();
+        // Deterministic link order across builds.
+        ext_dirs.sort();
+        for dir in ext_dirs {
+            let name = match dir.file_name().and_then(|n| n.to_str()) {
+                Some(n) => n,
+                None => continue,
+            };
+            let lib_name = format!("{name}_extension");
+            let lib_path = dir.join(format!("lib{lib_name}.a"));
+            if lib_path.exists() {
+                println!("cargo:rustc-link-search=native={}", dir.display());
+                println!("cargo:rustc-link-lib=static={}", lib_name);
+            }
+        }
+    }
+    println!("cargo:rerun-if-changed={}", ext_root.display());
 
     if let Ok(prefix) = env::var("WASI_SDK_PREFIX") {
         let target = env::var("TARGET").unwrap_or_default();
@@ -92,6 +120,17 @@ fn main() {
         if base_lib.exists() {
             println!("cargo:rustc-link-search=native={}", base_lib.display());
             println!("cargo:rustc-link-lib=static=m");
+            // The tpch/tpcds data generators (dbgen/dsdgen) reference signal.h;
+            // DuckDB compiles them with -D_WASI_EMULATED_SIGNAL, so the core must
+            // link the emulated-signal stub implementations.
+            if base_lib.join("libwasi-emulated-signal.a").exists() {
+                println!("cargo:rustc-link-lib=static=wasi-emulated-signal");
+            }
+            // ICU's common code uses mmap/munmap (compiled with
+            // -D_WASI_EMULATED_MMAN); link the emulated-mman implementations.
+            if base_lib.join("libwasi-emulated-mman.a").exists() {
+                println!("cargo:rustc-link-lib=static=wasi-emulated-mman");
+            }
         }
     }
     println!("cargo:rustc-link-arg=-Wl,--end-group");

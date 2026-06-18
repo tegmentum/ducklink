@@ -1,0 +1,283 @@
+{
+  "_schema": {
+    "version": 1,
+    "description": "Compat status for upstream Rust crates targeted at wasm32-wasip2. Consulted by tooling/scaffold.py when wiring --crate args.",
+    "status_values": {
+      "clean": "builds + runs clean on wasm32-wasip2 with default features",
+      "needs-bootstrap": "builds with RUSTC_BOOTSTRAP=1 (nightly-feature gate in tree)",
+      "needs-feature-tweak": "builds clean only with non-default feature flags noted in `notes`",
+      "broken": "panics or fails to instantiate on wasi-p2; do not use without forking",
+      "hand-roll-preferred": "ecosystem doesn't have a usable crate; the inline implementation is short enough that hand-rolling beats fighting any crate (see `notes` for the rough LOC + algorithm hint)",
+      "unverified": "not yet evaluated in this catalog"
+    }
+  },
+  "crates": {
+    "slug": {
+      "status": "clean",
+      "version_tested": "0.1.6",
+      "used_by": ["detect"]
+    },
+    "whatlang": {
+      "status": "clean",
+      "version_tested": "0.18.0",
+      "used_by": ["detect"]
+    },
+    "infer": {
+      "status": "clean",
+      "version_tested": "0.19.0",
+      "notes": "Use default-features = false; lean MIME sniffer with compiled magic table",
+      "used_by": ["detect"]
+    },
+    "base32": {
+      "status": "clean",
+      "version_tested": "0.5.1",
+      "used_by": ["baseN"]
+    },
+    "bs58": {
+      "status": "clean",
+      "version_tested": "0.5.1",
+      "notes": "Use features = ['alloc'] with default-features = false",
+      "used_by": ["baseN"]
+    },
+    "base62": {
+      "status": "broken",
+      "version_tested": "2.2.4",
+      "notes": "API takes u128 only, not bytes  doesn't fit BLOB-in/TEXT-out scalar shape. If a caller needs base62, expose as INTEGER-in/TEXT-out scalar pair instead."
+    },
+    "url": {
+      "status": "clean",
+      "version_tested": "2.5.8",
+      "notes": "default-features = false works; idna transitively brought in",
+      "used_by": ["url"]
+    },
+    "emojis": {
+      "status": "clean",
+      "version_tested": "0.8.2",
+      "notes": "Full Unicode 16 table compiled in (~600 KB component contribution)",
+      "used_by": ["emoji"]
+    },
+    "unicode-segmentation": {
+      "status": "clean",
+      "version_tested": "1.13.3",
+      "used_by": ["emoji"]
+    },
+    "sqlparser": {
+      "status": "clean",
+      "version_tested": "0.62.0",
+      "notes": "DO NOT use default-features = false  drops recursive-protection which is required for the grammar to compile. Component is ~6 MB.",
+      "used_by": ["sqlparse"]
+    },
+    "minijinja": {
+      "status": "clean",
+      "version_tested": "2.20.0",
+      "notes": "Need features = ['builtins','macros','serde']  default-features = false drops serde support and triggers a deprecation warning",
+      "used_by": ["template"]
+    },
+    "email_address": {
+      "status": "clean",
+      "version_tested": "0.2.9",
+      "used_by": ["email"]
+    },
+    "phonenumber": {
+      "status": "clean",
+      "version_tested": "0.3.9",
+      "notes": "~2.6 MB component  the Google libphonenumber per-country metadata tables are the bulk",
+      "used_by": ["phone"]
+    },
+    "rust_iso3166": {
+      "status": "clean",
+      "version_tested": "0.1.14",
+      "used_by": ["iso"]
+    },
+    "iso_currency": {
+      "status": "clean",
+      "version_tested": "0.5.3",
+      "used_by": ["iso"]
+    },
+    "isolang": {
+      "status": "clean",
+      "version_tested": "2.4.0",
+      "used_by": ["iso"]
+    },
+    "idna": {
+      "status": "clean",
+      "version_tested": "1.1.0",
+      "notes": "Use features = ['compiled_data','alloc'] with default-features = false",
+      "used_by": ["idna"]
+    },
+    "lipsum": {
+      "status": "clean",
+      "version_tested": "0.9.1",
+      "notes": "Requires pinned rand_chacha 0.3 + rand 0.8 for the SeedableRng trait impls to line up",
+      "used_by": ["lorem"]
+    },
+    "graphql-parser": {
+      "status": "clean",
+      "version_tested": "0.4.1",
+      "notes": "Use Document<'a, &'a str> for the Text trait param; lifetime parameters need explicit propagation",
+      "used_by": ["graphql"]
+    },
+    "vader_sentiment": {
+      "status": "clean",
+      "version_tested": "0.1.1",
+      "notes": "~2 MB component  the VADER lexicon is the bulk",
+      "used_by": ["sentiment"]
+    },
+    "semver": {
+      "status": "clean",
+      "version_tested": "1.0.28",
+      "used_by": ["semver"]
+    },
+    "bt_bencode": {
+      "status": "clean",
+      "version_tested": "0.8.2",
+      "notes": "Value::Int wraps Number enum (Signed/Unsigned), not raw i64/u64  match Number variants directly",
+      "used_by": ["bencode"]
+    },
+    "csscolorparser": {
+      "status": "clean",
+      "version_tested": "0.8.3",
+      "notes": "Use features = ['named-colors'] with default-features = false",
+      "used_by": ["csscolor"]
+    },
+    "icalendar": {
+      "status": "clean",
+      "version_tested": "0.17.11",
+      "notes": "REQUIRES features = ['parser'] with default-features = false; otherwise parse() is unavailable",
+      "used_by": ["ical"]
+    },
+    "heck": {
+      "status": "clean",
+      "version_tested": "0.5.0",
+      "used_by": ["case"]
+    },
+    "cron": {
+      "status": "clean",
+      "version_tested": "0.16.0",
+      "notes": "Internally pulls chrono; 5-field crons need normalization to 7-field for cron::Schedule::from_str",
+      "used_by": ["cron"]
+    },
+    "chrono": {
+      "status": "clean",
+      "version_tested": "0.4.x",
+      "notes": "Use features = ['clock'] with default-features = false to keep tz tables out",
+      "used_by": ["cron"]
+    },
+    "isbn": {
+      "status": "clean",
+      "version_tested": "0.8.20260617",
+      "notes": "Cross-conversion uses Isbn13::from(isbn10), NOT FromStr-via-hyphenated-form",
+      "used_by": ["isbn"]
+    },
+    "htmd": {
+      "status": "clean",
+      "version_tested": "0.5.4",
+      "notes": "Apache-2.0; pulls in html5ever  ~600 KB component contribution. Pair with pulldown_cmark for round-trip.",
+      "used_by": ["text-nlp"]
+    },
+    "pulldown-cmark": {
+      "status": "clean",
+      "version_tested": "0.12.x",
+      "notes": "Use features = ['html'] with default-features = false. NOTE: 0.12 changed Tag::Heading and Tag::Link to STRUCT variants (was tuple in 0.10/0.11); destructure with `{ field, .. }` syntax. Event::End takes TagEnd, not Tag.",
+      "used_by": ["text-nlp"]
+    },
+    "similar": {
+      "status": "clean",
+      "version_tested": "3.1.1",
+      "notes": "For meaningful single-line similarity use from_chars(); from_lines() returns 0.0 on any single-line input pair",
+      "used_by": ["text-nlp"]
+    },
+    "tract-onnx": {
+      "status": "needs-bootstrap",
+      "version_tested": "0.23.2",
+      "notes": "Needs RUSTC_BOOTSTRAP=1 due to typed-path transitive nightly-feature gate. 23 MB component  the full op set (nnef, hir, pulse, transformers) is the bulk. TypedRunnableModel lives in tract_core::prelude (re-exported from tract_onnx::prelude); to_plain_array_view::<f32>() for output reads (not to_array_view, not as_slice).",
+      "used_by": ["onnx"]
+    },
+    "typed-path": {
+      "status": "needs-bootstrap",
+      "version_tested": "0.12.3",
+      "notes": "Uses `#![feature(wasip2)]` unconditionally  needs RUSTC_BOOTSTRAP=1 to compile on stable. The feature is a no-op on stable; bootstrap just lets stable rustc accept the gate. Affects any crate that pulls in zip 7.x or calamine.",
+      "transitive_via": ["zip", "calamine"]
+    },
+    "calamine": {
+      "status": "needs-bootstrap",
+      "version_tested": "0.35.0",
+      "notes": "Inherits the typed-path bootstrap requirement. ~1 MB component for the full xlsx/xlsb/xls/ods surface.",
+      "used_by": ["excel"]
+    },
+    "parquet": {
+      "status": "clean",
+      "version_tested": "57.3.1",
+      "notes": "Use features = ['arrow','snap'] with default-features = false  pure-Rust compression backends only. flate2 doesn't build for wasi-p2; gzip-compressed Parquet files would need a different feature combination (or upstream patch).",
+      "used_by": ["parquet"]
+    },
+    "arrow": {
+      "status": "clean",
+      "version_tested": "57.3.1",
+      "notes": "Use features = ['ipc'] with default-features = false",
+      "used_by": ["arrow", "parquet"]
+    },
+    "oxigdal-pmtiles": {
+      "status": "clean",
+      "version_tested": "0.1.6",
+      "notes": "API is `PmTilesReader` (camel-case Pm, not PM)  caught after first attempt used `PMTilesReader::new()`. The `compression` feature pulls oxiarc-archive; skip it if raw-payload-only is acceptable.",
+      "used_by": ["pmtiles"]
+    },
+    "hickory-resolver": {
+      "status": "clean",
+      "version_tested": "0.24.4",
+      "notes": "Use features = ['tokio-runtime','system-config']  pairs with the host's async tokio runtime",
+      "used_by": ["dns (host-side dep)"]
+    },
+    "zxcvbn": {
+      "status": "broken",
+      "version_tested": "3.1.1 + 2.2.2",
+      "notes": "Both versions assume wasm32 = browser context. 3.x uses web_sys::Performance for timing; 2.x uses js_sys::Date::new_0(). Both panic on wasi-p2 with 'cannot call wasm-bindgen imported functions on non-wasm targets' (the irony is the panic site IS wasm). Requires forking or implementing a custom timer wrapper. Abandoned in v1; if needed, hand-roll an entropy estimator (~50 LOC for the common case).",
+      "alternates": ["hand-roll a simple entropy estimator"]
+    },
+    "serde_json_path": {
+      "status": "clean",
+      "version_tested": "0.7.2",
+      "notes": "Already used by web-parsers. RFC 9535 conformant.",
+      "used_by": ["web-parsers"]
+    },
+    "ulid": {
+      "status": "clean",
+      "version_tested": "1.x",
+      "used_by": ["ids"]
+    },
+    "eui48": {
+      "status": "broken",
+      "version_tested": "1.1.0",
+      "notes": "Transitive `rustc-serialize` 0.3.25 fails E0046 on modern rustc (missing trait items on Encodable/Decodable for path types).",
+      "alternates": ["hand-roll  see status `_mac-address-parse` below"]
+    },
+    "_mac-address-parse": {
+      "status": "hand-roll-preferred",
+      "notes": "~30 LOC: filter hex digits, parse 12-char string into [u8;6], format with separator. Implementation in extensions/mac/src/lib.rs; copy-edit if you need this elsewhere."
+    },
+    "_roman-numerals": {
+      "status": "hand-roll-preferred",
+      "notes": "~50 LOC: subtractive pairs lookup table + greedy encode + symbol-pair decode + canonical-form re-encode validation. Range 1..3999; vinculum notation deferred. See extensions/roman/src/lib.rs."
+    },
+    "_morse-code": {
+      "status": "hand-roll-preferred",
+      "notes": "~150 LOC including the ITU-R M.1677-1 table (letters / digits / punctuation). See extensions/morse/src/lib.rs."
+    },
+    "_hex-dump": {
+      "status": "hand-roll-preferred",
+      "notes": "~40 LOC formatter. Classic `hexdump -C` shape: offset + hex pairs + ASCII gutter. See extensions/hexdump/src/lib.rs."
+    },
+    "mac_address": {
+      "status": "unverified",
+      "version_tested": "1.1.8",
+      "notes": "Cross-platform retrieval of interface MAC  evaluates host network interfaces, not parsing. Not what we want for SQL scalars."
+    },
+    "rand_chacha": {
+      "status": "clean",
+      "version_tested": "0.3.1",
+      "notes": "Pin to 0.3 (not 0.9) when used alongside lipsum 0.9 or other crates expecting the 0.3-era SeedableRng trait shape",
+      "used_by": ["lorem"]
+    }
+  }
+}

@@ -1,0 +1,180 @@
+//! {DESCRIPTION_SHORT}
+
+use std::collections::HashMap;
+use std::sync::{{
+    atomic::{{AtomicU32, Ordering}},
+    Mutex, OnceLock,
+}};
+
+use wit_bindgen::rt::string::String;
+use wit_bindgen::rt::vec::Vec;
+
+wit_bindgen::generate!({{
+    path: "./wit",
+    world: "duckdb:extension/duckdb-extension",
+}});
+
+use duckdb::extension::{{runtime, types}};
+use exports::duckdb::extension::{{callback_dispatch, guest}};
+
+struct Extension;
+
+impl guest::Guest for Extension {{
+    fn load() -> Result<types::Loadresult, types::Duckerror> {{
+        register_scalars()?;
+        Ok(types::Loadresult {{
+            name: "{NAME}".into(),
+            version: Some(env!("CARGO_PKG_VERSION").into()),
+            requires: Vec::new().into(),
+        }})
+    }}
+
+    fn reconfigure(_keys: Vec<String>) -> Result<bool, types::Duckerror> {{
+        Ok(false)
+    }}
+
+    fn shutdown() -> Result<bool, types::Duckerror> {{
+        Ok(false)
+    }}
+}}
+
+// ---- Arg helpers ----
+// The common shapes; copy-pasted into every extension so you delete what you
+// don't need. DuckDB hands typed `Duckvalue` variants, not raw bytes.
+
+#[allow(dead_code)]
+fn arg_text(args: &[types::Duckvalue], i: usize, fname: &str) -> Result<String, types::Duckerror> {{
+    match args.get(i) {{
+        Some(types::Duckvalue::Text(s)) => Ok(s.clone()),
+        _ => Err(types::Duckerror::Invalidargument(
+            alloc_msg(fname, i, "TEXT"),
+        )),
+    }}
+}}
+
+#[allow(dead_code)]
+fn arg_int(args: &[types::Duckvalue], i: usize, fname: &str) -> Result<i64, types::Duckerror> {{
+    match args.get(i) {{
+        Some(types::Duckvalue::Int64(n)) => Ok(*n),
+        _ => Err(types::Duckerror::Invalidargument(
+            alloc_msg(fname, i, "INT64"),
+        )),
+    }}
+}}
+
+#[allow(dead_code)]
+fn arg_blob(args: &[types::Duckvalue], i: usize, fname: &str) -> Result<Vec<u8>, types::Duckerror> {{
+    match args.get(i) {{
+        Some(types::Duckvalue::Blob(b)) => Ok(b.clone()),
+        Some(types::Duckvalue::Text(s)) => Ok(s.as_bytes().to_vec()),
+        _ => Err(types::Duckerror::Invalidargument(
+            alloc_msg(fname, i, "BLOB"),
+        )),
+    }}
+}}
+
+fn alloc_msg(fname: &str, i: usize, ty: &str) -> String {{
+    format!("{{fname}}: expected {{ty}} arg at position {{i}}")
+}}
+
+impl callback_dispatch::Guest for Extension {{
+    fn call_scalar(
+        handle: u32,
+        args: Vec<types::Duckvalue>,
+        _ctx: types::Invokeinfo,
+    ) -> Result<types::Duckvalue, types::Duckerror> {{
+        let which = scalar_handlers()
+            .lock()
+            .expect("scalar handler mutex poisoned")
+            .get(&handle)
+            .copied()
+            .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
+        let _ = &args;
+        match which {{
+            ScalarHandler::Placeholder => {{
+                Ok(types::Duckvalue::Text("hello from {NAME}".into()))
+            }}
+        }}
+    }}
+
+    fn call_table(
+        _handle: u32,
+        _args: Vec<types::Duckvalue>,
+    ) -> Result<types::Resultset, types::Duckerror> {{
+        Err(types::Duckerror::Unsupported("{NAME}: no table functions".into()))
+    }}
+
+    fn call_aggregate(
+        _handle: u32,
+        _rows: types::Rowbatch,
+    ) -> Result<types::Duckvalue, types::Duckerror> {{
+        Err(types::Duckerror::Unsupported("{NAME}: no aggregates".into()))
+    }}
+
+    fn call_pragma(
+        _handle: u32,
+        _args: Vec<types::Duckvalue>,
+    ) -> Result<Option<types::Duckvalue>, types::Duckerror> {{
+        Err(types::Duckerror::Unsupported("{NAME}: no pragmas".into()))
+    }}
+
+    fn call_cast(
+        _handle: u32,
+        _value: types::Duckvalue,
+    ) -> Result<types::Duckvalue, types::Duckerror> {{
+        Err(types::Duckerror::Unsupported("{NAME}: no casts".into()))
+    }}
+}}
+
+export!(Extension);
+
+// ---- Registration ----
+// Open the scalar capability registry the host exposes and register every
+// scalar this extension provides. Add more `registry.register(...)` calls (and
+// matching `ScalarHandler` variants + dispatch arms) as you grow the extension.
+fn register_scalars() -> Result<(), types::Duckerror> {{
+    let capability = runtime::get_capability(types::Capabilitykind::Scalar)
+        .ok_or_else(|| types::Duckerror::Internal("host did not expose scalar capability".into()))?;
+    let registry = match capability {{
+        runtime::Capability::Scalar(registry) => registry,
+        _ => {{
+            return Err(types::Duckerror::Internal(
+                "scalar capability returned unexpected variant".into(),
+            ))
+        }}
+    }};
+
+    let handle = NEXT_SCALAR_HANDLE.fetch_add(1, Ordering::Relaxed);
+    scalar_handlers()
+        .lock()
+        .expect("scalar handler mutex poisoned")
+        .insert(handle, ScalarHandler::Placeholder);
+
+    let callback = runtime::ScalarCallback::new(handle);
+    let args: Vec<runtime::Funcarg> = Vec::new();
+    let opts = runtime::Funcopts {{
+        description: Some("placeholder scalar generated by tooling/scaffold.py".into()),
+        tags: vec!["{NAME}".into()],
+        attributes: types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS,
+    }};
+    registry.register(
+        "{NAME_UNDERSCORE}_placeholder",
+        &args,
+        types::Logicaltype::Text,
+        callback,
+        Some(&opts),
+    )?;
+    Ok(())
+}}
+
+#[derive(Clone, Copy)]
+enum ScalarHandler {{
+    Placeholder,
+}}
+
+static NEXT_SCALAR_HANDLE: AtomicU32 = AtomicU32::new(1);
+static SCALAR_HANDLERS: OnceLock<Mutex<HashMap<u32, ScalarHandler>>> = OnceLock::new();
+
+fn scalar_handlers() -> &'static Mutex<HashMap<u32, ScalarHandler>> {{
+    SCALAR_HANDLERS.get_or_init(|| Mutex::new(HashMap::new()))
+}}

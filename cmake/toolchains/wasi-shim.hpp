@@ -69,4 +69,26 @@ static inline int ioctl(int, unsigned long, ...) {
     return -1;
 }
 
+// WASI libc omits the POSIX `tzname` global, which ICU's putil.cpp references in
+// its timezone-detection *fallback*. ICU checks getenv("TZ") first (the real
+// default-zone source on wasm), and `SET TimeZone='…'` overrides per connection,
+// so this stub is only a never-meaningfully-used placeholder to satisfy the
+// reference. File-scope `static` keeps it per-translation-unit (no global symbol
+// to collide/merge); `unused` silences the warning in the many non-ICU TUs that
+// force-include this header.
+static char *tzname[2] __attribute__((unused)) = { (char *) "UTC", (char *) "UTC" };
+
+// WASI's <netdb.h> omits some getaddrinfo/getnameinfo flag constants that
+// third_party/httplib uses (the httpfs HTTP client). Standard POSIX values;
+// guarded so a future wasi-libc that adds them wins.
+#ifndef AI_NUMERICHOST
+#define AI_NUMERICHOST 0x00000004
+#endif
+#ifndef NI_MAXHOST
+#define NI_MAXHOST 1025
+#endif
+#ifndef NI_NUMERICHOST
+#define NI_NUMERICHOST 0x01
+#endif
+
 #endif // __wasi__

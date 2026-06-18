@@ -482,6 +482,7 @@ extern "C" {
     pub fn duckdb_vector_get_column_type(vector: duckdb_vector) -> duckdb_logical_type;
     pub fn duckdb_vector_get_data(vector: duckdb_vector) -> *mut c_void;
     pub fn duckdb_vector_get_validity(vector: duckdb_vector) -> *mut u64;
+    pub fn duckdb_vector_ensure_validity_writable(vector: duckdb_vector);
     pub fn duckdb_vector_assign_string_element(
         vector: duckdb_vector,
         index: idx_t,

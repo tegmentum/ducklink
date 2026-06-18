@@ -1,7 +1,7 @@
 WASI_TARGET?=wasm32-wasip2
 BROWSER_TARGET?=wasm32-unknown-unknown
 
-.PHONY: all core core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension ci-local clean
+.PHONY: all core core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship
 
 all: core standalone-cli loader-stub
 
@@ -41,6 +41,41 @@ smoke-extension:
 # Run the smoke-tests GitHub Actions workflow locally via nektos/act (Docker).
 ci-local:
 	./scripts/ci-local.sh
+
+# ---- Componentized extensions (tooling/) ----------------------------------
+# The extension tracking + scaffolding + smoke system mirrors ~/git/sqlite-wasm.
+# Extensions load through the native host runner (duckdb-host); the standalone
+# CLI links a no-op loader stub and cannot instantiate them. Build core + cli
+# components first with `make all` (needs DUCKDB_STATIC_LIB / DUCKDB_INCLUDE_DIR).
+
+# Native host runner that has the real component extension loader.
+host:
+	cargo build --release -p duckdb-component-host --bin duckdb-host
+
+# Scaffold a new extension:  make ext-scaffold NAME=foo [CRATE=base32,bs58]
+ext-scaffold:
+	@ : "$${NAME:?set NAME to the bare extension name, e.g. NAME=isin}"
+	python3 tooling/scaffold.py $(NAME) $(if $(CRATE),--crate $(CRATE),) $(if $(DESCRIPTION),--description "$(DESCRIPTION)",)
+
+# Build one extension component, copy its artifact, and smoke it:
+#   make ext NAME=isin-component
+ext: host
+	@ : "$${NAME:?set NAME to the extension (bare or -component), e.g. NAME=isin-component}"
+	python3 tooling/smoke.py --build $(NAME)
+
+# Smoke every extension that has a smoke.sql (assumes components already built).
+ext-smoke-all: host
+	python3 tooling/smoke.py --all
+
+# List upstream crates flagged in tooling/compat-registry.json.
+ext-list-broken:
+	python3 tooling/scaffold.py --list-broken
+
+# Build + smoke one extension, then run the full smoke regression.
+ext-ship: host
+	@ : "$${NAME:?set NAME to the extension (bare or -component), e.g. NAME=isin-component}"
+	python3 tooling/smoke.py --build $(NAME)
+	python3 tooling/smoke.py --all
 
 clean:
 	cargo clean

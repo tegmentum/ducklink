@@ -1,0 +1,10 @@
+-- Smoke test for the `{NAME}` extension.
+-- Run via:  tooling/smoke.py {NAME}
+--
+-- The extension is loaded by the harness (`--load-extension {NAME}`), so do NOT
+-- add a LOAD statement here. The harness pipes these statements through the
+-- native host CLI with the extension already registered. Replace the
+-- placeholder with one SELECT per scalar -- cover the happy path and one
+-- fail-clean case each. Seed expected output with:
+--   tooling/smoke.py --seed-expected {NAME}
+SELECT {NAME_UNDERSCORE}_placeholder();

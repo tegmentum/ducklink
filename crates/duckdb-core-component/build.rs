@@ -4,6 +4,16 @@ fn main() {
         return;
     }
 
+    // DuckDB's libpg_query parser (base_yyparse) is deeply recursive and runs at
+    // database-open time: statically-linked extensions (e.g. json) register
+    // their internal SQL macros during Load(), which parses SQL via the pg
+    // parser. The default 1 MiB wasm stack overflows on that
+    // open -> Load -> ParseExpressionList -> yyparse chain and traps in
+    // core_yylex. Reserve a larger stack; --stack-first (set by the target)
+    // places it at the base of linear memory so an overflow faults cleanly.
+    println!("cargo:rustc-link-arg=-z");
+    println!("cargo:rustc-link-arg=stack-size=8388608");
+
     if std::env::var_os("CARGO_FEATURE_FS_SHIMS").is_none() {
         return;
     }

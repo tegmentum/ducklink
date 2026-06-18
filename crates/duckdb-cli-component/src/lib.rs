@@ -477,6 +477,23 @@ fn read_line(
     buffer: &mut Vec<u8>,
 ) -> Result<Option<String>, String> {
     loop {
+        // Serve any complete line already sitting in the buffer before reading
+        // more. A single `blocking_read` can return many lines at once (piped
+        // input arrives in 1024-byte chunks); without draining the buffer first
+        // we would block-read again, hit `Closed` at EOF with the remaining
+        // lines still buffered, and collapse them into one mega-statement.
+        if let Some(position) = buffer.iter().position(|byte| *byte == b'\n') {
+            let mut drained = buffer.drain(..=position).collect::<Vec<_>>();
+            if let Some(last) = drained.last() {
+                if *last == b'\n' {
+                    drained.pop();
+                }
+            }
+            let line =
+                String::from_utf8(drained).map_err(|_| "stdin is not valid UTF-8".to_string())?;
+            return Ok(Some(line));
+        }
+
         match stream.blocking_read(1024) {
             Ok(chunk) => {
                 if chunk.is_empty() {
@@ -488,24 +505,13 @@ fn read_line(
                 if buffer.is_empty() {
                     return Ok(None);
                 }
+                // EOF with a trailing line that had no newline terminator.
                 let line = flush_buffer(buffer)?;
                 return Ok(Some(line));
             }
             Err(streams::StreamError::LastOperationFailed(err)) => {
                 return Err(format!("read failed: {err:?}"));
             }
-        }
-
-        if let Some(position) = buffer.iter().position(|byte| *byte == b'\n') {
-            let mut drained = buffer.drain(..=position).collect::<Vec<_>>();
-            if let Some(last) = drained.last() {
-                if *last == b'\n' {
-                    drained.pop();
-                }
-            }
-            let line =
-                String::from_utf8(drained).map_err(|_| "stdin is not valid UTF-8".to_string())?;
-            return Ok(Some(line));
         }
     }
 }
