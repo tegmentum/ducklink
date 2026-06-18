@@ -111,14 +111,15 @@ so anything network- or large-native-dep-bound is out. Feasibility:
 | **excel** | xlsx reader + vcpkg dep | **deferred** — `find_package` + `vcpkg.json`; needs a vcpkg native dep built for wasi (no vcpkg toolchain here). |
 | **avro** | Apache Avro C lib + vcpkg | **deferred** — `find_path` + `vcpkg.json`; needs the Avro C lib via vcpkg built for wasi. |
 | **httpfs** | HTTP/S3 over TCP+TLS | **working, out of the box** — plain `read_csv_auto('https://…')` fetches over HTTPS via `wasi:sockets` + parses (verified, iris.csv → 150 rows; secure cert verification ON, no settings). **curl is the default client on wasi** (build script patches httpfs `LoadInternal`); the vendored httplib client compiles but its connect select/poll path fails at runtime. BSD sockets come from grafting the wasip2 libc socket objects into the wasip1 core module (`scripts/build-libduckdb-wasm.sh`); openssl-wasm + curl-wasm (libcurl/nghttp2/ngtcp2/nghttp3/brotli) supply HTTP/TLS. Cert verification is secure-by-default: an embedded Mozilla CA bundle (`cmake/ca-bundle/cacert.pem`) is loaded in-memory via `CURLOPT_CAINFO_BLOB` (openssl-wasm can't load a CA *file* — its file BIO doesn't reach the wrapped host FS). |
-| **iceberg** / **ducklake** | catalog + remote storage (httpfs) | gated on **httpfs** — now unblocked (httpfs works); still need their own catalog/storage ports |
+| **ducklake** | SQL catalog + parquet storage | **working** — pure C++, no native deps. `ATTACH 'ducklake:…'` + CREATE/INSERT/SELECT verified; parquet files written + metadata persists across re-ATTACH. |
+| **iceberg** | Avro manifests + roaring + (AWS/CURL skipped on wasm) | **feasible, not yet built** — upstream guards AWS SDK + CURL behind `NOT Emscripten`, so wasm needs only `avro-c` + `roaring` (both plain C/C++) built for wasi + extending the guard to `WASI`. No AWS SDK required. |
 | **aws** / **azure** | cloud SDK + network | **very hard** — TCP+TLS solved by openssl-wasm, but the AWS/Azure C++ SDKs are huge; far beyond transport |
 | **mysql_scanner** / **postgres_scanner** | libpq / libmysqlclient + network | **hard** — transport solved by openssl-wasm + `wasi:sockets`; still needs libpq/libmysqlclient ported to wasi |
 | **spatial** | GEOS + GDAL + PROJ | **infeasible** — huge native geo stack (not a network problem; openssl-wasm doesn't help) |
 | **ui** | embedded HTTP **server** | n/a — needs inbound sockets + a browser (openssl-wasm is client-side) |
 
-**Result:** **inet, fts, vss, sqlite_scanner, httpfs** are implemented and
-verified. `excel`/`avro` need a **vcpkg** native dep (no vcpkg-for-wasi toolchain
+**Result:** **inet, fts, vss, sqlite_scanner, httpfs, ducklake** are implemented
+and verified (httpfs also covers S3 via the built-in `S3FileSystem`). `excel`/`avro` need a **vcpkg** native dep (no vcpkg-for-wasi toolchain
 wired). `spatial` (geo native stack) and `ui` (inbound server + browser) stay
 infeasible.
 

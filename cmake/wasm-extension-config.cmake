@@ -42,6 +42,11 @@ duckdb_extension_load(sqlite_scanner # read/attach SQLite database files (vendor
   GIT_TAG 833e105cbcaa0f6e8d34d334f3b920ce86f6fdf9   # DuckDB-pinned commit
   INCLUDE_DIR src/include
 )
+duckdb_extension_load(ducklake        # DuckLake lakehouse format (SQL catalog + parquet storage; pure C++, no native deps)
+  GIT_URL https://github.com/duckdb/ducklake
+  GIT_TAG 45788f0a875844ac8fed048c99b87f7f4b1c2ac1   # DuckDB-pinned commit
+  INCLUDE_DIR src/include
+)
 
 # httpfs needs CURL (its curl client) + OpenSSL (crypto.cpp AES/EVP). Both come
 # from ~/git/curl-wasm (libcurl 8.17 built for wasm + its own openssl/zlib/zstd),
