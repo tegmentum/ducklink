@@ -8214,6 +8214,131 @@ pub mod exports {
                         }
                     }
                 }
+                /// Bulk row insertion into an existing table — much faster than running
+                /// individual INSERT statements.
+                #[derive(Debug)]
+                #[repr(transparent)]
+                pub struct Appender {
+                    handle: _rt::Resource<Appender>,
+                }
+                type _AppenderRep<T> = Option<T>;
+                impl Appender {
+                    /// Creates a new resource from the specified representation.
+                    ///
+                    /// This function will create a new resource handle by moving `val` onto
+                    /// the heap and then passing that heap pointer to the component model to
+                    /// create a handle. The owned handle is then returned as `Appender`.
+                    pub fn new<T: GuestAppender>(val: T) -> Self {
+                        Self::type_guard::<T>();
+                        let val: _AppenderRep<T> = Some(val);
+                        let ptr: *mut _AppenderRep<T> = _rt::Box::into_raw(
+                            _rt::Box::new(val),
+                        );
+                        unsafe { Self::from_handle(T::_resource_new(ptr.cast())) }
+                    }
+                    /// Gets access to the underlying `T` which represents this resource.
+                    pub fn get<T: GuestAppender>(&self) -> &T {
+                        let ptr = unsafe { &*self.as_ptr::<T>() };
+                        ptr.as_ref().unwrap()
+                    }
+                    /// Gets mutable access to the underlying `T` which represents this
+                    /// resource.
+                    pub fn get_mut<T: GuestAppender>(&mut self) -> &mut T {
+                        let ptr = unsafe { &mut *self.as_ptr::<T>() };
+                        ptr.as_mut().unwrap()
+                    }
+                    /// Consumes this resource and returns the underlying `T`.
+                    pub fn into_inner<T: GuestAppender>(self) -> T {
+                        let ptr = unsafe { &mut *self.as_ptr::<T>() };
+                        ptr.take().unwrap()
+                    }
+                    #[doc(hidden)]
+                    pub unsafe fn from_handle(handle: u32) -> Self {
+                        Self {
+                            handle: unsafe { _rt::Resource::from_handle(handle) },
+                        }
+                    }
+                    #[doc(hidden)]
+                    pub fn take_handle(&self) -> u32 {
+                        _rt::Resource::take_handle(&self.handle)
+                    }
+                    #[doc(hidden)]
+                    pub fn handle(&self) -> u32 {
+                        _rt::Resource::handle(&self.handle)
+                    }
+                    #[doc(hidden)]
+                    fn type_guard<T: 'static>() {
+                        use core::any::TypeId;
+                        static mut LAST_TYPE: Option<TypeId> = None;
+                        unsafe {
+                            assert!(! cfg!(target_feature = "atomics"));
+                            let id = TypeId::of::<T>();
+                            match LAST_TYPE {
+                                Some(ty) => {
+                                    assert!(
+                                        ty == id, "cannot use two types with this resource type"
+                                    )
+                                }
+                                None => LAST_TYPE = Some(id),
+                            }
+                        }
+                    }
+                    #[doc(hidden)]
+                    pub unsafe fn dtor<T: 'static>(handle: *mut u8) {
+                        Self::type_guard::<T>();
+                        let _ = unsafe {
+                            _rt::Box::from_raw(handle as *mut _AppenderRep<T>)
+                        };
+                    }
+                    fn as_ptr<T: GuestAppender>(&self) -> *mut _AppenderRep<T> {
+                        Appender::type_guard::<T>();
+                        T::_resource_rep(self.handle()).cast()
+                    }
+                }
+                /// A borrowed version of [`Appender`] which represents a borrowed value
+                /// with the lifetime `'a`.
+                #[derive(Debug)]
+                #[repr(transparent)]
+                pub struct AppenderBorrow<'a> {
+                    rep: *mut u8,
+                    _marker: core::marker::PhantomData<&'a Appender>,
+                }
+                impl<'a> AppenderBorrow<'a> {
+                    #[doc(hidden)]
+                    pub unsafe fn lift(rep: usize) -> Self {
+                        Self {
+                            rep: rep as *mut u8,
+                            _marker: core::marker::PhantomData,
+                        }
+                    }
+                    /// Gets access to the underlying `T` in this resource.
+                    pub fn get<T: GuestAppender>(&self) -> &T {
+                        let ptr = unsafe { &mut *self.as_ptr::<T>() };
+                        ptr.as_ref().unwrap()
+                    }
+                    fn as_ptr<T: 'static>(&self) -> *mut _AppenderRep<T> {
+                        Appender::type_guard::<T>();
+                        self.rep.cast()
+                    }
+                }
+                unsafe impl _rt::WasmResource for Appender {
+                    #[inline]
+                    unsafe fn drop(_handle: u32) {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        unreachable!();
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            #[link(
+                                wasm_import_module = "[export]duckdb:component/database"
+                            )]
+                            unsafe extern "C" {
+                                #[link_name = "[resource-drop]appender"]
+                                fn drop(_: u32);
+                            }
+                            unsafe { drop(_handle) };
+                        }
+                    }
+                }
                 /// Extension metadata captured during registration.
                 #[derive(Clone)]
                 pub struct ExtensionInfo {
@@ -9133,6 +9258,566 @@ pub mod exports {
                                         .add(3 * ::core::mem::size_of::<*const u8>())
                                         .cast::<usize>();
                                     _rt::cabi_dealloc(l27, l28, 1);
+                                }
+                            }
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_method_appender_append_row_cabi<T: GuestAppender>(
+                    arg0: *mut u8,
+                    arg1: *mut u8,
+                    arg2: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let base12 = arg1;
+                    let len12 = arg2;
+                    let mut result12 = _rt::Vec::with_capacity(len12);
+                    for i in 0..len12 {
+                        let base = base12
+                            .add(i * (8 + 2 * ::core::mem::size_of::<*const u8>()));
+                        let e12 = {
+                            let l0 = i32::from(*base.add(0).cast::<u8>());
+                            use super::super::super::super::duckdb::extension::types::Duckvalue as V11;
+                            let v11 = match l0 {
+                                0 => V11::Null,
+                                1 => {
+                                    let e11 = {
+                                        let l1 = i32::from(*base.add(8).cast::<u8>());
+                                        _rt::bool_lift(l1 as u8)
+                                    };
+                                    V11::Boolean(e11)
+                                }
+                                2 => {
+                                    let e11 = {
+                                        let l2 = *base.add(8).cast::<i64>();
+                                        l2
+                                    };
+                                    V11::Int64(e11)
+                                }
+                                3 => {
+                                    let e11 = {
+                                        let l3 = *base.add(8).cast::<i64>();
+                                        l3 as u64
+                                    };
+                                    V11::Uint64(e11)
+                                }
+                                4 => {
+                                    let e11 = {
+                                        let l4 = *base.add(8).cast::<f64>();
+                                        l4
+                                    };
+                                    V11::Float64(e11)
+                                }
+                                5 => {
+                                    let e11 = {
+                                        let l5 = *base.add(8).cast::<*mut u8>();
+                                        let l6 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len7 = l6;
+                                        let bytes7 = _rt::Vec::from_raw_parts(
+                                            l5.cast(),
+                                            len7,
+                                            len7,
+                                        );
+                                        _rt::string_lift(bytes7)
+                                    };
+                                    V11::Text(e11)
+                                }
+                                n => {
+                                    debug_assert_eq!(n, 6, "invalid enum discriminant");
+                                    let e11 = {
+                                        let l8 = *base.add(8).cast::<*mut u8>();
+                                        let l9 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len10 = l9;
+                                        _rt::Vec::from_raw_parts(l8.cast(), len10, len10)
+                                    };
+                                    V11::Blob(e11)
+                                }
+                            };
+                            v11
+                        };
+                        result12.push(e12);
+                    }
+                    _rt::cabi_dealloc(
+                        base12,
+                        len12 * (8 + 2 * ::core::mem::size_of::<*const u8>()),
+                        8,
+                    );
+                    let result13 = T::append_row(
+                        unsafe { AppenderBorrow::lift(arg0 as u32 as usize) }.get(),
+                        result12,
+                    );
+                    let ptr14 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result13 {
+                        Ok(_) => {
+                            *ptr14.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr14.add(0).cast::<u8>() = (1i32) as u8;
+                            use super::super::super::super::duckdb::extension::types::Duckerror as V20;
+                            match e {
+                                V20::Invalidargument(e) => {
+                                    *ptr14
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                    let vec15 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr15 = vec15.as_ptr().cast::<u8>();
+                                    let len15 = vec15.len();
+                                    ::core::mem::forget(vec15);
+                                    *ptr14
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len15;
+                                    *ptr14
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr15.cast_mut();
+                                }
+                                V20::Unsupported(e) => {
+                                    *ptr14
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec16 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr16 = vec16.as_ptr().cast::<u8>();
+                                    let len16 = vec16.len();
+                                    ::core::mem::forget(vec16);
+                                    *ptr14
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len16;
+                                    *ptr14
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr16.cast_mut();
+                                }
+                                V20::Invalidstate(e) => {
+                                    *ptr14
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (2i32) as u8;
+                                    let vec17 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr17 = vec17.as_ptr().cast::<u8>();
+                                    let len17 = vec17.len();
+                                    ::core::mem::forget(vec17);
+                                    *ptr14
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len17;
+                                    *ptr14
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr17.cast_mut();
+                                }
+                                V20::Io(e) => {
+                                    *ptr14
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (3i32) as u8;
+                                    let vec18 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr18 = vec18.as_ptr().cast::<u8>();
+                                    let len18 = vec18.len();
+                                    ::core::mem::forget(vec18);
+                                    *ptr14
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len18;
+                                    *ptr14
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr18.cast_mut();
+                                }
+                                V20::Internal(e) => {
+                                    *ptr14
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (4i32) as u8;
+                                    let vec19 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr19 = vec19.as_ptr().cast::<u8>();
+                                    let len19 = vec19.len();
+                                    ::core::mem::forget(vec19);
+                                    *ptr14
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len19;
+                                    *ptr14
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr19.cast_mut();
+                                }
+                            }
+                        }
+                    };
+                    ptr14
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_method_appender_append_row<T: GuestAppender>(
+                    arg0: *mut u8,
+                ) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l1 {
+                                0 => {
+                                    let l2 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                1 => {
+                                    let l4 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l5 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l4, l5, 1);
+                                }
+                                2 => {
+                                    let l6 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l7 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l6, l7, 1);
+                                }
+                                3 => {
+                                    let l8 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l9 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l8, l9, 1);
+                                }
+                                _ => {
+                                    let l10 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l11 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l10, l11, 1);
+                                }
+                            }
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_method_appender_flush_cabi<T: GuestAppender>(
+                    arg0: *mut u8,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::flush(
+                        unsafe { AppenderBorrow::lift(arg0 as u32 as usize) }.get(),
+                    );
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result0 {
+                        Ok(_) => {
+                            *ptr1.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr1.add(0).cast::<u8>() = (1i32) as u8;
+                            use super::super::super::super::duckdb::extension::types::Duckerror as V7;
+                            match e {
+                                V7::Invalidargument(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                    let vec2 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                                    let len2 = vec2.len();
+                                    ::core::mem::forget(vec2);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len2;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr2.cast_mut();
+                                }
+                                V7::Unsupported(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec3 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                                    let len3 = vec3.len();
+                                    ::core::mem::forget(vec3);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len3;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr3.cast_mut();
+                                }
+                                V7::Invalidstate(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (2i32) as u8;
+                                    let vec4 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                                    let len4 = vec4.len();
+                                    ::core::mem::forget(vec4);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len4;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr4.cast_mut();
+                                }
+                                V7::Io(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (3i32) as u8;
+                                    let vec5 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr5 = vec5.as_ptr().cast::<u8>();
+                                    let len5 = vec5.len();
+                                    ::core::mem::forget(vec5);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len5;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr5.cast_mut();
+                                }
+                                V7::Internal(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (4i32) as u8;
+                                    let vec6 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr6 = vec6.as_ptr().cast::<u8>();
+                                    let len6 = vec6.len();
+                                    ::core::mem::forget(vec6);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len6;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr6.cast_mut();
+                                }
+                            }
+                        }
+                    };
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_method_appender_flush<T: GuestAppender>(
+                    arg0: *mut u8,
+                ) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l1 {
+                                0 => {
+                                    let l2 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                1 => {
+                                    let l4 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l5 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l4, l5, 1);
+                                }
+                                2 => {
+                                    let l6 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l7 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l6, l7, 1);
+                                }
+                                3 => {
+                                    let l8 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l9 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l8, l9, 1);
+                                }
+                                _ => {
+                                    let l10 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l11 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l10, l11, 1);
+                                }
+                            }
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_method_appender_close_cabi<T: GuestAppender>(
+                    arg0: *mut u8,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::close(
+                        unsafe { AppenderBorrow::lift(arg0 as u32 as usize) }.get(),
+                    );
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result0 {
+                        Ok(_) => {
+                            *ptr1.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr1.add(0).cast::<u8>() = (1i32) as u8;
+                            use super::super::super::super::duckdb::extension::types::Duckerror as V7;
+                            match e {
+                                V7::Invalidargument(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                    let vec2 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                                    let len2 = vec2.len();
+                                    ::core::mem::forget(vec2);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len2;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr2.cast_mut();
+                                }
+                                V7::Unsupported(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec3 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                                    let len3 = vec3.len();
+                                    ::core::mem::forget(vec3);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len3;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr3.cast_mut();
+                                }
+                                V7::Invalidstate(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (2i32) as u8;
+                                    let vec4 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                                    let len4 = vec4.len();
+                                    ::core::mem::forget(vec4);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len4;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr4.cast_mut();
+                                }
+                                V7::Io(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (3i32) as u8;
+                                    let vec5 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr5 = vec5.as_ptr().cast::<u8>();
+                                    let len5 = vec5.len();
+                                    ::core::mem::forget(vec5);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len5;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr5.cast_mut();
+                                }
+                                V7::Internal(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (4i32) as u8;
+                                    let vec6 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr6 = vec6.as_ptr().cast::<u8>();
+                                    let len6 = vec6.len();
+                                    ::core::mem::forget(vec6);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len6;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr6.cast_mut();
+                                }
+                            }
+                        }
+                    };
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_method_appender_close<T: GuestAppender>(
+                    arg0: *mut u8,
+                ) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l1 {
+                                0 => {
+                                    let l2 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                1 => {
+                                    let l4 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l5 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l4, l5, 1);
+                                }
+                                2 => {
+                                    let l6 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l7 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l6, l7, 1);
+                                }
+                                3 => {
+                                    let l8 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l9 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l8, l9, 1);
+                                }
+                                _ => {
+                                    let l10 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l11 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l10, l11, 1);
                                 }
                             }
                         }
@@ -10226,6 +10911,191 @@ pub mod exports {
                 }
                 #[doc(hidden)]
                 #[allow(non_snake_case)]
+                pub unsafe fn _export_create_appender_cabi<T: Guest>(
+                    arg0: i32,
+                    arg1: i32,
+                    arg2: *mut u8,
+                    arg3: usize,
+                    arg4: *mut u8,
+                    arg5: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len1 = arg5;
+                    let bytes1 = _rt::Vec::from_raw_parts(arg4.cast(), len1, len1);
+                    let result2 = T::create_appender(
+                        unsafe { ConnectionBorrow::lift(arg0 as u32 as usize) },
+                        match arg1 {
+                            0 => None,
+                            1 => {
+                                let e = {
+                                    let len0 = arg3;
+                                    let bytes0 = _rt::Vec::from_raw_parts(
+                                        arg2.cast(),
+                                        len0,
+                                        len0,
+                                    );
+                                    _rt::string_lift(bytes0)
+                                };
+                                Some(e)
+                            }
+                            _ => _rt::invalid_enum_discriminant(),
+                        },
+                        _rt::string_lift(bytes1),
+                    );
+                    let ptr3 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result2 {
+                        Ok(e) => {
+                            *ptr3.add(0).cast::<u8>() = (0i32) as u8;
+                            *ptr3
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<i32>() = (e).take_handle() as i32;
+                        }
+                        Err(e) => {
+                            *ptr3.add(0).cast::<u8>() = (1i32) as u8;
+                            use super::super::super::super::duckdb::extension::types::Duckerror as V9;
+                            match e {
+                                V9::Invalidargument(e) => {
+                                    *ptr3
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                    let vec4 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                                    let len4 = vec4.len();
+                                    ::core::mem::forget(vec4);
+                                    *ptr3
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len4;
+                                    *ptr3
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr4.cast_mut();
+                                }
+                                V9::Unsupported(e) => {
+                                    *ptr3
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec5 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr5 = vec5.as_ptr().cast::<u8>();
+                                    let len5 = vec5.len();
+                                    ::core::mem::forget(vec5);
+                                    *ptr3
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len5;
+                                    *ptr3
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr5.cast_mut();
+                                }
+                                V9::Invalidstate(e) => {
+                                    *ptr3
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (2i32) as u8;
+                                    let vec6 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr6 = vec6.as_ptr().cast::<u8>();
+                                    let len6 = vec6.len();
+                                    ::core::mem::forget(vec6);
+                                    *ptr3
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len6;
+                                    *ptr3
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr6.cast_mut();
+                                }
+                                V9::Io(e) => {
+                                    *ptr3
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (3i32) as u8;
+                                    let vec7 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr7 = vec7.as_ptr().cast::<u8>();
+                                    let len7 = vec7.len();
+                                    ::core::mem::forget(vec7);
+                                    *ptr3
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len7;
+                                    *ptr3
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr7.cast_mut();
+                                }
+                                V9::Internal(e) => {
+                                    *ptr3
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (4i32) as u8;
+                                    let vec8 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr8 = vec8.as_ptr().cast::<u8>();
+                                    let len8 = vec8.len();
+                                    ::core::mem::forget(vec8);
+                                    *ptr3
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len8;
+                                    *ptr3
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr8.cast_mut();
+                                }
+                            }
+                        }
+                    };
+                    ptr3
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_create_appender<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l1 {
+                                0 => {
+                                    let l2 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                1 => {
+                                    let l4 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l5 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l4, l5, 1);
+                                }
+                                2 => {
+                                    let l6 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l7 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l6, l7, 1);
+                                }
+                                3 => {
+                                    let l8 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l9 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l8, l9, 1);
+                                }
+                                _ => {
+                                    let l10 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l11 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l10, l11, 1);
+                                }
+                            }
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
                 pub unsafe fn _export_register_extension_cabi<T: Guest>(
                     arg0: *mut u8,
                     arg1: usize,
@@ -10405,6 +11275,7 @@ pub mod exports {
                     type Connection: GuestConnection;
                     type ResultStream: GuestResultStream;
                     type PreparedStatement: GuestPreparedStatement;
+                    type Appender: GuestAppender;
                     /// Opens a DuckDB database. Pass `none` for an in-memory database.
                     fn open(
                         path: Option<_rt::String>,
@@ -10445,6 +11316,13 @@ pub mod exports {
                         conn: ConnectionBorrow<'_>,
                         sql: _rt::String,
                     ) -> Result<_rt::Vec<u8>, Duckerror>;
+                    /// Creates an appender for bulk insertion into `table` (in `schema`, or the
+                    /// default schema when `none`).
+                    fn create_appender(
+                        conn: ConnectionBorrow<'_>,
+                        schema: Option<_rt::String>,
+                        table: _rt::String,
+                    ) -> Result<Appender, Duckerror>;
                     /// Registers metadata about an extension along with the capabilities it intends to use.
                     fn register_extension(
                         name: _rt::String,
@@ -10609,6 +11487,61 @@ pub mod exports {
                         params: _rt::Vec<Duckvalue>,
                     ) -> Result<QueryResult, Duckerror>;
                 }
+                pub trait GuestAppender: 'static {
+                    #[doc(hidden)]
+                    unsafe fn _resource_new(val: *mut u8) -> u32
+                    where
+                        Self: Sized,
+                    {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            let _ = val;
+                            unreachable!();
+                        }
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            #[link(
+                                wasm_import_module = "[export]duckdb:component/database"
+                            )]
+                            unsafe extern "C" {
+                                #[link_name = "[resource-new]appender"]
+                                fn new(_: *mut u8) -> u32;
+                            }
+                            unsafe { new(val) }
+                        }
+                    }
+                    #[doc(hidden)]
+                    fn _resource_rep(handle: u32) -> *mut u8
+                    where
+                        Self: Sized,
+                    {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            let _ = handle;
+                            unreachable!();
+                        }
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            #[link(
+                                wasm_import_module = "[export]duckdb:component/database"
+                            )]
+                            unsafe extern "C" {
+                                #[link_name = "[resource-rep]appender"]
+                                fn rep(_: u32) -> *mut u8;
+                            }
+                            unsafe { rep(handle) }
+                        }
+                    }
+                    /// Appends one row; `values` bind positionally to the table's columns.
+                    fn append_row(
+                        &self,
+                        values: _rt::Vec<Duckvalue>,
+                    ) -> Result<(), Duckerror>;
+                    /// Flushes buffered rows to the table.
+                    fn flush(&self) -> Result<(), Duckerror>;
+                    /// Flushes and closes the appender (also performed when dropped).
+                    fn close(&self) -> Result<(), Duckerror>;
+                }
                 #[doc(hidden)]
                 macro_rules! __export_duckdb_component_database_cabi {
                     ($ty:ident with_types_in $($path_to_types:tt)*) => {
@@ -10665,13 +11598,48 @@ pub mod exports {
                         { unsafe { $($path_to_types)*::
                         __post_return_method_prepared_statement_execute::<<$ty as
                         $($path_to_types)*:: Guest >::PreparedStatement > (arg0) } }
-                        #[unsafe (export_name = "duckdb:component/database#open")] unsafe
-                        extern "C" fn export_open(arg0 : i32, arg1 : * mut u8, arg2 :
-                        usize,) -> * mut u8 { unsafe { $($path_to_types)*::
-                        _export_open_cabi::<$ty > (arg0, arg1, arg2) } } #[unsafe
-                        (export_name = "cabi_post_duckdb:component/database#open")]
-                        unsafe extern "C" fn _post_return_open(arg0 : * mut u8,) { unsafe
-                        { $($path_to_types)*:: __post_return_open::<$ty > (arg0) } }
+                        #[unsafe (export_name =
+                        "duckdb:component/database#[method]appender.append-row")] unsafe
+                        extern "C" fn export_method_appender_append_row(arg0 : * mut u8,
+                        arg1 : * mut u8, arg2 : usize,) -> * mut u8 { unsafe {
+                        $($path_to_types)*::
+                        _export_method_appender_append_row_cabi::<<$ty as
+                        $($path_to_types)*:: Guest >::Appender > (arg0, arg1, arg2) } }
+                        #[unsafe (export_name =
+                        "cabi_post_duckdb:component/database#[method]appender.append-row")]
+                        unsafe extern "C" fn _post_return_method_appender_append_row(arg0
+                        : * mut u8,) { unsafe { $($path_to_types)*::
+                        __post_return_method_appender_append_row::<<$ty as
+                        $($path_to_types)*:: Guest >::Appender > (arg0) } } #[unsafe
+                        (export_name =
+                        "duckdb:component/database#[method]appender.flush")] unsafe
+                        extern "C" fn export_method_appender_flush(arg0 : * mut u8,) -> *
+                        mut u8 { unsafe { $($path_to_types)*::
+                        _export_method_appender_flush_cabi::<<$ty as $($path_to_types)*::
+                        Guest >::Appender > (arg0) } } #[unsafe (export_name =
+                        "cabi_post_duckdb:component/database#[method]appender.flush")]
+                        unsafe extern "C" fn _post_return_method_appender_flush(arg0 : *
+                        mut u8,) { unsafe { $($path_to_types)*::
+                        __post_return_method_appender_flush::<<$ty as
+                        $($path_to_types)*:: Guest >::Appender > (arg0) } } #[unsafe
+                        (export_name =
+                        "duckdb:component/database#[method]appender.close")] unsafe
+                        extern "C" fn export_method_appender_close(arg0 : * mut u8,) -> *
+                        mut u8 { unsafe { $($path_to_types)*::
+                        _export_method_appender_close_cabi::<<$ty as $($path_to_types)*::
+                        Guest >::Appender > (arg0) } } #[unsafe (export_name =
+                        "cabi_post_duckdb:component/database#[method]appender.close")]
+                        unsafe extern "C" fn _post_return_method_appender_close(arg0 : *
+                        mut u8,) { unsafe { $($path_to_types)*::
+                        __post_return_method_appender_close::<<$ty as
+                        $($path_to_types)*:: Guest >::Appender > (arg0) } } #[unsafe
+                        (export_name = "duckdb:component/database#open")] unsafe extern
+                        "C" fn export_open(arg0 : i32, arg1 : * mut u8, arg2 : usize,) ->
+                        * mut u8 { unsafe { $($path_to_types)*:: _export_open_cabi::<$ty
+                        > (arg0, arg1, arg2) } } #[unsafe (export_name =
+                        "cabi_post_duckdb:component/database#open")] unsafe extern "C" fn
+                        _post_return_open(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_open::<$ty > (arg0) } }
                         #[unsafe (export_name =
                         "duckdb:component/database#open-with-config")] unsafe extern "C"
                         fn export_open_with_config(arg0 : i32, arg1 : * mut u8, arg2 :
@@ -10720,6 +11688,15 @@ pub mod exports {
                         "C" fn _post_return_query_arrow(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_query_arrow::<$ty > (arg0) } }
                         #[unsafe (export_name =
+                        "duckdb:component/database#create-appender")] unsafe extern "C"
+                        fn export_create_appender(arg0 : i32, arg1 : i32, arg2 : * mut
+                        u8, arg3 : usize, arg4 : * mut u8, arg5 : usize,) -> * mut u8 {
+                        unsafe { $($path_to_types)*:: _export_create_appender_cabi::<$ty
+                        > (arg0, arg1, arg2, arg3, arg4, arg5) } } #[unsafe (export_name
+                        = "cabi_post_duckdb:component/database#create-appender")] unsafe
+                        extern "C" fn _post_return_create_appender(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_create_appender::<$ty
+                        > (arg0) } } #[unsafe (export_name =
                         "duckdb:component/database#register-extension")] unsafe extern
                         "C" fn export_register_extension(arg0 : * mut u8, arg1 : usize,
                         arg2 : * mut u8, arg3 : usize,) -> * mut u8 { unsafe {
@@ -10754,7 +11731,11 @@ pub mod exports {
                         #[allow(non_snake_case)] unsafe extern "C" fn dtor(rep : * mut
                         u8) { unsafe { $($path_to_types)*:: PreparedStatement::dtor::<
                         <$ty as $($path_to_types)*:: Guest >::PreparedStatement > (rep) }
-                        } }; };
+                        } }; const _ : () = { #[doc(hidden)] #[unsafe (export_name =
+                        "duckdb:component/database#[dtor]appender")]
+                        #[allow(non_snake_case)] unsafe extern "C" fn dtor(rep : * mut
+                        u8) { unsafe { $($path_to_types)*:: Appender::dtor::< <$ty as
+                        $($path_to_types)*:: Guest >::Appender > (rep) } } }; };
                     };
                 }
                 #[doc(hidden)]
@@ -17806,8 +18787,8 @@ pub(crate) use __export_libduckdb_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 10427] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xbbP\x01A\x02\x01A8\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 10619] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xfbQ\x01A\x02\x01A8\x01\
 B\x0a\x01o\x02ss\x01p\0\x01@\0\0\x01\x04\0\x0fget-environment\x01\x02\x01ps\x01@\
 \0\0\x03\x04\0\x0dget-arguments\x01\x04\x01ks\x01@\0\0\x05\x04\0\x0binitial-cwd\x01\
 \x06\x03\0\x1awasi:cli/environment@0.2.6\x05\0\x01B\x04\x04\0\x05error\x03\x01\x01\
@@ -17952,28 +18933,32 @@ gs\x0a\0\x0d\x04\0\x0acall-table\x01\x0e\x01@\x02\x06handley\x04rows\x09\0\x0b\x
 \0\x0ecall-aggregate\x01\x0f\x01k\x03\x01j\x01\x10\x01\x01\x01@\x02\x06handley\x04\
 args\x0a\0\x11\x04\0\x0bcall-pragma\x01\x12\x01@\x02\x06handley\x05value\x03\0\x0b\
 \x04\0\x09call-cast\x01\x13\x03\0\"duckdb:extension/callback-dispatch\x05\x1b\x02\
-\x03\0\x0a\x0ecapabilitykind\x01BF\x02\x03\x02\x01\x1c\x04\0\x0ecapabilitykind\x03\
+\x03\0\x0a\x0ecapabilitykind\x01BR\x02\x03\x02\x01\x1c\x04\0\x0ecapabilitykind\x03\
 \0\0\x02\x03\x02\x01\x13\x04\0\x09columndef\x03\0\x02\x02\x03\x02\x01\x16\x04\0\x09\
 duckerror\x03\0\x04\x02\x03\x02\x01\x17\x04\0\x09duckvalue\x03\0\x06\x04\0\x0aco\
 nnection\x03\x01\x01p\x07\x04\0\x03row\x03\0\x09\x01p\x03\x01p\x0a\x01r\x02\x07c\
 olumns\x0b\x04rows\x0c\x04\0\x0cquery-result\x03\0\x0d\x04\0\x0dresult-stream\x03\
-\x01\x04\0\x12prepared-statement\x03\x01\x01p\x01\x01r\x02\x04names\x08requires\x11\
-\x04\0\x0eextension-info\x03\0\x12\x01h\x0f\x01@\x01\x04self\x14\0\x0b\x04\0\x1c\
-[method]result-stream.schema\x01\x15\x01k\x0c\x01j\x01\x16\x01\x05\x01@\x02\x04s\
-elf\x14\x08max-rowsy\0\x17\x04\0\x1a[method]result-stream.next\x01\x18\x01@\x01\x04\
-self\x14\x01\0\x04\0\x1b[method]result-stream.close\x01\x19\x01h\x10\x01@\x01\x04\
-self\x1a\0y\x04\0*[method]prepared-statement.parameter-count\x01\x1b\x01p\x07\x01\
-j\x01\x0e\x01\x05\x01@\x02\x04self\x1a\x06params\x1c\0\x1d\x04\0\"[method]prepar\
-ed-statement.execute\x01\x1e\x01ks\x01i\x08\x01j\x01\x20\x01s\x01@\x01\x04path\x1f\
-\0!\x04\0\x04open\x01\"\x01o\x02ss\x01p#\x01@\x02\x04path\x1f\x07options$\0!\x04\
-\0\x10open-with-config\x01%\x01@\x01\x04conn\x20\x01\0\x04\0\x05close\x01&\x01h\x08\
-\x01@\x01\x04conn'\x01\0\x04\0\x09interrupt\x01(\x01@\x02\x04conn'\x03sqls\0\x1d\
-\x04\0\x07execute\x01)\x01i\x0f\x01j\x01*\x01\x05\x01@\x02\x04conn'\x03sqls\0+\x04\
-\0\x0bopen-stream\x01,\x01i\x10\x01j\x01-\x01\x05\x01@\x02\x04conn'\x03sqls\0.\x04\
-\0\x07prepare\x01/\x01p}\x01j\x010\x01\x05\x01@\x02\x04conn'\x03sqls\01\x04\0\x0b\
-query-arrow\x012\x01j\x01\x7f\x01s\x01@\x02\x04names\x08requires\x11\03\x04\0\x12\
-register-extension\x014\x01p\x13\x01@\0\05\x04\0\x1alist-registered-extensions\x01\
-6\x04\0\x19duckdb:component/database\x05\x1d\x02\x03\0\x0a\x0bconfigerror\x01B$\x02\
+\x01\x04\0\x12prepared-statement\x03\x01\x04\0\x08appender\x03\x01\x01p\x01\x01r\
+\x02\x04names\x08requires\x12\x04\0\x0eextension-info\x03\0\x13\x01h\x0f\x01@\x01\
+\x04self\x15\0\x0b\x04\0\x1c[method]result-stream.schema\x01\x16\x01k\x0c\x01j\x01\
+\x17\x01\x05\x01@\x02\x04self\x15\x08max-rowsy\0\x18\x04\0\x1a[method]result-str\
+eam.next\x01\x19\x01@\x01\x04self\x15\x01\0\x04\0\x1b[method]result-stream.close\
+\x01\x1a\x01h\x10\x01@\x01\x04self\x1b\0y\x04\0*[method]prepared-statement.param\
+eter-count\x01\x1c\x01p\x07\x01j\x01\x0e\x01\x05\x01@\x02\x04self\x1b\x06params\x1d\
+\0\x1e\x04\0\"[method]prepared-statement.execute\x01\x1f\x01h\x11\x01j\0\x01\x05\
+\x01@\x02\x04self\x20\x06values\x1d\0!\x04\0\x1b[method]appender.append-row\x01\"\
+\x01@\x01\x04self\x20\0!\x04\0\x16[method]appender.flush\x01#\x04\0\x16[method]a\
+ppender.close\x01#\x01ks\x01i\x08\x01j\x01%\x01s\x01@\x01\x04path$\0&\x04\0\x04o\
+pen\x01'\x01o\x02ss\x01p(\x01@\x02\x04path$\x07options)\0&\x04\0\x10open-with-co\
+nfig\x01*\x01@\x01\x04conn%\x01\0\x04\0\x05close\x01+\x01h\x08\x01@\x01\x04conn,\
+\x01\0\x04\0\x09interrupt\x01-\x01@\x02\x04conn,\x03sqls\0\x1e\x04\0\x07execute\x01\
+.\x01i\x0f\x01j\x01/\x01\x05\x01@\x02\x04conn,\x03sqls\00\x04\0\x0bopen-stream\x01\
+1\x01i\x10\x01j\x012\x01\x05\x01@\x02\x04conn,\x03sqls\03\x04\0\x07prepare\x014\x01\
+p}\x01j\x015\x01\x05\x01@\x02\x04conn,\x03sqls\06\x04\0\x0bquery-arrow\x017\x01i\
+\x11\x01j\x018\x01\x05\x01@\x03\x04conn,\x06schema$\x05tables\09\x04\0\x0fcreate\
+-appender\x01:\x01j\x01\x7f\x01s\x01@\x02\x04names\x08requires\x12\0;\x04\0\x12r\
+egister-extension\x01<\x01p\x14\x01@\0\0=\x04\0\x1alist-registered-extensions\x01\
+>\x04\0\x19duckdb:component/database\x05\x1d\x02\x03\0\x0a\x0bconfigerror\x01B$\x02\
 \x03\x02\x01\x1e\x04\0\x0bconfigerror\x03\0\0\x01@\0\0s\x04\0\x10provider-versio\
 n\x01\x02\x01ks\x01ps\x01@\x01\x06prefix\x03\0\x04\x04\0\x09list-keys\x01\x05\x01\
 j\x01\x03\x01\x01\x01@\x01\x04paths\0\x06\x04\0\x0aget-string\x01\x07\x01k\x7f\x01\

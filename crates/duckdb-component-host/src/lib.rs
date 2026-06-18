@@ -246,6 +246,18 @@ impl CoreExecution {
         f(guest, store)
     }
 
+    fn with_appender<F, R>(&mut self, f: F) -> R
+    where
+        F: FnOnce(
+            core_db_exports::GuestAppender<'_>,
+            wasmtime::StoreContextMut<'_, CoreStoreState>,
+        ) -> R,
+    {
+        let guest = self.bindings.duckdb_component_database().appender();
+        let store = self.store.as_context_mut();
+        f(guest, store)
+    }
+
     fn with_runtime<F, R>(&mut self, f: F) -> R
     where
         F: FnOnce(&core_runtime_exports::Guest, wasmtime::StoreContextMut<'_, CoreStoreState>) -> R,
@@ -285,6 +297,10 @@ struct StreamEntry {
 }
 
 struct PreparedEntry {
+    handle: ResourceAny,
+}
+
+struct AppenderEntry {
     handle: ResourceAny,
 }
 
@@ -1060,9 +1076,11 @@ pub struct HostState {
     connections: HashMap<u32, ConnectionEntry>,
     streams: HashMap<u32, StreamEntry>,
     prepared: HashMap<u32, PreparedEntry>,
+    appenders: HashMap<u32, AppenderEntry>,
     pending_connection_drops: Vec<Resource<cli_db::Connection>>,
     pending_stream_drops: Vec<Resource<cli_db::ResultStream>>,
     pending_prepared_drops: Vec<Resource<cli_db::PreparedStatement>>,
+    pending_appender_drops: Vec<Resource<cli_db::Appender>>,
 }
 
 impl WasiView for HostState {
@@ -1105,6 +1123,10 @@ impl HostState {
         let pending_prepared = std::mem::take(&mut self.pending_prepared_drops);
         for prepared in pending_prepared {
             self.drop_prepared_resource(prepared)?;
+        }
+        let pending_appenders = std::mem::take(&mut self.pending_appender_drops);
+        for appender in pending_appenders {
+            self.drop_appender_resource(appender)?;
         }
         Ok(())
     }
@@ -1190,6 +1212,23 @@ impl HostState {
 
     fn schedule_prepared_drop(&mut self, prepared: Resource<cli_db::PreparedStatement>) {
         self.pending_prepared_drops.push(prepared);
+    }
+
+    fn drop_appender_resource(
+        &mut self,
+        rep: Resource<cli_db::Appender>,
+    ) -> Result<(), cli_types::Duckerror> {
+        if let Some(entry) = self.appenders.remove(&rep.rep()) {
+            self.with_core(|core| {
+                core.with_appender(|_guest, store| entry.handle.resource_drop(store))
+            })
+            .map_err(|err| cli_types::Duckerror::Internal(trap_to_cli_string(err)))?;
+        }
+        Ok(())
+    }
+
+    fn schedule_appender_drop(&mut self, appender: Resource<cli_db::Appender>) {
+        self.pending_appender_drops.push(appender);
     }
 }
 
@@ -2021,6 +2060,57 @@ impl cli_db::HostPreparedStatement for HostState {
     }
 }
 
+impl cli_db::HostAppender for HostState {
+    fn append_row(
+        &mut self,
+        rep: Resource<cli_db::Appender>,
+        values: wasmtime::component::__internal::Vec<cli_types::Duckvalue>,
+    ) -> Result<(), cli_types::Duckerror> {
+        let handle = self
+            .appenders
+            .get(&rep.rep())
+            .ok_or_else(|| cli_types::Duckerror::Internal("unknown appender".into()))?
+            .handle
+            .clone();
+        let core_values: Vec<core_types::Duckvalue> =
+            values.into_iter().map(convert_cli_duckvalue).collect();
+        self.with_core(|core| {
+            core.with_appender(|guest, store| guest.call_append_row(store, handle, &core_values))
+        })
+        .map_err(convert_trap_to_duckerror)?
+        .map_err(convert_core_duckerror)
+    }
+
+    fn flush(&mut self, rep: Resource<cli_db::Appender>) -> Result<(), cli_types::Duckerror> {
+        let handle = self
+            .appenders
+            .get(&rep.rep())
+            .ok_or_else(|| cli_types::Duckerror::Internal("unknown appender".into()))?
+            .handle
+            .clone();
+        self.with_core(|core| core.with_appender(|guest, store| guest.call_flush(store, handle)))
+            .map_err(convert_trap_to_duckerror)?
+            .map_err(convert_core_duckerror)
+    }
+
+    fn close(&mut self, rep: Resource<cli_db::Appender>) -> Result<(), cli_types::Duckerror> {
+        let handle = self
+            .appenders
+            .get(&rep.rep())
+            .ok_or_else(|| cli_types::Duckerror::Internal("unknown appender".into()))?
+            .handle
+            .clone();
+        self.with_core(|core| core.with_appender(|guest, store| guest.call_close(store, handle)))
+            .map_err(convert_trap_to_duckerror)?
+            .map_err(convert_core_duckerror)
+    }
+
+    fn drop(&mut self, rep: Resource<cli_db::Appender>) -> wasmtime::Result<()> {
+        self.schedule_appender_drop(rep);
+        Ok(())
+    }
+}
+
 impl cli_db::Host for HostState {
     fn open(&mut self, path: Option<CliString>) -> Result<Resource<cli_db::Connection>, CliString> {
         let owned: Option<String> = path.map(|s| s.into());
@@ -2199,6 +2289,42 @@ impl cli_db::Host for HostState {
             Ok(handle) => {
                 let id = self.alloc_resource_id();
                 self.prepared.insert(id, PreparedEntry { handle });
+                Ok(Resource::new_own(id))
+            }
+            Err(err) => Err(convert_core_duckerror(err)),
+        }
+    }
+
+    fn create_appender(
+        &mut self,
+        conn: Resource<cli_db::Connection>,
+        schema: Option<CliString>,
+        table: CliString,
+    ) -> Result<Resource<cli_db::Appender>, cli_types::Duckerror> {
+        let handle = self
+            .connections
+            .get(&conn.rep())
+            .ok_or_else(|| cli_types::Duckerror::Internal("unknown connection".into()))?
+            .handle
+            .clone();
+        let owned_schema: Option<String> = schema.map(|s| s.into());
+        let owned_table: String = table.into();
+        let appender = self
+            .with_core(|core| {
+                core.with_database(|guest, store| {
+                    guest.call_create_appender(
+                        store,
+                        handle,
+                        owned_schema.as_deref(),
+                        &owned_table,
+                    )
+                })
+            })
+            .map_err(convert_trap_to_duckerror)?;
+        match appender {
+            Ok(handle) => {
+                let id = self.alloc_resource_id();
+                self.appenders.insert(id, AppenderEntry { handle });
                 Ok(Resource::new_own(id))
             }
             Err(err) => Err(convert_core_duckerror(err)),
@@ -3249,9 +3375,11 @@ impl CliHarness {
             connections: HashMap::new(),
             streams: HashMap::new(),
             prepared: HashMap::new(),
+            appenders: HashMap::new(),
             pending_connection_drops: Vec::new(),
             pending_stream_drops: Vec::new(),
             pending_prepared_drops: Vec::new(),
+            pending_appender_drops: Vec::new(),
         };
         let mut store = Store::new(&engine, host_state);
 
@@ -3357,9 +3485,11 @@ pub fn run_cli_with_stdio(
         connections: HashMap::new(),
         streams: HashMap::new(),
         prepared: HashMap::new(),
+        appenders: HashMap::new(),
         pending_connection_drops: Vec::new(),
         pending_stream_drops: Vec::new(),
         pending_prepared_drops: Vec::new(),
+        pending_appender_drops: Vec::new(),
     };
     let mut store = Store::new(&engine, host_state);
 
@@ -3403,6 +3533,57 @@ mod tests {
         stdout
             .lines()
             .any(|line| line.split('|').map(str::trim).any(|cell| cell == value))
+    }
+
+    #[test]
+    fn core_appender_bulk_inserts_under_wasmtime() -> Result<()> {
+        let engine = build_engine()?;
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &[])?;
+        let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
+        let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
+
+        let conn = core
+            .with_database(|g, s| g.call_open(s, None))?
+            .map_err(|e| anyhow::anyhow!("open: {e}"))?;
+        core.with_database(|g, s| {
+            g.call_execute(s, conn.clone(), "CREATE TABLE t(id BIGINT, name VARCHAR)")
+        })?
+        .map_err(|e| anyhow::anyhow!("create: {e:?}"))?;
+
+        // Bulk-insert rows through the appender.
+        let appender = core
+            .with_database(|g, s| g.call_create_appender(s, conn.clone(), None, "t"))?
+            .map_err(|e| anyhow::anyhow!("create_appender: {e:?}"))?;
+        for (id, name) in [(1i64, "alice"), (2, "bob"), (3, "carol")] {
+            let values = vec![
+                core_types::Duckvalue::Int64(id),
+                core_types::Duckvalue::Text(name.to_string()),
+            ];
+            core.with_appender(|g, s| g.call_append_row(s, appender.clone(), &values))?
+                .map_err(|e| anyhow::anyhow!("append_row: {e:?}"))?;
+        }
+        core.with_appender(|g, s| g.call_flush(s, appender.clone()))?
+            .map_err(|e| anyhow::anyhow!("flush: {e:?}"))?;
+
+        // Read the appended rows back.
+        let result = core
+            .with_database(|g, s| {
+                g.call_execute(s, conn, "SELECT count(*) AS n, sum(id) AS total FROM t")
+            })?
+            .map_err(|e| anyhow::anyhow!("select: {e:?}"))?;
+        let cell = |row: usize, col: usize| -> String {
+            match result.rows.get(row).and_then(|r| r.get(col)) {
+                Some(core_types::Duckvalue::Int64(v)) => v.to_string(),
+                Some(core_types::Duckvalue::Uint64(v)) => v.to_string(),
+                Some(core_types::Duckvalue::Text(v)) => v.clone(),
+                other => format!("{other:?}"),
+            }
+        };
+        assert_eq!(cell(0, 0), "3", "appended row count");
+        assert_eq!(cell(0, 1), "6", "sum of appended ids");
+
+        Ok(())
     }
 
     #[test]

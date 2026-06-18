@@ -11,6 +11,7 @@ pub type duckdb_config = *mut c_void;
 pub type duckdb_prepared_statement = *mut c_void;
 pub type duckdb_arrow_options = *mut c_void;
 pub type duckdb_error_data = *mut c_void;
+pub type duckdb_appender = *mut c_void;
 pub type idx_t = u64;
 pub type duckdb_data_chunk = *mut c_void;
 pub type duckdb_vector = *mut c_void;
@@ -234,6 +235,34 @@ extern "C" {
     pub fn duckdb_error_data_message(error_data: duckdb_error_data) -> *const c_char;
     pub fn duckdb_error_data_has_error(error_data: duckdb_error_data) -> bool;
     pub fn duckdb_destroy_error_data(error_data: *mut duckdb_error_data);
+
+    // Appender: fast bulk row insertion into an existing table.
+    pub fn duckdb_appender_create(
+        connection: duckdb_connection,
+        schema: *const c_char,
+        table: *const c_char,
+        out_appender: *mut duckdb_appender,
+    ) -> duckdb_state;
+    pub fn duckdb_appender_error(appender: duckdb_appender) -> *const c_char;
+    pub fn duckdb_appender_end_row(appender: duckdb_appender) -> duckdb_state;
+    pub fn duckdb_appender_flush(appender: duckdb_appender) -> duckdb_state;
+    pub fn duckdb_appender_close(appender: duckdb_appender) -> duckdb_state;
+    pub fn duckdb_appender_destroy(appender: *mut duckdb_appender) -> duckdb_state;
+    pub fn duckdb_append_bool(appender: duckdb_appender, value: bool) -> duckdb_state;
+    pub fn duckdb_append_int64(appender: duckdb_appender, value: i64) -> duckdb_state;
+    pub fn duckdb_append_uint64(appender: duckdb_appender, value: u64) -> duckdb_state;
+    pub fn duckdb_append_double(appender: duckdb_appender, value: f64) -> duckdb_state;
+    pub fn duckdb_append_varchar_length(
+        appender: duckdb_appender,
+        val: *const c_char,
+        length: idx_t,
+    ) -> duckdb_state;
+    pub fn duckdb_append_blob(
+        appender: duckdb_appender,
+        data: *const c_void,
+        length: idx_t,
+    ) -> duckdb_state;
+    pub fn duckdb_append_null(appender: duckdb_appender) -> duckdb_state;
 
     pub fn duckdb_result_error(result: *mut duckdb_result) -> *const c_char;
 

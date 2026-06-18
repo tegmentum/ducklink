@@ -50,6 +50,19 @@ interface database {
         execute: func(params: list<duckvalue>) -> result<query-result, duckerror>;
     }
 
+    /// Bulk row insertion into an existing table — much faster than running
+    /// individual INSERT statements.
+    resource appender {
+        /// Appends one row; `values` bind positionally to the table's columns.
+        append-row: func(values: list<duckvalue>) -> result<_, duckerror>;
+
+        /// Flushes buffered rows to the table.
+        flush: func() -> result<_, duckerror>;
+
+        /// Flushes and closes the appender (also performed when dropped).
+        close: func() -> result<_, duckerror>;
+    }
+
     /// Opens a DuckDB database. Pass `none` for an in-memory database.
     open: func(path: option<string>) -> result<connection, string>;
 
@@ -83,6 +96,14 @@ interface database {
     /// True zero-copy is not possible across the component boundary, so the
     /// columnar buffers are serialized once into this byte stream.
     query-arrow: func(conn: borrow<connection>, sql: string) -> result<list<u8>, duckerror>;
+
+    /// Creates an appender for bulk insertion into `table` (in `schema`, or the
+    /// default schema when `none`).
+    create-appender: func(
+        conn: borrow<connection>,
+        schema: option<string>,
+        table: string,
+    ) -> result<appender, duckerror>;
 
     /// Registers metadata about an extension along with the capabilities it intends to use.
     register-extension: func(name: string, requires: list<capabilitykind>) -> result<bool, string>;

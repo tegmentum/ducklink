@@ -2549,6 +2549,130 @@ impl exported_database::GuestPreparedStatement for PreparedStatementState {
     }
 }
 
+/// A DuckDB appender for fast bulk row insertion into an existing table.
+struct AppenderState {
+    appender: RefCell<duckdb::duckdb_appender>,
+}
+
+impl AppenderState {
+    fn create(
+        conn: &ConnectionState,
+        schema: Option<&str>,
+        table: &str,
+    ) -> Result<Self, DuckDbError> {
+        let c_table = CString::new(table).map_err(|_| DuckDbError::EmbeddedNull)?;
+        let c_schema = match schema {
+            Some(s) => Some(CString::new(s).map_err(|_| DuckDbError::EmbeddedNull)?),
+            None => None,
+        };
+        unsafe {
+            let mut appender: duckdb::duckdb_appender = ptr::null_mut();
+            let state = duckdb::duckdb_appender_create(
+                conn.handle,
+                c_schema.as_ref().map(|s| s.as_ptr()).unwrap_or(ptr::null()),
+                c_table.as_ptr(),
+                &mut appender,
+            );
+            if state != DUCKDB_SUCCESS {
+                let message = appender_error_message(appender);
+                if !appender.is_null() {
+                    duckdb::duckdb_appender_destroy(&mut appender);
+                }
+                return Err(DuckDbError::message(message));
+            }
+            Ok(AppenderState {
+                appender: RefCell::new(appender),
+            })
+        }
+    }
+}
+
+unsafe fn appender_error_message(appender: duckdb::duckdb_appender) -> String {
+    if appender.is_null() {
+        return "duckdb_appender_create failed".to_string();
+    }
+    let ptr = duckdb::duckdb_appender_error(appender);
+    if ptr.is_null() {
+        "duckdb appender error".to_string()
+    } else {
+        CStr::from_ptr(ptr).to_string_lossy().into_owned()
+    }
+}
+
+impl Drop for AppenderState {
+    fn drop(&mut self) {
+        unsafe {
+            let mut appender = *self.appender.borrow();
+            if !appender.is_null() {
+                // destroy flushes and closes the appender.
+                duckdb::duckdb_appender_destroy(&mut appender);
+            }
+        }
+    }
+}
+
+impl exported_database::GuestAppender for AppenderState {
+    fn append_row(&self, values: Vec<Duckvalue>) -> Result<(), Duckerror> {
+        unsafe {
+            let appender = *self.appender.borrow();
+            for value in &values {
+                let state = match value {
+                    Duckvalue::Null => duckdb::duckdb_append_null(appender),
+                    Duckvalue::Boolean(v) => duckdb::duckdb_append_bool(appender, *v),
+                    Duckvalue::Int64(v) => duckdb::duckdb_append_int64(appender, *v),
+                    Duckvalue::Uint64(v) => duckdb::duckdb_append_uint64(appender, *v),
+                    Duckvalue::Float64(v) => duckdb::duckdb_append_double(appender, *v),
+                    Duckvalue::Text(v) => duckdb::duckdb_append_varchar_length(
+                        appender,
+                        v.as_ptr() as *const c_char,
+                        v.len() as duckdb::idx_t,
+                    ),
+                    Duckvalue::Blob(bytes) => duckdb::duckdb_append_blob(
+                        appender,
+                        bytes.as_ptr() as *const c_void,
+                        bytes.len() as duckdb::idx_t,
+                    ),
+                };
+                if state != DUCKDB_SUCCESS {
+                    return Err(Duckerror::from(DuckDbError::message(appender_error_message(
+                        appender,
+                    ))));
+                }
+            }
+            if duckdb::duckdb_appender_end_row(appender) != DUCKDB_SUCCESS {
+                return Err(Duckerror::from(DuckDbError::message(appender_error_message(
+                    appender,
+                ))));
+            }
+            Ok(())
+        }
+    }
+
+    fn flush(&self) -> Result<(), Duckerror> {
+        unsafe {
+            let appender = *self.appender.borrow();
+            if duckdb::duckdb_appender_flush(appender) != DUCKDB_SUCCESS {
+                return Err(Duckerror::from(DuckDbError::message(appender_error_message(
+                    appender,
+                ))));
+            }
+            Ok(())
+        }
+    }
+
+    fn close(&self) -> Result<(), Duckerror> {
+        unsafe {
+            let appender = *self.appender.borrow();
+            if duckdb::duckdb_appender_close(appender) != DUCKDB_SUCCESS {
+                return Err(Duckerror::from(DuckDbError::message(appender_error_message(
+                    appender,
+                ))));
+            }
+            Ok(())
+        }
+    }
+}
+
 struct Component;
 
 fn register_connection_handle(
@@ -2624,6 +2748,7 @@ impl exported_database::Guest for Component {
     type Connection = ConnectionState;
     type ResultStream = QueryStream;
     type PreparedStatement = PreparedStatementState;
+    type Appender = AppenderState;
 
     fn open(path: Option<String>) -> Result<Connection, String> {
         let state = ConnectionState::open(path.as_deref()).map_err(|err| err.to_string())?;
@@ -2680,6 +2805,16 @@ impl exported_database::Guest for Component {
         conn.get::<ConnectionState>()
             .query_arrow_ipc(&sql)
             .map_err(Duckerror::from)
+    }
+
+    fn create_appender(
+        conn: ConnectionBorrow<'_>,
+        schema: Option<String>,
+        table: String,
+    ) -> Result<exported_database::Appender, Duckerror> {
+        let state = AppenderState::create(conn.get::<ConnectionState>(), schema.as_deref(), &table)
+            .map_err(Duckerror::from)?;
+        Ok(exported_database::Appender::new(state))
     }
 
     fn register_extension(name: String, requires: Vec<Capabilitykind>) -> Result<bool, String> {
