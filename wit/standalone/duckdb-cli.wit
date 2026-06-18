@@ -7,6 +7,7 @@ use wasi:cli/stderr@0.2.6;
 use wasi:cli/stdin@0.2.6;
 use wasi:cli/stdout@0.2.6;
 use wasi:filesystem/preopens@0.2.6;
+use wasi:filesystem/types@0.2.6;
 
 world duckdb-cli {
     import duckdb:component/database;
@@ -15,6 +16,7 @@ world duckdb-cli {
     import wasi:cli/stdin@0.2.6;
     import wasi:cli/stdout@0.2.6;
     import wasi:filesystem/preopens@0.2.6;
+    import wasi:filesystem/types@0.2.6;
 
     export wasi:cli/run@0.2.6;
 }

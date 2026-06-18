@@ -24,6 +24,7 @@ pub mod duckdb_cli_bindings {
             "wasi:cli/stdout": wasmtime_wasi::p2::bindings::cli::stdout,
             "wasi:cli/stderr": wasmtime_wasi::p2::bindings::cli::stderr,
             "wasi:filesystem/preopens": wasmtime_wasi::p2::bindings::filesystem::preopens,
+            "wasi:filesystem/types": wasmtime_wasi::p2::bindings::filesystem::types,
         },
         require_store_data_send: true,
     });
@@ -3703,6 +3704,39 @@ mod tests {
         assert!(
             json_out.contains(r#"{"i":1,"b":true,"s":"x"}"#),
             "expected typed JSON (unquoted number/bool), got:\n{json_out}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn cli_output_redirects_to_file() -> Result<()> {
+        let tempdir = tempdir().context("failed to create temporary directory")?;
+        let preopens = [(tempdir.path(), ".")];
+
+        // First query goes to the file; .output stdout restores stdout.
+        std::fs::write(
+            tempdir.path().join("redirect.sql"),
+            ".output captured.txt\n\
+             SELECT 7 AS answer;\n\
+             .output stdout\n\
+             SELECT 'on stdout' AS where_am_i;\n",
+        )?;
+        let mut h = CliHarness::new(
+            &["duckdb-cli", ":memory:", "-c", ".read redirect.sql"],
+            &preopens,
+        )?;
+        assert!(h.run()?.is_ok(), ".output failed: {}", h.stderr()?);
+
+        let stdout = h.stdout()?;
+        assert!(
+            has_cell(&stdout, "on stdout") && !has_cell(&stdout, "7"),
+            "post-redirect query should be on stdout, the redirected one should not:\n{stdout}"
+        );
+        let file = std::fs::read_to_string(tempdir.path().join("captured.txt"))?;
+        assert!(
+            has_cell(&file, "answer") && has_cell(&file, "7"),
+            "redirected query should be in the file, got:\n{file}"
         );
 
         Ok(())

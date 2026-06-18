@@ -7,6 +7,8 @@ use bindings::wasi::cli::environment;
 use bindings::wasi::cli::stderr;
 use bindings::wasi::cli::stdin;
 use bindings::wasi::cli::stdout;
+use bindings::wasi::filesystem::preopens;
+use bindings::wasi::filesystem::types as fs_types;
 use bindings::wasi::io::streams;
 
 struct Component;
@@ -222,6 +224,21 @@ fn run_meta_command(conn: &duckdb::Connection, rest: &str) -> Result<(), String>
             OUTPUT_MODE.with(|m| m.set(selected));
             Ok(())
         }
+        "output" => {
+            // `.output FILE` redirects subsequent output to a file;
+            // `.output` / `.output stdout` restores stdout.
+            match arg.as_deref() {
+                None | Some("stdout") | Some("-") => {
+                    OUTPUT_FILE.with(|c| *c.borrow_mut() = None);
+                    Ok(())
+                }
+                Some(path) => {
+                    let file = open_output_file(path)?;
+                    OUTPUT_FILE.with(|c| *c.borrow_mut() = Some(file));
+                    Ok(())
+                }
+            }
+        }
         other => Err(format!("unknown command: .{other} (try .help)")),
     }
 }
@@ -285,17 +302,86 @@ thread_local! {
     static OUTPUT_MODE: std::cell::Cell<OutputMode> = std::cell::Cell::new(OutputMode::Table);
 }
 
+/// A file opened by `.output`. The descriptor is held alongside the write stream
+/// so the file stays open for the stream's lifetime; dropping it flushes/closes.
+struct OutputFile {
+    _descriptor: fs_types::Descriptor,
+    stream: streams::OutputStream,
+}
+
+thread_local! {
+    static OUTPUT_FILE: std::cell::RefCell<Option<OutputFile>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 fn render_result(result: duckdb::QueryResult) -> Result<(), String> {
+    OUTPUT_FILE.with(|cell| {
+        let target = cell.borrow();
+        match target.as_ref() {
+            Some(file) => render_to(result, &file.stream),
+            None => render_to(result, &stdout::get_stdout()),
+        }
+    })
+}
+
+/// Opens `path` (truncating) for `.output`, resolving it against the WASI
+/// preopened directories and returning the file descriptor + its write stream.
+fn open_output_file(path: &str) -> Result<OutputFile, String> {
+    let preopens = preopens::get_directories();
+    let (descriptor, relative) = resolve_output_path(path, &preopens)?;
+    let file = descriptor
+        .open_at(
+            fs_types::PathFlags::empty(),
+            &relative,
+            fs_types::OpenFlags::CREATE | fs_types::OpenFlags::TRUNCATE,
+            fs_types::DescriptorFlags::WRITE,
+        )
+        .map_err(|err| format!("cannot open '{path}' for output: {err:?}"))?;
+    let stream = file
+        .write_via_stream(0)
+        .map_err(|err| format!("cannot write '{path}': {err:?}"))?;
+    Ok(OutputFile {
+        _descriptor: file,
+        stream,
+    })
+}
+
+/// Matches `path` against a preopened directory, returning that directory's
+/// descriptor and the sub-path relative to it. Relative paths land in the cwd
+/// preopen (`.`); absolute paths are matched by prefix; otherwise the first
+/// preopen is used.
+fn resolve_output_path<'a>(
+    path: &str,
+    preopens: &'a [(fs_types::Descriptor, String)],
+) -> Result<(&'a fs_types::Descriptor, String), String> {
+    let relative = path.trim_start_matches("./");
+    for (descriptor, root) in preopens {
+        let root = root.trim_end_matches('/');
+        if (root.is_empty() || root == ".") && !path.starts_with('/') {
+            return Ok((descriptor, relative.to_string()));
+        }
+        if let Some(rest) = path.strip_prefix(root) {
+            let rest = rest.trim_start_matches('/');
+            if !rest.is_empty() {
+                return Ok((descriptor, rest.to_string()));
+            }
+        }
+    }
+    preopens
+        .first()
+        .map(|(descriptor, _)| (descriptor, relative.to_string()))
+        .ok_or_else(|| "no writable directory available (run with --dir)".to_string())
+}
+
+fn render_to(result: duckdb::QueryResult, out: &streams::OutputStream) -> Result<(), String> {
     match OUTPUT_MODE.with(|m| m.get()) {
-        OutputMode::Table => render_table(result),
-        OutputMode::Csv => render_csv(result),
-        OutputMode::Json => render_json(result),
+        OutputMode::Table => render_table(result, out),
+        OutputMode::Csv => render_csv(result, out),
+        OutputMode::Json => render_json(result, out),
     }
 }
 
-fn render_table(result: duckdb::QueryResult) -> Result<(), String> {
-    let out = stdout::get_stdout();
-
+fn render_table(result: duckdb::QueryResult, out: &streams::OutputStream) -> Result<(), String> {
     let duckdb::QueryResult { columns, rows } = result;
     let mut widths: Vec<usize> = columns.iter().map(|c| c.name.len()).collect();
     let mut rendered_rows = Vec::with_capacity(rows.len());
@@ -318,15 +404,15 @@ fn render_table(result: duckdb::QueryResult) -> Result<(), String> {
 
     let mut line = String::new();
     format_header_row(&mut line, &columns, &widths);
-    write_line(&out, &line)?;
+    write_line(out, &line)?;
     line.clear();
     format_separator(&mut line, &widths);
-    write_line(&out, &line)?;
+    write_line(out, &line)?;
 
     for row in rendered_rows {
         line.clear();
         format_data_row(&mut line, &row, &widths);
-        write_line(&out, &line)?;
+        write_line(out, &line)?;
     }
 
     Ok(())
@@ -458,6 +544,7 @@ fn print_help() {
          .import FILE TABLE  Load a CSV file into an existing table\n  \
          .read FILE          Execute SQL statements from a file\n  \
          .mode FORMAT        Set output format: table, csv, or json\n  \
+         .output [FILE]      Redirect output to FILE (no arg / stdout resets)\n  \
          .help               Show this help\n  \
          .exit, .quit        Leave the shell",
     );
@@ -473,17 +560,16 @@ fn duckerror_to_string(err: duckdb::Duckerror) -> String {
     }
 }
 
-fn render_csv(result: duckdb::QueryResult) -> Result<(), String> {
-    let out = stdout::get_stdout();
+fn render_csv(result: duckdb::QueryResult, out: &streams::OutputStream) -> Result<(), String> {
     let duckdb::QueryResult { columns, rows } = result;
     let header: Vec<String> = columns.iter().map(|c| csv_field(&c.name)).collect();
-    write_line(&out, &header.join(","))?;
+    write_line(out, &header.join(","))?;
     for row in rows {
         let cells: Vec<String> = row
             .into_iter()
             .map(|v| csv_field(&format_duckvalue(v)))
             .collect();
-        write_line(&out, &cells.join(","))?;
+        write_line(out, &cells.join(","))?;
     }
     Ok(())
 }
@@ -496,8 +582,7 @@ fn csv_field(value: &str) -> String {
     }
 }
 
-fn render_json(result: duckdb::QueryResult) -> Result<(), String> {
-    let out = stdout::get_stdout();
+fn render_json(result: duckdb::QueryResult, out: &streams::OutputStream) -> Result<(), String> {
     let duckdb::QueryResult { columns, rows } = result;
     let mut json = String::from("[");
     for (ri, row) in rows.into_iter().enumerate() {
@@ -517,7 +602,7 @@ fn render_json(result: duckdb::QueryResult) -> Result<(), String> {
         json.push('}');
     }
     json.push(']');
-    write_line(&out, &json)
+    write_line(out, &json)
 }
 
 fn json_value(value: duckdb::Duckvalue) -> String {
