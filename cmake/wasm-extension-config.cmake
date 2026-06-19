@@ -105,6 +105,21 @@ if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../build/wasi-deps/minizip/lib/libminizip-n
   )
 endif()
 
+# postgres_scanner: ATTACH/scan a PostgreSQL server over TCP (libpq). The pinned
+# extension compiles libpq inline from a downloaded PG source; build-libduckdb-wasm.sh
+# stages a wasi-cross-configured PG 15.13 tree (build-wasi-deps.sh) + injects the
+# posix shim, replaces find_package(OpenSSL) with openssl-wasm, and adds a static
+# build. Networking is httpfs's wasip2 socket graft (so httpfs must be enabled);
+# TLS via openssl-wasm. Built static (no DONT_LINK) so it links into the core.
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../build/wasi-deps/src/postgresql-15.13/src/include/pg_config.h"
+   AND EXISTS "$ENV{HOME}/git/openssl-wasm/build/openssl/libssl.a")
+  duckdb_extension_load(postgres_scanner # ATTACH/scan PostgreSQL over TCP (libpq compiled inline)
+    GIT_URL https://github.com/duckdb/duckdb-postgres
+    GIT_TAG f012a4f99cea1d276d1787d0dc84b1f1a0e0f0b2   # DuckDB-pinned commit
+    INCLUDE_DIR src/include                            # postgres_scanner_extension.hpp for the loader
+  )
+endif()
+
 # httpfs needs CURL (its curl client) + OpenSSL (crypto.cpp AES/EVP). Both come
 # from ~/git/curl-wasm (libcurl 8.17 built for wasm + its own openssl/zlib/zstd),
 # satisfying httpfs's find_package(CURL|OpenSSL). TLS for the httplib client is

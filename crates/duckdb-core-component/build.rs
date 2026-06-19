@@ -14,6 +14,26 @@ fn main() {
     println!("cargo:rustc-link-arg=-z");
     println!("cargo:rustc-link-arg=stack-size=8388608");
 
+    // postgres_scanner's getaddrinfo wrapper: wasi-libc's getaddrinfo rejects
+    // numeric IP literals + loopback (resolve-addresses returns "unsupported"),
+    // so libpq can't connect by IP. When the merged archive provides the C helper
+    // (postgres_scanner enabled), enable the Rust trampolines (cfg pg_net) and
+    // --wrap getaddrinfo/freeaddrinfo onto them. The trampolines must live in the
+    // root crate (not an on-demand archive) for --wrap to bind them, mirroring
+    // the fs-shims __wrap_open.
+    println!("cargo:rustc-check-cfg=cfg(pg_net)");
+    if let Ok(lib) = std::env::var("DUCKDB_STATIC_LIB") {
+        if let Ok(bytes) = std::fs::read(&lib) {
+            let needle = b"pg_wasi_getaddrinfo";
+            if bytes.windows(needle.len()).any(|w| w == needle) {
+                println!("cargo:rustc-cfg=pg_net");
+                println!("cargo:rustc-link-arg=--wrap=getaddrinfo");
+                println!("cargo:rustc-link-arg=--wrap=freeaddrinfo");
+                println!("cargo:rerun-if-changed={}", lib);
+            }
+        }
+    }
+
     if std::env::var_os("CARGO_FEATURE_FS_SHIMS").is_none() {
         return;
     }

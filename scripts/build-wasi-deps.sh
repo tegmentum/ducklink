@@ -135,4 +135,58 @@ cmake_wasi "$SRC/minizip" "$SRC/minizip/build-wasi" \
 cmake --build "$SRC/minizip/build-wasi" --target install
 echo "[deps] minizip-ng -> $DEPS/minizip/lib/libminizip-ng.a" >&2
 
-echo "[deps] done: jansson + avro-c + roaring + minizip-ng built for wasm32-wasi under $DEPS" >&2
+# --- libpq source (postgres_scanner: client compiled inline by the extension) --
+# The pinned duckdb-postgres (f012a4f) compiles libpq's sources from a
+# PostgreSQL tree rather than linking a prebuilt lib. We cross-configure PG
+# 15.13 for wasi here so the extension build finds a wasi pg_config.h (its own
+# host ./configure would emit a macOS one). Autotools with --host=wasm32-wasi +
+# the linux template; CC carries the wasi target + cmake/postgres-wasi/shim.h
+# (posix gaps); a config.cache supplies the run-test answers cross can't.
+PG_VER=15.13
+PG_SRC15="$SRC/postgresql-$PG_VER"
+if [[ ! -f "$PG_SRC15/src/include/pg_config.h" ]]; then
+  if [[ ! -d "$PG_SRC15" ]]; then
+    curl -sSL -o "$SRC/pg15.tar.bz2" "https://ftp.postgresql.org/pub/source/v$PG_VER/postgresql-$PG_VER.tar.bz2"
+    tar xjf "$SRC/pg15.tar.bz2" -C "$SRC" && rm -f "$SRC/pg15.tar.bz2"
+  fi
+  PGSHIM="$ROOT/cmake/postgres-wasi/shim.h"; PGSHIMINC="$ROOT/cmake/postgres-wasi/include"
+  cat > "$SRC/pg15.cache" <<'CACHEEOF'
+ac_cv_func_setvbuf_reversed=no
+pgac_cv_snprintf_long_long_int_modifier=ll
+ac_cv_type_struct_sockaddr_storage=yes
+CACHEEOF
+  ( cd "$PG_SRC15"
+    CC="$WASI_SDK_PREFIX/bin/clang --target=wasm32-wasip2 --sysroot=$WASI_SDK_PREFIX/share/wasi-sysroot -include $PGSHIM -I$PGSHIMINC -D_WASI_EMULATED_MMAN -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS -D_WASI_EMULATED_GETPID -Wno-unused-command-line-argument" \
+    AR="$WASI_SDK_PREFIX/bin/llvm-ar" RANLIB="$WASI_SDK_PREFIX/bin/llvm-ranlib" \
+    ./configure --host=wasm32-wasi --with-template=linux --cache-file="$SRC/pg15.cache" \
+      --without-icu --without-readline --without-zlib --without-lz4 --without-zstd \
+      --without-openssl --without-gssapi --without-ldap --without-pam --without-bonjour \
+      --without-selinux --without-systemd --without-llvm --without-perl --without-python \
+      --without-tcl --disable-spinlocks --disable-atomics --without-libxml --without-libxslt \
+      >/dev/null 2>&1 )
+  # wasi has gettimeofday (libc); pg's fallback file is dropped from the build
+  python3 - "$PG_SRC15/src/include/pg_config.h" <<'PYEOF'
+import sys,re
+p=sys.argv[1]; s=open(p).read()
+open(p,'w').write(re.sub(r'/\* #undef HAVE_GETTIMEOFDAY \*/','#define HAVE_GETTIMEOFDAY 1',s))
+PYEOF
+  # libpq socket setup uses fcntl(F_SETFL/F_SETFD) which isn't wired through the
+  # wasip1<-wasip2 socket graft (ENOSYS). wasi:sockets are non-blocking by nature
+  # and have no exec, so no-op pg_set_noblock/pg_set_block + skip close-on-exec.
+  python3 - "$PG_SRC15/src/port/noblock.c" <<'PYEOF'
+import sys
+p=sys.argv[1]; s=open(p).read()
+if '__wasi__' not in s:
+    open(p,'w').write(s.replace('#if !defined(WIN32)','#if defined(__wasi__)\n\treturn true;\n#elif !defined(WIN32)'))
+PYEOF
+  python3 - "$PG_SRC15/src/interfaces/libpq/fe-connect.c" <<'PYEOF'
+import sys
+p=sys.argv[1]; s=open(p).read()
+open(p,'w').write(s.replace('#ifdef F_SETFD','#if defined(F_SETFD) && !defined(__wasi__)'))
+PYEOF
+fi
+[[ -f "$PG_SRC15/src/include/pg_config.h" ]] \
+  && echo "[deps] libpq source -> $PG_SRC15 (wasi-cross-configured PG $PG_VER)" >&2 \
+  || echo "[deps] WARNING: PG $PG_VER configure failed" >&2
+
+echo "[deps] done: jansson + avro-c + roaring + minizip-ng + libpq-src built for wasm32-wasi under $DEPS" >&2

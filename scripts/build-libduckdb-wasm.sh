@@ -284,6 +284,66 @@ open(p, 'w').write(s)
 print('patched excel CMakeLists: IMPORTED EXPAT + ZLIB + minizip-ng deps')
 PY
 fi
+
+# postgres_scanner: the pinned extension (f012a4f) compiles libpq's sources
+# inline from a downloaded PostgreSQL tree and is DONT_LINK (loadable only).
+# For the static wasm core we: replace find_package(OpenSSL) with our deps
+# (cmake/postgres-deps.cmake -> openssl-wasm + shim force-include); add a
+# build_static_extension call; drop the getaddrinfo/gettimeofday fallback files
+# (wasi has those); and stage the wasi-cross-configured PG 15.13 source (built
+# by build-wasi-deps.sh) as the extension's `postgres/` tree so it skips its own
+# download + host ./configure. Networking comes from httpfs's wasip2 graft.
+PG_SRC="$BUILD_DIR/_deps/postgres_scanner_extension_fc-src"
+PG_DEPS_CMAKE="$(pwd)/cmake/postgres-deps.cmake"
+PG_STAGED="$(pwd)/build/wasi-deps/src/postgresql-15.13"
+if grep -q "duckdb_extension_load(postgres_scanner" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+   && [[ -f "$PG_SRC/CMakeLists.txt" ]]; then
+  python3 - "$PG_SRC/CMakeLists.txt" "$PG_DEPS_CMAKE" <<'PY'
+import sys
+p, inc = sys.argv[1], sys.argv[2]
+s = open(p).read()
+if 'postgres-deps.cmake' in s:
+    sys.exit(0)
+if 'find_package(OpenSSL REQUIRED)' not in s:
+    sys.stderr.write('postgres anchor not found: find_package(OpenSSL)\n'); sys.exit(1)
+s = s.replace('find_package(OpenSSL REQUIRED)', 'include("%s")' % inc, 1)
+# wasi provides getaddrinfo/getnameinfo/gettimeofday; drop pg's fallback files.
+# fe-print.c (libpq's PQprint result pretty-printer, unused by the scanner)
+# includes <sys/ioctl.h> which conflicts with the duckdb toolchain ioctl stub.
+for f in ('postgres/src/port/getaddrinfo.c', 'postgres/src/port/gettimeofday.c',
+          'postgres/src/interfaces/libpq/fe-print.c'):
+    s = s.replace('    %s\n' % f, '')
+# the extension is DONT_LINK upstream (loadable only); add a static build so it
+# links into the wasm core, with the same sources.
+anchor = ('build_loadable_extension(${TARGET_NAME} ${PARAMETERS} ${ALL_OBJECT_FILES}\n'
+          '                         ${LIBPG_SOURCES_FULLPATH})')
+if anchor not in s:
+    sys.stderr.write('postgres anchor not found: build_loadable_extension\n'); sys.exit(1)
+# f012a4f is DONT_LINK (loadable only) -> no install(EXPORT) for the static
+# target. build_static_extension creates ${TARGET_NAME}_extension; export it
+# like the in-tree extensions do, else "not in any export set".
+static = ('build_static_extension(${TARGET_NAME} ${ALL_OBJECT_FILES}\n'
+          '                       ${LIBPG_SOURCES_FULLPATH})\n'
+          'install(TARGETS ${TARGET_NAME}_extension EXPORT "${DUCKDB_EXPORT_SET}"\n'
+          '        LIBRARY DESTINATION "${INSTALL_LIB_DIR}"\n'
+          '        ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")')
+s = s.replace(anchor, anchor + '\n' + static, 1)
+open(p, 'w').write(s)
+print('patched postgres CMakeLists: openssl deps + static build + export + drop pg fallbacks')
+PY
+  # stage the wasi-configured PG 15.13 source as the extension's postgres/ tree,
+  # force-replacing the host source the extension's own ./configure downloads
+  # (so the wasi pg_config.h is used, not a host one). -L: replace if not ours.
+  if [[ -d "$PG_STAGED/src/include" && -f "$PG_STAGED/src/include/pg_config.h" ]]; then
+    if [[ ! -L "$PG_SRC/postgres" ]]; then
+      rm -rf "$PG_SRC/postgres"
+      ln -s "$PG_STAGED" "$PG_SRC/postgres"
+      echo "staged wasi PG 15.13 source as postgres_scanner/postgres" >&2
+    fi
+  else
+    echo "WARNING: PG 15.13 source not configured at $PG_STAGED (run build-wasi-deps.sh)" >&2
+  fi
+fi
 }
 
 # Configure, patching fetched sources after each failure, until it succeeds.
@@ -522,6 +582,23 @@ if grep -q "duckdb_extension_load(excel" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null
       echo "WARNING: excel dep missing: $src" >&2
     fi
   done
+fi
+
+# postgres_scanner: libpq is compiled inline into the extension, so only the
+# pg-wasi posix stubs (no-op signal API + getpwuid/getuid/popen) need merging.
+# Sockets (connect/getaddrinfo/poll) + openssl come from httpfs's wasip2 graft,
+# so postgres_scanner requires httpfs to be enabled.
+if grep -q "duckdb_extension_load(postgres_scanner" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+  "$WASI_SDK_PREFIX/bin/clang" --target="${WASI_TARGET_TRIPLE:-wasm32-wasip2}" -O2 \
+    -c "$(pwd)/cmake/postgres-wasi/stubs.c" -o "$TMPDIR/pg_stubs.o" \
+    -I"$(pwd)/cmake/postgres-wasi/include"
+  # getaddrinfo wrapper: numeric IPs resolve locally (wasi's getaddrinfo rejects
+  # them via resolve-addresses). Linked via -Wl,--wrap=getaddrinfo (build.rs).
+  "$WASI_SDK_PREFIX/bin/clang" --target="${WASI_TARGET_TRIPLE:-wasm32-wasip2}" -O2 \
+    -c "$(pwd)/cmake/postgres-wasi/getaddrinfo_wrap.c" -o "$TMPDIR/pg_gaiwrap.o"
+  "$WASI_SDK_PREFIX/bin/llvm-ar" rcs "$TMPDIR/libpgstubs.a" "$TMPDIR/pg_stubs.o" "$TMPDIR/pg_gaiwrap.o"
+  ADDLIBS="$ADDLIBS"$'\n'"ADDLIB libpgstubs.a"
+  echo "Merging pg-wasi stubs + getaddrinfo wrapper into libduckdb-wasi.a" >&2
 fi
 pushd "$TMPDIR" >/dev/null
 printf 'CREATE libduckdb_combined.a\n%s\nSAVE\nEND\n' "$ADDLIBS" | "$WASI_SDK_PREFIX/bin/llvm-ar" -M

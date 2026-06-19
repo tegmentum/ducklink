@@ -2,6 +2,15 @@
 
 #ifdef __wasi__
 
+// postgres_scanner needs the REAL wasi getaddrinfo (libpq resolves hosts over
+// wasi:sockets; numeric IPs are handled by the getaddrinfo wrapper). When
+// PG_WASI_REAL_NETDB is set (the postgres compile, via cmake/postgres-deps.cmake)
+// defer to the real <netdb.h>, not the no-socket stub below which exists so core
+// DuckDB compiles without sockets.
+#if defined(PG_WASI_REAL_NETDB)
+#include_next <netdb.h>
+#else
+
 #include <stdint.h>
 #include <sys/socket.h>
 
@@ -38,4 +47,5 @@ static inline const char *gai_strerror(int) {
     return "getaddrinfo unsupported";
 }
 
+#endif // PG_WASI_REAL_NETDB
 #endif // __wasi__

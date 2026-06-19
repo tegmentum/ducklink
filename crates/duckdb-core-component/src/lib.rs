@@ -461,6 +461,39 @@ impl WasiDir {
     }
 }
 
+// postgres_scanner: Rust trampolines for the getaddrinfo wrapper. --wrap=getaddrinfo
+// (build.rs, when cfg pg_net is set) redirects libpq's getaddrinfo/freeaddrinfo
+// here; they must live in the root crate (not an on-demand archive) for --wrap to
+// bind them, mirroring the fs-shims __wrap_open. They forward to the C impl
+// (cmake/postgres-wasi/getaddrinfo_wrap.c), which parses numeric IPs locally
+// (wasi's getaddrinfo rejects them) and delegates hostnames to __real_getaddrinfo.
+#[cfg(pg_net)]
+mod pg_net_overrides {
+    use core::ffi::{c_char, c_int, c_void};
+    extern "C" {
+        fn pg_wasi_getaddrinfo(
+            node: *const c_char,
+            service: *const c_char,
+            hints: *const c_void,
+            res: *mut *mut c_void,
+        ) -> c_int;
+        fn pg_wasi_freeaddrinfo(ai: *mut c_void);
+    }
+    #[no_mangle]
+    pub unsafe extern "C" fn __wrap_getaddrinfo(
+        node: *const c_char,
+        service: *const c_char,
+        hints: *const c_void,
+        res: *mut *mut c_void,
+    ) -> c_int {
+        pg_wasi_getaddrinfo(node, service, hints, res)
+    }
+    #[no_mangle]
+    pub unsafe extern "C" fn __wrap_freeaddrinfo(ai: *mut c_void) {
+        pg_wasi_freeaddrinfo(ai)
+    }
+}
+
 #[cfg(feature = "fs_shims")]
 mod libc_overrides {
     use super::*;
