@@ -124,3 +124,75 @@ uses pyiceberg-written tables instead.
 **B2** Phase 2 (gzip metadata) + Phase 6 (time travel) → verification-heavy.
 **B3** Phase 3 (SigV4) + Phase 4 (vended creds) → unlocks AWS + credentialed REST.
 **B4** Phase 5 (writes) → the big one; gated on a writable catalog.
+
+---
+
+# Tail items plan
+
+Phases 1–7 are done. What's left is small/verification-shaped or blocked
+upstream. Source survey (duckdb-iceberg @49d67e45):
+`IRCatalog::PlanCreateTableAs` and `PlanDelete` exist (so CTAS + DELETE have a
+code path), but `ICTableEntry::BindUpdateConstraints` **throws
+`NotImplementedException`** and `iceberg_insert.cpp` throws for partitioned
+inserts / targeted columns / RETURNING / ON CONFLICT / V3 tables. The avro-c
+fork's `codec.c` has `SNAPPY`/`DEFLATE`/`LZMA` guards but **no `ZSTD_CODEC`**.
+
+## T1 — lzma avro codec  · effort S
+
+Some writers use `avro.codec=xz` (lzma). The fork already has the `LZMA_CODEC`
+path; we forced it off (no liblzma). To enable:
+
+1. Build **liblzma/xz** for wasi → `build/wasi-deps/lzma` (mirror the snappy
+   section in `scripts/build-wasi-deps.sh`; source from `~/git/xz-wasm` or
+   upstream `tukaani/xz`, cmake install so `find_package(LibLZMA)` works).
+2. In `build-wasi-deps.sh`, drop the `set(LZMA_FOUND FALSE)` patch and pass the
+   liblzma dir (the fork's CMake does `find_package(LibLZMA REQUIRED)` +
+   `-DLZMA_CODEC`); update the post-build assertion that currently forbids
+   `lzma_` symbols.
+3. Merge `liblzma.a` in `build-libduckdb-wasm.sh` (like `libsnappy.a`).
+4. **Verify** — generate an xz-compressed avro manifest (`fastavro` with
+   `codec='xz'`, or a pyiceberg table with `write.avro.compression-codec=xz`) →
+   `read_avro` + `iceberg_scan`; add a harness check.
+
+**zstd is out of scope** — the avro-c fork doesn't implement it; supporting it
+means patching `codec.c` to add a zstd codec + linking `libzstd` (rare for
+manifests). Document as "not supported" rather than build it.
+
+## T2 — CREATE TABLE AS  · effort S (likely already works)
+
+`PlanCreateTableAs` exists; it is CREATE + INSERT fused, both of which work.
+
+- **Verify** — against the writable harness catalog: `CREATE TABLE lake.main.t
+  AS SELECT … FROM range(N)` then read back in a fresh ATTACH. Add a
+  `CTAS` check to `tooling/iceberg_smoke.py`. If it works (expected), it's
+  pure test coverage; if it surfaces a gap, capture it.
+
+## T3 — DELETE  · effort M
+
+`PlanDelete` exists. First determine the delete mode the extension emits
+(copy-on-write data-file rewrite vs merge-on-read positional/equality delete
+files) by reading `PlanDelete` + `iceberg_insert.cpp`/`deletes/*`.
+
+- **Verify** — `DELETE FROM lake.main.t WHERE …` then read back; confirm the
+  written delete artifacts (rewritten data file or `*-delete.parquet`) and that
+  a subsequent scan reflects the deletion. Add a harness check.
+- If delete writes avro/parquet delete files, this also exercises more of the
+  writer path. Scope up if it needs the equality/positional delete writer.
+
+## Upstream gaps — document, don't implement
+
+These throw `NotImplementedException`/`BinderException` in the extension itself,
+so they're not a wasm problem and not our work; note them in the registry/docs so
+users aren't surprised:
+
+- **UPDATE** — `BindUpdateConstraints` is unimplemented upstream.
+- **INSERT into a partitioned table** — `iceberg_insert.cpp:441` throws.
+- **Targeted-column INSERT, `RETURNING`, `ON CONFLICT`, Iceberg V3 tables** —
+  explicit upstream throws.
+- **DROP TABLE … CASCADE**, CREATE INDEX/VIEW, ALTER — unimplemented upstream.
+
+## Tail sequencing
+
+**T2** (CTAS — cheap verify, likely green) → **T1** (lzma codec — established
+pattern) → **T3** (DELETE — needs mode investigation). Then a docs/registry pass
+recording the upstream gaps. Skip zstd + the upstream-gap features.
