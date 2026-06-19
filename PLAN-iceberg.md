@@ -69,14 +69,15 @@ be scheme-less (upstream `DecomposeHost` splits on `/`). Real AWS uses valid
 certs (the embedded CA bundle trusts them); the test used a self-signed cert with
 `enable_curl_server_cert_verification=false`.
 
-## Phase 4 — Vended credentials → httpfs S3  · effort M
+## Phase 4 — Vended credentials → httpfs S3  · effort M — DONE
 
-REST catalogs return temporary S3 credentials in the `LoadTableResult.config`
-(`s3.access-key-id`, `s3.session-token`, …) — the `X-Iceberg-Access-Delegation:
-vended-credentials` header is already sent. Wire those config values into the
-httpfs S3 secret for the table's data reads so credentialed buckets work through
-an attached catalog. **Verify** — mock catalog returning config creds + a private
-(local-emulated) S3.
+The machinery was already in `iceberg_table_information.cpp` (maps `s3.access-key-id`/
+`secret-access-key`/`session-token`/`region`/`endpoint`/`path-style-access` from
+`LoadTableResult.config` into a temporary S3 secret). VERIFIED on wasi: a REST
+catalog that vends those config values + a moto S3 endpoint, with **no global S3
+settings**, reads `s3://` data through the attached catalog (50 rows) — the read
+only succeeds because the vended endpoint+creds were applied. Covered by the
+`vended credentials (S3)` harness check (skips if `moto`/`boto3` absent).
 
 ## Phase 5 — Writes  · effort L
 

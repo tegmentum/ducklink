@@ -200,8 +200,13 @@ def range_handler():
     return H
 
 
-def catalog_handler(meta_path: Path, token=None, sigv4_secret=None):
-    metadata = json.load(open(meta_path))
+def catalog_handler(meta_path: Path = None, token=None, sigv4_secret=None, *,
+                    metadata=None, meta_location=None, table="basic", config=None):
+    if metadata is None:
+        metadata = json.load(open(meta_path))
+    if meta_location is None:
+        meta_location = "file://" + str(meta_path)
+    table_cfg = config or {}
 
     def verify_sigv4(method, raw_path, headers, body) -> bool:
         auth = headers.get("authorization", "")
@@ -245,10 +250,10 @@ def catalog_handler(meta_path: Path, token=None, sigv4_secret=None):
             elif p.endswith("/v1/namespaces"):
                 self._j({"namespaces": [["main"]]})
             elif p.endswith("/v1/namespaces/main/tables"):
-                self._j({"identifiers": [{"namespace": ["main"], "name": "basic"}]})
-            elif p.endswith("/v1/namespaces/main/tables/basic"):
-                self._j({"metadata-location": "file://" + str(meta_path),
-                         "metadata": metadata, "config": {}})
+                self._j({"identifiers": [{"namespace": ["main"], "name": table}]})
+            elif p.endswith("/v1/namespaces/main/tables/" + table):
+                self._j({"metadata-location": meta_location,
+                         "metadata": metadata, "config": table_cfg})
             else:
                 self._j({"error": {"message": "NoSuchTable", "code": 404}}, 404)
 
@@ -352,6 +357,52 @@ def check_catalog_sigv4(ctx):
     return cell(out, "n") == "20"
 
 
+def check_vended_credentials(ctx):
+    """REST catalog vends S3 creds + endpoint in LoadTable config; data lives on
+    a moto S3. With NO global S3 settings, a successful read proves the vended
+    config was applied. Skipped (returns None) if moto/boto3 are not installed."""
+    try:
+        from moto.server import ThreadedMotoServer
+        import boto3
+        import pyarrow as pa
+        import pyarrow.fs as pafs
+        from pyiceberg.catalog.sql import SqlCatalog
+    except ImportError:
+        return None  # skip
+
+    key, sec = "AKIAIOSFODNN7EXAMPLE", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    mp = _free_port()
+    moto = ThreadedMotoServer(ip_address="127.0.0.1", port=mp)
+    moto.start()
+    try:
+        ep = f"http://127.0.0.1:{mp}"
+        boto3.client("s3", endpoint_url=ep, aws_access_key_id=key, aws_secret_access_key=sec,
+                     region_name="us-east-1").create_bucket(Bucket="icebucket")
+        cat = SqlCatalog("v", uri=f"sqlite:///{FIX}/moto_cat.db", warehouse="s3://icebucket/wh",
+                         **{"s3.endpoint": ep, "s3.access-key-id": key, "s3.secret-access-key": sec,
+                            "s3.region": "us-east-1"})
+        cat.create_namespace("main")
+        data = pa.table({"id": pa.array(range(50), pa.int64()),
+                         "v": pa.array([i * 3 for i in range(50)], pa.int64())})
+        t = cat.create_table("main.s3tbl", schema=data.schema)
+        t.append(data)
+        s3fs = pafs.S3FileSystem(endpoint_override=ep, access_key=key, secret_key=sec, scheme="http")
+        with s3fs.open_input_stream(t.metadata_location.replace("s3://", "")) as f:
+            meta = json.loads(f.read())
+        config = {"s3.access-key-id": key, "s3.secret-access-key": sec, "s3.region": "us-east-1",
+                  "s3.endpoint": ep, "s3.path-style-access": "true"}
+        handler = catalog_handler(metadata=meta, meta_location=t.metadata_location,
+                                  table="s3tbl", config=config)
+        with _Server(handler) as srv:
+            out = run_sql(
+                f"ATTACH 'wh' AS lake (TYPE ICEBERG, ENDPOINT 'http://127.0.0.1:{srv.port}', "
+                "AUTHORIZATION_TYPE 'none');\n"
+                "SELECT count(*) AS n, sum(v) AS s FROM lake.main.s3tbl;")
+        return cell(out, "n") == "50" and cell(out, "s") == "3675"
+    finally:
+        moto.stop()
+
+
 CHECKS = [
     ("read_avro deflate", check_read_avro_deflate),
     ("read_avro snappy", check_read_avro_snappy),
@@ -364,6 +415,7 @@ CHECKS = [
     ("REST catalog: none", check_catalog_none),
     ("REST catalog: bearer", check_catalog_bearer),
     ("REST catalog: sigv4", check_catalog_sigv4),
+    ("vended credentials (S3)", check_vended_credentials),
 ]
 
 
@@ -389,19 +441,24 @@ def main():
     print("generating fixtures…")
     ctx = gen_fixtures()
 
-    failures = 0
+    failures = skipped = 0
     for name, fn in CHECKS:
         try:
             ok = fn(ctx)
         except Exception as e:  # noqa: BLE001
             ok, name = False, f"{name} (exception: {e})"
+        if ok is None:
+            print(f"  SKIP  {name} (install moto[server] + boto3 to enable)")
+            skipped += 1
+            continue
         print(f"  {'PASS' if ok else 'FAIL'}  {name}")
         failures += not ok
 
     if not args.keep_fixtures:
         shutil.rmtree(FIX, ignore_errors=True)
-    total = len(CHECKS)
-    print(f"\n{total - failures}/{total} checks passed")
+    ran = len(CHECKS) - skipped
+    extra = f" ({skipped} skipped)" if skipped else ""
+    print(f"\n{ran - failures}/{ran} checks passed{extra}")
     return 1 if failures else 0
 
 
