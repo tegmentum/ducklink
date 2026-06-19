@@ -9,6 +9,11 @@
 # live in the host's 64-bit address space -- so the spilled working set can grow
 # past the wasm 4 GiB ceiling without ever writing a temp file.
 #
+# No temporary directory is configured: the patched BlockHandle::CanUnload makes
+# temp blocks evictable whenever a TVM host is wired, so the spill goes straight
+# to host regions with no on-disk temp file involved. (Without TVM this query
+# errors with "Unused blocks cannot be offloaded to disk".)
+#
 # This sorts 20M rows under a 128 MB limit (~160 MB raw, forces a spill) and
 # asserts: (1) correct result, (2) DuckDB pushed >memory_limit bytes into TVM,
 # (3) no temp files were written.
@@ -34,11 +39,11 @@ TRACE="$(mktemp)"
 cleanup() { rm -rf "$TMP_DIR" "$TRACE"; }
 trap cleanup EXIT
 
-# temp_directory must be set so the buffer pool considers blocks evictable; the
-# TVM interception then takes the write before any temp file is created.
+# Deliberately no `SET temp_directory`: TVM availability alone must make the
+# blocks evictable (patched BlockHandle::CanUnload), so the spill goes to host
+# regions with no temp file path involved.
 SQL=$(cat <<SQL
 SET memory_limit='${MEMORY_LIMIT}';
-SET temp_directory='${TMP_DIR}';
 SET threads=1;
 SELECT count(*) AS n, min(i) AS lo, max(i) AS hi
 FROM (SELECT i FROM range(${ROWS}) t(i) ORDER BY i DESC) sub;

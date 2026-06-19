@@ -101,6 +101,10 @@ fn main() {
     }
     println!("cargo:rerun-if-changed={}", ext_root.display());
 
+    // Without this, a build that omits WASI_SDK_PREFIX caches a build-script run
+    // with no sysroot link directives (libm / emulated-mman / emulated-signal),
+    // and a later build that sets it reuses the stale output -> undefined mmap.
+    println!("cargo:rerun-if-env-changed=WASI_SDK_PREFIX");
     if let Ok(prefix) = env::var("WASI_SDK_PREFIX") {
         let target = env::var("TARGET").unwrap_or_default();
         let triple_dir = if target.contains("wasip2") {

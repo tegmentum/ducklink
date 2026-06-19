@@ -500,6 +500,35 @@ open(p, 'w').write(s)
 print('patched standard_buffer_manager.cpp: TVM spill hooks')
 PY
 
+# TVM spill, part 2: make a temp block evictable when a TVM host is wired even
+# with no temporary directory. BlockHandle::CanUnload otherwise refuses to unload
+# such a block (no spill target), which surfaces as "Unused blocks cannot be
+# offloaded to disk" before WriteTemporaryBuffer (and its TVM hook) is reached.
+python3 - "$DUCKDB_SOURCE_DIR/src/storage/buffer/block_handle.cpp" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+if 'tvm_spill_available' in s:
+    sys.exit(0)
+decl = ('\n#ifdef __wasi__\n'
+        '// TVM spill bridge (crates/duckdb-core-component/src/tvm_spill.rs).\n'
+        'extern "C" int tvm_spill_available();\n'
+        '#endif\n')
+s = s.replace('namespace duckdb {\n', 'namespace duckdb {\n' + decl, 1)
+anchor = ('\tif (block_id >= MAXIMUM_BLOCK && MustWriteToTemporaryFile() &&\n'
+          '\t    !block_manager.buffer_manager.HasTemporaryDirectory()) {')
+repl = ('\tif (block_id >= MAXIMUM_BLOCK && MustWriteToTemporaryFile() &&\n'
+        '\t    !block_manager.buffer_manager.HasTemporaryDirectory()\n'
+        '#ifdef __wasi__\n'
+        '\t    && !tvm_spill_available()\n'
+        '#endif\n'
+        '\t    ) {')
+if anchor not in s:
+    sys.exit('block_handle.cpp: CanUnload anchor not found')
+s = s.replace(anchor, repl, 1)
+open(p, 'w').write(s)
+print('patched block_handle.cpp: TVM makes temp blocks evictable without a temp dir')
+PY
+
 echo "Building libduckdb static archive" >&2
 cmake --build "$BUILD_DIR" --target duckdb_static
 

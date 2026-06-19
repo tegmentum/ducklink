@@ -14,6 +14,7 @@
 use crate::bindings::tvm::memory::types::{Handle, RegionKind};
 use crate::bindings::tvm::memory::{bytes, manager};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 // Each TVM region is one 32-bit memory (<= 4 GiB; handle offset is u32). To
@@ -65,6 +66,48 @@ fn alloc_in_pool(st: &mut SpillState, size: u32) -> Option<Handle> {
         Err(_) => {
             st.disabled = true;
             None
+        }
+    }
+}
+
+// Cached availability: 0=unknown, 1=yes, 2=no. Avoids re-probing on the hot
+// CanUnload path once the answer is known.
+static AVAIL: AtomicU8 = AtomicU8::new(0);
+
+/// Can evicted blocks be spilled to TVM? DuckDB calls this from
+/// `BlockHandle::CanUnload` so a buffer block with no temporary directory is
+/// still evictable when a TVM host is wired. The first call probes by opening a
+/// region (kept for the imminent spill); the result is cached. Returns 1 if a
+/// TVM host is available, 0 otherwise (DuckDB then falls back to its temp-dir /
+/// out-of-memory behavior).
+#[no_mangle]
+pub extern "C" fn tvm_spill_available() -> i32 {
+    match AVAIL.load(Ordering::Relaxed) {
+        1 => return 1,
+        2 => return 0,
+        _ => {}
+    }
+    let mut st = state().lock().unwrap();
+    if st.disabled {
+        AVAIL.store(2, Ordering::Relaxed);
+        return 0;
+    }
+    if !st.regions.is_empty() {
+        AVAIL.store(1, Ordering::Relaxed);
+        return 1;
+    }
+    // CanUnload only reaches here under eviction pressure on a temp block, so a
+    // spill is imminent -- open the first region now and reuse it.
+    match manager::create_region(RegionKind::PageStore, REGION_CAPACITY) {
+        Ok(rid) => {
+            st.regions.push(rid);
+            AVAIL.store(1, Ordering::Relaxed);
+            1
+        }
+        Err(_) => {
+            st.disabled = true;
+            AVAIL.store(2, Ordering::Relaxed);
+            0
         }
     }
 }
