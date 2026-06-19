@@ -24,6 +24,7 @@ pub(crate) use clog;
 
 mod bindings;
 mod extension_loader;
+mod tvm_spill;
 
 use bindings::duckdb::component::extension_loader_hooks;
 use bindings::duckdb::extension::callback_dispatch;

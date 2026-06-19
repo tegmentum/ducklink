@@ -3072,6 +3072,971 @@ pub mod duckdb {
 }
 #[rustfmt::skip]
 #[allow(dead_code, clippy::all)]
+pub mod tvm {
+    pub mod memory {
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod types {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            #[repr(u8)]
+            #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+            pub enum RegionKind {
+                HotHeap,
+                ObjectArena,
+                BlobArena,
+                PageStore,
+                Scratch,
+                DeviceState,
+                CodeCache,
+            }
+            impl ::core::fmt::Debug for RegionKind {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    match self {
+                        RegionKind::HotHeap => {
+                            f.debug_tuple("RegionKind::HotHeap").finish()
+                        }
+                        RegionKind::ObjectArena => {
+                            f.debug_tuple("RegionKind::ObjectArena").finish()
+                        }
+                        RegionKind::BlobArena => {
+                            f.debug_tuple("RegionKind::BlobArena").finish()
+                        }
+                        RegionKind::PageStore => {
+                            f.debug_tuple("RegionKind::PageStore").finish()
+                        }
+                        RegionKind::Scratch => {
+                            f.debug_tuple("RegionKind::Scratch").finish()
+                        }
+                        RegionKind::DeviceState => {
+                            f.debug_tuple("RegionKind::DeviceState").finish()
+                        }
+                        RegionKind::CodeCache => {
+                            f.debug_tuple("RegionKind::CodeCache").finish()
+                        }
+                    }
+                }
+            }
+            impl RegionKind {
+                #[doc(hidden)]
+                pub unsafe fn _lift(val: u8) -> RegionKind {
+                    if !cfg!(debug_assertions) {
+                        return ::core::mem::transmute(val);
+                    }
+                    match val {
+                        0 => RegionKind::HotHeap,
+                        1 => RegionKind::ObjectArena,
+                        2 => RegionKind::BlobArena,
+                        3 => RegionKind::PageStore,
+                        4 => RegionKind::Scratch,
+                        5 => RegionKind::DeviceState,
+                        6 => RegionKind::CodeCache,
+                        _ => panic!("invalid enum discriminant"),
+                    }
+                }
+            }
+            #[repr(u8)]
+            #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+            pub enum Residency {
+                Hot,
+                Warm,
+                Cold,
+                External,
+            }
+            impl ::core::fmt::Debug for Residency {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    match self {
+                        Residency::Hot => f.debug_tuple("Residency::Hot").finish(),
+                        Residency::Warm => f.debug_tuple("Residency::Warm").finish(),
+                        Residency::Cold => f.debug_tuple("Residency::Cold").finish(),
+                        Residency::External => {
+                            f.debug_tuple("Residency::External").finish()
+                        }
+                    }
+                }
+            }
+            impl Residency {
+                #[doc(hidden)]
+                pub unsafe fn _lift(val: u8) -> Residency {
+                    if !cfg!(debug_assertions) {
+                        return ::core::mem::transmute(val);
+                    }
+                    match val {
+                        0 => Residency::Hot,
+                        1 => Residency::Warm,
+                        2 => Residency::Cold,
+                        3 => Residency::External,
+                        _ => panic!("invalid enum discriminant"),
+                    }
+                }
+            }
+            #[repr(C)]
+            #[derive(Clone, Copy)]
+            pub struct Handle {
+                pub region_id: u16,
+                pub generation: u16,
+                pub offset: u32,
+            }
+            impl ::core::fmt::Debug for Handle {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("Handle")
+                        .field("region-id", &self.region_id)
+                        .field("generation", &self.generation)
+                        .field("offset", &self.offset)
+                        .finish()
+                }
+            }
+            #[repr(C)]
+            #[derive(Clone, Copy)]
+            pub struct RegionInfo {
+                pub id: u16,
+                pub generation: u16,
+                pub kind: RegionKind,
+                pub capacity: u32,
+                pub used: u32,
+                pub residency: Residency,
+            }
+            impl ::core::fmt::Debug for RegionInfo {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("RegionInfo")
+                        .field("id", &self.id)
+                        .field("generation", &self.generation)
+                        .field("kind", &self.kind)
+                        .field("capacity", &self.capacity)
+                        .field("used", &self.used)
+                        .field("residency", &self.residency)
+                        .finish()
+                }
+            }
+            #[derive(Clone)]
+            pub enum TvmError {
+                RegionNotFound(u16),
+                StaleHandle,
+                OutOfBounds,
+                NotResident,
+                AllocationFailed,
+                BackingStore(_rt::String),
+                Pinned,
+            }
+            impl ::core::fmt::Debug for TvmError {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    match self {
+                        TvmError::RegionNotFound(e) => {
+                            f.debug_tuple("TvmError::RegionNotFound").field(e).finish()
+                        }
+                        TvmError::StaleHandle => {
+                            f.debug_tuple("TvmError::StaleHandle").finish()
+                        }
+                        TvmError::OutOfBounds => {
+                            f.debug_tuple("TvmError::OutOfBounds").finish()
+                        }
+                        TvmError::NotResident => {
+                            f.debug_tuple("TvmError::NotResident").finish()
+                        }
+                        TvmError::AllocationFailed => {
+                            f.debug_tuple("TvmError::AllocationFailed").finish()
+                        }
+                        TvmError::BackingStore(e) => {
+                            f.debug_tuple("TvmError::BackingStore").field(e).finish()
+                        }
+                        TvmError::Pinned => f.debug_tuple("TvmError::Pinned").finish(),
+                    }
+                }
+            }
+            impl ::core::fmt::Display for TvmError {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    write!(f, "{:?}", self)
+                }
+            }
+            impl std::error::Error for TvmError {}
+        }
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod manager {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            pub type RegionKind = super::super::super::tvm::memory::types::RegionKind;
+            pub type Handle = super::super::super::tvm::memory::types::Handle;
+            pub type RegionInfo = super::super::super::tvm::memory::types::RegionInfo;
+            pub type TvmError = super::super::super::tvm::memory::types::TvmError;
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn create_region(
+                kind: RegionKind,
+                capacity: u32,
+            ) -> Result<u16, TvmError> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 4 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 4
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "tvm:memory/manager@0.1.0")]
+                    unsafe extern "C" {
+                        #[link_name = "create-region"]
+                        fn wit_import1(_: i32, _: i32, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import1(_: i32, _: i32, _: *mut u8) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import1(kind.clone() as i32, _rt::as_i32(&capacity), ptr0)
+                    };
+                    let l2 = i32::from(*ptr0.add(0).cast::<u8>());
+                    let result10 = match l2 {
+                        0 => {
+                            let e = {
+                                let l3 = i32::from(
+                                    *ptr0.add(::core::mem::size_of::<*const u8>()).cast::<u16>(),
+                                );
+                                l3 as u16
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l4 = i32::from(
+                                    *ptr0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                                );
+                                use super::super::super::tvm::memory::types::TvmError as V9;
+                                let v9 = match l4 {
+                                    0 => {
+                                        let e9 = {
+                                            let l5 = i32::from(
+                                                *ptr0
+                                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                                    .cast::<u16>(),
+                                            );
+                                            l5 as u16
+                                        };
+                                        V9::RegionNotFound(e9)
+                                    }
+                                    1 => V9::StaleHandle,
+                                    2 => V9::OutOfBounds,
+                                    3 => V9::NotResident,
+                                    4 => V9::AllocationFailed,
+                                    5 => {
+                                        let e9 = {
+                                            let l6 = *ptr0
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l7 = *ptr0
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len8 = l7;
+                                            let bytes8 = _rt::Vec::from_raw_parts(
+                                                l6.cast(),
+                                                len8,
+                                                len8,
+                                            );
+                                            _rt::string_lift(bytes8)
+                                        };
+                                        V9::BackingStore(e9)
+                                    }
+                                    n => {
+                                        debug_assert_eq!(n, 6, "invalid enum discriminant");
+                                        V9::Pinned
+                                    }
+                                };
+                                v9
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result10
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn destroy_region(region_id: u16) -> Result<(), TvmError> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 4 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 4
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "tvm:memory/manager@0.1.0")]
+                    unsafe extern "C" {
+                        #[link_name = "destroy-region"]
+                        fn wit_import1(_: i32, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import1(_: i32, _: *mut u8) {
+                        unreachable!()
+                    }
+                    unsafe { wit_import1(_rt::as_i32(&region_id), ptr0) };
+                    let l2 = i32::from(*ptr0.add(0).cast::<u8>());
+                    let result9 = match l2 {
+                        0 => {
+                            let e = ();
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l3 = i32::from(
+                                    *ptr0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                                );
+                                use super::super::super::tvm::memory::types::TvmError as V8;
+                                let v8 = match l3 {
+                                    0 => {
+                                        let e8 = {
+                                            let l4 = i32::from(
+                                                *ptr0
+                                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                                    .cast::<u16>(),
+                                            );
+                                            l4 as u16
+                                        };
+                                        V8::RegionNotFound(e8)
+                                    }
+                                    1 => V8::StaleHandle,
+                                    2 => V8::OutOfBounds,
+                                    3 => V8::NotResident,
+                                    4 => V8::AllocationFailed,
+                                    5 => {
+                                        let e8 = {
+                                            let l5 = *ptr0
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l6 = *ptr0
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len7 = l6;
+                                            let bytes7 = _rt::Vec::from_raw_parts(
+                                                l5.cast(),
+                                                len7,
+                                                len7,
+                                            );
+                                            _rt::string_lift(bytes7)
+                                        };
+                                        V8::BackingStore(e8)
+                                    }
+                                    n => {
+                                        debug_assert_eq!(n, 6, "invalid enum discriminant");
+                                        V8::Pinned
+                                    }
+                                };
+                                v8
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result9
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn alloc(region_id: u16, size: u32) -> Result<Handle, TvmError> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 4 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 4
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "tvm:memory/manager@0.1.0")]
+                    unsafe extern "C" {
+                        #[link_name = "alloc"]
+                        fn wit_import1(_: i32, _: i32, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import1(_: i32, _: i32, _: *mut u8) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import1(_rt::as_i32(&region_id), _rt::as_i32(&size), ptr0)
+                    };
+                    let l2 = i32::from(*ptr0.add(0).cast::<u8>());
+                    let result12 = match l2 {
+                        0 => {
+                            let e = {
+                                let l3 = i32::from(
+                                    *ptr0.add(::core::mem::size_of::<*const u8>()).cast::<u16>(),
+                                );
+                                let l4 = i32::from(
+                                    *ptr0
+                                        .add(2 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u16>(),
+                                );
+                                let l5 = *ptr0
+                                    .add(4 + 1 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<i32>();
+                                super::super::super::tvm::memory::types::Handle {
+                                    region_id: l3 as u16,
+                                    generation: l4 as u16,
+                                    offset: l5 as u32,
+                                }
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l6 = i32::from(
+                                    *ptr0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                                );
+                                use super::super::super::tvm::memory::types::TvmError as V11;
+                                let v11 = match l6 {
+                                    0 => {
+                                        let e11 = {
+                                            let l7 = i32::from(
+                                                *ptr0
+                                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                                    .cast::<u16>(),
+                                            );
+                                            l7 as u16
+                                        };
+                                        V11::RegionNotFound(e11)
+                                    }
+                                    1 => V11::StaleHandle,
+                                    2 => V11::OutOfBounds,
+                                    3 => V11::NotResident,
+                                    4 => V11::AllocationFailed,
+                                    5 => {
+                                        let e11 = {
+                                            let l8 = *ptr0
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l9 = *ptr0
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len10 = l9;
+                                            let bytes10 = _rt::Vec::from_raw_parts(
+                                                l8.cast(),
+                                                len10,
+                                                len10,
+                                            );
+                                            _rt::string_lift(bytes10)
+                                        };
+                                        V11::BackingStore(e11)
+                                    }
+                                    n => {
+                                        debug_assert_eq!(n, 6, "invalid enum discriminant");
+                                        V11::Pinned
+                                    }
+                                };
+                                v11
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result12
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn dealloc(ptr: Handle) -> Result<(), TvmError> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 4 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 4
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let super::super::super::tvm::memory::types::Handle {
+                        region_id: region_id0,
+                        generation: generation0,
+                        offset: offset0,
+                    } = ptr;
+                    let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "tvm:memory/manager@0.1.0")]
+                    unsafe extern "C" {
+                        #[link_name = "dealloc"]
+                        fn wit_import2(_: i32, _: i32, _: i32, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import2(
+                        _: i32,
+                        _: i32,
+                        _: i32,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import2(
+                            _rt::as_i32(region_id0),
+                            _rt::as_i32(generation0),
+                            _rt::as_i32(offset0),
+                            ptr1,
+                        )
+                    };
+                    let l3 = i32::from(*ptr1.add(0).cast::<u8>());
+                    let result10 = match l3 {
+                        0 => {
+                            let e = ();
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l4 = i32::from(
+                                    *ptr1.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                                );
+                                use super::super::super::tvm::memory::types::TvmError as V9;
+                                let v9 = match l4 {
+                                    0 => {
+                                        let e9 = {
+                                            let l5 = i32::from(
+                                                *ptr1
+                                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                                    .cast::<u16>(),
+                                            );
+                                            l5 as u16
+                                        };
+                                        V9::RegionNotFound(e9)
+                                    }
+                                    1 => V9::StaleHandle,
+                                    2 => V9::OutOfBounds,
+                                    3 => V9::NotResident,
+                                    4 => V9::AllocationFailed,
+                                    5 => {
+                                        let e9 = {
+                                            let l6 = *ptr1
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l7 = *ptr1
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len8 = l7;
+                                            let bytes8 = _rt::Vec::from_raw_parts(
+                                                l6.cast(),
+                                                len8,
+                                                len8,
+                                            );
+                                            _rt::string_lift(bytes8)
+                                        };
+                                        V9::BackingStore(e9)
+                                    }
+                                    n => {
+                                        debug_assert_eq!(n, 6, "invalid enum discriminant");
+                                        V9::Pinned
+                                    }
+                                };
+                                v9
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result10
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn describe_region(region_id: u16) -> Result<RegionInfo, TvmError> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 16 + 2 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 16
+                            + 2 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "tvm:memory/manager@0.1.0")]
+                    unsafe extern "C" {
+                        #[link_name = "describe-region"]
+                        fn wit_import1(_: i32, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import1(_: i32, _: *mut u8) {
+                        unreachable!()
+                    }
+                    unsafe { wit_import1(_rt::as_i32(&region_id), ptr0) };
+                    let l2 = i32::from(*ptr0.add(0).cast::<u8>());
+                    let result15 = match l2 {
+                        0 => {
+                            let e = {
+                                let l3 = i32::from(
+                                    *ptr0.add(::core::mem::size_of::<*const u8>()).cast::<u16>(),
+                                );
+                                let l4 = i32::from(
+                                    *ptr0
+                                        .add(2 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u16>(),
+                                );
+                                let l5 = i32::from(
+                                    *ptr0
+                                        .add(4 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                let l6 = *ptr0
+                                    .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<i32>();
+                                let l7 = *ptr0
+                                    .add(12 + 1 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<i32>();
+                                let l8 = i32::from(
+                                    *ptr0
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                super::super::super::tvm::memory::types::RegionInfo {
+                                    id: l3 as u16,
+                                    generation: l4 as u16,
+                                    kind: super::super::super::tvm::memory::types::RegionKind::_lift(
+                                        l5 as u8,
+                                    ),
+                                    capacity: l6 as u32,
+                                    used: l7 as u32,
+                                    residency: super::super::super::tvm::memory::types::Residency::_lift(
+                                        l8 as u8,
+                                    ),
+                                }
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l9 = i32::from(
+                                    *ptr0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                                );
+                                use super::super::super::tvm::memory::types::TvmError as V14;
+                                let v14 = match l9 {
+                                    0 => {
+                                        let e14 = {
+                                            let l10 = i32::from(
+                                                *ptr0
+                                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                                    .cast::<u16>(),
+                                            );
+                                            l10 as u16
+                                        };
+                                        V14::RegionNotFound(e14)
+                                    }
+                                    1 => V14::StaleHandle,
+                                    2 => V14::OutOfBounds,
+                                    3 => V14::NotResident,
+                                    4 => V14::AllocationFailed,
+                                    5 => {
+                                        let e14 = {
+                                            let l11 = *ptr0
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l12 = *ptr0
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len13 = l12;
+                                            let bytes13 = _rt::Vec::from_raw_parts(
+                                                l11.cast(),
+                                                len13,
+                                                len13,
+                                            );
+                                            _rt::string_lift(bytes13)
+                                        };
+                                        V14::BackingStore(e14)
+                                    }
+                                    n => {
+                                        debug_assert_eq!(n, 6, "invalid enum discriminant");
+                                        V14::Pinned
+                                    }
+                                };
+                                v14
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result15
+                }
+            }
+        }
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod bytes {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            pub type Handle = super::super::super::tvm::memory::types::Handle;
+            pub type TvmError = super::super::super::tvm::memory::types::TvmError;
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn read(ptr: Handle, len: u32) -> Result<_rt::Vec<u8>, TvmError> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 4 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 4
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let super::super::super::tvm::memory::types::Handle {
+                        region_id: region_id0,
+                        generation: generation0,
+                        offset: offset0,
+                    } = ptr;
+                    let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "tvm:memory/bytes@0.1.0")]
+                    unsafe extern "C" {
+                        #[link_name = "read"]
+                        fn wit_import2(_: i32, _: i32, _: i32, _: i32, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import2(
+                        _: i32,
+                        _: i32,
+                        _: i32,
+                        _: i32,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import2(
+                            _rt::as_i32(region_id0),
+                            _rt::as_i32(generation0),
+                            _rt::as_i32(offset0),
+                            _rt::as_i32(&len),
+                            ptr1,
+                        )
+                    };
+                    let l3 = i32::from(*ptr1.add(0).cast::<u8>());
+                    let result13 = match l3 {
+                        0 => {
+                            let e = {
+                                let l4 = *ptr1
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l5 = *ptr1
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len6 = l5;
+                                _rt::Vec::from_raw_parts(l4.cast(), len6, len6)
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l7 = i32::from(
+                                    *ptr1.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                                );
+                                use super::super::super::tvm::memory::types::TvmError as V12;
+                                let v12 = match l7 {
+                                    0 => {
+                                        let e12 = {
+                                            let l8 = i32::from(
+                                                *ptr1
+                                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                                    .cast::<u16>(),
+                                            );
+                                            l8 as u16
+                                        };
+                                        V12::RegionNotFound(e12)
+                                    }
+                                    1 => V12::StaleHandle,
+                                    2 => V12::OutOfBounds,
+                                    3 => V12::NotResident,
+                                    4 => V12::AllocationFailed,
+                                    5 => {
+                                        let e12 = {
+                                            let l9 = *ptr1
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l10 = *ptr1
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len11 = l10;
+                                            let bytes11 = _rt::Vec::from_raw_parts(
+                                                l9.cast(),
+                                                len11,
+                                                len11,
+                                            );
+                                            _rt::string_lift(bytes11)
+                                        };
+                                        V12::BackingStore(e12)
+                                    }
+                                    n => {
+                                        debug_assert_eq!(n, 6, "invalid enum discriminant");
+                                        V12::Pinned
+                                    }
+                                };
+                                v12
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result13
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn write(ptr: Handle, data: &[u8]) -> Result<(), TvmError> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 4 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 4
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let super::super::super::tvm::memory::types::Handle {
+                        region_id: region_id0,
+                        generation: generation0,
+                        offset: offset0,
+                    } = ptr;
+                    let vec1 = data;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let ptr2 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "tvm:memory/bytes@0.1.0")]
+                    unsafe extern "C" {
+                        #[link_name = "write"]
+                        fn wit_import3(
+                            _: i32,
+                            _: i32,
+                            _: i32,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import3(
+                        _: i32,
+                        _: i32,
+                        _: i32,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import3(
+                            _rt::as_i32(region_id0),
+                            _rt::as_i32(generation0),
+                            _rt::as_i32(offset0),
+                            ptr1.cast_mut(),
+                            len1,
+                            ptr2,
+                        )
+                    };
+                    let l4 = i32::from(*ptr2.add(0).cast::<u8>());
+                    let result11 = match l4 {
+                        0 => {
+                            let e = ();
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l5 = i32::from(
+                                    *ptr2.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                                );
+                                use super::super::super::tvm::memory::types::TvmError as V10;
+                                let v10 = match l5 {
+                                    0 => {
+                                        let e10 = {
+                                            let l6 = i32::from(
+                                                *ptr2
+                                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                                    .cast::<u16>(),
+                                            );
+                                            l6 as u16
+                                        };
+                                        V10::RegionNotFound(e10)
+                                    }
+                                    1 => V10::StaleHandle,
+                                    2 => V10::OutOfBounds,
+                                    3 => V10::NotResident,
+                                    4 => V10::AllocationFailed,
+                                    5 => {
+                                        let e10 = {
+                                            let l7 = *ptr2
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l8 = *ptr2
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len9 = l8;
+                                            let bytes9 = _rt::Vec::from_raw_parts(
+                                                l7.cast(),
+                                                len9,
+                                                len9,
+                                            );
+                                            _rt::string_lift(bytes9)
+                                        };
+                                        V10::BackingStore(e10)
+                                    }
+                                    n => {
+                                        debug_assert_eq!(n, 6, "invalid enum discriminant");
+                                        V10::Pinned
+                                    }
+                                };
+                                v10
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result11
+                }
+            }
+        }
+    }
+}
+#[rustfmt::skip]
+#[allow(dead_code, clippy::all)]
 pub mod wasi {
     pub mod cli {
         #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
@@ -18787,8 +19752,8 @@ pub(crate) use __export_libduckdb_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 10619] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xfbQ\x01A\x02\x01A8\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 11519] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xffX\x01A\x02\x01AB\x01\
 B\x0a\x01o\x02ss\x01p\0\x01@\0\0\x01\x04\0\x0fget-environment\x01\x02\x01ps\x01@\
 \0\0\x03\x04\0\x0dget-arguments\x01\x04\x01ks\x01@\0\0\x05\x04\0\x0binitial-cwd\x01\
 \x06\x03\0\x1awasi:cli/environment@0.2.6\x05\0\x01B\x04\x04\0\x05error\x03\x01\x01\
@@ -18932,87 +19897,107 @@ ch\x01B\x19\x02\x03\x02\x01\x16\x04\0\x09duckerror\x03\0\0\x02\x03\x02\x01\x17\x
 gs\x0a\0\x0d\x04\0\x0acall-table\x01\x0e\x01@\x02\x06handley\x04rows\x09\0\x0b\x04\
 \0\x0ecall-aggregate\x01\x0f\x01k\x03\x01j\x01\x10\x01\x01\x01@\x02\x06handley\x04\
 args\x0a\0\x11\x04\0\x0bcall-pragma\x01\x12\x01@\x02\x06handley\x05value\x03\0\x0b\
-\x04\0\x09call-cast\x01\x13\x03\0\"duckdb:extension/callback-dispatch\x05\x1b\x02\
-\x03\0\x0a\x0ecapabilitykind\x01BR\x02\x03\x02\x01\x1c\x04\0\x0ecapabilitykind\x03\
-\0\0\x02\x03\x02\x01\x13\x04\0\x09columndef\x03\0\x02\x02\x03\x02\x01\x16\x04\0\x09\
-duckerror\x03\0\x04\x02\x03\x02\x01\x17\x04\0\x09duckvalue\x03\0\x06\x04\0\x0aco\
-nnection\x03\x01\x01p\x07\x04\0\x03row\x03\0\x09\x01p\x03\x01p\x0a\x01r\x02\x07c\
-olumns\x0b\x04rows\x0c\x04\0\x0cquery-result\x03\0\x0d\x04\0\x0dresult-stream\x03\
-\x01\x04\0\x12prepared-statement\x03\x01\x04\0\x08appender\x03\x01\x01p\x01\x01r\
-\x02\x04names\x08requires\x12\x04\0\x0eextension-info\x03\0\x13\x01h\x0f\x01@\x01\
-\x04self\x15\0\x0b\x04\0\x1c[method]result-stream.schema\x01\x16\x01k\x0c\x01j\x01\
-\x17\x01\x05\x01@\x02\x04self\x15\x08max-rowsy\0\x18\x04\0\x1a[method]result-str\
-eam.next\x01\x19\x01@\x01\x04self\x15\x01\0\x04\0\x1b[method]result-stream.close\
-\x01\x1a\x01h\x10\x01@\x01\x04self\x1b\0y\x04\0*[method]prepared-statement.param\
-eter-count\x01\x1c\x01p\x07\x01j\x01\x0e\x01\x05\x01@\x02\x04self\x1b\x06params\x1d\
-\0\x1e\x04\0\"[method]prepared-statement.execute\x01\x1f\x01h\x11\x01j\0\x01\x05\
-\x01@\x02\x04self\x20\x06values\x1d\0!\x04\0\x1b[method]appender.append-row\x01\"\
-\x01@\x01\x04self\x20\0!\x04\0\x16[method]appender.flush\x01#\x04\0\x16[method]a\
-ppender.close\x01#\x01ks\x01i\x08\x01j\x01%\x01s\x01@\x01\x04path$\0&\x04\0\x04o\
-pen\x01'\x01o\x02ss\x01p(\x01@\x02\x04path$\x07options)\0&\x04\0\x10open-with-co\
-nfig\x01*\x01@\x01\x04conn%\x01\0\x04\0\x05close\x01+\x01h\x08\x01@\x01\x04conn,\
-\x01\0\x04\0\x09interrupt\x01-\x01@\x02\x04conn,\x03sqls\0\x1e\x04\0\x07execute\x01\
-.\x01i\x0f\x01j\x01/\x01\x05\x01@\x02\x04conn,\x03sqls\00\x04\0\x0bopen-stream\x01\
-1\x01i\x10\x01j\x012\x01\x05\x01@\x02\x04conn,\x03sqls\03\x04\0\x07prepare\x014\x01\
-p}\x01j\x015\x01\x05\x01@\x02\x04conn,\x03sqls\06\x04\0\x0bquery-arrow\x017\x01i\
-\x11\x01j\x018\x01\x05\x01@\x03\x04conn,\x06schema$\x05tables\09\x04\0\x0fcreate\
--appender\x01:\x01j\x01\x7f\x01s\x01@\x02\x04names\x08requires\x12\0;\x04\0\x12r\
-egister-extension\x01<\x01p\x14\x01@\0\0=\x04\0\x1alist-registered-extensions\x01\
->\x04\0\x19duckdb:component/database\x05\x1d\x02\x03\0\x0a\x0bconfigerror\x01B$\x02\
-\x03\x02\x01\x1e\x04\0\x0bconfigerror\x03\0\0\x01@\0\0s\x04\0\x10provider-versio\
-n\x01\x02\x01ks\x01ps\x01@\x01\x06prefix\x03\0\x04\x04\0\x09list-keys\x01\x05\x01\
-j\x01\x03\x01\x01\x01@\x01\x04paths\0\x06\x04\0\x0aget-string\x01\x07\x01k\x7f\x01\
-j\x01\x08\x01\x01\x01@\x01\x04paths\0\x09\x04\0\x08get-bool\x01\x0a\x01kx\x01j\x01\
-\x0b\x01\x01\x01@\x01\x04paths\0\x0c\x04\0\x07get-i64\x01\x0d\x01kw\x01j\x01\x0e\
-\x01\x01\x01@\x01\x04paths\0\x0f\x04\0\x07get-u64\x01\x10\x01ku\x01j\x01\x11\x01\
-\x01\x01@\x01\x04paths\0\x12\x04\0\x07get-f64\x01\x13\x01p}\x01k\x14\x01j\x01\x15\
-\x01\x01\x01@\x01\x04paths\0\x16\x04\0\x09get-bytes\x01\x17\x01k\x04\x01j\x01\x18\
-\x01\x01\x01@\x01\x04paths\0\x19\x04\0\x0fget-string-list\x01\x1a\x04\0\x17duckd\
-b:extension/config\x05\x1f\x02\x03\0\x0a\x08logfield\x02\x03\0\x0a\x08loglevel\x01\
-B\x0a\x02\x03\x02\x01\x20\x04\0\x08logfield\x03\0\0\x02\x03\x02\x01!\x04\0\x08lo\
-glevel\x03\0\x02\x01ks\x01@\x03\x05level\x03\x07messages\x06target\x04\x01\0\x04\
-\0\x03log\x01\x05\x01p\x01\x01@\x03\x05level\x03\x07messages\x06fields\x06\x01\0\
-\x04\0\x0alog-fields\x01\x07\x04\0\x18duckdb:extension/logging\x05\"\x02\x03\0\x0a\
-\x07extopts\x02\x03\0\x0a\x07funcarg\x02\x03\0\x0a\x08funcopts\x01Bf\x02\x03\x02\
-\x01\x1c\x04\0\x0ecapabilitykind\x03\0\0\x02\x03\x02\x01\x16\x04\0\x09duckerror\x03\
-\0\x02\x02\x03\x02\x01\x17\x04\0\x09duckvalue\x03\0\x04\x02\x03\x02\x01#\x04\0\x07\
-extopts\x03\0\x06\x02\x03\x02\x01$\x04\0\x07funcarg\x03\0\x08\x02\x03\x02\x01%\x04\
-\0\x08funcopts\x03\0\x0a\x02\x03\x02\x01\x18\x04\0\x0ainvokeinfo\x03\0\x0c\x02\x03\
-\x02\x01\x12\x04\0\x0blogicaltype\x03\0\x0e\x02\x03\x02\x01\x19\x04\0\x09results\
-et\x03\0\x10\x02\x03\x02\x01\x1a\x04\0\x08rowbatch\x03\0\x12\x02\x03\x02\x01\x13\
-\x04\0\x09columndef\x03\0\x14\x04\0\x0fscalar-callback\x03\x01\x04\0\x0etable-ca\
-llback\x03\x01\x04\0\x12aggregate-callback\x03\x01\x04\0\x0fpragma-callback\x03\x01\
-\x04\0\x0dcast-callback\x03\x01\x04\0\x0fscalar-registry\x03\x01\x04\0\x0etable-\
-registry\x03\x01\x04\0\x12aggregate-registry\x03\x01\x04\0\x0fpragma-registry\x03\
-\x01\x04\0\x0emacro-registry\x03\x01\x01i\x1b\x01i\x1c\x01i\x1d\x01i\x1e\x01i\x1f\
-\x01q\x05\x06scalar\x01\x20\0\x05table\x01!\0\x09aggregate\x01\"\0\x06pragma\x01\
-#\0\x05macro\x01$\0\x04\0\x0acapability\x03\0%\x01i\x16\x01@\x01\x06handley\0'\x04\
-\0\x1c[constructor]scalar-callback\x01(\x01h\x16\x01p\x05\x01j\x01\x05\x01\x03\x01\
-@\x03\x04self)\x04args*\x03ctx\x0d\0+\x04\0\x1c[method]scalar-callback.call\x01,\
-\x01i\x17\x01@\x01\x06handley\0-\x04\0\x1b[constructor]table-callback\x01.\x01h\x17\
-\x01j\x01\x11\x01\x03\x01@\x02\x04self/\x04args*\00\x04\0\x1b[method]table-callb\
-ack.call\x011\x01i\x18\x01@\x01\x06handley\02\x04\0\x1f[constructor]aggregate-ca\
-llback\x013\x01h\x18\x01@\x02\x04self4\x04rows\x13\0+\x04\0\x1f[method]aggregate\
--callback.call\x015\x01i\x19\x01@\x01\x06handley\06\x04\0\x1c[constructor]pragma\
--callback\x017\x01h\x19\x01k\x05\x01j\x019\x01\x03\x01@\x02\x04self8\x04args*\0:\
-\x04\0\x1c[method]pragma-callback.call\x01;\x01i\x1a\x01@\x01\x06handley\0<\x04\0\
-\x1a[constructor]cast-callback\x01=\x01h\x1a\x01@\x02\x04self>\x05value\x05\0+\x04\
-\0\x1a[method]cast-callback.call\x01?\x01h\x1b\x01p\x09\x01k\x0b\x01j\x01y\x01\x03\
-\x01@\x06\x04self\xc0\0\x04names\x09arguments\xc1\0\x07returns\x0f\x08callback'\x07\
-options\xc2\0\0\xc3\0\x04\0\x20[method]scalar-registry.register\x01D\x01h\x1c\x01\
-p\x15\x01k\x07\x01@\x06\x04self\xc5\0\x04names\x09arguments\xc1\0\x07columns\xc6\
-\0\x08callback-\x07options\xc7\0\0\xc3\0\x04\0\x1f[method]table-registry.registe\
-r\x01H\x01h\x1d\x01@\x06\x04self\xc9\0\x04names\x09arguments\xc1\0\x07returns\x0f\
-\x08callback2\x07options\xc2\0\0\xc3\0\x04\0#[method]aggregate-registry.register\
-\x01J\x01h\x1e\x01@\x06\x04self\xcb\0\x04names\x09arguments\xc1\0\x07returns\x0f\
-\x08callback6\x07options\xc7\0\0\xc3\0\x04\0%[method]pragma-registry.register-ca\
-ll\x01L\x01h\x1f\x01ps\x01j\x01\x7f\x01\x03\x01@\x05\x04self\xcd\0\x04names\x0ap\
-arameters\xce\0\x08body-sqls\x07options\xc7\0\0\xcf\0\x04\0&[method]macro-regist\
-ry.register-scalar\x01P\x01k&\x01@\x01\x04kind\x01\0\xd1\0\x04\0\x0eget-capabili\
-ty\x01R\x01p\x01\x01@\0\0\xd3\0\x04\0\x11list-capabilities\x01T\x04\0\x18duckdb:\
-extension/runtime\x05&\x04\0\x1aduckdb:component/libduckdb\x04\0\x0b\x0f\x01\0\x09\
-libduckdb\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.\
-227.1\x10wit-bindgen-rust\x060.41.0";
+\x04\0\x09call-cast\x01\x13\x03\0\"duckdb:extension/callback-dispatch\x05\x1b\x01\
+B\x0a\x01m\x07\x08hot-heap\x0cobject-arena\x0ablob-arena\x0apage-store\x07scratc\
+h\x0cdevice-state\x0acode-cache\x04\0\x0bregion-kind\x03\0\0\x01m\x04\x03hot\x04\
+warm\x04cold\x08external\x04\0\x09residency\x03\0\x02\x01r\x03\x09region-id{\x0a\
+generation{\x06offsety\x04\0\x06handle\x03\0\x04\x01r\x06\x02id{\x0ageneration{\x04\
+kind\x01\x08capacityy\x04usedy\x09residency\x03\x04\0\x0bregion-info\x03\0\x06\x01\
+q\x07\x10region-not-found\x01{\0\x0cstale-handle\0\0\x0dout-of-bounds\0\0\x0cnot\
+-resident\0\0\x11allocation-failed\0\0\x0dbacking-store\x01s\0\x06pinned\0\0\x04\
+\0\x09tvm-error\x03\0\x08\x03\0\x16tvm:memory/types@0.1.0\x05\x1c\x02\x03\0\x0d\x0b\
+region-kind\x02\x03\0\x0d\x06handle\x02\x03\0\x0d\x0bregion-info\x02\x03\0\x0d\x09\
+tvm-error\x01B\x16\x02\x03\x02\x01\x1d\x04\0\x0bregion-kind\x03\0\0\x02\x03\x02\x01\
+\x1e\x04\0\x06handle\x03\0\x02\x02\x03\x02\x01\x1f\x04\0\x0bregion-info\x03\0\x04\
+\x02\x03\x02\x01\x20\x04\0\x09tvm-error\x03\0\x06\x01j\x01{\x01\x07\x01@\x02\x04\
+kind\x01\x08capacityy\0\x08\x04\0\x0dcreate-region\x01\x09\x01j\0\x01\x07\x01@\x01\
+\x09region-id{\0\x0a\x04\0\x0edestroy-region\x01\x0b\x01j\x01\x03\x01\x07\x01@\x02\
+\x09region-id{\x04sizey\0\x0c\x04\0\x05alloc\x01\x0d\x01@\x01\x03ptr\x03\0\x0a\x04\
+\0\x07dealloc\x01\x0e\x01j\x01\x05\x01\x07\x01@\x01\x09region-id{\0\x0f\x04\0\x0f\
+describe-region\x01\x10\x03\0\x18tvm:memory/manager@0.1.0\x05!\x01B\x0b\x02\x03\x02\
+\x01\x1e\x04\0\x06handle\x03\0\0\x02\x03\x02\x01\x20\x04\0\x09tvm-error\x03\0\x02\
+\x01p}\x01j\x01\x04\x01\x03\x01@\x02\x03ptr\x01\x03leny\0\x05\x04\0\x04read\x01\x06\
+\x01j\0\x01\x03\x01@\x02\x03ptr\x01\x04data\x04\0\x07\x04\0\x05write\x01\x08\x03\
+\0\x16tvm:memory/bytes@0.1.0\x05\"\x02\x03\0\x0a\x0ecapabilitykind\x01BR\x02\x03\
+\x02\x01#\x04\0\x0ecapabilitykind\x03\0\0\x02\x03\x02\x01\x13\x04\0\x09columndef\
+\x03\0\x02\x02\x03\x02\x01\x16\x04\0\x09duckerror\x03\0\x04\x02\x03\x02\x01\x17\x04\
+\0\x09duckvalue\x03\0\x06\x04\0\x0aconnection\x03\x01\x01p\x07\x04\0\x03row\x03\0\
+\x09\x01p\x03\x01p\x0a\x01r\x02\x07columns\x0b\x04rows\x0c\x04\0\x0cquery-result\
+\x03\0\x0d\x04\0\x0dresult-stream\x03\x01\x04\0\x12prepared-statement\x03\x01\x04\
+\0\x08appender\x03\x01\x01p\x01\x01r\x02\x04names\x08requires\x12\x04\0\x0eexten\
+sion-info\x03\0\x13\x01h\x0f\x01@\x01\x04self\x15\0\x0b\x04\0\x1c[method]result-\
+stream.schema\x01\x16\x01k\x0c\x01j\x01\x17\x01\x05\x01@\x02\x04self\x15\x08max-\
+rowsy\0\x18\x04\0\x1a[method]result-stream.next\x01\x19\x01@\x01\x04self\x15\x01\
+\0\x04\0\x1b[method]result-stream.close\x01\x1a\x01h\x10\x01@\x01\x04self\x1b\0y\
+\x04\0*[method]prepared-statement.parameter-count\x01\x1c\x01p\x07\x01j\x01\x0e\x01\
+\x05\x01@\x02\x04self\x1b\x06params\x1d\0\x1e\x04\0\"[method]prepared-statement.\
+execute\x01\x1f\x01h\x11\x01j\0\x01\x05\x01@\x02\x04self\x20\x06values\x1d\0!\x04\
+\0\x1b[method]appender.append-row\x01\"\x01@\x01\x04self\x20\0!\x04\0\x16[method\
+]appender.flush\x01#\x04\0\x16[method]appender.close\x01#\x01ks\x01i\x08\x01j\x01\
+%\x01s\x01@\x01\x04path$\0&\x04\0\x04open\x01'\x01o\x02ss\x01p(\x01@\x02\x04path\
+$\x07options)\0&\x04\0\x10open-with-config\x01*\x01@\x01\x04conn%\x01\0\x04\0\x05\
+close\x01+\x01h\x08\x01@\x01\x04conn,\x01\0\x04\0\x09interrupt\x01-\x01@\x02\x04\
+conn,\x03sqls\0\x1e\x04\0\x07execute\x01.\x01i\x0f\x01j\x01/\x01\x05\x01@\x02\x04\
+conn,\x03sqls\00\x04\0\x0bopen-stream\x011\x01i\x10\x01j\x012\x01\x05\x01@\x02\x04\
+conn,\x03sqls\03\x04\0\x07prepare\x014\x01p}\x01j\x015\x01\x05\x01@\x02\x04conn,\
+\x03sqls\06\x04\0\x0bquery-arrow\x017\x01i\x11\x01j\x018\x01\x05\x01@\x03\x04con\
+n,\x06schema$\x05tables\09\x04\0\x0fcreate-appender\x01:\x01j\x01\x7f\x01s\x01@\x02\
+\x04names\x08requires\x12\0;\x04\0\x12register-extension\x01<\x01p\x14\x01@\0\0=\
+\x04\0\x1alist-registered-extensions\x01>\x04\0\x19duckdb:component/database\x05\
+$\x02\x03\0\x0a\x0bconfigerror\x01B$\x02\x03\x02\x01%\x04\0\x0bconfigerror\x03\0\
+\0\x01@\0\0s\x04\0\x10provider-version\x01\x02\x01ks\x01ps\x01@\x01\x06prefix\x03\
+\0\x04\x04\0\x09list-keys\x01\x05\x01j\x01\x03\x01\x01\x01@\x01\x04paths\0\x06\x04\
+\0\x0aget-string\x01\x07\x01k\x7f\x01j\x01\x08\x01\x01\x01@\x01\x04paths\0\x09\x04\
+\0\x08get-bool\x01\x0a\x01kx\x01j\x01\x0b\x01\x01\x01@\x01\x04paths\0\x0c\x04\0\x07\
+get-i64\x01\x0d\x01kw\x01j\x01\x0e\x01\x01\x01@\x01\x04paths\0\x0f\x04\0\x07get-\
+u64\x01\x10\x01ku\x01j\x01\x11\x01\x01\x01@\x01\x04paths\0\x12\x04\0\x07get-f64\x01\
+\x13\x01p}\x01k\x14\x01j\x01\x15\x01\x01\x01@\x01\x04paths\0\x16\x04\0\x09get-by\
+tes\x01\x17\x01k\x04\x01j\x01\x18\x01\x01\x01@\x01\x04paths\0\x19\x04\0\x0fget-s\
+tring-list\x01\x1a\x04\0\x17duckdb:extension/config\x05&\x02\x03\0\x0a\x08logfie\
+ld\x02\x03\0\x0a\x08loglevel\x01B\x0a\x02\x03\x02\x01'\x04\0\x08logfield\x03\0\0\
+\x02\x03\x02\x01(\x04\0\x08loglevel\x03\0\x02\x01ks\x01@\x03\x05level\x03\x07mes\
+sages\x06target\x04\x01\0\x04\0\x03log\x01\x05\x01p\x01\x01@\x03\x05level\x03\x07\
+messages\x06fields\x06\x01\0\x04\0\x0alog-fields\x01\x07\x04\0\x18duckdb:extensi\
+on/logging\x05)\x02\x03\0\x0a\x07extopts\x02\x03\0\x0a\x07funcarg\x02\x03\0\x0a\x08\
+funcopts\x01Bf\x02\x03\x02\x01#\x04\0\x0ecapabilitykind\x03\0\0\x02\x03\x02\x01\x16\
+\x04\0\x09duckerror\x03\0\x02\x02\x03\x02\x01\x17\x04\0\x09duckvalue\x03\0\x04\x02\
+\x03\x02\x01*\x04\0\x07extopts\x03\0\x06\x02\x03\x02\x01+\x04\0\x07funcarg\x03\0\
+\x08\x02\x03\x02\x01,\x04\0\x08funcopts\x03\0\x0a\x02\x03\x02\x01\x18\x04\0\x0ai\
+nvokeinfo\x03\0\x0c\x02\x03\x02\x01\x12\x04\0\x0blogicaltype\x03\0\x0e\x02\x03\x02\
+\x01\x19\x04\0\x09resultset\x03\0\x10\x02\x03\x02\x01\x1a\x04\0\x08rowbatch\x03\0\
+\x12\x02\x03\x02\x01\x13\x04\0\x09columndef\x03\0\x14\x04\0\x0fscalar-callback\x03\
+\x01\x04\0\x0etable-callback\x03\x01\x04\0\x12aggregate-callback\x03\x01\x04\0\x0f\
+pragma-callback\x03\x01\x04\0\x0dcast-callback\x03\x01\x04\0\x0fscalar-registry\x03\
+\x01\x04\0\x0etable-registry\x03\x01\x04\0\x12aggregate-registry\x03\x01\x04\0\x0f\
+pragma-registry\x03\x01\x04\0\x0emacro-registry\x03\x01\x01i\x1b\x01i\x1c\x01i\x1d\
+\x01i\x1e\x01i\x1f\x01q\x05\x06scalar\x01\x20\0\x05table\x01!\0\x09aggregate\x01\
+\"\0\x06pragma\x01#\0\x05macro\x01$\0\x04\0\x0acapability\x03\0%\x01i\x16\x01@\x01\
+\x06handley\0'\x04\0\x1c[constructor]scalar-callback\x01(\x01h\x16\x01p\x05\x01j\
+\x01\x05\x01\x03\x01@\x03\x04self)\x04args*\x03ctx\x0d\0+\x04\0\x1c[method]scala\
+r-callback.call\x01,\x01i\x17\x01@\x01\x06handley\0-\x04\0\x1b[constructor]table\
+-callback\x01.\x01h\x17\x01j\x01\x11\x01\x03\x01@\x02\x04self/\x04args*\00\x04\0\
+\x1b[method]table-callback.call\x011\x01i\x18\x01@\x01\x06handley\02\x04\0\x1f[c\
+onstructor]aggregate-callback\x013\x01h\x18\x01@\x02\x04self4\x04rows\x13\0+\x04\
+\0\x1f[method]aggregate-callback.call\x015\x01i\x19\x01@\x01\x06handley\06\x04\0\
+\x1c[constructor]pragma-callback\x017\x01h\x19\x01k\x05\x01j\x019\x01\x03\x01@\x02\
+\x04self8\x04args*\0:\x04\0\x1c[method]pragma-callback.call\x01;\x01i\x1a\x01@\x01\
+\x06handley\0<\x04\0\x1a[constructor]cast-callback\x01=\x01h\x1a\x01@\x02\x04sel\
+f>\x05value\x05\0+\x04\0\x1a[method]cast-callback.call\x01?\x01h\x1b\x01p\x09\x01\
+k\x0b\x01j\x01y\x01\x03\x01@\x06\x04self\xc0\0\x04names\x09arguments\xc1\0\x07re\
+turns\x0f\x08callback'\x07options\xc2\0\0\xc3\0\x04\0\x20[method]scalar-registry\
+.register\x01D\x01h\x1c\x01p\x15\x01k\x07\x01@\x06\x04self\xc5\0\x04names\x09arg\
+uments\xc1\0\x07columns\xc6\0\x08callback-\x07options\xc7\0\0\xc3\0\x04\0\x1f[me\
+thod]table-registry.register\x01H\x01h\x1d\x01@\x06\x04self\xc9\0\x04names\x09ar\
+guments\xc1\0\x07returns\x0f\x08callback2\x07options\xc2\0\0\xc3\0\x04\0#[method\
+]aggregate-registry.register\x01J\x01h\x1e\x01@\x06\x04self\xcb\0\x04names\x09ar\
+guments\xc1\0\x07returns\x0f\x08callback6\x07options\xc7\0\0\xc3\0\x04\0%[method\
+]pragma-registry.register-call\x01L\x01h\x1f\x01ps\x01j\x01\x7f\x01\x03\x01@\x05\
+\x04self\xcd\0\x04names\x0aparameters\xce\0\x08body-sqls\x07options\xc7\0\0\xcf\0\
+\x04\0&[method]macro-registry.register-scalar\x01P\x01k&\x01@\x01\x04kind\x01\0\xd1\
+\0\x04\0\x0eget-capability\x01R\x01p\x01\x01@\0\0\xd3\0\x04\0\x11list-capabiliti\
+es\x01T\x04\0\x18duckdb:extension/runtime\x05-\x04\0\x1aduckdb:component/libduck\
+db\x04\0\x0b\x0f\x01\0\x09libduckdb\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\
+\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

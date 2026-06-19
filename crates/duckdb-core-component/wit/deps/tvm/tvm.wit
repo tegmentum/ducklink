@@ -1,0 +1,36 @@
+// Vendored subset of tvm:memory@0.1.0 (github.com/tegmentum/tvm-wasm wit/tvm.wit).
+// Tiered Virtual Memory: bulk data lives in host-owned regions beyond the wasm32
+// 4 GiB ceiling, reached via handles (never raw pointers). DuckDB spills evicted
+// buffer-pool blocks here. Only types + manager + bytes are vendored (no
+// diagnostics / no extra worlds); the host implements manager + bytes.
+package tvm:memory@0.1.0;
+
+interface types {
+  enum region-kind {
+    hot-heap, object-arena, blob-arena, page-store, scratch, device-state, code-cache,
+  }
+  enum residency { hot, warm, cold, external }
+  record handle { region-id: u16, generation: u16, offset: u32 }
+  record region-info {
+    id: u16, generation: u16, kind: region-kind, capacity: u32, used: u32, residency: residency,
+  }
+  variant tvm-error {
+    region-not-found(u16), stale-handle, out-of-bounds, not-resident,
+    allocation-failed, backing-store(string), pinned,
+  }
+}
+
+interface manager {
+  use types.{region-kind, handle, region-info, tvm-error};
+  create-region: func(kind: region-kind, capacity: u32) -> result<u16, tvm-error>;
+  destroy-region: func(region-id: u16) -> result<_, tvm-error>;
+  alloc: func(region-id: u16, size: u32) -> result<handle, tvm-error>;
+  dealloc: func(ptr: handle) -> result<_, tvm-error>;
+  describe-region: func(region-id: u16) -> result<region-info, tvm-error>;
+}
+
+interface bytes {
+  use types.{handle, tvm-error};
+  read: func(ptr: handle, len: u32) -> result<list<u8>, tvm-error>;
+  write: func(ptr: handle, data: list<u8>) -> result<_, tvm-error>;
+}

@@ -229,6 +229,8 @@ world libduckdb {
     import host-extension-loader;
     import extension-loader-hooks;
     import duckdb:extension/callback-dispatch;
+    import tvm:memory/manager@0.1.0;
+    import tvm:memory/bytes@0.1.0;
 
     export database;
     export duckdb:extension/config;

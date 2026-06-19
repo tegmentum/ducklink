@@ -441,6 +441,65 @@ done
 # sources fetched in the successful configure.
 apply_extension_patches
 
+# TVM spill: route the buffer manager's temporary-block spill (evicted blocks +
+# larger-than-memory sort/hash/aggregate) to host-owned Tiered Virtual Memory
+# regions (cmake/.. crates/duckdb-core-component/src/tvm_spill.rs) instead of
+# temp files -- extending capacity past the wasm32 4 GiB ceiling. The hooks fall
+# back to temp files when no TVM host is wired, so this is always safe.
+python3 - "$DUCKDB_SOURCE_DIR/src/storage/standard_buffer_manager.cpp" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+if 'tvm_spill_write' in s:
+    sys.exit(0)
+# 1) extern "C" decls of the bridge (wasm-only)
+decls = ('\n#ifdef __wasi__\n'
+         'extern "C" {\n'
+         '// TVM spill bridge (crates/duckdb-core-component/src/tvm_spill.rs).\n'
+         'int tvm_spill_write(uint8_t tag, int64_t block_id, const uint8_t *data,\n'
+         '                    uint64_t alloc_size, uint64_t logical_size, uint64_t header_size);\n'
+         'int tvm_spill_query(int64_t block_id, uint64_t *out_logical, uint64_t *out_header);\n'
+         'int tvm_spill_read(int64_t block_id, uint8_t *out, uint64_t capacity);\n'
+         'uint64_t tvm_spill_delete(int64_t block_id);\n'
+         '}\n#endif\n')
+s = s.replace('namespace duckdb {\n', 'namespace duckdb {\n' + decls, 1)
+# 2) WriteTemporaryBuffer -> TVM first
+wanchor = 'void StandardBufferManager::WriteTemporaryBuffer(MemoryTag tag, block_id_t block_id, FileBuffer &buffer) {\n'
+s = s.replace(wanchor, wanchor +
+    '#ifdef __wasi__\n'
+    '\tif (tvm_spill_write(uint8_t(tag), block_id, buffer.InternalBuffer(), buffer.AllocSize(),\n'
+    '\t                    buffer.size, buffer.GetHeaderSize())) {\n'
+    '\t\tevicted_data_per_tag[uint8_t(tag)] += buffer.AllocSize();\n'
+    '\t\treturn;\n'
+    '\t}\n#endif\n', 1)
+# 3) ReadTemporaryBuffer -> TVM first
+ranchor = 'unique_ptr<FileBuffer> reusable_buffer) {\n\tD_ASSERT(!temporary_directory.path.empty());'
+s = s.replace(ranchor,
+    'unique_ptr<FileBuffer> reusable_buffer) {\n'
+    '#ifdef __wasi__\n'
+    '\t{\n'
+    '\t\tuint64_t tvm_logical = 0, tvm_header = 0;\n'
+    '\t\tif (tvm_spill_query(block.BlockId(), &tvm_logical, &tvm_header)) {\n'
+    '\t\t\tauto tvm_buffer = ConstructManagedBuffer(tvm_logical, tvm_header, std::move(reusable_buffer));\n'
+    '\t\t\ttvm_spill_read(block.BlockId(), tvm_buffer->InternalBuffer(), tvm_buffer->AllocSize());\n'
+    '\t\t\treturn tvm_buffer;\n'
+    '\t\t}\n'
+    '\t}\n#endif\n'
+    '\tD_ASSERT(!temporary_directory.path.empty());', 1)
+# 4) DeleteTemporaryFile -> TVM first
+danchor = 'void StandardBufferManager::DeleteTemporaryFile(BlockHandle &block) {\n\tauto id = block.BlockId();\n'
+s = s.replace(danchor, danchor +
+    '#ifdef __wasi__\n'
+    '\t{\n'
+    '\t\tuint64_t tvm_freed = tvm_spill_delete(id);\n'
+    '\t\tif (tvm_freed) {\n'
+    '\t\t\tevicted_data_per_tag[uint8_t(block.GetMemoryTag())] -= tvm_freed;\n'
+    '\t\t\treturn;\n'
+    '\t\t}\n'
+    '\t}\n#endif\n', 1)
+open(p, 'w').write(s)
+print('patched standard_buffer_manager.cpp: TVM spill hooks')
+PY
+
 echo "Building libduckdb static archive" >&2
 cmake --build "$BUILD_DIR" --target duckdb_static
 

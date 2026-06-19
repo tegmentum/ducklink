@@ -46,6 +46,9 @@ use duckdb_core_bindings::duckdb::component::extension_loader_hooks as core_exte
 use duckdb_core_bindings::duckdb::component::host_extension_loader as core_host_loader;
 use duckdb_core_bindings::duckdb::extension::callback_dispatch as core_callback_dispatch;
 use duckdb_core_bindings::duckdb::extension::types as core_types;
+use duckdb_core_bindings::tvm::memory::bytes as core_tvm_bytes;
+use duckdb_core_bindings::tvm::memory::manager as core_tvm_manager;
+use duckdb_core_bindings::tvm::memory::types as core_tvm_types;
 use duckdb_core_bindings::exports::duckdb::component::database as core_db_exports;
 use duckdb_core_bindings::exports::duckdb::extension::{
     config as core_config_exports, logging as core_logging_exports, runtime as core_runtime_exports,
@@ -70,6 +73,8 @@ struct CoreStoreState {
     table: ResourceTable,
     wasi: WasiCtx,
     extension_manager: Arc<Mutex<ExtensionManager>>,
+    // Tiered Virtual Memory: host-owned regions back DuckDB's >4 GiB spill tier.
+    tvm: tvm_core::RegionDirectory<tvm_core::VecBackedRegion>,
 }
 
 impl WasiView for CoreStoreState {
@@ -201,6 +206,139 @@ impl core_callback_dispatch::Host for CoreStoreState {
             .dispatch_cast(handle, &converted)
             .map(convert_extension_duckvalue_to_core)
             .map_err(convert_extension_duckerror_to_core)
+    }
+}
+
+// ---- TVM spill host (Tiered Virtual Memory) ----
+// Backs the libduckdb world's tvm:memory imports with an in-process region
+// directory (tvm-core). DuckDB spills evicted buffer-pool blocks here via the
+// wasm component's tvm_spill bridge, extending capacity past the 4 GiB wasm32
+// ceiling -- the regions live in this host's 64-bit address space.
+
+// The guest only checks Err vs Ok, so map every tvm-core error to one WIT variant.
+fn tvm_err_to_wit(e: tvm_core::TvmError) -> core_tvm_types::TvmError {
+    core_tvm_types::TvmError::BackingStore(format!("{e:?}"))
+}
+fn tvm_kind_to_core(k: core_tvm_types::RegionKind) -> tvm_core::RegionKind {
+    use core_tvm_types::RegionKind as W;
+    use tvm_core::RegionKind as C;
+    match k {
+        W::HotHeap => C::HotHeap,
+        W::ObjectArena => C::ObjectArena,
+        W::BlobArena => C::BlobArena,
+        W::PageStore => C::PageStore,
+        W::Scratch => C::Scratch,
+        W::DeviceState => C::DeviceState,
+        W::CodeCache => C::CodeCache,
+    }
+}
+fn tvm_to_core_handle(h: core_tvm_types::Handle) -> tvm_core::Handle {
+    tvm_core::Handle {
+        region_id: h.region_id,
+        generation: h.generation,
+        offset: h.offset,
+    }
+}
+fn tvm_to_wit_handle(h: tvm_core::Handle) -> core_tvm_types::Handle {
+    core_tvm_types::Handle {
+        region_id: h.region_id,
+        generation: h.generation,
+        offset: h.offset,
+    }
+}
+
+// Opt-in observability: set DUCKDB_TVM_DEBUG=1 to trace what DuckDB spills into
+// the host-owned TVM regions (region opens + cumulative bytes written/read).
+fn tvm_debug() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("DUCKDB_TVM_DEBUG").is_some())
+}
+static TVM_REGIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static TVM_BYTES_WRITTEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static TVM_BYTES_READ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+impl core_tvm_manager::Host for CoreStoreState {
+    fn create_region(
+        &mut self,
+        kind: core_tvm_types::RegionKind,
+        capacity: u32,
+    ) -> Result<u16, core_tvm_types::TvmError> {
+        let mem = tvm_core::VecBackedRegion::new(capacity);
+        let r = self
+            .tvm
+            .create_region(tvm_kind_to_core(kind), capacity, mem)
+            .map_err(tvm_err_to_wit);
+        if tvm_debug() {
+            if let Ok(id) = &r {
+                let n = TVM_REGIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                eprintln!(
+                    "[tvm] open region #{n} id={id} kind={kind:?} cap={} MiB (host-owned, beyond wasm 4 GiB)",
+                    capacity >> 20
+                );
+            }
+        }
+        r
+    }
+    fn destroy_region(&mut self, region_id: u16) -> Result<(), core_tvm_types::TvmError> {
+        self.tvm.destroy_region(region_id).map_err(tvm_err_to_wit)
+    }
+    fn alloc(
+        &mut self,
+        region_id: u16,
+        size: u32,
+    ) -> Result<core_tvm_types::Handle, core_tvm_types::TvmError> {
+        self.tvm
+            .alloc(region_id, size)
+            .map(tvm_to_wit_handle)
+            .map_err(tvm_err_to_wit)
+    }
+    fn dealloc(&mut self, ptr: core_tvm_types::Handle) -> Result<(), core_tvm_types::TvmError> {
+        self.tvm
+            .dealloc(tvm_to_core_handle(ptr))
+            .map_err(tvm_err_to_wit)
+    }
+    fn describe_region(
+        &mut self,
+        _region_id: u16,
+    ) -> Result<core_tvm_types::RegionInfo, core_tvm_types::TvmError> {
+        Err(core_tvm_types::TvmError::BackingStore(
+            "describe-region not implemented".into(),
+        ))
+    }
+}
+
+impl core_tvm_bytes::Host for CoreStoreState {
+    fn read(
+        &mut self,
+        ptr: core_tvm_types::Handle,
+        len: u32,
+    ) -> Result<Vec<u8>, core_tvm_types::TvmError> {
+        let mut buf = vec![0u8; len as usize];
+        self.tvm
+            .read(tvm_to_core_handle(ptr), &mut buf)
+            .map_err(tvm_err_to_wit)?;
+        if tvm_debug() {
+            let t = TVM_BYTES_READ.fetch_add(len as u64, std::sync::atomic::Ordering::Relaxed)
+                + len as u64;
+            eprintln!("[tvm] read {len} B (cumulative {} MiB)", t >> 20);
+        }
+        Ok(buf)
+    }
+    fn write(
+        &mut self,
+        ptr: core_tvm_types::Handle,
+        data: Vec<u8>,
+    ) -> Result<(), core_tvm_types::TvmError> {
+        let len = data.len() as u64;
+        let r = self
+            .tvm
+            .write(tvm_to_core_handle(ptr), &data)
+            .map_err(tvm_err_to_wit);
+        if tvm_debug() && r.is_ok() {
+            let t = TVM_BYTES_WRITTEN.fetch_add(len, std::sync::atomic::Ordering::Relaxed) + len;
+            eprintln!("[tvm] write {len} B (cumulative {} MiB)", t >> 20);
+        }
+        r
     }
 }
 
@@ -3001,6 +3139,8 @@ fn instantiate_core(
         &mut linker,
         |state| state,
     )?;
+    core_tvm_manager::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |state| state)?;
+    core_tvm_bytes::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |state| state)?;
 
     let mut store = Store::new(
         engine,
@@ -3008,6 +3148,7 @@ fn instantiate_core(
             table: ResourceTable::new(),
             wasi: wasi_ctx,
             extension_manager,
+            tvm: tvm_core::RegionDirectory::new(),
         },
     );
 

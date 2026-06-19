@@ -37,3 +37,4 @@ world = "libduckdb"
 "wasi:clocks" = { path = "wit/deps/wasi-clocks" }
 "wasi:sockets" = { path = "wit/deps/wasi-sockets" }
 "wasi:random" = { path = "wit/deps/wasi-random" }
+"tvm:memory" = { path = "wit/deps/tvm" }
