@@ -1,7 +1,7 @@
 WASI_TARGET?=wasm32-wasip2
 BROWSER_TARGET?=wasm32-unknown-unknown
 
-.PHONY: all core core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship
+.PHONY: all core core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke
 
 all: core standalone-cli loader-stub
 
@@ -66,6 +66,12 @@ ext: host
 # Smoke every extension that has a smoke.sql (assumes components already built).
 ext-smoke-all: host
 	python3 tooling/smoke.py --all
+
+# Iceberg + Avro regression: generates pyiceberg fixtures and asserts the
+# iceberg/avro surface (local + remote reads, codecs, time travel, REST catalog
+# none/bearer/sigv4) through duckdb-host. Needs: pip install 'pyiceberg[snappy]' pyarrow.
+iceberg-smoke: host
+	python3 tooling/iceberg_smoke.py
 
 # List upstream crates flagged in tooling/compat-registry.json.
 ext-list-broken:

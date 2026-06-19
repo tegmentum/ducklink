@@ -97,15 +97,20 @@ VERIFIED on wasi: a 2-snapshot pyiceberg table reads 40 rows at HEAD and 10 rows
 via `iceberg_scan(…, snapshot_from_id=<id>)` (the first snapshot). `version=…`
 also works. No code changes needed.
 
-## Cross-cutting — iceberg test harness  · effort S
+## Cross-cutting — iceberg test harness  · effort S — DONE
 
-- A committed fixture generator (`scripts/gen-iceberg-fixtures.py`, pyiceberg) that
-  produces consistent tables (deflate + snappy, partitioned, with deletes,
-  multi-snapshot) under a gitignored dir.
-- A smoke test (local + a spawned range-capable HTTP server + a mock REST catalog)
-  wired into the existing `tooling/smoke.py` so iceberg regressions are caught.
-- Note the **stale-metadata gotcha**: the duckdb-iceberg repo's `data/persistent/*`
-  tables record wrong `file_size_in_bytes`, so they only read locally.
+`tooling/iceberg_smoke.py` (`make iceberg-smoke`) generates consistent pyiceberg
+fixtures (deflate + snappy, partitioned, multi-snapshot, gzip-metadata) under the
+gitignored `build/iceberg-fixtures/` and asserts the whole surface through
+`duckdb-host` — 11 checks: read_avro (deflate/snappy), iceberg_scan
+(local/snappy/partitioned), gzip metadata, time travel, remote HTTP (range
+server), and REST catalog none/bearer/**sigv4** (the sigv4 mock recomputes the
+signature). Servers run in background threads. Requires `pyiceberg[snappy]` +
+`pyarrow`. **11/11 passing.**
+
+Note the **stale-metadata gotcha**: the duckdb-iceberg repo's `data/persistent/*`
+tables record wrong `file_size_in_bytes`, so they only read locally — the harness
+uses pyiceberg-written tables instead.
 
 ## Sequencing
 
