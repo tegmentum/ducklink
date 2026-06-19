@@ -48,6 +48,34 @@ duckdb_extension_load(ducklake        # DuckLake lakehouse format (SQL catalog +
   INCLUDE_DIR src/include
 )
 
+# avro (read_avro) + iceberg. Both need C libs built for wasi by
+# scripts/build-wasi-deps.sh into build/wasi-deps/: jansson + avro-c (deflate
+# codec only -> no lzma/snappy) for the avro extension, and roaring (CRoaring)
+# for iceberg. iceberg AutoLoadExtension("avro")s, so avro must be present.
+# scripts/build-libduckdb-wasm.sh patches duckdb-avro (drop lzma/snappy) +
+# iceberg (skip AWS SDK/CURL on WASI like Emscripten) and merges the libs.
+set(WASI_DEPS "${CMAKE_CURRENT_LIST_DIR}/../build/wasi-deps")
+if(EXISTS "${WASI_DEPS}/avro-c/lib/libavro.a")
+  # Pre-seed the libs duckdb-avro's find_library() looks for (avro/jansson/zlib);
+  # lzma/snappy are patched out of its CMakeLists (deflate-only avro-c).
+  set(AVRO_INCLUDE_DIR "${WASI_DEPS}/avro-c/include" CACHE PATH "" FORCE)
+  set(AVRO_LIBRARY "${WASI_DEPS}/avro-c/lib/libavro.a" CACHE FILEPATH "" FORCE)
+  set(JANSSON_LIBRARY "${WASI_DEPS}/jansson/lib/libjansson.a" CACHE FILEPATH "" FORCE)
+  set(ZLIB_LIBRARY "$ENV{HOME}/git/curl-wasm/build/zlib/lib/libz.a" CACHE FILEPATH "" FORCE)
+  duckdb_extension_load(avro          # read_avro table function (libavro-c + jansson, deflate codec)
+    GIT_URL https://github.com/duckdb/duckdb-avro
+    GIT_TAG 0c97a61781f63f8c5444cf3e0c6881ecbaa9fe13   # DuckDB-pinned commit
+  )
+  if(EXISTS "${WASI_DEPS}/roaring/lib/libroaring.a")
+    set(roaring_DIR "${WASI_DEPS}/roaring/lib/cmake/roaring" CACHE PATH "" FORCE)
+    duckdb_extension_load(iceberg     # Apache Iceberg tables (avro manifests + roaring; AWS SDK skipped on wasi)
+      GIT_URL https://github.com/duckdb/duckdb-iceberg
+      GIT_TAG 49d67e45a6f15ad855f3760658b4ab42967d9cdc # DuckDB-pinned commit
+      INCLUDE_DIR src/include
+    )
+  endif()
+endif()
+
 # httpfs needs CURL (its curl client) + OpenSSL (crypto.cpp AES/EVP). Both come
 # from ~/git/curl-wasm (libcurl 8.17 built for wasm + its own openssl/zlib/zstd),
 # satisfying httpfs's find_package(CURL|OpenSSL). TLS for the httplib client is

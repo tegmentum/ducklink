@@ -109,17 +109,19 @@ so anything network- or large-native-dep-bound is out. Feasibility:
 | **vss** | pure C++ HNSW (usearch) | **working** — `CREATE INDEX … USING HNSW` + `array_distance` NN search (`@c8a4efe`, `INCLUDE_DIR src/include`). |
 | **sqlite_scanner** | vendored sqlite3 + WASI VFS | **working** — `sqlite_scan(...)` + `ATTACH … (TYPE SQLITE)` read real `.sqlite` files. `-DSQLITE_OS_OTHER=1` drops sqlite3.c's unix VFS; a WASI VFS reused from `~/git/sqlite-wasm` (`cmake/sqlite-wasi-vfs/`, registered by `sqlite3_os_init`) backs file I/O. |
 | **excel** | xlsx reader + vcpkg dep | **deferred** — `find_package` + `vcpkg.json`; needs a vcpkg native dep built for wasi (no vcpkg toolchain here). |
-| **avro** | Apache Avro C lib + vcpkg | **deferred** — `find_path` + `vcpkg.json`; needs the Avro C lib via vcpkg built for wasi. |
+| **avro** | DuckDB's avro-c fork + jansson | **working** — `read_avro('…')` verified. Needs DuckDB's **fork** `duckdb/duckdb-avro-c` (the field-id API; stock apache/avro lacks it) + jansson, built for wasi by `scripts/build-wasi-deps.sh` (deflate codec only). |
 | **httpfs** | HTTP/S3 over TCP+TLS | **working, out of the box** — plain `read_csv_auto('https://…')` fetches over HTTPS via `wasi:sockets` + parses (verified, iris.csv → 150 rows; secure cert verification ON, no settings). **curl is the default client on wasi** (build script patches httpfs `LoadInternal`); the vendored httplib client compiles but its connect select/poll path fails at runtime. BSD sockets come from grafting the wasip2 libc socket objects into the wasip1 core module (`scripts/build-libduckdb-wasm.sh`); openssl-wasm + curl-wasm (libcurl/nghttp2/ngtcp2/nghttp3/brotli) supply HTTP/TLS. Cert verification is secure-by-default: an embedded Mozilla CA bundle (`cmake/ca-bundle/cacert.pem`) is loaded in-memory via `CURLOPT_CAINFO_BLOB` (openssl-wasm can't load a CA *file* — its file BIO doesn't reach the wrapped host FS). |
 | **ducklake** | SQL catalog + parquet storage | **working** — pure C++, no native deps. `ATTACH 'ducklake:…'` + CREATE/INSERT/SELECT verified; parquet files written + metadata persists across re-ATTACH. |
-| **iceberg** | Avro manifests + roaring + (AWS/CURL skipped on wasm) | **feasible, not yet built** — upstream guards AWS SDK + CURL behind `NOT Emscripten`, so wasm needs only `avro-c` + `roaring` (both plain C/C++) built for wasi + extending the guard to `WASI`. No AWS SDK required. |
+| **iceberg** | avro extension + roaring; AWS SDK skipped | **working** — `iceberg_scan('table', allow_moved_paths=true)` reads real Iceberg tables (metadata JSON → avro manifests → parquet data), partitioned rows verified. AWS SDK avoided by extending the upstream `Emscripten` guards to `WASI` + stubbing `AWSInput` Head/Delete/Post (AWS Glue/S3Tables REST catalogs unsupported; filesystem + S3 reads work). Needs `roaring` (built for wasi) + the avro extension. |
 | **aws** / **azure** | cloud SDK + network | **very hard** — TCP+TLS solved by openssl-wasm, but the AWS/Azure C++ SDKs are huge; far beyond transport |
 | **mysql_scanner** / **postgres_scanner** | libpq / libmysqlclient + network | **hard** — transport solved by openssl-wasm + `wasi:sockets`; still needs libpq/libmysqlclient ported to wasi |
 | **spatial** | GEOS + GDAL + PROJ | **infeasible** — huge native geo stack (not a network problem; openssl-wasm doesn't help) |
 | **ui** | embedded HTTP **server** | n/a — needs inbound sockets + a browser (openssl-wasm is client-side) |
 
-**Result:** **inet, fts, vss, sqlite_scanner, httpfs, ducklake** are implemented
-and verified (httpfs also covers S3 via the built-in `S3FileSystem`). `excel`/`avro` need a **vcpkg** native dep (no vcpkg-for-wasi toolchain
+**Result:** **inet, fts, vss, sqlite_scanner, httpfs, ducklake, avro, iceberg**
+are implemented and verified (httpfs also covers S3 via the built-in
+`S3FileSystem`). The avro/iceberg native deps (jansson, DuckDB's avro-c fork,
+roaring) are built for wasi by `scripts/build-wasi-deps.sh`. `excel`/`avro` need a **vcpkg** native dep (no vcpkg-for-wasi toolchain
 wired). `spatial` (geo native stack) and `ui` (inbound server + browser) stay
 infeasible.
 

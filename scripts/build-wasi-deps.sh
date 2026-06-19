@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Build the C libraries the avro + iceberg extensions need, for wasm32-wasi:
+#   - jansson  (JSON)        -> avro-c
+#   - avro-c   (Apache Avro) -> the `avro` extension's read_avro (deflate codec
+#                               only: snappy/lzma are disabled, so no extra libs)
+#   - roaring  (CRoaring)    -> linked directly into iceberg
+# Outputs static libs + headers (+ cmake config for roaring) under build/wasi-deps/.
+# Idempotent: re-run to rebuild. Requires WASI_SDK_PREFIX and the wasi toolchain
+# file. zlib (deflate) is reused from ~/git/curl-wasm.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+: "${WASI_SDK_PREFIX:?set WASI_SDK_PREFIX to the wasi-sdk install}"
+TOOLCHAIN="$ROOT/cmake/toolchains/wasi-sdk.cmake"
+DEPS="$ROOT/build/wasi-deps"
+SRC="$DEPS/src"
+ZLIB="${ZLIB_WASM_DIR:-$HOME/git/curl-wasm/build/zlib}"
+mkdir -p "$SRC"
+
+NM="$WASI_SDK_PREFIX/bin/llvm-nm"
+cmake_wasi() { cmake -S "$1" -B "$2" \
+  -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" -DWASI_SDK_PREFIX="$WASI_SDK_PREFIX" \
+  -DBUILD_SHARED_LIBS=OFF "${@:3}"; }
+
+# --- jansson ---------------------------------------------------------------
+if [[ ! -d "$SRC/jansson" ]]; then
+  git clone --depth 1 https://github.com/akheron/jansson "$SRC/jansson"
+fi
+cmake_wasi "$SRC/jansson" "$SRC/jansson/build-wasi" \
+  -DCMAKE_INSTALL_PREFIX="$DEPS/jansson" \
+  -DJANSSON_BUILD_DOCS=OFF -DJANSSON_EXAMPLES=OFF -DJANSSON_WITHOUT_TESTS=ON \
+  -DJANSSON_BUILD_SHARED_LIBS=OFF
+cmake --build "$SRC/jansson/build-wasi" --target install
+echo "[deps] jansson -> $DEPS/jansson/lib/libjansson.a" >&2
+
+# --- avro-c ----------------------------------------------------------------
+# DuckDB's FORK of avro-c (adds the Iceberg field-id API:
+# avro_schema_record_field_id / avro_reader_reader / *_id), which the duckdb-avro
+# extension requires -- stock apache/avro lacks these. Pinned to the duckdb vcpkg
+# port's ref.
+AVRO_REF="8af400279c445a81b8552a7670d8c1ebd92ba34a"
+if [[ ! -d "$SRC/avro/.git" ]]; then
+  rm -rf "$SRC/avro"
+  git clone https://github.com/duckdb/duckdb-avro-c "$SRC/avro"
+fi
+git -C "$SRC/avro" checkout -q "$AVRO_REF"
+AVROC="$SRC/avro/lang/c"
+# wasi can't build SHARED libs; treat WASI like WIN32 for the shared target + install.
+perl -0pi -e 's/if \(NOT WIN32\)\n# TODO: Create Windows DLLs/if (NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "WASI")\n# TODO: Create Windows DLLs/' "$AVROC/src/CMakeLists.txt"
+perl -0pi -e 's/install\(TARGETS avro-static avro-shared/install(TARGETS avro-static/' "$AVROC/src/CMakeLists.txt"
+# Force snappy + lzma codecs OFF (the fork hard-REQUIREs them, and find_package
+# would grab the host's libs -> undefined symbols at the wasi link). Iceberg
+# manifests use the deflate/null codec, so deflate (zlib) is enough.
+perl -0pi -e 's/find_package\(Snappy CONFIG REQUIRED\)/set(Snappy_FOUND FALSE) # wasi: no snappy codec/' "$AVROC/CMakeLists.txt"
+perl -0pi -e 's/find_package\(LibLZMA REQUIRED\)\s*\n\s*set\(LZMA_FOUND 1\)/set(LZMA_FOUND FALSE) # wasi: no lzma codec/' "$AVROC/CMakeLists.txt"
+rm -rf "$AVROC/build-wasi"
+cmake_wasi "$AVROC" "$AVROC/build-wasi" \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  -Djansson_DIR="$DEPS/jansson/lib/cmake/jansson" -DCMAKE_PREFIX_PATH="$DEPS/jansson" \
+  -DZLIB_LIBRARY="$ZLIB/lib/libz.a" -DZLIB_INCLUDE_DIR="$ZLIB/include" \
+  -DAVRO_BUILD_TESTS=OFF -DAVRO_BUILD_EXECUTABLES=OFF
+cmake --build "$AVROC/build-wasi" --target avro-static
+mkdir -p "$DEPS/avro-c/lib" "$DEPS/avro-c/include/avro"
+cp "$(find "$AVROC/build-wasi" -name libavro.a | head -1)" "$DEPS/avro-c/lib/libavro.a"
+cp "$AVROC/src/avro.h" "$DEPS/avro-c/include/"
+cp "$AVROC/src/avro/"*.h "$DEPS/avro-c/include/avro/"
+if "$NM" "$DEPS/avro-c/lib/libavro.a" | grep -qE " U (lzma_|snappy_)"; then
+  echo "[deps] ERROR: avro-c still references lzma/snappy" >&2; exit 1
+fi
+echo "[deps] avro-c -> $DEPS/avro-c/lib/libavro.a (deflate codec only)" >&2
+
+# --- roaring (CRoaring) ----------------------------------------------------
+if [[ ! -d "$SRC/roaring" ]]; then
+  git clone --depth 1 https://github.com/RoaringBitmap/CRoaring "$SRC/roaring"
+fi
+cmake_wasi "$SRC/roaring" "$SRC/roaring/build-wasi" \
+  -DCMAKE_INSTALL_PREFIX="$DEPS/roaring" \
+  -DROARING_BUILD_STATIC=ON -DENABLE_ROARING_TESTS=OFF
+cmake --build "$SRC/roaring/build-wasi" --target install
+echo "[deps] roaring -> $DEPS/roaring/lib/libroaring.a" >&2
+
+echo "[deps] done: jansson + avro-c + roaring built for wasm32-wasi under $DEPS" >&2

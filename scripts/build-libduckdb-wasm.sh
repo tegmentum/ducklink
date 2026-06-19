@@ -32,18 +32,25 @@ mkdir -p "$BUILD_DIR"
 
 echo "Configuring DuckDB for wasm32-wasi in $BUILD_DIR" >&2
 echo "  extension config: $DUCKDB_EXTENSION_CONFIGS" >&2
-env WASM_EXTENSIONS="$WASM_EXTENSIONS" cmake -S "$DUCKDB_SOURCE_DIR" -B "$BUILD_DIR" \
-  -DCMAKE_TOOLCHAIN_FILE="$(pwd)/cmake/toolchains/wasi-sdk.cmake" \
-  -DWASI_SDK_PREFIX:PATH="$WASI_SDK_PREFIX" \
-  -DDUCKDB_EXTENSION_CONFIGS="$DUCKDB_EXTENSION_CONFIGS" \
-  -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
-  -DBUILD_SHELL=OFF \
-  -DBUILD_TESTS=OFF \
-  -DBUILD_BENCHMARK=OFF \
-  -DDUCKDB_PLATFORM="wasm32-wasi" \
-  -DDUCKDB_LIBDYNAMIC=OFF \
-  -DDUCKDB_LIBDUCKDB_STATIC=ON
-
+configure_duckdb() {
+  env WASM_EXTENSIONS="$WASM_EXTENSIONS" cmake -S "$DUCKDB_SOURCE_DIR" -B "$BUILD_DIR" \
+    -DCMAKE_TOOLCHAIN_FILE="$(pwd)/cmake/toolchains/wasi-sdk.cmake" \
+    -DWASI_SDK_PREFIX:PATH="$WASI_SDK_PREFIX" \
+    -DDUCKDB_EXTENSION_CONFIGS="$DUCKDB_EXTENSION_CONFIGS" \
+    -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
+    -DBUILD_SHELL=OFF \
+    -DBUILD_TESTS=OFF \
+    -DBUILD_BENCHMARK=OFF \
+    -DDUCKDB_PLATFORM="wasm32-wasi" \
+    -DDUCKDB_LIBDYNAMIC=OFF \
+    -DDUCKDB_LIBDUCKDB_STATIC=ON
+}
+# Patches for FetchContent-populated extension sources. Some are
+# configure-blocking (avro's find_library(LZMA), iceberg's find_package(AWSSDK))
+# and must be applied before configure can process that extension; since sources
+# are fetched progressively, the loop below re-runs configure + patch until it
+# succeeds. Every patch is idempotent and guards on its source being present.
+apply_extension_patches() {
 # Embed a CA bundle into httpfs's curl client so HTTPS certificate verification
 # works without a host CA file: openssl's file BIO isn't reliably reachable
 # through the component's wrapped filesystem, so we load the bundle from memory
@@ -125,6 +132,93 @@ open(p, 'w').write(s)
 print('patched httpfs_extension.cpp: curl is the default client on wasi')
 PY
 fi
+
+# duckdb-avro: our wasi avro-c is deflate-only (no lzma/snappy), so drop those
+# REQUIRED find_library() calls + their use in ALL_AVRO_LIBRARIES. Idempotent.
+AVRO_SRC="$BUILD_DIR/_deps/avro_extension_fc-src"
+if grep -q "duckdb_extension_load(avro" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+   && [[ -f "$AVRO_SRC/CMakeLists.txt" ]]; then
+  python3 - "$AVRO_SRC/CMakeLists.txt" <<'PY'
+import re, sys
+p = sys.argv[1]; s = open(p).read()
+if 'wasi-no-lzma-snappy' in s:
+    sys.exit(0)
+# drop the lzma/snappy REQUIRED finds (both MSVC and non-MSVC spellings)
+for pat in [r'\n\s*find_library\(LZMA_LIBRARY [^\)]*REQUIRED\)',
+            r'\n\s*find_library\(SNAPPY_LIBRARY [^\)]*REQUIRED\)']:
+    s = re.sub(pat, '', s)
+# drop their use in ALL_AVRO_LIBRARIES (+ jemalloc/gmp/math which we don't provide)
+for var in ('LZMA_LIBRARY', 'SNAPPY_LIBRARY', 'JEMALLOC_LIBRARY', 'GMP_LIBRARY', 'MATH_LIBRARY'):
+    s = re.sub(r'\n\s*\$\{%s\}' % var, '', s)
+s = '# wasi-no-lzma-snappy\n' + s
+open(p, 'w').write(s)
+print('patched duckdb-avro CMakeLists: deflate-only (no lzma/snappy/jemalloc/gmp)')
+PY
+fi
+
+# iceberg: upstream skips the AWS SDK + CURL behind `Emscripten` guards. Extend
+# them to our WASI build (CMake STREQUAL guard + the #ifdef EMSCRIPTEN source
+# guards in aws.cpp/aws.hpp) so AWS is stubbed out and no AWS SDK is needed.
+ICE_SRC="$BUILD_DIR/_deps/iceberg_extension_fc-src"
+if grep -q "duckdb_extension_load(iceberg" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+   && [[ -d "$ICE_SRC" ]]; then
+  # CMake: skip AWS/CURL on WASI as well as Emscripten
+  if ! grep -q 'STREQUAL "WASI"' "$ICE_SRC/CMakeLists.txt"; then
+    perl -0pi -e 's/NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten"/NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten" AND NOT CMAKE_SYSTEM_NAME STREQUAL "WASI"/g' "$ICE_SRC/CMakeLists.txt"
+  fi
+  # Sources: make the EMSCRIPTEN AWS-stub guards also fire on __wasi__
+  for f in "$ICE_SRC/src/aws.cpp" "$ICE_SRC/src/include/aws.hpp"; do
+    [[ -f "$f" ]] && perl -0pi -e 's/#ifdef EMSCRIPTEN/#if defined(EMSCRIPTEN) || defined(__wasi__)/g' "$f"
+  done
+  # The EMSCRIPTEN stub branch only defines AWSInput::GetRequest; sigv4.cpp also
+  # references Head/Delete/PostRequest (used only by the AWS Glue/S3Tables REST
+  # catalog, not filesystem/S3 iceberg_scan). Add the missing stubs.
+  if [[ -f "$ICE_SRC/src/aws.cpp" ]]; then
+    python3 - "$ICE_SRC/src/aws.cpp" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+if 'HEAD on WASM' in s:
+    sys.exit(0)
+anchor = ('unique_ptr<HTTPResponse> AWSInput::GetRequest(ClientContext &context) {\n'
+          '\tthrow NotImplementedException("GET on WASM not implemented yet");\n}')
+if anchor not in s:
+    sys.stderr.write('aws.cpp GetRequest stub anchor not found\n'); sys.exit(1)
+extra = anchor + '''
+
+unique_ptr<HTTPResponse> AWSInput::HeadRequest(ClientContext &context) {
+\tthrow NotImplementedException("HEAD on WASM not implemented yet");
+}
+
+unique_ptr<HTTPResponse> AWSInput::DeleteRequest(ClientContext &context) {
+\tthrow NotImplementedException("DELETE on WASM not implemented yet");
+}
+
+unique_ptr<HTTPResponse> AWSInput::PostRequest(ClientContext &context, string post_body) {
+\tthrow NotImplementedException("POST on WASM not implemented yet");
+}'''
+open(p, 'w').write(s.replace(anchor, extra, 1))
+print('patched iceberg aws.cpp: added Head/Delete/Post WASM stubs')
+PY
+  fi
+  echo "patched iceberg: AWS SDK/CURL skipped on wasi (stubbed like Emscripten)" >&2
+fi
+}
+
+# Configure, patching fetched sources after each failure, until it succeeds.
+# Extensions are fetched progressively, so a configure-blocking extension only
+# becomes patchable once the earlier-failing one is fixed (hence the loop).
+attempt=0
+until configure_duckdb; do
+  attempt=$((attempt + 1))
+  if [[ $attempt -ge 6 ]]; then
+    echo "configure still failing after $attempt attempts" >&2; exit 1
+  fi
+  echo "configure attempt $attempt failed; patching fetched sources + retrying" >&2
+  apply_extension_patches
+done
+# Final pass for compile-only source patches (httpfs CA bundle, curl default) on
+# sources fetched in the successful configure.
+apply_extension_patches
 
 echo "Building libduckdb static archive" >&2
 cmake --build "$BUILD_DIR" --target duckdb_static
@@ -242,6 +336,27 @@ if grep -q "duckdb_extension_load(httpfs" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/nul
   "$WASI_SDK_PREFIX/bin/llvm-ar" rcs "$TMPDIR/libwasigetpid.a" "$TMPDIR/wasi_getpid.o"
   ADDLIBS="$ADDLIBS"$'\n'"ADDLIB libwasigetpid.a"
   echo "Merging getpid stub into libduckdb-wasi.a" >&2
+fi
+
+# avro extension links libavro + libjansson (deflate codec uses zlib, already
+# merged with httpfs). iceberg links libroaring. Merge the wasi deps built by
+# scripts/build-wasi-deps.sh so the core resolves their symbols.
+WASI_DEPS="${WASI_DEPS:-$(pwd)/build/wasi-deps}"
+if grep -q "duckdb_extension_load(avro" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+  deps=("$WASI_DEPS/avro-c/lib/libavro.a" "$WASI_DEPS/jansson/lib/libjansson.a")
+  # zlib (deflate codec) -- only if httpfs didn't already merge it
+  grep -q "duckdb_extension_load(httpfs" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+    || deps+=("$HOME/git/curl-wasm/build/zlib/lib/libz.a")
+  grep -q "duckdb_extension_load(iceberg" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+    && deps+=("$WASI_DEPS/roaring/lib/libroaring.a")
+  for src in "${deps[@]}"; do
+    name="$(basename "$src")"
+    if [[ -f "$src" ]]; then
+      cp "$src" "$TMPDIR/$name"
+      ADDLIBS="$ADDLIBS"$'\n'"ADDLIB $name"
+      echo "Merging avro/iceberg dep ($src) into libduckdb-wasi.a" >&2
+    fi
+  done
 fi
 pushd "$TMPDIR" >/dev/null
 printf 'CREATE libduckdb_combined.a\n%s\nSAVE\nEND\n' "$ADDLIBS" | "$WASI_SDK_PREFIX/bin/llvm-ar" -M
