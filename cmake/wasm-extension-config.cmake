@@ -181,11 +181,12 @@ add_library(sqlite_wasivfs STATIC
 target_include_directories(sqlite_wasivfs PRIVATE ${CMAKE_CURRENT_LIST_DIR}/sqlite-wasi-vfs)
 
 # --- remaining (not yet built for wasi) ---
-# postgres_scanner / mysql_scanner: need libpq / the mysql client built for wasi
-#   + outbound TCP (the wasip2 socket graft from httpfs is reusable).
+# mysql_scanner: like postgres_scanner -- needs the mysql client built for wasi +
+#   the same wasip2 socket graft + getaddrinfo wrapper (cmake/postgres-wasi reusable).
 # aws: AWS credential-provider chain (config/SSO); pairs with httpfs/iceberg S3
 #   (SigV4 is already hand-rolled for iceberg).
 # azure: heavy Azure C++ SDK + curl.
 # ui: needs a *listening* HTTP server inside the component -- poor fit for
 #   wasip2's outbound-only model.
-# (Built above: avro, iceberg, spatial, httpfs, ducklake, sqlite_scanner, excel.)
+# (Built above: avro, iceberg, spatial, httpfs, ducklake, sqlite_scanner, excel,
+#  postgres_scanner.)
