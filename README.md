@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/ducklink_logo.png" alt="DuckLink" width="360">
+</p>
+
 # DuckDB WebAssembly Components
 
 This repository contains a pair of WebAssembly components that wrap the DuckDB C API (`libduckdb`) and expose it through the Wasm component model.
