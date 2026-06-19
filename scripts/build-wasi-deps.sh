@@ -189,4 +189,55 @@ fi
   && echo "[deps] libpq source -> $PG_SRC15 (wasi-cross-configured PG $PG_VER)" >&2 \
   || echo "[deps] WARNING: PG $PG_VER configure failed" >&2
 
-echo "[deps] done: jansson + avro-c + roaring + minizip-ng + libpq-src built for wasm32-wasi under $DEPS" >&2
+# --- mariadb-connector-c (mysql_scanner: MySQL/MariaDB client) --------------
+# Prebuilt client (libmariadbclient.a) linked by the mysql extension. CMake
+# cross-build with the *clean* deps toolchain (no duckdb netdb override -> real
+# getaddrinfo, wrappable at the core link). TLS via openssl-wasm, bundled zlib,
+# the posix shim for wasi gaps. -Werror off (wasi-sdk clang 20+ has new warnings).
+MARIADB_VER=3.4.7
+MARIADB_SRC="$SRC/mariadb"
+if [[ ! -f "$DEPS/mariadb/lib/mariadb/libmariadbclient.a" ]]; then
+  [[ -d "$MARIADB_SRC" ]] || git clone -q --depth 1 --branch "v$MARIADB_VER" \
+    https://github.com/mariadb-corporation/mariadb-connector-c "$MARIADB_SRC"
+  python3 -c "p='$MARIADB_SRC/CMakeLists.txt';s=open(p).read();open(p,'w').write(s.replace('SET(WARNING_AS_ERROR \"-Werror\")','SET(WARNING_AS_ERROR \"\")'))"
+  # pvio sets the socket non-blocking via fcntl(F_SETFL) before TLS; that isn't
+  # wired through the wasip1<-wasip2 socket graft (EBADF). wasi:sockets are
+  # non-blocking by nature -> no-op it on wasi.
+  python3 - "$MARIADB_SRC/plugins/pvio/pvio_socket.c" <<'PYEOF'
+import sys
+p=sys.argv[1]; s=open(p).read()
+old='''#else
+  if (fcntl(csock->socket, F_SETFL, new_fcntl_mode) == -1)
+  {
+    return errno;
+  }
+#endif'''
+new='''#elif defined(__wasi__)
+  /* wasi:sockets are non-blocking by nature; fcntl(F_SETFL) isn't wired through
+     the wasip1<-wasip2 socket graft (would fail). */
+#else
+  if (fcntl(csock->socket, F_SETFL, new_fcntl_mode) == -1)
+  {
+    return errno;
+  }
+#endif'''
+if old in s and '__wasi__' not in s: open(p,'w').write(s.replace(old,new,1))
+PYEOF
+  _OSSL="$HOME/git/openssl-wasm/build/openssl"; _OSSL2="$HOME/git/openssl-wasm/third_party/openssl/include"
+  _MSHIM="$ROOT/cmake/postgres-wasi/shim.h"; _MSHIMINC="$ROOT/cmake/postgres-wasi/include"
+  cmake -S "$MARIADB_SRC" -B "$MARIADB_SRC/build-wasi" \
+    -DCMAKE_TOOLCHAIN_FILE="$ROOT/cmake/toolchains/wasi-sdk-deps.cmake" -DWASI_SDK_PREFIX="$WASI_SDK_PREFIX" \
+    -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX="$DEPS/mariadb" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+    -DCMAKE_C_FLAGS="-include $_MSHIM -I$_MSHIMINC -I$_OSSL/include -I$_OSSL2 -Wno-unused-command-line-argument -Wno-error" \
+    -DWITH_SSL=OPENSSL -DOPENSSL_ROOT_DIR="$_OSSL" -DOPENSSL_INCLUDE_DIR="$_OSSL/include" \
+    -DOPENSSL_SSL_LIBRARY="$_OSSL/libssl.a" -DOPENSSL_CRYPTO_LIBRARY="$_OSSL/libcrypto.a" \
+    -DWITH_CURL=OFF -DWITH_UNIT_TESTS=OFF -DWITH_EXTERNAL_ZLIB=OFF -DSOCKET_SIZE_TYPE=socklen_t >/dev/null 2>&1
+  cmake --build "$MARIADB_SRC/build-wasi" --target mariadbclient >/dev/null 2>&1
+  # install the Development component -> include/mariadb/*.h + lib/mariadb/*.a
+  cmake --install "$MARIADB_SRC/build-wasi" --component Development >/dev/null 2>&1 || true
+fi
+[[ -f "$DEPS/mariadb/lib/mariadb/libmariadbclient.a" ]] \
+  && echo "[deps] mariadb-connector-c -> $DEPS/mariadb/lib/mariadb/libmariadbclient.a" >&2 \
+  || echo "[deps] WARNING: mariadb-connector-c build failed" >&2
+
+echo "[deps] done: jansson + avro-c + roaring + minizip-ng + libpq-src + mariadb built for wasm32-wasi under $DEPS" >&2

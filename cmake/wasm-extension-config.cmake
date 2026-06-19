@@ -120,6 +120,19 @@ if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../build/wasi-deps/src/postgresql-15.13/src
   )
 endif()
 
+# mysql_scanner: ATTACH/scan a MySQL/MariaDB server over TCP. Links a prebuilt
+# MariaDB Connector/C (build-wasi-deps.sh, against openssl-wasm); cmake/mysql-deps.cmake
+# replaces find_package(libmysql) + reuses the postgres socket graft + getaddrinfo
+# wrapper + posix shim. Built static (the pin is DONT_LINK). Needs httpfs.
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../build/wasi-deps/mariadb/lib/mariadb/libmariadbclient.a"
+   AND EXISTS "$ENV{HOME}/git/openssl-wasm/build/openssl/libssl.a")
+  duckdb_extension_load(mysql_scanner    # ATTACH/scan MySQL/MariaDB over TCP (libmariadb)
+    GIT_URL https://github.com/duckdb/duckdb-mysql
+    GIT_TAG 8a32d4e069438585e80494e296e407653aebfed3   # DuckDB-pinned commit
+    INCLUDE_DIR src/include                            # mysql_scanner_extension.hpp for the loader
+  )
+endif()
+
 # httpfs needs CURL (its curl client) + OpenSSL (crypto.cpp AES/EVP). Both come
 # from ~/git/curl-wasm (libcurl 8.17 built for wasm + its own openssl/zlib/zstd),
 # satisfying httpfs's find_package(CURL|OpenSSL). TLS for the httplib client is
@@ -181,12 +194,10 @@ add_library(sqlite_wasivfs STATIC
 target_include_directories(sqlite_wasivfs PRIVATE ${CMAKE_CURRENT_LIST_DIR}/sqlite-wasi-vfs)
 
 # --- remaining (not yet built for wasi) ---
-# mysql_scanner: like postgres_scanner -- needs the mysql client built for wasi +
-#   the same wasip2 socket graft + getaddrinfo wrapper (cmake/postgres-wasi reusable).
 # aws: AWS credential-provider chain (config/SSO); pairs with httpfs/iceberg S3
 #   (SigV4 is already hand-rolled for iceberg).
 # azure: heavy Azure C++ SDK + curl.
 # ui: needs a *listening* HTTP server inside the component -- poor fit for
 #   wasip2's outbound-only model.
 # (Built above: avro, iceberg, spatial, httpfs, ducklake, sqlite_scanner, excel,
-#  postgres_scanner.)
+#  postgres_scanner, mysql_scanner.)

@@ -344,6 +344,85 @@ PY
     echo "WARNING: PG 15.13 source not configured at $PG_STAGED (run build-wasi-deps.sh)" >&2
   fi
 fi
+
+# mysql_scanner: like postgres but links a PREBUILT MariaDB Connector/C
+# (libmariadbclient.a). Replace find_package(libmysql) with cmake/mysql-deps.cmake
+# (openssl-wasm + the shim + PG_WASI_REAL_NETDB) and add a static build (the
+# pinned extension is DONT_LINK / loadable only). Networking reuses the postgres
+# socket graft + getaddrinfo wrapper.
+MY_SRC="$BUILD_DIR/_deps/mysql_scanner_extension_fc-src"
+MY_DEPS_CMAKE="$(pwd)/cmake/mysql-deps.cmake"
+if grep -q "duckdb_extension_load(mysql_scanner" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+   && [[ -f "$MY_SRC/CMakeLists.txt" ]]; then
+  python3 - "$MY_SRC/CMakeLists.txt" "$MY_DEPS_CMAKE" <<'PY'
+import sys
+p, inc = sys.argv[1], sys.argv[2]
+s = open(p).read()
+if 'mysql-deps.cmake' in s:
+    sys.exit(0)
+if 'find_package(libmysql REQUIRED)' not in s:
+    sys.stderr.write('mysql anchor not found: find_package(libmysql)\n'); sys.exit(1)
+s = s.replace('find_package(libmysql REQUIRED)', 'include("%s")' % inc, 1)
+anchor = 'build_loadable_extension(${TARGET_NAME} ${PARAMETERS} ${ALL_OBJECT_FILES})'
+if anchor not in s:
+    sys.stderr.write('mysql anchor not found: build_loadable_extension\n'); sys.exit(1)
+add = (anchor + '\n'
+       'build_static_extension(${TARGET_NAME} ${ALL_OBJECT_FILES})\n'
+       'target_include_directories(${TARGET_NAME}_extension PRIVATE include ${MYSQL_INCLUDE_DIR})\n'
+       'install(TARGETS ${TARGET_NAME}_extension EXPORT "${DUCKDB_EXPORT_SET}"\n'
+       '        LIBRARY DESTINATION "${INSTALL_LIB_DIR}"\n'
+       '        ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")')
+s = s.replace(anchor, add, 1)
+open(p, 'w').write(s)
+print('patched mysql CMakeLists: libmariadb deps + static build + export')
+PY
+  # postgres + mysql both vendor these database-connector helpers in the duckdb
+  # namespace with different bodies (e.g. EscapeConnectionString escapes ' vs ")
+  # -> duplicate-symbol clash when both are linked. They're single-file in the
+  # mysql extension, so give them internal linkage (static).
+  python3 - "$MY_SRC/src/storage/mysql_catalog.cpp" "$MY_SRC/src/storage/mysql_schema_entry.cpp" <<'PY'
+import sys
+defs = {
+  'mysql_catalog.cpp': [('string EscapeConnectionString(const string &input) {',
+                         'static string EscapeConnectionString(const string &input) {'),
+                        ('unique_ptr<SecretEntry> GetSecret(ClientContext &context, const string &secret_name) {',
+                         'static unique_ptr<SecretEntry> GetSecret(ClientContext &context, const string &secret_name) {')],
+  'mysql_schema_entry.cpp': [('bool CatalogTypeIsSupported(CatalogType type) {',
+                              'static bool CatalogTypeIsSupported(CatalogType type) {')],
+}
+for path in sys.argv[1:]:
+    name = path.rsplit('/', 1)[-1]
+    s = open(path).read()
+    for old, new in defs.get(name, []):
+        if old in s and new not in s:
+            s = s.replace(old, new, 1)
+    open(path, 'w').write(s)
+print('patched mysql: static linkage for shared duckdb-namespace helpers')
+PY
+  # MariaDB Connector/C lacks MYSQL_OPT_SSL_MODE (the extension's mechanism); map
+  # ssl_mode to MariaDB's MYSQL_OPT_SSL_ENFORCE on wasi.
+  python3 - "$MY_SRC/src/mysql_utils.cpp" <<'PY'
+import sys
+p=sys.argv[1]; s=open(p).read()
+old='''	if (config.ssl_mode != SSL_MODE_PREFERRED) {
+		mysql_options(mysql, MYSQL_OPT_SSL_MODE, &config.ssl_mode);
+	}'''
+new='''#ifdef __wasi__
+	{
+		my_bool _ssl_enforce = (config.ssl_mode == SSL_MODE_REQUIRED ||
+		                        config.ssl_mode == SSL_MODE_VERIFY_CA ||
+		                        config.ssl_mode == SSL_MODE_VERIFY_IDENTITY) ? 1 : 0;
+		mysql_options(mysql, MYSQL_OPT_SSL_ENFORCE, &_ssl_enforce);
+	}
+#else
+	if (config.ssl_mode != SSL_MODE_PREFERRED) {
+		mysql_options(mysql, MYSQL_OPT_SSL_MODE, &config.ssl_mode);
+	}
+#endif'''
+if old in s and '_ssl_enforce' not in s:
+    open(p,'w').write(s.replace(old,new,1)); print('patched mysql ssl_mode -> SSL_ENFORCE')
+PY
+fi
 }
 
 # Configure, patching fetched sources after each failure, until it succeeds.
@@ -584,21 +663,32 @@ if grep -q "duckdb_extension_load(excel" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null
   done
 fi
 
-# postgres_scanner: libpq is compiled inline into the extension, so only the
-# pg-wasi posix stubs (no-op signal API + getpwuid/getuid/popen) need merging.
-# Sockets (connect/getaddrinfo/poll) + openssl come from httpfs's wasip2 graft,
-# so postgres_scanner requires httpfs to be enabled.
-if grep -q "duckdb_extension_load(postgres_scanner" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+# postgres_scanner / mysql_scanner: the pg-wasi posix stubs (no-op signal API +
+# getpwuid/getuid/popen + gai_strerror) + the getaddrinfo wrapper (numeric IPs
+# resolve locally; wasi's getaddrinfo rejects them via resolve-addresses).
+# Sockets + openssl come from httpfs's wasip2 graft, so both DB scanners require
+# httpfs. postgres compiles libpq inline; mysql merges a prebuilt libmariadb.
+if grep -qE "duckdb_extension_load\((postgres|mysql)_scanner" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
   "$WASI_SDK_PREFIX/bin/clang" --target="${WASI_TARGET_TRIPLE:-wasm32-wasip2}" -O2 \
     -c "$(pwd)/cmake/postgres-wasi/stubs.c" -o "$TMPDIR/pg_stubs.o" \
     -I"$(pwd)/cmake/postgres-wasi/include"
-  # getaddrinfo wrapper: numeric IPs resolve locally (wasi's getaddrinfo rejects
-  # them via resolve-addresses). Linked via -Wl,--wrap=getaddrinfo (build.rs).
   "$WASI_SDK_PREFIX/bin/clang" --target="${WASI_TARGET_TRIPLE:-wasm32-wasip2}" -O2 \
     -c "$(pwd)/cmake/postgres-wasi/getaddrinfo_wrap.c" -o "$TMPDIR/pg_gaiwrap.o"
   "$WASI_SDK_PREFIX/bin/llvm-ar" rcs "$TMPDIR/libpgstubs.a" "$TMPDIR/pg_stubs.o" "$TMPDIR/pg_gaiwrap.o"
   ADDLIBS="$ADDLIBS"$'\n'"ADDLIB libpgstubs.a"
   echo "Merging pg-wasi stubs + getaddrinfo wrapper into libduckdb-wasi.a" >&2
+fi
+# mysql_scanner: merge the prebuilt MariaDB Connector/C (libpq is inline; this
+# is the equivalent for mysql).
+if grep -q "duckdb_extension_load(mysql_scanner" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+  WASI_DEPS="${WASI_DEPS:-$(pwd)/build/wasi-deps}"
+  if [[ -f "$WASI_DEPS/mariadb/lib/mariadb/libmariadbclient.a" ]]; then
+    cp "$WASI_DEPS/mariadb/lib/mariadb/libmariadbclient.a" "$TMPDIR/libmariadbclient.a"
+    ADDLIBS="$ADDLIBS"$'\n'"ADDLIB libmariadbclient.a"
+    echo "Merging libmariadbclient into libduckdb-wasi.a" >&2
+  else
+    echo "WARNING: mysql dep missing: $WASI_DEPS/mariadb/lib/mariadb/libmariadbclient.a" >&2
+  fi
 fi
 pushd "$TMPDIR" >/dev/null
 printf 'CREATE libduckdb_combined.a\n%s\nSAVE\nEND\n' "$ADDLIBS" | "$WASI_SDK_PREFIX/bin/llvm-ar" -M

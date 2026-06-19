@@ -499,6 +499,16 @@ mod libc_overrides {
     use super::*;
     use std::slice;
 
+    // --wrap renames the real libc fns to __real_*. For fds NOT in our file
+    // table (sockets -- e.g. openssl's socket BIO uses read()/write()), fall
+    // through to these so socket I/O reaches the wasip2 socket layer instead of
+    // failing with EBADF. (libpq used recv/send and bypassed the wrap entirely.)
+    extern "C" {
+        fn __real_read(fd: c_int, buf: *mut c_void, count: usize) -> isize;
+        fn __real_write(fd: c_int, buf: *const c_void, count: usize) -> isize;
+        fn __real_close(fd: c_int) -> c_int;
+    }
+
     #[no_mangle]
     pub unsafe extern "C" fn __wrap_open(path: *const c_char, flags: c_int, _mode: c_int) -> c_int {
         clear_errno();
@@ -598,8 +608,8 @@ mod libc_overrides {
         if table.remove(fd as i32).is_some() {
             0
         } else {
-            set_errno(libc::EBADF);
-            -1
+            drop(table);
+            __real_close(fd)
         }
     }
 
@@ -611,8 +621,8 @@ mod libc_overrides {
         let entry = match table.get_mut(fd as i32) {
             Some(entry) => entry,
             None => {
-                set_errno(libc::EBADF);
-                return -1;
+                // not a managed file fd (e.g. a socket) -> real read
+                return __real_read(fd, buf, count);
             }
         };
 
@@ -702,8 +712,8 @@ mod libc_overrides {
         let entry = match table.get_mut(fd as i32) {
             Some(entry) => entry,
             None => {
-                set_errno(libc::EBADF);
-                return -1;
+                // not a managed file fd (e.g. a socket) -> real write
+                return __real_write(fd, buf, count);
             }
         };
 
