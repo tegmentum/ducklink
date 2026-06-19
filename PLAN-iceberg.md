@@ -52,17 +52,22 @@ Catalogs/writers may store `vN.gz.metadata.json` (gzip). VERIFIED on wasi:
 gzipped metadata file (25 rows). zlib (already linked via httpfs) handles the
 gunzip — no extra deps.
 
-## Phase 3 — AWS SigV4 catalog auth (Glue / S3Tables)  · effort M
+## Phase 3 — AWS SigV4 catalog auth (Glue / S3Tables)  · effort M — DONE
 
-Today `AWSInput::{Get,Head,Delete,Post}Request` + `sigv4.cpp` are stubbed (no AWS
-SDK). To support AWS-native Iceberg catalogs:
+`AWSInput::{Get,Head,Delete,Post}Request` now sign with a **self-contained SigV4**
+(SHA-256 + HMAC, no AWS SDK, no openssl-header plumbing) in
+`cmake/iceberg-wasi/aws_wasi.inc`, injected into aws.cpp's `#ifdef __wasi__`
+branch by `scripts/build-libduckdb-wasm.sh`; requests go out via `HTTPUtil`
+(curl). Credentials come from an `s3`/`aws` DuckDB secret (`CREATE SECRET (TYPE
+S3, KEY_ID, SECRET, REGION)`).
 
-- Implement SigV4 request signing **without** the AWS C++ SDK — reuse
-  **`~/git/aws-sigv4-wasm`** (a dedicated SigV4 component) or port the signing
-  into `aws.cpp`'s `#if defined(__wasi__)` branch, issuing the actual HTTP via
-  `HTTPUtil` (curl, already working) instead of `Aws::Http`.
-- Credentials from the existing DuckDB S3 secret chain (`s3_access_key_id`, …).
-- **Verify** — against an S3 Tables / Glue endpoint (or a SigV4-checking mock).
+VERIFIED: `ATTACH '<wh>' AS x (TYPE ICEBERG, ENDPOINT '<host:port, no scheme>',
+AUTHORIZATION_TYPE 'sigv4', SECRET s3sec)` + `SELECT` (20 rows) against a mock
+that **independently recomputes the signature** (Python hashlib/hmac) — our
+signature matched byte-for-byte on every request. Note: the sigv4 endpoint must
+be scheme-less (upstream `DecomposeHost` splits on `/`). Real AWS uses valid
+certs (the embedded CA bundle trusts them); the test used a self-signed cert with
+`enable_curl_server_cert_verification=false`.
 
 ## Phase 4 — Vended credentials → httpfs S3  · effort M
 

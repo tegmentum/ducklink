@@ -156,51 +156,53 @@ print('patched duckdb-avro CMakeLists: deflate-only (no lzma/snappy/jemalloc/gmp
 PY
 fi
 
-# iceberg: upstream skips the AWS SDK + CURL behind `Emscripten` guards. Extend
-# them to our WASI build (CMake STREQUAL guard + the #ifdef EMSCRIPTEN source
-# guards in aws.cpp/aws.hpp) so AWS is stubbed out and no AWS SDK is needed.
+# iceberg: upstream finds the AWS C++ SDK + CURL behind `NOT Emscripten` guards.
+# On WASI we (1) skip those in CMake, (2) skip the AWS-SDK includes/decls in
+# aws.hpp, and (3) replace aws.cpp's AWS-SDK request path with a self-contained
+# SigV4 signer (cmake/iceberg-wasi/aws_wasi.inc) that issues signed requests via
+# HTTPUtil (curl) -- so AWS-native Iceberg catalogs (Glue/S3 Tables) work without
+# the AWS SDK. EMSCRIPTEN keeps the upstream stub.
 ICE_SRC="$BUILD_DIR/_deps/iceberg_extension_fc-src"
+AWS_WASI_INC="$(pwd)/cmake/iceberg-wasi/aws_wasi.inc"
 if grep -q "duckdb_extension_load(iceberg" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
    && [[ -d "$ICE_SRC" ]]; then
-  # CMake: skip AWS/CURL on WASI as well as Emscripten
+  # CMake: skip AWS/CURL find_package on WASI as well as Emscripten
   if ! grep -q 'STREQUAL "WASI"' "$ICE_SRC/CMakeLists.txt"; then
     perl -0pi -e 's/NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten"/NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten" AND NOT CMAKE_SYSTEM_NAME STREQUAL "WASI"/g' "$ICE_SRC/CMakeLists.txt"
   fi
-  # Sources: make the EMSCRIPTEN AWS-stub guards also fire on __wasi__
-  for f in "$ICE_SRC/src/aws.cpp" "$ICE_SRC/src/include/aws.hpp"; do
-    [[ -f "$f" ]] && perl -0pi -e 's/#ifdef EMSCRIPTEN/#if defined(EMSCRIPTEN) || defined(__wasi__)/g' "$f"
-  done
-  # The EMSCRIPTEN stub branch only defines AWSInput::GetRequest; sigv4.cpp also
-  # references Head/Delete/PostRequest (used only by the AWS Glue/S3Tables REST
-  # catalog, not filesystem/S3 iceberg_scan). Add the missing stubs.
+  # aws.hpp: skip the AWS-SDK includes + AWS-typed method decls on wasi too.
+  [[ -f "$ICE_SRC/src/include/aws.hpp" ]] && \
+    perl -0pi -e 's/#ifdef EMSCRIPTEN/#if defined(EMSCRIPTEN) || defined(__wasi__)/g' "$ICE_SRC/src/include/aws.hpp"
+  # aws.cpp: inject the real SigV4 impl for __wasi__ (keep EMSCRIPTEN stub + AWS SDK).
   if [[ -f "$ICE_SRC/src/aws.cpp" ]]; then
-    python3 - "$ICE_SRC/src/aws.cpp" <<'PY'
+    python3 - "$ICE_SRC/src/aws.cpp" "$AWS_WASI_INC" <<'PY'
 import sys
-p = sys.argv[1]; s = open(p).read()
-if 'HEAD on WASM' in s:
+p, inc = sys.argv[1], sys.argv[2]
+s = open(p).read()
+if 'aws_wasi.inc' in s:
     sys.exit(0)
-anchor = ('unique_ptr<HTTPResponse> AWSInput::GetRequest(ClientContext &context) {\n'
-          '\tthrow NotImplementedException("GET on WASM not implemented yet");\n}')
-if anchor not in s:
-    sys.stderr.write('aws.cpp GetRequest stub anchor not found\n'); sys.exit(1)
-extra = anchor + '''
-
-unique_ptr<HTTPResponse> AWSInput::HeadRequest(ClientContext &context) {
-\tthrow NotImplementedException("HEAD on WASM not implemented yet");
-}
-
-unique_ptr<HTTPResponse> AWSInput::DeleteRequest(ClientContext &context) {
-\tthrow NotImplementedException("DELETE on WASM not implemented yet");
-}
-
-unique_ptr<HTTPResponse> AWSInput::PostRequest(ClientContext &context, string post_body) {
-\tthrow NotImplementedException("POST on WASM not implemented yet");
-}'''
-open(p, 'w').write(s.replace(anchor, extra, 1))
-print('patched iceberg aws.cpp: added Head/Delete/Post WASM stubs')
+# (1) includes guard: wasi pulls <time.h>/<algorithm>, not the AWS SDK headers
+inc_old = '#ifdef EMSCRIPTEN\n#else\n#include <aws/core/auth/AWSCredentialsProviderChain.h>'
+inc_new = ('#if defined(__wasi__)\n#include <time.h>\n#include <algorithm>\n'
+           '#include "duckdb/main/database.hpp"\n'
+           '#elif defined(EMSCRIPTEN)\n#else\n#include <aws/core/auth/AWSCredentialsProviderChain.h>')
+# (2) impl guard: wasi includes the SigV4 impl; EMSCRIPTEN keeps the GET stub
+impl_old = ('#ifdef EMSCRIPTEN\n\n'
+            'unique_ptr<HTTPResponse> AWSInput::GetRequest(ClientContext &context) {\n'
+            '\tthrow NotImplementedException("GET on WASM not implemented yet");\n}\n\n#else')
+impl_new = ('#if defined(__wasi__)\n#include "%s"\n#elif defined(EMSCRIPTEN)\n\n'
+            'unique_ptr<HTTPResponse> AWSInput::GetRequest(ClientContext &context) {\n'
+            '\tthrow NotImplementedException("GET on WASM not implemented yet");\n}\n\n#else') % inc
+for old, new, what in ((inc_old, inc_new, 'aws.cpp includes guard'),
+                       (impl_old, impl_new, 'aws.cpp impl guard')):
+    if old not in s:
+        sys.stderr.write('anchor not found: %s\n' % what); sys.exit(1)
+    s = s.replace(old, new, 1)
+open(p, 'w').write(s)
+print('patched iceberg aws.cpp: wasi SigV4 signer injected')
 PY
   fi
-  echo "patched iceberg: AWS SDK/CURL skipped on wasi (stubbed like Emscripten)" >&2
+  echo "patched iceberg: AWS SDK/CURL skipped on wasi; SigV4 signer wired" >&2
 fi
 }
 
