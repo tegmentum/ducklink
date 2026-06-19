@@ -163,29 +163,27 @@ adding a codec to `codec.c` + linking `libzstd` (rare for manifests). Not built.
   `CTAS` check to `tooling/iceberg_smoke.py`. If it works (expected), it's
   pure test coverage; if it surfaces a gap, capture it.
 
-## T3 — DELETE  · effort M
+## T3 — DELETE  · NOT POSSIBLE (upstream gap)
 
-`PlanDelete` exists. First determine the delete mode the extension emits
-(copy-on-write data-file rewrite vs merge-on-read positional/equality delete
-files) by reading `PlanDelete` + `iceberg_insert.cpp`/`deletes/*`.
-
-- **Verify** — `DELETE FROM lake.main.t WHERE …` then read back; confirm the
-  written delete artifacts (rewritten data file or `*-delete.parquet`) and that
-  a subsequent scan reflects the deletion. Add a harness check.
-- If delete writes avro/parquet delete files, this also exercises more of the
-  writer path. Scope up if it needs the equality/positional delete writer.
+`IRCatalog::PlanDelete` is only a *declaration* — its body throws
+`NotImplementedException("IRCatalog PlanDelete")`. Confirmed live: `DELETE FROM
+lake.main.t WHERE …` → "Not implemented Error: IRCatalog PlanDelete". So DELETE is
+unimplemented in the **extension itself**, not a wasm limitation; nothing to do on
+our side but document it.
 
 ## Upstream gaps — document, don't implement
 
-These throw `NotImplementedException`/`BinderException` in the extension itself,
-so they're not a wasm problem and not our work; note them in the registry/docs so
-users aren't surprised:
+These throw `NotImplementedException`/`BinderException` in the extension itself
+(verified live where noted), so they're not a wasm problem and not our work — just
+recorded in the registry/docs so users aren't surprised:
 
-- **UPDATE** — `BindUpdateConstraints` is unimplemented upstream.
+- **DELETE** — `IRCatalog::PlanDelete` throws (verified).
+- **UPDATE** — `BindUpdateConstraints` throws (verified).
 - **INSERT into a partitioned table** — `iceberg_insert.cpp:441` throws.
 - **Targeted-column INSERT, `RETURNING`, `ON CONFLICT`, Iceberg V3 tables** —
   explicit upstream throws.
 - **DROP TABLE … CASCADE**, CREATE INDEX/VIEW, ALTER — unimplemented upstream.
+- **zstd avro codec** — not in the avro-c fork (deflate/snappy/xz work).
 
 ## Tail sequencing
 
