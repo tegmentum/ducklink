@@ -45,11 +45,12 @@ manifests; some use **zstd**. Our avro-c was deflate-only.
   way snappy was done. (zstd avro codec is newer; confirm the fork's codec.c
   supports it.) Lower priority — snappy + deflate cover the vast majority.
 
-## Phase 2 — Gzip table metadata  · effort S
+## Phase 2 — Gzip table metadata  · effort S — DONE
 
-Catalogs/writers may store `vN.gz.metadata.json` (gzip). DuckDB's iceberg supports
-`metadata_compression_codec='gzip'`. Confirm the gzip path works on wasi (zlib is
-already linked via httpfs); add a fixture. Mostly a verification + docs task.
+Catalogs/writers may store `vN.gz.metadata.json` (gzip). VERIFIED on wasi:
+`iceberg_scan(dir, metadata_compression_codec='gzip', version='1')` reads a
+gzipped metadata file (25 rows). zlib (already linked via httpfs) handles the
+gunzip — no extra deps.
 
 ## Phase 3 — AWS SigV4 catalog auth (Glue / S3Tables)  · effort M
 
@@ -85,10 +86,11 @@ metadata files written to storage). Needs:
 - **Verify** — `CREATE TABLE lake.ns.t AS SELECT …; INSERT …; SELECT` round-trip
   against the (now writable) mock catalog.
 
-## Phase 6 — Snapshot selection / time travel  · effort S–M
+## Phase 6 — Snapshot selection / time travel  · effort S–M — DONE
 
-Confirm `iceberg_scan(…, version='…')`, snapshot-id and `…_from_timestamp`
-selection work on wasi; add fixtures (multi-snapshot pyiceberg table).
+VERIFIED on wasi: a 2-snapshot pyiceberg table reads 40 rows at HEAD and 10 rows
+via `iceberg_scan(…, snapshot_from_id=<id>)` (the first snapshot). `version=…`
+also works. No code changes needed.
 
 ## Cross-cutting — iceberg test harness  · effort S
 
