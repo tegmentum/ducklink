@@ -33,6 +33,22 @@ cmake_wasi "$SRC/jansson" "$SRC/jansson/build-wasi" \
 cmake --build "$SRC/jansson/build-wasi" --target install
 echo "[deps] jansson -> $DEPS/jansson/lib/libjansson.a" >&2
 
+# --- snappy ----------------------------------------------------------------
+# avro-c's snappy codec (snappy-c.h). Source is bundled in ~/git/snappy-wasm;
+# installs a SnappyConfig.cmake that avro-c's find_package(Snappy CONFIG) finds.
+if [[ ! -d "$SRC/snappy" ]]; then
+  if [[ -d "$HOME/git/snappy-wasm/snappy" ]]; then
+    cp -r "$HOME/git/snappy-wasm/snappy" "$SRC/snappy"
+  else
+    git clone --depth 1 https://github.com/google/snappy "$SRC/snappy"
+  fi
+fi
+cmake_wasi "$SRC/snappy" "$SRC/snappy/build-wasi" \
+  -DCMAKE_INSTALL_PREFIX="$DEPS/snappy" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  -DSNAPPY_BUILD_TESTS=OFF -DSNAPPY_BUILD_BENCHMARKS=OFF
+cmake --build "$SRC/snappy/build-wasi" --target install
+echo "[deps] snappy -> $DEPS/snappy/lib/libsnappy.a" >&2
+
 # --- avro-c ----------------------------------------------------------------
 # DuckDB's FORK of avro-c (adds the Iceberg field-id API:
 # avro_schema_record_field_id / avro_reader_reader / *_id), which the duckdb-avro
@@ -48,15 +64,16 @@ AVROC="$SRC/avro/lang/c"
 # wasi can't build SHARED libs; treat WASI like WIN32 for the shared target + install.
 perl -0pi -e 's/if \(NOT WIN32\)\n# TODO: Create Windows DLLs/if (NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "WASI")\n# TODO: Create Windows DLLs/' "$AVROC/src/CMakeLists.txt"
 perl -0pi -e 's/install\(TARGETS avro-static avro-shared/install(TARGETS avro-static/' "$AVROC/src/CMakeLists.txt"
-# Force snappy + lzma codecs OFF (the fork hard-REQUIREs them, and find_package
-# would grab the host's libs -> undefined symbols at the wasi link). Iceberg
-# manifests use the deflate/null codec, so deflate (zlib) is enough.
-perl -0pi -e 's/find_package\(Snappy CONFIG REQUIRED\)/set(Snappy_FOUND FALSE) # wasi: no snappy codec/' "$AVROC/CMakeLists.txt"
+# Codecs: deflate (zlib) + snappy (our wasi libsnappy) enabled; lzma forced OFF
+# (we don't build liblzma; find_package(LibLZMA) would grab the host lib ->
+# undefined symbols at the wasi link). The fork hard-REQUIREs both, so set
+# LZMA_FOUND FALSE; snappy is found via the SnappyConfig.cmake we installed.
 perl -0pi -e 's/find_package\(LibLZMA REQUIRED\)\s*\n\s*set\(LZMA_FOUND 1\)/set(LZMA_FOUND FALSE) # wasi: no lzma codec/' "$AVROC/CMakeLists.txt"
 rm -rf "$AVROC/build-wasi"
 cmake_wasi "$AVROC" "$AVROC/build-wasi" \
   -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-  -Djansson_DIR="$DEPS/jansson/lib/cmake/jansson" -DCMAKE_PREFIX_PATH="$DEPS/jansson" \
+  -Djansson_DIR="$DEPS/jansson/lib/cmake/jansson" -DSnappy_DIR="$DEPS/snappy/lib/cmake/Snappy" \
+  -DCMAKE_PREFIX_PATH="$DEPS/jansson;$DEPS/snappy" \
   -DZLIB_LIBRARY="$ZLIB/lib/libz.a" -DZLIB_INCLUDE_DIR="$ZLIB/include" \
   -DAVRO_BUILD_TESTS=OFF -DAVRO_BUILD_EXECUTABLES=OFF
 cmake --build "$AVROC/build-wasi" --target avro-static
@@ -64,10 +81,10 @@ mkdir -p "$DEPS/avro-c/lib" "$DEPS/avro-c/include/avro"
 cp "$(find "$AVROC/build-wasi" -name libavro.a | head -1)" "$DEPS/avro-c/lib/libavro.a"
 cp "$AVROC/src/avro.h" "$DEPS/avro-c/include/"
 cp "$AVROC/src/avro/"*.h "$DEPS/avro-c/include/avro/"
-if "$NM" "$DEPS/avro-c/lib/libavro.a" | grep -qE " U (lzma_|snappy_)"; then
-  echo "[deps] ERROR: avro-c still references lzma/snappy" >&2; exit 1
+if "$NM" "$DEPS/avro-c/lib/libavro.a" | grep -qE " U lzma_"; then
+  echo "[deps] ERROR: avro-c still references lzma" >&2; exit 1
 fi
-echo "[deps] avro-c -> $DEPS/avro-c/lib/libavro.a (deflate codec only)" >&2
+echo "[deps] avro-c -> $DEPS/avro-c/lib/libavro.a (deflate + snappy codecs)" >&2
 
 # --- roaring (CRoaring) ----------------------------------------------------
 if [[ ! -d "$SRC/roaring" ]]; then

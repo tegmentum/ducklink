@@ -343,7 +343,8 @@ fi
 # scripts/build-wasi-deps.sh so the core resolves their symbols.
 WASI_DEPS="${WASI_DEPS:-$(pwd)/build/wasi-deps}"
 if grep -q "duckdb_extension_load(avro" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
-  deps=("$WASI_DEPS/avro-c/lib/libavro.a" "$WASI_DEPS/jansson/lib/libjansson.a")
+  deps=("$WASI_DEPS/avro-c/lib/libavro.a" "$WASI_DEPS/jansson/lib/libjansson.a" \
+        "$WASI_DEPS/snappy/lib/libsnappy.a")
   # zlib (deflate codec) -- only if httpfs didn't already merge it
   grep -q "duckdb_extension_load(httpfs" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
     || deps+=("$HOME/git/curl-wasm/build/zlib/lib/libz.a")

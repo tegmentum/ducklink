@@ -33,17 +33,17 @@ component. The foundation is in place (see `registry/index.json` → `iceberg`,
 ## Phase 1 — Codec coverage (read more real-world tables)  · effort S
 
 Real Iceberg writers (Spark, Flink, Trino) often write **snappy**-compressed avro
-manifests; some use **zstd**. Our avro-c is deflate-only.
+manifests; some use **zstd**. Our avro-c was deflate-only.
 
-- **Snappy** — build `~/git/snappy-wasm` (or snappy from source) for wasi, rebuild
-  avro-c from the duckdb fork with `find_package(Snappy)` re-enabled +
-  `-DSNAPPY_CODEC`, merge `libsnappy.a`. The build script already has the
-  force-off patch to flip.
-- **lzma/zstd** — `~/git/xz-wasm` / `~/git/zstd-wasm` give the libs; re-enable
-  `LZMA_CODEC` in avro-c the same way. (zstd avro codec is newer; check the fork
-  supports it.)
-- **Verify** — write a snappy-manifest table with pyiceberg
-  (`write.metadata.compression-codec` / manifest codec) → `iceberg_scan`.
+- **Snappy** — DONE. Built snappy for wasi from the `~/git/snappy-wasm` source
+  (`scripts/build-wasi-deps.sh` → `build/wasi-deps/snappy`), rebuilt the avro-c
+  fork with `find_package(Snappy CONFIG)` re-enabled (`-DSNAPPY_CODEC`), merged
+  `libsnappy.a`. Verified: `read_avro` + `iceberg_scan` on a snappy-manifest
+  pyiceberg table (30 rows); deflate still works (regression checked).
+- **lzma/zstd** — TODO. `~/git/xz-wasm` / `~/git/zstd-wasm` give the libs;
+  flip `LZMA_FOUND FALSE` in the avro-c patch + `find_package(LibLZMA)` the same
+  way snappy was done. (zstd avro codec is newer; confirm the fork's codec.c
+  supports it.) Lower priority — snappy + deflate cover the vast majority.
 
 ## Phase 2 — Gzip table metadata  · effort S
 
