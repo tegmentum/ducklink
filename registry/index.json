@@ -42,7 +42,7 @@
     "postgres_scanner": {"verdict": "hard", "deps": "libpq + network", "notes": "transport solved by openssl-wasm; still needs libpq ported to wasi"},
     "aws": {"verdict": "very-hard", "deps": "AWS SDK + network", "notes": "transport solved; AWS C++ SDK is huge"},
     "azure": {"verdict": "very-hard", "deps": "Azure SDK + network", "notes": "transport solved; Azure C++ SDK is huge"},
-    "spatial": {"verdict": "infeasible", "deps": "GEOS + GDAL + PROJ", "notes": "huge native geo stack; not a network problem"},
+    "spatial": {"verdict": "feasible-validated", "deps": "GEOS + PROJ + GDAL (+ tiff/jpeg/png/expat/sqlite/zlib)", "notes": "Re-classified from infeasible. The geo stack links + runs with our wasi-sdk: GEOS (geos-wasm libgeos_c.a/libgeos.a, computed ST_Intersection area=4.0), PROJ (proj-wasm libproj.a + libsqlite3, EPSG:4326->3857 transform correct), GDAL (gdal-wasm libgdal.a 16.5MB) -- all libc++/wasm-eh compatible. Full geo link has only ~24 external gaps, nearly all stubbable: dlopen/dlsym/fork/execvp/pipe (wasi-missing, GDAL falls back), getpid/pthread_atfork/signal/mmap (stubs), + 4 sqlite3_ (column-metadata + load_extension -> fuller sqlite or stub). REMAINING BUILD (large): gather GDAL headers (scattered in gcore/ogr/port), provide find_package CONFIG/IMPORTED targets for GDAL/PROJ/GEOS/EXPAT, patch spatial CMakeLists EMSCRIPTEN guards -> WASI (SPATIAL_USE_NETWORK OFF), build a stubs lib, merge ~10 libs into libduckdb-wasi.a, handle proj.db at runtime. @a6a607fe."},
     "ui": {"verdict": "n/a", "deps": "embedded HTTP server", "notes": "needs inbound sockets + a browser"}
   },
   "extensions": [
