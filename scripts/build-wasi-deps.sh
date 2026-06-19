@@ -49,6 +49,22 @@ cmake_wasi "$SRC/snappy" "$SRC/snappy/build-wasi" \
 cmake --build "$SRC/snappy/build-wasi" --target install
 echo "[deps] snappy -> $DEPS/snappy/lib/libsnappy.a" >&2
 
+# --- liblzma (xz) ----------------------------------------------------------
+# avro-c's lzma/xz codec. CMake's built-in FindLibLZMA picks it up via the
+# LIBLZMA_LIBRARY/LIBLZMA_INCLUDE_DIR hints passed to the avro-c build. Threads
+# off (wasi lacks pthread_sigmask); only the liblzma target (no xz CLI tools).
+if [[ ! -d "$SRC/xz" ]]; then
+  git clone --depth 1 https://github.com/tukaani-project/xz "$SRC/xz"
+fi
+rm -rf "$SRC/xz/build-wasi"
+cmake_wasi "$SRC/xz" "$SRC/xz/build-wasi" \
+  -DCMAKE_INSTALL_PREFIX="$DEPS/lzma" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  -DXZ_THREADS=no -DXZ_NLS=OFF \
+  -DXZ_TOOL_XZ=OFF -DXZ_TOOL_XZDEC=OFF -DXZ_TOOL_LZMADEC=OFF -DXZ_TOOL_LZMAINFO=OFF
+cmake --build "$SRC/xz/build-wasi" --target liblzma
+cmake --install "$SRC/xz/build-wasi"
+echo "[deps] liblzma -> $DEPS/lzma/lib/liblzma.a" >&2
+
 # --- avro-c ----------------------------------------------------------------
 # DuckDB's FORK of avro-c (adds the Iceberg field-id API:
 # avro_schema_record_field_id / avro_reader_reader / *_id), which the duckdb-avro
@@ -64,27 +80,34 @@ AVROC="$SRC/avro/lang/c"
 # wasi can't build SHARED libs; treat WASI like WIN32 for the shared target + install.
 perl -0pi -e 's/if \(NOT WIN32\)\n# TODO: Create Windows DLLs/if (NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "WASI")\n# TODO: Create Windows DLLs/' "$AVROC/src/CMakeLists.txt"
 perl -0pi -e 's/install\(TARGETS avro-static avro-shared/install(TARGETS avro-static/' "$AVROC/src/CMakeLists.txt"
-# Codecs: deflate (zlib) + snappy (our wasi libsnappy) enabled; lzma forced OFF
-# (we don't build liblzma; find_package(LibLZMA) would grab the host lib ->
-# undefined symbols at the wasi link). The fork hard-REQUIREs both, so set
-# LZMA_FOUND FALSE; snappy is found via the SnappyConfig.cmake we installed.
-perl -0pi -e 's/find_package\(LibLZMA REQUIRED\)\s*\n\s*set\(LZMA_FOUND 1\)/set(LZMA_FOUND FALSE) # wasi: no lzma codec/' "$AVROC/CMakeLists.txt"
+# Codecs: deflate (zlib) + snappy (libsnappy) + lzma/xz (liblzma) -- all three
+# enabled via the libs we build for wasi. The fork's find_package(Snappy)/
+# find_package(LibLZMA) are satisfied by the *_DIR / *_LIBRARY hints below.
+#
+# avro-c's lzma codec is non-interoperable as shipped: it names the codec "lzma"
+# (the Avro spec / Java / fastavro use "xz") and uses *raw* LZMA2
+# (lzma_raw_buffer_*) instead of the xz *container*. Patch it to (1) name + accept
+# "xz", and (2) use the xz stream container (lzma_easy/stream_buffer_*) so it can
+# read/write standard xz-compressed avro (e.g. Iceberg manifests).
+perl -0pi -e 's/\tcodec->name = "lzma";/\tcodec->name = "xz";/' "$AVROC/src/codec.c"
+perl -0pi -e 's/if \(strcmp\("lzma", type\) == 0\)/if (strcmp("lzma", type) == 0 || strcmp("xz", type) == 0)/' "$AVROC/src/codec.c"
+perl -0pi -e 's/int64_t buff_len = len \+ lzma_raw_encoder_memusage\(filters\);/int64_t buff_len = lzma_stream_buffer_bound(len);/' "$AVROC/src/codec.c"
+perl -0pi -e 's/ret = lzma_raw_buffer_encode\(filters, NULL, \(const uint8_t\*\)data, len, \(uint8_t\*\)codec->block_data, &written, codec->block_size\);/ret = lzma_easy_buffer_encode(LZMA_PRESET_DEFAULT, LZMA_CHECK_CRC64, NULL, (const uint8_t*)data, len, (uint8_t*)codec->block_data, \&written, codec->block_size);/' "$AVROC/src/codec.c"
+perl -0pi -e 's/\tdo\n\t\{\n\t\tret = lzma_raw_buffer_decode\(filters, NULL, \(const uint8_t\*\)data,\n\t\t\t&read_pos, len, \(uint8_t\*\)codec->block_data, &write_pos,\n\t\t\tcodec->block_size\);/\tuint64_t memlimit = UINT64_MAX;\n\tdo\n\t{\n\t\tread_pos = 0; write_pos = 0;\n\t\tret = lzma_stream_buffer_decode(\&memlimit, 0, NULL, (const uint8_t*)data,\n\t\t\t\&read_pos, len, (uint8_t*)codec->block_data, \&write_pos,\n\t\t\tcodec->block_size);/' "$AVROC/src/codec.c"
 rm -rf "$AVROC/build-wasi"
 cmake_wasi "$AVROC" "$AVROC/build-wasi" \
   -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
   -Djansson_DIR="$DEPS/jansson/lib/cmake/jansson" -DSnappy_DIR="$DEPS/snappy/lib/cmake/Snappy" \
   -DCMAKE_PREFIX_PATH="$DEPS/jansson;$DEPS/snappy" \
   -DZLIB_LIBRARY="$ZLIB/lib/libz.a" -DZLIB_INCLUDE_DIR="$ZLIB/include" \
+  -DLIBLZMA_LIBRARY="$DEPS/lzma/lib/liblzma.a" -DLIBLZMA_INCLUDE_DIR="$DEPS/lzma/include" \
   -DAVRO_BUILD_TESTS=OFF -DAVRO_BUILD_EXECUTABLES=OFF
 cmake --build "$AVROC/build-wasi" --target avro-static
 mkdir -p "$DEPS/avro-c/lib" "$DEPS/avro-c/include/avro"
 cp "$(find "$AVROC/build-wasi" -name libavro.a | head -1)" "$DEPS/avro-c/lib/libavro.a"
 cp "$AVROC/src/avro.h" "$DEPS/avro-c/include/"
 cp "$AVROC/src/avro/"*.h "$DEPS/avro-c/include/avro/"
-if "$NM" "$DEPS/avro-c/lib/libavro.a" | grep -qE " U lzma_"; then
-  echo "[deps] ERROR: avro-c still references lzma" >&2; exit 1
-fi
-echo "[deps] avro-c -> $DEPS/avro-c/lib/libavro.a (deflate + snappy codecs)" >&2
+echo "[deps] avro-c -> $DEPS/avro-c/lib/libavro.a (deflate + snappy + lzma codecs)" >&2
 
 # --- roaring (CRoaring) ----------------------------------------------------
 if [[ ! -d "$SRC/roaring" ]]; then

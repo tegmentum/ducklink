@@ -384,6 +384,20 @@ def check_read_avro_snappy(ctx):
     return cell(out, "n") == "1"
 
 
+def check_read_avro_xz(ctx):
+    """read_avro on an xz (lzma)-compressed avro file. Skips without fastavro."""
+    try:
+        import fastavro
+    except ImportError:
+        return None
+    path = FIX / "xz_test.avro"
+    schema = {"type": "record", "name": "r", "fields": [{"name": "id", "type": "long"}]}
+    with open(path, "wb") as f:
+        fastavro.writer(f, schema, [{"id": i} for i in range(20)], codec="xz")
+    out = run_sql(f"SELECT count(*) AS n FROM read_avro('{path}');")
+    return cell(out, "n") == "20"
+
+
 def check_scan_local(ctx):
     out = run_sql(f"SELECT count(*) AS n, sum(id) AS s FROM iceberg_scan('{WH}/main/basic');")
     return cell(out, "n") == "20" and cell(out, "s") == "190"
@@ -551,6 +565,7 @@ def check_vended_credentials(ctx):
 CHECKS = [
     ("read_avro deflate", check_read_avro_deflate),
     ("read_avro snappy", check_read_avro_snappy),
+    ("read_avro xz", check_read_avro_xz),
     ("iceberg_scan local", check_scan_local),
     ("iceberg_scan snappy", check_scan_snappy),
     ("iceberg_scan partitioned", check_scan_partitioned),

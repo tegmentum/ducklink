@@ -137,26 +137,22 @@ code path), but `ICTableEntry::BindUpdateConstraints` **throws
 inserts / targeted columns / RETURNING / ON CONFLICT / V3 tables. The avro-c
 fork's `codec.c` has `SNAPPY`/`DEFLATE`/`LZMA` guards but **no `ZSTD_CODEC`**.
 
-## T1 — lzma avro codec  · effort S
+## T1 — lzma/xz avro codec  · effort S — DONE
 
-Some writers use `avro.codec=xz` (lzma). The fork already has the `LZMA_CODEC`
-path; we forced it off (no liblzma). To enable:
+`read_avro` reads xz-compressed avro on wasm (verified, 20 rows; harness `read_avro
+xz` check). Built **liblzma** for wasi from `tukaani-project/xz` (`XZ_THREADS=no` —
+wasi lacks `pthread_sigmask`; liblzma target only), wired into avro-c via
+`-DLIBLZMA_LIBRARY/-DLIBLZMA_INCLUDE_DIR`, merged `liblzma.a`.
 
-1. Build **liblzma/xz** for wasi → `build/wasi-deps/lzma` (mirror the snappy
-   section in `scripts/build-wasi-deps.sh`; source from `~/git/xz-wasm` or
-   upstream `tukaani/xz`, cmake install so `find_package(LibLZMA)` works).
-2. In `build-wasi-deps.sh`, drop the `set(LZMA_FOUND FALSE)` patch and pass the
-   liblzma dir (the fork's CMake does `find_package(LibLZMA REQUIRED)` +
-   `-DLZMA_CODEC`); update the post-build assertion that currently forbids
-   `lzma_` symbols.
-3. Merge `liblzma.a` in `build-libduckdb-wasm.sh` (like `libsnappy.a`).
-4. **Verify** — generate an xz-compressed avro manifest (`fastavro` with
-   `codec='xz'`, or a pyiceberg table with `write.avro.compression-codec=xz`) →
-   `read_avro` + `iceberg_scan`; add a harness check.
+**Gotcha (the real work):** avro-c's lzma codec ships non-interoperable — it names
+the codec `"lzma"` (the spec / Java / fastavro use `"xz"`) and uses *raw* LZMA2
+(`lzma_raw_buffer_*`) instead of the xz *container*. `build-wasi-deps.sh` patches
+`codec.c` to name+accept `"xz"` and use the xz stream container
+(`lzma_easy_buffer_encode` / `lzma_stream_buffer_decode`), so it reads/writes
+standard xz avro (what Spark/Iceberg/fastavro produce).
 
-**zstd is out of scope** — the avro-c fork doesn't implement it; supporting it
-means patching `codec.c` to add a zstd codec + linking `libzstd` (rare for
-manifests). Document as "not supported" rather than build it.
+**zstd is out of scope** — the avro-c fork has no `ZSTD_CODEC`; supporting it means
+adding a codec to `codec.c` + linking `libzstd` (rare for manifests). Not built.
 
 ## T2 — CREATE TABLE AS  · effort S (likely already works)
 
