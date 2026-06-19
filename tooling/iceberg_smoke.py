@@ -341,6 +341,11 @@ def writable_catalog_handler(cat, staged):
                     st = cat._create_staged_table(("main", d["name"]),
                                                   Schema.model_validate(d["schema"]),
                                                   properties=d.get("properties") or {})
+                    # CTAS inserts into the staged table before its create-commit
+                    # persists the dirs, so pre-create them under the warehouse.
+                    base = st.metadata.location.replace("file://", "")
+                    os.makedirs(base + "/metadata", exist_ok=True)
+                    os.makedirs(base + "/data", exist_ok=True)
                     staged[d["name"]] = st
                     self._j(load_result(st))
                 elif "/tables/" in p:
@@ -475,6 +480,28 @@ def check_writes(ctx):
     return cell(out, "n") == "26" and cell(out, "mx") == "99"
 
 
+def check_ctas(ctx):
+    """CREATE TABLE ... AS SELECT through an attached writable catalog."""
+    try:
+        from pyiceberg.catalog.sql import SqlCatalog
+    except ImportError:
+        return None
+    wdir = FIX / "ctaswh"
+    wdir.mkdir(exist_ok=True)
+    cat = SqlCatalog("ct", uri=f"sqlite:///{FIX}/ctascat.db", warehouse=f"file://{wdir}")
+    cat.create_namespace("main")
+    with _Server(writable_catalog_handler(cat, {})) as srv:
+        ep = f"http://127.0.0.1:{srv.port}"
+        run_sql(
+            f"ATTACH 'wh' AS lake (TYPE ICEBERG, ENDPOINT '{ep}', AUTHORIZATION_TYPE 'none', "
+            "SUPPORT_STAGE_CREATE true);\n"
+            "CREATE TABLE lake.main.c AS SELECT range AS id, range*range AS sq FROM range(40);")
+        out = run_sql(
+            f"ATTACH 'wh' AS lake (TYPE ICEBERG, ENDPOINT '{ep}', AUTHORIZATION_TYPE 'none');\n"
+            "SELECT count(*) AS n, sum(sq) AS s FROM lake.main.c;")
+    return cell(out, "n") == "40" and cell(out, "s") == "20540"
+
+
 def check_vended_credentials(ctx):
     """REST catalog vends S3 creds + endpoint in LoadTable config; data lives on
     a moto S3. With NO global S3 settings, a successful read proves the vended
@@ -535,6 +562,7 @@ CHECKS = [
     ("REST catalog: sigv4", check_catalog_sigv4),
     ("vended credentials (S3)", check_vended_credentials),
     ("writes (CREATE + INSERT)", check_writes),
+    ("writes (CTAS)", check_ctas),
 ]
 
 
