@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import logging
 import hashlib
 import hmac
 import http.server
@@ -47,6 +48,10 @@ FIX = REPO_ROOT / "build" / "iceberg-fixtures"
 WH = FIX / "wh"
 
 VERBOSE = False
+
+# quiet moto/werkzeug access logging
+for _n in ("werkzeug", "moto"):
+    logging.getLogger(_n).setLevel(logging.ERROR)
 
 
 # --- host invocation -------------------------------------------------------
@@ -267,6 +272,94 @@ def catalog_handler(meta_path: Path = None, token=None, sigv4_secret=None, *,
     return H
 
 
+def writable_catalog_handler(cat, staged):
+    """REST catalog backed by a pyiceberg SqlCatalog, supporting create + commit
+    so the wasm build can CREATE TABLE / INSERT (stage-create flow)."""
+    from pyiceberg.schema import Schema
+    from pyiceberg.table import CommitTableRequest
+    from pyiceberg.exceptions import NoSuchTableError
+
+    def mdump(md):
+        return json.loads(md.model_dump_json(by_alias=True, exclude_none=True))
+
+    def load_result(t):
+        return {"metadata-location": t.metadata_location, "metadata": mdump(t.metadata), "config": {}}
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def _j(self, obj, code=200):
+            b = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+
+        def _err(self, msg, typ, code):
+            self._j({"error": {"message": msg, "type": typ, "code": code}}, code)
+
+        def _exists(self, t):
+            try:
+                cat.load_table(("main", t))
+                return True
+            except NoSuchTableError:
+                return False
+
+        def do_GET(self):
+            p = urlparse(self.path).path
+            if p.endswith("/v1/config"):
+                self._j({"defaults": {}, "overrides": {}, "endpoints": [
+                    "GET /v1/{prefix}/namespaces/{namespace}/tables/{table}",
+                    "POST /v1/{prefix}/namespaces/{namespace}/tables",
+                    "POST /v1/{prefix}/namespaces/{namespace}/tables/{table}"]})
+            elif p.endswith("/v1/namespaces"):
+                self._j({"namespaces": [["main"]]})
+            elif p.endswith("/v1/namespaces/main/tables"):
+                self._j({"identifiers": [{"namespace": ["main"], "name": n[-1]}
+                                         for n in cat.list_tables("main")]})
+            elif "/tables/" in p:
+                t = p.rsplit("/", 1)[-1]
+                try:
+                    self._j(load_result(cat.load_table(("main", t))))
+                except NoSuchTableError:
+                    self._err("no such table", "NoSuchIcebergTableException", 404)
+            else:
+                self._err("not found", "NoSuchIcebergTableException", 404)
+
+        def do_HEAD(self):
+            p = urlparse(self.path).path
+            ok = self._exists(p.rsplit("/", 1)[-1]) if "/tables/" in p else True
+            self.send_response(200 if ok else 404)
+            self.end_headers()
+
+        def do_POST(self):
+            p = urlparse(self.path).path
+            n = int(self.headers.get("Content-Length", 0))
+            b = self.rfile.read(n) if n else b""
+            try:
+                if p.endswith("/v1/namespaces/main/tables"):
+                    d = json.loads(b)
+                    st = cat._create_staged_table(("main", d["name"]),
+                                                  Schema.model_validate(d["schema"]),
+                                                  properties=d.get("properties") or {})
+                    staged[d["name"]] = st
+                    self._j(load_result(st))
+                elif "/tables/" in p:
+                    name = p.rsplit("/", 1)[-1]
+                    req = CommitTableRequest.model_validate_json(b)
+                    t = staged.pop(name, None) or cat.load_table(("main", name))
+                    resp = cat.commit_table(t, req.requirements, req.updates)
+                    self._j({"metadata-location": resp.metadata_location, "metadata": mdump(resp.metadata)})
+                else:
+                    self._err("bad", "BadRequest", 400)
+            except Exception as e:  # noqa: BLE001
+                self._err(str(e), type(e).__name__, 500)
+
+        def log_message(self, *a):
+            pass
+
+    return H
+
+
 def make_cert():
     if (FIX / "mock.crt").exists():
         return
@@ -357,6 +450,31 @@ def check_catalog_sigv4(ctx):
     return cell(out, "n") == "20"
 
 
+def check_writes(ctx):
+    """CREATE TABLE + INSERT through an attached writable catalog, then read the
+    committed data back in a fresh ATTACH (proves the catalog commit persisted)."""
+    try:
+        from pyiceberg.catalog.sql import SqlCatalog
+    except ImportError:
+        return None
+    wdir = FIX / "writewh"
+    wdir.mkdir(exist_ok=True)
+    cat = SqlCatalog("wr", uri=f"sqlite:///{FIX}/writecat.db", warehouse=f"file://{wdir}")
+    cat.create_namespace("main")
+    with _Server(writable_catalog_handler(cat, {})) as srv:
+        ep = f"http://127.0.0.1:{srv.port}"
+        run_sql(
+            f"ATTACH 'wh' AS lake (TYPE ICEBERG, ENDPOINT '{ep}', AUTHORIZATION_TYPE 'none', "
+            "SUPPORT_STAGE_CREATE true);\n"
+            "CREATE TABLE lake.main.t (id INTEGER, v VARCHAR);\n"
+            "INSERT INTO lake.main.t SELECT range, 'r' || range FROM range(25);\n"
+            "INSERT INTO lake.main.t VALUES (99, 'last');")
+        out = run_sql(
+            f"ATTACH 'wh' AS lake (TYPE ICEBERG, ENDPOINT '{ep}', AUTHORIZATION_TYPE 'none');\n"
+            "SELECT count(*) AS n, max(id) AS mx FROM lake.main.t;")
+    return cell(out, "n") == "26" and cell(out, "mx") == "99"
+
+
 def check_vended_credentials(ctx):
     """REST catalog vends S3 creds + endpoint in LoadTable config; data lives on
     a moto S3. With NO global S3 settings, a successful read proves the vended
@@ -416,6 +534,7 @@ CHECKS = [
     ("REST catalog: bearer", check_catalog_bearer),
     ("REST catalog: sigv4", check_catalog_sigv4),
     ("vended credentials (S3)", check_vended_credentials),
+    ("writes (CREATE + INSERT)", check_writes),
 ]
 
 

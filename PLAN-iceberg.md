@@ -79,18 +79,23 @@ settings**, reads `s3://` data through the attached catalog (50 rows) — the re
 only succeeds because the vended endpoint+creds were applied. Covered by the
 `vended credentials (S3)` harness check (skips if `moto`/`boto3` absent).
 
-## Phase 5 — Writes  · effort L
+## Phase 5 — Writes  · effort L — DONE
 
-`CREATE TABLE … AS`, `INSERT`, `DELETE`, `UPDATE`, snapshot commits. iceberg writes
-go through a catalog (`POST/PUT` to the REST catalog + new parquet/manifest/
-metadata files written to storage). Needs:
+`CREATE TABLE` + `INSERT` work on wasm against a REST catalog. The avro-c **writer**
+(13 symbols) writes manifests; DuckDB's parquet writer writes data; the extension
+commits via `POST …/tables/{table}` over HTTPUtil. VERIFIED: process 1 created a
+table + inserted 101 rows; a **fresh process** read 101 rows back (total/maxid
+correct), proving the catalog commit persisted. Covered by the `writes (CREATE +
+INSERT)` harness check (a pyiceberg `SqlCatalog`-backed REST catalog that handles
+stage-create + commit).
 
-- The REST catalog write endpoints (`POST …/tables`, `POST …/tables/{t}` commit)
-  over `HTTPUtil` — extend the mock catalog to accept commits.
-- Parquet + avro-manifest **writing** on wasi (parquet write already works; avro
-  write needs the avro-c writer path — verify it's compiled/working).
-- **Verify** — `CREATE TABLE lake.ns.t AS SELECT …; INSERT …; SELECT` round-trip
-  against the (now writable) mock catalog.
+Protocol notes (for the writable catalog): use `ATTACH … SUPPORT_STAGE_CREATE
+true`; `VerifyTableExistence` is a **HEAD** (must 404 for missing tables, else the
+lookup pre-populates the entry → "already exists"); the not-found load error type
+must be **`NoSuchIcebergTableException`**; the create POST omits `location` (catalog
+assigns it) so don't use pyiceberg's `CreateTableRequest` model directly; stage on
+create (`_create_staged_table`, don't persist) then `commit_table` the staged table
+on the assert-create commit. DELETE/UPDATE/`CREATE TABLE AS` not yet exercised.
 
 ## Phase 6 — Snapshot selection / time travel  · effort S–M — DONE
 
