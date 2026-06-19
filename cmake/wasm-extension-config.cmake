@@ -93,6 +93,18 @@ if(EXISTS "$ENV{HOME}/git/gdal-wasm/build/deps/gdal/libgdal.a"
   )
 endif()
 
+# excel: xlsx read/write (numformat + zip via minizip-ng + XML via expat). Needs
+# minizip-ng built by scripts/build-wasi-deps.sh plus expat-wasm; cmake/excel-deps.cmake
+# replaces its find_package(EXPAT/ZLIB/minizip-ng) and the libs merge into libduckdb-wasi.a.
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../build/wasi-deps/minizip/lib/libminizip-ng.a"
+   AND EXISTS "$ENV{HOME}/git/expat-wasm/build/lib/libexpat.a")
+  duckdb_extension_load(excel          # read_xlsx/COPY TO xlsx + Excel number formatting
+    GIT_URL https://github.com/duckdb/duckdb-excel
+    GIT_TAG 8504be9ec8183e4082141f9359b53a64d3a440b7   # DuckDB-pinned commit
+    INCLUDE_DIR src/excel/include                      # excel_extension.hpp for the generated loader
+  )
+endif()
+
 # httpfs needs CURL (its curl client) + OpenSSL (crypto.cpp AES/EVP). Both come
 # from ~/git/curl-wasm (libcurl 8.17 built for wasm + its own openssl/zlib/zstd),
 # satisfying httpfs's find_package(CURL|OpenSSL). TLS for the httplib client is
@@ -153,10 +165,12 @@ add_library(sqlite_wasivfs STATIC
   ${CMAKE_CURRENT_LIST_DIR}/sqlite-wasi-vfs/os_init.c)
 target_include_directories(sqlite_wasivfs PRIVATE ${CMAKE_CURRENT_LIST_DIR}/sqlite-wasi-vfs)
 
-# --- deferred (out-of-tree) ---
-# avro: CMakeLists find_path + vcpkg.json -> needs the Apache Avro C lib via
-#   vcpkg built for wasi; no vcpkg toolchain here. @0c97a61.
-# excel: CMakeLists find_package + vcpkg.json -> needs a vcpkg native dep
-#   (xlsx/zip lib) built for wasi; no vcpkg toolchain here. @8504be9.
-# spatial/httpfs/aws/azure/mysql_scanner/postgres_scanner/iceberg/ducklake/ui:
-#   infeasible on wasi (sockets/TLS/huge native deps) -- see docs.
+# --- remaining (not yet built for wasi) ---
+# postgres_scanner / mysql_scanner: need libpq / the mysql client built for wasi
+#   + outbound TCP (the wasip2 socket graft from httpfs is reusable).
+# aws: AWS credential-provider chain (config/SSO); pairs with httpfs/iceberg S3
+#   (SigV4 is already hand-rolled for iceberg).
+# azure: heavy Azure C++ SDK + curl.
+# ui: needs a *listening* HTTP server inside the component -- poor fit for
+#   wasip2's outbound-only model.
+# (Built above: avro, iceberg, spatial, httpfs, ducklake, sqlite_scanner, excel.)

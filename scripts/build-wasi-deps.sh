@@ -119,4 +119,20 @@ cmake_wasi "$SRC/roaring" "$SRC/roaring/build-wasi" \
 cmake --build "$SRC/roaring/build-wasi" --target install
 echo "[deps] roaring -> $DEPS/roaring/lib/libroaring.a" >&2
 
-echo "[deps] done: jansson + avro-c + roaring built for wasm32-wasi under $DEPS" >&2
+# --- minizip-ng (excel: xlsx is a zip) -------------------------------------
+# zlib-only (the excel vcpkg.json disables bzip2/lzma/zstd/encryption); modern
+# API (MZ_COMPAT off) -> MINIZIP::minizip-ng. zlib comes from curl-wasm.
+if [[ ! -d "$SRC/minizip" ]]; then
+  git clone --depth 1 --branch 4.0.7 https://github.com/zlib-ng/minizip-ng "$SRC/minizip"
+fi
+cmake_wasi "$SRC/minizip" "$SRC/minizip/build-wasi" \
+  -DCMAKE_INSTALL_PREFIX="$DEPS/minizip" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  -DMZ_COMPAT=OFF -DMZ_BZIP2=OFF -DMZ_LZMA=OFF -DMZ_ZSTD=OFF -DMZ_LIBCOMP=OFF \
+  -DMZ_PKCRYPT=OFF -DMZ_WZAES=OFF -DMZ_OPENSSL=OFF -DMZ_LIBBSD=OFF -DMZ_ICONV=OFF \
+  -DMZ_FETCH_LIBS=OFF -DMZ_FORCE_FETCH_LIBS=OFF -DMZ_ZLIB=ON \
+  -DMZ_BUILD_TESTS=OFF -DMZ_BUILD_UNIT_TESTS=OFF \
+  -DZLIB_LIBRARY="$ZLIB/lib/libz.a" -DZLIB_INCLUDE_DIR="$ZLIB/include"
+cmake --build "$SRC/minizip/build-wasi" --target install
+echo "[deps] minizip-ng -> $DEPS/minizip/lib/libminizip-ng.a" >&2
+
+echo "[deps] done: jansson + avro-c + roaring + minizip-ng built for wasm32-wasi under $DEPS" >&2

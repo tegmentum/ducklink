@@ -260,6 +260,30 @@ PY
     fi
   fi
 fi
+
+# excel: replace its find_package(EXPAT/ZLIB/minizip-ng) with our IMPORTED
+# targets (cmake/excel-deps.cmake, backed by expat-wasm + curl-wasm zlib +
+# the minizip-ng built by build-wasi-deps.sh).
+EXCEL_SRC="$BUILD_DIR/_deps/excel_extension_fc-src"
+EXCEL_DEPS_CMAKE="$(pwd)/cmake/excel-deps.cmake"
+if grep -q "duckdb_extension_load(excel" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+   && [[ -f "$EXCEL_SRC/CMakeLists.txt" ]]; then
+  python3 - "$EXCEL_SRC/CMakeLists.txt" "$EXCEL_DEPS_CMAKE" <<'PY'
+import sys
+p, inc = sys.argv[1], sys.argv[2]
+s = open(p).read()
+if 'excel-deps.cmake' in s:
+    sys.exit(0)
+fp_old = ('find_package(EXPAT REQUIRED)\n'
+          'find_package(ZLIB REQUIRED)\n'
+          'find_package(minizip-ng CONFIG REQUIRED)')
+if fp_old not in s:
+    sys.stderr.write('excel anchor not found: find_package block\n'); sys.exit(1)
+s = s.replace(fp_old, 'include("%s")' % inc, 1)
+open(p, 'w').write(s)
+print('patched excel CMakeLists: IMPORTED EXPAT + ZLIB + minizip-ng deps')
+PY
+fi
 }
 
 # Configure, patching fetched sources after each failure, until it succeeds.
@@ -475,6 +499,27 @@ if grep -q "duckdb_extension_load(spatial" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/nu
       echo "Merging spatial geo dep ($src) into libduckdb-wasi.a" >&2
     else
       echo "WARNING: spatial geo dep missing: $src" >&2
+    fi
+  done
+fi
+
+# excel: xlsx = zip(expat-parsed XML). Merge minizip-ng + expat + zlib (the
+# latter two only if not already merged by spatial/httpfs/avro).
+if grep -q "duckdb_extension_load(excel" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+  WASI_DEPS="${WASI_DEPS:-$(pwd)/build/wasi-deps}"
+  xdeps=("$WASI_DEPS/minizip/lib/libminizip-ng.a")
+  grep -q "duckdb_extension_load(spatial" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+    || xdeps+=("$HOME/git/expat-wasm/build/lib/libexpat.a")
+  grep -qE "duckdb_extension_load\((spatial|httpfs|avro)" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+    || xdeps+=("$HOME/git/curl-wasm/build/zlib/lib/libz.a")
+  for src in "${xdeps[@]}"; do
+    name="$(basename "$src")"
+    if [[ -f "$src" ]]; then
+      cp "$src" "$TMPDIR/$name"
+      ADDLIBS="$ADDLIBS"$'\n'"ADDLIB $name"
+      echo "Merging excel dep ($src) into libduckdb-wasi.a" >&2
+    else
+      echo "WARNING: excel dep missing: $src" >&2
     fi
   done
 fi

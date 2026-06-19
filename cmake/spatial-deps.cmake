@@ -29,11 +29,13 @@ set_target_properties(GEOS::geos_c PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES "${_GEO}/geos-wasm/lib/include")
 set(GEOS_FOUND TRUE)
 
-# --- EXPAT ----------------------------------------------------------------
+# --- EXPAT (shared with excel-deps.cmake -> guard) ------------------------
+if(NOT TARGET EXPAT::EXPAT)
 add_library(EXPAT::EXPAT STATIC IMPORTED GLOBAL)
 set_target_properties(EXPAT::EXPAT PROPERTIES
   IMPORTED_LOCATION "${_GEO}/expat-wasm/build/lib/libexpat.a"
   INTERFACE_INCLUDE_DIRECTORIES "${_GEO}/expat-wasm/deps/expat/expat/lib")
+endif()
 set(EXPAT_FOUND TRUE)
 set(EXPAT_INCLUDE_DIRS "${_GEO}/expat-wasm/deps/expat/expat/lib")
 set(EXPAT_LIBRARY "${_GEO}/expat-wasm/build/lib/libexpat.a")
@@ -46,11 +48,13 @@ set_target_properties(unofficial::sqlite3::sqlite3 PROPERTIES
 set(SQLite3_FOUND TRUE)
 set(unofficial-sqlite3_FOUND TRUE)
 
-# --- zlib (from curl-wasm) ------------------------------------------------
+# --- zlib (from curl-wasm; shared with excel-deps.cmake -> guard) ---------
+if(NOT TARGET ZLIB::ZLIB)
 add_library(ZLIB::ZLIB STATIC IMPORTED GLOBAL)
 set_target_properties(ZLIB::ZLIB PROPERTIES
   IMPORTED_LOCATION "${_GEO}/curl-wasm/build/zlib/lib/libz.a"
   INTERFACE_INCLUDE_DIRECTORIES "${_GEO}/curl-wasm/build/zlib/include")
+endif()
 set(ZLIB_FOUND TRUE)
 set(ZLIB_LIBRARIES "${_GEO}/curl-wasm/build/zlib/lib/libz.a")
 set(ZLIB_INCLUDE_DIRS "${_GEO}/curl-wasm/build/zlib/include")
