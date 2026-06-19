@@ -204,6 +204,62 @@ PY
   fi
   echo "patched iceberg: AWS SDK/CURL skipped on wasi; SigV4 signer wired" >&2
 fi
+
+# spatial: replace its find_package(GDAL/PROJ/EXPAT/sqlite/ZLIB/GEOS) with our
+# IMPORTED targets (cmake/spatial-deps.cmake, backed by the ~/git/*-wasm libs)
+# and turn network off on wasi (like the upstream Emscripten path).
+SPATIAL_SRC="$BUILD_DIR/_deps/spatial_extension_fc-src"
+SPATIAL_DEPS_CMAKE="$(pwd)/cmake/spatial-deps.cmake"
+if grep -q "duckdb_extension_load(spatial" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+   && [[ -f "$SPATIAL_SRC/CMakeLists.txt" ]]; then
+  python3 - "$SPATIAL_SRC/CMakeLists.txt" "$SPATIAL_DEPS_CMAKE" <<'PY'
+import sys
+p, inc = sys.argv[1], sys.argv[2]
+s = open(p).read()
+if 'spatial-deps.cmake' in s:
+    sys.exit(0)
+# 1) replace the find_package block with include(our imported targets)
+fp_old = ('find_package(ZLIB REQUIRED)\n'
+          'find_package(PROJ CONFIG REQUIRED)\n'
+          'find_package(GDAL CONFIG REQUIRED)\n'
+          'find_package(EXPAT REQUIRED)\n'
+          'find_package(unofficial-sqlite3 CONFIG REQUIRED)')
+fp_new = 'include("%s")' % inc
+# 2) GEOS is found separately; our include() already defines GEOS::geos_c
+geos_old = '  find_package(GEOS REQUIRED)\n'
+# 3) network off on wasi too (matches the Emscripten branch)
+net_old = ('if(EMSCRIPTEN)\n'
+           '  message(STATUS "Building for Emscripten, disabling network functionality")\n'
+           '  set(SPATIAL_USE_NETWORK OFF)\n'
+           'endif()')
+net_new = ('if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "WASI")\n'
+           '  message(STATUS "Disabling network functionality")\n'
+           '  set(SPATIAL_USE_NETWORK OFF)\n'
+           'endif()')
+for old, new, what in ((fp_old, fp_new, 'find_package block'),
+                       (geos_old, '', 'GEOS find_package'),
+                       (net_old, net_new, 'network guard')):
+    if old not in s:
+        sys.stderr.write('spatial anchor not found: %s\n' % what); sys.exit(1)
+    s = s.replace(old, new, 1)
+open(p, 'w').write(s)
+print('patched spatial CMakeLists: IMPORTED geo deps + network off on wasi')
+PY
+  # proj_db.c: the extension embeds an OLDER proj.db (DATABASE.LAYOUT.VERSION
+  # MINOR=2) than proj-wasm's libproj (PROJ 9.x rejects layout < 1.6).
+  # Regenerate it (xxd -i -> proj_db[]/proj_db_len) from the matching proj.db.
+  PROJ_DB="$HOME/git/proj-wasm/build_real_sqlite/deps/proj/data/proj.db"
+  PROJ_DB_C="$SPATIAL_SRC/src/spatial/modules/proj/proj_db.c"
+  if [[ -f "$PROJ_DB" && -f "$PROJ_DB_C" ]]; then
+    _sz="$(wc -c < "$PROJ_DB" | tr -d ' ')"
+    if ! grep -q "proj_db_len = $_sz" "$PROJ_DB_C" 2>/dev/null; then
+      _t="$(mktemp -d)"; cp "$PROJ_DB" "$_t/proj.db"
+      ( cd "$_t" && xxd -i proj.db ) > "$PROJ_DB_C"
+      rm -rf "$_t"
+      echo "regenerated spatial proj_db.c from proj-wasm proj.db (layout 1.6)" >&2
+    fi
+  fi
+fi
 }
 
 # Configure, patching fetched sources after each failure, until it succeeds.
@@ -358,6 +414,67 @@ if grep -q "duckdb_extension_load(avro" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null;
       cp "$src" "$TMPDIR/$name"
       ADDLIBS="$ADDLIBS"$'\n'"ADDLIB $name"
       echo "Merging avro/iceberg dep ($src) into libduckdb-wasi.a" >&2
+    fi
+  done
+fi
+
+# spatial: merge the geo stack (GEOS + PROJ + GDAL + tiff/jpeg/png/expat/sqlite +
+# proj data) from the ~/git/*-wasm libs, plus a stubs lib for the ~24 wasi-missing
+# symbols GDAL references (dlopen/fork/exec/sqlite-extras). zlib comes from httpfs.
+if grep -q "duckdb_extension_load(spatial" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+  # compile the weak stubs
+  "$WASI_SDK_PREFIX/bin/clang" --target="${WASI_TARGET_TRIPLE:-wasm32-wasip2}" -O2 \
+    -c "$(pwd)/cmake/spatial-deps/stubs.c" -o "$TMPDIR/spatial_stubs.o"
+  "$WASI_SDK_PREFIX/bin/llvm-ar" rcs "$TMPDIR/libspatialstubs.a" "$TMPDIR/spatial_stubs.o"
+  ADDLIBS="$ADDLIBS"$'\n'"ADDLIB libspatialstubs.a"
+  # libjpeg uses setjmp/longjmp -> the wasm-sjlj runtime (__wasm_setjmp/longjmp)
+  SJLJ="$WASI_SDK_PREFIX/share/wasi-sysroot/lib/${WASI_TARGET_TRIPLE:-wasm32-wasip2}/libsetjmp.a"
+  if [[ -f "$SJLJ" ]]; then
+    cp "$SJLJ" "$TMPDIR/libsetjmp.a"; ADDLIBS="$ADDLIBS"$'\n'"ADDLIB libsetjmp.a"
+    echo "Merging libsetjmp (wasm sjlj runtime) into libduckdb-wasi.a" >&2
+  fi
+  # PROJ: use the build_real_sqlite variant (real sqlite + memvfs-embedded
+  # proj.db, no runtime files). libproj.a references pj_get_embedded_proj_db
+  # which lives in a separate proj_resources object -> bundle it as a lib.
+  PROJ_RS="$HOME/git/proj-wasm/build_real_sqlite/deps/proj"
+  PROJ_RES_OBJ="$PROJ_RS/src/CMakeFiles/proj_resources.dir/embedded_resources.c.obj"
+  if [[ -f "$PROJ_RES_OBJ" ]]; then
+    "$WASI_SDK_PREFIX/bin/llvm-ar" rcs "$TMPDIR/libprojresources.a" "$PROJ_RES_OBJ"
+    ADDLIBS="$ADDLIBS"$'\n'"ADDLIB libprojresources.a"
+  fi
+  # sqlite3: compile proj-wasm's 3.45.0 amalgamation with SQLITE_USE_URI=1 (the
+  # spatial extension's proj_module opens the embedded proj.db via a memvfs
+  # `file:?ptr=` URI without passing SQLITE_OPEN_URI, so URI parsing must be
+  # compiled in). Matches proj-wasm's wasi flags otherwise. This .obj wins the
+  # final merge (added last) over sqlite_scanner's 3.38.1, so all sqlite3
+  # callers (proj, memvfs, gdal, sqlite_scanner) share one URI-enabled 3.45.0.
+  SQLITE_SRC="$HOME/git/proj-wasm/deps/sqlite/sqlite3.c"
+  if [[ -f "$SQLITE_SRC" ]]; then
+    "$WASI_SDK_PREFIX/bin/clang" --target="${WASI_TARGET_TRIPLE:-wasm32-wasip2}" -O2 \
+      -DSQLITE_USE_URI=1 -DSQLITE_OMIT_WAL=1 -DSQLITE_OMIT_LOAD_EXTENSION=1 \
+      -DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_SHARED_CACHE=1 -DSQLITE_DEFAULT_MEMSTATUS=0 \
+      -DSQLITE_LIKE_DOESNT_MATCH_BLOBS=1 -DSQLITE_OMIT_DEPRECATED=1 -DSQLITE_USE_ALLOCA=1 \
+      -DSQLITE_OMIT_AUTOINIT=1 -DSQLITE_OMIT_POSIX_ADVISORY_LOCKING=1 \
+      -c "$SQLITE_SRC" -o "$TMPDIR/sqlite3.c.obj"
+    "$WASI_SDK_PREFIX/bin/llvm-ar" rcs "$TMPDIR/libsqlite3uri.a" "$TMPDIR/sqlite3.c.obj"
+    ADDLIBS="$ADDLIBS"$'\n'"ADDLIB libsqlite3uri.a"
+    echo "Merging URI-enabled sqlite3 (3.45.0) into libduckdb-wasi.a" >&2
+  fi
+  geo=("$HOME/git/gdal-wasm/build/deps/gdal/libgdal.a"
+       "$HOME/git/geos-wasm/lib/lib/libgeos_c.a" "$HOME/git/geos-wasm/lib/lib/libgeos.a"
+       "$PROJ_RS/lib/libproj.a"
+       "$HOME/git/libtiff-wasm/build/lib/libtiff.a"
+       "$HOME/git/libjpeg-turbo-wasm/build/libjpeg-turbo/libjpeg.a"
+       "$HOME/git/libpng-wasm/build-wasip1/lib/libpng16.a"
+       "$HOME/git/expat-wasm/build/lib/libexpat.a")
+  for src in "${geo[@]}"; do
+    name="$(basename "$src")"
+    if [[ -f "$src" ]]; then
+      cp "$src" "$TMPDIR/$name"
+      ADDLIBS="$ADDLIBS"$'\n'"ADDLIB $name"
+      echo "Merging spatial geo dep ($src) into libduckdb-wasi.a" >&2
+    else
+      echo "WARNING: spatial geo dep missing: $src" >&2
     fi
   done
 fi

@@ -76,6 +76,23 @@ if(EXISTS "${WASI_DEPS}/avro-c/lib/libavro.a")
   endif()
 endif()
 
+# spatial: GEOS + PROJ + GDAL (+ tiff/jpeg/png/expat/sqlite/zlib) from the
+# ~/git/*-wasm static libs (all wasi-sdk + libc++ compatible -- validated). The
+# build script (scripts/build-libduckdb-wasm.sh) patches the fetched spatial
+# CMakeLists to include() cmake/spatial-deps.cmake (which defines the GDAL::GDAL/
+# PROJ::proj/GEOS::geos_c/EXPAT::EXPAT/sqlite3/ZLIB IMPORTED targets) in place of
+# its find_package calls, extends the EMSCRIPTEN guards to WASI (network off), and
+# merges the geo libs + cmake/spatial-deps/stubs.c into libduckdb-wasi.a.
+if(EXISTS "$ENV{HOME}/git/gdal-wasm/build/deps/gdal/libgdal.a"
+   AND EXISTS "$ENV{HOME}/git/geos-wasm/lib/lib/libgeos_c.a"
+   AND EXISTS "$ENV{HOME}/git/proj-wasm/build_cbor/deps/proj/lib/libproj.a")
+  duckdb_extension_load(spatial       # ST_* geometry (GEOS) + transforms (PROJ) + format I/O (GDAL/OGR)
+    GIT_URL https://github.com/duckdb/duckdb-spatial
+    GIT_TAG a6a607fe3a98ef9ad4bed218490b770f725fbc12   # DuckDB-pinned commit
+    INCLUDE_DIR src/spatial                            # spatial_extension.hpp for the generated loader
+  )
+endif()
+
 # httpfs needs CURL (its curl client) + OpenSSL (crypto.cpp AES/EVP). Both come
 # from ~/git/curl-wasm (libcurl 8.17 built for wasm + its own openssl/zlib/zstd),
 # satisfying httpfs's find_package(CURL|OpenSSL). TLS for the httplib client is
