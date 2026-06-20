@@ -11,7 +11,10 @@ OUTPUT_COMPONENT="${OUTPUT_COMPONENT:-$TARGET_DIR/duckdb_cli_standalone.wasm}"
 SQL="${SQL:-select 1 as answer;}"
 DB_PATH="${DB_PATH:-:memory:}"
 # The core component uses wasm C++ exceptions, so the standalone needs them on.
-EXTRA_WASMTIME_FLAGS="${EXTRA_WASMTIME_FLAGS:--W exceptions=y}"
+# `-C cache=y` enables wasmtime's on-disk compile cache so the (tens of MB)
+# component is Cranelift-compiled once and deserialized on later runs instead of
+# recompiled every invocation -- compilation otherwise dominates wall-clock.
+EXTRA_WASMTIME_FLAGS="${EXTRA_WASMTIME_FLAGS:--W exceptions=y -C cache=y}"
 ON_DISK_SMOKE="${ON_DISK_SMOKE:-0}"
 TEMP_DB_DIR=""
 EXTENSIONS="${EXTENSIONS:-}"
