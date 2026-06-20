@@ -1,0 +1,317 @@
+diff --git a/ffi/Cargo.toml b/ffi/Cargo.toml
+index 3069ada..9ae8cf9 100644
+--- a/ffi/Cargo.toml
++++ b/ffi/Cargo.toml
+@@ -54,3 +54,7 @@ default-engine-base = ["delta_kernel/default-engine-base", "delta_kernel/arrow"]
+ tracing = [ "tracing-core", "tracing-subscriber" ]
+ internal-api = []
+ test-ffi = []
++# sync-engine: expose the kernel's local-filesystem engine through the FFI (for
++# reading local Delta tables on wasm). Reuses the ExternEngineVtable/engine_to_handle
++# plumbing that the default engine also uses (un-gated below).
++sync-engine = ["delta_kernel/sync-engine", "delta_kernel/arrow"]
+diff --git a/ffi/src/engine_data.rs b/ffi/src/engine_data.rs
+index dc616d3..a9b8f7a 100644
+--- a/ffi/src/engine_data.rs
++++ b/ffi/src/engine_data.rs
+@@ -1,21 +1,21 @@
+ //! EngineData related ffi code
+ 
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ use delta_kernel::arrow;
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ use delta_kernel::arrow::array::{
+     ffi::{FFI_ArrowArray, FFI_ArrowSchema},
+     ArrayData, RecordBatch, StructArray,
+ };
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ use delta_kernel::engine::arrow_data::ArrowEngineData;
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ use delta_kernel::DeltaResult;
+ use delta_kernel::EngineData;
+ use std::ffi::c_void;
+ 
+ use crate::ExclusiveEngineData;
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ use crate::{ExternResult, IntoExternResult, SharedExternEngine};
+ 
+ use super::handle::Handle;
+@@ -55,7 +55,7 @@ unsafe fn get_raw_engine_data_impl(data: &mut Handle<ExclusiveEngineData>) -> &m
+ /// Struct to allow binding to the arrow [C Data
+ /// Interface](https://arrow.apache.org/docs/format/CDataInterface.html). This includes the data and
+ /// the schema.
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ #[repr(C)]
+ pub struct ArrowFFIData {
+     pub array: FFI_ArrowArray,
+@@ -70,7 +70,7 @@ pub struct ArrowFFIData {
+ /// # Safety
+ /// data_handle must be a valid ExclusiveEngineData as read by the
+ /// [`delta_kernel::engine::default::DefaultEngine`] obtained from `get_default_engine`.
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ #[no_mangle]
+ pub unsafe extern "C" fn get_raw_arrow_data(
+     data: Handle<ExclusiveEngineData>,
+@@ -82,7 +82,7 @@ pub unsafe extern "C" fn get_raw_arrow_data(
+ }
+ 
+ // TODO: This method leaks the returned pointer memory. How will the engine free it?
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ fn get_raw_arrow_data_impl(data: Box<dyn EngineData>) -> DeltaResult<*mut ArrowFFIData> {
+     let record_batch: delta_kernel::arrow::array::RecordBatch = data
+         .into_any()
+@@ -108,7 +108,7 @@ fn get_raw_arrow_data_impl(data: Box<dyn EngineData>) -> DeltaResult<*mut ArrowF
+ /// - `array` must be a valid FFI_ArrowArray
+ /// - `schema` must be a valid pointer to a FFI_ArrowSchema
+ /// - `engine` must be a valid Handle to a SharedExternEngine
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ #[no_mangle]
+ pub unsafe extern "C" fn get_engine_data(
+     array: FFI_ArrowArray,
+@@ -118,7 +118,7 @@ pub unsafe extern "C" fn get_engine_data(
+     get_engine_data_impl(array, schema).into_extern_result(&engine.as_ref())
+ }
+ 
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ unsafe fn get_engine_data_impl(
+     array: FFI_ArrowArray,
+     schema: &FFI_ArrowSchema,
+diff --git a/ffi/src/lib.rs b/ffi/src/lib.rs
+index 4cc8b33..f9db64c 100644
+--- a/ffi/src/lib.rs
++++ b/ffi/src/lib.rs
+@@ -362,14 +362,14 @@ pub trait ExternEngine: Send + Sync {
+ #[handle_descriptor(target=dyn ExternEngine, mutable=false)]
+ pub struct SharedExternEngine;
+ 
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ struct ExternEngineVtable {
+     // Actual engine instance to use
+     engine: Arc<dyn Engine>,
+     allocate_error: AllocateErrorFn,
+ }
+ 
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ impl Drop for ExternEngineVtable {
+     fn drop(&mut self) {
+         debug!("dropping engine interface");
+@@ -380,7 +380,7 @@ impl Drop for ExternEngineVtable {
+ ///
+ /// Kernel doesn't use any threading or concurrency. If engine chooses to do so, engine is
+ /// responsible for handling  any races that could result.
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ unsafe impl Send for ExternEngineVtable {}
+ 
+ /// # Safety
+@@ -392,10 +392,10 @@ unsafe impl Send for ExternEngineVtable {}
+ /// Basically, by failing to implement these traits, we forbid the engine from being able to declare
+ /// its thread-safety (because rust assumes it is not threadsafe). By implementing them, we leave it
+ /// up to the engine to enforce thread safety if engine chooses to use threads at all.
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ unsafe impl Sync for ExternEngineVtable {}
+ 
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ impl ExternEngine for ExternEngineVtable {
+     fn engine(&self) -> Arc<dyn Engine> {
+         self.engine.clone()
+@@ -522,7 +522,7 @@ fn get_default_default_engine_impl(
+ /// Safety
+ ///
+ /// Caller must free this handle to prevent memory leaks
+-#[cfg(feature = "default-engine-base")]
++#[cfg(any(feature = "default-engine-base", feature = "sync-engine"))]
+ fn engine_to_handle(
+     engine: Arc<dyn Engine>,
+     allocate_error: AllocateErrorFn,
+@@ -534,6 +534,29 @@ fn engine_to_handle(
+     engine.into()
+ }
+ 
++/// Construct a kernel engine backed by the local-filesystem SYNC engine (no
++/// cloud/object_store). Used to read local Delta tables on wasm. Path-agnostic:
++/// the table location is supplied later at snapshot time.
++///
++/// # Safety
++///
++/// Caller must free the returned handle to prevent memory leaks.
++#[cfg(feature = "sync-engine")]
++#[no_mangle]
++pub unsafe extern "C" fn get_sync_engine(
++    allocate_error: AllocateErrorFn,
++) -> ExternResult<Handle<SharedExternEngine>> {
++    get_sync_engine_impl(allocate_error).into_extern_result(&allocate_error)
++}
++
++#[cfg(feature = "sync-engine")]
++fn get_sync_engine_impl(
++    allocate_error: AllocateErrorFn,
++) -> DeltaResult<Handle<SharedExternEngine>> {
++    use delta_kernel::engine::sync::SyncEngine;
++    Ok(engine_to_handle(Arc::new(SyncEngine::new()), allocate_error))
++}
++
+ #[cfg(feature = "default-engine-base")]
+ fn get_default_engine_impl(
+     url: Url,
+diff --git a/kernel/Cargo.toml b/kernel/Cargo.toml
+index cbad49b..b003457 100644
+--- a/kernel/Cargo.toml
++++ b/kernel/Cargo.toml
+@@ -61,6 +61,9 @@ futures = { version = "0.3", optional = true }
+ reqwest = { version = "0.12.15", default-features = false, optional = true }
+ # optionally used with default engine (though not required)
+ tokio = { version = "1.44", optional = true, features = ["rt-multi-thread"] }
++# the sync engine's JSON handler does atomic writes via a temp file (also a
++# dev-dependency below, but the sync handler needs it in non-test builds too)
++tempfile = { version = "3", optional = true }
+ 
+ # arrow 54
+ [dependencies.arrow_54]
+@@ -88,12 +91,18 @@ optional = true
+ [dependencies.parquet_55]
+ package = "parquet"
+ version = "55"
+-features = ["async", "object_store"]
++# wasm/sync: drop the default zstd+brotli codecs (their bundled C symbols collide
++# with DuckDB's zstd + curl-wasm's libbrotli); drop async/object_store (default-
++# engine only). The sync engine uses parquet's arrow reader with snappy (delta default).
++default-features = false
++features = ["arrow", "snap", "flate2", "lz4", "base64"]
+ optional = true
+ [dependencies.object_store_55]
+ package = "object_store"
+ version = "0.12.3"
+-features = ["aws", "azure", "gcp", "http"]
++# wasm/sync: no cloud backends (aws/azure/gcp/http pull reqwest+tokio, which have
++# no wasip2 transport). The kernel only needs object_store's core path/types here.
++features = []
+ optional = true
+ 
+ [features]
+@@ -107,6 +116,10 @@ integration-test = ["hdfs-native-object-store/integration-test"]
+ # The default versions for arrow/parquet/object_store
+ arrow = ["arrow-55"] # latest arrow version
+ need-arrow = [] # need-arrow is a marker that the feature needs arrow dep
++# sync-engine: the local-filesystem engine (no tokio/reqwest/object_store), used
++# for reading local Delta tables on wasm. Re-exposes the otherwise test-only
++# sync module; needs arrow for its parquet/json handlers.
++sync-engine = ["arrow", "need-arrow", "arrow-conversion", "arrow-expression", "dep:tempfile"]
+ arrow-54 = ["dep:arrow_54", "dep:parquet_54", "dep:object_store_54"]
+ arrow-55 = ["dep:arrow_55", "dep:parquet_55", "dep:object_store_55"]
+ arrow-conversion = ["need-arrow"]
+diff --git a/kernel/src/engine/mod.rs b/kernel/src/engine/mod.rs
+index 03da11e..09763cb 100644
+--- a/kernel/src/engine/mod.rs
++++ b/kernel/src/engine/mod.rs
+@@ -5,7 +5,7 @@
+ #[cfg(feature = "arrow-conversion")]
+ pub mod arrow_conversion;
+ 
+-#[cfg(all(feature = "arrow-expression", feature = "default-engine-base"))]
++#[cfg(feature = "arrow-expression")]
+ pub mod arrow_expression;
+ #[cfg(feature = "arrow-expression")]
+ pub(crate) mod arrow_utils;
+@@ -15,16 +15,16 @@ pub use self::arrow_utils::{parse_json, to_json_bytes};
+ #[cfg(feature = "default-engine-base")]
+ pub mod default;
+ 
+-#[cfg(test)]
+-pub(crate) mod sync;
++#[cfg(any(test, feature = "sync-engine"))]
++pub mod sync;
+ 
+-#[cfg(feature = "default-engine-base")]
++#[cfg(feature = "need-arrow")]
+ pub mod arrow_data;
+-#[cfg(feature = "default-engine-base")]
++#[cfg(feature = "need-arrow")]
+ pub(crate) mod arrow_get_data;
+-#[cfg(feature = "default-engine-base")]
++#[cfg(feature = "need-arrow")]
+ pub(crate) mod ensure_data_types;
+-#[cfg(feature = "default-engine-base")]
++#[cfg(feature = "need-arrow")]
+ pub mod parquet_row_group_skipping;
+ 
+ #[cfg(test)]
+diff --git a/kernel/src/engine/sync/mod.rs b/kernel/src/engine/sync/mod.rs
+index 10e3cc6..e39ce39 100644
+--- a/kernel/src/engine/sync/mod.rs
++++ b/kernel/src/engine/sync/mod.rs
+@@ -18,9 +18,9 @@ pub(crate) mod json;
+ mod parquet;
+ mod storage;
+ 
+-/// This is a simple (test-only) implementation of [`Engine`]. It only supports reading data from
++/// This is a simple implementation of [`Engine`]. It only supports reading data from
+ /// the local filesystem, and internally represents data using `Arrow`.
+-pub(crate) struct SyncEngine {
++pub struct SyncEngine {
+     storage_handler: Arc<storage::SyncStorageHandler>,
+     json_handler: Arc<json::SyncJsonHandler>,
+     parquet_handler: Arc<parquet::SyncParquetHandler>,
+@@ -28,7 +28,7 @@ pub(crate) struct SyncEngine {
+ }
+ 
+ impl SyncEngine {
+-    pub(crate) fn new() -> Self {
++    pub fn new() -> Self {
+         SyncEngine {
+             storage_handler: Arc::new(storage::SyncStorageHandler {}),
+             json_handler: Arc::new(json::SyncJsonHandler {}),
+diff --git a/kernel/src/error.rs b/kernel/src/error.rs
+index 3ee51aa..96946c2 100644
+--- a/kernel/src/error.rs
++++ b/kernel/src/error.rs
+@@ -10,7 +10,7 @@ use crate::schema::{DataType, StructType};
+ use crate::table_properties::ParseIntervalError;
+ use crate::Version;
+ 
+-#[cfg(feature = "default-engine-base")]
++#[cfg(feature = "need-arrow")]
+ use crate::arrow::error::ArrowError;
+ #[cfg(feature = "default-engine-base")]
+ use crate::object_store;
+@@ -33,7 +33,7 @@ pub enum Error {
+     },
+ 
+     /// An error performing operations on arrow data
+-    #[cfg(feature = "default-engine-base")]
++    #[cfg(feature = "need-arrow")]
+     #[error(transparent)]
+     Arrow(ArrowError),
+ 
+@@ -68,7 +68,7 @@ pub enum Error {
+     InternalError(String),
+ 
+     /// An error enountered while working with parquet data
+-    #[cfg(feature = "default-engine-base")]
++    #[cfg(feature = "need-arrow")]
+     #[error("Arrow error: {0}")]
+     Parquet(#[from] crate::parquet::errors::ParquetError),
+ 
+@@ -322,7 +322,7 @@ from_with_backtrace!(
+     (std::io::Error, IOError)
+ );
+ 
+-#[cfg(feature = "default-engine-base")]
++#[cfg(feature = "need-arrow")]
+ impl From<ArrowError> for Error {
+     fn from(value: ArrowError) -> Self {
+         Self::Arrow(value).with_backtrace()

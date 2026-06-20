@@ -1,0 +1,34 @@
+--- a/src/functions/delta_scan/delta_multi_file_list.cpp	2026-06-20 08:04:11
++++ b/src/functions/delta_scan/delta_multi_file_list.cpp	2026-06-20 10:55:01
+@@ -60,6 +60,7 @@
+ 	return "";
+ }
+ 
++#ifndef __wasi__ // cloud (default-engine) builder API; absent in the wasm sync-engine kernel
+ static ffi::EngineBuilder *CreateBuilder(ClientContext &context, const string &path) {
+ 	ffi::EngineBuilder *builder;
+ 
+@@ -333,6 +334,7 @@
+ 	}
+ 	return builder;
+ }
++#endif // __wasi__
+ 
+ struct KernelPartitionVisitorData {
+ 	vector<string> partitions;
+@@ -622,8 +624,15 @@
+ void DeltaMultiFileList::InitializeSnapshot() const {
+ 	auto path_slice = KernelUtils::ToDeltaString(paths[0].path);
+ 
++#ifdef __wasi__
++	// wasm: the cloud builder API (get_engine_builder/builder_build) needs
++	// tokio+reqwest+object_store and isn't compiled into the sync-engine kernel;
++	// construct the local-filesystem sync engine directly instead.
++	extern_engine = TryUnpackKernelResult(ffi::get_sync_engine(DuckDBEngineError::AllocateError));
++#else
+ 	auto interface_builder = CreateBuilder(context, paths[0].path);
+ 	extern_engine = TryUnpackKernelResult(ffi::builder_build(interface_builder));
++#endif
+ 
+ 	if (!snapshot) {
+ 	    if (version == DConstants::INVALID_INDEX) {

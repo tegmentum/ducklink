@@ -438,11 +438,16 @@ fn file_table() -> &'static Mutex<FileTable> {
     FILE_TABLE.get_or_init(|| Mutex::new(FileTable::new()))
 }
 
+// On wasm `libc::dirent.d_name` is a zero-length flexible-array member, so the
+// struct alone has no room for the name. Back the dirent with an over-sized byte
+// buffer (header + name storage) and write the name at the d_name offset.
+const DIRENT_NAME_CAP: usize = 256;
+
 #[repr(C)]
 struct WasiDir {
     descriptor: Descriptor,
     stream: DirectoryEntryStream,
-    entry: MaybeUninit<libc::dirent>,
+    entry: [MaybeUninit<u8>; std::mem::size_of::<libc::dirent>() + DIRENT_NAME_CAP],
     finished: bool,
 }
 
@@ -452,13 +457,13 @@ impl WasiDir {
         Ok(Self {
             descriptor,
             stream,
-            entry: MaybeUninit::uninit(),
+            entry: [MaybeUninit::uninit(); std::mem::size_of::<libc::dirent>() + DIRENT_NAME_CAP],
             finished: false,
         })
     }
 
     fn dirent_ptr(&mut self) -> *mut libc::dirent {
-        self.entry.as_mut_ptr()
+        self.entry.as_mut_ptr().cast::<libc::dirent>()
     }
 }
 
@@ -1825,11 +1830,14 @@ mod libc_overrides {
                     }
 
                     let dirent_ptr = handle.dirent_ptr();
-                    let dest = unsafe { &mut (*dirent_ptr).d_name };
-                    let capacity = dest.len();
                     let name_bytes = entry.name.as_bytes();
 
-                    if name_bytes.len() >= capacity {
+                    // d_name is a flexible array member (len 0 in the struct); the
+                    // real storage is the over-sized WasiDir.entry buffer. Write the
+                    // name at d_name's offset, bounded by DIRENT_NAME_CAP (+1 for NUL).
+                    let name_off = std::mem::offset_of!(libc::dirent, d_name);
+                    let capacity = DIRENT_NAME_CAP;
+                    if name_bytes.len() + 1 > capacity {
                         set_errno(libc::ENAMETOOLONG);
                         return ptr::null_mut();
                     }
@@ -1838,15 +1846,13 @@ mod libc_overrides {
                         ptr::write_bytes(
                             dirent_ptr.cast::<u8>(),
                             0,
-                            std::mem::size_of::<libc::dirent>(),
+                            std::mem::size_of::<libc::dirent>() + capacity,
                         );
-                        dest.fill(0 as libc::c_char);
                         (*dirent_ptr).d_ino = 0;
                         (*dirent_ptr).d_type = descriptor_type_to_dirent_type(entry.type_);
-                        for (idx, byte) in name_bytes.iter().enumerate() {
-                            dest[idx] = *byte as libc::c_char;
-                        }
-                        dest[name_bytes.len()] = 0;
+                        let name_dst = dirent_ptr.cast::<u8>().add(name_off);
+                        ptr::copy_nonoverlapping(name_bytes.as_ptr(), name_dst, name_bytes.len());
+                        *name_dst.add(name_bytes.len()) = 0;
 
                         #[cfg(any(
                             target_os = "macos",
@@ -1858,9 +1864,7 @@ mod libc_overrides {
                         ))]
                         {
                             (*dirent_ptr).d_namlen = name_bytes.len() as _;
-                            let base = std::mem::size_of::<libc::dirent>();
-                            let fixed = base.saturating_sub(dest.len());
-                            (*dirent_ptr).d_reclen = (fixed + name_bytes.len() + 1) as _;
+                            (*dirent_ptr).d_reclen = (name_off + name_bytes.len() + 1) as _;
                         }
                     }
 

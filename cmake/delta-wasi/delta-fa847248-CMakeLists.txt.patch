@@ -1,0 +1,80 @@
+--- a/CMakeLists.txt	2026-06-20 08:04:11
++++ b/CMakeLists.txt	2026-06-20 10:57:55
+@@ -65,7 +65,11 @@
+ set(RUST_ENV_VARS "")
+ 
+ # Propagate arch to rust build for CI
+-set(RUST_PLATFORM_TARGET "")
++# wasm: the kernel is prebuilt for wasm32-wasip2 + staged by the build script
++# (scripts/build-libduckdb-wasm.sh stage_delta_kernel); force the triple and skip
++# the host arch detection / FATAL below.
++set(RUST_PLATFORM_TARGET "wasm32-wasip2")
++if(FALSE)
+ if("${OS_NAME}" STREQUAL "linux")
+   if("${OS_ARCH}" STREQUAL "arm64")
+     set(RUST_PLATFORM_TARGET "aarch64-unknown-linux-gnu")
+@@ -107,6 +111,7 @@
+     set(RUST_PLATFORM_TARGET "x86_64-pc-windows-msvc")
+   endif()
+ endif()
++endif() # wasm: close if(FALSE) wrapping the host arch detection
+ 
+ # We currently only support the predefined targets.
+ if("${RUST_PLATFORM_TARGET}" STREQUAL "")
+@@ -139,36 +144,16 @@
+ )
+ 
+ # Add rust_example as a CMake target
++# wasm: the kernel is prebuilt for wasm32-wasip2 (sync engine) by
++# scripts/build-delta-kernel-wasm.sh and staged at ${DELTA_KERNEL_LIBPATH} by
++# stage_delta_kernel(); skip the host clone + cargo build entirely.
+ ExternalProject_Add(
+   ${KERNEL_NAME}
+-  GIT_REPOSITORY "https://github.com/delta-io/delta-kernel-rs"
+-  # WARNING: the FFI headers are currently pinned due to the C linkage issue of
+-  # the c++ headers. Currently, when bumping the kernel version, the produced
+-  # header in ./src/include/delta_kernel_ffi.hpp should be also bumped, applying
+-  # the fix
+-  GIT_TAG v0.14.0
+-  # Prints the env variables passed to the cargo build to the terminal, useful
+-  # in debugging because passing them through CMake is an error-prone mess
+-  CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env ${RUST_UNSET_ENV_VARS}
+-                    ${RUST_ENV_VARS} env
+-  UPDATE_COMMAND ""
+-  BUILD_IN_SOURCE 1
+-  # Build debug build
+-  BUILD_COMMAND
+-    ${CMAKE_COMMAND} -E env ${RUST_UNSET_ENV_VARS} ${RUST_ENV_VARS} cargo build
+-    --package delta_kernel_ffi --workspace
+-    $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:--release> --all-features
+-    ${RUST_PLATFORM_PARAM}
+-  # Build DATs
+-  COMMAND
+-    ${CMAKE_COMMAND} -E env ${RUST_UNSET_ENV_VARS} ${RUST_ENV_VARS} cargo build
+-    --manifest-path=${CMAKE_BINARY_DIR}/rust/src/delta_kernel/acceptance/Cargo.toml
+-  # Define the byproducts, required for building with Ninja
+-  BUILD_BYPRODUCTS "${DELTA_KERNEL_LIBPATH}"
+-  BUILD_BYPRODUCTS "${DELTA_KERNEL_FFI_HEADER_C}"
+-  BUILD_BYPRODUCTS "${DELTA_KERNEL_FFI_HEADER_CXX}"
++  DOWNLOAD_COMMAND ""
++  CONFIGURE_COMMAND ""
++  BUILD_COMMAND ""
+   INSTALL_COMMAND ""
+-  LOG_BUILD ON)
++  BUILD_BYPRODUCTS "${DELTA_KERNEL_LIBPATH}")
+ 
+ build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
+ build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
+@@ -181,8 +166,10 @@
+     13.3
+     CACHE STRING "Minimum OS X deployment version" FORCE)
+ 
+-# Add the default client
+-add_compile_definitions(DEFINE_DEFAULT_ENGINE)
++# wasm: the local sync engine (not the cloud default engine). This selects the
++# committed FFI header's sync-ABI KernelError enum layout, matching the sync-built
++# kernel .a (see cmake/delta-wasi/README.md).
++add_compile_definitions(DEFINE_SYNC_ENGINE)
+ 
+ # Link delta-kernal-rs to static lib
+ target_link_libraries(${EXTENSION_NAME} ${DELTA_KERNEL_LIBPATH}

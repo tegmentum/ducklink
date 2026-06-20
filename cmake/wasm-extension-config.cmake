@@ -48,6 +48,22 @@ duckdb_extension_load(ducklake        # DuckLake lakehouse format (SQL catalog +
   INCLUDE_DIR src/include
 )
 
+# delta: read local Delta Lake tables (delta_scan). The in-tree extension wraps
+# delta-kernel-rs; on wasm we use the kernel's SYNC engine (local std::fs only --
+# no s3:// / object_store, which needs tokio+reqwest with no wasip2 transport).
+# The kernel is prebuilt for wasm32-wasip2 by scripts/build-delta-kernel-wasm.sh
+# (sync-engine, zstd+brotli codecs dropped to avoid C-symbol collisions) and
+# staged + wired by scripts/build-libduckdb-wasm.sh (stage_delta_kernel). See
+# cmake/delta-wasi/README.md.
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../build/delta-kernel/out/libdelta_kernel_ffi.a")
+  # SOURCE_DIR (not the bare in-tree form) so the include path defaults to
+  # <src>/src/include -- the bare form hardcodes extension/delta/include, where
+  # delta_extension.hpp does not live, breaking the generated loader.
+  duckdb_extension_load(delta          # delta_scan('<local path>') over the sync engine
+    SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/../external/duckdb/extension/delta
+  )
+endif()
+
 # avro (read_avro) + iceberg. Both need C libs built for wasi by
 # scripts/build-wasi-deps.sh into build/wasi-deps/: jansson + avro-c (deflate
 # codec only -> no lzma/snappy) for the avro extension, and roaring (CRoaring)

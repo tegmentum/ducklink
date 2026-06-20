@@ -433,6 +433,49 @@ PY
 fi
 }
 
+# delta: the `delta` extension (duckdb-delta @ fa847248, vendored at
+# external/duckdb/extension/delta, matching this DuckDB) wraps delta-kernel-rs.
+# On wasm it uses the kernel's SYNC engine only (local std::fs; no tokio/reqwest/
+# object_store). The kernel is prebuilt for wasm32-wasip2 (sync engine, zstd/brotli
+# codecs dropped) by scripts/build-delta-kernel-wasm.sh; the vendored extension
+# source + CMakeLists are already patched for wasm (get_sync_engine, DEFINE_SYNC_ENGINE,
+# no-op kernel ExternalProject) -- see cmake/delta-wasi/. This just stages the
+# prebuilt .a where the patched CMakeLists' DELTA_KERNEL_LIBPATH expects it.
+# Runs before configure because the delta CMakeLists is read at configure time.
+stage_delta_kernel() {
+  grep -q "duckdb_extension_load(delta" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null || return 0
+  local OUT_DIR="$(pwd)/build/delta-kernel/out"
+  if [[ ! -f "$OUT_DIR/libdelta_kernel_ffi.a" ]]; then
+    echo "delta: building wasm sync-engine kernel" >&2
+    OUT_DIR="$OUT_DIR" WASI_SDK_PREFIX="$WASI_SDK_PREFIX" \
+      "$(pwd)/scripts/build-delta-kernel-wasm.sh"
+  fi
+  # Apply the wasm C++ patches to the vendored duckdb-delta (fa847248) source
+  # (idempotent; guarded on the engine-swap marker). Lets a freshly re-vendored
+  # pristine fa847248 be made wasm-ready without manual edits.
+  local DELTA_DIR="$DUCKDB_SOURCE_DIR/extension/delta"
+  if [[ -f "$DELTA_DIR/src/functions/delta_scan/delta_multi_file_list.cpp" ]] \
+     && ! grep -q 'get_sync_engine' "$DELTA_DIR/src/functions/delta_scan/delta_multi_file_list.cpp"; then
+    for p in "$(pwd)"/cmake/delta-wasi/delta-fa847248-*.patch; do
+      ( cd "$DELTA_DIR" && git apply "$p" 2>/dev/null ) \
+        || patch -p1 -d "$DELTA_DIR" < "$p"
+    done
+    echo "delta: applied fa847248 wasm C++ patches" >&2
+  fi
+
+  # Pre-place the kernel .a (release; copied to debug too for the byproduct decl).
+  local KDIR="$BUILD_DIR/rust/src/delta_kernel/target"
+  mkdir -p "$KDIR/wasm32-wasip2/release" "$KDIR/wasm32-wasip2/debug" "$KDIR/ffi-headers"
+  cp "$OUT_DIR/libdelta_kernel_ffi.a" "$KDIR/wasm32-wasip2/release/"
+  cp "$OUT_DIR/libdelta_kernel_ffi.a" "$KDIR/wasm32-wasip2/debug/"
+  cp "$OUT_DIR/ffi-headers/"* "$KDIR/ffi-headers/" 2>/dev/null || true
+  echo "delta: staged prebuilt wasm kernel ($(du -h "$OUT_DIR/libdelta_kernel_ffi.a" | cut -f1))" >&2
+}
+
+# delta: stage the prebuilt wasm kernel before configure (the vendored delta
+# CMakeLists references the staged .a as an ExternalProject byproduct).
+stage_delta_kernel
+
 # Configure, patching fetched sources after each failure, until it succeeds.
 # Extensions are fetched progressively, so a configure-blocking extension only
 # becomes patchable once the earlier-failing one is fixed (hence the loop).
@@ -675,6 +718,21 @@ if grep -q "duckdb_extension_load(avro" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null;
       echo "Merging avro/iceberg dep ($src) into libduckdb-wasi.a" >&2
     fi
   done
+fi
+
+# delta: merge the prebuilt delta-kernel-rs FFI staticlib (sync engine). CMake
+# links it to the extension target via target_link_libraries, but a static lib
+# doesn't bundle its link deps, so the kernel symbols must be merged into the
+# combined archive the core links against (same as avro/iceberg/spatial).
+if grep -q "duckdb_extension_load(delta" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+  KERNEL_A="$(pwd)/build/delta-kernel/out/libdelta_kernel_ffi.a"
+  if [[ -f "$KERNEL_A" ]]; then
+    cp "$KERNEL_A" "$TMPDIR/libdelta_kernel_ffi.a"
+    ADDLIBS="$ADDLIBS"$'\n'"ADDLIB libdelta_kernel_ffi.a"
+    echo "Merging delta kernel ($KERNEL_A) into libduckdb-wasi.a" >&2
+  else
+    echo "WARNING: delta enabled but kernel missing: $KERNEL_A" >&2
+  fi
 fi
 
 # spatial: merge the geo stack (GEOS + PROJ + GDAL + tiff/jpeg/png/expat/sqlite +

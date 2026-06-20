@@ -14,6 +14,21 @@ fn main() {
     println!("cargo:rustc-link-arg=-z");
     println!("cargo:rustc-link-arg=stack-size=8388608");
 
+    // The delta extension merges delta-kernel-rs (a Rust `staticlib`) into
+    // libduckdb-wasi.a; that bundles its own copy of the Rust std runtime
+    // (rust_panic / __rdl_alloc / rust_eh_personality / ...), which collide with
+    // the core component's std at this link. Same toolchain on both sides, so let
+    // rust-lld keep the first definition. Only when delta is actually present.
+    if let Ok(lib) = std::env::var("DUCKDB_STATIC_LIB") {
+        if let Ok(bytes) = std::fs::read(&lib) {
+            let needle = b"get_sync_engine";
+            if bytes.windows(needle.len()).any(|w| w == needle) {
+                println!("cargo:rustc-link-arg=--allow-multiple-definition");
+                println!("cargo:rerun-if-changed={}", lib);
+            }
+        }
+    }
+
     // postgres_scanner's getaddrinfo wrapper: wasi-libc's getaddrinfo rejects
     // numeric IP literals + loopback (resolve-addresses returns "unsupported"),
     // so libpq can't connect by IP. When the merged archive provides the C helper

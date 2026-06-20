@@ -1,0 +1,22 @@
+--- a/src/include/delta_kernel_ffi.hpp	2026-06-20 08:04:11
++++ b/src/include/delta_kernel_ffi.hpp	2026-06-20 10:54:12
+@@ -834,8 +834,19 @@
+                                                             AllocateErrorFn allocate_error);
+ #endif
+ 
++#if defined(DEFINE_SYNC_ENGINE)
++/// Construct a kernel engine backed by the local-filesystem SYNC engine (no
++/// cloud/object_store). Path-agnostic: the table location is supplied at snapshot
++/// time. (Added for wasm; see cmake/delta-wasi/kernel-v0.14.0-sync-engine.patch.)
++///
+ /// # Safety
+ ///
++/// Caller must free the returned handle to prevent memory leaks.
++ExternResult<Handle<SharedExternEngine>> get_sync_engine(AllocateErrorFn allocate_error);
++#endif
++
++/// # Safety
++///
+ /// Caller is responsible for passing a valid handle.
+ void free_engine(Handle<SharedExternEngine> engine);
+ 

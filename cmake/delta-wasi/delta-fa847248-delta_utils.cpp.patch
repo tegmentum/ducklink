@@ -1,0 +1,29 @@
+--- a/src/delta_utils.cpp	2026-06-20 08:04:11
++++ b/src/delta_utils.cpp	2026-06-20 10:56:21
+@@ -641,17 +641,26 @@
+ }
+ 
+ string DuckDBEngineError::KernelErrorEnumToString(ffi::KernelError err) {
++	// NB: must track ffi::KernelError exactly, including its feature gates. The
++	// arrow/parquet/object_store/reqwest variants are gated on DEFINE_DEFAULT_ENGINE_BASE
++	// in the kernel + the committed header; the wasm sync build defines only
++	// DEFINE_SYNC_ENGINE, so they are absent there (Error::Arrow falls through to a
++	// wildcard). Mirror the same guards here or the enum numbering / static_assert breaks.
+ 	const char *KERNEL_ERROR_ENUM_STRINGS[] = {"UnknownError",
+ 	                                           "FFIError",
++#if defined(DEFINE_DEFAULT_ENGINE_BASE)
+ 	                                           "ArrowError",
++#endif
+ 	                                           "EngineDataTypeError",
+ 	                                           "ExtractError",
+ 	                                           "GenericError",
+ 	                                           "IOErrorError",
++#if defined(DEFINE_DEFAULT_ENGINE_BASE)
+ 	                                           "ParquetError",
+ 	                                           "ObjectStoreError",
+ 	                                           "ObjectStorePathError",
+ 	                                           "ReqwestError",
++#endif
+ 	                                           "FileNotFoundError",
+ 	                                           "MissingColumnError",
+ 	                                           "UnexpectedColumnTypeError",
