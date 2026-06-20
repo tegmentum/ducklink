@@ -1,0 +1,38 @@
+--- a/CMakeLists.txt	2025-09-16 22:33:57
++++ b/CMakeLists.txt	2026-06-20 18:04:12
+@@ -7,7 +7,11 @@
+ # added in ./vcpkg.json and then used in cmake with find_package. Feel free to
+ # remove or replace with other dependencies. Note that it should also be removed
+ # from vcpkg.json to prevent needlessly installing it..
+-find_package(OpenSSL REQUIRED)
++# OpenSSL: on wasm use the prebuilt openssl-wasm (already merged into
++# libduckdb-wasi.a for httpfs) -- no system find_package.
++if(NOT DUCKDB_PLATFORM MATCHES "wasm" AND NOT EMSCRIPTEN)
++  find_package(OpenSSL REQUIRED)
++endif()
+ 
+ set(EXTENSION_NAME ${TARGET_NAME}_extension)
+ 
+@@ -57,7 +61,21 @@
+ build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
+ build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
+ 
+-target_link_libraries(${EXTENSION_NAME} OpenSSL::SSL OpenSSL::Crypto)
++if(DUCKDB_PLATFORM MATCHES "wasm" OR EMSCRIPTEN)
++  # wasm: httplib needs mman/signal emulation + a net/if.h stub + sys/un.h
++  # force-include (AF_UNIX is patched out); DUCKDB_CPP_EXTENSION_ENTRY selects the
++  # new loader API (no removed ExtensionUtil). OpenSSL headers from openssl-wasm
++  # (UI_WASM_STUB_DIR + OPENSSL_INCLUDE_DIR set by cmake/wasm-extension-config.cmake).
++  foreach(_t ${EXTENSION_NAME} ${TARGET_NAME}_loadable_extension)
++    target_compile_definitions(${_t} PRIVATE
++      _WASI_EMULATED_MMAN _WASI_EMULATED_SIGNAL DUCKDB_CPP_EXTENSION_ENTRY
++      CPPHTTPLIB_OPENSSL_SUPPORT)
++    target_compile_options(${_t} PRIVATE -include sys/un.h)
++    target_include_directories(${_t} PRIVATE ${UI_WASM_STUB_DIR} ${OPENSSL_INCLUDE_DIR})
++  endforeach()
++else()
++  target_link_libraries(${EXTENSION_NAME} OpenSSL::SSL OpenSSL::Crypto)
++endif()
+ 
+ install(
+   TARGETS ${EXTENSION_NAME}

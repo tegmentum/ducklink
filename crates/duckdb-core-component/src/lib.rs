@@ -2883,6 +2883,76 @@ impl exported_database::Guest for Component {
             })
             .collect()
     }
+
+    // Bridge one DuckDB UI HTTP request to the statically-linked `ui` extension's
+    // HttpServer (the native host owns the socket; httplib can't listen() here).
+    // Calls the extension's C entry, which serializes the response as
+    // [u32 status][u32 ctype_len][ctype][u32 body_len][body].
+    fn handle_ui_request(
+        method: String,
+        path: String,
+        headers: String,
+        body: Vec<u8>,
+    ) -> Option<exported_database::UiResponse> {
+        extern "C" {
+            fn duckdb_ui_handle_request(
+                method: *const c_char,
+                path: *const c_char,
+                headers: *const c_char,
+                body: *const u8,
+                body_len: usize,
+                out_len: *mut usize,
+            ) -> *mut u8;
+            fn duckdb_ui_free(buf: *mut u8);
+        }
+
+        let c_method = std::ffi::CString::new(method).ok()?;
+        let c_path = std::ffi::CString::new(path).ok()?;
+        let c_headers = std::ffi::CString::new(headers).ok()?;
+        let mut out_len: usize = 0;
+        let buf = unsafe {
+            duckdb_ui_handle_request(
+                c_method.as_ptr(),
+                c_path.as_ptr(),
+                c_headers.as_ptr(),
+                body.as_ptr(),
+                body.len(),
+                &mut out_len,
+            )
+        };
+        if buf.is_null() || out_len < 12 {
+            if !buf.is_null() {
+                unsafe { duckdb_ui_free(buf) };
+            }
+            return None;
+        }
+
+        let slice = unsafe { std::slice::from_raw_parts(buf, out_len) };
+        let read_u32 = |off: usize| -> usize {
+            u32::from_ne_bytes([slice[off], slice[off + 1], slice[off + 2], slice[off + 3]]) as usize
+        };
+        let status = read_u32(0) as u16;
+        let ctype_len = read_u32(4);
+        let result = (|| {
+            let ctype_end = 8usize.checked_add(ctype_len)?;
+            if ctype_end + 4 > out_len {
+                return None;
+            }
+            let content_type = String::from_utf8_lossy(&slice[8..ctype_end]).into_owned();
+            let body_len = read_u32(ctype_end);
+            let body_start = ctype_end + 4;
+            if body_start.checked_add(body_len)? > out_len {
+                return None;
+            }
+            Some(exported_database::UiResponse {
+                status,
+                content_type,
+                body: slice[body_start..body_start + body_len].to_vec(),
+            })
+        })();
+        unsafe { duckdb_ui_free(buf) };
+        result
+    }
 }
 
 #[no_mangle]

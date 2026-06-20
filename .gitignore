@@ -18,3 +18,7 @@ Cargo.lock
 
 # Logs
 *.log
+
+# duckdb-host ui runtime
+.duckdb/
+.duckdb-ui-home/

@@ -219,6 +219,19 @@ if(EXISTS "${OPENSSL_WASM_DIR}/libcrypto.a" AND EXISTS "${CURL_WASM_DIR}/curl/li
     GIT_TAG 354d3f436a33f80f03a74419e76eb59459e19168   # DuckDB-pinned commit
     INCLUDE_DIR extension/httpfs/include
   )
+
+  # ui: the real DuckDB UI (web SQL console). httplib can't listen() inside the
+  # wasip2 sandbox, so the native host (duckdb-host ui) owns the socket and
+  # bridges each request to the extension's HttpServer::HandleRequest (exposed as
+  # the C symbol duckdb_ui_handle_request). The extension is vendored + patched to
+  # compile for wasm (see cmake/ui-deps/). Needs openssl-wasm (OPENSSL_INCLUDE_DIR,
+  # set above for httpfs) for httplib's TLS.
+  set(UI_WASM_STUB_DIR "${CMAKE_CURRENT_LIST_DIR}/ui-deps/wasm-stubs" CACHE PATH "" FORCE)
+  if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../external/duckdb/extension/ui/src/http_server.cpp")
+    duckdb_extension_load(ui            # DuckDB UI, bridged through the host (duckdb-host ui)
+      SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/../external/duckdb/extension/ui
+    )
+  endif()
 endif()
 
 # WASI VFS for sqlite_scanner's vendored sqlite3.c (built with -DSQLITE_OS_OTHER

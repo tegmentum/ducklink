@@ -1,0 +1,20 @@
+--- a/src/ui_extension.cpp	2025-09-16 22:33:57
++++ b/src/ui_extension.cpp	2026-06-20 18:07:29
+@@ -31,11 +31,17 @@
+   const auto &server = ui::HttpServer::Start(context);
+   const auto local_url = server.LocalUrl();
+ 
++#ifdef __wasi__
++  // wasm: no subprocess (system()); the native host (duckdb-host ui) owns the
++  // listening socket and opens the browser.
++  return StringUtil::Format("UI started at %s", local_url);
++#else
+   const auto command = StringUtil::Format("%s %s", OPEN_COMMAND, local_url);
+   return system(command.c_str())
+              ? StringUtil::Format("Navigate browser to %s",
+                                   local_url) // open command failed
+              : StringUtil::Format("UI started at %s", local_url);
++#endif
+ }
+ 
+ std::string StartUIServerFunction(ClientContext &context) {

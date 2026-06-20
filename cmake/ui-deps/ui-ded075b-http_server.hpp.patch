@@ -1,0 +1,25 @@
+--- a/src/include/http_server.hpp	2025-09-16 22:33:57
++++ b/src/include/http_server.hpp	2026-06-20 16:26:51
+@@ -38,6 +38,22 @@
+ 
+   std::string LocalUrl() const;
+ 
++#ifdef __wasi__
++  // wasm bridge: the native host owns the listening socket and forwards each
++  // request here (httplib can't listen() in the wasip2 sandbox). Dispatches to
++  // the private Handle* exactly like the route table in Run().
++  std::string HandleRequest(const std::string &method, const std::string &path,
++                            const std::string &headers, const std::string &body,
++                            uint16_t &out_status, std::string &out_ctype);
++  // Static entry: returns the response body of the singleton's HandleRequest
++  // (status/ctype via out-params). False return in `ok` if not started.
++  static std::string BridgeHandle(const std::string &method,
++                                  const std::string &path,
++                                  const std::string &headers,
++                                  const std::string &body, uint16_t &out_status,
++                                  std::string &out_ctype, bool &ok);
++#endif
++
+ private:
+   friend class Watcher;
+ 

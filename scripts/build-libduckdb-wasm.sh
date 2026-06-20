@@ -540,11 +540,40 @@ stage_azure_extension() {
   fi
 }
 
+# ui: the real DuckDB UI. httplib can't listen() in the wasip2 sandbox, so the
+# native host (duckdb-host ui) owns the socket and bridges each request to the
+# extension's HttpServer::HandleRequest (exposed as duckdb_ui_handle_request).
+# Vendor duckdb-ui @ ded075b (DuckDB 1.4.0) + apply the wasm patches (cmake/ui-deps/).
+stage_ui_extension() {
+  grep -q "duckdb_extension_load(ui" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null || return 0
+  local UI_DIR="$DUCKDB_SOURCE_DIR/extension/ui"
+  local PIN="ded075b"
+  if [[ ! -f "$UI_DIR/CMakeLists.txt" ]]; then
+    echo "ui: vendoring duckdb-ui @ $PIN" >&2
+    local tmp="$BUILD_DIR/duckdb-ui-src"
+    if [[ ! -d "$tmp/.git" ]]; then
+      git clone --quiet https://github.com/duckdb/duckdb-ui "$tmp"
+    fi
+    git -C "$tmp" checkout --quiet "$PIN"
+    mkdir -p "$UI_DIR"
+    ( cd "$tmp" && git archive "$PIN" CMakeLists.txt src third_party ) | tar -x -C "$UI_DIR"
+  fi
+  # Apply the wasm patches (httplib AF_UNIX/getnameinfo, watcher no-op, the request
+  # bridge, system()-guard, CMakeLists). Idempotent (guard on the bridge marker).
+  if ! grep -q 'duckdb_ui_handle_request' "$UI_DIR/src/http_server.cpp" 2>/dev/null; then
+    for p in "$(pwd)"/cmake/ui-deps/ui-ded075b-*.patch; do
+      ( cd "$UI_DIR" && git apply "$p" 2>/dev/null ) || patch -p1 -d "$UI_DIR" < "$p"
+    done
+    echo "ui: applied wasm patches" >&2
+  fi
+}
+
 # delta: stage the prebuilt wasm kernel before configure (the vendored delta
 # CMakeLists references the staged .a as an ExternalProject byproduct).
 stage_delta_kernel
 stage_aws_extension
 stage_azure_extension
+stage_ui_extension
 
 # Configure, patching fetched sources after each failure, until it succeeds.
 # Extensions are fetched progressively, so a configure-blocking extension only

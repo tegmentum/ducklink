@@ -1,56 +1,64 @@
-# Full DuckDB UI on wasm — port status & roadmap
+# DuckDB UI on wasm — WORKING (real SPA, offline + online)
 
-Two things ship for "the DuckDB UI on wasm":
+The real DuckDB UI runs against the wasm DuckDB core. `duckdb-host ui` serves it
+three ways:
+- `--offline` (default): the genuine ui.duckdb.org SPA from captured assets
+  (`web/duckdb-ui/`), no network.
+- `--online`: the SPA proxied live from ui.duckdb.org.
+- `--console`: a tiny built-in SQL console (fully self-contained).
 
-1. **A working equivalent console (DONE).** `duckdb-host ui` serves a small
-   offline SQL console that bridges queries to the core component
-   (`crates/duckdb-component-host/src/ui_server.rs`, `test/smoke-ui.sh`). This is
-   live and committed.
+In the real-UI modes `/ddb/run` returns DuckDB's exact `BinarySerializer` format,
+produced by the genuine duckdb-ui C++ handlers running **inside** the wasm
+component (verified: `SELECT 42 AS answer` round-trips through the bridge).
 
-2. **The *real* DuckDB UI, offline (IN PROGRESS).** Capturing the actual
-   ui.duckdb.org SPA + running the genuine duckdb-ui handlers so the SPA's exact
-   protocol works. This directory tracks that port.
+## Architecture (sqlite-wasm-httpd pattern)
 
-## Why a port (not a host reimplementation)
+httplib can't `listen()` in the wasip2 sandbox (the select/poll gap that broke
+the httplib client). So the NATIVE host owns the listening socket + accept loop
+(`crates/duckdb-component-host/src/ui_server.rs`) and bridges each request to the
+component. The component runs the real `HttpServer::Handle*` logic via a chain:
+host -> `handle-ui-request` (WIT export) -> `duckdb_ui_handle_request` (the C
+bridge added to the ui extension) -> the private `Handle*` methods. GET asset
+requests are served by the host (captured files, or proxied); `/ddb/*`, `/info`,
+`/localToken`, `/localEvents` go to the component.
 
-The SPA's `/ddb/run` decodes DuckDB's internal `BinarySerializer`(ArrowSchema/
-ArrowArray) — not standard Arrow IPC — so the real handlers must run inside the
-component. And httplib's `listen()` can't run in the wasip2 sandbox (the same
-select/poll gap that broke the httplib client). So: the NATIVE host owns the
-listening socket (sqlite-wasm-httpd pattern) and bridges each request to the
-component, which runs the real `HttpServer::Handle*` logic.
+## Phase 1 — compile duckdb-ui for wasm
 
-## Phase 1 — compile duckdb-ui for wasm: DONE
+Vendored duckdb-ui @ `ded075b` (DuckDB 1.4.0) at `external/duckdb/extension/ui`.
+Compiles for wasm32-wasip2 with `_WASI_EMULATED_MMAN/_SIGNAL`, `-include sys/un.h`,
+`-DDUCKDB_CPP_EXTENSION_ENTRY` (selects the new loader API, no removed
+`ExtensionUtil`), openssl-wasm headers, and the `wasm-stubs/net/if.h` shim
+(declares `if_nametoindex`/`getnameinfo` + `NI_*`, which httplib needs but wasi's
+headers don't surface in every TU).
 
-Vendored duckdb-ui @ `ded075b` (the DuckDB 1.4.0 build) at
-`external/duckdb/extension/ui`. All sources compile for wasm32-wasip2 with:
-- defines: `_WASI_EMULATED_MMAN _WASI_EMULATED_SIGNAL -include sys/un.h
-  -DUI_EXTENSION_SEQ_NUM=... -DUI_EXTENSION_GIT_SHA=... -DDUCKDB_CPP_EXTENSION_ENTRY
-  -DCPPHTTPLIB_OPENSSL_SUPPORT` (+ openssl-wasm includes). The
-  `DUCKDB_CPP_EXTENSION_ENTRY` define makes `RegisterTF` use the new
-  `loader.RegisterFunction` API, sidestepping the removed `ExtensionUtil`.
-- `wasm-stubs/net/if.h` — httplib references `<net/if.h>` (never called; listen
-  is bypassed).
-- `ui-ded075b-httplib.hpp.patch` — guard httplib's two AF_UNIX blocks with
-  `!defined(__wasi__)` (wasi's `sockaddr_un` is a stub without `sun_path`).
-- `ui-ded075b-watcher.cpp.patch` — the catalog watcher is a background
-  `std::thread` (live schema refresh); wasm is single-threaded, so `Start/Stop/
-  Watch` become no-ops. Also sidesteps a DuckDB API drift in its catalog walk.
+## Phase 2 — the bridge + the rest
 
-## Phase 2-7 — remaining
+Patches (`ui-ded075b-*.patch`, applied by `stage_ui_extension`):
+- `httplib.hpp`: guard the AF_UNIX blocks on `__wasi__` (wasi's `sockaddr_un` has
+  no `sun_path`).
+- `watcher.cpp`: the catalog-watcher `std::thread` becomes a no-op on wasm
+  (single-threaded; also sidesteps a DuckDB catalog-API drift).
+- `http_server.cpp`/`.hpp`: skip the listen thread on wasm; `Started()` reflects
+  bridge mode; add `HandleRequest` (dispatches to the private `Handle*` like the
+  route table) + the `duckdb_ui_handle_request`/`duckdb_ui_free` C entry.
+- `ui_extension.cpp`: guard the `system()` browser-launch (the host opens the
+  browser).
+- `CMakeLists.txt`: `build_static_extension`; on wasm skip `find_package(OpenSSL)`
+  and add the stubs/defines/openssl-wasm headers.
 
-2. **Bridge** — add a public `HttpServer::HandleRequest(method, path, headers,
-   body) -> {status, ctype, body}` that dispatches to the private `Handle*`
-   (constructing `httplib::Request`/`Response` + a one-shot `ContentReader` for
-   run/tokenize); make `start_ui()` initialize the singleton WITHOUT the
-   listen/thread on wasm; export an `extern "C"` symbol. `/localEvents` (SSE)
-   returns empty (the watcher is disabled).
-3. **WIT + core component** — a `handle-ui-request` export that FFI-calls the
-   bridge symbol.
-4. **Host server** — `duckdb-host ui` forwards every request to the export.
-5. **Build** — wire the extension into libduckdb (CMakeLists patch for the stubs/
-   defines/openssl link + `build_static_extension`), rebuild libduckdb + core.
-6. **Assets + online/offline toggle** — capture the SPA (index + ~8.3 MB bundle +
-   css + svgs + ~300 lazy chunks), embed for offline; a `--offline/--online` flag
-   chooses embedded assets vs proxying ui.duckdb.org (the default upstream behavior).
-7. **Browser test.**
+Host (`ui_server.rs`): pre-create `cwd/.duckdb/extension_data` (DuckDB's wasm
+home is `/`, which the fs shim maps to the cwd preopen) so the open succeeds;
+`open-with-config` disables extension autoinstall/autoload; `start_ui_server()`
+initializes the singleton in bridge mode.
+
+## Capturing the SPA (`scripts/capture-duckdb-ui.sh`)
+
+The SPA is a single monolithic bundle (no lazy chunks): `index.html` + a hashed
+8.3 MB `bundle.js` + css + a function-docs file. Captured to `web/duckdb-ui/`.
+
+## Known refinement
+
+The bridge currently forwards status + content-type + body. The handlers also set
+informational `X-DuckDB-*` version response headers (the query result itself is in
+the body); forwarding ALL response headers is a small follow-up (extend the bridge
+wire format + the WIT record).

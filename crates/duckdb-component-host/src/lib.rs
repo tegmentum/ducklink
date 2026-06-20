@@ -63,7 +63,7 @@ use wasmtime::component::{Component, Linker, Resource, ResourceAny, ResourceTabl
 use wasmtime::{AsContextMut, Config, Engine, Store, StoreContextMut};
 
 mod ui_server;
-pub use ui_server::serve_ui;
+pub use ui_server::{serve_ui, UiMode};
 use wasmtime_wasi::p2::{
     self,
     pipe::{MemoryInputPipe, MemoryOutputPipe},

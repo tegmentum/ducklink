@@ -1,21 +1,28 @@
-//! A minimal local web UI for the wasm DuckDB core.
+//! Local web UI for the wasm DuckDB core.
 //!
-//! DuckDB's own `ui` extension can't run inside the wasip2 sandbox (it embeds an
-//! httplib server that `listen()`s, and httplib's accept loop hits the same
-//! select/poll gap that broke the httplib *client*). Following the
-//! sqlite-wasm-httpd pattern, the NATIVE host owns the listening socket + accept
-//! loop and bridges each request to the core component, which actually runs the
-//! SQL. This is our own equivalent: a small SQL console served over HTTP whose
-//! `POST /api/query` executes against the core (via the same `call_execute` path
-//! the CLI/tests use) and returns JSON.
+//! DuckDB's `ui` extension can't `listen()` inside the wasip2 sandbox (httplib's
+//! accept loop hits the same select/poll gap that broke the httplib client).
+//! Following the sqlite-wasm-httpd pattern, the NATIVE host owns the listening
+//! socket + accept loop and bridges each request to the core component.
 //!
-//! Single-threaded by design: localhost, single user, one core instance + one
-//! connection held in the accept loop -- no Send/Sync gymnastics around the
-//! wasmtime Store.
+//! Three modes (`duckdb-host ui`):
+//! - `console` : a tiny built-in SQL console (embedded HTML, fully self-contained).
+//! - `offline` : the REAL DuckDB UI SPA served from captured assets (web/duckdb-ui/),
+//!               with /ddb/* bridged to the wasm core. No network.
+//! - `online`  : the REAL DuckDB UI proxied live from ui.duckdb.org, with /ddb/*
+//!               bridged to the wasm core.
+//!
+//! In the real-UI modes the genuine duckdb-ui C++ handlers run *inside* the
+//! component (so /ddb/run emits DuckDB's exact BinarySerializer format) -- reached
+//! via the `handle-ui-request` WIT export -> the `duckdb_ui_handle_request` C
+//! bridge in the statically-linked ui extension.
+//!
+//! Single-threaded by design: localhost, one core instance + one connection held
+//! in the accept loop.
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
@@ -27,13 +34,23 @@ use super::{
     ExtensionManager,
 };
 
-/// Serve the SQL console on 127.0.0.1:`port`, executing against a fresh core
-/// instance (in-memory unless `db` is a reachable path). Blocks forever.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum UiMode {
+    Console,
+    Offline,
+    Online,
+}
+
+const REMOTE_UI_URL: &str = "https://ui.duckdb.org";
+
+/// Serve the UI on 127.0.0.1:`port`. Blocks forever.
 pub fn serve_ui(
     artifacts: &ComponentArtifacts,
     db: Option<&str>,
     port: u16,
+    mode: UiMode,
     open_browser: bool,
+    assets_dir: &Path,
     preopen_refs: &[(&Path, &str)],
 ) -> Result<()> {
     let engine = build_engine()?;
@@ -42,28 +59,45 @@ pub fn serve_ui(
     let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)
         .context("failed to instantiate the core component")?;
 
-    // `db` of None / ":memory:" -> in-memory; a path must be inside a preopen.
     let db_arg = match db {
         None | Some(":memory:") | Some("") => None,
         Some(path) => Some(path.to_string()),
     };
+    // DuckDB derives its extension-data dir from home_directory at open time; the
+    // wasm default ("/") isn't writable in the sandbox. Set it (+ disable extension
+    // autoinstall/autoload, since everything is statically linked) at open so the
+    // open succeeds. "." resolves to the preopened cwd.
+    let open_opts: Vec<(String, String)> = vec![
+        ("autoinstall_known_extensions".to_string(), "false".to_string()),
+        ("autoload_known_extensions".to_string(), "false".to_string()),
+    ];
     let conn = core
-        .with_database(|g, s| g.call_open(s, db_arg.as_deref()))?
-        .map_err(|e| anyhow::anyhow!("open database: {e:?}"))?;
+        .with_database(|g, s| g.call_open_with_config(s, db_arg.as_deref(), &open_opts))?
+        .map_err(|e| anyhow::anyhow!("open database: {e}"))?;
 
-    // DuckDB's home-directory detection fails on wasm (no $HOME path it can
-    // resolve), which breaks duckdb_extensions() etc. Point it at the preopened
-    // cwd so introspection + extension settings work. Best-effort.
-    let _ = core.with_database(|g, s| g.call_execute(s, conn.clone(), "SET home_directory='.'"));
+    if mode != UiMode::Console {
+        // Initialize the ui extension's HttpServer singleton (bridge mode -- no
+        // listen). The real-UI bridge needs it before handling /ddb/* requests.
+        match core.with_database(|g, s| g.call_execute(s, conn.clone(), "SELECT * FROM start_ui_server()")) {
+            Ok(Ok(_)) => {}
+            other => eprintln!("duckdb-ui: start_ui_server() returned {other:?} (continuing)"),
+        }
+    }
 
     let listener = TcpListener::bind(("127.0.0.1", port))
         .with_context(|| format!("could not bind 127.0.0.1:{port}"))?;
     let url = format!("http://127.0.0.1:{port}/");
-    eprintln!("duckdb-ui: serving the SQL console at {url}");
+    let what = match mode {
+        UiMode::Console => "SQL console",
+        UiMode::Offline => "DuckDB UI (offline)",
+        UiMode::Online => "DuckDB UI (online, proxied from ui.duckdb.org)",
+    };
+    eprintln!("duckdb-ui: serving the {what} at {url}");
     if open_browser {
         open_in_browser(&url);
     }
 
+    let assets_dir = assets_dir.to_path_buf();
     for stream in listener.incoming() {
         let mut stream = match stream {
             Ok(s) => s,
@@ -72,7 +106,7 @@ pub fn serve_ui(
                 continue;
             }
         };
-        if let Err(e) = handle_connection(&mut stream, &mut core, &conn) {
+        if let Err(e) = handle_connection(&mut stream, &mut core, &conn, mode, &assets_dir) {
             eprintln!("duckdb-ui: request error: {e}");
         }
     }
@@ -80,84 +114,191 @@ pub fn serve_ui(
 }
 
 fn open_in_browser(url: &str) {
-    // best-effort; macOS `open`, Linux `xdg-open`
-    let opener = if cfg!(target_os = "macos") {
-        "open"
-    } else {
-        "xdg-open"
-    };
+    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
     let _ = std::process::Command::new(opener).arg(url).spawn();
 }
 
 struct Request {
     method: String,
     path: String,
-    body: String,
+    headers: String, // raw "Key: Value\n" block (forwarded to the bridge)
+    body: Vec<u8>,
 }
 
 fn read_request(stream: &mut TcpStream) -> Result<Option<Request>> {
     let mut reader = BufReader::new(stream);
     let mut request_line = String::new();
     if reader.read_line(&mut request_line)? == 0 {
-        return Ok(None); // connection closed
+        return Ok(None);
     }
     let mut parts = request_line.split_whitespace();
     let method = parts.next().unwrap_or_default().to_string();
     let path = parts.next().unwrap_or_default().to_string();
 
+    let mut headers = String::new();
     let mut content_length = 0usize;
     loop {
         let mut line = String::new();
         if reader.read_line(&mut line)? == 0 {
             break;
         }
-        let line = line.trim_end();
-        if line.is_empty() {
-            break; // end of headers
+        let trimmed = line.trim_end();
+        if trimmed.is_empty() {
+            break;
         }
-        if let Some(value) = line
-            .split_once(':')
-            .filter(|(k, _)| k.eq_ignore_ascii_case("content-length"))
-            .map(|(_, v)| v.trim())
-        {
-            content_length = value.parse().unwrap_or(0);
+        if let Some((k, v)) = trimmed.split_once(':') {
+            if k.eq_ignore_ascii_case("content-length") {
+                content_length = v.trim().parse().unwrap_or(0);
+            }
         }
+        headers.push_str(trimmed);
+        headers.push('\n');
     }
 
     let mut body = vec![0u8; content_length];
     if content_length > 0 {
         reader.read_exact(&mut body)?;
     }
-    Ok(Some(Request {
-        method,
-        path,
-        body: String::from_utf8_lossy(&body).into_owned(),
-    }))
+    Ok(Some(Request { method, path, headers, body }))
+}
+
+/// Paths the duckdb-ui handlers own (everything else is an asset GET).
+fn is_ui_endpoint(path: &str) -> bool {
+    path == "/info"
+        || path == "/localEvents"
+        || path == "/localToken"
+        || path.starts_with("/ddb/")
 }
 
 fn handle_connection(
     stream: &mut TcpStream,
     core: &mut CoreExecution,
     conn: &ResourceAny,
+    mode: UiMode,
+    assets_dir: &Path,
 ) -> Result<()> {
-    let request = match read_request(stream)? {
+    let req = match read_request(stream)? {
         Some(r) => r,
         None => return Ok(()),
     };
 
-    match (request.method.as_str(), request.path.as_str()) {
-        ("GET", "/") => write_response(stream, 200, "text/html; charset=utf-8", CONSOLE_HTML),
-        ("POST", "/api/query") => {
-            let json = run_query(core, conn, request.body.trim());
-            write_response(stream, 200, "application/json", &json)
+    match mode {
+        UiMode::Console => match (req.method.as_str(), req.path.as_str()) {
+            ("GET", "/") => write_response(stream, 200, "text/html; charset=utf-8", CONSOLE_HTML.as_bytes()),
+            ("POST", "/api/query") => {
+                let json = run_query(core, conn, std::str::from_utf8(&req.body).unwrap_or("").trim());
+                write_response(stream, 200, "application/json", json.as_bytes())
+            }
+            ("GET", "/favicon.ico") => write_response(stream, 204, "text/plain", b""),
+            _ => write_response(stream, 404, "text/plain", b"not found"),
+        },
+        UiMode::Offline | UiMode::Online => {
+            if is_ui_endpoint(&req.path) {
+                match bridge_ui_request(core, conn, &req) {
+                    Some((status, ctype, body)) => write_response(stream, status, &ctype, &body),
+                    None => write_response(stream, 503, "text/plain", b"UI server not started"),
+                }
+            } else if req.method == "GET" {
+                let (status, ctype, body) = match mode {
+                    UiMode::Offline => serve_asset(assets_dir, &req.path),
+                    UiMode::Online => proxy_get(&req.path),
+                    _ => unreachable!(),
+                };
+                write_response(stream, status, &ctype, &body)
+            } else {
+                write_response(stream, 404, "text/plain", b"not found")
+            }
         }
-        ("GET", "/favicon.ico") => write_response(stream, 204, "text/plain", ""),
-        _ => write_response(stream, 404, "text/plain", "not found"),
     }
 }
 
-/// Execute SQL against the core and return a JSON body
-/// `{"columns":[...],"rows":[[...]],"rowcount":N}` or `{"error":"..."}`.
+/// Forward a duckdb-ui request to the component's bridged HttpServer handler.
+fn bridge_ui_request(
+    core: &mut CoreExecution,
+    _conn: &ResourceAny,
+    req: &Request,
+) -> Option<(u16, String, Vec<u8>)> {
+    let resp = core
+        .with_database(|g, s| {
+            g.call_handle_ui_request(s, &req.method, &req.path, &req.headers, &req.body)
+        })
+        .ok()??;
+    Some((resp.status, resp.content_type, resp.body))
+}
+
+/// Serve a captured asset from the offline assets directory.
+fn serve_asset(assets_dir: &Path, path: &str) -> (u16, String, Vec<u8>) {
+    let rel = path.split('?').next().unwrap_or("/").trim_start_matches('/');
+    let rel = if rel.is_empty() { "index.html" } else { rel };
+    // contain to assets_dir (no traversal)
+    let mut full = PathBuf::from(assets_dir);
+    for seg in rel.split('/') {
+        if seg == ".." || seg == "." || seg.is_empty() {
+            continue;
+        }
+        full.push(seg);
+    }
+    match std::fs::read(&full) {
+        Ok(bytes) => (200, mime_for(&full).to_string(), bytes),
+        Err(_) => {
+            // SPA fallback: unknown non-asset path -> index.html (client routing)
+            if !rel.contains('.') {
+                if let Ok(bytes) = std::fs::read(assets_dir.join("index.html")) {
+                    return (200, "text/html; charset=utf-8".to_string(), bytes);
+                }
+            }
+            (404, "text/plain".to_string(), format!("not found: {path}").into_bytes())
+        }
+    }
+}
+
+/// Proxy a GET to ui.duckdb.org via curl (online mode; the host has outbound net).
+fn proxy_get(path: &str) -> (u16, String, Vec<u8>) {
+    let url = format!("{REMOTE_UI_URL}{}", if path == "/" { "/" } else { path });
+    let hdr_file = std::env::temp_dir().join(format!("ddbui-{}", std::process::id()));
+    let out = std::process::Command::new("curl")
+        .args(["-s", "-A", "duckdb", "-D", hdr_file.to_str().unwrap_or("/dev/null"), &url])
+        .output();
+    match out {
+        Ok(o) if o.status.success() => {
+            let mut status = 200u16;
+            let mut ctype = String::from("application/octet-stream");
+            if let Ok(hdrs) = std::fs::read_to_string(&hdr_file) {
+                for line in hdrs.lines() {
+                    if let Some(code) = line.strip_prefix("HTTP/").and_then(|l| l.split_whitespace().nth(1)) {
+                        status = code.parse().unwrap_or(status);
+                    } else if let Some((k, v)) = line.split_once(':') {
+                        if k.eq_ignore_ascii_case("content-type") {
+                            ctype = v.trim().to_string();
+                        }
+                    }
+                }
+            }
+            let _ = std::fs::remove_file(&hdr_file);
+            (status, ctype, o.stdout)
+        }
+        _ => (502, "text/plain".to_string(), b"upstream fetch failed".to_vec()),
+    }
+}
+
+fn mime_for(path: &Path) -> &'static str {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("html") => "text/html; charset=utf-8",
+        Some("js") => "text/javascript; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("json") | Some("jsonl") => "application/json; charset=utf-8",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("woff2") => "font/woff2",
+        Some("woff") => "font/woff",
+        Some("wasm") => "application/wasm",
+        Some("map") => "application/json",
+        _ => "application/octet-stream",
+    }
+}
+
+// --- console mode (the built-in tiny SQL console) ---------------------------
+
 fn run_query(core: &mut CoreExecution, conn: &ResourceAny, sql: &str) -> String {
     if sql.is_empty() {
         return r#"{"columns":[],"rows":[],"rowcount":0}"#.to_string();
@@ -167,7 +308,6 @@ fn run_query(core: &mut CoreExecution, conn: &ResourceAny, sql: &str) -> String 
         Ok(Err(e)) => return json_error(&duckerror_message(&e)),
         Err(e) => return json_error(&format!("{e}")),
     };
-
     let mut out = String::from("{\"columns\":[");
     for (i, col) in result.columns.iter().enumerate() {
         if i > 0 {
@@ -205,7 +345,7 @@ fn json_value(out: &mut String, val: &core_types::Duckvalue) {
             if v.is_finite() {
                 out.push_str(&v.to_string());
             } else {
-                json_string(out, &v.to_string()); // NaN/Inf aren't valid JSON numbers
+                json_string(out, &v.to_string());
             }
         }
         core_types::Duckvalue::Text(s) => json_string(out, s),
@@ -246,23 +386,21 @@ fn json_string(out: &mut String, s: &str) {
     out.push('"');
 }
 
-fn write_response(
-    stream: &mut TcpStream,
-    status: u16,
-    content_type: &str,
-    body: &str,
-) -> Result<()> {
+fn write_response(stream: &mut TcpStream, status: u16, content_type: &str, body: &[u8]) -> Result<()> {
     let reason = match status {
         200 => "OK",
         204 => "No Content",
         404 => "Not Found",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
         _ => "OK",
     };
-    let response = format!(
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\n\r\n{body}",
+    let header = format!(
+        "HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\n\r\n",
         body.len()
     );
-    stream.write_all(response.as_bytes())?;
+    stream.write_all(header.as_bytes())?;
+    stream.write_all(body)?;
     stream.flush()?;
     Ok(())
 }

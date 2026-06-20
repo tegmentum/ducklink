@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::{ArgAction, Parser};
 use duckdb_component_host::{
     precompile_component_to_file, run_cli_with_stdio, serve_ui, set_extension_root,
-    ComponentArtifacts,
+    ComponentArtifacts, UiMode,
 };
 
 #[derive(Parser, Debug)]
@@ -77,13 +77,17 @@ fn main() -> Result<()> {
         }
     }
 
-    // `duckdb-host ui [--port N] [--no-open] [DB]` starts the local web SQL
-    // console (our wasm-friendly equivalent of DuckDB's `ui` extension). The host
-    // owns the listening socket and bridges queries to the core component.
+    // `duckdb-host ui [--port N] [--online|--console] [--no-open] [--assets DIR] [DB]`
+    // The host owns the listening socket (httplib can't listen() in the sandbox)
+    // and bridges requests to the core component. Default: the REAL DuckDB UI
+    // served offline from captured assets; `--online` proxies ui.duckdb.org;
+    // `--console` is the tiny built-in SQL console.
     if raw.get(1).map(String::as_str) == Some("ui") {
         let mut port: u16 = 4213;
         let mut open_browser = true;
+        let mut mode = UiMode::Offline;
         let mut db: Option<String> = None;
+        let mut assets = std::env::current_dir()?.join("web/duckdb-ui");
         let mut i = 2;
         while i < raw.len() {
             match raw[i].as_str() {
@@ -91,6 +95,15 @@ fn main() -> Result<()> {
                     i += 1;
                     port = raw.get(i).and_then(|s| s.parse().ok()).unwrap_or(port);
                 }
+                "--assets" => {
+                    i += 1;
+                    if let Some(d) = raw.get(i) {
+                        assets = PathBuf::from(d);
+                    }
+                }
+                "--online" => mode = UiMode::Online,
+                "--offline" => mode = UiMode::Offline,
+                "--console" => mode = UiMode::Console,
                 "--no-open" => open_browser = false,
                 other => db = Some(other.to_string()),
             }
@@ -101,8 +114,12 @@ fn main() -> Result<()> {
         let extensions_dir = std::env::current_dir()?.join("artifacts/extensions");
         set_extension_root(extensions_dir);
         let cwd = std::env::current_dir()?;
+        // DuckDB's wasm home is "/", and it creates /.duckdb/extension_data at open.
+        // The fs shim resolves "/X" relative to the cwd preopen, so pre-create
+        // cwd/.duckdb/extension_data (the shim's mkdir isn't recursive enough).
+        std::fs::create_dir_all(cwd.join(".duckdb/extension_data")).ok();
         let preopens: Vec<(&Path, &str)> = vec![(cwd.as_path(), ".")];
-        serve_ui(&artifacts, db.as_deref(), port, open_browser, &preopens)?;
+        serve_ui(&artifacts, db.as_deref(), port, mode, open_browser, &assets, &preopens)?;
         return Ok(());
     }
 

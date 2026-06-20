@@ -116,6 +116,19 @@ interface database {
         name: string,
         requires: list<capabilitykind>,
     }
+
+    /// One response from the DuckDB UI extension's bridged HTTP handler.
+    record ui-response {
+        status: u16,
+        content-type: string,
+        body: list<u8>,
+    }
+
+    /// Handle one DuckDB UI HTTP request through the (static) `ui` extension's
+    /// HttpServer, which the native host bridges to (httplib can't listen() in
+    /// the wasip2 sandbox). `start-ui-server` must have been run first; returns
+    /// none if the UI server isn't started. `headers` is a "Key: Value\n" block.
+    handle-ui-request: func(method: string, path: string, headers: string, body: list<u8>) -> option<ui-response>;
 }
 
 interface host-extension-loader {
