@@ -3205,6 +3205,18 @@ fn build_engine() -> Result<Engine> {
     // exception handling; enable the proposal so throws unwind and are caught
     // instead of aborting the module.
     config.wasm_exceptions(true);
+    // Cache compiled artifacts on disk. The core component is ~96 MB of wasm;
+    // Cranelift-compiling it from scratch costs ~7s and otherwise happens on
+    // EVERY invocation (it dominates total runtime -- a trivial query takes as
+    // long as a 20M-row sort). With the cache, the first run compiles + stores
+    // and every later run deserializes in ~milliseconds (keyed by content +
+    // compiler config + wasmtime version, so a rebuilt component recompiles once).
+    match wasmtime::Cache::from_file(None) {
+        Ok(cache) => {
+            config.cache(Some(cache));
+        }
+        Err(err) => eprintln!("warning: wasmtime compile cache unavailable: {err}"),
+    }
     Engine::new(&config).context("failed to create Wasmtime engine")
 }
 
