@@ -11,4 +11,11 @@ world loader-stub {
     export duckdb:component/host-extension-loader;
     export duckdb:component/extension-loader-hooks;
     export duckdb:extension/callback-dispatch;
+    // The core imports tvm:memory unconditionally (the >4 GiB spill tier). The
+    // standalone has no 64-bit host to back it, so the stub declines region
+    // creation: the guest's spill bridge then disables TVM and falls back to the
+    // ordinary temp-directory path. (A future spill-capable standalone could
+    // back regions with the stub's own linear memory.)
+    export tvm:memory/manager@0.1.0;
+    export tvm:memory/bytes@0.1.0;
 }

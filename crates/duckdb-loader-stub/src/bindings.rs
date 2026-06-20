@@ -389,6 +389,207 @@ pub mod duckdb {
 }
 #[rustfmt::skip]
 #[allow(dead_code, clippy::all)]
+pub mod tvm {
+    pub mod memory {
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod types {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            #[repr(u8)]
+            #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+            pub enum RegionKind {
+                HotHeap,
+                ObjectArena,
+                BlobArena,
+                PageStore,
+                Scratch,
+                DeviceState,
+                CodeCache,
+            }
+            impl ::core::fmt::Debug for RegionKind {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    match self {
+                        RegionKind::HotHeap => {
+                            f.debug_tuple("RegionKind::HotHeap").finish()
+                        }
+                        RegionKind::ObjectArena => {
+                            f.debug_tuple("RegionKind::ObjectArena").finish()
+                        }
+                        RegionKind::BlobArena => {
+                            f.debug_tuple("RegionKind::BlobArena").finish()
+                        }
+                        RegionKind::PageStore => {
+                            f.debug_tuple("RegionKind::PageStore").finish()
+                        }
+                        RegionKind::Scratch => {
+                            f.debug_tuple("RegionKind::Scratch").finish()
+                        }
+                        RegionKind::DeviceState => {
+                            f.debug_tuple("RegionKind::DeviceState").finish()
+                        }
+                        RegionKind::CodeCache => {
+                            f.debug_tuple("RegionKind::CodeCache").finish()
+                        }
+                    }
+                }
+            }
+            impl RegionKind {
+                #[doc(hidden)]
+                pub unsafe fn _lift(val: u8) -> RegionKind {
+                    if !cfg!(debug_assertions) {
+                        return ::core::mem::transmute(val);
+                    }
+                    match val {
+                        0 => RegionKind::HotHeap,
+                        1 => RegionKind::ObjectArena,
+                        2 => RegionKind::BlobArena,
+                        3 => RegionKind::PageStore,
+                        4 => RegionKind::Scratch,
+                        5 => RegionKind::DeviceState,
+                        6 => RegionKind::CodeCache,
+                        _ => panic!("invalid enum discriminant"),
+                    }
+                }
+            }
+            #[repr(u8)]
+            #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+            pub enum Residency {
+                Hot,
+                Warm,
+                Cold,
+                External,
+            }
+            impl ::core::fmt::Debug for Residency {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    match self {
+                        Residency::Hot => f.debug_tuple("Residency::Hot").finish(),
+                        Residency::Warm => f.debug_tuple("Residency::Warm").finish(),
+                        Residency::Cold => f.debug_tuple("Residency::Cold").finish(),
+                        Residency::External => {
+                            f.debug_tuple("Residency::External").finish()
+                        }
+                    }
+                }
+            }
+            impl Residency {
+                #[doc(hidden)]
+                pub unsafe fn _lift(val: u8) -> Residency {
+                    if !cfg!(debug_assertions) {
+                        return ::core::mem::transmute(val);
+                    }
+                    match val {
+                        0 => Residency::Hot,
+                        1 => Residency::Warm,
+                        2 => Residency::Cold,
+                        3 => Residency::External,
+                        _ => panic!("invalid enum discriminant"),
+                    }
+                }
+            }
+            #[repr(C)]
+            #[derive(Clone, Copy)]
+            pub struct Handle {
+                pub region_id: u16,
+                pub generation: u16,
+                pub offset: u32,
+            }
+            impl ::core::fmt::Debug for Handle {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("Handle")
+                        .field("region-id", &self.region_id)
+                        .field("generation", &self.generation)
+                        .field("offset", &self.offset)
+                        .finish()
+                }
+            }
+            #[repr(C)]
+            #[derive(Clone, Copy)]
+            pub struct RegionInfo {
+                pub id: u16,
+                pub generation: u16,
+                pub kind: RegionKind,
+                pub capacity: u32,
+                pub used: u32,
+                pub residency: Residency,
+            }
+            impl ::core::fmt::Debug for RegionInfo {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("RegionInfo")
+                        .field("id", &self.id)
+                        .field("generation", &self.generation)
+                        .field("kind", &self.kind)
+                        .field("capacity", &self.capacity)
+                        .field("used", &self.used)
+                        .field("residency", &self.residency)
+                        .finish()
+                }
+            }
+            #[derive(Clone)]
+            pub enum TvmError {
+                RegionNotFound(u16),
+                StaleHandle,
+                OutOfBounds,
+                NotResident,
+                AllocationFailed,
+                BackingStore(_rt::String),
+                Pinned,
+            }
+            impl ::core::fmt::Debug for TvmError {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    match self {
+                        TvmError::RegionNotFound(e) => {
+                            f.debug_tuple("TvmError::RegionNotFound").field(e).finish()
+                        }
+                        TvmError::StaleHandle => {
+                            f.debug_tuple("TvmError::StaleHandle").finish()
+                        }
+                        TvmError::OutOfBounds => {
+                            f.debug_tuple("TvmError::OutOfBounds").finish()
+                        }
+                        TvmError::NotResident => {
+                            f.debug_tuple("TvmError::NotResident").finish()
+                        }
+                        TvmError::AllocationFailed => {
+                            f.debug_tuple("TvmError::AllocationFailed").finish()
+                        }
+                        TvmError::BackingStore(e) => {
+                            f.debug_tuple("TvmError::BackingStore").field(e).finish()
+                        }
+                        TvmError::Pinned => f.debug_tuple("TvmError::Pinned").finish(),
+                    }
+                }
+            }
+            impl ::core::fmt::Display for TvmError {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    write!(f, "{:?}", self)
+                }
+            }
+            impl std::error::Error for TvmError {}
+        }
+    }
+}
+#[rustfmt::skip]
+#[allow(dead_code, clippy::all)]
 pub mod exports {
     pub mod duckdb {
         pub mod component {
@@ -3754,6 +3955,927 @@ pub mod exports {
             }
         }
     }
+    pub mod tvm {
+        pub mod memory {
+            #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+            pub mod manager {
+                #[used]
+                #[doc(hidden)]
+                static __FORCE_SECTION_REF: fn() = super::super::super::super::__link_custom_section_describing_imports;
+                use super::super::super::super::_rt;
+                pub type RegionKind = super::super::super::super::tvm::memory::types::RegionKind;
+                pub type Handle = super::super::super::super::tvm::memory::types::Handle;
+                pub type RegionInfo = super::super::super::super::tvm::memory::types::RegionInfo;
+                pub type TvmError = super::super::super::super::tvm::memory::types::TvmError;
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_create_region_cabi<T: Guest>(
+                    arg0: i32,
+                    arg1: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::create_region(
+                        super::super::super::super::tvm::memory::types::RegionKind::_lift(
+                            arg0 as u8,
+                        ),
+                        arg1 as u32,
+                    );
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result0 {
+                        Ok(e) => {
+                            *ptr1.add(0).cast::<u8>() = (0i32) as u8;
+                            *ptr1
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<u16>() = (_rt::as_i32(e)) as u16;
+                        }
+                        Err(e) => {
+                            *ptr1.add(0).cast::<u8>() = (1i32) as u8;
+                            use super::super::super::super::tvm::memory::types::TvmError as V3;
+                            match e {
+                                V3::RegionNotFound(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u16>() = (_rt::as_i32(e)) as u16;
+                                }
+                                V3::StaleHandle => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                }
+                                V3::OutOfBounds => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (2i32) as u8;
+                                }
+                                V3::NotResident => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (3i32) as u8;
+                                }
+                                V3::AllocationFailed => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (4i32) as u8;
+                                }
+                                V3::BackingStore(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (5i32) as u8;
+                                    let vec2 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                                    let len2 = vec2.len();
+                                    ::core::mem::forget(vec2);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len2;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr2.cast_mut();
+                                }
+                                V3::Pinned => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (6i32) as u8;
+                                }
+                            }
+                        }
+                    };
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_create_region<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l1 {
+                                0 => {}
+                                1 => {}
+                                2 => {}
+                                3 => {}
+                                4 => {}
+                                5 => {
+                                    let l2 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_destroy_region_cabi<T: Guest>(
+                    arg0: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::destroy_region(arg0 as u16);
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result0 {
+                        Ok(_) => {
+                            *ptr1.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr1.add(0).cast::<u8>() = (1i32) as u8;
+                            use super::super::super::super::tvm::memory::types::TvmError as V3;
+                            match e {
+                                V3::RegionNotFound(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u16>() = (_rt::as_i32(e)) as u16;
+                                }
+                                V3::StaleHandle => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                }
+                                V3::OutOfBounds => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (2i32) as u8;
+                                }
+                                V3::NotResident => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (3i32) as u8;
+                                }
+                                V3::AllocationFailed => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (4i32) as u8;
+                                }
+                                V3::BackingStore(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (5i32) as u8;
+                                    let vec2 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                                    let len2 = vec2.len();
+                                    ::core::mem::forget(vec2);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len2;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr2.cast_mut();
+                                }
+                                V3::Pinned => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (6i32) as u8;
+                                }
+                            }
+                        }
+                    };
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_destroy_region<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l1 {
+                                0 => {}
+                                1 => {}
+                                2 => {}
+                                3 => {}
+                                4 => {}
+                                5 => {
+                                    let l2 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_alloc_cabi<T: Guest>(
+                    arg0: i32,
+                    arg1: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::alloc(arg0 as u16, arg1 as u32);
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result0 {
+                        Ok(e) => {
+                            *ptr1.add(0).cast::<u8>() = (0i32) as u8;
+                            let super::super::super::super::tvm::memory::types::Handle {
+                                region_id: region_id2,
+                                generation: generation2,
+                                offset: offset2,
+                            } = e;
+                            *ptr1
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<u16>() = (_rt::as_i32(region_id2)) as u16;
+                            *ptr1
+                                .add(2 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u16>() = (_rt::as_i32(generation2)) as u16;
+                            *ptr1
+                                .add(4 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<i32>() = _rt::as_i32(offset2);
+                        }
+                        Err(e) => {
+                            *ptr1.add(0).cast::<u8>() = (1i32) as u8;
+                            use super::super::super::super::tvm::memory::types::TvmError as V4;
+                            match e {
+                                V4::RegionNotFound(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u16>() = (_rt::as_i32(e)) as u16;
+                                }
+                                V4::StaleHandle => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                }
+                                V4::OutOfBounds => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (2i32) as u8;
+                                }
+                                V4::NotResident => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (3i32) as u8;
+                                }
+                                V4::AllocationFailed => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (4i32) as u8;
+                                }
+                                V4::BackingStore(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (5i32) as u8;
+                                    let vec3 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                                    let len3 = vec3.len();
+                                    ::core::mem::forget(vec3);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len3;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr3.cast_mut();
+                                }
+                                V4::Pinned => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (6i32) as u8;
+                                }
+                            }
+                        }
+                    };
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_alloc<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l1 {
+                                0 => {}
+                                1 => {}
+                                2 => {}
+                                3 => {}
+                                4 => {}
+                                5 => {
+                                    let l2 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_dealloc_cabi<T: Guest>(
+                    arg0: i32,
+                    arg1: i32,
+                    arg2: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::dealloc(super::super::super::super::tvm::memory::types::Handle {
+                        region_id: arg0 as u16,
+                        generation: arg1 as u16,
+                        offset: arg2 as u32,
+                    });
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result0 {
+                        Ok(_) => {
+                            *ptr1.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr1.add(0).cast::<u8>() = (1i32) as u8;
+                            use super::super::super::super::tvm::memory::types::TvmError as V3;
+                            match e {
+                                V3::RegionNotFound(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u16>() = (_rt::as_i32(e)) as u16;
+                                }
+                                V3::StaleHandle => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                }
+                                V3::OutOfBounds => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (2i32) as u8;
+                                }
+                                V3::NotResident => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (3i32) as u8;
+                                }
+                                V3::AllocationFailed => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (4i32) as u8;
+                                }
+                                V3::BackingStore(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (5i32) as u8;
+                                    let vec2 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                                    let len2 = vec2.len();
+                                    ::core::mem::forget(vec2);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len2;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr2.cast_mut();
+                                }
+                                V3::Pinned => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (6i32) as u8;
+                                }
+                            }
+                        }
+                    };
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_dealloc<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l1 {
+                                0 => {}
+                                1 => {}
+                                2 => {}
+                                3 => {}
+                                4 => {}
+                                5 => {
+                                    let l2 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_describe_region_cabi<T: Guest>(
+                    arg0: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::describe_region(arg0 as u16);
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result0 {
+                        Ok(e) => {
+                            *ptr1.add(0).cast::<u8>() = (0i32) as u8;
+                            let super::super::super::super::tvm::memory::types::RegionInfo {
+                                id: id2,
+                                generation: generation2,
+                                kind: kind2,
+                                capacity: capacity2,
+                                used: used2,
+                                residency: residency2,
+                            } = e;
+                            *ptr1
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<u16>() = (_rt::as_i32(id2)) as u16;
+                            *ptr1
+                                .add(2 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u16>() = (_rt::as_i32(generation2)) as u16;
+                            *ptr1
+                                .add(4 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (kind2.clone() as i32) as u8;
+                            *ptr1
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<i32>() = _rt::as_i32(capacity2);
+                            *ptr1
+                                .add(12 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<i32>() = _rt::as_i32(used2);
+                            *ptr1
+                                .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (residency2.clone() as i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr1.add(0).cast::<u8>() = (1i32) as u8;
+                            use super::super::super::super::tvm::memory::types::TvmError as V4;
+                            match e {
+                                V4::RegionNotFound(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u16>() = (_rt::as_i32(e)) as u16;
+                                }
+                                V4::StaleHandle => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                }
+                                V4::OutOfBounds => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (2i32) as u8;
+                                }
+                                V4::NotResident => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (3i32) as u8;
+                                }
+                                V4::AllocationFailed => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (4i32) as u8;
+                                }
+                                V4::BackingStore(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (5i32) as u8;
+                                    let vec3 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                                    let len3 = vec3.len();
+                                    ::core::mem::forget(vec3);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len3;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr3.cast_mut();
+                                }
+                                V4::Pinned => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (6i32) as u8;
+                                }
+                            }
+                        }
+                    };
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_describe_region<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l1 {
+                                0 => {}
+                                1 => {}
+                                2 => {}
+                                3 => {}
+                                4 => {}
+                                5 => {
+                                    let l2 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                pub trait Guest {
+                    fn create_region(
+                        kind: RegionKind,
+                        capacity: u32,
+                    ) -> Result<u16, TvmError>;
+                    fn destroy_region(region_id: u16) -> Result<(), TvmError>;
+                    fn alloc(region_id: u16, size: u32) -> Result<Handle, TvmError>;
+                    fn dealloc(ptr: Handle) -> Result<(), TvmError>;
+                    fn describe_region(region_id: u16) -> Result<RegionInfo, TvmError>;
+                }
+                #[doc(hidden)]
+                macro_rules! __export_tvm_memory_manager_0_1_0_cabi {
+                    ($ty:ident with_types_in $($path_to_types:tt)*) => {
+                        const _ : () = { #[unsafe (export_name =
+                        "tvm:memory/manager@0.1.0#create-region")] unsafe extern "C" fn
+                        export_create_region(arg0 : i32, arg1 : i32,) -> * mut u8 {
+                        unsafe { $($path_to_types)*:: _export_create_region_cabi::<$ty >
+                        (arg0, arg1) } } #[unsafe (export_name =
+                        "cabi_post_tvm:memory/manager@0.1.0#create-region")] unsafe
+                        extern "C" fn _post_return_create_region(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_create_region::<$ty >
+                        (arg0) } } #[unsafe (export_name =
+                        "tvm:memory/manager@0.1.0#destroy-region")] unsafe extern "C" fn
+                        export_destroy_region(arg0 : i32,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_destroy_region_cabi::<$ty > (arg0) }
+                        } #[unsafe (export_name =
+                        "cabi_post_tvm:memory/manager@0.1.0#destroy-region")] unsafe
+                        extern "C" fn _post_return_destroy_region(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_destroy_region::<$ty
+                        > (arg0) } } #[unsafe (export_name =
+                        "tvm:memory/manager@0.1.0#alloc")] unsafe extern "C" fn
+                        export_alloc(arg0 : i32, arg1 : i32,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_alloc_cabi::<$ty > (arg0, arg1) } }
+                        #[unsafe (export_name =
+                        "cabi_post_tvm:memory/manager@0.1.0#alloc")] unsafe extern "C" fn
+                        _post_return_alloc(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_alloc::<$ty > (arg0) } }
+                        #[unsafe (export_name = "tvm:memory/manager@0.1.0#dealloc")]
+                        unsafe extern "C" fn export_dealloc(arg0 : i32, arg1 : i32, arg2
+                        : i32,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_dealloc_cabi::<$ty > (arg0, arg1, arg2) } } #[unsafe
+                        (export_name = "cabi_post_tvm:memory/manager@0.1.0#dealloc")]
+                        unsafe extern "C" fn _post_return_dealloc(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_dealloc::<$ty >
+                        (arg0) } } #[unsafe (export_name =
+                        "tvm:memory/manager@0.1.0#describe-region")] unsafe extern "C" fn
+                        export_describe_region(arg0 : i32,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_describe_region_cabi::<$ty > (arg0)
+                        } } #[unsafe (export_name =
+                        "cabi_post_tvm:memory/manager@0.1.0#describe-region")] unsafe
+                        extern "C" fn _post_return_describe_region(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_describe_region::<$ty
+                        > (arg0) } } };
+                    };
+                }
+                #[doc(hidden)]
+                pub(crate) use __export_tvm_memory_manager_0_1_0_cabi;
+                #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                struct _RetArea(
+                    [::core::mem::MaybeUninit<
+                        u8,
+                    >; 16 + 2 * ::core::mem::size_of::<*const u8>()],
+                );
+                static mut _RET_AREA: _RetArea = _RetArea(
+                    [::core::mem::MaybeUninit::uninit(); 16
+                        + 2 * ::core::mem::size_of::<*const u8>()],
+                );
+            }
+            #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+            pub mod bytes {
+                #[used]
+                #[doc(hidden)]
+                static __FORCE_SECTION_REF: fn() = super::super::super::super::__link_custom_section_describing_imports;
+                use super::super::super::super::_rt;
+                pub type Handle = super::super::super::super::tvm::memory::types::Handle;
+                pub type TvmError = super::super::super::super::tvm::memory::types::TvmError;
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_read_cabi<T: Guest>(
+                    arg0: i32,
+                    arg1: i32,
+                    arg2: i32,
+                    arg3: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::read(
+                        super::super::super::super::tvm::memory::types::Handle {
+                            region_id: arg0 as u16,
+                            generation: arg1 as u16,
+                            offset: arg2 as u32,
+                        },
+                        arg3 as u32,
+                    );
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result0 {
+                        Ok(e) => {
+                            *ptr1.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec2 = (e).into_boxed_slice();
+                            let ptr2 = vec2.as_ptr().cast::<u8>();
+                            let len2 = vec2.len();
+                            ::core::mem::forget(vec2);
+                            *ptr1
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len2;
+                            *ptr1
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr2.cast_mut();
+                        }
+                        Err(e) => {
+                            *ptr1.add(0).cast::<u8>() = (1i32) as u8;
+                            use super::super::super::super::tvm::memory::types::TvmError as V4;
+                            match e {
+                                V4::RegionNotFound(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u16>() = (_rt::as_i32(e)) as u16;
+                                }
+                                V4::StaleHandle => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                }
+                                V4::OutOfBounds => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (2i32) as u8;
+                                }
+                                V4::NotResident => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (3i32) as u8;
+                                }
+                                V4::AllocationFailed => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (4i32) as u8;
+                                }
+                                V4::BackingStore(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (5i32) as u8;
+                                    let vec3 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                                    let len3 = vec3.len();
+                                    ::core::mem::forget(vec3);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len3;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr3.cast_mut();
+                                }
+                                V4::Pinned => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (6i32) as u8;
+                                }
+                            }
+                        }
+                    };
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_read<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base3 = l1;
+                            let len3 = l2;
+                            _rt::cabi_dealloc(base3, len3 * 1, 1);
+                        }
+                        _ => {
+                            let l4 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l4 {
+                                0 => {}
+                                1 => {}
+                                2 => {}
+                                3 => {}
+                                4 => {}
+                                5 => {
+                                    let l5 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l6 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l5, l6, 1);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_write_cabi<T: Guest>(
+                    arg0: i32,
+                    arg1: i32,
+                    arg2: i32,
+                    arg3: *mut u8,
+                    arg4: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg4;
+                    let result1 = T::write(
+                        super::super::super::super::tvm::memory::types::Handle {
+                            region_id: arg0 as u16,
+                            generation: arg1 as u16,
+                            offset: arg2 as u32,
+                        },
+                        _rt::Vec::from_raw_parts(arg3.cast(), len0, len0),
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(_) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            use super::super::super::super::tvm::memory::types::TvmError as V4;
+                            match e {
+                                V4::RegionNotFound(e) => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                    *ptr2
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u16>() = (_rt::as_i32(e)) as u16;
+                                }
+                                V4::StaleHandle => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                }
+                                V4::OutOfBounds => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (2i32) as u8;
+                                }
+                                V4::NotResident => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (3i32) as u8;
+                                }
+                                V4::AllocationFailed => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (4i32) as u8;
+                                }
+                                V4::BackingStore(e) => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (5i32) as u8;
+                                    let vec3 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                                    let len3 = vec3.len();
+                                    ::core::mem::forget(vec3);
+                                    *ptr2
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len3;
+                                    *ptr2
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr3.cast_mut();
+                                }
+                                V4::Pinned => {
+                                    *ptr2
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (6i32) as u8;
+                                }
+                            }
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_write<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l1 {
+                                0 => {}
+                                1 => {}
+                                2 => {}
+                                3 => {}
+                                4 => {}
+                                5 => {
+                                    let l2 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                pub trait Guest {
+                    fn read(ptr: Handle, len: u32) -> Result<_rt::Vec<u8>, TvmError>;
+                    fn write(ptr: Handle, data: _rt::Vec<u8>) -> Result<(), TvmError>;
+                }
+                #[doc(hidden)]
+                macro_rules! __export_tvm_memory_bytes_0_1_0_cabi {
+                    ($ty:ident with_types_in $($path_to_types:tt)*) => {
+                        const _ : () = { #[unsafe (export_name =
+                        "tvm:memory/bytes@0.1.0#read")] unsafe extern "C" fn
+                        export_read(arg0 : i32, arg1 : i32, arg2 : i32, arg3 : i32,) -> *
+                        mut u8 { unsafe { $($path_to_types)*:: _export_read_cabi::<$ty >
+                        (arg0, arg1, arg2, arg3) } } #[unsafe (export_name =
+                        "cabi_post_tvm:memory/bytes@0.1.0#read")] unsafe extern "C" fn
+                        _post_return_read(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_read::<$ty > (arg0) } }
+                        #[unsafe (export_name = "tvm:memory/bytes@0.1.0#write")] unsafe
+                        extern "C" fn export_write(arg0 : i32, arg1 : i32, arg2 : i32,
+                        arg3 : * mut u8, arg4 : usize,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_write_cabi::<$ty > (arg0, arg1,
+                        arg2, arg3, arg4) } } #[unsafe (export_name =
+                        "cabi_post_tvm:memory/bytes@0.1.0#write")] unsafe extern "C" fn
+                        _post_return_write(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_write::<$ty > (arg0) } } };
+                    };
+                }
+                #[doc(hidden)]
+                pub(crate) use __export_tvm_memory_bytes_0_1_0_cabi;
+                #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                struct _RetArea(
+                    [::core::mem::MaybeUninit<
+                        u8,
+                    >; 4 * ::core::mem::size_of::<*const u8>()],
+                );
+                static mut _RET_AREA: _RetArea = _RetArea(
+                    [::core::mem::MaybeUninit::uninit(); 4
+                        * ::core::mem::size_of::<*const u8>()],
+                );
+            }
+        }
+    }
 }
 #[rustfmt::skip]
 mod _rt {
@@ -3930,7 +5052,12 @@ macro_rules! __export_loader_stub_impl {
         exports::duckdb::component::extension_loader_hooks); $($path_to_types_root)*::
         exports::duckdb::extension::callback_dispatch::__export_duckdb_extension_callback_dispatch_cabi!($ty
         with_types_in $($path_to_types_root)*::
-        exports::duckdb::extension::callback_dispatch);
+        exports::duckdb::extension::callback_dispatch); $($path_to_types_root)*::
+        exports::tvm::memory::manager::__export_tvm_memory_manager_0_1_0_cabi!($ty
+        with_types_in $($path_to_types_root)*:: exports::tvm::memory::manager);
+        $($path_to_types_root)*::
+        exports::tvm::memory::bytes::__export_tvm_memory_bytes_0_1_0_cabi!($ty
+        with_types_in $($path_to_types_root)*:: exports::tvm::memory::bytes);
     };
 }
 #[doc(inline)]
@@ -3941,9 +5068,9 @@ pub(crate) use __export_loader_stub_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 2454] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\x94\x12\x01A\x02\x01\
-A\x10\x01B&\x01m\x06\x07boolean\x05int64\x06uint64\x07float64\x04text\x04blob\x04\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 3354] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\x98\x19\x01A\x02\x01\
+A\x1a\x01B&\x01m\x06\x07boolean\x05int64\x06uint64\x07float64\x04text\x04blob\x04\
 \0\x0blogicaltype\x03\0\0\x01ks\x01r\x02\x04name\x02\x07logical\x01\x04\0\x07fun\
 carg\x03\0\x03\x01n\x05\x0ddeterministic\x0bcommutative\x09stateless\x0dsideeffe\
 cting\x0adeprecated\x04\0\x09funcflags\x03\0\x05\x01ps\x01r\x03\x0bdescription\x02\
@@ -3961,40 +5088,61 @@ info\x04warn\x05error\x04\0\x08loglevel\x03\0\x1d\x01r\x02\x03keys\x05values\x04
 \0\x08logfield\x03\0\x1f\x01m\x07\x06scalar\x05table\x09aggregate\x06pragma\x05m\
 acro\x07catalog\x0bfile-format\x04\0\x0ecapabilitykind\x03\0!\x01p\"\x01r\x03\x04\
 names\x07version\x02\x08requires#\x04\0\x0aloadresult\x03\0$\x03\0\x16duckdb:ext\
-ension/types\x05\0\x01B\x02\x01@\x01\x04names\0\x7f\x04\0\x0crequest-load\x01\0\x04\
-\0&duckdb:component/host-extension-loader\x05\x01\x02\x03\0\0\x0blogicaltype\x02\
-\x03\0\0\x09columndef\x02\x03\0\0\x09funcflags\x01B+\x02\x03\x02\x01\x02\x04\0\x0b\
-logicaltype\x03\0\0\x02\x03\x02\x01\x03\x04\0\x09columndef\x03\0\x02\x02\x03\x02\
-\x01\x04\x04\0\x09funcflags\x03\0\x04\x01ks\x01r\x02\x04name\x06\x07logical\x01\x04\
-\0\x08func-arg\x03\0\x07\x01ps\x01r\x03\x0bdescription\x06\x04tags\x09\x0aattrib\
-utes\x05\x04\0\x09func-opts\x03\0\x0a\x01r\x02\x0bdescription\x06\x04tags\x09\x04\
-\0\x08ext-opts\x03\0\x0c\x01p\x08\x01k\x0b\x01r\x05\x04names\x09arguments\x0e\x07\
-returns\x01\x0fcallback-handley\x07options\x0f\x04\0\x13scalar-registration\x03\0\
-\x10\x01p\x03\x01k\x0d\x01r\x05\x04names\x09arguments\x0e\x07columns\x12\x0fcall\
-back-handley\x07options\x13\x04\0\x12table-registration\x03\0\x14\x01r\x05\x04na\
-mes\x09arguments\x0e\x07returns\x01\x0fcallback-handley\x07options\x0f\x04\0\x16\
-aggregate-registration\x03\0\x16\x01r\x04\x06schemas\x04names\x0aparameters\x09\x0e\
-definition-sqls\x04\0\x12macro-registration\x03\0\x18\x01r\x02\x0aextensions\x09\
-\x0dfunction-names\x04\0\x1dreplacement-scan-registration\x03\0\x1a\x01r\x02\x04\
-names\x08physicals\x04\0\x19logical-type-registration\x03\0\x1c\x01r\x03\x06sour\
-ces\x06targets\x0fcallback-handley\x04\0\x11cast-registration\x03\0\x1e\x01p\x11\
-\x01p\x15\x01p\x17\x01p\x19\x01p\x1b\x01p\x1d\x01p\x1f\x01r\x07\x07scalars\x20\x06\
-tables!\x0aaggregates\"\x06macros#\x11replacement-scans$\x0dlogical-types%\x05ca\
-sts&\x04\0\x15pending-registrations\x03\0'\x01@\0\0(\x04\0\x19get-pending-regist\
-rations\x01)\x04\0'duckdb:component/extension-loader-hooks\x05\x05\x02\x03\0\0\x09\
-duckerror\x02\x03\0\0\x09duckvalue\x02\x03\0\0\x0ainvokeinfo\x02\x03\0\0\x09resu\
-ltset\x02\x03\0\0\x08rowbatch\x01B\x19\x02\x03\x02\x01\x06\x04\0\x09duckerror\x03\
-\0\0\x02\x03\x02\x01\x07\x04\0\x09duckvalue\x03\0\x02\x02\x03\x02\x01\x08\x04\0\x0a\
-invokeinfo\x03\0\x04\x02\x03\x02\x01\x09\x04\0\x09resultset\x03\0\x06\x02\x03\x02\
-\x01\x0a\x04\0\x08rowbatch\x03\0\x08\x01p\x03\x01j\x01\x03\x01\x01\x01@\x03\x06h\
-andley\x04args\x0a\x03ctx\x05\0\x0b\x04\0\x0bcall-scalar\x01\x0c\x01j\x01\x07\x01\
-\x01\x01@\x02\x06handley\x04args\x0a\0\x0d\x04\0\x0acall-table\x01\x0e\x01@\x02\x06\
-handley\x04rows\x09\0\x0b\x04\0\x0ecall-aggregate\x01\x0f\x01k\x03\x01j\x01\x10\x01\
-\x01\x01@\x02\x06handley\x04args\x0a\0\x11\x04\0\x0bcall-pragma\x01\x12\x01@\x02\
-\x06handley\x05value\x03\0\x0b\x04\0\x09call-cast\x01\x13\x04\0\"duckdb:extensio\
-n/callback-dispatch\x05\x0b\x04\0\x1educkdb:loader-stub/loader-stub\x04\0\x0b\x11\
-\x01\0\x0bloader-stub\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-com\
-ponent\x070.227.1\x10wit-bindgen-rust\x060.41.0";
+ension/types\x05\0\x01B\x0a\x01m\x07\x08hot-heap\x0cobject-arena\x0ablob-arena\x0a\
+page-store\x07scratch\x0cdevice-state\x0acode-cache\x04\0\x0bregion-kind\x03\0\0\
+\x01m\x04\x03hot\x04warm\x04cold\x08external\x04\0\x09residency\x03\0\x02\x01r\x03\
+\x09region-id{\x0ageneration{\x06offsety\x04\0\x06handle\x03\0\x04\x01r\x06\x02i\
+d{\x0ageneration{\x04kind\x01\x08capacityy\x04usedy\x09residency\x03\x04\0\x0bre\
+gion-info\x03\0\x06\x01q\x07\x10region-not-found\x01{\0\x0cstale-handle\0\0\x0do\
+ut-of-bounds\0\0\x0cnot-resident\0\0\x11allocation-failed\0\0\x0dbacking-store\x01\
+s\0\x06pinned\0\0\x04\0\x09tvm-error\x03\0\x08\x03\0\x16tvm:memory/types@0.1.0\x05\
+\x01\x01B\x02\x01@\x01\x04names\0\x7f\x04\0\x0crequest-load\x01\0\x04\0&duckdb:c\
+omponent/host-extension-loader\x05\x02\x02\x03\0\0\x0blogicaltype\x02\x03\0\0\x09\
+columndef\x02\x03\0\0\x09funcflags\x01B+\x02\x03\x02\x01\x03\x04\0\x0blogicaltyp\
+e\x03\0\0\x02\x03\x02\x01\x04\x04\0\x09columndef\x03\0\x02\x02\x03\x02\x01\x05\x04\
+\0\x09funcflags\x03\0\x04\x01ks\x01r\x02\x04name\x06\x07logical\x01\x04\0\x08fun\
+c-arg\x03\0\x07\x01ps\x01r\x03\x0bdescription\x06\x04tags\x09\x0aattributes\x05\x04\
+\0\x09func-opts\x03\0\x0a\x01r\x02\x0bdescription\x06\x04tags\x09\x04\0\x08ext-o\
+pts\x03\0\x0c\x01p\x08\x01k\x0b\x01r\x05\x04names\x09arguments\x0e\x07returns\x01\
+\x0fcallback-handley\x07options\x0f\x04\0\x13scalar-registration\x03\0\x10\x01p\x03\
+\x01k\x0d\x01r\x05\x04names\x09arguments\x0e\x07columns\x12\x0fcallback-handley\x07\
+options\x13\x04\0\x12table-registration\x03\0\x14\x01r\x05\x04names\x09arguments\
+\x0e\x07returns\x01\x0fcallback-handley\x07options\x0f\x04\0\x16aggregate-regist\
+ration\x03\0\x16\x01r\x04\x06schemas\x04names\x0aparameters\x09\x0edefinition-sq\
+ls\x04\0\x12macro-registration\x03\0\x18\x01r\x02\x0aextensions\x09\x0dfunction-\
+names\x04\0\x1dreplacement-scan-registration\x03\0\x1a\x01r\x02\x04names\x08phys\
+icals\x04\0\x19logical-type-registration\x03\0\x1c\x01r\x03\x06sources\x06target\
+s\x0fcallback-handley\x04\0\x11cast-registration\x03\0\x1e\x01p\x11\x01p\x15\x01\
+p\x17\x01p\x19\x01p\x1b\x01p\x1d\x01p\x1f\x01r\x07\x07scalars\x20\x06tables!\x0a\
+aggregates\"\x06macros#\x11replacement-scans$\x0dlogical-types%\x05casts&\x04\0\x15\
+pending-registrations\x03\0'\x01@\0\0(\x04\0\x19get-pending-registrations\x01)\x04\
+\0'duckdb:component/extension-loader-hooks\x05\x06\x02\x03\0\0\x09duckerror\x02\x03\
+\0\0\x09duckvalue\x02\x03\0\0\x0ainvokeinfo\x02\x03\0\0\x09resultset\x02\x03\0\0\
+\x08rowbatch\x01B\x19\x02\x03\x02\x01\x07\x04\0\x09duckerror\x03\0\0\x02\x03\x02\
+\x01\x08\x04\0\x09duckvalue\x03\0\x02\x02\x03\x02\x01\x09\x04\0\x0ainvokeinfo\x03\
+\0\x04\x02\x03\x02\x01\x0a\x04\0\x09resultset\x03\0\x06\x02\x03\x02\x01\x0b\x04\0\
+\x08rowbatch\x03\0\x08\x01p\x03\x01j\x01\x03\x01\x01\x01@\x03\x06handley\x04args\
+\x0a\x03ctx\x05\0\x0b\x04\0\x0bcall-scalar\x01\x0c\x01j\x01\x07\x01\x01\x01@\x02\
+\x06handley\x04args\x0a\0\x0d\x04\0\x0acall-table\x01\x0e\x01@\x02\x06handley\x04\
+rows\x09\0\x0b\x04\0\x0ecall-aggregate\x01\x0f\x01k\x03\x01j\x01\x10\x01\x01\x01\
+@\x02\x06handley\x04args\x0a\0\x11\x04\0\x0bcall-pragma\x01\x12\x01@\x02\x06hand\
+ley\x05value\x03\0\x0b\x04\0\x09call-cast\x01\x13\x04\0\"duckdb:extension/callba\
+ck-dispatch\x05\x0c\x02\x03\0\x01\x0bregion-kind\x02\x03\0\x01\x06handle\x02\x03\
+\0\x01\x0bregion-info\x02\x03\0\x01\x09tvm-error\x01B\x16\x02\x03\x02\x01\x0d\x04\
+\0\x0bregion-kind\x03\0\0\x02\x03\x02\x01\x0e\x04\0\x06handle\x03\0\x02\x02\x03\x02\
+\x01\x0f\x04\0\x0bregion-info\x03\0\x04\x02\x03\x02\x01\x10\x04\0\x09tvm-error\x03\
+\0\x06\x01j\x01{\x01\x07\x01@\x02\x04kind\x01\x08capacityy\0\x08\x04\0\x0dcreate\
+-region\x01\x09\x01j\0\x01\x07\x01@\x01\x09region-id{\0\x0a\x04\0\x0edestroy-reg\
+ion\x01\x0b\x01j\x01\x03\x01\x07\x01@\x02\x09region-id{\x04sizey\0\x0c\x04\0\x05\
+alloc\x01\x0d\x01@\x01\x03ptr\x03\0\x0a\x04\0\x07dealloc\x01\x0e\x01j\x01\x05\x01\
+\x07\x01@\x01\x09region-id{\0\x0f\x04\0\x0fdescribe-region\x01\x10\x04\0\x18tvm:\
+memory/manager@0.1.0\x05\x11\x01B\x0b\x02\x03\x02\x01\x0e\x04\0\x06handle\x03\0\0\
+\x02\x03\x02\x01\x10\x04\0\x09tvm-error\x03\0\x02\x01p}\x01j\x01\x04\x01\x03\x01\
+@\x02\x03ptr\x01\x03leny\0\x05\x04\0\x04read\x01\x06\x01j\0\x01\x03\x01@\x02\x03\
+ptr\x01\x04data\x04\0\x07\x04\0\x05write\x01\x08\x04\0\x16tvm:memory/bytes@0.1.0\
+\x05\x12\x04\0\x1educkdb:loader-stub/loader-stub\x04\0\x0b\x11\x01\0\x0bloader-s\
+tub\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10\
+wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

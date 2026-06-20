@@ -18,6 +18,10 @@ use bindings::exports::duckdb::component::host_extension_loader::Guest as Loader
 use bindings::exports::duckdb::extension::callback_dispatch::{
     Duckerror, Duckvalue, Guest as DispatchGuest, Invokeinfo, Resultset, Rowbatch,
 };
+use bindings::exports::tvm::memory::bytes::Guest as TvmBytesGuest;
+use bindings::exports::tvm::memory::manager::{
+    Guest as TvmManagerGuest, Handle, RegionInfo, RegionKind, TvmError,
+};
 
 struct Component;
 
@@ -72,6 +76,38 @@ impl DispatchGuest for Component {
 
     fn call_cast(_handle: u32, _value: Duckvalue) -> Result<Duckvalue, Duckerror> {
         Err(unreachable_dispatch())
+    }
+}
+
+// TVM spill tier. The standalone has no 64-bit host to own regions, so the stub
+// declines region creation; the core's spill bridge (tvm_spill.rs) treats a
+// failed create-region as "TVM unavailable", disables the bridge, and falls back
+// to the ordinary temporary-directory spill path. The remaining entry points are
+// then unreachable but must exist to satisfy the imports.
+impl TvmManagerGuest for Component {
+    fn create_region(_kind: RegionKind, _capacity: u32) -> Result<u16, TvmError> {
+        Err(TvmError::AllocationFailed)
+    }
+    fn destroy_region(_region_id: u16) -> Result<(), TvmError> {
+        Err(TvmError::AllocationFailed)
+    }
+    fn alloc(_region_id: u16, _size: u32) -> Result<Handle, TvmError> {
+        Err(TvmError::AllocationFailed)
+    }
+    fn dealloc(_ptr: Handle) -> Result<(), TvmError> {
+        Err(TvmError::AllocationFailed)
+    }
+    fn describe_region(_region_id: u16) -> Result<RegionInfo, TvmError> {
+        Err(TvmError::AllocationFailed)
+    }
+}
+
+impl TvmBytesGuest for Component {
+    fn read(_ptr: Handle, _len: u32) -> Result<Vec<u8>, TvmError> {
+        Err(TvmError::AllocationFailed)
+    }
+    fn write(_ptr: Handle, _data: Vec<u8>) -> Result<(), TvmError> {
+        Err(TvmError::AllocationFailed)
     }
 }
 
