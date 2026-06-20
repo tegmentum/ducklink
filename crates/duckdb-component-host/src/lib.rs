@@ -349,8 +349,15 @@ impl core_tvm_bytes::Host for CoreStoreState {
         len: u32,
     ) -> Result<Vec<u8>, core_tvm_types::TvmError> {
         let th = self.tvm_resolve(ptr, false)?;
-        let mut buf = vec![0u8; len as usize];
-        self.tvm.read(th, &mut buf).map_err(tvm_err_to_wit)?;
+        // Borrow the region bytes zero-copy, then one alloc+copy into the
+        // returned Vec. Avoids the memset that `vec![0; len]` does before the
+        // read would overwrite every byte anyway (a full block of needless
+        // zeroing per read).
+        let buf = self
+            .tvm
+            .region_slice_at(th, len)
+            .map_err(tvm_err_to_wit)?
+            .to_vec();
         if tvm_debug() {
             let t = TVM_BYTES_READ.fetch_add(len as u64, std::sync::atomic::Ordering::Relaxed)
                 + len as u64;

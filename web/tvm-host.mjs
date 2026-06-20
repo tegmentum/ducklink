@@ -169,7 +169,10 @@ export function createTvmHost({ debug = false } = {}) {
       if (handle.offset + len > region.bytes.length) fail(ERR_BOUNDS)
       stats.bytesRead += len
       trace(`read ${len} B (cumulative ${stats.bytesRead >> 20} MiB)`)
-      return region.bytes.slice(handle.offset, handle.offset + len)
+      // subarray (a view), not slice (a copy): jco copies the bytes into guest
+      // memory on return anyway, so the extra host-side copy+alloc is wasted.
+      // Safe because the region isn't reallocated during this synchronous call.
+      return region.bytes.subarray(handle.offset, handle.offset + len)
     },
   }
 
