@@ -1,0 +1,38 @@
+diff --git a/sdk/core/azure-core/inc/azure/core/platform.hpp b/sdk/core/azure-core/inc/azure/core/platform.hpp
+index 2af201e..3524f04 100644
+--- a/sdk/core/azure-core/inc/azure/core/platform.hpp
++++ b/sdk/core/azure-core/inc/azure/core/platform.hpp
+@@ -45,7 +45,9 @@
+ 
+ #if defined(_WIN32)
+ #define AZ_PLATFORM_WINDOWS
+-#elif defined(__unix__) || defined(__unix) || (defined(__APPLE__) && defined(__MACH__))
++#elif defined(__unix__) || defined(__unix) || (defined(__APPLE__) && defined(__MACH__)) \
++    || defined(__wasi__)
++// wasm32-wasip2: wasi is POSIX-like (std::fs, OpenSSL crypto, libcurl transport).
+ #define AZ_PLATFORM_POSIX
+ #if defined(__APPLE__) || defined(__MACH__)
+ #define AZ_PLATFORM_MAC
+diff --git a/sdk/core/azure-core/src/http/curl/curl.cpp b/sdk/core/azure-core/src/http/curl/curl.cpp
+index b9180c1..4581697 100644
+--- a/sdk/core/azure-core/src/http/curl/curl.cpp
++++ b/sdk/core/azure-core/src/http/curl/curl.cpp
+@@ -2350,6 +2350,10 @@ void CurlConnectionPool::MoveConnectionBackToPool(
+   connection->UpdateLastUsageTime();
+   hostPool.push_front(std::move(connection));
+ 
++#ifndef __wasi__
++  // wasm is single-threaded (wasi has no thread spawn -> std::thread throws). Skip
++  // the background connection-pool cleanup thread; connections still pool, idle
++  // ones just aren't reaped in the background (fine for the extension's use).
+   if (m_cleanThread.joinable() && !IsCleanThreadRunning)
+   {
+     // Clean thread was running before but it's finished, join it to finalize
+@@ -2369,6 +2373,7 @@ void CurlConnectionPool::MoveConnectionBackToPool(
+   {
+     Log::Write(Logger::Level::Verbose, "Clean thread running. Won't start a new one.");
+   }
++#endif // __wasi__
+ }
+ 
+ CurlConnection::CurlConnection(

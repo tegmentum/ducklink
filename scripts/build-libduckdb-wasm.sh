@@ -501,10 +501,50 @@ stage_aws_extension() {
   fi
 }
 
+# azure: build the Azure SDK for wasm (if needed) + vendor/patch the extension.
+# Wraps the Azure SDK for C++; the SDK is prebuilt for wasm32-wasip2 (libcurl
+# transport over curl-wasm) and merged into libduckdb-wasi.a below.
+stage_azure_extension() {
+  grep -q "duckdb_extension_load(azure" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null || return 0
+  if [[ ! -f "$(pwd)/build/azure-sdk/out/lib/libazure-storage-blobs.a" ]]; then
+    echo "azure: building Azure SDK for wasm" >&2
+    WASI_SDK_PREFIX="$WASI_SDK_PREFIX" "$(pwd)/scripts/build-azure-sdk-wasm.sh"
+  fi
+  local AZ_DIR="$DUCKDB_SOURCE_DIR/extension/azure"
+  local PIN="5e458fcc466d2bc421922b11f4316564e3017800"
+  if [[ ! -f "$AZ_DIR/CMakeLists.txt" ]]; then
+    echo "azure: vendoring duckdb-azure @ $PIN" >&2
+    local tmp="$BUILD_DIR/duckdb-azure-src"
+    if [[ ! -d "$tmp/.git" ]]; then
+      git clone --quiet https://github.com/duckdb/duckdb-azure "$tmp"
+      git -C "$tmp" checkout --quiet "$PIN"
+    fi
+    mkdir -p "$AZ_DIR"
+    ( cd "$tmp" && git archive "$PIN" CMakeLists.txt src ) | tar -x -C "$AZ_DIR"
+  fi
+  # Patch the CMakeLists (prebuilt SDK headers + build_static_extension) + the
+  # curl transport (embedded CA bundle via CURLOPT_CAINFO_BLOB) for wasm. Idempotent.
+  if ! grep -q 'AZURE_SDK_WASM_DIR' "$AZ_DIR/CMakeLists.txt" 2>/dev/null; then
+    for p in "$(pwd)"/cmake/azure-deps/azure-5e458fcc-CMakeLists.txt.patch \
+             "$(pwd)"/cmake/azure-deps/azure-5e458fcc-ca-bundle-blob.patch; do
+      ( cd "$AZ_DIR" && git apply "$p" 2>/dev/null ) || patch -p1 -d "$AZ_DIR" < "$p"
+    done
+    echo "azure: applied wasm CMakeLists + CA-bundle patches" >&2
+  fi
+  # Embed the CA bundle (httpfs's) for CURLOPT_CAINFO_BLOB -- openssl-wasm can't
+  # load a CA file through the wrapped FS. Regenerate if missing/stale.
+  local CA_BUNDLE="$(pwd)/cmake/ca-bundle/cacert.pem"
+  if [[ -f "$CA_BUNDLE" && ! -f "$AZ_DIR/src/azure_ca_bundle.inc" ]]; then
+    { printf '{'; xxd -i < "$CA_BUNDLE"; printf '}'; } > "$AZ_DIR/src/azure_ca_bundle.inc"
+    echo "azure: embedded CA bundle ($(grep -c 'BEGIN CERTIFICATE' "$CA_BUNDLE") certs)" >&2
+  fi
+}
+
 # delta: stage the prebuilt wasm kernel before configure (the vendored delta
 # CMakeLists references the staged .a as an ExternalProject byproduct).
 stage_delta_kernel
 stage_aws_extension
+stage_azure_extension
 
 # Configure, patching fetched sources after each failure, until it succeeds.
 # Extensions are fetched progressively, so a configure-blocking extension only
@@ -763,6 +803,29 @@ if grep -q "duckdb_extension_load(delta" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null
   else
     echo "WARNING: delta enabled but kernel missing: $KERNEL_A" >&2
   fi
+fi
+
+# azure: merge the prebuilt Azure SDK for C++ (azure-core + storage-common/blobs/
+# datalake + identity) and its libxml2 dep. The extension links these via the
+# Azure:: targets on native, but on wasm they're separate static libs that must
+# be in the combined archive the core links against. curl-wasm + openssl-wasm
+# (the transport + crypto) are already merged for httpfs.
+if grep -q "duckdb_extension_load(azure" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+  AZURE_LIB="$(pwd)/build/azure-sdk/out/lib"
+  azure_deps=("$AZURE_LIB/libazure-storage-files-datalake.a" "$AZURE_LIB/libazure-storage-blobs.a"
+              "$AZURE_LIB/libazure-storage-common.a" "$AZURE_LIB/libazure-identity.a"
+              "$AZURE_LIB/libazure-core.a"
+              "${LIBXML2_WASM:-$HOME/git/libxml2-wasm/build/install}/lib/libxml2.a")
+  for src in "${azure_deps[@]}"; do
+    name="$(basename "$src")"
+    if [[ -f "$src" ]]; then
+      cp "$src" "$TMPDIR/$name"
+      ADDLIBS="$ADDLIBS"$'\n'"ADDLIB $name"
+      echo "Merging azure dep ($src) into libduckdb-wasi.a" >&2
+    else
+      echo "WARNING: azure enabled but dep missing: $src" >&2
+    fi
+  done
 fi
 
 # spatial: merge the geo stack (GEOS + PROJ + GDAL + tiff/jpeg/png/expat/sqlite +

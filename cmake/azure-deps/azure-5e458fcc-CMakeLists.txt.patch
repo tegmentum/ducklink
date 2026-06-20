@@ -1,0 +1,75 @@
+--- a/CMakeLists.txt	2026-06-20 13:30:19
++++ b/CMakeLists.txt	2026-06-20 13:31:11
+@@ -20,37 +20,47 @@
+     src/azure_dfs_filesystem.cpp
+     src/http_state_policy.cpp
+     src/azure_parsed_url.cpp)
+-add_library(${EXTENSION_NAME} STATIC ${EXTENSION_SOURCES})
+-
+ set(PARAMETERS "-warnings")
++# build_static_extension (not bare add_library) so the extension is registered for
++# static linking into libduckdb (see the aws extension for the same fix).
++build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
+ build_loadable_extension(${TARGET_NAME} ${PARAMETERS} ${EXTENSION_SOURCES})
+ 
+-find_package(azure-identity-cpp CONFIG)
+-find_package(azure-storage-blobs-cpp CONFIG)
+-find_package(azure-storage-files-datalake-cpp CONFIG)
++if(DUCKDB_PLATFORM MATCHES "wasm" OR EMSCRIPTEN)
++  # wasm: the Azure SDK for C++ is prebuilt for wasm32-wasip2
++  # (scripts/build-azure-sdk-wasm.sh, libcurl transport over curl-wasm) and merged
++  # into libduckdb-wasi.a by the build script -- so just add its headers here.
++  # AZURE_SDK_WASM_DIR is set by cmake/wasm-extension-config.cmake.
++  target_include_directories(${EXTENSION_NAME} PRIVATE ${AZURE_SDK_WASM_DIR}/include)
++  target_include_directories(${TARGET_NAME}_loadable_extension PRIVATE ${AZURE_SDK_WASM_DIR}/include)
++else()
++  find_package(azure-identity-cpp CONFIG)
++  find_package(azure-storage-blobs-cpp CONFIG)
++  find_package(azure-storage-files-datalake-cpp CONFIG)
+ 
+-if(NOT ${azure-identity-cpp_FOUND}
+-   OR NOT ${azure-storage-blobs-cpp_FOUND}
+-   OR NOT ${azure-storage-files-datalake-cpp_FOUND})
+-  message(FATAL_ERROR "Azure SDK not found, did you set up vcpkg correctly?")
+-endif()
++  if(NOT ${azure-identity-cpp_FOUND}
++     OR NOT ${azure-storage-blobs-cpp_FOUND}
++     OR NOT ${azure-storage-files-datalake-cpp_FOUND})
++    message(FATAL_ERROR "Azure SDK not found, did you set up vcpkg correctly?")
++  endif()
+ 
+-# Static lib
+-target_link_libraries(
+-  ${EXTENSION_NAME} Azure::azure-identity Azure::azure-storage-blobs
+-  Azure::azure-storage-files-datalake)
+-target_include_directories(
+-  ${EXTENSION_NAME} PRIVATE Azure::azure-identity Azure::azure-storage-blobs
+-                            Azure::azure-storage-files-datalake)
++  # Static lib
++  target_link_libraries(
++    ${EXTENSION_NAME} Azure::azure-identity Azure::azure-storage-blobs
++    Azure::azure-storage-files-datalake)
++  target_include_directories(
++    ${EXTENSION_NAME} PRIVATE Azure::azure-identity Azure::azure-storage-blobs
++                              Azure::azure-storage-files-datalake)
+ 
+-# Loadable binary
+-target_link_libraries(
+-  ${TARGET_NAME}_loadable_extension Azure::azure-identity
+-  Azure::azure-storage-blobs Azure::azure-storage-files-datalake)
+-target_include_directories(
+-  ${TARGET_NAME}_loadable_extension
+-  PRIVATE Azure::azure-identity Azure::azure-storage-blobs
+-          Azure::azure-storage-files-datalake)
++  # Loadable binary
++  target_link_libraries(
++    ${TARGET_NAME}_loadable_extension Azure::azure-identity
++    Azure::azure-storage-blobs Azure::azure-storage-files-datalake)
++  target_include_directories(
++    ${TARGET_NAME}_loadable_extension
++    PRIVATE Azure::azure-identity Azure::azure-storage-blobs
++            Azure::azure-storage-files-datalake)
++endif()
+ 
+ install(
+   TARGETS ${EXTENSION_NAME}

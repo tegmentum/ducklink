@@ -1,0 +1,53 @@
+--- a/src/azure_storage_account_client.cpp	2026-06-20 13:30:19
++++ b/src/azure_storage_account_client.cpp	2026-06-20 13:59:38
+@@ -245,6 +245,20 @@
+ 		curl_transport_options.ProxyPassword = proxy_password;
+ 	}
+ 
++#ifdef __wasi__
++	// wasm: openssl-wasm can't load a CA *file* through the component's wrapped
++	// filesystem (its file BIO doesn't reach the host FS), so pass the CA bundle
++	// in-memory via SslOptions.PemEncodedExpectedRootCertificates -> CURLOPT_CAINFO_BLOB.
++	// Same approach + same embedded bundle httpfs uses (cmake/ca-bundle/cacert.pem,
++	// xxd'd into azure_ca_bundle.inc by scripts/build-libduckdb-wasm.sh).
++	{
++		static const unsigned char azure_wasi_ca_bundle[] =
++#include "azure_ca_bundle.inc"
++		    ;
++		curl_transport_options.SslOptions.PemEncodedExpectedRootCertificates =
++		    std::string(reinterpret_cast<const char *>(azure_wasi_ca_bundle), sizeof(azure_wasi_ca_bundle));
++	}
++#else
+ 	const char *ca_info = std::getenv("CURL_CA_INFO");
+ #if !defined(_WIN32) && !defined(__APPLE__)
+ 	if (!ca_info) {
+@@ -274,6 +288,7 @@
+ 	if (ca_path) {
+ 		curl_transport_options.CAPath = ca_path;
+ 	}
++#endif // __wasi__
+ 
+ 	return std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
+ }
+@@ -283,6 +298,13 @@
+                                                                          const std::string &proxy_username,
+                                                                          const std::string &proxy_password) {
+ 	Azure::Core::Http::Policies::TransportOptions transport_options;
++#ifdef __wasi__
++	// wasm: always use our CurlTransport -- it carries the embedded CA bundle
++	// (CURLOPT_CAINFO_BLOB) needed to verify TLS. The SDK's "default" transport is
++	// a CurlTransport with no CA configured, so it can't verify the peer on wasm.
++	(void)transport_option_type;
++	transport_options.Transport = CreateCurlTransport(proxy, proxy_username, proxy_password);
++#else
+ 	if (transport_option_type == "default") {
+ 		if (!proxy.empty()) {
+ 			transport_options.HttpProxy = proxy;
+@@ -300,6 +322,7 @@
+ 	} else {
+ 		throw InvalidInputException("transport_option_type cannot take value '%s'", transport_option_type);
+ 	}
++#endif
+ 
+ 	return transport_options;
+ }

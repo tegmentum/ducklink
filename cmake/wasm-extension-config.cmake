@@ -74,6 +74,18 @@ duckdb_extension_load(aws              # AWS credential resolution -> S3 secret 
   SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/../external/duckdb/extension/aws
 )
 
+# azure: read Azure Blob Storage / Data Lake (az:// , abfss://). Wraps the Azure
+# SDK for C++, which doesn't build under vcpkg for wasm -- so the SDK is prebuilt
+# for wasm32-wasip2 (scripts/build-azure-sdk-wasm.sh, libcurl transport over
+# curl-wasm, like httpfs) + merged into libduckdb-wasi.a. AzureCliCredential is
+# unavailable (no subprocess); env / connection-string / SAS credentials work.
+set(AZURE_SDK_WASM_DIR "${CMAKE_CURRENT_LIST_DIR}/../build/azure-sdk/out" CACHE PATH "" FORCE)
+if(EXISTS "${AZURE_SDK_WASM_DIR}/lib/libazure-storage-blobs.a")
+  duckdb_extension_load(azure          # az:// + abfss:// blob/datalake filesystem
+    SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/../external/duckdb/extension/azure
+  )
+endif()
+
 # avro (read_avro) + iceberg. Both need C libs built for wasi by
 # scripts/build-wasi-deps.sh into build/wasi-deps/: jansson + avro-c (deflate
 # codec only -> no lzma/snappy) for the avro extension, and roaring (CRoaring)
@@ -220,9 +232,9 @@ add_library(sqlite_wasivfs STATIC
 target_include_directories(sqlite_wasivfs PRIVATE ${CMAKE_CURRENT_LIST_DIR}/sqlite-wasi-vfs)
 
 # --- remaining (not yet built for wasi) ---
-# azure: heavy Azure C++ SDK + curl. Use SAS-token URLs via httpfs instead.
 # ui: needs a *listening* HTTP server inside the component -- poor fit for
 #   wasip2's outbound-only model.
 # (Built above: avro, iceberg, spatial, httpfs, ducklake, sqlite_scanner, excel,
-#  postgres_scanner, mysql_scanner, delta, aws. aws's network credential
-#  providers -- sso/sts/instance/process -- error clearly; env + ~/.aws files work.)
+#  postgres_scanner, mysql_scanner, delta, aws, azure. azure's Azure SDK for C++
+#  is built for wasm (libcurl transport over curl-wasm); AzureCliCredential is
+#  unavailable, other credentials work. aws's network providers error clearly.)
