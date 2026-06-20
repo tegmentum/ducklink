@@ -2,7 +2,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::{ArgAction, Parser};
-use duckdb_component_host::{run_cli_with_stdio, set_extension_root, ComponentArtifacts};
+use duckdb_component_host::{
+    precompile_component_to_file, run_cli_with_stdio, set_extension_root, ComponentArtifacts,
+};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -55,6 +57,25 @@ fn parse_dir_mapping(value: &str) -> Result<DirMapping, String> {
 }
 
 fn main() -> Result<()> {
+    // `duckdb-host precompile <in.wasm> <out.cwasm>` AOT-compiles a component so
+    // a later run loads it (by passing the .cwasm path) without the Cranelift
+    // compile. Handled before clap, which uses trailing_var_arg and would
+    // otherwise treat these as CLI arguments.
+    let raw: Vec<String> = std::env::args().collect();
+    if raw.get(1).map(String::as_str) == Some("precompile") {
+        match (raw.get(2), raw.get(3)) {
+            (Some(input), Some(output)) => {
+                precompile_component_to_file(Path::new(input), Path::new(output))?;
+                eprintln!("precompiled {input} -> {output}");
+                return Ok(());
+            }
+            _ => {
+                eprintln!("usage: duckdb-host precompile <in.wasm> <out.cwasm>");
+                std::process::exit(2);
+            }
+        }
+    }
+
     let opts = Opts::parse();
 
     if opts.cli_args.is_empty() {

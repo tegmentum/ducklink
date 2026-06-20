@@ -1,7 +1,7 @@
 WASI_TARGET?=wasm32-wasip2
 BROWSER_TARGET?=wasm32-unknown-unknown
 
-.PHONY: all core core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host
+.PHONY: all core core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile
 
 all: core standalone-cli loader-stub
 
@@ -48,6 +48,18 @@ tvm-test-host:
 
 tvm-test: host
 	./scripts/test-tvm-spill.sh
+
+# AOT-precompile the core + cli components to .cwasm so the first run skips the
+# ~7s Cranelift compile (loaded via deserialize, ~0.1s). The .cwasm is CPU +
+# wasmtime-version specific -- regenerate per target. Pass the .cwasm paths to
+# --core-component/--cli-component to use them.
+precompile: host
+	./target/release/duckdb-host precompile \
+	  target/$(WASI_TARGET)/release/duckdb_core_component.wasm \
+	  target/$(WASI_TARGET)/release/duckdb_core_component.cwasm
+	./target/release/duckdb-host precompile \
+	  target/$(WASI_TARGET)/release/duckdb_cli_component.wasm \
+	  target/$(WASI_TARGET)/release/duckdb_cli_component.cwasm
 
 # Run the smoke-tests GitHub Actions workflow locally via nektos/act (Docker).
 ci-local:

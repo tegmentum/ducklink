@@ -3240,7 +3240,7 @@ fn instantiate_core(
     wasi_ctx: WasiCtx,
     extension_manager: Arc<Mutex<ExtensionManager>>,
 ) -> Result<CoreExecution> {
-    let component = Component::from_file(engine, component_path).with_context(|| {
+    let component = load_component(engine, component_path).with_context(|| {
         format!(
             "failed to load core component at {}",
             component_path.display()
@@ -3274,6 +3274,39 @@ fn instantiate_core(
     let pre = duckdb_core_bindings::LibduckdbPre::new(instance_pre)?;
     let bindings = pre.instantiate(store.as_context_mut())?;
     Ok(CoreExecution { store, bindings })
+}
+
+/// Load a component, deserializing a precompiled `.cwasm` (see
+/// [`precompile_component_to_file`]) instead of Cranelift-compiling a `.wasm`.
+/// A `.cwasm` makes even the first run fast (no compile); it is CPU- and
+/// wasmtime-version-specific, and `deserialize` validates that before use.
+fn load_component(engine: &Engine, path: &Path) -> Result<Component> {
+    if path.extension().and_then(|s| s.to_str()) == Some("cwasm") {
+        // SAFETY: trusts the file was produced by `precompile_component` against
+        // a compatible engine; deserialize checks version/config and errors on
+        // mismatch (it does not execute the contents).
+        unsafe { Component::deserialize_file(engine, path) }
+            .with_context(|| format!("failed to deserialize precompiled {}", path.display()))
+    } else {
+        Component::from_file(engine, path)
+            .with_context(|| format!("failed to load {}", path.display()))
+    }
+}
+
+/// AOT-compile a component `.wasm` to a `.cwasm` so the first run skips the
+/// (~7s for the ~96 MB core) Cranelift compile. Output is CPU- and
+/// wasmtime-version-specific; regenerate per target. Load it by passing the
+/// `.cwasm` path wherever a component path is accepted.
+pub fn precompile_component_to_file(in_path: &Path, out_path: &Path) -> Result<()> {
+    let engine = build_engine()?;
+    let bytes =
+        std::fs::read(in_path).with_context(|| format!("read {}", in_path.display()))?;
+    let precompiled = engine
+        .precompile_component(&bytes)
+        .with_context(|| format!("precompile {}", in_path.display()))?;
+    std::fs::write(out_path, &precompiled)
+        .with_context(|| format!("write {}", out_path.display()))?;
+    Ok(())
 }
 
 fn build_engine() -> Result<Engine> {
@@ -3676,7 +3709,7 @@ impl CliHarness {
             )?;
 
         let cli_component =
-            Component::from_file(&engine, &artifacts.cli_component).with_context(|| {
+            load_component(&engine, &artifacts.cli_component).with_context(|| {
                 format!(
                     "failed to load CLI component from {}",
                     artifacts.cli_component.display()
@@ -3786,7 +3819,7 @@ pub fn run_cli_with_stdio(
         )?;
 
     let cli_component =
-        Component::from_file(&engine, &artifacts.cli_component).with_context(|| {
+        load_component(&engine, &artifacts.cli_component).with_context(|| {
             format!(
                 "failed to load CLI component from {}",
                 artifacts.cli_component.display()
