@@ -12,7 +12,8 @@
     "verify-ext": "npm run copy-wasm && node verify.mjs /index-ext.html",
     "verify-prepared": "npm run copy-wasm && node verify.mjs /index-prepared.html",
     "test-tvm-host": "node tvm-host.test.mjs",
-    "verify-tvm-spill": "npm run copy-wasm && node verify.mjs /index-tvm.html"
+    "verify-tvm-spill": "npm run copy-wasm && node verify.mjs /index-tvm.html",
+    "verify-tvm-aot": "npm run copy-wasm && jco transpile public/duckdb_core_component.wasm -o .tvm-aot --instantiation async --no-nodejs-compat && AOT_DIR=.tvm-aot node aot-tvm-test.mjs"
   },
   "dependencies": {
     "@tegmentum/wasi-polyfill": "file:../../../wasi-polyfill",

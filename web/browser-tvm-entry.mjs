@@ -1,19 +1,10 @@
-// Browser diagnostic: DuckDB's larger-than-memory spill flowing through the
-// browser TVM host. Set a low memory_limit and no temp_directory, then run a
-// sort that exceeds the budget -- the evicted blocks spill into the host's
-// JS-owned TVM regions (web/tvm-host.mjs). Reports the result plus the host's
-// region/byte stats. Open with #2GB to disable spilling as a control.
-//
-// KNOWN LIMITATION (jco RuntimeBindgen, not this host): the spill *integration*
-// works -- blocks route through the TVM host and the byte counters confirm
-// >memory_limit data reaches host regions -- but the block bytes are corrupted
-// in transit across the sync `tvm:memory/bytes` import boundary, so the sorted
-// result is wrong (min lost). The same component wasm spills correctly on the
-// native wasmtime host (scripts/test-tvm-spill.sh) and the JS host is provably
-// faithful (web/tvm-host.test.mjs: round-trip + multi-region pass). The defect
-// is jco's marshalling of large list<u8> for sync imports. In-memory queries
-// (the #2GB control) are unaffected and correct. This page goes green once the
-// runtime marshals the spill bytes correctly.
+// Browser demo: DuckDB's larger-than-memory spill flowing through the browser
+// TVM host. Set a low memory_limit and no temp_directory, then run a sort that
+// exceeds the budget -- the evicted blocks spill into the host's JS-owned TVM
+// regions (web/tvm-host.mjs), which live in the page heap beyond the wasm32
+// 4 GiB ceiling. Reports the sorted result plus the host's region/byte stats,
+// proving >memory_limit data round-tripped through TVM. Open with #2GB to
+// disable spilling as an in-memory control.
 import { instantiateCore } from './run-core.mjs'
 
 async function main() {

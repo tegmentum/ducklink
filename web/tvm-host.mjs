@@ -10,17 +10,21 @@
 // These imports are UNCONDITIONAL in the component world, so the browser build
 // cannot instantiate without them wired (even for queries that never spill).
 //
-// jco conventions used here:
-//   - result<T,E>           -> return { tag: 'ok', val } | { tag: 'err', val }
-//   - record handle         -> { regionId, generation, offset } (camelCased)
-//   - variant tvm-error      -> { tag: '<case>', val? }
-//   - list<u8>               -> Uint8Array
+// jco import conventions (both RuntimeBindgen and `jco transpile` use these):
+//   - result<T,E>  -> return T directly on success; for the err case THROW
+//                     `{ payload: <E> }` (jco wraps the return as ok and reads
+//                     `e.payload` as the err value; a bare `Error` re-throws).
+//                     Returning `{tag:'ok',val}` yourself double-wraps and
+//                     corrupts the value -- do not.
+//   - record handle -> { regionId, generation, offset } (jco camelCases fields)
+//   - variant tvm-error -> { tag: '<case>', val? }
+//   - list<u8>      -> Uint8Array
 // Single-threaded: no locking, unlike the native host's Mutex.
 
 const U16_MAX = 0xffff
 
-const ok = (val) => ({ tag: 'ok', val })
-const err = (val) => ({ tag: 'err', val })
+// Signal a result's err case: throw a `{ payload }` jco unwraps into the err.
+const fail = (variant) => { throw { payload: variant } }
 const ERR_ALLOC = { tag: 'allocation-failed' }
 const ERR_BOUNDS = { tag: 'out-of-bounds' }
 const errRegion = (id) => ({ tag: 'region-not-found', val: id })
@@ -51,64 +55,58 @@ export function createTvmHost({ debug = false } = {}) {
     // pools regions and opens a fresh one when the active one fills, so total
     // spill capacity is multi-region and exceeds 4 GiB.
     createRegion(_kind, capacity) {
-      if (nextRegionId > U16_MAX) return err(ERR_ALLOC)
+      if (nextRegionId > U16_MAX) fail(ERR_ALLOC)
       const id = nextRegionId++
       regions.set(id, { bytes: new Uint8Array(0), used: 0, capacity, generation: 0 })
       stats.regionsOpened++
       trace(`open region #${stats.regionsOpened} id=${id} cap=${capacity >> 20} MiB (host heap, beyond wasm 4 GiB)`)
-      return ok(id)
+      return id
     },
     destroyRegion(regionId) {
-      return regions.delete(regionId) ? ok(undefined) : err(errRegion(regionId))
+      if (!regions.delete(regionId)) fail(errRegion(regionId))
     },
     alloc(regionId, size) {
       const region = regions.get(regionId)
-      if (!region) return err(errRegion(regionId))
+      if (!region) fail(errRegion(regionId))
       // Region full -> err so the guest opens another region (matches native).
-      if (region.used + size > region.capacity) return err(ERR_ALLOC)
+      if (region.used + size > region.capacity) fail(ERR_ALLOC)
       const offset = region.used
       ensureCapacity(region, offset + size)
       region.used = offset + size
-      return ok({ regionId, generation: region.generation, offset })
+      return { regionId, generation: region.generation, offset }
     },
     // Bump allocator: individual frees are no-ops; memory is reclaimed when the
     // whole region is destroyed (same as the native VecBackedRegion).
-    dealloc(_handle) {
-      return ok(undefined)
-    },
+    dealloc(_handle) {},
+    // Declared by the interface but never called by the guest spill bridge.
     describeRegion(regionId) {
       const region = regions.get(regionId)
-      if (!region) return err(errRegion(regionId))
-      return ok({
-        id: regionId,
-        generation: region.generation,
-        kind: 'page-store',
-        capacity: region.capacity,
-        used: region.used,
-        residency: 'cold',
-      })
+      if (!region) fail(errRegion(regionId))
+      return {
+        id: regionId, generation: region.generation, kind: 'page-store',
+        capacity: region.capacity, used: region.used, residency: 'cold',
+      }
     },
   }
 
   const bytes = {
     write(handle, data) {
       const region = regions.get(handle.regionId)
-      if (!region) return err(errRegion(handle.regionId))
+      if (!region) fail(errRegion(handle.regionId))
       const end = handle.offset + data.length
-      if (end > region.capacity) return err(ERR_BOUNDS)
+      if (end > region.capacity) fail(ERR_BOUNDS)
       ensureCapacity(region, end)
       region.bytes.set(data, handle.offset)
       stats.bytesWritten += data.length
       trace(`write ${data.length} B (cumulative ${stats.bytesWritten >> 20} MiB)`)
-      return ok(undefined)
     },
     read(handle, len) {
       const region = regions.get(handle.regionId)
-      if (!region) return err(errRegion(handle.regionId))
-      if (handle.offset + len > region.bytes.length) return err(ERR_BOUNDS)
+      if (!region) fail(errRegion(handle.regionId))
+      if (handle.offset + len > region.bytes.length) fail(ERR_BOUNDS)
       stats.bytesRead += len
       trace(`read ${len} B (cumulative ${stats.bytesRead >> 20} MiB)`)
-      return ok(region.bytes.slice(handle.offset, handle.offset + len))
+      return region.bytes.slice(handle.offset, handle.offset + len)
     },
   }
 
