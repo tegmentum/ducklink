@@ -16,6 +16,8 @@ import * as io from '@tegmentum/wasi-polyfill/wasip2/plugins/io'
 import * as fs from '@tegmentum/wasi-polyfill/wasip2/plugins/filesystem'
 import * as clocks from '@tegmentum/wasi-polyfill/wasip2/plugins/clocks'
 import * as random from '@tegmentum/wasi-polyfill/wasip2/plugins/random'
+import * as sockets from '@tegmentum/wasi-polyfill/wasip2/plugins/sockets'
+import { createTvmHost, tvmDebugEnabled } from './tvm-host.mjs'
 
 export function configurePolyfill() {
   const polyfill = createDevPolyfill()
@@ -32,6 +34,11 @@ export function configurePolyfill() {
     fs.filesystemPreopensPlugin, fs.filesystemTypesPlugin,
     clocks.monotonicClockPlugin, clocks.wallClockPlugin,
     random.randomPlugin, random.insecureRandomPlugin, random.insecureSeedPlugin,
+    // The core links socket-using extensions (httpfs/postgres/mysql), so it
+    // imports the wasi:sockets interfaces and won't instantiate without them.
+    // Register the default (virtual) socket plugins; plain/spill queries never
+    // touch the network, they just need the imports satisfied.
+    ...sockets.socketPlugins,
   ]) {
     polyfill.registerPlugin(p)
   }
@@ -58,13 +65,23 @@ export const duckdbStubImports = {
 }
 
 // Instantiate the core component. `additionalImports` defaults to the stubs;
-// pass an extension host's `coreImports()` to enable extension loading.
+// pass an extension host's `coreImports()` to enable extension loading. The TVM
+// host (tvm:memory imports) is always merged in -- the core imports it
+// unconditionally, so the component fails to instantiate without it, and it
+// backs DuckDB's larger-than-memory spill. The host is reachable afterwards as
+// `db.__tvmHost` for tests/inspection (region + byte-transfer stats).
 export async function instantiateCore(componentBytes, additionalImports = duckdbStubImports) {
   const polyfill = configurePolyfill()
-  const bindgen = createRuntimeBindgen({ polyfill, additionalImports })
+  const tvm = createTvmHost({ debug: tvmDebugEnabled() })
+  const bindgen = createRuntimeBindgen({
+    polyfill,
+    additionalImports: { ...additionalImports, ...tvm.imports },
+  })
   const instance = await bindgen.instantiate(componentBytes)
   const root = instance.exports ?? instance
-  return root.database
+  const database = root.database
+  database.__tvmHost = tvm
+  return database
 }
 
 // Instantiate the core component and run a query (no extension loading).

@@ -10,7 +10,9 @@
     "dev": "vite",
     "verify": "npm run copy-wasm && node verify.mjs",
     "verify-ext": "npm run copy-wasm && node verify.mjs /index-ext.html",
-    "verify-prepared": "npm run copy-wasm && node verify.mjs /index-prepared.html"
+    "verify-prepared": "npm run copy-wasm && node verify.mjs /index-prepared.html",
+    "test-tvm-host": "node tvm-host.test.mjs",
+    "verify-tvm-spill": "npm run copy-wasm && node verify.mjs /index-tvm.html"
   },
   "dependencies": {
     "@tegmentum/wasi-polyfill": "file:../../../wasi-polyfill",
