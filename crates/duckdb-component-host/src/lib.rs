@@ -264,9 +264,18 @@ impl core_tvm_manager::Host for CoreStoreState {
         capacity: u32,
     ) -> Result<u16, core_tvm_types::TvmError> {
         let mem = tvm_core::VecBackedRegion::new(capacity);
+        // Freelist (not the default Bump): DuckDB deletes spilled blocks as a
+        // sort/hash merge consumes them (tvm_spill_delete -> dealloc), and the
+        // free-list coalesces those holes so a region's footprint tracks the
+        // live set, not the cumulative spill volume. Bump's dealloc is a no-op.
         let r = self
             .tvm
-            .create_region(tvm_kind_to_core(kind), capacity, mem)
+            .create_region_with(
+                tvm_kind_to_core(kind),
+                capacity,
+                tvm_core::AllocatorKind::Freelist,
+                mem,
+            )
             .map_err(tvm_err_to_wit);
         if tvm_debug() {
             if let Ok(id) = &r {

@@ -54,6 +54,26 @@ check('full region throws allocation-failed', caught(() => mgr.alloc(small, 1))?
 // 6) unknown region -> throws region-not-found
 check('unknown region throws region-not-found', caught(() => mgr.alloc(4242, 1))?.tag === 'region-not-found')
 
+// 6a) reclamation: fill a region, free everything, refill -- must reuse the
+//     freed space in the SAME region (a bump allocator would be exhausted).
+const reuse = mgr.createRegion('page-store', 16) // 4 x 4-byte blocks
+const hs = [0, 4, 8, 12].map(() => mgr.alloc(reuse, 4))
+check('region filled to capacity', caught(() => mgr.alloc(reuse, 4))?.tag === 'allocation-failed')
+hs.forEach((h) => mgr.dealloc(h))
+let refilled = true
+for (let i = 0; i < 4; i++) { if (caught(() => mgr.alloc(reuse, 4))) refilled = false }
+check('freed space is reclaimed and reused (no bump exhaustion)', refilled)
+// coalescing: after freeing all, a single full-capacity alloc fits
+const reuse2 = mgr.createRegion('page-store', 16)
+const block = [mgr.alloc(reuse2, 8), mgr.alloc(reuse2, 8)]
+block.forEach((h) => mgr.dealloc(h))
+check('adjacent frees coalesce into one hole', !caught(() => mgr.alloc(reuse2, 16)))
+
+// 6b) stale handle (wrong generation) -> throws stale-handle
+const gh = mgr.alloc(rid, 8)
+check('stale generation throws on write', caught(() => bytes.write({ ...gh, generation: gh.generation + 1 }, Uint8Array.of(1, 2, 3, 4, 5, 6, 7, 8)))?.tag === 'stale-handle')
+check('stale generation throws on read', caught(() => bytes.read({ ...gh, generation: gh.generation + 7 }, 8))?.tag === 'stale-handle')
+
 // 7) end-to-end: replicate alloc_in_pool's pool-and-overflow across regions and
 //    spill > one region's capacity, proving multi-region works through the host.
 function poolDriver(host, regionCapacity) {
