@@ -1,0 +1,10 @@
+[package]
+name = "isin"
+version = "0.1.0"
+edition = "2021"
+description = "ISIN (ISO 6166) validation/check-digit algorithm, WIT-free so it can be used by both the isin component and the embedded (compiled-into-core) path"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]

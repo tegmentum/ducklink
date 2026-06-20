@@ -6,6 +6,7 @@ members = [
     "crates/duckdb-loader-stub",
     "crates/duckdb-component-host",
     "extensions/sample-extension-component",
+    "extensions/isin",
     "extensions/isin-component",
     "extensions/baseN-component",
 ]

@@ -16,11 +16,18 @@ arrow-schema = { version = "53", default-features = false, features = ["ffi"] }
 arrow-data = { version = "53", default-features = false, features = ["ffi"] }
 arrow-ipc = { version = "53", default-features = false }
 
+# Embeddable extensions (the embed framework): WIT-free algorithm crates the
+# core compiles in and registers as native scalars (no WIT boundary) when the
+# matching embed-<name> feature is enabled.
+isin = { path = "../../extensions/isin", optional = true }
+
 [features]
 default = ["wasi"]
 wasi = ["fs_shims"]
 browser = []
 fs_shims = []
+# Compile the isin extension into the core (native speed, works in the standalone).
+embed-isin = ["dep:isin"]
 
 [package.metadata.component]
 package = "duckdb:component"

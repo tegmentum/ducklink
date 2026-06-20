@@ -2168,6 +2168,9 @@ impl ConnectionState {
         path: Option<&str>,
         options: &[(String, String)],
     ) -> Result<Self, DuckDbError> {
+        // Make compiled-in (embedded) extension scalars available; their
+        // definitions are replayed onto this connection by register_connection_handle.
+        register_embedded_extensions();
         #[cfg(feature = "browser")]
         if let Some(_) = path {
             return Err(DuckDbError::message(
@@ -3172,6 +3175,7 @@ fn register_pending_scalar(
             .collect(),
         returns: convert_loader_logicaltype(returns),
         callback_handle,
+        embedded: None,
         options: options.map(convert_loader_funcopts),
     });
 
@@ -3555,6 +3559,11 @@ struct ComponentAggregateRegistry;
 struct ComponentPragmaRegistry;
 struct NoopMacroRegistry;
 
+/// An embedded scalar runs in-core with no WIT boundary (vs `callback_handle`,
+/// which dispatches to a loaded extension component). The function receives one
+/// row's arguments and returns its result, called directly per row.
+type EmbeddedScalarFn = fn(&[Duckvalue]) -> Result<Duckvalue, Duckerror>;
+
 #[derive(Debug)]
 struct ScalarFunctionDefinition {
     id: u32,
@@ -3562,12 +3571,86 @@ struct ScalarFunctionDefinition {
     arguments: Vec<Logicaltype>,
     returns: Logicaltype,
     callback_handle: u32,
+    /// Set for extensions compiled into the core (the embed framework); when
+    /// `Some`, execute_scalar_function calls it directly instead of crossing the
+    /// WIT boundary via `callback_handle`.
+    embedded: Option<EmbeddedScalarFn>,
     options: Option<runtime_exports::Funcopts>,
 }
 
 #[derive(Clone)]
 struct ScalarFunctionEntry {
     definition: Arc<ScalarFunctionDefinition>,
+}
+
+// ---- Embedded extensions (the embed framework) ----
+// Extensions selected at build time (embed-<name> cargo features) are compiled
+// into the core and registered as native scalars with no WIT boundary, so they
+// run at native speed and are available even in the standalone (no host needed).
+// The algorithm lives in a WIT-free crate (e.g. `isin`) shared with the
+// component build; only the Duckvalue glue is here.
+
+#[cfg(feature = "embed-isin")]
+fn register_embedded_scalar(
+    name: &str,
+    arguments: Vec<Logicaltype>,
+    returns: Logicaltype,
+    embedded: EmbeddedScalarFn,
+) {
+    let id = NEXT_SCALAR_FUNCTION_ID.fetch_add(1, Ordering::Relaxed);
+    push_scalar_function_definition(Arc::new(ScalarFunctionDefinition {
+        id,
+        name: name.to_string(),
+        arguments,
+        returns,
+        callback_handle: 0,
+        embedded: Some(embedded),
+        options: None,
+    }));
+}
+
+#[cfg(feature = "embed-isin")]
+fn embed_arg_text(args: &[Duckvalue], i: usize, fname: &str) -> Result<String, Duckerror> {
+    match args.get(i) {
+        Some(Duckvalue::Text(s)) => Ok(s.clone()),
+        Some(Duckvalue::Null) => Ok(String::new()),
+        _ => Err(Duckerror::Invalidargument(format!(
+            "{fname}: expected VARCHAR argument at position {i}"
+        ))),
+    }
+}
+
+/// Push the definitions for every compiled-in extension once; they are then
+/// replayed onto each connection by register_connection_handle. Idempotent.
+fn register_embedded_extensions() {
+    static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if DONE.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    #[cfg(feature = "embed-isin")]
+    {
+        register_embedded_scalar(
+            "isin_validate",
+            vec![Logicaltype::Text],
+            Logicaltype::Boolean,
+            |args| {
+                Ok(Duckvalue::Boolean(isin::validate(&embed_arg_text(
+                    args,
+                    0,
+                    "isin_validate",
+                )?)))
+            },
+        );
+        register_embedded_scalar(
+            "isin_check_digit",
+            vec![Logicaltype::Text],
+            Logicaltype::Int64,
+            |args| match isin::check_digit(&embed_arg_text(args, 0, "isin_check_digit")?) {
+                Some(d) => Ok(Duckvalue::Int64(d)),
+                None => Ok(Duckvalue::Null),
+            },
+        );
+    }
 }
 
 struct ScalarInputColumn {
@@ -3817,6 +3900,7 @@ impl runtime_exports::GuestScalarRegistry for ScalarRegistry {
             arguments: arguments_vec,
             returns,
             callback_handle,
+            embedded: None,
             options,
         });
 
@@ -4332,16 +4416,25 @@ unsafe fn execute_scalar_function(
         rows.push(args);
     }
 
-    let invoke = callback_dispatch::Invokeinfo {
-        rowindex: Some(0),
-        iswindow: false,
+    let results = if let Some(embedded) = entry.definition.embedded {
+        // Compiled-into-core extension: run the Rust function directly, no WIT.
+        let mut out = Vec::with_capacity(rows.len());
+        for args in &rows {
+            out.push(embedded(args)?);
+        }
+        out
+    } else {
+        let invoke = callback_dispatch::Invokeinfo {
+            rowindex: Some(0),
+            iswindow: false,
+        };
+        callback_dispatch::call_scalar_batch(
+            entry.definition.callback_handle,
+            rows.as_slice(),
+            invoke,
+        )
+        .map_err(|err| err)?
     };
-    let results = callback_dispatch::call_scalar_batch(
-        entry.definition.callback_handle,
-        rows.as_slice(),
-        invoke,
-    )
-    .map_err(|err| err)?;
 
     if results.len() as u64 != row_count {
         return Err(Duckerror::Internal(format!(

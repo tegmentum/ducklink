@@ -1,7 +1,7 @@
 WASI_TARGET?=wasm32-wasip2
 BROWSER_TARGET?=wasm32-unknown-unknown
 
-.PHONY: all core core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile
+.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile
 
 all: core standalone-cli loader-stub
 
@@ -10,6 +10,18 @@ core:
 	@ : "$${DUCKDB_STATIC_LIB:?set DUCKDB_STATIC_LIB to the prebuilt DuckDB static archive for this target}" \
 	 && : "$${DUCKDB_INCLUDE_DIR:?set DUCKDB_INCLUDE_DIR to the directory containing duckdb.h}" \
 	 && cargo component build -p duckdb-core-component --target $(WASI_TARGET) --release --features wasi
+
+# Build the core with selected extensions COMPILED IN (the embed framework):
+#   make core-embed EMBED=embed-isin
+# Embedded extensions register as native scalars (no WIT boundary -> faster) and
+# work in the standalone (wasmtime run) with no host. Add one embed-<name>
+# feature per extension (see the core crate's [features]).
+EMBED ?= embed-isin
+core-embed:
+	./scripts/sync-core-wit.sh
+	@ : "$${DUCKDB_STATIC_LIB:?set DUCKDB_STATIC_LIB to the prebuilt DuckDB static archive for this target}" \
+	 && : "$${DUCKDB_INCLUDE_DIR:?set DUCKDB_INCLUDE_DIR to the directory containing duckdb.h}" \
+	 && cargo component build -p duckdb-core-component --target $(WASI_TARGET) --release --features wasi,$(EMBED)
 
 core-browser:
 	@ : "$${DUCKDB_STATIC_LIB:?set DUCKDB_STATIC_LIB to the browser-appropriate DuckDB static archive}" \
