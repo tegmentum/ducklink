@@ -1,0 +1,38 @@
+diff --git a/ffi/src/lib.rs b/ffi/src/lib.rs
+index 493170cd..d5585534 100644
+--- a/ffi/src/lib.rs
++++ b/ffi/src/lib.rs
+@@ -566,6 +566,33 @@ fn get_default_engine_impl(
+     Ok(engine.into())
+ }
+ 
++/// Construct the sync (local-filesystem, no async/cloud) engine. Unlike the
++/// default engine this pulls in no tokio/reqwest/object_store, so it builds for
++/// wasm32-wasip2. Reads file:// Delta tables only.
++///
++/// # Safety
++///
++/// Caller must pass a valid allocate_error function pointer.
++#[cfg(feature = "sync-engine")]
++#[no_mangle]
++pub unsafe extern "C" fn get_sync_engine(
++    allocate_error: AllocateErrorFn,
++) -> ExternResult<Handle<SharedExternEngine>> {
++    get_sync_engine_impl(allocate_error).into_extern_result(&allocate_error)
++}
++
++#[cfg(feature = "sync-engine")]
++fn get_sync_engine_impl(
++    allocate_error: AllocateErrorFn,
++) -> DeltaResult<Handle<SharedExternEngine>> {
++    use delta_kernel::engine::sync::SyncEngine;
++    let engine: Arc<dyn ExternEngine> = Arc::new(ExternEngineVtable {
++        engine: Arc::new(SyncEngine::new()),
++        allocate_error,
++    });
++    Ok(engine.into())
++}
++
+ /// # Safety
+ ///
+ /// Caller is responsible for passing a valid handle.

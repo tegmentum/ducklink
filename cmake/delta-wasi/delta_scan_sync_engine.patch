@@ -1,0 +1,37 @@
+diff --git a/extension/delta/src/functions/delta_scan.cpp b/extension/delta/src/functions/delta_scan.cpp
+index 790224a..9df3689 100644
+--- a/extension/delta/src/functions/delta_scan.cpp
++++ b/extension/delta/src/functions/delta_scan.cpp
+@@ -68,6 +68,7 @@ static void visit_data(void *engine_context, ffi::EngineData *engine_data,
+ 	ffi::visit_scan_data(engine_data, selection_vec, engine_context, visit_callback);
+ }
+ 
++#ifndef __wasi__ // cloud (default-engine) builder API; absent in the wasm sync-engine kernel
+ static ffi::EngineBuilder *CreateBuilder(ClientContext &context, const string &path) {
+ 	ffi::EngineBuilder *builder;
+ 
+@@ -128,6 +129,7 @@ static ffi::EngineBuilder *CreateBuilder(ClientContext &context, const string &p
+ 
+ 	return builder;
+ }
++#endif // __wasi__
+ 
+ DeltaSnapshot::DeltaSnapshot(ClientContext &context_p, const string &path)
+     : MultiFileList({ToDeltaPath(path)}, FileGlobOptions::ALLOW_EMPTY), context(context_p) {
+@@ -212,8 +214,16 @@ void DeltaSnapshot::InitializeFiles() {
+ 	auto path_slice = KernelUtils::ToDeltaString(paths[0]);
+ 
+ 	// Register engine
++#ifdef __wasi__
++	// wasm: use the sync (local-filesystem) engine. The cloud builder API
++	// (get_engine_builder / builder_build) pulls in tokio + reqwest + object_store
++	// and is not compiled into the sync-engine kernel; get_sync_engine (a kernel
++	// FFI addition) constructs the local engine with no async/network deps.
++	extern_engine = TryUnpackKernelResult(ffi::get_sync_engine(DuckDBEngineError::AllocateError));
++#else
+ 	auto interface_builder = CreateBuilder(context, paths[0]);
+ 	extern_engine = TryUnpackKernelResult(ffi::builder_build(interface_builder));
++#endif
+ 
+ 	// Initialize Snapshot
+ 	snapshot = TryUnpackKernelResult(ffi::snapshot(path_slice, extern_engine.get()));
