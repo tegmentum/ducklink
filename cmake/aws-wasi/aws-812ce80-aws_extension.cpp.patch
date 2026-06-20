@@ -1,0 +1,85 @@
+--- a/src/aws_extension.cpp	2026-06-20 11:45:22
++++ b/src/aws_extension.cpp	2026-06-20 11:51:25
+@@ -6,16 +6,33 @@
+ #include "duckdb/catalog/catalog.hpp"
+ #include "duckdb/main/extension/extension_loader.hpp"
+ #include <duckdb/parser/parsed_data/create_scalar_function_info.hpp>
++#ifdef __wasi__
++#include "aws_wasi_credentials.hpp"
++#else
+ #include <aws/core/Aws.h>
+ #include <aws/core/auth/AWSCredentialsProviderChain.h>
+ #include <aws/core/client/ClientConfiguration.h>
++#endif
+ 
+ namespace duckdb {
+ 
+-//! Set the DuckDB AWS Credentials using the DefaultAWSCredentialsProviderChain
++//! Set the DuckDB AWS Credentials using the default credential chain.
+ static AwsSetCredentialsResult TrySetAwsCredentials(DBConfig &config, const string &profile, bool set_region) {
+-	Aws::Auth::AWSCredentials credentials;
++	string key_id, secret_key, session_token, region;
++	bool creds_expired_or_empty = true;
+ 
++#ifdef __wasi__
++	auto resolved_profile = aws_wasi::ResolveProfileName(profile);
++	auto creds = aws_wasi::ResolveCredentials(/*chain=*/string(), resolved_profile);
++	if (!creds.IsEmpty()) {
++		key_id = creds.access_key_id;
++		secret_key = creds.secret_access_key;
++		session_token = creds.session_token;
++		creds_expired_or_empty = false;
++	}
++	region = aws_wasi::ResolveRegion(resolved_profile);
++#else
++	Aws::Auth::AWSCredentials credentials;
+ 	if (!profile.empty()) {
+ 		// The user has specified a specific profile they want to use instead of the current profile specified by the
+ 		// system
+@@ -27,19 +44,27 @@
+ 	}
+ 
+ 	auto s3_config = Aws::Client::ClientConfiguration(profile.c_str());
+-	auto region = s3_config.region;
++	region = s3_config.region;
+ 
+ 	// TODO: We would also like to get the endpoint here, but it's currently not supported by the AWS SDK:
+ 	// 		 https://github.com/aws/aws-sdk-cpp/issues/2587
+ 
++	creds_expired_or_empty = credentials.IsExpiredOrEmpty();
++	if (!creds_expired_or_empty) {
++		key_id = credentials.GetAWSAccessKeyId();
++		secret_key = credentials.GetAWSSecretKey();
++		session_token = credentials.GetSessionToken();
++	}
++#endif
++
+ 	AwsSetCredentialsResult ret;
+-	if (!credentials.IsExpiredOrEmpty()) {
+-		config.SetOption("s3_access_key_id", Value(credentials.GetAWSAccessKeyId()));
+-		config.SetOption("s3_secret_access_key", Value(credentials.GetAWSSecretKey()));
+-		config.SetOption("s3_session_token", Value(credentials.GetSessionToken()));
+-		ret.set_access_key_id = credentials.GetAWSAccessKeyId();
+-		ret.set_secret_access_key = credentials.GetAWSSecretKey();
+-		ret.set_session_token = credentials.GetSessionToken();
++	if (!creds_expired_or_empty) {
++		config.SetOption("s3_access_key_id", Value(key_id));
++		config.SetOption("s3_secret_access_key", Value(secret_key));
++		config.SetOption("s3_session_token", Value(session_token));
++		ret.set_access_key_id = key_id;
++		ret.set_secret_access_key = secret_key;
++		ret.set_session_token = session_token;
+ 	}
+ 
+ 	if (!region.empty() && set_region) {
+@@ -116,8 +141,10 @@
+ 	data.finished = true;
+ }
+ static void LoadInternal(ExtensionLoader &loader) {
++#ifndef __wasi__
+ 	Aws::SDKOptions options;
+ 	Aws::InitAPI(options);
++#endif
+ 
+ 	CreateAwsSecretFunctions::InitializeCurlCertificates(loader.GetDatabaseInstance());
+ 

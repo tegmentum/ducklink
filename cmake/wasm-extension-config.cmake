@@ -64,6 +64,16 @@ if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../build/delta-kernel/out/libdelta_kernel_f
   )
 endif()
 
+# aws: load_aws_credentials() + CREATE SECRET (TYPE s3, PROVIDER credential_chain).
+# The AWS C++ SDK doesn't build for wasm, so the vendored extension resolves
+# credentials natively (env vars + ~/.aws INI files + region) under __wasi__ --
+# see external/duckdb/extension/aws/src/include/aws_wasi_credentials.hpp. The
+# network/subprocess providers (sso/sts/instance/process) error clearly. Pairs
+# with httpfs (which consumes the secret + signs S3 requests).
+duckdb_extension_load(aws              # AWS credential resolution -> S3 secret for httpfs
+  SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/../external/duckdb/extension/aws
+)
+
 # avro (read_avro) + iceberg. Both need C libs built for wasi by
 # scripts/build-wasi-deps.sh into build/wasi-deps/: jansson + avro-c (deflate
 # codec only -> no lzma/snappy) for the avro extension, and roaring (CRoaring)
@@ -210,10 +220,9 @@ add_library(sqlite_wasivfs STATIC
 target_include_directories(sqlite_wasivfs PRIVATE ${CMAKE_CURRENT_LIST_DIR}/sqlite-wasi-vfs)
 
 # --- remaining (not yet built for wasi) ---
-# aws: AWS credential-provider chain (config/SSO); pairs with httpfs/iceberg S3
-#   (SigV4 is already hand-rolled for iceberg).
-# azure: heavy Azure C++ SDK + curl.
+# azure: heavy Azure C++ SDK + curl. Use SAS-token URLs via httpfs instead.
 # ui: needs a *listening* HTTP server inside the component -- poor fit for
 #   wasip2's outbound-only model.
 # (Built above: avro, iceberg, spatial, httpfs, ducklake, sqlite_scanner, excel,
-#  postgres_scanner, mysql_scanner.)
+#  postgres_scanner, mysql_scanner, delta, aws. aws's network credential
+#  providers -- sso/sts/instance/process -- error clearly; env + ~/.aws files work.)

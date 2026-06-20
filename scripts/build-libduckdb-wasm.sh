@@ -472,9 +472,39 @@ stage_delta_kernel() {
   echo "delta: staged prebuilt wasm kernel ($(du -h "$OUT_DIR/libdelta_kernel_ffi.a" | cut -f1))" >&2
 }
 
+# aws: the `aws` extension resolves AWS credentials for httpfs's S3 secrets. The
+# AWS C++ SDK doesn't build for wasm, so we vendor duckdb-aws (the version-matched
+# pin) + patch it to resolve credentials natively (env vars + ~/.aws INI files +
+# region) under __wasi__ via cmake/aws-wasi/aws_wasi_credentials.hpp. Pure C++,
+# no extra deps. Runs before configure (in-tree extension read at configure time).
+stage_aws_extension() {
+  grep -q "duckdb_extension_load(aws" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null || return 0
+  local AWS_DIR="$DUCKDB_SOURCE_DIR/extension/aws"
+  local PIN="812ce80fde0bfa6e4641b6fd798087349a610795"
+  if [[ ! -f "$AWS_DIR/CMakeLists.txt" ]]; then
+    echo "aws: vendoring duckdb-aws @ $PIN" >&2
+    local tmp="$BUILD_DIR/duckdb-aws-src"
+    if [[ ! -d "$tmp/.git" ]]; then
+      git clone --quiet https://github.com/duckdb/duckdb-aws "$tmp"
+      git -C "$tmp" checkout --quiet "$PIN"
+    fi
+    mkdir -p "$AWS_DIR"
+    ( cd "$tmp" && git archive "$PIN" CMakeLists.txt src ) | tar -x -C "$AWS_DIR"
+  fi
+  # Apply the wasm patches + drop in the native resolver header (idempotent).
+  if ! grep -q '__wasi__' "$AWS_DIR/src/aws_secret.cpp" 2>/dev/null; then
+    cp "$(pwd)/cmake/aws-wasi/aws_wasi_credentials.hpp" "$AWS_DIR/src/include/"
+    for p in "$(pwd)"/cmake/aws-wasi/aws-812ce80-*.patch; do
+      ( cd "$AWS_DIR" && git apply "$p" 2>/dev/null ) || patch -p1 -d "$AWS_DIR" < "$p"
+    done
+    echo "aws: applied wasm patches + native credential resolver" >&2
+  fi
+}
+
 # delta: stage the prebuilt wasm kernel before configure (the vendored delta
 # CMakeLists references the staged .a as an ExternalProject byproduct).
 stage_delta_kernel
+stage_aws_extension
 
 # Configure, patching fetched sources after each failure, until it succeeds.
 # Extensions are fetched progressively, so a configure-blocking extension only
