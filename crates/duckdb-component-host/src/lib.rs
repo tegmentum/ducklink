@@ -75,6 +75,13 @@ struct CoreStoreState {
     extension_manager: Arc<Mutex<ExtensionManager>>,
     // Tiered Virtual Memory: host-owned regions back DuckDB's >4 GiB spill tier.
     tvm: tvm_core::RegionDirectory<tvm_core::VecBackedRegion>,
+    // Per-slot generation layer over tvm_core (whose handle generation is
+    // region-level). Keyed by (region-id, offset): a per-slot generation that
+    // bumps on each reallocation, plus the live tvm_core handle (None once
+    // freed). The WIT handle carries the slot generation, so a stale handle to a
+    // freed or freed-then-reused slot is rejected instead of hitting the block
+    // that reused the slot. See web/tvm-host.mjs for the browser-host mirror.
+    tvm_slots: std::collections::HashMap<(u16, u32), (u16, Option<tvm_core::Handle>)>,
 }
 
 impl WasiView for CoreStoreState {
@@ -232,18 +239,40 @@ fn tvm_kind_to_core(k: core_tvm_types::RegionKind) -> tvm_core::RegionKind {
         W::CodeCache => C::CodeCache,
     }
 }
-fn tvm_to_core_handle(h: core_tvm_types::Handle) -> tvm_core::Handle {
-    tvm_core::Handle {
-        region_id: h.region_id,
-        generation: h.generation,
-        offset: h.offset,
+impl CoreStoreState {
+    // Record a fresh tvm_core allocation under its (region, offset) slot, bumping
+    // the per-slot generation, and return the WIT handle (carrying the slot
+    // generation) to hand back to the guest.
+    fn tvm_register(&mut self, region_id: u16, th: tvm_core::Handle) -> core_tvm_types::Handle {
+        let slot = self.tvm_slots.entry((region_id, th.offset)).or_insert((0, None));
+        slot.0 = slot.0.wrapping_add(1);
+        slot.1 = Some(th);
+        core_tvm_types::Handle {
+            region_id,
+            generation: slot.0,
+            offset: th.offset,
+        }
     }
-}
-fn tvm_to_wit_handle(h: tvm_core::Handle) -> core_tvm_types::Handle {
-    core_tvm_types::Handle {
-        region_id: h.region_id,
-        generation: h.generation,
-        offset: h.offset,
+    // Validate a WIT handle against its slot and return the live tvm_core handle.
+    // Rejects a handle whose slot was freed (None) or freed-then-reused (the slot
+    // generation moved past the handle's). `free` also marks the slot freed.
+    fn tvm_resolve(
+        &mut self,
+        ptr: core_tvm_types::Handle,
+        free: bool,
+    ) -> Result<tvm_core::Handle, core_tvm_types::TvmError> {
+        let slot = self
+            .tvm_slots
+            .get_mut(&(ptr.region_id, ptr.offset))
+            .ok_or(core_tvm_types::TvmError::StaleHandle)?;
+        if slot.0 != ptr.generation {
+            return Err(core_tvm_types::TvmError::StaleHandle);
+        }
+        let th = slot.1.ok_or(core_tvm_types::TvmError::StaleHandle)?;
+        if free {
+            slot.1 = None;
+        }
+        Ok(th)
     }
 }
 
@@ -296,15 +325,12 @@ impl core_tvm_manager::Host for CoreStoreState {
         region_id: u16,
         size: u32,
     ) -> Result<core_tvm_types::Handle, core_tvm_types::TvmError> {
-        self.tvm
-            .alloc(region_id, size)
-            .map(tvm_to_wit_handle)
-            .map_err(tvm_err_to_wit)
+        let th = self.tvm.alloc(region_id, size).map_err(tvm_err_to_wit)?;
+        Ok(self.tvm_register(region_id, th))
     }
     fn dealloc(&mut self, ptr: core_tvm_types::Handle) -> Result<(), core_tvm_types::TvmError> {
-        self.tvm
-            .dealloc(tvm_to_core_handle(ptr))
-            .map_err(tvm_err_to_wit)
+        let th = self.tvm_resolve(ptr, true)?;
+        self.tvm.dealloc(th).map_err(tvm_err_to_wit)
     }
     fn describe_region(
         &mut self,
@@ -322,10 +348,9 @@ impl core_tvm_bytes::Host for CoreStoreState {
         ptr: core_tvm_types::Handle,
         len: u32,
     ) -> Result<Vec<u8>, core_tvm_types::TvmError> {
+        let th = self.tvm_resolve(ptr, false)?;
         let mut buf = vec![0u8; len as usize];
-        self.tvm
-            .read(tvm_to_core_handle(ptr), &mut buf)
-            .map_err(tvm_err_to_wit)?;
+        self.tvm.read(th, &mut buf).map_err(tvm_err_to_wit)?;
         if tvm_debug() {
             let t = TVM_BYTES_READ.fetch_add(len as u64, std::sync::atomic::Ordering::Relaxed)
                 + len as u64;
@@ -339,10 +364,8 @@ impl core_tvm_bytes::Host for CoreStoreState {
         data: Vec<u8>,
     ) -> Result<(), core_tvm_types::TvmError> {
         let len = data.len() as u64;
-        let r = self
-            .tvm
-            .write(tvm_to_core_handle(ptr), &data)
-            .map_err(tvm_err_to_wit);
+        let th = self.tvm_resolve(ptr, false)?;
+        let r = self.tvm.write(th, &data).map_err(tvm_err_to_wit);
         if tvm_debug() && r.is_ok() {
             let t = TVM_BYTES_WRITTEN.fetch_add(len, std::sync::atomic::Ordering::Relaxed) + len;
             eprintln!("[tvm] write {len} B (cumulative {} MiB)", t >> 20);
@@ -3158,6 +3181,7 @@ fn instantiate_core(
             wasi: wasi_ctx,
             extension_manager,
             tvm: tvm_core::RegionDirectory::new(),
+            tvm_slots: std::collections::HashMap::new(),
         },
     );
 

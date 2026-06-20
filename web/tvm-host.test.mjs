@@ -69,10 +69,21 @@ const block = [mgr.alloc(reuse2, 8), mgr.alloc(reuse2, 8)]
 block.forEach((h) => mgr.dealloc(h))
 check('adjacent frees coalesce into one hole', !caught(() => mgr.alloc(reuse2, 16)))
 
-// 6b) stale handle (wrong generation) -> throws stale-handle
+// 6b) wrong generation -> throws stale-handle
 const gh = mgr.alloc(rid, 8)
-check('stale generation throws on write', caught(() => bytes.write({ ...gh, generation: gh.generation + 1 }, Uint8Array.of(1, 2, 3, 4, 5, 6, 7, 8)))?.tag === 'stale-handle')
-check('stale generation throws on read', caught(() => bytes.read({ ...gh, generation: gh.generation + 7 }, 8))?.tag === 'stale-handle')
+const eight = Uint8Array.of(1, 2, 3, 4, 5, 6, 7, 8)
+check('wrong generation throws on write', caught(() => bytes.write({ ...gh, generation: gh.generation + 1 }, eight))?.tag === 'stale-handle')
+check('wrong generation throws on read', caught(() => bytes.read({ ...gh, generation: gh.generation + 7 }, 8))?.tag === 'stale-handle')
+
+// 6c) per-slot stale detection: a handle whose slot was freed (or freed and
+//     reused by a later allocation) is rejected, not silently honored.
+const slotR = mgr.createRegion('page-store', 8) // single 8-byte slot
+const old = mgr.alloc(slotR, 8)                 // offset 0, generation 1
+check('use-after-free is rejected', (mgr.dealloc(old), caught(() => bytes.read(old, 8))?.tag === 'stale-handle'))
+const fresh = mgr.alloc(slotR, 8)               // reuses offset 0, generation 2
+check('stale handle to a reused slot is rejected', caught(() => bytes.write(old, eight))?.tag === 'stale-handle')
+check('the fresh handle to the reused slot works', !caught(() => bytes.write(fresh, eight)))
+check('double-free is rejected', (mgr.dealloc(fresh), caught(() => mgr.dealloc(fresh))?.tag === 'stale-handle'))
 
 // 7) end-to-end: replicate alloc_in_pool's pool-and-overflow across regions and
 //    spill > one region's capacity, proving multi-region works through the host.

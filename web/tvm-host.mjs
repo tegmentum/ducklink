@@ -51,9 +51,17 @@ function ensureCapacity(region, need) {
 // offset to its size so dealloc can reclaim it. Reclamation is what keeps a
 // region's footprint at the live set rather than the cumulative spill volume:
 // DuckDB deletes spilled blocks as a sort/hash merge consumes them.
-function newRegion(capacity, generation) {
-  return { bytes: new Uint8Array(0), capacity, generation, free: [[0, capacity]], live: new Map(), used: 0 }
+//
+// `slotGen` maps an offset to a per-slot generation, bumped each time that
+// offset is reallocated. The handle carries this generation, so a stale handle
+// to a freed-then-reused slot is rejected (the slot now has a newer generation)
+// rather than silently reading/writing the block that reused the slot. `slotGen`
+// persists across dealloc (only `live` membership tracks free/allocated).
+function newRegion(capacity) {
+  return { bytes: new Uint8Array(0), capacity, free: [[0, capacity]], live: new Map(), slotGen: new Map(), used: 0 }
 }
+// Allocate `size` bytes; returns the slot's `{ offset, generation }`, or null if
+// no contiguous hole is big enough.
 function flAlloc(region, size) {
   for (let i = 0; i < region.free.length; i++) {
     const hole = region.free[i]
@@ -63,10 +71,12 @@ function flAlloc(region, size) {
       else { hole[0] += size; hole[1] -= size }
       region.live.set(offset, size)
       region.used += size
-      return offset
+      const generation = ((region.slotGen.get(offset) ?? 0) + 1) & 0xffff
+      region.slotGen.set(offset, generation)
+      return { offset, generation }
     }
   }
-  return -1 // no contiguous hole big enough
+  return null // no contiguous hole big enough
 }
 function flDealloc(region, offset) {
   const size = region.live.get(offset)
@@ -91,12 +101,16 @@ export function createTvmHost({ debug = false } = {}) {
   let nextRegionId = 0
   const stats = { regionsOpened: 0, bytesWritten: 0, bytesRead: 0 }
   const trace = (msg) => { if (debug) console.error(`[tvm] ${msg}`) }
-  // Reject a handle whose region is gone or whose generation is stale (region
-  // ids never repeat here, so this mostly mirrors the native generation check).
+  // Resolve a handle to its region, rejecting a stale one: the region must
+  // exist, the offset must currently be allocated (`live`), and the handle's
+  // generation must match the slot's current generation (catches use of a
+  // handle whose slot was freed, or freed and reused by a later allocation).
   const regionFor = (handle) => {
     const region = regions.get(handle.regionId)
     if (!region) fail(errRegion(handle.regionId))
-    if (handle.generation !== region.generation) fail(ERR_STALE)
+    if (!region.live.has(handle.offset) || region.slotGen.get(handle.offset) !== handle.generation) {
+      fail(ERR_STALE)
+    }
     return region
   }
 
@@ -107,7 +121,7 @@ export function createTvmHost({ debug = false } = {}) {
     createRegion(_kind, capacity) {
       if (nextRegionId > U16_MAX) fail(ERR_ALLOC)
       const id = nextRegionId++
-      regions.set(id, newRegion(capacity, 1))
+      regions.set(id, newRegion(capacity))
       stats.regionsOpened++
       trace(`open region #${stats.regionsOpened} id=${id} cap=${capacity >> 20} MiB (host heap, beyond wasm 4 GiB)`)
       return id
@@ -118,13 +132,14 @@ export function createTvmHost({ debug = false } = {}) {
     alloc(regionId, size) {
       const region = regions.get(regionId)
       if (!region) fail(errRegion(regionId))
-      const offset = flAlloc(region, size)
+      const slot = flAlloc(region, size)
       // No hole big enough -> err so the guest opens another region (matches native).
-      if (offset < 0) fail(ERR_ALLOC)
-      ensureCapacity(region, offset + size)
-      return { regionId, generation: region.generation, offset }
+      if (!slot) fail(ERR_ALLOC)
+      ensureCapacity(region, slot.offset + size)
+      return { regionId, generation: slot.generation, offset: slot.offset }
     },
-    // Reclaim the block's space back into the region's free list.
+    // Reclaim the block's space back into the region's free list (validates the
+    // handle first, so a double-free or stale dealloc is rejected).
     dealloc(handle) {
       flDealloc(regionFor(handle), handle.offset)
     },
@@ -133,7 +148,7 @@ export function createTvmHost({ debug = false } = {}) {
       const region = regions.get(regionId)
       if (!region) fail(errRegion(regionId))
       return {
-        id: regionId, generation: region.generation, kind: 'page-store',
+        id: regionId, generation: 0, kind: 'page-store',
         capacity: region.capacity, used: region.used, residency: 'cold',
       }
     },
