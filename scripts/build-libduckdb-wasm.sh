@@ -33,11 +33,19 @@ mkdir -p "$BUILD_DIR"
 echo "Configuring DuckDB for wasm32-wasi in $BUILD_DIR" >&2
 echo "  extension config: $DUCKDB_EXTENSION_CONFIGS" >&2
 configure_duckdb() {
+  # EXTRA_CXX_FLAGS / EXTRA_C_FLAGS append to the DuckDB compile (e.g.
+  # EXTRA_CXX_FLAGS=-msimd128 to enable wasm SIMD autovectorization). Empty by
+  # default; the runtime (wasmtime, browsers) supports SIMD.
+  # Note: -msimd128 was measured as noise-level on sort/aggregation workloads
+  # (the bottleneck was component COMPILE time, fixed by the host's on-disk
+  # cache, not query compute), so it is intentionally not enabled by default.
   env WASM_EXTENSIONS="$WASM_EXTENSIONS" cmake -S "$DUCKDB_SOURCE_DIR" -B "$BUILD_DIR" \
     -DCMAKE_TOOLCHAIN_FILE="$(pwd)/cmake/toolchains/wasi-sdk.cmake" \
     -DWASI_SDK_PREFIX:PATH="$WASI_SDK_PREFIX" \
     -DDUCKDB_EXTENSION_CONFIGS="$DUCKDB_EXTENSION_CONFIGS" \
     -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
+    -DCMAKE_CXX_FLAGS="${EXTRA_CXX_FLAGS:-}" \
+    -DCMAKE_C_FLAGS="${EXTRA_C_FLAGS:-${EXTRA_CXX_FLAGS:-}}" \
     -DBUILD_SHELL=OFF \
     -DBUILD_TESTS=OFF \
     -DBUILD_BENCHMARK=OFF \
