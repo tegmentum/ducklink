@@ -1,0 +1,25 @@
+--- a/src/watcher.cpp	2026-06-20 16:21:53
++++ b/src/watcher.cpp	2026-06-20 16:20:09
+@@ -13,6 +13,17 @@
+ Watcher::Watcher(HttpServer &_server)
+     : should_run(false), server(_server), watched_database(nullptr) {}
+ 
++#ifdef __wasi__
++// wasm is single-threaded (no std::thread spawn). The catalog watcher provides
++// push-based live-schema refresh to the UI; on wasm it's disabled (the UI still
++// works, just without automatic catalog-change events). No-op Start/Stop/Watch.
++void Watcher::Watch() {}
++void Watcher::Start() {}
++void Watcher::Stop() {}
++} // namespace ui
++} // namespace duckdb
++#else
++
+ bool WasCatalogUpdated(DatabaseInstance &db, Connection &connection,
+                        CatalogState &last_state) {
+   bool has_change = false;
+@@ -130,3 +141,4 @@
+ 
+ } // namespace ui
+ } // namespace duckdb
++#endif // __wasi__

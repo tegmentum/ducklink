@@ -1,0 +1,20 @@
+--- a/third_party/httplib/httplib.hpp	2026-06-20 16:21:53
++++ b/third_party/httplib/httplib.hpp	2026-06-20 16:18:09
+@@ -3075,7 +3075,7 @@
+     hints.ai_flags = socket_flags;
+   }
+ 
+-#ifndef _WIN32
++#if !defined(_WIN32) && !defined(__wasi__) // wasm has no AF_UNIX (sockaddr_un lacks sun_path)
+   if (hints.ai_family == AF_UNIX) {
+     const auto addrlen = host.length();
+     if (addrlen > sizeof(sockaddr_un::sun_path)) { return INVALID_SOCKET; }
+@@ -3386,7 +3386,7 @@
+ 
+   if (!getpeername(sock, reinterpret_cast<struct sockaddr *>(&addr),
+                    &addr_len)) {
+-#ifndef _WIN32
++#if !defined(_WIN32) && !defined(__wasi__) // wasm has no AF_UNIX peer-cred lookup
+     if (addr.ss_family == AF_UNIX) {
+ #if defined(__linux__)
+       struct ucred ucred;
