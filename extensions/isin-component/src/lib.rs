@@ -131,6 +131,25 @@ fn arg_text(args: &[types::Duckvalue], i: usize, fname: &str) -> Result<String, 
 // ---- Dispatch ----
 
 impl callback_dispatch::Guest for Extension {
+    fn call_scalar_batch(
+        handle: u32,
+        rows: Vec<Vec<types::Duckvalue>>,
+        ctx: types::Invokeinfo,
+    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
+        // Batched dispatch: the host hands the whole chunk in one WIT call; loop
+        // the rows here in-wasm (row i's index is ctx.rowindex + i).
+        let base = ctx.rowindex.unwrap_or(0);
+        let mut out = Vec::with_capacity(rows.len());
+        for (i, args) in rows.into_iter().enumerate() {
+            let row_ctx = types::Invokeinfo {
+                rowindex: Some(base + i as u64),
+                iswindow: ctx.iswindow,
+            };
+            out.push(Self::call_scalar(handle, args, row_ctx)?);
+        }
+        Ok(out)
+    }
+
     fn call_scalar(
         handle: u32,
         args: Vec<types::Duckvalue>,

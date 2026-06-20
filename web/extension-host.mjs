@@ -161,6 +161,15 @@ export function createExtensionHost() {
         },
         'duckdb:extension/callback-dispatch': {
           callScalar: dispatch('callScalar'),
+          // Phase 1a: the core→host crossing is batched (one call per chunk);
+          // the extension is still invoked per row. Row i's index is base + i.
+          callScalarBatch: (handle, rows, ctx) => {
+            const callScalar = dispatch('callScalar')
+            const base = ctx.rowindex ?? 0n
+            return rows.map((args, i) =>
+              callScalar(handle, args, { rowindex: base + BigInt(i), iswindow: ctx.iswindow }),
+            )
+          },
           callTable: dispatch('callTable'),
           callAggregate: dispatch('callAggregate'),
           callPragma: dispatch('callPragma'),

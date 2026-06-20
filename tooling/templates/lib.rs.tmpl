@@ -78,6 +78,25 @@ fn alloc_msg(fname: &str, i: usize, ty: &str) -> String {{
 }}
 
 impl callback_dispatch::Guest for Extension {{
+    // Batched dispatch: the host hands the whole DataChunk in one WIT call (one
+    // crossing per <=2048 rows instead of per row); loop the rows here in-wasm.
+    fn call_scalar_batch(
+        handle: u32,
+        rows: Vec<Vec<types::Duckvalue>>,
+        ctx: types::Invokeinfo,
+    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {{
+        let base = ctx.rowindex.unwrap_or(0);
+        let mut out = Vec::with_capacity(rows.len());
+        for (i, args) in rows.into_iter().enumerate() {{
+            let row_ctx = types::Invokeinfo {{
+                rowindex: Some(base + i as u64),
+                iswindow: ctx.iswindow,
+            }};
+            out.push(Self::call_scalar(handle, args, row_ctx)?);
+        }}
+        Ok(out)
+    }}
+
     fn call_scalar(
         handle: u32,
         args: Vec<types::Duckvalue>,

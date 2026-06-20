@@ -57,6 +57,7 @@ export const duckdbStubImports = {
   },
   'duckdb:extension/callback-dispatch': {
     callScalar: () => { throw new Error('callbacks unavailable') },
+    callScalarBatch: () => { throw new Error('callbacks unavailable') },
     callTable: () => { throw new Error('callbacks unavailable') },
     callAggregate: () => { throw new Error('callbacks unavailable') },
     callPragma: () => { throw new Error('callbacks unavailable') },

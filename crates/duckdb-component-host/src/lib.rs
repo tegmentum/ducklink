@@ -145,6 +145,39 @@ impl core_callback_dispatch::Host for CoreStoreState {
             .map_err(convert_extension_duckerror_to_core)
     }
 
+    fn call_scalar_batch(
+        &mut self,
+        handle: u32,
+        rows: core_callback_dispatch::Rowbatch,
+        ctx: core_callback_dispatch::Invokeinfo,
+    ) -> Result<Vec<core_types::Duckvalue>, core_types::Duckerror> {
+        // The whole chunk crosses to the extension in ONE call; the extension
+        // loops internally. This removes the per-row host->extension wasmtime
+        // invocation overhead (the dominant share). Row i's index is
+        // ctx.rowindex + i, derived extension-side.
+        let converted_rows: Vec<Vec<_>> = rows
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(convert_core_duckvalue_to_extension)
+                    .collect()
+            })
+            .collect();
+        let converted_ctx = convert_core_invokeinfo(ctx);
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_scalar_batch(handle, &converted_rows, converted_ctx)
+            .map(|vals| {
+                vals.into_iter()
+                    .map(convert_extension_duckvalue_to_core)
+                    .collect()
+            })
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
     fn call_table(
         &mut self,
         handle: u32,
@@ -579,6 +612,21 @@ impl ExtensionInstance {
             .map_err(|err| err)
     }
 
+    #[allow(clippy::ptr_arg)] // the bindgen call takes &Vec (the rowbatch type), not a slice
+    fn dispatch_scalar_batch(
+        &mut self,
+        dispatcher_handle: u32,
+        rows: &Vec<Vec<extension_types::Duckvalue>>,
+        ctx: extension_runtime::Invokeinfo,
+    ) -> Result<Vec<extension_types::Duckvalue>, extension_types::Duckerror> {
+        let guest = self.bindings.duckdb_extension_callback_dispatch();
+        let mut store = self.store.as_context_mut();
+        guest
+            .call_call_scalar_batch(&mut store, dispatcher_handle, rows, ctx)
+            .map_err(map_extension_trap)?
+            .map_err(|err| err)
+    }
+
     fn dispatch_table(
         &mut self,
         dispatcher_handle: u32,
@@ -705,6 +753,36 @@ impl ExtensionManager {
             }
         };
         instance.dispatch_scalar(entry.dispatcher_handle, args, ctx)
+    }
+
+    #[allow(clippy::ptr_arg)] // forwarded to a bindgen call that takes &Vec (rowbatch)
+    fn dispatch_scalar_batch(
+        &mut self,
+        handle: u32,
+        rows: &Vec<Vec<extension_types::Duckvalue>>,
+        ctx: extension_runtime::Invokeinfo,
+    ) -> Result<Vec<extension_types::Duckvalue>, extension_types::Duckerror> {
+        let entry = match self.lookup_callback(handle, CallbackKind::Scalar) {
+            Some(entry) => entry,
+            None => {
+                eprintln!(
+                    "[extension-manager] dispatch_scalar_batch received unknown handle {handle}"
+                );
+                return Err(extension_types::Duckerror::Invalidstate(format!(
+                    "unknown scalar callback handle {handle}"
+                )));
+            }
+        };
+        let instance = match self.extensions.get_mut(&entry.extension) {
+            Some(instance) => instance,
+            None => {
+                return Err(extension_types::Duckerror::Invalidstate(format!(
+                    "extension {} is not loaded",
+                    entry.extension
+                )));
+            }
+        };
+        instance.dispatch_scalar_batch(entry.dispatcher_handle, rows, ctx)
     }
 
     fn dispatch_table(

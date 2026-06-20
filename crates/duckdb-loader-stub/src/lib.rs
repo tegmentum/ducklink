@@ -59,6 +59,14 @@ impl DispatchGuest for Component {
         Err(unreachable_dispatch())
     }
 
+    fn call_scalar_batch(
+        _handle: u32,
+        _rows: Rowbatch,
+        _ctx: Invokeinfo,
+    ) -> Result<Vec<Duckvalue>, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+
     fn call_table(_handle: u32, _args: Vec<Duckvalue>) -> Result<Resultset, Duckerror> {
         Err(unreachable_dispatch())
     }
