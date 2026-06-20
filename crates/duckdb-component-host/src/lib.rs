@@ -61,6 +61,9 @@ use duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
 use wasmtime::component::__internal::Vec as BindgenVec;
 use wasmtime::component::{Component, Linker, Resource, ResourceAny, ResourceTable};
 use wasmtime::{AsContextMut, Config, Engine, Store, StoreContextMut};
+
+mod ui_server;
+pub use ui_server::serve_ui;
 use wasmtime_wasi::p2::{
     self,
     pipe::{MemoryInputPipe, MemoryOutputPipe},

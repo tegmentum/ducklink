@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DuckDB (wasm) — SQL Console</title>
+<style>
+  :root { color-scheme: light dark; --fg:#1b1b1f; --bg:#fbfbfd; --acc:#fff000; --line:#dcdce0;
+          --head:#f1f1f4; --err:#b00020; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg:#e6e6ea; --bg:#1b1b1f; --line:#34343a; --head:#26262b; --err:#ff6b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         color:var(--fg); background:var(--bg); height:100vh; display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; gap:10px; padding:10px 16px; border-bottom:1px solid var(--line); }
+  header b { font-weight:700; } header .dim { color:#888; font-size:12px; }
+  .duck { font-size:20px; }
+  main { flex:1; display:flex; flex-direction:column; min-height:0; }
+  textarea { width:100%; height:34vh; resize:vertical; border:none; border-bottom:1px solid var(--line);
+             padding:14px 16px; font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+             color:var(--fg); background:var(--bg); outline:none; }
+  .bar { display:flex; align-items:center; gap:12px; padding:8px 16px; border-bottom:1px solid var(--line); }
+  button { font:inherit; font-weight:600; padding:6px 16px; border:1px solid var(--line); border-radius:6px;
+           background:var(--head); color:var(--fg); cursor:pointer; }
+  button:hover { border-color:#999; }
+  .status { color:#888; font-size:12px; }
+  .out { flex:1; overflow:auto; padding:0 0 40px; }
+  table { border-collapse:collapse; width:100%; font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  th,td { text-align:left; padding:5px 12px; border-bottom:1px solid var(--line); white-space:pre; }
+  th { position:sticky; top:0; background:var(--head); border-bottom:1px solid var(--line); font-weight:700; }
+  td.null { color:#999; font-style:italic; }
+  .err { color:var(--err); padding:14px 16px; white-space:pre-wrap; font:13px/1.5 ui-monospace,monospace; }
+  .empty { color:#888; padding:16px; }
+</style>
+</head>
+<body>
+<header>
+  <span class="duck">🦆</span><b>DuckDB</b><span class="dim">wasm · SQL console</span>
+</header>
+<main>
+  <textarea id="sql" spellcheck="false" placeholder="SELECT * FROM duckdb_extensions();">SELECT extension_name, loaded, installed
+FROM duckdb_extensions()
+ORDER BY extension_name;</textarea>
+  <div class="bar">
+    <button id="run">Run ▸</button>
+    <span class="status" id="status">⌘/Ctrl + Enter to run</span>
+  </div>
+  <div class="out" id="out"><div class="empty">Run a query to see results.</div></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const sql = $("sql"), out = $("out"), status = $("status");
+
+function esc(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+function render(data){
+  if (data.error){ out.innerHTML = '<div class="err">'+esc(data.error)+'</div>'; return; }
+  const cols = data.columns||[], rows = data.rows||[];
+  if (!cols.length){ out.innerHTML = '<div class="empty">OK — no result set.</div>'; return; }
+  let h = '<table><thead><tr>';
+  for (const c of cols) h += '<th>'+esc(c)+'</th>';
+  h += '</tr></thead><tbody>';
+  for (const r of rows){
+    h += '<tr>';
+    for (const v of r) h += (v===null) ? '<td class="null">NULL</td>' : '<td>'+esc(v)+'</td>';
+    h += '</tr>';
+  }
+  h += '</tbody></table>';
+  out.innerHTML = h;
+}
+
+async function run(){
+  const q = sql.value.trim();
+  if (!q) return;
+  status.textContent = 'Running…';
+  const t0 = performance.now();
+  try {
+    const res = await fetch('/api/query', { method:'POST', body:q });
+    const data = await res.json();
+    render(data);
+    const ms = (performance.now()-t0).toFixed(0);
+    status.textContent = data.error ? 'Error' : (data.rowcount+' row'+(data.rowcount===1?'':'s')+' · '+ms+' ms');
+  } catch (e){
+    out.innerHTML = '<div class="err">'+esc(e.message||e)+'</div>';
+    status.textContent = 'Failed';
+  }
+}
+
+$("run").addEventListener('click', run);
+sql.addEventListener('keydown', e => {
+  if ((e.metaKey||e.ctrlKey) && e.key === 'Enter'){ e.preventDefault(); run(); }
+});
+</script>
+</body>
+</html>

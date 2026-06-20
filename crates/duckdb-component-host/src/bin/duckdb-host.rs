@@ -3,7 +3,8 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use clap::{ArgAction, Parser};
 use duckdb_component_host::{
-    precompile_component_to_file, run_cli_with_stdio, set_extension_root, ComponentArtifacts,
+    precompile_component_to_file, run_cli_with_stdio, serve_ui, set_extension_root,
+    ComponentArtifacts,
 };
 
 #[derive(Parser, Debug)]
@@ -74,6 +75,35 @@ fn main() -> Result<()> {
                 std::process::exit(2);
             }
         }
+    }
+
+    // `duckdb-host ui [--port N] [--no-open] [DB]` starts the local web SQL
+    // console (our wasm-friendly equivalent of DuckDB's `ui` extension). The host
+    // owns the listening socket and bridges queries to the core component.
+    if raw.get(1).map(String::as_str) == Some("ui") {
+        let mut port: u16 = 4213;
+        let mut open_browser = true;
+        let mut db: Option<String> = None;
+        let mut i = 2;
+        while i < raw.len() {
+            match raw[i].as_str() {
+                "--port" => {
+                    i += 1;
+                    port = raw.get(i).and_then(|s| s.parse().ok()).unwrap_or(port);
+                }
+                "--no-open" => open_browser = false,
+                other => db = Some(other.to_string()),
+            }
+            i += 1;
+        }
+
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let extensions_dir = std::env::current_dir()?.join("artifacts/extensions");
+        set_extension_root(extensions_dir);
+        let cwd = std::env::current_dir()?;
+        let preopens: Vec<(&Path, &str)> = vec![(cwd.as_path(), ".")];
+        serve_ui(&artifacts, db.as_deref(), port, open_browser, &preopens)?;
+        return Ok(());
     }
 
     let opts = Opts::parse();
