@@ -1,7 +1,7 @@
 WASI_TARGET?=wasm32-wasip2
 BROWSER_TARGET?=wasm32-unknown-unknown
 
-.PHONY: all core core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke
+.PHONY: all core core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host
 
 all: core standalone-cli loader-stub
 
@@ -37,6 +37,17 @@ sample-extension: all
 
 smoke-extension:
 	cargo test -p duckdb-component-host load_sample_extension_component
+
+# Tiered Virtual Memory (>4 GiB spill tier) tests.
+#   make tvm-test-host -- fast, pure-node free-list/handle unit test (no build)
+#   make tvm-test      -- native larger-than-memory spill round-trip
+#                         (needs core + cli components from `make all`)
+# Opt-in >4 GiB demo (slow, ~5 GiB RAM): scripts/test-tvm-bigspill.sh
+tvm-test-host:
+	node web/tvm-host.test.mjs
+
+tvm-test: host
+	./scripts/test-tvm-spill.sh
 
 # Run the smoke-tests GitHub Actions workflow locally via nektos/act (Docker).
 ci-local:

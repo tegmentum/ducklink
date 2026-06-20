@@ -110,3 +110,9 @@ jobs:
 
       - name: Smoke test (on-disk persistence)
         run: ON_DISK_SMOKE=1 scripts/smoke-cli.sh
+
+      - name: TVM host unit test (free-list allocator + handle validation)
+        run: make tvm-test-host
+
+      - name: TVM larger-than-memory spill round-trip
+        run: make tvm-test
