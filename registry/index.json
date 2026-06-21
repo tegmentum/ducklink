@@ -645,6 +645,140 @@
         "csscolorparser"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "url",
+      "version": "0.1.0",
+      "description": "URL component extraction: scheme / host / port (with default) / path / query (url crate). NULL on unparseable input.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "url",
+        "uri",
+        "parse"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/url-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/url.wasm",
+      "exports": [
+        "url_scheme",
+        "url_host",
+        "url_port",
+        "url_path",
+        "url_query"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "url"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "email",
+      "version": "0.1.0",
+      "description": "Email address validation + parsing: validate -> bool, plus domain / local-part extraction (email_address crate).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "email",
+        "validate",
+        "parse"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/email-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/email.wasm",
+      "exports": [
+        "email_validate",
+        "email_domain",
+        "email_local"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "email_address"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "semver",
+      "version": "0.1.0",
+      "description": "Semantic version parsing + comparison: valid -> bool, major / minor / patch components, and compare(a,b) -> -1/0/1 (semver crate).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "semver",
+        "version",
+        "compare"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/semver-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/semver.wasm",
+      "exports": [
+        "semver_valid",
+        "semver_major",
+        "semver_minor",
+        "semver_patch",
+        "semver_compare"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "semver"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "slug",
+      "version": "0.1.0",
+      "description": "URL-safe slug generation: slugify(text) lowercases, transliterates, and hyphenates (slug crate).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "slug",
+        "url",
+        "permalink"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/slug-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/slug.wasm",
+      "exports": [
+        "slugify"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "slug"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {

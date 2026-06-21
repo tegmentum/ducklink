@@ -22,6 +22,10 @@ members = [
     "extensions/csscolor-component",
     "extensions/rapidfuzz-component",
     "extensions/uuidx-component",
+    "extensions/url-component",
+    "extensions/email-component",
+    "extensions/semver-component",
+    "extensions/slug-component",
 ]
 
 resolver = "2"
