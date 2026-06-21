@@ -62,6 +62,10 @@ members = [
     "extensions/rot13-component",
     "extensions/leetspeak-component",
     "extensions/dms-component",
+    "extensions/cbor-component",
+    "extensions/msgpack-component",
+    "extensions/elements-component",
+    "extensions/vigenere-component",
 ]
 
 resolver = "2"

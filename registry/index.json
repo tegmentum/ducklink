@@ -1951,6 +1951,141 @@
       ],
       "crates": [],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "cbor",
+      "version": "0.1.0",
+      "description": "JSON <-> CBOR (ciborium, via serde_json::Value): cbor_from_json(json) -> hex, cbor_to_json(hex) -> JSON. DuckDB has JSON but no CBOR. Invalid -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "cbor",
+        "codec",
+        "serialization",
+        "json"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/cbor-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/cbor.wasm",
+      "exports": [
+        "cbor_from_json",
+        "cbor_to_json"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "ciborium",
+        "serde_json",
+        "hex"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "msgpack",
+      "version": "0.1.0",
+      "description": "JSON <-> MessagePack (rmp-serde, via serde_json::Value): msgpack_from_json(json) -> hex, msgpack_to_json(hex) -> JSON. Invalid -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "msgpack",
+        "messagepack",
+        "codec",
+        "json"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/msgpack-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/msgpack.wasm",
+      "exports": [
+        "msgpack_from_json",
+        "msgpack_to_json"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "rmp-serde",
+        "serde_json",
+        "hex"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "elements",
+      "version": "0.1.0",
+      "description": "Periodic-table lookups by symbol (mendeleev): element_name, element_number (atomic number), element_weight (atomic weight). Unknown -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "chemistry",
+        "periodic-table",
+        "element",
+        "science"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/elements-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/elements.wasm",
+      "exports": [
+        "element_name",
+        "element_number",
+        "element_weight"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "mendeleev"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "vigenere",
+      "version": "0.1.0",
+      "description": "Vigenere cipher (hand-rolled): vigenere_encrypt(text, key) / vigenere_decrypt(text, key). Letters enciphered (case preserved); key cycles over letters. Empty key -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "vigenere",
+        "cipher",
+        "crypto",
+        "classical"
+      ],
+      "categories": [
+        "cryptography"
+      ],
+      "source": "extensions/vigenere-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/vigenere.wasm",
+      "exports": [
+        "vigenere_encrypt",
+        "vigenere_decrypt"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {
