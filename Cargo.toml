@@ -42,6 +42,10 @@ members = [
     "extensions/currency-component",
     "extensions/hmac-component",
     "extensions/phonetic-component",
+    "extensions/jwt-component",
+    "extensions/totp-component",
+    "extensions/baseconv-component",
+    "extensions/emoji-component",
 ]
 
 resolver = "2"

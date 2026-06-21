@@ -1,0 +1,26 @@
+[package]
+name = "totp-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+RFC 6238 TOTP codes
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+hmac = "0.12"
+sha1 = "0.10"
+base32 = "0.5"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

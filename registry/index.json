@@ -1309,6 +1309,137 @@
         "rphonetic"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "jwt",
+      "version": "0.1.0",
+      "description": "Decode JWT segments (base64url, NO signature verification): jwt_header(token) and jwt_payload(token) -> JSON text. Malformed -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "jwt",
+        "token",
+        "decode",
+        "auth"
+      ],
+      "categories": [
+        "cryptography"
+      ],
+      "source": "extensions/jwt-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/jwt.wasm",
+      "exports": [
+        "jwt_header",
+        "jwt_payload"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "base64"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "totp",
+      "version": "0.1.0",
+      "description": "RFC 6238 time-based one-time passwords: totp(secret_base32, unix_time, period, digits) -> zero-padded code (HMAC-SHA1). Deterministic given explicit time.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "totp",
+        "2fa",
+        "otp",
+        "auth"
+      ],
+      "categories": [
+        "cryptography"
+      ],
+      "source": "extensions/totp-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/totp.wasm",
+      "exports": [
+        "totp"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "hmac",
+        "sha1",
+        "base32"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "baseconv",
+      "version": "0.1.0",
+      "description": "Arbitrary-radix decode: from_base(text, base) -> bigint (base 2..36), the inverse of DuckDB's built-in to_base(). Case-insensitive; unparseable -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "base",
+        "radix",
+        "convert",
+        "parse"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/baseconv-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/baseconv.wasm",
+      "exports": [
+        "from_base"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "emoji",
+      "version": "0.1.0",
+      "description": "Emoji lookups (emojis crate): emoji_name(emoji), emoji_shortcode(emoji), emoji_char(shortcode). Unknown -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "emoji",
+        "unicode",
+        "shortcode",
+        "name"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/emoji-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/emoji.wasm",
+      "exports": [
+        "emoji_name",
+        "emoji_shortcode",
+        "emoji_char"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "emojis"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {
