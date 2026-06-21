@@ -114,6 +114,8 @@ members = [
     "extensions/bloom-component",
     "extensions/minhash-component",
     "extensions/countmin-component",
+    "extensions/dns-component",
+    "extensions/http-component",
 ]
 
 resolver = "2"

@@ -3645,6 +3645,72 @@
       ],
       "crates": [],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "dns",
+      "version": "0.1.0",
+      "description": "DNS resolution over the wasi:sockets graft (the host grants extension components outbound network): dns_lookup(host) -> first IP, dns_resolve_all(host) -> JSON array of IPs. Nondeterministic; unresolvable -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "dns",
+        "network",
+        "resolve",
+        "sockets"
+      ],
+      "categories": [
+        "network"
+      ],
+      "source": "extensions/dns-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/dns.wasm",
+      "exports": [
+        "dns_lookup",
+        "dns_resolve_all"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "http",
+      "version": "0.1.0",
+      "description": "Minimal HTTP/1.1 client over wasi:sockets, with TLS for https:// via a pure-Rust stack (rustls + rustls-rustcrypto + webpki-roots): http_get(url) -> body, http_status(url) -> code. Nondeterministic; errors -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "http",
+        "https",
+        "network",
+        "client"
+      ],
+      "categories": [
+        "network"
+      ],
+      "source": "extensions/http-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/http.wasm",
+      "exports": [
+        "http_get",
+        "http_status"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "rustls",
+        "rustls-rustcrypto",
+        "webpki-roots"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {

@@ -2,12 +2,12 @@
 """Run an extension's smoke.sql against the native host CLI + optional assertions.
 
 Each extension owns extensions/<name>-component/smoke.sql. This harness loads the
-extension through the *native host* runner (`duckdb-host`, which has a real
+extension through the *native host* runner (`ducklink`, which has a real
 component loader) and pipes the file's statements through the CLI's REPL with the
 extension preregistered (`--load-extension <name>`).
 
 NOTE on the loader: the wac-composed *standalone* CLI links a no-op loader stub
-and cannot instantiate extension components, so smoke runs through `duckdb-host`
+and cannot instantiate extension components, so smoke runs through `ducklink`
 (crates/duckdb-component-host) instead. That binary resolves `<name>.wasm` under
 artifacts/extensions/, instantiates it with wasmtime, runs its `load()`, and
 forwards the captured registrations to the core component.
@@ -47,7 +47,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TARGET_DIR = REPO_ROOT / "target" / "wasm32-wasip2" / "release"
 
-HOST_BIN = REPO_ROOT / "target" / "release" / "duckdb-host"
+HOST_BIN = REPO_ROOT / "target" / "release" / "ducklink"
 CORE_COMPONENT = TARGET_DIR / "duckdb_core_component.wasm"
 CLI_COMPONENT = TARGET_DIR / "duckdb_cli_component.wasm"
 EXT_ROOT = REPO_ROOT / "artifacts" / "extensions"

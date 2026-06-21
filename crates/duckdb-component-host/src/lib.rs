@@ -956,7 +956,16 @@ impl ExtensionManager {
             artifact_path.display()
         );
         let handle = thread::spawn(move || -> wasmtime::Result<ExtensionInstance> {
-            let wasi = WasiCtxBuilder::new().inherit_env().inherit_stdio().build();
+            // Grant extension components outbound network (TCP + DNS) so the
+            // network-bound extensions (dns, http) can reach hosts over the
+            // wasi:sockets graft. Mirrors the network grant the core/httpd
+            // WasiCtx builders already use elsewhere in this file.
+            let wasi = WasiCtxBuilder::new()
+                .inherit_env()
+                .inherit_stdio()
+                .inherit_network()
+                .allow_ip_name_lookup(true)
+                .build();
             let mut store = Store::new(
                 &engine,
                 ExtensionStoreState::new(wasi, core, callback_registry, extension_name.clone()),
