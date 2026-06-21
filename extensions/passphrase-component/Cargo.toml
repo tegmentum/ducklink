@@ -1,0 +1,24 @@
+[package]
+name = "passphrase-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Diceware passphrase generation
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+chbs = "*"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

@@ -116,6 +116,9 @@ members = [
     "extensions/countmin-component",
     "extensions/dns-component",
     "extensions/http-component",
+    "extensions/lorem-component",
+    "extensions/faker-component",
+    "extensions/passphrase-component",
 ]
 
 resolver = "2"

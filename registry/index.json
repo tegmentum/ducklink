@@ -3711,6 +3711,107 @@
         "webpki-roots"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "lorem",
+      "version": "0.1.0",
+      "description": "Lorem ipsum placeholder text (lipsum): lorem_words(n), lorem_title(). Nondeterministic.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "lorem",
+        "ipsum",
+        "placeholder",
+        "text"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/lorem-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/lorem.wasm",
+      "exports": [
+        "lorem_words",
+        "lorem_title"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "lipsum"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "faker",
+      "version": "0.1.0",
+      "description": "Fake data generation (fake crate, bundled lists): fake_name, fake_email, fake_username, fake_city, fake_company. Nondeterministic. Useful for seeding test datasets.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "fake",
+        "mock",
+        "testdata",
+        "seed"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/faker-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/faker.wasm",
+      "exports": [
+        "fake_name",
+        "fake_email",
+        "fake_username",
+        "fake_city",
+        "fake_company"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "fake"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "passphrase",
+      "version": "0.1.0",
+      "description": "Diceware passphrase generation (chbs, bundled wordlist): passphrase() -> 'correct horse battery staple'-style. Nondeterministic.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "passphrase",
+        "diceware",
+        "password",
+        "security"
+      ],
+      "categories": [
+        "cryptography"
+      ],
+      "source": "extensions/passphrase-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/passphrase.wasm",
+      "exports": [
+        "passphrase"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "chbs"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {

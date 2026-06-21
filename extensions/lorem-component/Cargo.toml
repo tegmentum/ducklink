@@ -1,0 +1,25 @@
+[package]
+name = "lorem-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Lorem ipsum placeholder text
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+# Requires pinned rand_chacha 0.3 + rand 0.8 for the SeedableRng trait impls to line up
+lipsum = "0.9"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"
