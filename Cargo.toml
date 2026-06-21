@@ -21,6 +21,7 @@ members = [
     "extensions/hashfuncs-component",
     "extensions/csscolor-component",
     "extensions/rapidfuzz-component",
+    "extensions/uuidx-component",
 ]
 
 resolver = "2"

@@ -396,13 +396,13 @@
       "min_duckdb_version": "1.0.0"
     },
     {
-      "name": "uuid-extras",
-      "version": "0.0.0",
-      "description": "UUID v7 generation + parse/extract helpers (DuckDB ships v4 + gen_random_uuid).",
+      "name": "uuidx",
+      "version": "0.1.0",
+      "description": "UUID extras: generate time-ordered UUIDv7, extract version + embedded timestamp (uuid crate). Named `uuidx` (uuid-extras has a hyphen).",
       "categories": [
         "data-types"
       ],
-      "status": "planned",
+      "status": "working",
       "exports": [
         "uuid_v7",
         "uuid_version",
@@ -413,7 +413,20 @@
       ],
       "crates": [
         "uuid"
-      ]
+      ],
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "source": "extensions/uuidx-component",
+      "artifact": "artifacts/extensions/uuidx.wasm",
+      "keywords": [
+        "uuid",
+        "v7",
+        "identifier"
+      ],
+      "min_duckdb_version": "1.0.0"
     },
     {
       "name": "crypto",

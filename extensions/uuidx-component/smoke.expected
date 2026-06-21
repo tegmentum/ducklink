@@ -1,0 +1,13 @@
+# Expected output for extensions/uuidx-component/smoke.sql (reviewed; uuid_v7 is volatile — shape asserted).
+v7_len
+36
+v7_version
+7
+v4_version
+4
+bad
+NULL
+v7_ts
+1645557742000
+v4_ts_null
+NULL
