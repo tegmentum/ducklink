@@ -7,6 +7,7 @@ members = [
     "crates/duckdb-component-host",
     "extensions/sample-extension-component",
     "extensions/isin",
+    "extensions/greet-dotcmd",
     "extensions/isin-component",
     "extensions/baseN-component",
     "handlers/echo-handler",

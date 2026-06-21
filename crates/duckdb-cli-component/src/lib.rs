@@ -239,7 +239,21 @@ fn run_meta_command(conn: &duckdb::Connection, rest: &str) -> Result<(), String>
                 }
             }
         }
-        other => Err(format!("unknown command: .{other} (try .help)")),
+        other => {
+            // Unknown built-in: fall through to a pluggable dot-command
+            // component (host-mediated). `args` is everything after the name.
+            let args = rest
+                .trim()
+                .splitn(2, char::is_whitespace)
+                .nth(1)
+                .unwrap_or("")
+                .trim();
+            match bindings::duckdb::cli::dotcmd_host::invoke(other, args) {
+                Ok(Some(text)) => write_all(&stdout::get_stdout(), text.as_bytes()),
+                Ok(None) => Err(format!("unknown command: .{other} (try .help)")),
+                Err(message) => Err(message),
+            }
+        }
     }
 }
 

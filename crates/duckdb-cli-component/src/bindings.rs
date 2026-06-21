@@ -4,6 +4,123 @@
 #[rustfmt::skip]
 #[allow(dead_code, clippy::all)]
 pub mod duckdb {
+    pub mod cli {
+        /// Host-provided dispatch for pluggable dot-command components. The CLI routes
+        /// an unknown `.NAME args` here; the host invokes the owning component.
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod dotcmd_host {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            #[allow(unused_unsafe, clippy::all)]
+            /// ok(some(text)) = handled, print `text`; ok(none) = no such dot command
+            /// (CLI falls back to its built-ins); err(message) = handled but failed.
+            pub fn invoke(
+                name: &str,
+                args: &str,
+            ) -> Result<Option<_rt::String>, _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 4 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 4
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let vec0 = name;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    let vec1 = args;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let ptr2 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "duckdb:cli/dotcmd-host")]
+                    unsafe extern "C" {
+                        #[link_name = "invoke"]
+                        fn wit_import3(
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import3(
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import3(ptr0.cast_mut(), len0, ptr1.cast_mut(), len1, ptr2)
+                    };
+                    let l4 = i32::from(*ptr2.add(0).cast::<u8>());
+                    let result12 = match l4 {
+                        0 => {
+                            let e = {
+                                let l5 = i32::from(
+                                    *ptr2.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                                );
+                                match l5 {
+                                    0 => None,
+                                    1 => {
+                                        let e = {
+                                            let l6 = *ptr2
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l7 = *ptr2
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len8 = l7;
+                                            let bytes8 = _rt::Vec::from_raw_parts(
+                                                l6.cast(),
+                                                len8,
+                                                len8,
+                                            );
+                                            _rt::string_lift(bytes8)
+                                        };
+                                        Some(e)
+                                    }
+                                    _ => _rt::invalid_enum_discriminant(),
+                                }
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l9 = *ptr2
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l10 = *ptr2
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len11 = l10;
+                                let bytes11 = _rt::Vec::from_raw_parts(
+                                    l9.cast(),
+                                    len11,
+                                    len11,
+                                );
+                                _rt::string_lift(bytes11)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result12
+                }
+            }
+        }
+    }
     pub mod component {
         #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
         pub mod database {
@@ -202,6 +319,26 @@ pub mod duckdb {
                     f.debug_struct("ExtensionInfo")
                         .field("name", &self.name)
                         .field("requires", &self.requires)
+                        .finish()
+                }
+            }
+            /// One response from the DuckDB UI extension's bridged HTTP handler.
+            #[derive(Clone)]
+            pub struct UiResponse {
+                pub status: u16,
+                /// All response headers as a "Key: Value\n"-delimited block.
+                pub headers: _rt::String,
+                pub body: _rt::Vec<u8>,
+            }
+            impl ::core::fmt::Debug for UiResponse {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("UiResponse")
+                        .field("status", &self.status)
+                        .field("headers", &self.headers)
+                        .field("body", &self.body)
                         .finish()
                 }
             }
@@ -2866,6 +3003,125 @@ pub mod duckdb {
                     );
                     let result12 = result11;
                     result12
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Handle one DuckDB UI HTTP request through the (static) `ui` extension's
+            /// HttpServer, which the native host bridges to (httplib can't listen() in
+            /// the wasip2 sandbox). `start-ui-server` must have been run first; returns
+            /// none if the UI server isn't started. `headers` is a "Key: Value\n" block.
+            pub fn handle_ui_request(
+                method: &str,
+                path: &str,
+                headers: &str,
+                body: &[u8],
+            ) -> Option<UiResponse> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 6 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 6
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let vec0 = method;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    let vec1 = path;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let vec2 = headers;
+                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                    let len2 = vec2.len();
+                    let vec3 = body;
+                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                    let len3 = vec3.len();
+                    let ptr4 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "duckdb:component/database")]
+                    unsafe extern "C" {
+                        #[link_name = "handle-ui-request"]
+                        fn wit_import5(
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import5(
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import5(
+                            ptr0.cast_mut(),
+                            len0,
+                            ptr1.cast_mut(),
+                            len1,
+                            ptr2.cast_mut(),
+                            len2,
+                            ptr3.cast_mut(),
+                            len3,
+                            ptr4,
+                        )
+                    };
+                    let l6 = i32::from(*ptr4.add(0).cast::<u8>());
+                    let result14 = match l6 {
+                        0 => None,
+                        1 => {
+                            let e = {
+                                let l7 = i32::from(
+                                    *ptr4.add(::core::mem::size_of::<*const u8>()).cast::<u16>(),
+                                );
+                                let l8 = *ptr4
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l9 = *ptr4
+                                    .add(3 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len10 = l9;
+                                let bytes10 = _rt::Vec::from_raw_parts(
+                                    l8.cast(),
+                                    len10,
+                                    len10,
+                                );
+                                let l11 = *ptr4
+                                    .add(4 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l12 = *ptr4
+                                    .add(5 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len13 = l12;
+                                UiResponse {
+                                    status: l7 as u16,
+                                    headers: _rt::string_lift(bytes10),
+                                    body: _rt::Vec::from_raw_parts(l11.cast(), len13, len13),
+                                }
+                            };
+                            Some(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result14
                 }
             }
         }
@@ -8310,8 +8566,8 @@ pub(crate) use __export_duckdb_cli_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 7081] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xa86\x01A\x02\x01A%\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 7251] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xd27\x01A\x02\x01A'\x01\
 B&\x01m\x06\x07boolean\x05int64\x06uint64\x07float64\x04text\x04blob\x04\0\x0blo\
 gicaltype\x03\0\0\x01ks\x01r\x02\x04name\x02\x07logical\x01\x04\0\x07funcarg\x03\
 \0\x03\x01n\x05\x0ddeterministic\x0bcommutative\x09stateless\x0dsideeffecting\x0a\
@@ -8331,132 +8587,135 @@ fo\x04warn\x05error\x04\0\x08loglevel\x03\0\x1d\x01r\x02\x03keys\x05values\x04\0
 ro\x07catalog\x0bfile-format\x04\0\x0ecapabilitykind\x03\0!\x01p\"\x01r\x03\x04n\
 ames\x07version\x02\x08requires#\x04\0\x0aloadresult\x03\0$\x03\0\x16duckdb:exte\
 nsion/types\x05\0\x02\x03\0\0\x0ecapabilitykind\x02\x03\0\0\x09columndef\x02\x03\
-\0\0\x09duckerror\x02\x03\0\0\x09duckvalue\x01BR\x02\x03\x02\x01\x01\x04\0\x0eca\
+\0\0\x09duckerror\x02\x03\0\0\x09duckvalue\x01BW\x02\x03\x02\x01\x01\x04\0\x0eca\
 pabilitykind\x03\0\0\x02\x03\x02\x01\x02\x04\0\x09columndef\x03\0\x02\x02\x03\x02\
 \x01\x03\x04\0\x09duckerror\x03\0\x04\x02\x03\x02\x01\x04\x04\0\x09duckvalue\x03\
 \0\x06\x04\0\x0aconnection\x03\x01\x01p\x07\x04\0\x03row\x03\0\x09\x01p\x03\x01p\
 \x0a\x01r\x02\x07columns\x0b\x04rows\x0c\x04\0\x0cquery-result\x03\0\x0d\x04\0\x0d\
 result-stream\x03\x01\x04\0\x12prepared-statement\x03\x01\x04\0\x08appender\x03\x01\
 \x01p\x01\x01r\x02\x04names\x08requires\x12\x04\0\x0eextension-info\x03\0\x13\x01\
-h\x0f\x01@\x01\x04self\x15\0\x0b\x04\0\x1c[method]result-stream.schema\x01\x16\x01\
-k\x0c\x01j\x01\x17\x01\x05\x01@\x02\x04self\x15\x08max-rowsy\0\x18\x04\0\x1a[met\
-hod]result-stream.next\x01\x19\x01@\x01\x04self\x15\x01\0\x04\0\x1b[method]resul\
-t-stream.close\x01\x1a\x01h\x10\x01@\x01\x04self\x1b\0y\x04\0*[method]prepared-s\
-tatement.parameter-count\x01\x1c\x01p\x07\x01j\x01\x0e\x01\x05\x01@\x02\x04self\x1b\
-\x06params\x1d\0\x1e\x04\0\"[method]prepared-statement.execute\x01\x1f\x01h\x11\x01\
-j\0\x01\x05\x01@\x02\x04self\x20\x06values\x1d\0!\x04\0\x1b[method]appender.appe\
-nd-row\x01\"\x01@\x01\x04self\x20\0!\x04\0\x16[method]appender.flush\x01#\x04\0\x16\
-[method]appender.close\x01#\x01ks\x01i\x08\x01j\x01%\x01s\x01@\x01\x04path$\0&\x04\
-\0\x04open\x01'\x01o\x02ss\x01p(\x01@\x02\x04path$\x07options)\0&\x04\0\x10open-\
-with-config\x01*\x01@\x01\x04conn%\x01\0\x04\0\x05close\x01+\x01h\x08\x01@\x01\x04\
-conn,\x01\0\x04\0\x09interrupt\x01-\x01@\x02\x04conn,\x03sqls\0\x1e\x04\0\x07exe\
-cute\x01.\x01i\x0f\x01j\x01/\x01\x05\x01@\x02\x04conn,\x03sqls\00\x04\0\x0bopen-\
-stream\x011\x01i\x10\x01j\x012\x01\x05\x01@\x02\x04conn,\x03sqls\03\x04\0\x07pre\
-pare\x014\x01p}\x01j\x015\x01\x05\x01@\x02\x04conn,\x03sqls\06\x04\0\x0bquery-ar\
-row\x017\x01i\x11\x01j\x018\x01\x05\x01@\x03\x04conn,\x06schema$\x05tables\09\x04\
-\0\x0fcreate-appender\x01:\x01j\x01\x7f\x01s\x01@\x02\x04names\x08requires\x12\0\
-;\x04\0\x12register-extension\x01<\x01p\x14\x01@\0\0=\x04\0\x1alist-registered-e\
-xtensions\x01>\x03\0\x19duckdb:component/database\x05\x05\x01B\x0a\x01o\x02ss\x01\
-p\0\x01@\0\0\x01\x04\0\x0fget-environment\x01\x02\x01ps\x01@\0\0\x03\x04\0\x0dge\
-t-arguments\x01\x04\x01ks\x01@\0\0\x05\x04\0\x0binitial-cwd\x01\x06\x03\0\x1awas\
-i:cli/environment@0.2.6\x05\x06\x01B\x04\x04\0\x05error\x03\x01\x01h\0\x01@\x01\x04\
-self\x01\0s\x04\0\x1d[method]error.to-debug-string\x01\x02\x03\0\x13wasi:io/erro\
-r@0.2.6\x05\x07\x01B\x0a\x04\0\x08pollable\x03\x01\x01h\0\x01@\x01\x04self\x01\0\
-\x7f\x04\0\x16[method]pollable.ready\x01\x02\x01@\x01\x04self\x01\x01\0\x04\0\x16\
-[method]pollable.block\x01\x03\x01p\x01\x01py\x01@\x01\x02in\x04\0\x05\x04\0\x04\
-poll\x01\x06\x03\0\x12wasi:io/poll@0.2.6\x05\x08\x02\x03\0\x03\x05error\x02\x03\0\
-\x04\x08pollable\x01B(\x02\x03\x02\x01\x09\x04\0\x05error\x03\0\0\x02\x03\x02\x01\
-\x0a\x04\0\x08pollable\x03\0\x02\x01i\x01\x01q\x02\x15last-operation-failed\x01\x04\
-\0\x06closed\0\0\x04\0\x0cstream-error\x03\0\x05\x04\0\x0cinput-stream\x03\x01\x04\
-\0\x0doutput-stream\x03\x01\x01h\x07\x01p}\x01j\x01\x0a\x01\x06\x01@\x02\x04self\
-\x09\x03lenw\0\x0b\x04\0\x19[method]input-stream.read\x01\x0c\x04\0\"[method]inp\
-ut-stream.blocking-read\x01\x0c\x01j\x01w\x01\x06\x01@\x02\x04self\x09\x03lenw\0\
-\x0d\x04\0\x19[method]input-stream.skip\x01\x0e\x04\0\"[method]input-stream.bloc\
-king-skip\x01\x0e\x01i\x03\x01@\x01\x04self\x09\0\x0f\x04\0\x1e[method]input-str\
-eam.subscribe\x01\x10\x01h\x08\x01@\x01\x04self\x11\0\x0d\x04\0![method]output-s\
-tream.check-write\x01\x12\x01j\0\x01\x06\x01@\x02\x04self\x11\x08contents\x0a\0\x13\
-\x04\0\x1b[method]output-stream.write\x01\x14\x04\0.[method]output-stream.blocki\
-ng-write-and-flush\x01\x14\x01@\x01\x04self\x11\0\x13\x04\0\x1b[method]output-st\
-ream.flush\x01\x15\x04\0$[method]output-stream.blocking-flush\x01\x15\x01@\x01\x04\
-self\x11\0\x0f\x04\0\x1f[method]output-stream.subscribe\x01\x16\x01@\x02\x04self\
-\x11\x03lenw\0\x13\x04\0\"[method]output-stream.write-zeroes\x01\x17\x04\05[meth\
-od]output-stream.blocking-write-zeroes-and-flush\x01\x17\x01@\x03\x04self\x11\x03\
-src\x09\x03lenw\0\x0d\x04\0\x1c[method]output-stream.splice\x01\x18\x04\0%[metho\
-d]output-stream.blocking-splice\x01\x18\x03\0\x15wasi:io/streams@0.2.6\x05\x0b\x02\
-\x03\0\x05\x0doutput-stream\x01B\x05\x02\x03\x02\x01\x0c\x04\0\x0doutput-stream\x03\
-\0\0\x01i\x01\x01@\0\0\x02\x04\0\x0aget-stderr\x01\x03\x03\0\x15wasi:cli/stderr@\
-0.2.6\x05\x0d\x02\x03\0\x05\x0cinput-stream\x01B\x05\x02\x03\x02\x01\x0e\x04\0\x0c\
-input-stream\x03\0\0\x01i\x01\x01@\0\0\x02\x04\0\x09get-stdin\x01\x03\x03\0\x14w\
-asi:cli/stdin@0.2.6\x05\x0f\x01B\x05\x02\x03\x02\x01\x0c\x04\0\x0doutput-stream\x03\
-\0\0\x01i\x01\x01@\0\0\x02\x04\0\x0aget-stdout\x01\x03\x03\0\x15wasi:cli/stdout@\
-0.2.6\x05\x10\x01B\x05\x01r\x02\x07secondsw\x0bnanosecondsy\x04\0\x08datetime\x03\
-\0\0\x01@\0\0\x01\x04\0\x03now\x01\x02\x04\0\x0aresolution\x01\x02\x03\0\x1cwasi\
-:clocks/wall-clock@0.2.6\x05\x11\x02\x03\0\x05\x05error\x02\x03\0\x09\x08datetim\
-e\x01Br\x02\x03\x02\x01\x0e\x04\0\x0cinput-stream\x03\0\0\x02\x03\x02\x01\x0c\x04\
-\0\x0doutput-stream\x03\0\x02\x02\x03\x02\x01\x12\x04\0\x05error\x03\0\x04\x02\x03\
-\x02\x01\x13\x04\0\x08datetime\x03\0\x06\x01w\x04\0\x08filesize\x03\0\x08\x01m\x08\
-\x07unknown\x0cblock-device\x10character-device\x09directory\x04fifo\x0dsymbolic\
--link\x0cregular-file\x06socket\x04\0\x0fdescriptor-type\x03\0\x0a\x01n\x06\x04r\
-ead\x05write\x13file-integrity-sync\x13data-integrity-sync\x14requested-write-sy\
-nc\x10mutate-directory\x04\0\x10descriptor-flags\x03\0\x0c\x01n\x01\x0esymlink-f\
-ollow\x04\0\x0apath-flags\x03\0\x0e\x01n\x04\x06create\x09directory\x09exclusive\
-\x08truncate\x04\0\x0aopen-flags\x03\0\x10\x01w\x04\0\x0alink-count\x03\0\x12\x01\
-k\x07\x01r\x06\x04type\x0b\x0alink-count\x13\x04size\x09\x15data-access-timestam\
-p\x14\x1bdata-modification-timestamp\x14\x17status-change-timestamp\x14\x04\0\x0f\
-descriptor-stat\x03\0\x15\x01q\x03\x09no-change\0\0\x03now\0\0\x09timestamp\x01\x07\
-\0\x04\0\x0dnew-timestamp\x03\0\x17\x01r\x02\x04type\x0b\x04names\x04\0\x0fdirec\
-tory-entry\x03\0\x19\x01m%\x06access\x0bwould-block\x07already\x0ebad-descriptor\
-\x04busy\x08deadlock\x05quota\x05exist\x0efile-too-large\x15illegal-byte-sequenc\
-e\x0bin-progress\x0binterrupted\x07invalid\x02io\x0cis-directory\x04loop\x0etoo-\
-many-links\x0cmessage-size\x0dname-too-long\x09no-device\x08no-entry\x07no-lock\x13\
-insufficient-memory\x12insufficient-space\x0dnot-directory\x09not-empty\x0fnot-r\
-ecoverable\x0bunsupported\x06no-tty\x0eno-such-device\x08overflow\x0dnot-permitt\
-ed\x04pipe\x09read-only\x0cinvalid-seek\x0etext-file-busy\x0ccross-device\x04\0\x0a\
-error-code\x03\0\x1b\x01m\x06\x06normal\x0asequential\x06random\x09will-need\x09\
-dont-need\x08no-reuse\x04\0\x06advice\x03\0\x1d\x01r\x02\x05lowerw\x05upperw\x04\
-\0\x13metadata-hash-value\x03\0\x1f\x04\0\x0adescriptor\x03\x01\x04\0\x16directo\
-ry-entry-stream\x03\x01\x01h!\x01i\x01\x01j\x01$\x01\x1c\x01@\x02\x04self#\x06of\
-fset\x09\0%\x04\0\"[method]descriptor.read-via-stream\x01&\x01i\x03\x01j\x01'\x01\
-\x1c\x01@\x02\x04self#\x06offset\x09\0(\x04\0#[method]descriptor.write-via-strea\
-m\x01)\x01@\x01\x04self#\0(\x04\0$[method]descriptor.append-via-stream\x01*\x01j\
-\0\x01\x1c\x01@\x04\x04self#\x06offset\x09\x06length\x09\x06advice\x1e\0+\x04\0\x19\
-[method]descriptor.advise\x01,\x01@\x01\x04self#\0+\x04\0\x1c[method]descriptor.\
-sync-data\x01-\x01j\x01\x0d\x01\x1c\x01@\x01\x04self#\0.\x04\0\x1c[method]descri\
-ptor.get-flags\x01/\x01j\x01\x0b\x01\x1c\x01@\x01\x04self#\00\x04\0\x1b[method]d\
-escriptor.get-type\x011\x01@\x02\x04self#\x04size\x09\0+\x04\0\x1b[method]descri\
-ptor.set-size\x012\x01@\x03\x04self#\x15data-access-timestamp\x18\x1bdata-modifi\
-cation-timestamp\x18\0+\x04\0\x1c[method]descriptor.set-times\x013\x01p}\x01o\x02\
-4\x7f\x01j\x015\x01\x1c\x01@\x03\x04self#\x06length\x09\x06offset\x09\06\x04\0\x17\
-[method]descriptor.read\x017\x01j\x01\x09\x01\x1c\x01@\x03\x04self#\x06buffer4\x06\
-offset\x09\08\x04\0\x18[method]descriptor.write\x019\x01i\"\x01j\x01:\x01\x1c\x01\
-@\x01\x04self#\0;\x04\0![method]descriptor.read-directory\x01<\x04\0\x17[method]\
-descriptor.sync\x01-\x01@\x02\x04self#\x04paths\0+\x04\0&[method]descriptor.crea\
-te-directory-at\x01=\x01j\x01\x16\x01\x1c\x01@\x01\x04self#\0>\x04\0\x17[method]\
-descriptor.stat\x01?\x01@\x03\x04self#\x0apath-flags\x0f\x04paths\0>\x04\0\x1a[m\
-ethod]descriptor.stat-at\x01@\x01@\x05\x04self#\x0apath-flags\x0f\x04paths\x15da\
-ta-access-timestamp\x18\x1bdata-modification-timestamp\x18\0+\x04\0\x1f[method]d\
-escriptor.set-times-at\x01A\x01@\x05\x04self#\x0eold-path-flags\x0f\x08old-paths\
-\x0enew-descriptor#\x08new-paths\0+\x04\0\x1a[method]descriptor.link-at\x01B\x01\
-i!\x01j\x01\xc3\0\x01\x1c\x01@\x05\x04self#\x0apath-flags\x0f\x04paths\x0aopen-f\
-lags\x11\x05flags\x0d\0\xc4\0\x04\0\x1a[method]descriptor.open-at\x01E\x01j\x01s\
-\x01\x1c\x01@\x02\x04self#\x04paths\0\xc6\0\x04\0\x1e[method]descriptor.readlink\
--at\x01G\x04\0&[method]descriptor.remove-directory-at\x01=\x01@\x04\x04self#\x08\
-old-paths\x0enew-descriptor#\x08new-paths\0+\x04\0\x1c[method]descriptor.rename-\
-at\x01H\x01@\x03\x04self#\x08old-paths\x08new-paths\0+\x04\0\x1d[method]descript\
-or.symlink-at\x01I\x04\0![method]descriptor.unlink-file-at\x01=\x01@\x02\x04self\
-#\x05other#\0\x7f\x04\0![method]descriptor.is-same-object\x01J\x01j\x01\x20\x01\x1c\
-\x01@\x01\x04self#\0\xcb\0\x04\0\x20[method]descriptor.metadata-hash\x01L\x01@\x03\
-\x04self#\x0apath-flags\x0f\x04paths\0\xcb\0\x04\0#[method]descriptor.metadata-h\
-ash-at\x01M\x01h\"\x01k\x1a\x01j\x01\xcf\0\x01\x1c\x01@\x01\x04self\xce\0\0\xd0\0\
-\x04\03[method]directory-entry-stream.read-directory-entry\x01Q\x01h\x05\x01k\x1c\
-\x01@\x01\x03err\xd2\0\0\xd3\0\x04\0\x15filesystem-error-code\x01T\x03\0\x1bwasi\
-:filesystem/types@0.2.6\x05\x14\x02\x03\0\x0a\x0adescriptor\x01B\x07\x02\x03\x02\
-\x01\x15\x04\0\x0adescriptor\x03\0\0\x01i\x01\x01o\x02\x02s\x01p\x03\x01@\0\0\x04\
-\x04\0\x0fget-directories\x01\x05\x03\0\x1ewasi:filesystem/preopens@0.2.6\x05\x16\
-\x01B\x03\x01j\0\0\x01@\0\0\0\x04\0\x03run\x01\x01\x04\0\x12wasi:cli/run@0.2.6\x05\
-\x17\x04\0\x15duckdb:cli/duckdb-cli\x04\0\x0b\x10\x01\0\x0aduckdb-cli\x03\0\0\0G\
-\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen\
--rust\x060.41.0";
+p}\x01r\x03\x06status{\x07headerss\x04body\x15\x04\0\x0bui-response\x03\0\x16\x01\
+h\x0f\x01@\x01\x04self\x18\0\x0b\x04\0\x1c[method]result-stream.schema\x01\x19\x01\
+k\x0c\x01j\x01\x1a\x01\x05\x01@\x02\x04self\x18\x08max-rowsy\0\x1b\x04\0\x1a[met\
+hod]result-stream.next\x01\x1c\x01@\x01\x04self\x18\x01\0\x04\0\x1b[method]resul\
+t-stream.close\x01\x1d\x01h\x10\x01@\x01\x04self\x1e\0y\x04\0*[method]prepared-s\
+tatement.parameter-count\x01\x1f\x01p\x07\x01j\x01\x0e\x01\x05\x01@\x02\x04self\x1e\
+\x06params\x20\0!\x04\0\"[method]prepared-statement.execute\x01\"\x01h\x11\x01j\0\
+\x01\x05\x01@\x02\x04self#\x06values\x20\0$\x04\0\x1b[method]appender.append-row\
+\x01%\x01@\x01\x04self#\0$\x04\0\x16[method]appender.flush\x01&\x04\0\x16[method\
+]appender.close\x01&\x01ks\x01i\x08\x01j\x01(\x01s\x01@\x01\x04path'\0)\x04\0\x04\
+open\x01*\x01o\x02ss\x01p+\x01@\x02\x04path'\x07options,\0)\x04\0\x10open-with-c\
+onfig\x01-\x01@\x01\x04conn(\x01\0\x04\0\x05close\x01.\x01h\x08\x01@\x01\x04conn\
+/\x01\0\x04\0\x09interrupt\x010\x01@\x02\x04conn/\x03sqls\0!\x04\0\x07execute\x01\
+1\x01i\x0f\x01j\x012\x01\x05\x01@\x02\x04conn/\x03sqls\03\x04\0\x0bopen-stream\x01\
+4\x01i\x10\x01j\x015\x01\x05\x01@\x02\x04conn/\x03sqls\06\x04\0\x07prepare\x017\x01\
+j\x01\x15\x01\x05\x01@\x02\x04conn/\x03sqls\08\x04\0\x0bquery-arrow\x019\x01i\x11\
+\x01j\x01:\x01\x05\x01@\x03\x04conn/\x06schema'\x05tables\0;\x04\0\x0fcreate-app\
+ender\x01<\x01j\x01\x7f\x01s\x01@\x02\x04names\x08requires\x12\0=\x04\0\x12regis\
+ter-extension\x01>\x01p\x14\x01@\0\0?\x04\0\x1alist-registered-extensions\x01@\x01\
+k\x17\x01@\x04\x06methods\x04paths\x07headerss\x04body\x15\0\xc1\0\x04\0\x11hand\
+le-ui-request\x01B\x03\0\x19duckdb:component/database\x05\x05\x01B\x04\x01ks\x01\
+j\x01\0\x01s\x01@\x02\x04names\x04argss\0\x01\x04\0\x06invoke\x01\x02\x03\0\x16d\
+uckdb:cli/dotcmd-host\x05\x06\x01B\x0a\x01o\x02ss\x01p\0\x01@\0\0\x01\x04\0\x0fg\
+et-environment\x01\x02\x01ps\x01@\0\0\x03\x04\0\x0dget-arguments\x01\x04\x01ks\x01\
+@\0\0\x05\x04\0\x0binitial-cwd\x01\x06\x03\0\x1awasi:cli/environment@0.2.6\x05\x07\
+\x01B\x04\x04\0\x05error\x03\x01\x01h\0\x01@\x01\x04self\x01\0s\x04\0\x1d[method\
+]error.to-debug-string\x01\x02\x03\0\x13wasi:io/error@0.2.6\x05\x08\x01B\x0a\x04\
+\0\x08pollable\x03\x01\x01h\0\x01@\x01\x04self\x01\0\x7f\x04\0\x16[method]pollab\
+le.ready\x01\x02\x01@\x01\x04self\x01\x01\0\x04\0\x16[method]pollable.block\x01\x03\
+\x01p\x01\x01py\x01@\x01\x02in\x04\0\x05\x04\0\x04poll\x01\x06\x03\0\x12wasi:io/\
+poll@0.2.6\x05\x09\x02\x03\0\x04\x05error\x02\x03\0\x05\x08pollable\x01B(\x02\x03\
+\x02\x01\x0a\x04\0\x05error\x03\0\0\x02\x03\x02\x01\x0b\x04\0\x08pollable\x03\0\x02\
+\x01i\x01\x01q\x02\x15last-operation-failed\x01\x04\0\x06closed\0\0\x04\0\x0cstr\
+eam-error\x03\0\x05\x04\0\x0cinput-stream\x03\x01\x04\0\x0doutput-stream\x03\x01\
+\x01h\x07\x01p}\x01j\x01\x0a\x01\x06\x01@\x02\x04self\x09\x03lenw\0\x0b\x04\0\x19\
+[method]input-stream.read\x01\x0c\x04\0\"[method]input-stream.blocking-read\x01\x0c\
+\x01j\x01w\x01\x06\x01@\x02\x04self\x09\x03lenw\0\x0d\x04\0\x19[method]input-str\
+eam.skip\x01\x0e\x04\0\"[method]input-stream.blocking-skip\x01\x0e\x01i\x03\x01@\
+\x01\x04self\x09\0\x0f\x04\0\x1e[method]input-stream.subscribe\x01\x10\x01h\x08\x01\
+@\x01\x04self\x11\0\x0d\x04\0![method]output-stream.check-write\x01\x12\x01j\0\x01\
+\x06\x01@\x02\x04self\x11\x08contents\x0a\0\x13\x04\0\x1b[method]output-stream.w\
+rite\x01\x14\x04\0.[method]output-stream.blocking-write-and-flush\x01\x14\x01@\x01\
+\x04self\x11\0\x13\x04\0\x1b[method]output-stream.flush\x01\x15\x04\0$[method]ou\
+tput-stream.blocking-flush\x01\x15\x01@\x01\x04self\x11\0\x0f\x04\0\x1f[method]o\
+utput-stream.subscribe\x01\x16\x01@\x02\x04self\x11\x03lenw\0\x13\x04\0\"[method\
+]output-stream.write-zeroes\x01\x17\x04\05[method]output-stream.blocking-write-z\
+eroes-and-flush\x01\x17\x01@\x03\x04self\x11\x03src\x09\x03lenw\0\x0d\x04\0\x1c[\
+method]output-stream.splice\x01\x18\x04\0%[method]output-stream.blocking-splice\x01\
+\x18\x03\0\x15wasi:io/streams@0.2.6\x05\x0c\x02\x03\0\x06\x0doutput-stream\x01B\x05\
+\x02\x03\x02\x01\x0d\x04\0\x0doutput-stream\x03\0\0\x01i\x01\x01@\0\0\x02\x04\0\x0a\
+get-stderr\x01\x03\x03\0\x15wasi:cli/stderr@0.2.6\x05\x0e\x02\x03\0\x06\x0cinput\
+-stream\x01B\x05\x02\x03\x02\x01\x0f\x04\0\x0cinput-stream\x03\0\0\x01i\x01\x01@\
+\0\0\x02\x04\0\x09get-stdin\x01\x03\x03\0\x14wasi:cli/stdin@0.2.6\x05\x10\x01B\x05\
+\x02\x03\x02\x01\x0d\x04\0\x0doutput-stream\x03\0\0\x01i\x01\x01@\0\0\x02\x04\0\x0a\
+get-stdout\x01\x03\x03\0\x15wasi:cli/stdout@0.2.6\x05\x11\x01B\x05\x01r\x02\x07s\
+econdsw\x0bnanosecondsy\x04\0\x08datetime\x03\0\0\x01@\0\0\x01\x04\0\x03now\x01\x02\
+\x04\0\x0aresolution\x01\x02\x03\0\x1cwasi:clocks/wall-clock@0.2.6\x05\x12\x02\x03\
+\0\x06\x05error\x02\x03\0\x0a\x08datetime\x01Br\x02\x03\x02\x01\x0f\x04\0\x0cinp\
+ut-stream\x03\0\0\x02\x03\x02\x01\x0d\x04\0\x0doutput-stream\x03\0\x02\x02\x03\x02\
+\x01\x13\x04\0\x05error\x03\0\x04\x02\x03\x02\x01\x14\x04\0\x08datetime\x03\0\x06\
+\x01w\x04\0\x08filesize\x03\0\x08\x01m\x08\x07unknown\x0cblock-device\x10charact\
+er-device\x09directory\x04fifo\x0dsymbolic-link\x0cregular-file\x06socket\x04\0\x0f\
+descriptor-type\x03\0\x0a\x01n\x06\x04read\x05write\x13file-integrity-sync\x13da\
+ta-integrity-sync\x14requested-write-sync\x10mutate-directory\x04\0\x10descripto\
+r-flags\x03\0\x0c\x01n\x01\x0esymlink-follow\x04\0\x0apath-flags\x03\0\x0e\x01n\x04\
+\x06create\x09directory\x09exclusive\x08truncate\x04\0\x0aopen-flags\x03\0\x10\x01\
+w\x04\0\x0alink-count\x03\0\x12\x01k\x07\x01r\x06\x04type\x0b\x0alink-count\x13\x04\
+size\x09\x15data-access-timestamp\x14\x1bdata-modification-timestamp\x14\x17stat\
+us-change-timestamp\x14\x04\0\x0fdescriptor-stat\x03\0\x15\x01q\x03\x09no-change\
+\0\0\x03now\0\0\x09timestamp\x01\x07\0\x04\0\x0dnew-timestamp\x03\0\x17\x01r\x02\
+\x04type\x0b\x04names\x04\0\x0fdirectory-entry\x03\0\x19\x01m%\x06access\x0bwoul\
+d-block\x07already\x0ebad-descriptor\x04busy\x08deadlock\x05quota\x05exist\x0efi\
+le-too-large\x15illegal-byte-sequence\x0bin-progress\x0binterrupted\x07invalid\x02\
+io\x0cis-directory\x04loop\x0etoo-many-links\x0cmessage-size\x0dname-too-long\x09\
+no-device\x08no-entry\x07no-lock\x13insufficient-memory\x12insufficient-space\x0d\
+not-directory\x09not-empty\x0fnot-recoverable\x0bunsupported\x06no-tty\x0eno-suc\
+h-device\x08overflow\x0dnot-permitted\x04pipe\x09read-only\x0cinvalid-seek\x0ete\
+xt-file-busy\x0ccross-device\x04\0\x0aerror-code\x03\0\x1b\x01m\x06\x06normal\x0a\
+sequential\x06random\x09will-need\x09dont-need\x08no-reuse\x04\0\x06advice\x03\0\
+\x1d\x01r\x02\x05lowerw\x05upperw\x04\0\x13metadata-hash-value\x03\0\x1f\x04\0\x0a\
+descriptor\x03\x01\x04\0\x16directory-entry-stream\x03\x01\x01h!\x01i\x01\x01j\x01\
+$\x01\x1c\x01@\x02\x04self#\x06offset\x09\0%\x04\0\"[method]descriptor.read-via-\
+stream\x01&\x01i\x03\x01j\x01'\x01\x1c\x01@\x02\x04self#\x06offset\x09\0(\x04\0#\
+[method]descriptor.write-via-stream\x01)\x01@\x01\x04self#\0(\x04\0$[method]desc\
+riptor.append-via-stream\x01*\x01j\0\x01\x1c\x01@\x04\x04self#\x06offset\x09\x06\
+length\x09\x06advice\x1e\0+\x04\0\x19[method]descriptor.advise\x01,\x01@\x01\x04\
+self#\0+\x04\0\x1c[method]descriptor.sync-data\x01-\x01j\x01\x0d\x01\x1c\x01@\x01\
+\x04self#\0.\x04\0\x1c[method]descriptor.get-flags\x01/\x01j\x01\x0b\x01\x1c\x01\
+@\x01\x04self#\00\x04\0\x1b[method]descriptor.get-type\x011\x01@\x02\x04self#\x04\
+size\x09\0+\x04\0\x1b[method]descriptor.set-size\x012\x01@\x03\x04self#\x15data-\
+access-timestamp\x18\x1bdata-modification-timestamp\x18\0+\x04\0\x1c[method]desc\
+riptor.set-times\x013\x01p}\x01o\x024\x7f\x01j\x015\x01\x1c\x01@\x03\x04self#\x06\
+length\x09\x06offset\x09\06\x04\0\x17[method]descriptor.read\x017\x01j\x01\x09\x01\
+\x1c\x01@\x03\x04self#\x06buffer4\x06offset\x09\08\x04\0\x18[method]descriptor.w\
+rite\x019\x01i\"\x01j\x01:\x01\x1c\x01@\x01\x04self#\0;\x04\0![method]descriptor\
+.read-directory\x01<\x04\0\x17[method]descriptor.sync\x01-\x01@\x02\x04self#\x04\
+paths\0+\x04\0&[method]descriptor.create-directory-at\x01=\x01j\x01\x16\x01\x1c\x01\
+@\x01\x04self#\0>\x04\0\x17[method]descriptor.stat\x01?\x01@\x03\x04self#\x0apat\
+h-flags\x0f\x04paths\0>\x04\0\x1a[method]descriptor.stat-at\x01@\x01@\x05\x04sel\
+f#\x0apath-flags\x0f\x04paths\x15data-access-timestamp\x18\x1bdata-modification-\
+timestamp\x18\0+\x04\0\x1f[method]descriptor.set-times-at\x01A\x01@\x05\x04self#\
+\x0eold-path-flags\x0f\x08old-paths\x0enew-descriptor#\x08new-paths\0+\x04\0\x1a\
+[method]descriptor.link-at\x01B\x01i!\x01j\x01\xc3\0\x01\x1c\x01@\x05\x04self#\x0a\
+path-flags\x0f\x04paths\x0aopen-flags\x11\x05flags\x0d\0\xc4\0\x04\0\x1a[method]\
+descriptor.open-at\x01E\x01j\x01s\x01\x1c\x01@\x02\x04self#\x04paths\0\xc6\0\x04\
+\0\x1e[method]descriptor.readlink-at\x01G\x04\0&[method]descriptor.remove-direct\
+ory-at\x01=\x01@\x04\x04self#\x08old-paths\x0enew-descriptor#\x08new-paths\0+\x04\
+\0\x1c[method]descriptor.rename-at\x01H\x01@\x03\x04self#\x08old-paths\x08new-pa\
+ths\0+\x04\0\x1d[method]descriptor.symlink-at\x01I\x04\0![method]descriptor.unli\
+nk-file-at\x01=\x01@\x02\x04self#\x05other#\0\x7f\x04\0![method]descriptor.is-sa\
+me-object\x01J\x01j\x01\x20\x01\x1c\x01@\x01\x04self#\0\xcb\0\x04\0\x20[method]d\
+escriptor.metadata-hash\x01L\x01@\x03\x04self#\x0apath-flags\x0f\x04paths\0\xcb\0\
+\x04\0#[method]descriptor.metadata-hash-at\x01M\x01h\"\x01k\x1a\x01j\x01\xcf\0\x01\
+\x1c\x01@\x01\x04self\xce\0\0\xd0\0\x04\03[method]directory-entry-stream.read-di\
+rectory-entry\x01Q\x01h\x05\x01k\x1c\x01@\x01\x03err\xd2\0\0\xd3\0\x04\0\x15file\
+system-error-code\x01T\x03\0\x1bwasi:filesystem/types@0.2.6\x05\x15\x02\x03\0\x0b\
+\x0adescriptor\x01B\x07\x02\x03\x02\x01\x16\x04\0\x0adescriptor\x03\0\0\x01i\x01\
+\x01o\x02\x02s\x01p\x03\x01@\0\0\x04\x04\0\x0fget-directories\x01\x05\x03\0\x1ew\
+asi:filesystem/preopens@0.2.6\x05\x17\x01B\x03\x01j\0\0\x01@\0\0\0\x04\0\x03run\x01\
+\x01\x04\0\x12wasi:cli/run@0.2.6\x05\x18\x04\0\x15duckdb:cli/duckdb-cli\x04\0\x0b\
+\x10\x01\0\x0aduckdb-cli\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-\
+component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

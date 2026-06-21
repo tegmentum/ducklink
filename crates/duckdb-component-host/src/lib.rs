@@ -30,6 +30,14 @@ pub mod duckdb_cli_bindings {
     });
 }
 
+pub mod dotcmd_bindings {
+    wasmtime::component::bindgen!({
+        path: "../../wit/dotcmd",
+        world: "duckdb:dotcmd/dotcmd",
+        require_store_data_send: true,
+    });
+}
+
 use std::collections::{BTreeMap, HashMap};
 #[cfg(test)]
 use std::fs;
@@ -720,6 +728,113 @@ fn network_grant_allows(extension: &str) -> bool {
     }
 }
 
+/// Store data for a dot-command component: just wasi (the component imports it
+/// for std even though the `duckdb:dotcmd` world declares no WIT imports).
+struct DotcmdState {
+    wasi: WasiCtx,
+    table: ResourceTable,
+}
+impl WasiView for DotcmdState {
+    fn ctx(&mut self) -> WasiCtxView<'_> {
+        WasiCtxView { ctx: &mut self.wasi, table: &mut self.table }
+    }
+}
+
+/// A loaded pluggable dot-command component (its own wasmtime store + instance).
+struct DotcmdInstance {
+    store: Store<DotcmdState>,
+    bindings: dotcmd_bindings::Dotcmd,
+}
+
+/// Registry of pluggable dot-command components. Each declares its commands via
+/// `registry.list-commands`; the host routes `.NAME args` typed at the CLI to the
+/// owning component's `registry.invoke`.
+pub struct DotcmdRegistry {
+    components: Vec<DotcmdInstance>,
+    /// lowercased command name -> (component index, command id)
+    by_name: HashMap<String, (usize, u64)>,
+}
+
+impl DotcmdRegistry {
+    /// Load every `*.wasm` dot-command component in `dir` (missing dir = empty).
+    fn load(engine: &Engine, dir: &Path) -> Self {
+        let mut components = Vec::new();
+        let mut by_name = HashMap::new();
+        let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("wasm"))
+            .collect();
+        paths.sort();
+        for path in paths {
+            match Self::load_one(engine, &path) {
+                Ok((inst, specs)) => {
+                    let idx = components.len();
+                    let names: Vec<String> = specs.iter().map(|(n, _)| n.clone()).collect();
+                    for (name, id) in specs {
+                        by_name.entry(name.to_ascii_lowercase()).or_insert((idx, id));
+                    }
+                    eprintln!(
+                        "[dotcmd] loaded {} -> .{}",
+                        path.file_name().and_then(|s| s.to_str()).unwrap_or("?"),
+                        names.join(", .")
+                    );
+                    components.push(inst);
+                }
+                Err(err) => eprintln!("[dotcmd] failed to load {}: {err:?}", path.display()),
+            }
+        }
+        Self { components, by_name }
+    }
+
+    fn load_one(
+        engine: &Engine,
+        path: &Path,
+    ) -> wasmtime::Result<(DotcmdInstance, Vec<(String, u64)>)> {
+        let component = load_component(engine, path)?;
+        let mut linker = Linker::<DotcmdState>::new(engine);
+        p2::add_to_linker_sync(&mut linker)?;
+        let wasi = WasiCtxBuilder::new().inherit_stdio().build();
+        let mut store = Store::new(engine, DotcmdState { wasi, table: ResourceTable::new() });
+        let bindings = dotcmd_bindings::Dotcmd::instantiate(&mut store, &component, &linker)?;
+        let specs = bindings
+            .duckdb_dotcmd_registry()
+            .call_list_commands(&mut store)?
+            .into_iter()
+            .map(|s| (s.name, s.id))
+            .collect();
+        Ok((DotcmdInstance { store, bindings }, specs))
+    }
+
+    /// Invoke `.name args`. None = no registered command by that name; the CLI
+    /// then falls back to its built-in handling.
+    fn invoke(&mut self, name: &str, args: &str) -> Option<Result<String, String>> {
+        let (idx, id) = *self.by_name.get(&name.to_ascii_lowercase())?;
+        let inst = &mut self.components[idx];
+        Some(
+            match inst
+                .bindings
+                .duckdb_dotcmd_registry()
+                .call_invoke(&mut inst.store, id, args)
+            {
+                Ok(r) => r,
+                Err(trap) => Err(format!("dot-command '{name}' trapped: {trap}")),
+            },
+        )
+    }
+}
+
+/// Directory holding pluggable dot-command components (sibling of the extension
+/// root; default `artifacts/dotcmds`).
+fn dotcmd_root() -> PathBuf {
+    EXTENSION_ROOT
+        .get()
+        .and_then(|p| p.parent().map(|d| d.join("dotcmds")))
+        .unwrap_or_else(|| workspace_root().join("artifacts/dotcmds"))
+}
+
 struct ExtensionManager {
     engine: Engine,
     core: Option<Arc<Mutex<CoreExecution>>>,
@@ -1383,6 +1498,7 @@ pub struct HostState {
     wasi: WasiCtx,
     core: Arc<Mutex<CoreExecution>>,
     extension_manager: Arc<Mutex<ExtensionManager>>,
+    dotcmd_registry: Arc<Mutex<DotcmdRegistry>>,
     next_resource_id: u32,
     connections: HashMap<u32, ConnectionEntry>,
     streams: HashMap<u32, StreamEntry>,
@@ -3732,11 +3848,13 @@ impl CliHarness {
                 .expect("extension manager mutex poisoned");
             manager.attach_core(core.clone());
         }
+        let dotcmd_registry = Arc::new(Mutex::new(DotcmdRegistry::load(&engine, &dotcmd_root())));
         let host_state = HostState {
             table: ResourceTable::new(),
             wasi: cli_wasi,
             core: core.clone(),
             extension_manager: extension_manager.clone(),
+            dotcmd_registry,
             next_resource_id: 1,
             connections: HashMap::new(),
             streams: HashMap::new(),
@@ -3761,6 +3879,25 @@ impl CliHarness {
                         .data_mut()
                         .request_extension_load(&extension)
                         .map(|handled| (handled,))
+                },
+            )?;
+
+        // The CLI routes an unknown `.NAME args` here; the host invokes the
+        // owning pluggable dot-command component and returns its output.
+        linker
+            .instance("duckdb:cli/dotcmd-host")?
+            .func_wrap(
+                "invoke",
+                |store: StoreContextMut<'_, HostState>, (name, args): (String, String)| {
+                    let registry = store.data().dotcmd_registry.clone();
+                    let mut registry =
+                        registry.lock().expect("dotcmd registry mutex poisoned");
+                    let result = match registry.invoke(&name, &args) {
+                        None => Ok(None),
+                        Some(Ok(text)) => Ok(Some(text)),
+                        Some(Err(message)) => Err(message),
+                    };
+                    Ok((result,))
                 },
             )?;
 
@@ -3842,11 +3979,13 @@ pub fn run_cli_with_stdio(
             .expect("extension manager mutex poisoned");
         manager.attach_core(core.clone());
     }
+    let dotcmd_registry = Arc::new(Mutex::new(DotcmdRegistry::load(&engine, &dotcmd_root())));
     let host_state = HostState {
         table: ResourceTable::new(),
         wasi: cli_wasi,
         core: core.clone(),
         extension_manager: extension_manager.clone(),
+        dotcmd_registry,
         next_resource_id: 1,
         connections: HashMap::new(),
         streams: HashMap::new(),
@@ -3871,6 +4010,21 @@ pub fn run_cli_with_stdio(
                     .data_mut()
                     .request_extension_load(&extension)
                     .map(|handled| (handled,))
+            },
+        )?;
+    linker
+        .instance("duckdb:cli/dotcmd-host")?
+        .func_wrap(
+            "invoke",
+            |store: StoreContextMut<'_, HostState>, (name, args): (String, String)| {
+                let registry = store.data().dotcmd_registry.clone();
+                let mut registry = registry.lock().expect("dotcmd registry mutex poisoned");
+                let result = match registry.invoke(&name, &args) {
+                    None => Ok(None),
+                    Some(Ok(text)) => Ok(Some(text)),
+                    Some(Err(message)) => Err(message),
+                };
+                Ok((result,))
             },
         )?;
 

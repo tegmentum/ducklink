@@ -1,0 +1,21 @@
+[package]
+name = "greet-dotcmd"
+version = "0.1.0"
+edition = "2021"
+description = "Reference pluggable dot-command component: .greet"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+
+[package.metadata.component]
+package = "duckdb:dotcmd"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:dotcmd/dotcmd"
