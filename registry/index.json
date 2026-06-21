@@ -3816,6 +3816,72 @@
       "min_duckdb_version": "1.0.0"
     }
   ],
+  "dotcmds": [
+    {
+      "name": "core",
+      "version": "0.1.0",
+      "description": "Built-in dot commands ported as a pluggable component: introspection (.tables/.schema/.indexes/.count/.columns) over the live connection plus output-mode toggles (.json/.csv/.box).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "dot-command",
+        "cli",
+        "introspection"
+      ],
+      "categories": [
+        "dot-commands"
+      ],
+      "source": "dotcmd-component",
+      "status": "working",
+      "artifact": "artifacts/dotcmds/core.wasm",
+      "commands": [
+        "tables",
+        "schema",
+        "indexes",
+        "count",
+        "columns",
+        "json",
+        "csv",
+        "box"
+      ],
+      "requires": [
+        "spi"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "greet",
+      "version": "0.1.0",
+      "description": "Reference dot-command component demonstrating the duckdb:dotcmd world: .greet [NAME].",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "dot-command",
+        "cli",
+        "sample",
+        "reference"
+      ],
+      "categories": [
+        "dot-commands"
+      ],
+      "source": "dotcmd-component",
+      "status": "working",
+      "artifact": "artifacts/dotcmds/greet.wasm",
+      "commands": [
+        "greet"
+      ],
+      "requires": [],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    }
+  ],
   "categories": {
     "validators": "Identifier + checksum validation (ISIN, IBAN, credit cards, ...)",
     "data-types": "Type parsing, extraction, and conversion helpers",
@@ -3825,6 +3891,7 @@
     "networking": "HTTP, DNS, URL/HTML parsing",
     "math": "Sketches, statistics, numeric helpers",
     "aggregates": "Custom aggregate functions",
+    "dot-commands": "Pluggable CLI meta-commands (.tables, .greet, output modes)",
     "utility": "Tooling, reference, and management"
   }
 }

@@ -37,6 +37,7 @@ TEMPLATES = SITE / "templates"
 LOGO = REPO / "docs" / "assets" / "ducklink_logo.png"
 REGISTRY = REPO / "registry" / "index.json"
 ARTIFACTS = REPO / "artifacts" / "extensions"
+DOTCMD_ARTIFACTS = REPO / "artifacts" / "dotcmds"
 OUT = SITE / "registry.db"
 
 
@@ -110,6 +111,23 @@ def load_entries() -> tuple[list[dict], dict]:
             "artifact": e.get("artifact"),
         })
 
+    # Pluggable dot-command components (Rust, duckdb:dotcmd world). Their
+    # `commands` are the `.NAME` meta-commands they register, shown (with a
+    # leading dot) through the same slot as a regular extension's `exports`.
+    for e in cat.get("dotcmds", []):
+        entries.append({
+            "name": e["name"],
+            "kind": "dotcmd",
+            "status": e.get("status", "planned"),
+            "description": e.get("description", ""),
+            "exports": ["." + c for c in e.get("commands", [])],
+            "categories": e.get("categories", ["dot-commands"]),
+            "version": e.get("version"),
+            "repository": e.get("repository"),
+            "source": e.get("source", "dotcmd-component"),
+            "artifact": e.get("artifact"),
+        })
+
     # DuckDB builtins (in-tree C++, statically linked into the core).
     for name, info in cat.get("builtins", {}).items():
         if name.startswith("_"):
@@ -164,7 +182,7 @@ def load_entries() -> tuple[list[dict], dict]:
             "artifact": None,
         })
 
-    order = {"component": 0, "community": 1, "official": 2, "builtin": 3}
+    order = {"component": 0, "dotcmd": 1, "community": 2, "official": 3, "builtin": 4}
     entries.sort(key=lambda e: (order.get(e["kind"], 9), e["name"].lower()))
     return entries, {"registry_url": cat.get("registry_url", ""), "categories": categories}
 
@@ -179,18 +197,23 @@ def badge_class(status: str) -> str:
 # ---------------------------------------------------------------------------
 def collect_assets() -> dict[str, dict]:
     assets: dict[str, dict] = {}
-    if not ARTIFACTS.is_dir():
-        return assets
-    for f in sorted(ARTIFACTS.glob("*.wasm")):
-        blob = f.read_bytes()
-        name = f.stem
-        assets[name] = {
-            "name": name,
-            "blob": blob,
-            "size_bytes": len(blob),
-            "sha256": hashlib.sha256(blob).hexdigest(),
-            "content_type": "application/wasm",
-        }
+    for root in (ARTIFACTS, DOTCMD_ARTIFACTS):
+        if not root.is_dir():
+            continue
+        for f in sorted(root.glob("*.wasm")):
+            name = f.stem
+            if name in assets:
+                print(f"WARNING: duplicate artifact name {name!r} ({f}); keeping first",
+                      file=sys.stderr)
+                continue
+            blob = f.read_bytes()
+            assets[name] = {
+                "name": name,
+                "blob": blob,
+                "size_bytes": len(blob),
+                "sha256": hashlib.sha256(blob).hexdigest(),
+                "content_type": "application/wasm",
+            }
     return assets
 
 
@@ -219,6 +242,18 @@ def render_install(entry: dict, has_asset: bool) -> str:
         lines.append("")
         lines.append(f'<span class="c"># or embed it into the core</span>')
         lines.append(f"ducklink compose --embed {name}")
+    elif entry["kind"] == "dotcmd":
+        if has_asset:
+            stem = artifact_name(entry)
+            lines.append(f'<span class="c"># download the dot-command component</span>')
+            lines.append(f"curl -O /asset/{esc(stem)}")
+            lines.append("")
+        lines.append(f'<span class="c"># drop it in the CLI\'s dot-command dir (auto-discovered, no LOAD)</span>')
+        lines.append(f"cp {esc(entry['name'])}.wasm artifacts/dotcmds/")
+        lines.append("")
+        lines.append(f'<span class="c"># then invoke a command at the ducklink prompt</span>')
+        cmds = entry.get("exports", [])
+        lines.append(esc(cmds[0]) if cmds else ".help")
     elif entry["kind"] == "builtin":
         lines.append(f'<span class="c"># statically linked when embedded into libduckdb</span>')
         lines.append(f'EMBED_EXTENSIONS="{name}" ./scripts/build-libduckdb-wasm.sh')
@@ -233,9 +268,12 @@ def render_install(entry: dict, has_asset: bool) -> str:
 def render_detail(entry: dict, style: str, template: str, assets: dict) -> str:
     name = entry["name"]
     has_asset = artifact_name(entry) in assets if artifact_name(entry) else False
+    is_dotcmd = entry["kind"] == "dotcmd"
+    exports_label = "Commands" if is_dotcmd else "Functions"
+    empty_note = "commands" if is_dotcmd else "functions"
     exports = "".join(
         f'<span class="export">{esc(e)}</span>' for e in entry.get("exports", [])
-    ) or '<span class="desc">— no individually-listed functions —</span>'
+    ) or f'<span class="desc">— no individually-listed {empty_note} —</span>'
 
     kv = []
     def row(k, v):
@@ -267,6 +305,7 @@ def render_detail(entry: dict, style: str, template: str, assets: dict) -> str:
         "{{DESC_ATTR}}": esc((entry.get("description") or "")[:160]),
         "{{STATUS}}": esc(entry["status"]),
         "{{KIND}}": esc(entry["kind"]),
+        "{{EXPORTS_LABEL}}": exports_label,
         "{{EXPORTS}}": exports,
         "{{KV}}": "".join(kv),
         "{{INSTALL}}": render_install(entry, has_asset),
