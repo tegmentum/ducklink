@@ -79,6 +79,10 @@ members = [
     "extensions/hashids-component",
     "extensions/checkdigit-component",
     "extensions/dice-component",
+    "extensions/graycode-component",
+    "extensions/cardtype-component",
+    "extensions/money-component",
+    "extensions/ngrams-component",
 ]
 
 resolver = "2"

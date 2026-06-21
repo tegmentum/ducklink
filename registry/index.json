@@ -2521,6 +2521,132 @@
         "rand"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "graycode",
+      "version": "0.1.0",
+      "description": "Gray code (hand-rolled): gray_encode(n) reflected-binary Gray code, gray_decode(g) inverse. Negative -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "gray",
+        "graycode",
+        "bits",
+        "encoding"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/graycode-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/graycode.wasm",
+      "exports": [
+        "gray_encode",
+        "gray_decode"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "cardtype",
+      "version": "0.1.0",
+      "description": "Credit-card brand detection (hand-rolled IIN ranges): card_brand(number) -> visa/mastercard/amex/discover/diners/jcb/unionpay/maestro/unknown. Complements creditcard (Luhn).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "creditcard",
+        "brand",
+        "iin",
+        "payment"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/cardtype-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/cardtype.wasm",
+      "exports": [
+        "card_brand"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "money",
+      "version": "0.1.0",
+      "description": "Currency amount formatting (iso_currency): format_money(amount, code) -> '$1,234.50' / '\u00a51,000', using the currency symbol + minor-unit count, thousands-grouped. Unknown -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "money",
+        "currency",
+        "format",
+        "finance"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/money-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/money.wasm",
+      "exports": [
+        "format_money"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "iso_currency"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "ngrams",
+      "version": "0.1.0",
+      "description": "Character / word n-grams as a JSON array (serde_json): char_ngrams(text, n), word_ngrams(text, n). Works with DuckDB's json_* functions.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "ngram",
+        "nlp",
+        "text",
+        "json"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/ngrams-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/ngrams.wasm",
+      "exports": [
+        "char_ngrams",
+        "word_ngrams"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {
