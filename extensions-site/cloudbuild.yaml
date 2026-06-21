@@ -1,0 +1,66 @@
+# Cloud Build pipeline: build the ducklink extensions-site image, push to
+# Artifact Registry, deploy to Cloud Run. Trigger:
+#
+#   gcloud builds submit \
+#       --config extensions-site/cloudbuild.yaml \
+#       --substitutions _REGION=us-central1,_SERVICE=ducklink-extensions-site
+#
+# Prereq: the linux/amd64 `ducklink` binary + `duckdb_core_component.wasm` must
+# be present under build-artifacts/ in the submitted context (the wasm core
+# can't be built in-container; produce both in a prior CI step).
+
+substitutions:
+  _REGION: us-central1
+  _SERVICE: ducklink-extensions-site
+  _REPO: extensions
+  _PROJECT: ${PROJECT_ID}
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build
+    args:
+      - build
+      - -f
+      - extensions-site/Dockerfile
+      - -t
+      - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+      - -t
+      - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:latest
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    id: push-sha
+    args: ['push', '${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:${SHORT_SHA}']
+    waitFor: [build]
+  - name: gcr.io/cloud-builders/docker
+    id: push-latest
+    args: ['push', '${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:latest']
+    waitFor: [build]
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+      - --region=${_REGION}
+      - --allow-unauthenticated
+      - --memory=512Mi
+      - --cpu=1
+      - --min-instances=0
+      - --max-instances=10
+      - --port=8080
+      - --timeout=30s
+      - --concurrency=80
+    waitFor: [push-sha]
+
+images:
+  - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+  - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 1800s

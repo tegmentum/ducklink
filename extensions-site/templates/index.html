@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ducklink — DuckDB-wasm extensions registry</title>
+<meta name="description" content="Browse {{TOTAL_COUNT}} DuckDB extensions ({{FN_COUNT}} SQL functions) for the WebAssembly component runtime. Load with LOAD &lt;name&gt; or embed via ducklink compose --embed.">
+<style>{{STYLE}}</style>
+</head>
+<body>
+<header>
+  <div class="container brand-row">
+    <a class="brand" href="/" aria-label="ducklink home">
+      <img class="logo" src="/static/ducklink_logo.png" alt="ducklink" width="180" height="56">
+    </a>
+    <div class="subtitle">{{TOTAL_COUNT}} DuckDB extensions · {{FN_COUNT}} SQL functions, on the WebAssembly component runtime</div>
+  </div>
+</header>
+
+<main class="container">
+  <input type="search" class="search-bar" id="q" placeholder="Search by name, description, function, or category" autofocus>
+
+  <div class="filter-row" id="kind-filters"></div>
+  <div class="filter-row" id="cat-filters"></div>
+
+  <div class="stats" id="stats">{{TOTAL_COUNT}} extensions · {{FN_COUNT}} functions</div>
+
+  <div class="grid" id="results"></div>
+  <div class="empty" id="empty" style="display:none">No extensions match your search.</div>
+</main>
+
+<footer class="container">
+  Generated from <code>registry/index.json</code> at build time · served by
+  <code>ducklink serve</code> from a single DuckDB database.<br>
+  Source: <a href="{{REGISTRY_URL}}">{{REGISTRY_URL_SHORT}}</a>
+</footer>
+
+<script id="data" type="application/json">{{DATA_JSON}}</script>
+<script>
+(function() {
+  const data = JSON.parse(document.getElementById('data').textContent);
+  const q = document.getElementById('q');
+  const results = document.getElementById('results');
+  const empty = document.getElementById('empty');
+  const stats = document.getElementById('stats');
+  const kindRow = document.getElementById('kind-filters');
+  const catRow = document.getElementById('cat-filters');
+
+  let activeKind = null, activeCat = null;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  const kinds = [...new Set(data.map(d => d.kind))].sort();
+  const cats = [...new Set(data.flatMap(d => d.categories || []))].sort();
+
+  function chips(row, values, getActive, setActive) {
+    row.innerHTML = '';
+    for (const v of values) {
+      const c = document.createElement('span');
+      c.className = 'chip' + (getActive() === v ? ' active' : '');
+      c.textContent = v;
+      c.onclick = () => { setActive(getActive() === v ? null : v); render(); };
+      row.appendChild(c);
+    }
+  }
+
+  function card(d) {
+    const exports = (d.exports || []).slice(0, 8)
+      .map(e => `<span class="export">${esc(e)}</span>`).join('');
+    return `<div class="card">
+      <div class="meta">
+        <span class="badge ${esc(d.status)}">${esc(d.status)}</span>
+        <span class="badge kind">${esc(d.kind)}</span>
+      </div>
+      <h3><a href="/ext/${encodeURIComponent(d.name)}">${esc(d.name)}</a></h3>
+      <div class="desc">${esc(d.description || '')}</div>
+      <div class="exports">${exports}</div>
+    </div>`;
+  }
+
+  function render() {
+    const term = q.value.trim().toLowerCase();
+    const rows = data.filter(d => {
+      if (activeKind && d.kind !== activeKind) return false;
+      if (activeCat && !(d.categories || []).includes(activeCat)) return false;
+      if (!term) return true;
+      const hay = [d.name, d.description, (d.exports || []).join(' '),
+                   (d.categories || []).join(' ')].join(' ').toLowerCase();
+      return hay.includes(term);
+    });
+    results.innerHTML = rows.map(card).join('');
+    empty.style.display = rows.length ? 'none' : 'block';
+    const fns = rows.reduce((n, d) => n + (d.exports || []).length, 0);
+    stats.textContent = `${rows.length} extension${rows.length===1?'':'s'} · ${fns} functions`;
+    chips(kindRow, kinds, () => activeKind, v => activeKind = v);
+    chips(catRow, cats, () => activeCat, v => activeCat = v);
+  }
+
+  q.addEventListener('input', render);
+  render();
+})();
+</script>
+</body>
+</html>

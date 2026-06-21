@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{NAME}} — ducklink extensions</title>
+<meta name="description" content="{{DESC_ATTR}}">
+<style>{{STYLE}}</style>
+</head>
+<body>
+<header>
+  <div class="container brand-row">
+    <a class="brand" href="/" aria-label="ducklink home">
+      <img class="logo" src="/static/ducklink_logo.png" alt="ducklink" width="180" height="56">
+    </a>
+  </div>
+</header>
+
+<main class="container">
+  <a class="back" href="/">← all extensions</a>
+  <div class="detail">
+    <div class="meta">
+      <span class="badge {{STATUS}}">{{STATUS}}</span>
+      <span class="badge kind">{{KIND}}</span>
+    </div>
+    <h1>{{NAME}}</h1>
+    <p class="lead">{{DESC}}</p>
+
+    <h3>Functions</h3>
+    <div class="exports">{{EXPORTS}}</div>
+
+    <dl class="kv">{{KV}}</dl>
+
+    <h3>Use it</h3>
+    <div class="install">{{INSTALL}}</div>
+  </div>
+</main>
+
+<footer class="container">
+  <a href="/api/ext/{{NAME}}.json">JSON</a> ·
+  Generated from <code>registry/index.json</code>.
+</footer>
+</body>
+</html>

@@ -1,7 +1,7 @@
 WASI_TARGET?=wasm32-wasip2
 BROWSER_TARGET?=wasm32-unknown-unknown
 
-.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension echo-handler smoke-httpd ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile
+.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile
 
 all: core standalone-cli loader-stub
 
@@ -60,6 +60,17 @@ echo-handler:
 # duckdb-wasm-httpd end-to-end smoke (built-ins + every route kind incl. wasm).
 smoke-httpd: host echo-handler
 	./test/smoke-httpd.sh
+
+# Build the extension-registry distribution database (extensions-site/registry.db)
+# from registry/index.json + the built artifacts, then serve it with ducklink.
+#   make site        # build registry.db
+#   make site-serve  # build + serve on :8080
+site:
+	python3 -m pip install -q 'duckdb==1.4.0'
+	python3 extensions-site/build.py
+
+site-serve: host site
+	./target/release/ducklink serve --db extensions-site/registry.db --port 8080
 
 # Tiered Virtual Memory (>4 GiB spill tier) tests.
 #   make tvm-test-host -- fast, pure-node free-list/handle unit test (no build)
