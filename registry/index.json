@@ -1824,6 +1824,133 @@
         "textwrap"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "timezone",
+      "version": "0.1.0",
+      "description": "IANA timezone lookups (chrono-tz): tz_valid, tz_offset_seconds(name, unix_time) (DST-aware), tz_abbreviation. Unknown zone -> NULL/false.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "timezone",
+        "iana",
+        "offset",
+        "dst"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/timezone-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/timezone.wasm",
+      "exports": [
+        "tz_valid",
+        "tz_offset_seconds",
+        "tz_abbreviation"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "chrono-tz",
+        "chrono"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "rot13",
+      "version": "0.1.0",
+      "description": "Caesar-family ciphers (hand-rolled): rot13(text) (self-inverse) and caesar(text, shift). Letters rotate within case; other chars pass through.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "rot13",
+        "caesar",
+        "cipher",
+        "rotate"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/rot13-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/rot13.wasm",
+      "exports": [
+        "rot13",
+        "caesar"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "leetspeak",
+      "version": "0.1.0",
+      "description": "Leetspeak transform (hand-rolled): to_leet(text) maps a->4, e->3, i->1, o->0, s->5, t->7, b->8, g->6, l->1.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "leet",
+        "leetspeak",
+        "text",
+        "fun"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/leetspeak-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/leetspeak.wasm",
+      "exports": [
+        "to_leet"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "dms",
+      "version": "0.1.0",
+      "description": "Geographic coordinate conversion (hand-rolled): dms_to_decimal(deg,min,sec) and decimal_to_dms(decimal) -> D\u00b0M'S\". Sign-aware.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "dms",
+        "coordinates",
+        "geo",
+        "degrees"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/dms-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/dms.wasm",
+      "exports": [
+        "dms_to_decimal",
+        "decimal_to_dms"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {

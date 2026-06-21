@@ -58,6 +58,10 @@ members = [
     "extensions/quotedprintable-component",
     "extensions/unitconv-component",
     "extensions/wordwrap-component",
+    "extensions/timezone-component",
+    "extensions/rot13-component",
+    "extensions/leetspeak-component",
+    "extensions/dms-component",
 ]
 
 resolver = "2"
