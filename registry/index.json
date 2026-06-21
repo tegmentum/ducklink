@@ -3041,6 +3041,135 @@
         "unicode-width"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "colorconv",
+      "version": "0.1.0",
+      "description": "HSL/HSV colour conversions (hand-rolled): hex_to_hsl, hex_to_hsv (h 0-360, s/l/v 0-100), hsl_to_hex. Complements csscolor + color. Bad hex -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "color",
+        "hsl",
+        "hsv",
+        "convert"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/colorconv-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/colorconv.wasm",
+      "exports": [
+        "hex_to_hsl",
+        "hex_to_hsv",
+        "hsl_to_hex"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "jsonschema",
+      "version": "0.1.0",
+      "description": "JSON Schema validation (jsonschema): json_schema_valid(schema, instance) -> bool. Both args JSON text. Malformed JSON or invalid schema -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "json",
+        "schema",
+        "validate"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/jsonschema-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/jsonschema.wasm",
+      "exports": [
+        "json_schema_valid"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "jsonschema",
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "simhash",
+      "version": "0.1.0",
+      "description": "SimHash locality-sensitive fingerprints (hand-rolled, deterministic): simhash(text) -> 64-bit fingerprint, simhash_distance(a,b) -> Hamming distance. Near-duplicates have small distances.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "simhash",
+        "lsh",
+        "dedup",
+        "fingerprint"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/simhash-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/simhash.wasm",
+      "exports": [
+        "simhash",
+        "simhash_distance"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "idextra",
+      "version": "0.1.0",
+      "description": "Modern sortable/collision-resistant IDs: ksuid() (svix-ksuid), cuid2() (cuid2). Nondeterministic (wasi random+clock). Complements ids (ulid/nanoid) and uuid5/uuidx.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "ksuid",
+        "cuid2",
+        "identifier",
+        "id"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/idextra-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/idextra.wasm",
+      "exports": [
+        "ksuid",
+        "cuid2"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "svix-ksuid",
+        "cuid2"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {

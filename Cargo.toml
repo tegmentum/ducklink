@@ -95,6 +95,10 @@ members = [
     "extensions/yaml-component",
     "extensions/unicodenorm-component",
     "extensions/unicodewidth-component",
+    "extensions/colorconv-component",
+    "extensions/jsonschema-component",
+    "extensions/simhash-component",
+    "extensions/idextra-component",
 ]
 
 resolver = "2"
