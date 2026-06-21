@@ -1,0 +1,25 @@
+[package]
+name = "checksums-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+CRC-16 / Adler-32 / FNV-1a checksums
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+crc = "*"
+adler = "*"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

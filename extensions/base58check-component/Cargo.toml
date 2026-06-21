@@ -1,0 +1,25 @@
+[package]
+name = "base58check-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Base58Check encode/decode
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+# Use features = ['alloc'] with default-features = false
+bs58 = { version = "0.5", features = ["check"] }
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

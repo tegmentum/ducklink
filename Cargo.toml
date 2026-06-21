@@ -66,6 +66,10 @@ members = [
     "extensions/msgpack-component",
     "extensions/elements-component",
     "extensions/vigenere-component",
+    "extensions/petname-component",
+    "extensions/base58check-component",
+    "extensions/checksums-component",
+    "extensions/siphash-component",
 ]
 
 resolver = "2"

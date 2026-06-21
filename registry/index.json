@@ -2086,6 +2086,139 @@
       ],
       "crates": [],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "petname",
+      "version": "0.1.0",
+      "description": "Memorable random names (petname): petname(words, separator) -> e.g. 'wise-firm-cat'. Nondeterministic (wasi random).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "petname",
+        "random",
+        "id",
+        "memorable"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/petname-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/petname.wasm",
+      "exports": [
+        "petname"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "petname"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "base58check",
+      "version": "0.1.0",
+      "description": "Base58Check (bs58): base58check_encode(hex) and base58check_decode(text) -> hex, with the Bitcoin-style 4-byte checksum. Invalid -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "base58",
+        "base58check",
+        "bitcoin",
+        "encoding"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/base58check-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/base58check.wasm",
+      "exports": [
+        "base58check_encode",
+        "base58check_decode"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "bs58"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "checksums",
+      "version": "0.1.0",
+      "description": "Non-cryptographic checksums over UTF-8 bytes: crc16 (CRC-16/ARC), adler32, fnv1a_32, fnv1a_64 (crc + adler crates, FNV hand-rolled). Complements crypto/hashfuncs.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "checksum",
+        "crc",
+        "adler",
+        "fnv"
+      ],
+      "categories": [
+        "cryptography"
+      ],
+      "source": "extensions/checksums-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/checksums.wasm",
+      "exports": [
+        "crc16",
+        "adler32",
+        "fnv1a_32",
+        "fnv1a_64"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "crc",
+        "adler"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "siphash",
+      "version": "0.1.0",
+      "description": "Keyed SipHash-1-3 (siphasher): siphash(key0, key1, text) -> ubigint. Hash-flooding-resistant bucketing. NULL text -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "siphash",
+        "hash",
+        "keyed",
+        "bucketing"
+      ],
+      "categories": [
+        "cryptography"
+      ],
+      "source": "extensions/siphash-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/siphash.wasm",
+      "exports": [
+        "siphash"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "siphasher"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {
