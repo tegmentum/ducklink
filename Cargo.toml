@@ -26,6 +26,10 @@ members = [
     "extensions/email-component",
     "extensions/semver-component",
     "extensions/slug-component",
+    "extensions/escape-component",
+    "extensions/natsort-component",
+    "extensions/roman-component",
+    "extensions/humansize-component",
 ]
 
 resolver = "2"

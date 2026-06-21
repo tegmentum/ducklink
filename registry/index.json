@@ -779,6 +779,137 @@
         "slug"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "escape",
+      "version": "0.1.0",
+      "description": "HTML + URL percent encode/decode: html_escape / html_unescape (html-escape) and url_encode / url_decode (percent-encoding). NULL -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "escape",
+        "html",
+        "url",
+        "encode"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/escape-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/escape.wasm",
+      "exports": [
+        "html_escape",
+        "html_unescape",
+        "url_encode",
+        "url_decode"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "html-escape",
+        "percent-encoding"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "natsort",
+      "version": "0.1.0",
+      "description": "Natural-order string comparison: natsort_compare(a,b) -> -1/0/1, so 'img2' sorts before 'img12' (natord).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "sort",
+        "natural",
+        "compare"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/natsort-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/natsort.wasm",
+      "exports": [
+        "natsort_compare"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "natord"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "roman",
+      "version": "0.1.0",
+      "description": "Roman numeral encode/decode: to_roman(int) -> text (1..=3999) and from_roman(text) -> bigint (roman crate). Out-of-range / invalid -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "roman",
+        "numeral",
+        "convert"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/roman-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/roman.wasm",
+      "exports": [
+        "to_roman",
+        "from_roman"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "roman"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "humansize",
+      "version": "0.1.0",
+      "description": "Human-readable byte sizes: humansize(bytes) -> '1.50 MB' (decimal) and humansize_binary(bytes) -> '1.00 MiB' (binary) via humansize. Negative -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "format",
+        "bytes",
+        "size"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/humansize-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/humansize.wasm",
+      "exports": [
+        "humansize",
+        "humansize_binary"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "humansize"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {
