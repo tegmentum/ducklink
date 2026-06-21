@@ -110,6 +110,10 @@ members = [
     "extensions/phonenumber-component",
     "extensions/qrcode-component",
     "extensions/pwstrength-component",
+    "extensions/aggstat-component",
+    "extensions/bloom-component",
+    "extensions/minhash-component",
+    "extensions/countmin-component",
 ]
 
 resolver = "2"

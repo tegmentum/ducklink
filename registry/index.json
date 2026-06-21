@@ -3519,6 +3519,132 @@
         "qrcode"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "aggstat",
+      "version": "0.1.0",
+      "description": "Statistical AGGREGATES DuckDB core lacks (first use of the aggregate capability): harmonic_mean(x). NULL inputs skipped.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "aggregate",
+        "statistics",
+        "mean",
+        "harmonic"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/aggstat-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/aggstat.wasm",
+      "exports": [
+        "harmonic_mean"
+      ],
+      "requires": [
+        "aggregate"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "bloom",
+      "version": "0.1.0",
+      "description": "Bloom filter as a DuckDB aggregate + query scalar (not in core): bloom_filter(value) AGGREGATE -> hex filter (8192-bit, k=5), bloom_contains(filter, item) -> bool (no false negatives).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "bloom",
+        "sketch",
+        "membership",
+        "probabilistic"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/bloom-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/bloom.wasm",
+      "exports": [
+        "bloom_filter",
+        "bloom_contains"
+      ],
+      "requires": [
+        "aggregate",
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "minhash",
+      "version": "0.1.0",
+      "description": "MinHash set similarity as a DuckDB aggregate + scalar (not in core): minhash(value) AGGREGATE -> 64-slot signature, minhash_similarity(a,b) -> estimated Jaccard.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "minhash",
+        "jaccard",
+        "similarity",
+        "sketch"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/minhash-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/minhash.wasm",
+      "exports": [
+        "minhash",
+        "minhash_similarity"
+      ],
+      "requires": [
+        "aggregate",
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "countmin",
+      "version": "0.1.0",
+      "description": "Count-Min sketch as a DuckDB aggregate + scalar (not in core): count_min(value) AGGREGATE -> d=4 x w=512 table, cms_estimate(sketch, item) -> estimated frequency (never under-counts).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "count-min",
+        "frequency",
+        "sketch",
+        "heavy-hitters"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/countmin-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/countmin.wasm",
+      "exports": [
+        "count_min",
+        "cms_estimate"
+      ],
+      "requires": [
+        "aggregate",
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {
