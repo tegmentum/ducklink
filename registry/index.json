@@ -3299,6 +3299,127 @@
       ],
       "crates": [],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "atbash",
+      "version": "0.1.0",
+      "description": "Atbash cipher (hand-rolled): atbash(text) maps a<->z within each case, self-inverse. Non-letters pass through.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "atbash",
+        "cipher",
+        "substitution",
+        "rotate"
+      ],
+      "categories": [
+        "cryptography"
+      ],
+      "source": "extensions/atbash-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/atbash.wasm",
+      "exports": [
+        "atbash"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "piglatin",
+      "version": "0.1.0",
+      "description": "Pig Latin (hand-rolled): to_pig_latin(text) moves the leading consonant cluster to the end + 'ay' ('way' for vowel-initial). Case of the first letter preserved.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "piglatin",
+        "text",
+        "fun",
+        "transform"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/piglatin-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/piglatin.wasm",
+      "exports": [
+        "to_pig_latin"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "rle",
+      "version": "0.1.0",
+      "description": "Run-length encoding (hand-rolled): rle_encode(text) -> '3a2b1c', rle_decode inverts it. Malformed decode -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "rle",
+        "compression",
+        "encoding",
+        "run-length"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/rle-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/rle.wasm",
+      "exports": [
+        "rle_encode",
+        "rle_decode"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "bbcode",
+      "version": "0.1.0",
+      "description": "BBCode -> HTML (hand-rolled): bbcode_to_html maps [b][i][u][s][code][quote], [url=href]text[/url], [img]src[/img]. Unknown tags pass through.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "bbcode",
+        "html",
+        "markup",
+        "forum"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/bbcode-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/bbcode.wasm",
+      "exports": [
+        "bbcode_to_html"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {

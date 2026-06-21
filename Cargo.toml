@@ -103,6 +103,10 @@ members = [
     "extensions/z85-component",
     "extensions/initials-component",
     "extensions/luhngen-component",
+    "extensions/atbash-component",
+    "extensions/piglatin-component",
+    "extensions/rle-component",
+    "extensions/bbcode-component",
 ]
 
 resolver = "2"
