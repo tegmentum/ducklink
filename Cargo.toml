@@ -71,6 +71,10 @@ members = [
     "extensions/checksums-component",
     "extensions/siphash-component",
     "extensions/tiktoken-component",
+    "extensions/bech32-component",
+    "extensions/uuid5-component",
+    "extensions/gravatar-component",
+    "extensions/html2text-component",
 ]
 
 resolver = "2"

@@ -2254,6 +2254,139 @@
         "tiktoken-rs"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "bech32",
+      "version": "0.1.0",
+      "description": "Bech32 encoding (bech32, BIP-173): bech32_encode(hrp, hex), bech32_hrp, bech32_decode_hex, bech32_valid. Invalid -> NULL/false.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "bech32",
+        "bitcoin",
+        "segwit",
+        "encoding"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/bech32-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/bech32.wasm",
+      "exports": [
+        "bech32_encode",
+        "bech32_hrp",
+        "bech32_decode_hex",
+        "bech32_valid"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "bech32"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "uuid5",
+      "version": "0.1.0",
+      "description": "Namespace UUIDs (uuid): uuid_v5(namespace, name) and uuid_v3(namespace, name), deterministic. namespace is a UUID or alias dns/url/oid/x500. Complements uuidx (v7).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "uuid",
+        "v5",
+        "v3",
+        "namespace"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/uuid5-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/uuid5.wasm",
+      "exports": [
+        "uuid_v5",
+        "uuid_v3"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "uuid"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "gravatar",
+      "version": "0.1.0",
+      "description": "Gravatar helpers (md5): gravatar_hash(email) and gravatar_url(email), with the spec's trim+lowercase normalization. NULL -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "gravatar",
+        "avatar",
+        "md5",
+        "email"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/gravatar-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/gravatar.wasm",
+      "exports": [
+        "gravatar_hash",
+        "gravatar_url"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "md5"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "html2text",
+      "version": "0.1.0",
+      "description": "Strip HTML to readable text (nanohtml2text): html_to_text(html). Decodes entities, renders links. NULL -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "html",
+        "text",
+        "strip",
+        "scrape"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/html2text-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/html2text.wasm",
+      "exports": [
+        "html_to_text"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "nanohtml2text"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {
