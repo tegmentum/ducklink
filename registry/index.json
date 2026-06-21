@@ -2777,6 +2777,133 @@
       ],
       "crates": [],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "stopwords",
+      "version": "0.1.0",
+      "description": "Stop-word detection + removal (stop-words, stopwords-iso lists): is_stopword(word, language), remove_stopwords(text, language). 11 languages by name or ISO code; unknown -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "stopwords",
+        "nlp",
+        "filter",
+        "text"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/stopwords-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/stopwords.wasm",
+      "exports": [
+        "is_stopword",
+        "remove_stopwords"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "stop-words"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "isbnconv",
+      "version": "0.1.0",
+      "description": "ISBN-10 <-> ISBN-13 conversion (hand-rolled checksums): isbn10_to_13, isbn13_to_10 (978-prefixed only). Complements isbn (validate/normalize). Invalid length -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "isbn",
+        "convert",
+        "book",
+        "checksum"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/isbnconv-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/isbnconv.wasm",
+      "exports": [
+        "isbn10_to_13",
+        "isbn13_to_10"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "passgen",
+      "version": "0.1.0",
+      "description": "Random password generation (rand, wasi entropy): gen_password(length) (alphanumeric + symbols), gen_password_alnum(length). Nondeterministic; length clamped 1..256.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "password",
+        "random",
+        "security",
+        "generate"
+      ],
+      "categories": [
+        "cryptography"
+      ],
+      "source": "extensions/passgen-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/passgen.wasm",
+      "exports": [
+        "gen_password",
+        "gen_password_alnum"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "rand"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "braille",
+      "version": "0.1.0",
+      "description": "Text -> Unicode Braille (hand-rolled grade-1 letters): to_braille(text) maps a-z to the Braille Patterns block; other chars pass through.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "braille",
+        "accessibility",
+        "unicode",
+        "text"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/braille-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/braille.wasm",
+      "exports": [
+        "to_braille"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {

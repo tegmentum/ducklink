@@ -87,6 +87,10 @@ members = [
     "extensions/transliterate-component",
     "extensions/pluscode-component",
     "extensions/rot47-component",
+    "extensions/stopwords-component",
+    "extensions/isbnconv-component",
+    "extensions/passgen-component",
+    "extensions/braille-component",
 ]
 
 resolver = "2"
