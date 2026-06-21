@@ -1,0 +1,13 @@
+# Expected output for extensions/hashfuncs-component/smoke.sql (reviewed — canonical xxHash/Murmur vectors).
+xxh32_empty
+46947589
+xxh64_empty
+17241709254077376921
+xxh3_empty
+3244421341483603138
+xxh64_abc
+4952883123889572249
+murmur3_hello
+613153351
+null_in
+NULL

@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "updated": "2026-06-20",
+  "updated": "2026-06-21",
   "registry_url": "https://github.com/tegmentum/duckdb-webassembly-component",
   "_schema": {
     "description": "Catalog of componentized DuckDB-wasm extensions. Each entry describes one extension component built against the duckdb:extension world. The full planned roadmap (with per-extension batch + native-coverage notes) lives in PLAN-duckdb-extensions.md.",
@@ -457,25 +457,112 @@
       "min_duckdb_version": "1.0.0"
     },
     {
-      "name": "case",
-      "version": "0.0.0",
-      "description": "Identifier case conversions: snake/camel/pascal/kebab/title.",
+      "name": "markdown",
+      "version": "0.1.0",
+      "description": "Render Markdown (CommonMark + tables/strikethrough) to HTML or plain text (pulldown-cmark).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "markdown",
+        "commonmark",
+        "html",
+        "text"
+      ],
       "categories": [
         "text-processing"
       ],
-      "status": "planned",
+      "source": "extensions/markdown-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/markdown.wasm",
+      "exports": [
+        "md_to_html",
+        "md_to_text"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "pulldown-cmark"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "hashfuncs",
+      "version": "0.1.0",
+      "description": "Non-cryptographic hashes: xxHash32/64, XXH3-64, MurmurHash3 (twox-hash, murmur3).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "hash",
+        "xxhash",
+        "murmur",
+        "checksum"
+      ],
+      "categories": [
+        "math",
+        "encoding"
+      ],
+      "source": "extensions/hashfuncs-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/hashfuncs.wasm",
+      "exports": [
+        "xxh32",
+        "xxh64",
+        "xxh3",
+        "murmur3"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "twox-hash",
+        "murmur3"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "casing",
+      "version": "0.1.0",
+      "description": "Identifier case conversions: snake, camel, pascal, kebab, title, constant (heck). Named `casing` because `case` is a SQL keyword.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "case",
+        "snake",
+        "camel",
+        "kebab",
+        "text"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/casing-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/casing.wasm",
       "exports": [
         "to_snake_case",
         "to_camel_case",
         "to_pascal_case",
-        "to_kebab_case"
+        "to_kebab_case",
+        "to_title_case",
+        "to_constant_case"
       ],
       "requires": [
         "scalar"
       ],
       "crates": [
         "heck"
-      ]
+      ],
+      "min_duckdb_version": "1.0.0"
     },
     {
       "name": "csscolor",

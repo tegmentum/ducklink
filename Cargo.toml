@@ -16,6 +16,9 @@ members = [
     "extensions/ean-component",
     "extensions/aba-component",
     "extensions/crypto-component",
+    "extensions/casing-component",
+    "extensions/markdown-component",
+    "extensions/hashfuncs-component",
 ]
 
 resolver = "2"

@@ -1,0 +1,15 @@
+# Expected output for extensions/casing-component/smoke.sql (reviewed).
+snake
+foo_bar_baz
+camel
+fooBarBaz
+pascal
+FooBar
+kebab
+foo-bar-baz
+title
+Foo Bar
+constant
+FOO_BAR
+null_in
+NULL

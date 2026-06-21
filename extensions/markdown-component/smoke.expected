@@ -1,0 +1,11 @@
+# Expected output for extensions/markdown-component/smoke.sql (reviewed).
+h1
+"<h1>Hi</h1>
+"
+bold
+"<p>a <strong>b</strong> c</p>
+"
+plain
+Title  some bold text
+null_in
+NULL
