@@ -5,10 +5,10 @@
 b32enc
 JBSWY3DP
 b32dec
-Hello
+0x48656c6c6f
 b58enc
 12VfUX
 b58dec
-\x00\x01\x02\x03\x04
+0x0001020304
 b58bad
 NULL

@@ -10,6 +10,11 @@ members = [
     "extensions/isin-component",
     "extensions/baseN-component",
     "handlers/echo-handler",
+    "extensions/luhn-component",
+    "extensions/iban-component",
+    "extensions/creditcard-component",
+    "extensions/ean-component",
+    "extensions/aba-component",
 ]
 
 resolver = "2"

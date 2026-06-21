@@ -1,0 +1,11 @@
+# Expected output for extensions/aba-component/smoke.sql (reviewed).
+chase
+true
+wells_fargo
+true
+bad_check
+false
+too_short
+false
+junk
+false

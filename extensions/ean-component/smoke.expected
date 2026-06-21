@@ -1,0 +1,13 @@
+# Expected output for extensions/ean-component/smoke.sql (reviewed).
+ean13_ok
+true
+ean8_ok
+true
+upca_ok
+true
+bad_check
+false
+ean13_check
+1
+ean8_check
+4

@@ -1,0 +1,14 @@
+# Expected output for extensions/luhn-component/smoke.sql (reviewed).
+# `.mode csv` emits a header line (the AS alias) then the value, per SELECT.
+classic
+true
+visa_test
+true
+bad_check
+false
+junk
+false
+classic_check_digit
+3
+visa_check_digit
+1

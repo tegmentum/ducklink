@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "updated": "2026-06-18",
+  "updated": "2026-06-20",
   "registry_url": "https://github.com/tegmentum/duckdb-webassembly-component",
   "_schema": {
     "description": "Catalog of componentized DuckDB-wasm extensions. Each entry describes one extension component built against the duckdb:extension world. The full planned roadmap (with per-extension batch + native-coverage notes) lives in PLAN-duckdb-extensions.md.",
@@ -19,31 +19,112 @@
   },
   "builtins": {
     "_comment": "DuckDB's own in-tree (C++) extensions, statically linked into the wasm core via cmake/wasm-extension-config.cmake (NOT components). See docs/duckdb-official-extensions.md. status: working = verified on wasm32-wasip2.",
-    "core_functions": {"status": "working", "notes": "always linked"},
-    "parquet": {"status": "working", "notes": "read_parquet + COPY ... TO ... (FORMAT parquet)"},
-    "json": {"status": "working", "notes": "scalars, ::JSON, ->/->>, json_group_array macro, read_json"},
-    "tpch": {"status": "working", "notes": "dbgen verified (sf=0.01 -> nation=25, lineitem=60175); tpch_queries()=22; needs -D_WASI_EMULATED_SIGNAL"},
-    "tpcds": {"status": "working", "notes": "dsdgen verified at sf>=0.01 (income_band=20); needs -D_WASI_EMULATED_SIGNAL. NOTE: sf=0.001 hangs (dsdgen tiny-scale edge case, not wasm-specific) -- use sf>=0.01."},
-    "autocomplete": {"status": "working", "notes": "sql_auto_complete('SELE') -> SELECT"},
-    "icu": {"status": "working", "notes": "timezones + collations verified: AT TIME ZONE DST-correct (NY EDT/EST), 134 collations, default zone from TZ env (TZ=Asia/Tokyo -> Asia/Tokyo, else UTC) + SET TimeZone. wasm patches: tzname stub (wasi-shim.hpp), putil.cpp U_TZSET/U_TIMEZONE undef, double-conversion __wasm__ arch, emulated-mman link."}
+    "core_functions": {
+      "status": "working",
+      "notes": "always linked"
+    },
+    "parquet": {
+      "status": "working",
+      "notes": "read_parquet + COPY ... TO ... (FORMAT parquet)"
+    },
+    "json": {
+      "status": "working",
+      "notes": "scalars, ::JSON, ->/->>, json_group_array macro, read_json"
+    },
+    "tpch": {
+      "status": "working",
+      "notes": "dbgen verified (sf=0.01 -> nation=25, lineitem=60175); tpch_queries()=22; needs -D_WASI_EMULATED_SIGNAL"
+    },
+    "tpcds": {
+      "status": "working",
+      "notes": "dsdgen verified at sf>=0.01 (income_band=20); needs -D_WASI_EMULATED_SIGNAL. NOTE: sf=0.001 hangs (dsdgen tiny-scale edge case, not wasm-specific) -- use sf>=0.01."
+    },
+    "autocomplete": {
+      "status": "working",
+      "notes": "sql_auto_complete('SELE') -> SELECT"
+    },
+    "icu": {
+      "status": "working",
+      "notes": "timezones + collations verified: AT TIME ZONE DST-correct (NY EDT/EST), 134 collations, default zone from TZ env (TZ=Asia/Tokyo -> Asia/Tokyo, else UTC) + SET TimeZone. wasm patches: tzname stub (wasi-shim.hpp), putil.cpp U_TZSET/U_TIMEZONE undef, double-conversion __wasm__ arch, emulated-mman link."
+    }
   },
   "out_of_tree": {
     "_comment": "DuckDB's official extensions that live in separate repos (fetched via duckdb_extension_load GIT_URL). wasm32-wasip2 HAS sockets + TLS now (wasi:sockets via grafted wasip2 libc socket objects + openssl-wasm; see httpfs). verdict: working|gated-on-httpfs|hard|very-hard|infeasible.",
-    "inet": {"verdict": "working", "deps": "pure C++ INET type/functions", "notes": "host()/netmask()/broadcast()/<<= + IPv6 verified (duckdb-inet @fe7f60b). CAVEAT: bare INET-typed results render empty in the CLI (duckdb_value_varchar doesn't invoke the custom INET->VARCHAR cast); use ::VARCHAR. Affects any custom type; core-marshaler follow-up."},
-    "fts": {"verdict": "working", "deps": "snowball stemmer + BM25 + SQL macros", "notes": "stem() + create_fts_index + match_bm25 verified (BM25 ranking correct). duckdb-fts @39376623, INCLUDE_DIR extension/fts/include (nested layout)."},
-    "vss": {"verdict": "working", "deps": "pure C++ HNSW (usearch)", "notes": "CREATE INDEX ... USING HNSW + array_distance NN search verified (exact match dist=0). duckdb-vss @c8a4efe, INCLUDE_DIR src/include."},
-    "excel": {"verdict": "deferred", "deps": "C++ xlsx reader + vcpkg dep", "notes": "CMakeLists find_package + vcpkg.json -> needs a vcpkg native dep built for wasi; no vcpkg toolchain. @8504be9."},
-    "avro": {"verdict": "working", "deps": "duckdb/duckdb-avro-c fork (field-id API) + jansson + snappy, deflate+snappy codecs", "notes": "VERIFIED: read_avro('manifest.avro') -> rows, with deflate, snappy AND xz-compressed manifests. Needs DuckDB's avro-c FORK (duckdb/duckdb-avro-c @8af40027) not stock apache/avro -- the extension calls avro_schema_record_field_id/avro_reader_reader/*_id (Iceberg field IDs). Built for wasi by scripts/build-wasi-deps.sh (jansson + snappy [from ~/git/snappy-wasm source] + liblzma [tukaani-project/xz] + avro-c with deflate+snappy+xz (codec.c patched: name+container); CMAKE_POLICY_VERSION_MINIMUM=3.5). merges libavro/libjansson/libsnappy/liblzma. @0c97a61."},
-    "sqlite_scanner": {"verdict": "working", "deps": "vendored sqlite3 + WASI VFS", "notes": "sqlite_scan() + ATTACH (TYPE SQLITE) read real .sqlite files. Fixed via -DSQLITE_OS_OTHER=1 + a WASI VFS reused from ~/git/sqlite-wasm (cmake/sqlite-wasi-vfs/) registered by sqlite3_os_init. @833e105."},
-    "httpfs": {"verdict": "working", "deps": "curl-wasm (libcurl+nghttp2/ngtcp2/nghttp3+brotli) + openssl-wasm + wasip2 libc BSD sockets + wasi:sockets", "notes": "VERIFIED: read_csv_auto('https://...iris.csv') -> 150 rows fetched over HTTPS via wasi:sockets + parsed (avg SepalLength 5.843). S3 works too: read_parquet('s3://ookla-open-data/...') returned 4.87M rows (set s3_region to the bucket's region; the built-in S3FileSystem signs via SigV4 over the curl client -- no separate s3-wasm component needed). Works out of the box: curl is the default client on wasi (build script patches httpfs LoadInternal; the vendored httplib client COMPILES but fails at runtime -- non-blocking connect select/poll gap -- so SET httpfs_client_implementation='httplib' is not usable on wasi). Sockets: cargo-component builds a wasip1 core module (no BSD sockets in wasip1 libc), so scripts/build-libduckdb-wasm.sh grafts the wasip2 libc socket+binding objects (socket/connect/.../wasip2.c.obj/wasip2_component_type.o) into libduckdb-wasi.a; they import wasi:sockets/io/clocks which the host grants (inherit_network + allow_ip_name_lookup). Cert verification works secure-by-default: an embedded Mozilla CA bundle (cmake/ca-bundle/cacert.pem, 121 certs) is loaded in-memory via CURLOPT_CAINFO_BLOB (the build script patches httpfs_curl_client.cpp); verified that self-signed.badssl.com is rejected + valid certs accepted, no runtime --dir needed. openssl-wasm can't load a CA *file* (its stdio/file-BIO doesn't reach the host FS that DuckDB's wrapped open/stat use), hence the in-memory blob. @354d3f43."},
-    "iceberg": {"verdict": "working", "deps": "avro extension + roaring (CRoaring); AWS SDK skipped on wasi", "notes": "VERIFIED local AND remote: iceberg_scan('table', allow_moved_paths=true) reads real Iceberg tables -> rows (metadata JSON -> avro manifest-list/manifests -> parquet data). Remote over HTTP verified end-to-end on a pyiceberg-written table (20 rows, correct aggregates) via httpfs range requests; S3 works the same way. NOTE: remote uses the manifest's file_size_in_bytes for footer ranges, so the table metadata must be consistent (the duckdb-iceberg repo's test tables have STALE sizes -> only work locally where the real file is stat'd). pyiceberg names metadata 00001-<uuid>.metadata.json (DuckDB version-guessing expects vN.metadata.json) -> pass the metadata.json path or add version-hint.text. No AWS SDK: upstream guards it behind Emscripten; build-libduckdb-wasm.sh extends those guards to WASI (CMake STREQUAL + #ifdef EMSCRIPTEN->||__wasi__) and stubs AWSInput Head/Delete/PostRequest (AWS Glue/S3Tables REST catalogs unsupported; filesystem + S3 iceberg reads work). roaring built by scripts/build-wasi-deps.sh. AutoLoadExtension(avro) so avro must be present. REST CATALOG works on wasi: ATTACH '<wh>' AS x (TYPE ICEBERG, ENDPOINT 'http://...', AUTHORIZATION_TYPE 'none') and CREATE SECRET (TYPE ICEBERG, TOKEN '...') + ATTACH (... SECRET) both verified (config/namespaces/tables/LoadTable handshake over the curl HTTPUtil; bearer token sent as Authorization: Bearer). Covers R2/Lakekeeper/Polaris/Tabular (bearer/oauth2). AWS SigV4 catalog auth (Glue/S3 Tables) also WORKS: a self-contained SigV4 signer (cmake/iceberg-wasi/aws_wasi.inc, SHA256+HMAC, no AWS SDK) replaces aws.cpp's AWS-SDK path on wasi; AUTHORIZATION_TYPE 'sigv4' + CREATE SECRET (TYPE S3, KEY_ID, SECRET, REGION) verified against a signature-recomputing mock (byte-for-byte match). Vended credentials work: a REST catalog can return S3 creds + endpoint in LoadTableResult.config (s3.access-key-id/secret-access-key/session-token/region/endpoint/path-style-access) and iceberg builds a temp S3 secret -> httpfs reads s3:// data with no global S3 settings (verified vs a moto S3). Also verified: gzip table metadata (metadata_compression_codec='gzip'), time travel (snapshot_from_id/version), snappy avro manifests. WRITES work: CREATE TABLE + INSERT through an attached catalog (ATTACH ... SUPPORT_STAGE_CREATE true) -> the avro-c writer writes manifests + DuckDB writes parquet + the extension commits via POST .../tables/{table}; verified data persists across a fresh process (101 rows). All covered by tooling/iceberg_smoke.py (make iceberg-smoke, 15 checks: reads/codecs/catalog-auth/vended-creds/writes/CTAS). UPSTREAM LIMITS (the duckdb-iceberg extension itself throws NotImplementedException, not a wasm issue): DELETE (IRCatalog::PlanDelete), UPDATE (BindUpdateConstraints), INSERT into partitioned tables, targeted-column INSERT, RETURNING/ON CONFLICT, Iceberg V3 tables, DROP CASCADE. @49d67e45."},
-    "ducklake": {"verdict": "working", "deps": "pure C++ (DuckDB SQL catalog + parquet storage), no native deps", "notes": "VERIFIED: ATTACH 'ducklake:/tmp/lake/my.ducklake' (DATA_PATH ...) + CREATE TABLE/INSERT/SELECT, parquet files written under data/main/<t>/, metadata persists across a fresh re-ATTACH (6 rows, max_id 99). Pure C++, statically linked (no DONT_LINK), INCLUDE_DIR src/include. @45788f0a."},
-    "mysql_scanner": {"verdict": "hard", "deps": "libmysqlclient + network", "notes": "transport solved by openssl-wasm; still needs libmysqlclient ported to wasi"},
-    "postgres_scanner": {"verdict": "hard", "deps": "libpq + network", "notes": "transport solved by openssl-wasm; still needs libpq ported to wasi"},
-    "aws": {"verdict": "very-hard", "deps": "AWS SDK + network", "notes": "transport solved; AWS C++ SDK is huge"},
-    "azure": {"verdict": "very-hard", "deps": "Azure SDK + network", "notes": "transport solved; Azure C++ SDK is huge"},
-    "spatial": {"verdict": "feasible-validated", "deps": "GEOS + PROJ + GDAL (+ tiff/jpeg/png/expat/sqlite/zlib)", "notes": "Re-classified from infeasible. The geo stack links + runs with our wasi-sdk: GEOS (geos-wasm libgeos_c.a/libgeos.a, computed ST_Intersection area=4.0), PROJ (proj-wasm libproj.a + libsqlite3, EPSG:4326->3857 transform correct), GDAL (gdal-wasm libgdal.a 16.5MB) -- all libc++/wasm-eh compatible. Full geo link has only ~24 external gaps, nearly all stubbable: dlopen/dlsym/fork/execvp/pipe (wasi-missing, GDAL falls back), getpid/pthread_atfork/signal/mmap (stubs), + 4 sqlite3_ (column-metadata + load_extension -> fuller sqlite or stub). REMAINING BUILD (large): gather GDAL headers (scattered in gcore/ogr/port), provide find_package CONFIG/IMPORTED targets for GDAL/PROJ/GEOS/EXPAT, patch spatial CMakeLists EMSCRIPTEN guards -> WASI (SPATIAL_USE_NETWORK OFF), build a stubs lib, merge ~10 libs into libduckdb-wasi.a, handle proj.db at runtime. @a6a607fe."},
-    "ui": {"verdict": "n/a", "deps": "embedded HTTP server", "notes": "needs inbound sockets + a browser"}
+    "inet": {
+      "verdict": "working",
+      "deps": "pure C++ INET type/functions",
+      "notes": "host()/netmask()/broadcast()/<<= + IPv6 verified (duckdb-inet @fe7f60b). CAVEAT: bare INET-typed results render empty in the CLI (duckdb_value_varchar doesn't invoke the custom INET->VARCHAR cast); use ::VARCHAR. Affects any custom type; core-marshaler follow-up."
+    },
+    "fts": {
+      "verdict": "working",
+      "deps": "snowball stemmer + BM25 + SQL macros",
+      "notes": "stem() + create_fts_index + match_bm25 verified (BM25 ranking correct). duckdb-fts @39376623, INCLUDE_DIR extension/fts/include (nested layout)."
+    },
+    "vss": {
+      "verdict": "working",
+      "deps": "pure C++ HNSW (usearch)",
+      "notes": "CREATE INDEX ... USING HNSW + array_distance NN search verified (exact match dist=0). duckdb-vss @c8a4efe, INCLUDE_DIR src/include."
+    },
+    "excel": {
+      "verdict": "deferred",
+      "deps": "C++ xlsx reader + vcpkg dep",
+      "notes": "CMakeLists find_package + vcpkg.json -> needs a vcpkg native dep built for wasi; no vcpkg toolchain. @8504be9."
+    },
+    "avro": {
+      "verdict": "working",
+      "deps": "duckdb/duckdb-avro-c fork (field-id API) + jansson + snappy, deflate+snappy codecs",
+      "notes": "VERIFIED: read_avro('manifest.avro') -> rows, with deflate, snappy AND xz-compressed manifests. Needs DuckDB's avro-c FORK (duckdb/duckdb-avro-c @8af40027) not stock apache/avro -- the extension calls avro_schema_record_field_id/avro_reader_reader/*_id (Iceberg field IDs). Built for wasi by scripts/build-wasi-deps.sh (jansson + snappy [from ~/git/snappy-wasm source] + liblzma [tukaani-project/xz] + avro-c with deflate+snappy+xz (codec.c patched: name+container); CMAKE_POLICY_VERSION_MINIMUM=3.5). merges libavro/libjansson/libsnappy/liblzma. @0c97a61."
+    },
+    "sqlite_scanner": {
+      "verdict": "working",
+      "deps": "vendored sqlite3 + WASI VFS",
+      "notes": "sqlite_scan() + ATTACH (TYPE SQLITE) read real .sqlite files. Fixed via -DSQLITE_OS_OTHER=1 + a WASI VFS reused from ~/git/sqlite-wasm (cmake/sqlite-wasi-vfs/) registered by sqlite3_os_init. @833e105."
+    },
+    "httpfs": {
+      "verdict": "working",
+      "deps": "curl-wasm (libcurl+nghttp2/ngtcp2/nghttp3+brotli) + openssl-wasm + wasip2 libc BSD sockets + wasi:sockets",
+      "notes": "VERIFIED: read_csv_auto('https://...iris.csv') -> 150 rows fetched over HTTPS via wasi:sockets + parsed (avg SepalLength 5.843). S3 works too: read_parquet('s3://ookla-open-data/...') returned 4.87M rows (set s3_region to the bucket's region; the built-in S3FileSystem signs via SigV4 over the curl client -- no separate s3-wasm component needed). Works out of the box: curl is the default client on wasi (build script patches httpfs LoadInternal; the vendored httplib client COMPILES but fails at runtime -- non-blocking connect select/poll gap -- so SET httpfs_client_implementation='httplib' is not usable on wasi). Sockets: cargo-component builds a wasip1 core module (no BSD sockets in wasip1 libc), so scripts/build-libduckdb-wasm.sh grafts the wasip2 libc socket+binding objects (socket/connect/.../wasip2.c.obj/wasip2_component_type.o) into libduckdb-wasi.a; they import wasi:sockets/io/clocks which the host grants (inherit_network + allow_ip_name_lookup). Cert verification works secure-by-default: an embedded Mozilla CA bundle (cmake/ca-bundle/cacert.pem, 121 certs) is loaded in-memory via CURLOPT_CAINFO_BLOB (the build script patches httpfs_curl_client.cpp); verified that self-signed.badssl.com is rejected + valid certs accepted, no runtime --dir needed. openssl-wasm can't load a CA *file* (its stdio/file-BIO doesn't reach the host FS that DuckDB's wrapped open/stat use), hence the in-memory blob. @354d3f43."
+    },
+    "iceberg": {
+      "verdict": "working",
+      "deps": "avro extension + roaring (CRoaring); AWS SDK skipped on wasi",
+      "notes": "VERIFIED local AND remote: iceberg_scan('table', allow_moved_paths=true) reads real Iceberg tables -> rows (metadata JSON -> avro manifest-list/manifests -> parquet data). Remote over HTTP verified end-to-end on a pyiceberg-written table (20 rows, correct aggregates) via httpfs range requests; S3 works the same way. NOTE: remote uses the manifest's file_size_in_bytes for footer ranges, so the table metadata must be consistent (the duckdb-iceberg repo's test tables have STALE sizes -> only work locally where the real file is stat'd). pyiceberg names metadata 00001-<uuid>.metadata.json (DuckDB version-guessing expects vN.metadata.json) -> pass the metadata.json path or add version-hint.text. No AWS SDK: upstream guards it behind Emscripten; build-libduckdb-wasm.sh extends those guards to WASI (CMake STREQUAL + #ifdef EMSCRIPTEN->||__wasi__) and stubs AWSInput Head/Delete/PostRequest (AWS Glue/S3Tables REST catalogs unsupported; filesystem + S3 iceberg reads work). roaring built by scripts/build-wasi-deps.sh. AutoLoadExtension(avro) so avro must be present. REST CATALOG works on wasi: ATTACH '<wh>' AS x (TYPE ICEBERG, ENDPOINT 'http://...', AUTHORIZATION_TYPE 'none') and CREATE SECRET (TYPE ICEBERG, TOKEN '...') + ATTACH (... SECRET) both verified (config/namespaces/tables/LoadTable handshake over the curl HTTPUtil; bearer token sent as Authorization: Bearer). Covers R2/Lakekeeper/Polaris/Tabular (bearer/oauth2). AWS SigV4 catalog auth (Glue/S3 Tables) also WORKS: a self-contained SigV4 signer (cmake/iceberg-wasi/aws_wasi.inc, SHA256+HMAC, no AWS SDK) replaces aws.cpp's AWS-SDK path on wasi; AUTHORIZATION_TYPE 'sigv4' + CREATE SECRET (TYPE S3, KEY_ID, SECRET, REGION) verified against a signature-recomputing mock (byte-for-byte match). Vended credentials work: a REST catalog can return S3 creds + endpoint in LoadTableResult.config (s3.access-key-id/secret-access-key/session-token/region/endpoint/path-style-access) and iceberg builds a temp S3 secret -> httpfs reads s3:// data with no global S3 settings (verified vs a moto S3). Also verified: gzip table metadata (metadata_compression_codec='gzip'), time travel (snapshot_from_id/version), snappy avro manifests. WRITES work: CREATE TABLE + INSERT through an attached catalog (ATTACH ... SUPPORT_STAGE_CREATE true) -> the avro-c writer writes manifests + DuckDB writes parquet + the extension commits via POST .../tables/{table}; verified data persists across a fresh process (101 rows). All covered by tooling/iceberg_smoke.py (make iceberg-smoke, 15 checks: reads/codecs/catalog-auth/vended-creds/writes/CTAS). UPSTREAM LIMITS (the duckdb-iceberg extension itself throws NotImplementedException, not a wasm issue): DELETE (IRCatalog::PlanDelete), UPDATE (BindUpdateConstraints), INSERT into partitioned tables, targeted-column INSERT, RETURNING/ON CONFLICT, Iceberg V3 tables, DROP CASCADE. @49d67e45."
+    },
+    "ducklake": {
+      "verdict": "working",
+      "deps": "pure C++ (DuckDB SQL catalog + parquet storage), no native deps",
+      "notes": "VERIFIED: ATTACH 'ducklake:/tmp/lake/my.ducklake' (DATA_PATH ...) + CREATE TABLE/INSERT/SELECT, parquet files written under data/main/<t>/, metadata persists across a fresh re-ATTACH (6 rows, max_id 99). Pure C++, statically linked (no DONT_LINK), INCLUDE_DIR src/include. @45788f0a."
+    },
+    "mysql_scanner": {
+      "verdict": "hard",
+      "deps": "libmysqlclient + network",
+      "notes": "transport solved by openssl-wasm; still needs libmysqlclient ported to wasi"
+    },
+    "postgres_scanner": {
+      "verdict": "hard",
+      "deps": "libpq + network",
+      "notes": "transport solved by openssl-wasm; still needs libpq ported to wasi"
+    },
+    "aws": {
+      "verdict": "very-hard",
+      "deps": "AWS SDK + network",
+      "notes": "transport solved; AWS C++ SDK is huge"
+    },
+    "azure": {
+      "verdict": "very-hard",
+      "deps": "Azure SDK + network",
+      "notes": "transport solved; Azure C++ SDK is huge"
+    },
+    "spatial": {
+      "verdict": "feasible-validated",
+      "deps": "GEOS + PROJ + GDAL (+ tiff/jpeg/png/expat/sqlite/zlib)",
+      "notes": "Re-classified from infeasible. The geo stack links + runs with our wasi-sdk: GEOS (geos-wasm libgeos_c.a/libgeos.a, computed ST_Intersection area=4.0), PROJ (proj-wasm libproj.a + libsqlite3, EPSG:4326->3857 transform correct), GDAL (gdal-wasm libgdal.a 16.5MB) -- all libc++/wasm-eh compatible. Full geo link has only ~24 external gaps, nearly all stubbable: dlopen/dlsym/fork/execvp/pipe (wasi-missing, GDAL falls back), getpid/pthread_atfork/signal/mmap (stubs), + 4 sqlite3_ (column-metadata + load_extension -> fuller sqlite or stub). REMAINING BUILD (large): gather GDAL headers (scattered in gcore/ogr/port), provide find_package CONFIG/IMPORTED targets for GDAL/PROJ/GEOS/EXPAT, patch spatial CMakeLists EMSCRIPTEN guards -> WASI (SPATIAL_USE_NETWORK OFF), build a stubs lib, merge ~10 libs into libduckdb-wasi.a, handle proj.db at runtime. @a6a607fe."
+    },
+    "ui": {
+      "verdict": "n/a",
+      "deps": "embedded HTTP server",
+      "notes": "needs inbound sockets + a browser"
+    }
   },
   "extensions": [
     {
@@ -51,10 +132,18 @@
       "version": "0.1.0",
       "description": "Reference extension exercising every capability: scalar, table, aggregate, macro, logical-type, cast, and a replacement scan.",
       "license": "MIT",
-      "authors": ["Tegmentum"],
+      "authors": [
+        "Tegmentum"
+      ],
       "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
-      "keywords": ["sample", "reference", "template"],
-      "categories": ["utility"],
+      "keywords": [
+        "sample",
+        "reference",
+        "template"
+      ],
+      "categories": [
+        "utility"
+      ],
       "source": "builtin",
       "status": "working",
       "artifact": "artifacts/extensions/sample_extension.wasm",
@@ -66,7 +155,13 @@
         "sample_id",
         "sample_read_path"
       ],
-      "requires": ["scalar", "table", "aggregate", "macro", "catalog"],
+      "requires": [
+        "scalar",
+        "table",
+        "aggregate",
+        "macro",
+        "catalog"
+      ],
       "crates": [],
       "min_duckdb_version": "1.0.0"
     },
@@ -75,15 +170,33 @@
       "version": "0.1.0",
       "description": "ISIN (ISO 6166) securities identifier validation and field extraction. Luhn check-digit over the letter-expanded body.",
       "license": "MIT",
-      "authors": ["Tegmentum"],
+      "authors": [
+        "Tegmentum"
+      ],
       "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
-      "keywords": ["isin", "validation", "securities", "finance", "iso6166"],
-      "categories": ["validators", "data-types"],
+      "keywords": [
+        "isin",
+        "validation",
+        "securities",
+        "finance",
+        "iso6166"
+      ],
+      "categories": [
+        "validators",
+        "data-types"
+      ],
       "source": "extensions/isin-component",
       "status": "working",
       "artifact": "artifacts/extensions/isin.wasm",
-      "exports": ["isin_validate", "isin_check_digit", "isin_country", "isin_nsin"],
-      "requires": ["scalar"],
+      "exports": [
+        "isin_validate",
+        "isin_check_digit",
+        "isin_country",
+        "isin_nsin"
+      ],
+      "requires": [
+        "scalar"
+      ],
       "crates": [],
       "min_duckdb_version": "1.0.0"
     },
@@ -92,77 +205,282 @@
       "version": "0.1.0",
       "description": "Compact base-N codecs: base32 (RFC 4648, no pad) and base58 (Bitcoin alphabet) for BLOB<->VARCHAR. Decode errors return NULL.",
       "license": "MIT",
-      "authors": ["Tegmentum"],
+      "authors": [
+        "Tegmentum"
+      ],
       "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
-      "keywords": ["base32", "base58", "encoding", "codec", "bitcoin"],
-      "categories": ["encoding"],
+      "keywords": [
+        "base32",
+        "base58",
+        "encoding",
+        "codec",
+        "bitcoin"
+      ],
+      "categories": [
+        "encoding"
+      ],
       "source": "extensions/baseN-component",
       "status": "working",
       "artifact": "artifacts/extensions/baseN.wasm",
-      "exports": ["base32_encode", "base32_decode", "base58_encode", "base58_decode"],
-      "requires": ["scalar"],
-      "crates": ["base32", "bs58"],
+      "exports": [
+        "base32_encode",
+        "base32_decode",
+        "base58_encode",
+        "base58_decode"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "base32",
+        "bs58"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "luhn",
+      "version": "0.1.0",
+      "description": "Luhn (mod-10) checksum: validate a number and compute its check digit.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "luhn",
+        "checksum",
+        "mod10",
+        "validation"
+      ],
+      "categories": [
+        "validators"
+      ],
+      "source": "extensions/luhn-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/luhn.wasm",
+      "exports": [
+        "luhn_validate",
+        "luhn_check_digit"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
       "min_duckdb_version": "1.0.0"
     },
     {
       "name": "iban",
-      "version": "0.0.0",
-      "description": "IBAN (ISO 13616) validation + country/BBAN extraction (mod-97).",
-      "categories": ["validators"],
-      "status": "planned",
-      "exports": ["iban_validate", "iban_country", "iban_bban"],
-      "requires": ["scalar"],
-      "crates": []
+      "version": "0.1.0",
+      "description": "IBAN (ISO 13616) validation + country/BBAN extraction via the mod-97 check.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "iban",
+        "validation",
+        "banking",
+        "finance",
+        "iso13616"
+      ],
+      "categories": [
+        "validators",
+        "data-types"
+      ],
+      "source": "extensions/iban-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/iban.wasm",
+      "exports": [
+        "iban_validate",
+        "iban_country",
+        "iban_bban"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "ean",
+      "version": "0.1.0",
+      "description": "EAN-8/EAN-13/UPC-A barcode validation and check-digit computation.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "ean",
+        "upc",
+        "barcode",
+        "validation",
+        "gtin"
+      ],
+      "categories": [
+        "validators"
+      ],
+      "source": "extensions/ean-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/ean.wasm",
+      "exports": [
+        "ean_validate",
+        "ean_check_digit"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "aba",
+      "version": "0.1.0",
+      "description": "ABA routing-number (US) checksum validation.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "aba",
+        "routing",
+        "banking",
+        "validation"
+      ],
+      "categories": [
+        "validators"
+      ],
+      "source": "extensions/aba-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/aba.wasm",
+      "exports": [
+        "aba_validate"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
     },
     {
       "name": "creditcard",
-      "version": "0.0.0",
-      "description": "Payment card number validation (Luhn) + network detection (Visa/MC/Amex/...).",
-      "categories": ["validators"],
-      "status": "planned",
-      "exports": ["cc_validate", "cc_network"],
-      "requires": ["scalar"],
-      "crates": []
+      "version": "0.1.0",
+      "description": "Credit-card number validation (Luhn) and network detection (Visa/Mastercard/Amex/Discover/...).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "creditcard",
+        "luhn",
+        "payment",
+        "validation"
+      ],
+      "categories": [
+        "validators"
+      ],
+      "source": "extensions/creditcard-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/creditcard.wasm",
+      "exports": [
+        "cc_validate",
+        "cc_network"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
     },
     {
       "name": "uuid-extras",
       "version": "0.0.0",
       "description": "UUID v7 generation + parse/extract helpers (DuckDB ships v4 + gen_random_uuid).",
-      "categories": ["data-types"],
+      "categories": [
+        "data-types"
+      ],
       "status": "planned",
-      "exports": ["uuid_v7", "uuid_version", "uuid_timestamp"],
-      "requires": ["scalar"],
-      "crates": ["uuid"]
+      "exports": [
+        "uuid_v7",
+        "uuid_version",
+        "uuid_timestamp"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "uuid"
+      ]
     },
     {
       "name": "crypto",
       "version": "0.0.0",
       "description": "Hash digests beyond DuckDB's md5/sha256: sha1, sha512, sha3, blake3, crc32.",
-      "categories": ["cryptography"],
+      "categories": [
+        "cryptography"
+      ],
       "status": "planned",
-      "exports": ["sha1", "sha512", "sha3_256", "blake3", "crc32"],
-      "requires": ["scalar"],
-      "crates": ["sha1", "sha2", "sha3", "blake3", "crc32fast"]
+      "exports": [
+        "sha1",
+        "sha512",
+        "sha3_256",
+        "blake3",
+        "crc32"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "sha1",
+        "sha2",
+        "sha3",
+        "blake3",
+        "crc32fast"
+      ]
     },
     {
       "name": "case",
       "version": "0.0.0",
       "description": "Identifier case conversions: snake/camel/pascal/kebab/title.",
-      "categories": ["text-processing"],
+      "categories": [
+        "text-processing"
+      ],
       "status": "planned",
-      "exports": ["to_snake_case", "to_camel_case", "to_pascal_case", "to_kebab_case"],
-      "requires": ["scalar"],
-      "crates": ["heck"]
+      "exports": [
+        "to_snake_case",
+        "to_camel_case",
+        "to_pascal_case",
+        "to_kebab_case"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "heck"
+      ]
     },
     {
       "name": "csscolor",
       "version": "0.0.0",
       "description": "CSS color parsing + format conversion (hex/rgb/hsl/named).",
-      "categories": ["data-types"],
+      "categories": [
+        "data-types"
+      ],
       "status": "planned",
-      "exports": ["css_parse", "css_to_rgb", "css_to_hex"],
-      "requires": ["scalar"],
-      "crates": ["csscolorparser"]
+      "exports": [
+        "css_parse",
+        "css_to_rgb",
+        "css_to_hex"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "csscolorparser"
+      ]
     }
   ],
   "categories": {

@@ -1,0 +1,13 @@
+# Expected output for extensions/iban-component/smoke.sql (reviewed).
+gb_valid
+true
+de_valid
+true
+bad_check
+false
+junk
+false
+gb_country
+GB
+gb_bban
+WEST12345698765432
