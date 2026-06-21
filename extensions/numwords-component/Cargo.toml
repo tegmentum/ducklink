@@ -1,0 +1,24 @@
+[package]
+name = "numwords-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Spell out numbers in English
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+num2words = "*"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

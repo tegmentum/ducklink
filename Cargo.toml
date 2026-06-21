@@ -50,6 +50,10 @@ members = [
     "extensions/ipaddr-component",
     "extensions/mime-component",
     "extensions/pluralize-component",
+    "extensions/haversine-component",
+    "extensions/numwords-component",
+    "extensions/ordinal-component",
+    "extensions/nato-component",
 ]
 
 resolver = "2"

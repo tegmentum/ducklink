@@ -1572,6 +1572,130 @@
         "pluralizer"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "haversine",
+      "version": "0.1.0",
+      "description": "Great-circle distance (hand-rolled Haversine): haversine_km / haversine_mi (lat1,lon1,lat2,lon2). DuckDB core has no distance fn. NULL arg -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "haversine",
+        "distance",
+        "geo",
+        "great-circle"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/haversine-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/haversine.wasm",
+      "exports": [
+        "haversine_km",
+        "haversine_mi"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "numwords",
+      "version": "0.1.0",
+      "description": "Spell out numbers (num2words): num_to_words(n) -> cardinal English, num_to_ordinal_words(n) -> ordinal words. NULL -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "number",
+        "words",
+        "spell",
+        "cardinal"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/numwords-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/numwords.wasm",
+      "exports": [
+        "num_to_words",
+        "num_to_ordinal_words"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "num2words"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "ordinal",
+      "version": "0.1.0",
+      "description": "Ordinal formatting (hand-rolled): ordinal(n) -> '1st','2nd','3rd','11th','21st'. Handles the 11-13 exception and negatives. NULL -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "ordinal",
+        "number",
+        "suffix",
+        "format"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/ordinal-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/ordinal.wasm",
+      "exports": [
+        "ordinal"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "nato",
+      "version": "0.1.0",
+      "description": "NATO phonetic alphabet (hand-rolled): nato(text) spells letters as Alfa/Bravo/... and digits as One/Two/... joined by spaces.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "nato",
+        "phonetic",
+        "alphabet",
+        "spelling"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/nato-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/nato.wasm",
+      "exports": [
+        "nato"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {
