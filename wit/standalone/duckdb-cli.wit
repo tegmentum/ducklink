@@ -12,9 +12,20 @@ use wasi:filesystem/types@0.2.6;
 /// Host-provided dispatch for pluggable dot-command components. The CLI routes
 /// an unknown `.NAME args` here; the host invokes the owning component.
 interface dotcmd-host {
-    /// ok(some(text)) = handled, print `text`; ok(none) = no such dot command
-    /// (CLI falls back to its built-ins); err(message) = handled but failed.
-    invoke: func(name: string, args: string) -> result<option<string>, string>;
+    /// A session-state change for the CLI to apply (e.g. key "display/mode",
+    /// value "json"). Unknown keys are ignored.
+    record state-delta {
+        key: string,
+        value: string,
+    }
+    /// A handled dot command's result: text to print + state to apply.
+    record outcome {
+        text: string,
+        state-deltas: list<state-delta>,
+    }
+    /// ok(some(outcome)) = handled; ok(none) = no such dot command (CLI falls
+    /// back to its built-ins); err(message) = handled but failed.
+    invoke: func(name: string, args: string) -> result<option<outcome>, string>;
 }
 
 world duckdb-cli {

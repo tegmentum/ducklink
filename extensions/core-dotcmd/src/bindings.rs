@@ -129,6 +129,42 @@ pub mod exports {
                             .finish()
                     }
                 }
+                /// A change to the CLI's session state, applied after the command returns.
+                /// `key` is slash-namespaced (e.g. "display/mode"); unknown keys are ignored.
+                /// `value` is text the CLI parses per key.
+                #[derive(Clone)]
+                pub struct StateDelta {
+                    pub key: _rt::String,
+                    pub value: _rt::String,
+                }
+                impl ::core::fmt::Debug for StateDelta {
+                    fn fmt(
+                        &self,
+                        f: &mut ::core::fmt::Formatter<'_>,
+                    ) -> ::core::fmt::Result {
+                        f.debug_struct("StateDelta")
+                            .field("key", &self.key)
+                            .field("value", &self.value)
+                            .finish()
+                    }
+                }
+                /// What `invoke` returns: text to print plus session-state changes.
+                #[derive(Clone)]
+                pub struct InvokeResult {
+                    pub text: _rt::String,
+                    pub state_deltas: _rt::Vec<StateDelta>,
+                }
+                impl ::core::fmt::Debug for InvokeResult {
+                    fn fmt(
+                        &self,
+                        f: &mut ::core::fmt::Formatter<'_>,
+                    ) -> ::core::fmt::Result {
+                        f.debug_struct("InvokeResult")
+                            .field("text", &self.text)
+                            .field("state-deltas", &self.state_deltas)
+                            .finish()
+                    }
+                }
                 #[doc(hidden)]
                 #[allow(non_snake_case)]
                 pub unsafe fn _export_list_commands_cabi<T: Guest>() -> *mut u8 {
@@ -250,20 +286,11 @@ pub mod exports {
                     match result1 {
                         Ok(e) => {
                             *ptr2.add(0).cast::<u8>() = (0i32) as u8;
-                            let vec3 = (e.into_bytes()).into_boxed_slice();
-                            let ptr3 = vec3.as_ptr().cast::<u8>();
-                            let len3 = vec3.len();
-                            ::core::mem::forget(vec3);
-                            *ptr2
-                                .add(2 * ::core::mem::size_of::<*const u8>())
-                                .cast::<usize>() = len3;
-                            *ptr2
-                                .add(::core::mem::size_of::<*const u8>())
-                                .cast::<*mut u8>() = ptr3.cast_mut();
-                        }
-                        Err(e) => {
-                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
-                            let vec4 = (e.into_bytes()).into_boxed_slice();
+                            let InvokeResult {
+                                text: text3,
+                                state_deltas: state_deltas3,
+                            } = e;
+                            let vec4 = (text3.into_bytes()).into_boxed_slice();
                             let ptr4 = vec4.as_ptr().cast::<u8>();
                             let len4 = vec4.len();
                             ::core::mem::forget(vec4);
@@ -273,6 +300,65 @@ pub mod exports {
                             *ptr2
                                 .add(::core::mem::size_of::<*const u8>())
                                 .cast::<*mut u8>() = ptr4.cast_mut();
+                            let vec8 = state_deltas3;
+                            let len8 = vec8.len();
+                            let layout8 = _rt::alloc::Layout::from_size_align_unchecked(
+                                vec8.len() * (4 * ::core::mem::size_of::<*const u8>()),
+                                ::core::mem::size_of::<*const u8>(),
+                            );
+                            let result8 = if layout8.size() != 0 {
+                                let ptr = _rt::alloc::alloc(layout8).cast::<u8>();
+                                if ptr.is_null() {
+                                    _rt::alloc::handle_alloc_error(layout8);
+                                }
+                                ptr
+                            } else {
+                                ::core::ptr::null_mut()
+                            };
+                            for (i, e) in vec8.into_iter().enumerate() {
+                                let base = result8
+                                    .add(i * (4 * ::core::mem::size_of::<*const u8>()));
+                                {
+                                    let StateDelta { key: key5, value: value5 } = e;
+                                    let vec6 = (key5.into_bytes()).into_boxed_slice();
+                                    let ptr6 = vec6.as_ptr().cast::<u8>();
+                                    let len6 = vec6.len();
+                                    ::core::mem::forget(vec6);
+                                    *base
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len6;
+                                    *base.add(0).cast::<*mut u8>() = ptr6.cast_mut();
+                                    let vec7 = (value5.into_bytes()).into_boxed_slice();
+                                    let ptr7 = vec7.as_ptr().cast::<u8>();
+                                    let len7 = vec7.len();
+                                    ::core::mem::forget(vec7);
+                                    *base
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len7;
+                                    *base
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr7.cast_mut();
+                                }
+                            }
+                            *ptr2
+                                .add(4 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len8;
+                            *ptr2
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = result8;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec9 = (e.into_bytes()).into_boxed_slice();
+                            let ptr9 = vec9.as_ptr().cast::<u8>();
+                            let len9 = vec9.len();
+                            ::core::mem::forget(vec9);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len9;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr9.cast_mut();
                         }
                     };
                     ptr2
@@ -290,15 +376,46 @@ pub mod exports {
                                 .add(2 * ::core::mem::size_of::<*const u8>())
                                 .cast::<usize>();
                             _rt::cabi_dealloc(l1, l2, 1);
-                        }
-                        _ => {
                             let l3 = *arg0
-                                .add(::core::mem::size_of::<*const u8>())
+                                .add(3 * ::core::mem::size_of::<*const u8>())
                                 .cast::<*mut u8>();
                             let l4 = *arg0
+                                .add(4 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base9 = l3;
+                            let len9 = l4;
+                            for i in 0..len9 {
+                                let base = base9
+                                    .add(i * (4 * ::core::mem::size_of::<*const u8>()));
+                                {
+                                    let l5 = *base.add(0).cast::<*mut u8>();
+                                    let l6 = *base
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l5, l6, 1);
+                                    let l7 = *base
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l8 = *base
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l7, l8, 1);
+                                }
+                            }
+                            _rt::cabi_dealloc(
+                                base9,
+                                len9 * (4 * ::core::mem::size_of::<*const u8>()),
+                                ::core::mem::size_of::<*const u8>(),
+                            );
+                        }
+                        _ => {
+                            let l10 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l11 = *arg0
                                 .add(2 * ::core::mem::size_of::<*const u8>())
                                 .cast::<usize>();
-                            _rt::cabi_dealloc(l3, l4, 1);
+                            _rt::cabi_dealloc(l10, l11, 1);
                         }
                     }
                 }
@@ -306,11 +423,11 @@ pub mod exports {
                     /// Declare the dot commands this component provides.
                     fn list_commands() -> _rt::Vec<CommandSpec>;
                     /// Run command `id` with the raw argument string (everything after the
-                    /// command name, trimmed). Returns the text to print, or an error message.
+                    /// command name, trimmed). Returns the result, or an error message.
                     fn invoke(
                         id: u64,
                         args: _rt::String,
-                    ) -> Result<_rt::String, _rt::String>;
+                    ) -> Result<InvokeResult, _rt::String>;
                 }
                 #[doc(hidden)]
                 macro_rules! __export_duckdb_dotcmd_registry_0_1_0_cabi {
@@ -340,10 +457,10 @@ pub mod exports {
                 struct _RetArea(
                     [::core::mem::MaybeUninit<
                         u8,
-                    >; 3 * ::core::mem::size_of::<*const u8>()],
+                    >; 5 * ::core::mem::size_of::<*const u8>()],
                 );
                 static mut _RET_AREA: _RetArea = _RetArea(
-                    [::core::mem::MaybeUninit::uninit(); 3
+                    [::core::mem::MaybeUninit::uninit(); 5
                         * ::core::mem::size_of::<*const u8>()],
                 );
             }
@@ -442,15 +559,17 @@ pub(crate) use __export_dotcmd_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 360] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xeb\x01\x01A\x02\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 437] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xb8\x02\x01A\x02\x01\
 A\x04\x01B\x03\x01j\x01s\x01s\x01@\x01\x03sqls\0\0\x04\0\x05query\x01\x01\x03\0\x17\
-duckdb:dotcmd/spi@0.1.0\x05\0\x01B\x08\x01r\x04\x02idw\x04names\x07summarys\x05u\
-sages\x04\0\x0ccommand-spec\x03\0\0\x01p\x01\x01@\0\0\x02\x04\0\x0dlist-commands\
-\x01\x03\x01j\x01s\x01s\x01@\x02\x02idw\x04argss\0\x04\x04\0\x06invoke\x01\x05\x04\
-\0\x1cduckdb:dotcmd/registry@0.1.0\x05\x01\x04\0\x1aduckdb:dotcmd/dotcmd@0.1.0\x04\
-\0\x0b\x0c\x01\0\x06dotcmd\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwi\
-t-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
+duckdb:dotcmd/spi@0.1.0\x05\0\x01B\x0d\x01r\x04\x02idw\x04names\x07summarys\x05u\
+sages\x04\0\x0ccommand-spec\x03\0\0\x01r\x02\x03keys\x05values\x04\0\x0bstate-de\
+lta\x03\0\x02\x01p\x03\x01r\x02\x04texts\x0cstate-deltas\x04\x04\0\x0dinvoke-res\
+ult\x03\0\x05\x01p\x01\x01@\0\0\x07\x04\0\x0dlist-commands\x01\x08\x01j\x01\x06\x01\
+s\x01@\x02\x02idw\x04argss\0\x09\x04\0\x06invoke\x01\x0a\x04\0\x1cduckdb:dotcmd/\
+registry@0.1.0\x05\x01\x04\0\x1aduckdb:dotcmd/dotcmd@0.1.0\x04\0\x0b\x0c\x01\0\x06\
+dotcmd\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227\
+.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

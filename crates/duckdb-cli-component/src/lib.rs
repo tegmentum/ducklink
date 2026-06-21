@@ -249,11 +249,34 @@ fn run_meta_command(conn: &duckdb::Connection, rest: &str) -> Result<(), String>
                 .unwrap_or("")
                 .trim();
             match bindings::duckdb::cli::dotcmd_host::invoke(other, args) {
-                Ok(Some(text)) => write_all(&stdout::get_stdout(), text.as_bytes()),
+                Ok(Some(outcome)) => {
+                    for delta in &outcome.state_deltas {
+                        apply_state_delta(&delta.key, &delta.value);
+                    }
+                    if outcome.text.is_empty() {
+                        Ok(())
+                    } else {
+                        write_all(&stdout::get_stdout(), outcome.text.as_bytes())
+                    }
+                }
                 Ok(None) => Err(format!("unknown command: .{other} (try .help)")),
                 Err(message) => Err(message),
             }
         }
+    }
+}
+
+/// Apply a session-state delta emitted by a dot-command component. Slash-
+/// namespaced keys; unknown keys/values are silently ignored (forward-compatible).
+fn apply_state_delta(key: &str, value: &str) {
+    if key == "display/mode" {
+        let mode = match value.to_ascii_lowercase().as_str() {
+            "csv" => OutputMode::Csv,
+            "json" => OutputMode::Json,
+            "table" | "box" | "column" => OutputMode::Table,
+            _ => return,
+        };
+        OUTPUT_MODE.with(|m| m.set(mode));
     }
 }
 

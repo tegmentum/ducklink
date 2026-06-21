@@ -890,9 +890,14 @@ impl DotcmdRegistry {
         Ok((DotcmdInstance { store, bindings }, specs))
     }
 
-    /// Invoke `.name args`. None = no registered command by that name; the CLI
-    /// then falls back to its built-in handling.
-    fn invoke(&mut self, name: &str, args: &str) -> Option<Result<String, String>> {
+    /// Invoke `.name args`. None = no registered command by that name (the CLI
+    /// then falls back to its built-ins). Ok = (text-to-print, state-deltas as
+    /// (key,value) pairs); Err = a graceful error message.
+    fn invoke(
+        &mut self,
+        name: &str,
+        args: &str,
+    ) -> Option<Result<(String, Vec<(String, String)>), String>> {
         let (idx, id) = *self.by_name.get(&name.to_ascii_lowercase())?;
         let inst = &mut self.components[idx];
         Some(
@@ -901,7 +906,15 @@ impl DotcmdRegistry {
                 .duckdb_dotcmd_registry()
                 .call_invoke(&mut inst.store, id, args)
             {
-                Ok(r) => r,
+                Ok(Ok(result)) => Ok((
+                    result.text,
+                    result
+                        .state_deltas
+                        .into_iter()
+                        .map(|d| (d.key, d.value))
+                        .collect(),
+                )),
+                Ok(Err(message)) => Err(message),
                 Err(trap) => Err(format!("dot-command '{name}' trapped: {trap}")),
             },
         )
@@ -915,6 +928,25 @@ fn dotcmd_root() -> PathBuf {
         .get()
         .and_then(|p| p.parent().map(|d| d.join("dotcmds")))
         .unwrap_or_else(|| workspace_root().join("artifacts/dotcmds"))
+}
+
+/// Build the CLI-facing dotcmd outcome (text + state-deltas) the func_wrap returns.
+fn make_cli_outcome(
+    text: String,
+    deltas: Vec<(String, String)>,
+) -> duckdb_cli_bindings::duckdb::cli::dotcmd_host::Outcome {
+    duckdb_cli_bindings::duckdb::cli::dotcmd_host::Outcome {
+        text,
+        state_deltas: deltas
+            .into_iter()
+            .map(
+                |(key, value)| duckdb_cli_bindings::duckdb::cli::dotcmd_host::StateDelta {
+                    key,
+                    value,
+                },
+            )
+            .collect(),
+    }
 }
 
 struct ExtensionManager {
@@ -4010,7 +4042,7 @@ impl CliHarness {
                         registry.lock().expect("dotcmd registry mutex poisoned");
                     let result = match registry.invoke(&name, &args) {
                         None => Ok(None),
-                        Some(Ok(text)) => Ok(Some(text)),
+                        Some(Ok((text, deltas))) => Ok(Some(make_cli_outcome(text, deltas))),
                         Some(Err(message)) => Err(message),
                     };
                     Ok((result,))
@@ -4144,7 +4176,7 @@ pub fn run_cli_with_stdio(
                 let mut registry = registry.lock().expect("dotcmd registry mutex poisoned");
                 let result = match registry.invoke(&name, &args) {
                     None => Ok(None),
-                    Some(Ok(text)) => Ok(Some(text)),
+                    Some(Ok((text, deltas))) => Ok(Some(make_cli_outcome(text, deltas))),
                     Some(Err(message)) => Err(message),
                 };
                 Ok((result,))

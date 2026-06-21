@@ -23,11 +23,23 @@ interface registry {
         /// Usage hint, e.g. "count TABLE".
         usage: string,
     }
+    /// A change to the CLI's session state, applied after the command returns.
+    /// `key` is slash-namespaced (e.g. "display/mode"); unknown keys are ignored.
+    /// `value` is text the CLI parses per key.
+    record state-delta {
+        key: string,
+        value: string,
+    }
+    /// What `invoke` returns: text to print plus session-state changes.
+    record invoke-result {
+        text: string,
+        state-deltas: list<state-delta>,
+    }
     /// Declare the dot commands this component provides.
     list-commands: func() -> list<command-spec>;
     /// Run command `id` with the raw argument string (everything after the
-    /// command name, trimmed). Returns the text to print, or an error message.
-    invoke: func(id: u64, args: string) -> result<string, string>;
+    /// command name, trimmed). Returns the result, or an error message.
+    invoke: func(id: u64, args: string) -> result<invoke-result, string>;
 }
 
 world dotcmd {
