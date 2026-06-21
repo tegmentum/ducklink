@@ -5283,6 +5283,23 @@ unsafe fn marshal_result(
                 row.push(Duckvalue::Null);
                 continue;
             }
+            // BLOB columns must be read as raw bytes -- duckdb_value_varchar
+            // would render them as DuckDB's "\xNN" escape text and corrupt
+            // binary payloads (e.g. the registry site's .wasm/.png assets).
+            if type_ids[col_idx as usize] == duckdb::DUCKDB_TYPE_BLOB {
+                let blob = duckdb::duckdb_value_blob(result_mut, col_idx, row_idx);
+                let bytes = if blob.data.is_null() || blob.size == 0 {
+                    Vec::new()
+                } else {
+                    let slice =
+                        std::slice::from_raw_parts(blob.data as *const u8, blob.size as usize);
+                    let owned = slice.to_vec();
+                    duckdb::duckdb_free(blob.data);
+                    owned
+                };
+                row.push(Duckvalue::Blob(bytes));
+                continue;
+            }
             let value_ptr = duckdb::duckdb_value_varchar(result_mut, col_idx, row_idx);
             let text = if value_ptr.is_null() {
                 String::new()
@@ -5314,6 +5331,7 @@ fn marshal_logical_for_type(type_id: duckdb::duckdb_type) -> Logicaltype {
         | duckdb::DUCKDB_TYPE_UINTEGER
         | duckdb::DUCKDB_TYPE_UBIGINT => Logicaltype::Uint64,
         duckdb::DUCKDB_TYPE_FLOAT | duckdb::DUCKDB_TYPE_DOUBLE => Logicaltype::Float64,
+        duckdb::DUCKDB_TYPE_BLOB => Logicaltype::Blob,
         _ => Logicaltype::Text,
     }
 }

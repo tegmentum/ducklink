@@ -276,6 +276,8 @@ extern "C" {
 
     pub fn duckdb_value_varchar(result: *mut duckdb_result, col: idx_t, row: idx_t) -> *mut c_char;
 
+    pub fn duckdb_value_blob(result: *mut duckdb_result, col: idx_t, row: idx_t) -> duckdb_blob;
+
     pub fn duckdb_free(ptr: *mut c_void);
 
     pub fn duckdb_create_scalar_function() -> duckdb_scalar_function;
