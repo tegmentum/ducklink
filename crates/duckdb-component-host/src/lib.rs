@@ -815,9 +815,16 @@ pub struct DotcmdRegistry {
     components: Vec<DotcmdInstance>,
     /// lowercased command name -> (component index, command id)
     by_name: HashMap<String, (usize, u64)>,
+    /// (name, summary, usage) for every command, sorted by name — for `.help`.
+    infos: Vec<(String, String, String)>,
 }
 
 impl DotcmdRegistry {
+    /// Every registered command (name, summary, usage), sorted by name.
+    fn list_commands(&self) -> Vec<(String, String, String)> {
+        self.infos.clone()
+    }
+
     /// Load every `*.wasm` dot-command component in `dir` (missing dir = empty).
     /// `core` + `current_connection` back the spi import (SQL on the live conn).
     fn load(
@@ -828,6 +835,7 @@ impl DotcmdRegistry {
     ) -> Self {
         let mut components = Vec::new();
         let mut by_name = HashMap::new();
+        let mut infos: Vec<(String, String, String)> = Vec::new();
         let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
             .into_iter()
             .flatten()
@@ -840,9 +848,12 @@ impl DotcmdRegistry {
             match Self::load_one(engine, &path, core.clone(), current_connection.clone()) {
                 Ok((inst, specs)) => {
                     let idx = components.len();
-                    let names: Vec<String> = specs.iter().map(|(n, _)| n.clone()).collect();
-                    for (name, id) in specs {
-                        by_name.entry(name.to_ascii_lowercase()).or_insert((idx, id));
+                    let names: Vec<String> = specs.iter().map(|(n, ..)| n.clone()).collect();
+                    for (name, id, summary, usage) in specs {
+                        by_name
+                            .entry(name.to_ascii_lowercase())
+                            .or_insert((idx, id));
+                        infos.push((name, summary, usage));
                     }
                     eprintln!(
                         "[dotcmd] loaded {} -> .{}",
@@ -854,7 +865,8 @@ impl DotcmdRegistry {
                 Err(err) => eprintln!("[dotcmd] failed to load {}: {err:?}", path.display()),
             }
         }
-        Self { components, by_name }
+        infos.sort();
+        Self { components, by_name, infos }
     }
 
     fn load_one(
@@ -862,7 +874,7 @@ impl DotcmdRegistry {
         path: &Path,
         core: Arc<Mutex<CoreExecution>>,
         current_connection: Arc<Mutex<Option<ResourceAny>>>,
-    ) -> wasmtime::Result<(DotcmdInstance, Vec<(String, u64)>)> {
+    ) -> wasmtime::Result<(DotcmdInstance, Vec<(String, u64, String, String)>)> {
         let component = load_component(engine, path)?;
         let mut linker = Linker::<DotcmdState>::new(engine);
         p2::add_to_linker_sync(&mut linker)?;
@@ -885,7 +897,7 @@ impl DotcmdRegistry {
             .duckdb_dotcmd_registry()
             .call_list_commands(&mut store)?
             .into_iter()
-            .map(|s| (s.name, s.id))
+            .map(|s| (s.name, s.id, s.summary, s.usage))
             .collect();
         Ok((DotcmdInstance { store, bindings }, specs))
     }
@@ -928,6 +940,25 @@ fn dotcmd_root() -> PathBuf {
         .get()
         .and_then(|p| p.parent().map(|d| d.join("dotcmds")))
         .unwrap_or_else(|| workspace_root().join("artifacts/dotcmds"))
+}
+
+/// Snapshot all registered dot commands as CLI `command-info` records (for `.help`).
+fn cli_command_infos(
+    store: &StoreContextMut<'_, HostState>,
+) -> Vec<duckdb_cli_bindings::duckdb::cli::dotcmd_host::CommandInfo> {
+    let registry = store.data().dotcmd_registry.clone();
+    let registry = registry.lock().expect("dotcmd registry mutex poisoned");
+    registry
+        .list_commands()
+        .into_iter()
+        .map(
+            |(name, summary, usage)| duckdb_cli_bindings::duckdb::cli::dotcmd_host::CommandInfo {
+                name,
+                summary,
+                usage,
+            },
+        )
+        .collect()
 }
 
 /// Build the CLI-facing dotcmd outcome (text + state-deltas) the func_wrap returns.
@@ -4032,22 +4063,24 @@ impl CliHarness {
 
         // The CLI routes an unknown `.NAME args` here; the host invokes the
         // owning pluggable dot-command component and returns its output.
-        linker
-            .instance("duckdb:cli/dotcmd-host")?
-            .func_wrap(
-                "invoke",
-                |store: StoreContextMut<'_, HostState>, (name, args): (String, String)| {
-                    let registry = store.data().dotcmd_registry.clone();
-                    let mut registry =
-                        registry.lock().expect("dotcmd registry mutex poisoned");
-                    let result = match registry.invoke(&name, &args) {
-                        None => Ok(None),
-                        Some(Ok((text, deltas))) => Ok(Some(make_cli_outcome(text, deltas))),
-                        Some(Err(message)) => Err(message),
-                    };
-                    Ok((result,))
-                },
-            )?;
+        let mut dotcmd_host = linker.instance("duckdb:cli/dotcmd-host")?;
+        dotcmd_host.func_wrap(
+            "invoke",
+            |store: StoreContextMut<'_, HostState>, (name, args): (String, String)| {
+                let registry = store.data().dotcmd_registry.clone();
+                let mut registry = registry.lock().expect("dotcmd registry mutex poisoned");
+                let result = match registry.invoke(&name, &args) {
+                    None => Ok(None),
+                    Some(Ok((text, deltas))) => Ok(Some(make_cli_outcome(text, deltas))),
+                    Some(Err(message)) => Err(message),
+                };
+                Ok((result,))
+            },
+        )?;
+        dotcmd_host.func_wrap(
+            "list-commands",
+            |store: StoreContextMut<'_, HostState>, (): ()| Ok((cli_command_infos(&store),)),
+        )?;
 
         let cli_component =
             load_component(&engine, &artifacts.cli_component).with_context(|| {
@@ -4167,21 +4200,24 @@ pub fn run_cli_with_stdio(
                     .map(|handled| (handled,))
             },
         )?;
-    linker
-        .instance("duckdb:cli/dotcmd-host")?
-        .func_wrap(
-            "invoke",
-            |store: StoreContextMut<'_, HostState>, (name, args): (String, String)| {
-                let registry = store.data().dotcmd_registry.clone();
-                let mut registry = registry.lock().expect("dotcmd registry mutex poisoned");
-                let result = match registry.invoke(&name, &args) {
-                    None => Ok(None),
-                    Some(Ok((text, deltas))) => Ok(Some(make_cli_outcome(text, deltas))),
-                    Some(Err(message)) => Err(message),
-                };
-                Ok((result,))
-            },
-        )?;
+    let mut dotcmd_host = linker.instance("duckdb:cli/dotcmd-host")?;
+    dotcmd_host.func_wrap(
+        "invoke",
+        |store: StoreContextMut<'_, HostState>, (name, args): (String, String)| {
+            let registry = store.data().dotcmd_registry.clone();
+            let mut registry = registry.lock().expect("dotcmd registry mutex poisoned");
+            let result = match registry.invoke(&name, &args) {
+                None => Ok(None),
+                Some(Ok((text, deltas))) => Ok(Some(make_cli_outcome(text, deltas))),
+                Some(Err(message)) => Err(message),
+            };
+            Ok((result,))
+        },
+    )?;
+    dotcmd_host.func_wrap(
+        "list-commands",
+        |store: StoreContextMut<'_, HostState>, (): ()| Ok((cli_command_infos(&store),)),
+    )?;
 
     let cli_component =
         load_component(&engine, &artifacts.cli_component).with_context(|| {

@@ -26,6 +26,15 @@ interface dotcmd-host {
     /// ok(some(outcome)) = handled; ok(none) = no such dot command (CLI falls
     /// back to its built-ins); err(message) = handled but failed.
     invoke: func(name: string, args: string) -> result<option<outcome>, string>;
+
+    /// One registered dot command, for `.help`.
+    record command-info {
+        name: string,
+        summary: string,
+        usage: string,
+    }
+    /// Every dot command across all loaded components, sorted by name.
+    list-commands: func() -> list<command-info>;
 }
 
 world duckdb-cli {

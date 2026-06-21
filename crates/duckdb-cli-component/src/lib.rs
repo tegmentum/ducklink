@@ -555,10 +555,7 @@ fn print_help() {
     );
     let _ = write_line(
         &out,
-        "Meta-commands:\n  \
-         .tables [LIKE]      List tables (optionally matching a LIKE pattern)\n  \
-         .schema [TABLE]     Show CREATE statements (optionally for one table)\n  \
-         .indexes [TABLE]    List indexes (optionally for one table)\n  \
+        "Built-in meta-commands:\n  \
          .import FILE TABLE  Load a CSV file into an existing table\n  \
          .read FILE          Execute SQL statements from a file\n  \
          .mode FORMAT        Set output format: table, csv, or json\n  \
@@ -566,6 +563,15 @@ fn print_help() {
          .help               Show this help\n  \
          .exit, .quit        Leave the shell",
     );
+    // Pluggable dot commands provided by loaded dot-command components
+    // (.tables / .schema / etc. now live in core-dotcmd).
+    let commands = bindings::duckdb::cli::dotcmd_host::list_commands();
+    if !commands.is_empty() {
+        let _ = write_line(&out, "\nPlugin dot commands:");
+        for c in &commands {
+            let _ = write_line(&out, &format!("  .{:<18}{}", c.usage, c.summary));
+        }
+    }
 }
 
 fn duckerror_to_string(err: duckdb::Duckerror) -> String {
