@@ -126,6 +126,38 @@
       "notes": "needs inbound sockets + a browser"
     }
   },
+  "community": {
+    "_comment": "DuckDB Community Extensions (github.com/duckdb/community-extensions) ported to wasm32-wasip2: statically compiled against libduckdb-wasi at their `andium` (DuckDB 1.4) ref + embedded via EMBED_EXTENSIONS. See docs/duckdb-community-extensions.md for the full feasibility triage (262 total).",
+    "read_lines": {
+      "verdict": "working",
+      "repo": "teaguesterling/duckdb_read_lines",
+      "ref": "8075509bc21b936c228879ada22c8a46657109aa",
+      "exports": [
+        "read_lines",
+        "read_lines_lateral"
+      ],
+      "notes": "read_lines('file') table function -> (line_number, content, byte_offset, file_path). Verified on wasi."
+    },
+    "func_apply": {
+      "verdict": "working",
+      "repo": "teaguesterling/duckdb_func_apply",
+      "ref": "2013ac345d6f19e61ee78cacae161eb272cf1837",
+      "exports": [
+        "apply",
+        "apply_with",
+        "array_apply",
+        "list_apply",
+        "apply_table"
+      ],
+      "notes": "Call any scalar/macro by name at runtime: apply(fn, args). Verified on wasi."
+    },
+    "duck_hunt": {
+      "verdict": "deferred",
+      "repo": "teaguesterling/duck_hunt",
+      "ref": "22c142f3dee138566589783afb56a5e7f2858886",
+      "notes": "API drift: its andium ref calls GlobFiles(string, ClientContext&, \u2026) vs our 1.4.0 signature. Needs a patch or matched ref."
+    }
+  },
   "extensions": [
     {
       "name": "sample_extension",

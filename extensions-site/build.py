@@ -71,6 +71,10 @@ DESCRIPTIONS = {
     "encodings": "Decode legacy text encodings (read CSV in non-UTF-8 charsets).",
     "delta": "Read Delta Lake tables (delta_scan).",
     "uc_catalog": "ATTACH a Databricks Unity Catalog and read its Delta tables.",
+    # community
+    "read_lines": "Read line-based text files (read_lines table function, with byte offsets).",
+    "func_apply": "Call any scalar function or macro by name at runtime (apply, array_apply, list_apply).",
+    "duck_hunt": "Parse test results and CI/CD logs from 110+ formats.",
 }
 
 
@@ -142,7 +146,26 @@ def load_entries() -> tuple[list[dict], dict]:
             "artifact": None,
         })
 
-    entries.sort(key=lambda e: (e["kind"] != "component", e["name"].lower()))
+    # DuckDB Community Extensions ported to wasm (statically embedded).
+    for name, info in cat.get("community", {}).items():
+        if name.startswith("_"):
+            continue
+        entries.append({
+            "name": name,
+            "kind": "community",
+            "status": info.get("verdict", "planned"),
+            "description": DESCRIPTIONS.get(name, "DuckDB community extension."),
+            "notes": info.get("notes", ""),
+            "exports": info.get("exports", []),
+            "categories": ["community"],
+            "version": None,
+            "repository": "https://github.com/" + info["repo"] if info.get("repo") else None,
+            "source": "community-extensions",
+            "artifact": None,
+        })
+
+    order = {"component": 0, "community": 1, "official": 2, "builtin": 3}
+    entries.sort(key=lambda e: (order.get(e["kind"], 9), e["name"].lower()))
     return entries, {"registry_url": cat.get("registry_url", ""), "categories": categories}
 
 
