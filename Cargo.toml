@@ -38,6 +38,10 @@ members = [
     "extensions/humantime-component",
     "extensions/color-component",
     "extensions/iso-component",
+    "extensions/geohash-component",
+    "extensions/currency-component",
+    "extensions/hmac-component",
+    "extensions/phonetic-component",
 ]
 
 resolver = "2"

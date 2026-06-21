@@ -1173,6 +1173,142 @@
         "csscolorparser"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "geohash",
+      "version": "0.1.0",
+      "description": "Geohash encode/decode: geohash_encode(lat, lon, precision) -> text, geohash_decode_lat / geohash_decode_lon -> double (geohash crate).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "geohash",
+        "geo",
+        "spatial",
+        "encode"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/geohash-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/geohash.wasm",
+      "exports": [
+        "geohash_encode",
+        "geohash_decode_lat",
+        "geohash_decode_lon"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "geohash"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "currency",
+      "version": "0.1.0",
+      "description": "ISO 4217 currency lookups by code: currency_name, currency_symbol, currency_numeric, currency_exponent (minor-unit digits) via iso_currency. Unknown -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "currency",
+        "iso",
+        "4217",
+        "money"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/currency-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/currency.wasm",
+      "exports": [
+        "currency_name",
+        "currency_symbol",
+        "currency_numeric",
+        "currency_exponent"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "iso_currency"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "hmac",
+      "version": "0.1.0",
+      "description": "Keyed HMAC: hmac_sha256(key,msg) and hmac_sha512(key,msg) -> hex text (hmac + sha2). NULL arg -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "hmac",
+        "crypto",
+        "sha256",
+        "mac"
+      ],
+      "categories": [
+        "cryptography"
+      ],
+      "source": "extensions/hmac-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/hmac.wasm",
+      "exports": [
+        "hmac_sha256",
+        "hmac_sha512"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "hmac",
+        "sha2"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "phonetic",
+      "version": "0.1.0",
+      "description": "Phonetic codes: soundex(text) and metaphone(text) for fuzzy name matching (rphonetic). Complements DuckDB's jaro_winkler/levenshtein.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "phonetic",
+        "soundex",
+        "metaphone",
+        "fuzzy"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/phonetic-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/phonetic.wasm",
+      "exports": [
+        "soundex",
+        "metaphone"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "rphonetic"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {
