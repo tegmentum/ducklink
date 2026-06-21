@@ -1,0 +1,13 @@
+# Expected output for extensions/crypto-component/smoke.sql (reviewed — matches published test vectors).
+sha1_abc
+a9993e364706816aba3e25717850c26c9cd0d89d
+sha512_empty
+cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e
+sha3_abc
+3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532
+blake3_empty
+af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262
+crc32_check
+3421780262
+null_in
+NULL

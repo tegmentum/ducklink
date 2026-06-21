@@ -271,29 +271,12 @@ if((_w_httpfs OR _w_ui OR _w_uc)
   )
 endif()
 
-# --- DuckDB Community Extensions (github.com/duckdb/community-extensions) ---
-# Third-party extensions, opt-in via EMBED_EXTENSIONS like everything else. Each
-# is pinned to its `andium` ref (the commit the community CI built against DuckDB
-# 1.4). Only the Tier-A (dep-free, pure-C++) ones are wired so far; see
-# docs/duckdb-community-extensions.md for the full feasibility triage.
-embed_ext(read_lines      # read line-based text files (read_lines table function)
-  GIT_URL https://github.com/teaguesterling/duckdb_read_lines
-  GIT_TAG 8075509bc21b936c228879ada22c8a46657109aa   # andium (DuckDB 1.4) ref
-  INCLUDE_DIR src/include
-)
-embed_ext(func_apply      # call any scalar/macro by name at runtime (apply / func_apply)
-  GIT_URL https://github.com/teaguesterling/duckdb_func_apply
-  GIT_TAG 2013ac345d6f19e61ee78cacae161eb272cf1837   # andium (DuckDB 1.4) ref
-  INCLUDE_DIR src/include
-)
-# duck_hunt: deferred — its andium ref calls GlobFiles(string, ClientContext&, …),
-# a signature that drifted from our exact DuckDB 1.4.0 file_system.hpp. Needs a
-# patch or a 1.4.0-matched ref. (See docs/duckdb-community-extensions.md.)
-# embed_ext(duck_hunt
-#   GIT_URL https://github.com/teaguesterling/duck_hunt
-#   GIT_TAG 22c142f3dee138566589783afb56a5e7f2858886
-#   INCLUDE_DIR src/include
-# )
+# NOTE: DuckDB Community Extensions are NOT static-linked here. They inherit
+# DuckDB's version-locked C++ ABI (the rebuild-per-release treadmill). The
+# standard is to deliver their functionality as Rust *components* (the
+# duckdb:extension WIT world) with the embed option -- version-independent and
+# portable, like the in-repo extensions (isin, luhn, crypto, ...). See
+# docs/duckdb-community-extensions.md for the feasibility map + the rationale.
 
 # WASI VFS for sqlite_scanner's vendored sqlite3.c (-DSQLITE_OS_OTHER). Built
 # unconditionally (tiny: vfs_wasi.c + os_init.c) and merged into libduckdb-wasi.a;

@@ -104,31 +104,35 @@ DataSketches). `duckpgq` needs `openssl` — which we already have as openssl-wa
 need outbound HTTP — possible via the httpfs `wasi:sockets` graft, but not pure
 compute; deferred.
 
-## Status
+## The way we deliver these: as components, not static-linked C++
 
-| ext | tier | status |
+Static-linking a C++ community extension *works* (proven earlier with
+`read_lines` + `func_apply`), but it inherits DuckDB's version-locked C++ ABI —
+the very treadmill above. So the **standard is to deliver the functionality as a
+Rust component** (the `duckdb:extension` WIT world) with the embed option, like
+every other in-repo extension. Components have a stable WIT contract, are one
+portable `.wasm`, run as a runtime `LOAD` *or* `ducklink compose --embed`, and
+**don't break across DuckDB versions**. The C++ static-link route was reverted.
+
+This catalog therefore reads as a **functionality map**: a source of useful
+behaviour to reimplement as components (often with the same upstream Rust crates
+the originals use), not a list of C++ binaries to chase.
+
+| community functionality | delivered as | status |
 |---|---|---|
-| `read_lines` | A | **working** — `read_lines('file')` → (line_number, content, byte_offset, file_path), verified on wasi |
-| `func_apply` | A | **working** — `apply` / `array_apply` / `list_apply`, verified on wasi |
-| `duck_hunt` | A | **deferred** — compiles against a 1.4.x but its `andium` ref calls `GlobFiles(string, ClientContext&, …)`, drifted from our exact 1.4.0 `file_system.hpp`. Needs a one-line patch or a matched ref. |
-| everything else | — | catalogued; not yet built |
+| `crypto` (sha1/sha512/sha3-256/blake3/crc32) | `extensions/crypto-component` (Rust: sha1/sha2/sha3/blake3/crc32fast) | **working** — digests match published vectors, embeddable, version-independent |
+| `read_lines`, `func_apply` | — | static-link spike, reverted (version-locked) |
+| `hashfuncs`, `markdown`, `marisa`, `rapidfuzz`, … | (component candidates) | reimplement via Rust crates |
+| `func_apply`-style (needs the core function catalog) | — | genuinely not a component — needs deep core access |
 
-First two real community extensions ported to wasip2. `duck_hunt` confirms the
-triage's caveat: even Tier-A can hit per-extension 1.4.0 API drift. Both working
-ones build cleanly and embed via `EMBED_EXTENSIONS="read_lines,func_apply"`.
+## How to add one (the component way)
 
-## How to add one
-
-```cmake
-# cmake/wasm-extension-config.cmake — gated by EMBED_EXTENSIONS like the rest
-embed_ext(read_lines
-  GIT_URL https://github.com/teaguesterling/duckdb_read_lines
-  GIT_TAG <andium-ref>
-  INCLUDE_DIR src/include)
-```
 ```bash
-EMBED_EXTENSIONS="read_lines,func_apply,duck_hunt" ./scripts/build-libduckdb-wasm.sh
-make core
+# scaffold a component that reimplements the functionality (pulls wasm-clean crates)
+python3 tooling/scaffold.py crypto --crate sha1,sha2,sha3,blake3,crc32fast
+# implement the scalars/table-funcs in extensions/crypto-component/src/lib.rs, then:
+make ext NAME=crypto-component        # build + smoke
+ducklink compose --embed crypto       # optional: bake it into the core
 ```
 
 ## The deeper signal: DuckDB's C++ extension mechanism is brittle

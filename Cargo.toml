@@ -15,6 +15,7 @@ members = [
     "extensions/creditcard-component",
     "extensions/ean-component",
     "extensions/aba-component",
+    "extensions/crypto-component",
 ]
 
 resolver = "2"
