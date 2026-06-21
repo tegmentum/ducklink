@@ -693,6 +693,33 @@ impl ExtensionInstance {
     }
 }
 
+/// Best-effort network capability policy for extension components, read from the
+/// `DUCKLINK_NETWORK_GRANT` environment variable:
+///   - unset / empty / "none"  -> deny every extension (default; secure)
+///   - "all" / "*"             -> grant every extension
+///   - otherwise               -> a comma/space-separated allowlist of names
+///                                (e.g. "dns,http")
+///
+/// Enforcement is the WasiCtx network grant: a denied extension's wasi:sockets
+/// calls fail, so it cannot reach the network even though it may still try.
+fn network_grant_allows(extension: &str) -> bool {
+    match std::env::var("DUCKLINK_NETWORK_GRANT") {
+        Ok(v) => {
+            let v = v.trim();
+            if v.is_empty() || v.eq_ignore_ascii_case("none") {
+                return false;
+            }
+            if v == "*" || v.eq_ignore_ascii_case("all") {
+                return true;
+            }
+            v.split([',', ' '])
+                .map(str::trim)
+                .any(|name| !name.is_empty() && name.eq_ignore_ascii_case(extension))
+        }
+        Err(_) => false,
+    }
+}
+
 struct ExtensionManager {
     engine: Engine,
     core: Option<Arc<Mutex<CoreExecution>>>,
@@ -956,16 +983,29 @@ impl ExtensionManager {
             artifact_path.display()
         );
         let handle = thread::spawn(move || -> wasmtime::Result<ExtensionInstance> {
-            // Grant extension components outbound network (TCP + DNS) so the
-            // network-bound extensions (dns, http) can reach hosts over the
-            // wasi:sockets graft. Mirrors the network grant the core/httpd
-            // WasiCtx builders already use elsewhere in this file.
-            let wasi = WasiCtxBuilder::new()
-                .inherit_env()
-                .inherit_stdio()
-                .inherit_network()
-                .allow_ip_name_lookup(true)
-                .build();
+            // Outbound network is a GRANTED capability for extension components,
+            // off by default and opt-in via `DUCKLINK_NETWORK_GRANT`. This mirrors
+            // how DuckDB function capabilities are declared-then-granted (the
+            // registry declares `network` in an extension's `requires`; the host
+            // decides whether to honour it). It is best-effort, not a true
+            // sandbox: without the grant the WasiCtx simply denies wasi:sockets,
+            // so a net-using extension (dns, http) fails to connect rather than
+            // being hard-prevented from trying.
+            let grant_network = network_grant_allows(&extension_name);
+            eprintln!(
+                "[extension-manager] '{extension_name}' network capability: {}",
+                if grant_network {
+                    "GRANTED"
+                } else {
+                    "denied (opt in with DUCKLINK_NETWORK_GRANT=all|<names>)"
+                }
+            );
+            let mut builder = WasiCtxBuilder::new();
+            builder.inherit_env().inherit_stdio();
+            if grant_network {
+                builder.inherit_network().allow_ip_name_lookup(true);
+            }
+            let wasi = builder.build();
             let mut store = Store::new(
                 &engine,
                 ExtensionStoreState::new(wasi, core, callback_registry, extension_name.clone()),

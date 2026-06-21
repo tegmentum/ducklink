@@ -3672,7 +3672,8 @@
         "dns_resolve_all"
       ],
       "requires": [
-        "scalar"
+        "scalar",
+        "network"
       ],
       "crates": [],
       "min_duckdb_version": "1.0.0"
@@ -3703,7 +3704,8 @@
         "http_status"
       ],
       "requires": [
-        "scalar"
+        "scalar",
+        "network"
       ],
       "crates": [
         "rustls",

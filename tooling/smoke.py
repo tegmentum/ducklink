@@ -190,8 +190,11 @@ def _run_cli(name: str, sql: str, timeout: int) -> subprocess.CompletedProcess:
         "--", ":memory:",
         "--load-extension", bare(name),
     ]
+    # Grant the network capability to the extension under test (the host denies
+    # it by default). Harmless for non-networked extensions; enables dns/http.
+    env = {**os.environ, "DUCKLINK_NETWORK_GRANT": bare(name)}
     return subprocess.run(
-        argv, input=sql, capture_output=True, text=True, timeout=timeout, cwd=REPO_ROOT
+        argv, input=sql, capture_output=True, text=True, timeout=timeout, cwd=REPO_ROOT, env=env
     )
 
 
