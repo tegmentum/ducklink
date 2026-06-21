@@ -16,7 +16,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 
 - **Runtime load (every extension):** `LOAD <name>;` pulls `artifacts/extensions/<name>.wasm` — no core recompile, version-independent. This is the component model's whole point.
 - **Static embed (opt-in):** `ducklink compose --embed <name>` bakes an extension into the core at build time. Wired today for `isin` (`embed-isin` core feature); `ducklink compose --list` shows what's embeddable. Most extensions stay runtime-loaded by design.
-- **Network grant:** net extensions are denied by default; opt in with `DUCKLINK_NETWORK_GRANT=all` or a name allowlist.
+- **Network grant:** net extensions are denied by default; opt in with `--grant-network all` (or a name allowlist), equivalently the `DUCKLINK_NETWORK_GRANT` env var.
 
 ## Text & NLP (45)
 

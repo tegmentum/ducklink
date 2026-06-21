@@ -31,6 +31,13 @@ struct Opts {
     #[arg(long = "dir", value_parser = parse_dir_mapping, action = ArgAction::Append)]
     preopen: Vec<DirMapping>,
 
+    /// Grant outbound network to extension components: "all" / "*" for every
+    /// extension, or a comma-separated allowlist of names (e.g. "dns,http").
+    /// Default: denied. Convenience for the DUCKLINK_NETWORK_GRANT env var
+    /// (this flag wins when both are set).
+    #[arg(long = "grant-network")]
+    grant_network: Option<String>,
+
     /// Arguments forwarded to the DuckDB CLI component (prefix with `--`)
     cli_args: Vec<String>,
 }
@@ -518,6 +525,13 @@ fn main() -> Result<()> {
     }
 
     let opts = Opts::parse();
+
+    // The network capability gate (network_grant_allows) reads
+    // DUCKLINK_NETWORK_GRANT at extension-instantiation time; the --grant-network
+    // flag is convenience that sets it (and wins over an inherited env var).
+    if let Some(spec) = &opts.grant_network {
+        std::env::set_var("DUCKLINK_NETWORK_GRANT", spec);
+    }
 
     if opts.cli_args.is_empty() {
         anyhow::bail!("pass CLI arguments after `--`, e.g. ducklink -- duckdb-cli :memory:");

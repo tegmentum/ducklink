@@ -22,3 +22,7 @@ Cargo.lock
 # duckdb-host ui runtime
 .duckdb/
 .duckdb-ui-home/
+
+# Python tooling cache
+__pycache__/
+*.pyc

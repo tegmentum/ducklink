@@ -62,7 +62,8 @@ lines.append("- **Static embed (opt-in):** `ducklink compose --embed <name>` bak
              "`ducklink compose --list` shows what's embeddable. Most extensions stay "
              "runtime-loaded by design.")
 lines.append("- **Network grant:** net extensions are denied by default; opt in with "
-             "`DUCKLINK_NETWORK_GRANT=all` or a name allowlist.\n")
+             "`--grant-network all` (or a name allowlist), equivalently the "
+             "`DUCKLINK_NETWORK_GRANT` env var.\n")
 
 
 for cat in sorted(CATS, key=lambda c: (-len(CATS[c]), c)):
