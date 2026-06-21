@@ -1,0 +1,13 @@
+# Expected output for extensions/csscolor-component/smoke.sql (reviewed). Hex values are 'x'-prefixed (see smoke.sql).
+red_hex
+x#ff0000
+rgb_hex
+x#0080ff
+hex_rgb
+rgb(255 136 0)
+named_ok
+true
+bad
+false
+bad_is_null
+true

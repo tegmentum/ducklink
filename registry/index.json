@@ -527,6 +527,41 @@
       "min_duckdb_version": "1.0.0"
     },
     {
+      "name": "rapidfuzz",
+      "version": "0.1.0",
+      "description": "Fuzzy string matching: fuzzywuzzy-style ratio (0-100) + damerau-levenshtein / indel / osa distances (rapidfuzz).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "fuzzy",
+        "string",
+        "similarity",
+        "levenshtein"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/rapidfuzz-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/rapidfuzz.wasm",
+      "exports": [
+        "fuzz_ratio",
+        "damerau_levenshtein",
+        "indel",
+        "osa"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "rapidfuzz"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
       "name": "casing",
       "version": "0.1.0",
       "description": "Identifier case conversions: snake, camel, pascal, kebab, title, constant (heck). Named `casing` because `case` is a SQL keyword.",
@@ -566,23 +601,37 @@
     },
     {
       "name": "csscolor",
-      "version": "0.0.0",
-      "description": "CSS color parsing + format conversion (hex/rgb/hsl/named).",
+      "version": "0.1.0",
+      "description": "CSS color parsing + conversion: any CSS color -> hex / rgb, plus validity (csscolorparser).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "css",
+        "color",
+        "hex",
+        "rgb"
+      ],
       "categories": [
         "data-types"
       ],
-      "status": "planned",
+      "source": "extensions/csscolor-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/csscolor.wasm",
       "exports": [
-        "css_parse",
+        "css_to_hex",
         "css_to_rgb",
-        "css_to_hex"
+        "css_valid"
       ],
       "requires": [
         "scalar"
       ],
       "crates": [
         "csscolorparser"
-      ]
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {

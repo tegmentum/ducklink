@@ -1,0 +1,24 @@
+[package]
+name = "rapidfuzz-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Fuzzy string matching: fuzzywuzzy-style ratios (ratio, partial, token-sort)
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+rapidfuzz = "*"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

@@ -19,6 +19,8 @@ members = [
     "extensions/casing-component",
     "extensions/markdown-component",
     "extensions/hashfuncs-component",
+    "extensions/csscolor-component",
+    "extensions/rapidfuzz-component",
 ]
 
 resolver = "2"

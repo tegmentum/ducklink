@@ -1,0 +1,15 @@
+# Expected output for extensions/rapidfuzz-component/smoke.sql (reviewed).
+exact
+100
+close
+95.2
+transpose
+1
+lev_native
+2
+indel_sub
+2
+osa_swap
+1
+null_in
+NULL
