@@ -11,7 +11,7 @@
 <header>
   <div class="container brand-row">
     <a class="brand" href="/" aria-label="ducklink home">
-      <img class="logo" src="/static/ducklink_logo.png" alt="ducklink" width="180" height="56">
+      <img class="logo" src="/static/ducklink_logo.png" alt="ducklink" width="360" height="112">
     </a>
     <div class="subtitle">{{TOTAL_COUNT}} DuckDB extensions · {{FN_COUNT}} SQL functions, on the WebAssembly component runtime</div>
   </div>
@@ -67,15 +67,15 @@
   function card(d) {
     const exports = (d.exports || []).slice(0, 8)
       .map(e => `<span class="export">${esc(e)}</span>`).join('');
-    return `<div class="card">
+    return `<a class="card" href="/ext/${encodeURIComponent(d.name)}">
       <div class="meta">
         <span class="badge ${esc(d.status)}">${esc(d.status)}</span>
         <span class="badge kind">${esc(d.kind)}</span>
       </div>
-      <h3><a href="/ext/${encodeURIComponent(d.name)}">${esc(d.name)}</a></h3>
+      <h3>${esc(d.name)}</h3>
       <div class="desc">${esc(d.description || '')}</div>
       <div class="exports">${exports}</div>
-    </div>`;
+    </a>`;
   }
 
   function render() {

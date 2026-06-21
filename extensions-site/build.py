@@ -40,6 +40,40 @@ ARTIFACTS = REPO / "artifacts" / "extensions"
 OUT = SITE / "registry.db"
 
 
+# Clean, user-facing one-liners for the DuckDB builtins + official extensions.
+# (registry/index.json only carries internal dev-notes/verdicts for these, which
+# are kept as `notes` on the detail page rather than shown as the description.)
+DESCRIPTIONS = {
+    # builtins
+    "core_functions": "Core scalar, aggregate, and list functions (always linked).",
+    "parquet": "Read and write Apache Parquet files (read_parquet, COPY … TO).",
+    "json": "JSON type and functions: ::JSON, ->/->>, json_group_array, read_json.",
+    "tpch": "TPC-H data generator (dbgen) and the 22 benchmark queries.",
+    "tpcds": "TPC-DS data generator (dsdgen) for benchmarking.",
+    "autocomplete": "SQL autocompletion (sql_auto_complete).",
+    "icu": "Unicode collations and time-zone-aware timestamps (AT TIME ZONE).",
+    # official
+    "inet": "INET / IPv4 / IPv6 types and address functions.",
+    "fts": "Full-text search: BM25 ranking, stemming, create_fts_index.",
+    "vss": "Vector similarity search with HNSW indexes (array_distance).",
+    "excel": "Read and write Excel .xlsx files.",
+    "avro": "Read Apache Avro files (read_avro).",
+    "sqlite_scanner": "Read and ATTACH SQLite database files.",
+    "httpfs": "HTTP(S) and S3 filesystem — query remote files over the network.",
+    "iceberg": "Read and write Apache Iceberg tables, including REST catalogs.",
+    "ducklake": "DuckLake lakehouse format: a SQL catalog over Parquet storage.",
+    "mysql_scanner": "ATTACH and scan a live MySQL / MariaDB database.",
+    "postgres_scanner": "ATTACH and scan a live PostgreSQL database.",
+    "aws": "AWS credential resolution for S3 access (CREATE SECRET, credential_chain).",
+    "azure": "Azure Blob Storage / Data Lake filesystem (az://, abfss://).",
+    "spatial": "Geometry types and spatial functions (GEOS / PROJ / GDAL).",
+    "ui": "The DuckDB web UI — an interactive SQL notebook, served by the host.",
+    "encodings": "Decode legacy text encodings (read CSV in non-UTF-8 charsets).",
+    "delta": "Read Delta Lake tables (delta_scan).",
+    "uc_catalog": "ATTACH a Databricks Unity Catalog and read its Delta tables.",
+}
+
+
 def esc(s: str) -> str:
     return html.escape("" if s is None else str(s))
 
@@ -80,7 +114,8 @@ def load_entries() -> tuple[list[dict], dict]:
             "name": name,
             "kind": "builtin",
             "status": info.get("status", "working"),
-            "description": info.get("notes", ""),
+            "description": DESCRIPTIONS.get(name, "DuckDB built-in extension."),
+            "notes": info.get("notes", ""),
             "exports": [],
             "categories": ["builtin"],
             "version": None,
@@ -97,7 +132,8 @@ def load_entries() -> tuple[list[dict], dict]:
             "name": name,
             "kind": "official",
             "status": info.get("verdict", "planned"),
-            "description": info.get("notes", info.get("deps", "")),
+            "description": DESCRIPTIONS.get(name, "DuckDB official extension."),
+            "notes": info.get("notes", info.get("deps", "")),
             "exports": [],
             "categories": ["official"],
             "version": None,
@@ -186,6 +222,7 @@ def render_detail(entry: dict, style: str, template: str, assets: dict) -> str:
     row("Status", esc(entry["status"]))
     row("Version", esc(entry.get("version")))
     row("Categories", ", ".join(esc(c) for c in entry.get("categories", [])))
+    row("Notes", esc(entry.get("notes")))
     if entry.get("repository"):
         r = esc(entry["repository"])
         row("Repository", f'<a href="{r}">{r}</a>')
