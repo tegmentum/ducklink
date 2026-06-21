@@ -11,6 +11,16 @@ This repository contains a pair of WebAssembly components that wrap the DuckDB C
 
 Both components are intended to run in preview2-capable runtimes such as `wasmtime 16.0+`.
 
+## Extension catalog
+
+The repo also ships **111 component extensions** (254 SQL functions) — Rust
+`wasm32-wasip2` components implementing the `duckdb:extension` WIT world, loadable
+at runtime with `LOAD <name>` and verified by `tooling/smoke.py`. They span text
+& NLP, encodings, crypto, aggregates (bloom/minhash/count-min sketches), and gated
+network (dns/http). See **[CATALOG.md](CATALOG.md)** for the full index
+(regenerate with `python3 tooling/gen-catalog.py`; verify integrity with
+`python3 tooling/verify-catalog.py`).
+
 ## Repository layout
 
 ```
