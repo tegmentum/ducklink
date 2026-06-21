@@ -1,9 +1,9 @@
 WASI_TARGET?=wasm32-wasip2
 BROWSER_TARGET?=wasm32-unknown-unknown
 
-.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile
+.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds
 
-all: core standalone-cli loader-stub
+all: core standalone-cli loader-stub dotcmds
 
 core:
 	./scripts/sync-core-wit.sh
@@ -35,6 +35,12 @@ standalone-cli:
 loader-stub:
 	./scripts/sync-stub-wit.sh
 	cargo component build -p duckdb-loader-stub --target $(WASI_TARGET) --release
+
+dotcmds:
+	cargo component build -p greet-dotcmd -p core-dotcmd --target $(WASI_TARGET) --release
+	mkdir -p artifacts/dotcmds
+	cp target/$(WASI_TARGET)/release/greet_dotcmd.wasm artifacts/dotcmds/greet.wasm
+	cp target/$(WASI_TARGET)/release/core_dotcmd.wasm artifacts/dotcmds/core.wasm
 
 smoke-cli: all
 	./scripts/smoke-cli.sh

@@ -138,7 +138,6 @@ fn run_meta_command(conn: &duckdb::Connection, rest: &str) -> Result<(), String>
     let mut parts = rest.split_whitespace();
     let cmd = parts.next().unwrap_or("").to_ascii_lowercase();
     let arg = parts.next().map(|s| s.trim_end_matches(';').to_string());
-    let user_schema = "table_schema NOT IN ('information_schema', 'pg_catalog')";
     match cmd.as_str() {
         "help" => {
             print_help();
@@ -146,33 +145,9 @@ fn run_meta_command(conn: &duckdb::Connection, rest: &str) -> Result<(), String>
         }
         // Loop control; handled by the REPL, no-op elsewhere.
         "quit" | "exit" => Ok(()),
-        "tables" => {
-            let filter = arg
-                .map(|p| format!(" AND table_name LIKE '{}'", escape_sql_literal(&p)))
-                .unwrap_or_default();
-            let sql = format!(
-                "SELECT table_name AS name FROM information_schema.tables \
-                 WHERE {user_schema}{filter} ORDER BY name"
-            );
-            execute_and_print(conn, &sql)
-        }
-        "schema" => {
-            let filter = arg
-                .map(|t| format!(" WHERE table_name = '{}'", escape_sql_literal(&t)))
-                .unwrap_or_default();
-            let sql =
-                format!("SELECT sql FROM duckdb_tables(){filter} ORDER BY table_name");
-            execute_and_print(conn, &sql)
-        }
-        "indexes" | "indices" => {
-            let filter = arg
-                .map(|t| format!(" WHERE table_name = '{}'", escape_sql_literal(&t)))
-                .unwrap_or_default();
-            let sql = format!(
-                "SELECT index_name AS name FROM duckdb_indexes(){filter} ORDER BY name"
-            );
-            execute_and_print(conn, &sql)
-        }
+        // .tables / .schema / .indexes are now provided by the pluggable
+        // `core-dotcmd` component (extensions/core-dotcmd) — they fall through
+        // to the dot-command registry below instead of being hard-coded here.
         "read" => {
             // DuckDB reads the file (via the core fs shims); run its contents as
             // a script. Errors abort the script.
