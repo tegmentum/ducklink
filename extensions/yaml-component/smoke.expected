@@ -1,0 +1,11 @@
+# AUTO-SEEDED by smoke.py --seed-expected. Review and trim:
+#   - csv mode emits a header line per SELECT; keep or drop as you like
+#   - replace nondeterministic lines (timestamps, rng) with ~~
+#   - replace order-sensitive lines with ? if any-non-empty is OK
+#   - delete this banner once you've reviewed each line
+j
+"{""age"":30,""name"":""Alice""}"
+arr
+"[1,2,3]"
+bad
+NULL

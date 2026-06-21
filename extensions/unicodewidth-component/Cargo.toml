@@ -1,0 +1,25 @@
+[package]
+name = "unicodewidth-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Grapheme count + display width
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+unicode-segmentation = "1.13"
+unicode-width = "*"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

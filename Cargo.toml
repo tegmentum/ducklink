@@ -91,6 +91,10 @@ members = [
     "extensions/isbnconv-component",
     "extensions/passgen-component",
     "extensions/braille-component",
+    "extensions/toml-component",
+    "extensions/yaml-component",
+    "extensions/unicodenorm-component",
+    "extensions/unicodewidth-component",
 ]
 
 resolver = "2"

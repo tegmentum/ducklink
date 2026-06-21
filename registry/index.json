@@ -2904,6 +2904,143 @@
       ],
       "crates": [],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "toml",
+      "version": "0.1.0",
+      "description": "TOML <-> JSON (toml, via serde_json::Value): toml_to_json / json_to_toml. DuckDB has JSON but not TOML. json_to_toml needs a top-level object. Invalid -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "toml",
+        "config",
+        "json",
+        "convert"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/toml-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/toml.wasm",
+      "exports": [
+        "toml_to_json",
+        "json_to_toml"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "toml",
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "yaml",
+      "version": "0.1.0",
+      "description": "YAML <-> JSON (serde_yaml, via serde_json::Value): yaml_to_json / json_to_yaml. DuckDB has JSON but not YAML. Invalid -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "yaml",
+        "config",
+        "json",
+        "convert"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/yaml-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/yaml.wasm",
+      "exports": [
+        "yaml_to_json",
+        "json_to_yaml"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "serde_yaml",
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "unicodenorm",
+      "version": "0.1.0",
+      "description": "Unicode normalization (unicode-normalization): nfc / nfd / nfkc / nfkd. For dedup/compare of visually-identical strings with different code-point sequences. NULL -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "unicode",
+        "normalize",
+        "nfc",
+        "nfkc"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/unicodenorm-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/unicodenorm.wasm",
+      "exports": [
+        "nfc",
+        "nfd",
+        "nfkc",
+        "nfkd"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "unicode-normalization"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "unicodewidth",
+      "version": "0.1.0",
+      "description": "Grapheme + display-width (unicode-segmentation + unicode-width): grapheme_count (user-perceived chars) and display_width (terminal columns; wide CJK = 2). Distinct from length() (code points).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "unicode",
+        "grapheme",
+        "width",
+        "cjk"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/unicodewidth-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/unicodewidth.wasm",
+      "exports": [
+        "grapheme_count",
+        "display_width"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "unicode-segmentation",
+        "unicode-width"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {
