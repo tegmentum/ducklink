@@ -84,6 +84,8 @@ fn run_cli() -> Result<(), String> {
     let database_path = positional.first().cloned();
     let connection = open_connection(database_path.clone())?;
     load_extensions(&connection, &preload_extensions)?;
+    // Auto-load extensions a previous session persisted in this database.
+    autoload_persisted_extensions(&connection);
 
     if let Some(sql) = command {
         dispatch_statement(&connection, &sql)?;
@@ -128,7 +130,64 @@ fn dispatch_statement(conn: &duckdb::Connection, statement: &str) -> Result<(), 
     if let Some(rest) = trimmed.strip_prefix('.') {
         return run_meta_command(conn, rest);
     }
-    execute_and_print(conn, statement)
+    let result = execute_and_print(conn, statement);
+    // Remember each successful `LOAD <ext>` so a future session on this db
+    // auto-loads it. `-c` can pass several `;`-separated statements at once.
+    if result.is_ok() {
+        for name in parse_load_names(trimmed) {
+            persist_loaded_extension(conn, &name);
+        }
+    }
+    result
+}
+
+const PERSIST_TABLE: &str = "__ducklink_loaded_extensions";
+
+/// Extract the extension name from every `LOAD <name>` among the `;`-separated
+/// statements in `input` (quotes stripped). Splitting on `;` is a heuristic, but
+/// extension names are bare identifiers and a stray match merely re-LOADs.
+fn parse_load_names(input: &str) -> Vec<String> {
+    input
+        .split(';')
+        .filter_map(|stmt| {
+            let mut it = stmt.trim().splitn(2, char::is_whitespace);
+            if !it.next()?.eq_ignore_ascii_case("load") {
+                return None;
+            }
+            let name = it.next()?.trim().trim_matches(|c| c == '\'' || c == '"').trim();
+            (!name.is_empty() && !name.contains(char::is_whitespace)).then(|| name.to_string())
+        })
+        .collect()
+}
+
+/// Record a loaded extension in the db so a future session on the same database
+/// auto-loads it. Best-effort (errors ignored; ephemeral for `:memory:`).
+fn persist_loaded_extension(conn: &duckdb::Connection, name: &str) {
+    let _ = duckdb::execute(
+        conn,
+        &format!("CREATE TABLE IF NOT EXISTS {PERSIST_TABLE}(name VARCHAR PRIMARY KEY)"),
+    );
+    let _ = duckdb::execute(
+        conn,
+        &format!(
+            "INSERT INTO {PERSIST_TABLE} VALUES ('{}') ON CONFLICT DO NOTHING",
+            escape_sql_literal(name)
+        ),
+    );
+}
+
+/// On startup, LOAD every extension a previous session persisted in this db.
+fn autoload_persisted_extensions(conn: &duckdb::Connection) {
+    let result = match duckdb::execute(conn, &format!("SELECT name FROM {PERSIST_TABLE}")) {
+        Ok(r) => r,
+        Err(_) => return, // table absent (fresh db) -> nothing to auto-load
+    };
+    for row in result.rows {
+        if let Some(duckdb::Duckvalue::Text(name)) = row.into_iter().next() {
+            // Direct execute (not dispatch_statement) so this doesn't re-persist.
+            let _ = duckdb::execute(conn, &format!("LOAD {name}"));
+        }
+    }
 }
 
 /// Translate a dot meta-command into the SQL that backs it, mirroring a subset

@@ -17,7 +17,8 @@ const FID_BOX: u64 = 5;
 const FID_TABLES: u64 = 6;
 const FID_SCHEMA: u64 = 7;
 const FID_INDEXES: u64 = 8;
-const USER_SCHEMA: &str = "table_schema NOT IN ('information_schema', 'pg_catalog')";
+const USER_SCHEMA: &str =
+    "table_schema NOT IN ('information_schema', 'pg_catalog') AND table_name NOT LIKE '\\_\\_ducklink%' ESCAPE '\\'";
 fn quote_ident(name: &str) -> std::string::String { format!("\"{}\"", name.replace('"', "\"\"")) }
 fn quote_str(s: &str) -> std::string::String { s.replace('\'', "''") }
 fn plain(text: std::string::String) -> InvokeResult { InvokeResult { text, state_deltas: vec![] } }
@@ -58,8 +59,11 @@ impl Guest for Component {
                 ))?));
             }
             FID_SCHEMA => {
-                let filter = if arg.is_empty() { std::string::String::new() }
-                    else { format!(" WHERE table_name = '{}'", quote_str(arg)) };
+                let filter = if arg.is_empty() {
+                    " WHERE table_name NOT LIKE '\\_\\_ducklink%' ESCAPE '\\'".to_string()
+                } else {
+                    format!(" WHERE table_name = '{}'", quote_str(arg))
+                };
                 let out = spi::query(&format!(
                     "SELECT sql FROM duckdb_tables(){filter} ORDER BY table_name"
                 ))?;
