@@ -99,6 +99,10 @@ members = [
     "extensions/jsonschema-component",
     "extensions/simhash-component",
     "extensions/idextra-component",
+    "extensions/phonetic2-component",
+    "extensions/z85-component",
+    "extensions/initials-component",
+    "extensions/luhngen-component",
 ]
 
 resolver = "2"

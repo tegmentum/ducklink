@@ -3170,6 +3170,135 @@
         "cuid2"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "phonetic2",
+      "version": "0.1.0",
+      "description": "Additional phonetic algorithms (rphonetic): nysiis, refined_soundex, double_metaphone (primary). Complements phonetic (soundex/metaphone).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "phonetic",
+        "nysiis",
+        "metaphone",
+        "fuzzy"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/phonetic2-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/phonetic2.wasm",
+      "exports": [
+        "nysiis",
+        "refined_soundex",
+        "double_metaphone"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "rphonetic"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "z85",
+      "version": "0.1.0",
+      "description": "Z85 / Base85 (ZeroMQ; z85 crate): z85_encode(hex) (input bytes must be a multiple of 4), z85_decode(text) -> hex. Invalid -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "z85",
+        "base85",
+        "zeromq",
+        "encoding"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/z85-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/z85.wasm",
+      "exports": [
+        "z85_encode",
+        "z85_decode"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "z85"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "initials",
+      "version": "0.1.0",
+      "description": "Initials / acronyms (hand-rolled): initials(text) -> first letter of each word uppercased ('Portable Document Format' -> 'PDF'), initials_dotted -> 'P.D.F.'.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "initials",
+        "acronym",
+        "abbreviation",
+        "text"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/initials-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/initials.wasm",
+      "exports": [
+        "initials",
+        "initials_dotted"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "luhngen",
+      "version": "0.1.0",
+      "description": "Luhn check-digit generation (hand-rolled): luhn_check_digit(partial), luhn_append(partial). Complements luhn (validation). Verified 7992739871 -> 3.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "luhn",
+        "checkdigit",
+        "generate",
+        "validation"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/luhngen-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/luhngen.wasm",
+      "exports": [
+        "luhn_check_digit",
+        "luhn_append"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {
