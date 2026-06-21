@@ -83,6 +83,10 @@ members = [
     "extensions/cardtype-component",
     "extensions/money-component",
     "extensions/ngrams-component",
+    "extensions/stem-component",
+    "extensions/transliterate-component",
+    "extensions/pluscode-component",
+    "extensions/rot47-component",
 ]
 
 resolver = "2"

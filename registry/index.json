@@ -2647,6 +2647,136 @@
         "serde_json"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "stem",
+      "version": "0.1.0",
+      "description": "Snowball word stemming (rust-stemmers): stem(word, language) for english/french/german/spanish/italian/portuguese/russian/dutch/swedish/norwegian/danish/finnish (default english).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "stem",
+        "snowball",
+        "porter",
+        "nlp"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/stem-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/stem.wasm",
+      "exports": [
+        "stem"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "rust-stemmers"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "transliterate",
+      "version": "0.1.0",
+      "description": "Unicode -> ASCII transliteration (deunicode): deunicode(text), e.g. '\u00c6neid caf\u00e9' -> 'AEneid cafe'. NULL -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "transliterate",
+        "ascii",
+        "unicode",
+        "deunicode"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/transliterate-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/transliterate.wasm",
+      "exports": [
+        "deunicode"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "deunicode"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "pluscode",
+      "version": "0.1.0",
+      "description": "Open Location Code / plus codes (open-location-code): pluscode_encode(lat, lon, length), pluscode_valid, pluscode_decode_lat/lon (area center). Invalid -> NULL/false.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "pluscode",
+        "olc",
+        "geo",
+        "location"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/pluscode-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/pluscode.wasm",
+      "exports": [
+        "pluscode_encode",
+        "pluscode_valid",
+        "pluscode_decode_lat",
+        "pluscode_decode_lon"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "open-location-code",
+        "geo"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "rot47",
+      "version": "0.1.0",
+      "description": "ROT47 cipher (hand-rolled): rot47(text) rotates the 94 printable ASCII chars by 47, self-inverse. ROT13's punctuation-aware cousin.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "rot47",
+        "cipher",
+        "rotate",
+        "ascii"
+      ],
+      "categories": [
+        "cryptography"
+      ],
+      "source": "extensions/rot47-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/rot47.wasm",
+      "exports": [
+        "rot47"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {

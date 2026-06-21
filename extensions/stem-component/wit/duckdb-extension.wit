@@ -1,0 +1,19 @@
+package duckdb:extension;
+
+use runtime;
+use callback-dispatch;
+use config;
+use logging;
+use catalog;
+use files;
+use guest;
+
+world duckdb-extension {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  export guest;
+  export callback-dispatch;
+}
