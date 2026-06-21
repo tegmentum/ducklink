@@ -30,6 +30,10 @@ members = [
     "extensions/natsort-component",
     "extensions/roman-component",
     "extensions/humansize-component",
+    "extensions/ids-component",
+    "extensions/idna-component",
+    "extensions/mac-component",
+    "extensions/isbn-component",
 ]
 
 resolver = "2"

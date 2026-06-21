@@ -910,6 +910,138 @@
         "humansize"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "ids",
+      "version": "0.1.0",
+      "description": "Identifier generators: ulid() and nanoid() (nondeterministic, use wasi random+clock), plus ulid_timestamp(ulid) -> epoch ms (ulid, nanoid crates).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "ulid",
+        "nanoid",
+        "identifier",
+        "id"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/ids-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/ids.wasm",
+      "exports": [
+        "ulid",
+        "nanoid",
+        "ulid_timestamp"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "ulid",
+        "nanoid"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "idna",
+      "version": "0.1.0",
+      "description": "IDNA / punycode domain conversion: idna_to_ascii (Unicode domain -> punycode) and idna_to_unicode (punycode -> Unicode) via the idna crate.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "idna",
+        "punycode",
+        "domain",
+        "unicode"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/idna-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/idna.wasm",
+      "exports": [
+        "idna_to_ascii",
+        "idna_to_unicode"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "idna"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "mac",
+      "version": "0.1.0",
+      "description": "MAC address validation + normalization: mac_valid -> bool, mac_normalize -> canonical colon-separated uppercase (macaddr). Invalid -> NULL/false.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "mac",
+        "address",
+        "network",
+        "validate"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/mac-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/mac.wasm",
+      "exports": [
+        "mac_valid",
+        "mac_normalize"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "macaddr"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "isbn",
+      "version": "0.1.0",
+      "description": "ISBN-10 / ISBN-13 validation + normalization (hand-rolled checksum): isbn_valid -> bool, isbn_normalize -> digits-only canonical. Invalid -> NULL/false.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "isbn",
+        "book",
+        "validate",
+        "checksum"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/isbn-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/isbn.wasm",
+      "exports": [
+        "isbn_valid",
+        "isbn_normalize"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {

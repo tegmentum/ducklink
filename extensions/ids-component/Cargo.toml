@@ -1,0 +1,25 @@
+[package]
+name = "ids-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+ULID + nanoid identifier generators
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+ulid = "1.x"
+nanoid = "*"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"
