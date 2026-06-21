@@ -1440,6 +1440,138 @@
         "emojis"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "whatlang",
+      "version": "0.1.0",
+      "description": "Natural-language detection: detect_language -> ISO 639-3 code, detect_language_name -> English name, detect_script -> script (whatlang). Undetectable -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "language",
+        "detection",
+        "nlp",
+        "script"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/whatlang-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/whatlang.wasm",
+      "exports": [
+        "detect_language",
+        "detect_language_name",
+        "detect_script"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "whatlang"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "ipaddr",
+      "version": "0.1.0",
+      "description": "IP address validation + classification (std::net): ip_valid -> bool, ip_version -> 4/6, ip_is_private -> bool (RFC 1918 v4 / unique-local v6). Invalid -> NULL/false.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "ip",
+        "network",
+        "ipv4",
+        "ipv6"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/ipaddr-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/ipaddr.wasm",
+      "exports": [
+        "ip_valid",
+        "ip_version",
+        "ip_is_private"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "mime",
+      "version": "0.1.0",
+      "description": "Filename -> MIME type: mime_type(path) and mime_from_ext(ext) via mime_guess. Unknown -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "mime",
+        "content-type",
+        "filename",
+        "extension"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/mime-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/mime.wasm",
+      "exports": [
+        "mime_type",
+        "mime_from_ext"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "mime_guess"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "pluralize",
+      "version": "0.1.0",
+      "description": "English inflection: pluralize(word) and singularize(word), handling irregulars (person/people, child/children) via pluralizer. NULL -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "pluralize",
+        "singular",
+        "plural",
+        "inflection"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/pluralize-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/pluralize.wasm",
+      "exports": [
+        "pluralize",
+        "singularize"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "pluralizer"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {

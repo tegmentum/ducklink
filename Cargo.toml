@@ -46,6 +46,10 @@ members = [
     "extensions/totp-component",
     "extensions/baseconv-component",
     "extensions/emoji-component",
+    "extensions/whatlang-component",
+    "extensions/ipaddr-component",
+    "extensions/mime-component",
+    "extensions/pluralize-component",
 ]
 
 resolver = "2"
