@@ -16,7 +16,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET_DIR="${TARGET_DIR:-$ROOT/target/wasm32-wasip2/release}"
-HOST_BIN="${HOST_BIN:-$ROOT/target/release/duckdb-host}"
+HOST_BIN="${HOST_BIN:-$ROOT/target/release/ducklink}"
 CORE_COMPONENT="${CORE_COMPONENT:-$TARGET_DIR/duckdb_core_component.wasm}"
 CLI_COMPONENT="${CLI_COMPONENT:-$TARGET_DIR/duckdb_cli_component.wasm}"
 MEMORY_LIMIT="${MEMORY_LIMIT:-512MB}"

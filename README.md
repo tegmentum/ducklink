@@ -112,7 +112,7 @@ make ext-list-broken      # crates flagged un-buildable on wasm32-wasip2
 python3 tooling/t-status.py   # tooling-improvement items from build experience
 ```
 
-Extensions load through the **native host runner** (`duckdb-host`); the
+Extensions load through the **native host runner** (`ducklink`); the
 wac-composed standalone CLI links a no-op loader stub and cannot instantiate
 them. `isin` (hand-rolled) and `baseN` (crate-backed) are worked examples. See
 [docs/component-extension-guide.md](docs/component-extension-guide.md) for the
@@ -194,7 +194,7 @@ The `duckdb-component-host` crate provides a reusable Wasmtime runner that compo
 and core components along with the componentized extension loader. Build and execute it via:
 
 ```bash
-cargo run -p duckdb-component-host --bin duckdb-host -- -- duckdb-cli :memory: -c "select 42 as answer;"
+cargo run -p duckdb-component-host --bin ducklink -- -- duckdb-cli :memory: -c "select 42 as answer;"
 ```
 
 Additional directories can be exposed to the CLI with `--dir /host/path::/guest/path`, and

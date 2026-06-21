@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Smoke test: the DuckDB UI on wasm (`duckdb-host ui`). The native host owns the
+# Smoke test: the DuckDB UI on wasm (`ducklink ui`). The native host owns the
 # listening socket (httplib can't listen() inside the wasip2 sandbox) and bridges
 # each request to the core component, where the genuine duckdb-ui handlers run.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-HOST=./target/release/duckdb-host
-[[ -x "$HOST" ]] || cargo build --release -p duckdb-component-host --bin duckdb-host
+HOST=./target/release/ducklink
+[[ -x "$HOST" ]] || cargo build --release -p duckdb-component-host --bin ducklink
 
 run() { # mode port
   local mode="$1" port="$2"

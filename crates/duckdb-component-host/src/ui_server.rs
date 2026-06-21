@@ -5,7 +5,7 @@
 //! Following the sqlite-wasm-httpd pattern, the NATIVE host owns the listening
 //! socket + accept loop and bridges each request to the core component.
 //!
-//! Three modes (`duckdb-host ui`):
+//! Three modes (`ducklink ui`):
 //! - `console` : a tiny built-in SQL console (embedded HTML, fully self-contained).
 //! - `offline` : the REAL DuckDB UI SPA served from captured assets (web/duckdb-ui/),
 //!               with /ddb/* bridged to the wasm core. No network.
@@ -195,7 +195,9 @@ fn handle_connection(
         UiMode::Offline | UiMode::Online => {
             if is_ui_endpoint(&req.path) {
                 match bridge_ui_request(core, conn, &req) {
-                    Some((status, ctype, body)) => write_response(stream, status, &ctype, &body),
+                    Some((status, headers, body)) => {
+                        write_response_with_headers(stream, status, &headers, &body)
+                    }
                     None => write_response(stream, 503, "text/plain", b"UI server not started"),
                 }
             } else if req.method == "GET" {
@@ -218,12 +220,13 @@ fn bridge_ui_request(
     _conn: &ResourceAny,
     req: &Request,
 ) -> Option<(u16, String, Vec<u8>)> {
+    // returns (status, "Key: Value\n"-block of all response headers, body)
     let resp = core
         .with_database(|g, s| {
             g.call_handle_ui_request(s, &req.method, &req.path, &req.headers, &req.body)
         })
         .ok()??;
-    Some((resp.status, resp.content_type, resp.body))
+    Some((resp.status, resp.headers, resp.body))
 }
 
 /// Serve a captured asset from the offline assets directory.
@@ -335,7 +338,7 @@ fn run_query(core: &mut CoreExecution, conn: &ResourceAny, sql: &str) -> String 
     out
 }
 
-fn json_value(out: &mut String, val: &core_types::Duckvalue) {
+pub(crate) fn json_value(out: &mut String, val: &core_types::Duckvalue) {
     match val {
         core_types::Duckvalue::Null => out.push_str("null"),
         core_types::Duckvalue::Boolean(b) => out.push_str(if *b { "true" } else { "false" }),
@@ -353,7 +356,7 @@ fn json_value(out: &mut String, val: &core_types::Duckvalue) {
     }
 }
 
-fn duckerror_message(err: &core_types::Duckerror) -> String {
+pub(crate) fn duckerror_message(err: &core_types::Duckerror) -> String {
     match err {
         core_types::Duckerror::Invalidargument(m)
         | core_types::Duckerror::Unsupported(m)
@@ -363,14 +366,14 @@ fn duckerror_message(err: &core_types::Duckerror) -> String {
     }
 }
 
-fn json_error(msg: &str) -> String {
+pub(crate) fn json_error(msg: &str) -> String {
     let mut out = String::from("{\"error\":");
     json_string(&mut out, msg);
     out.push('}');
     out
 }
 
-fn json_string(out: &mut String, s: &str) {
+pub(crate) fn json_string(out: &mut String, s: &str) {
     out.push('"');
     for c in s.chars() {
         match c {
@@ -400,6 +403,54 @@ fn write_response(stream: &mut TcpStream, status: u16, content_type: &str, body:
         body.len()
     );
     stream.write_all(header.as_bytes())?;
+    stream.write_all(body)?;
+    stream.flush()?;
+    Ok(())
+}
+
+/// Write a response forwarding the full "Key: Value\n" header block the bridged
+/// UI handler produced (carries the X-DuckDB-* version/metadata headers the SPA
+/// reads). We compute Content-Length/Connection ourselves and drop any the
+/// handler set to avoid conflicting duplicates.
+fn write_response_with_headers(
+    stream: &mut TcpStream,
+    status: u16,
+    headers: &str,
+    body: &[u8],
+) -> Result<()> {
+    let reason = match status {
+        200 => "OK",
+        201 => "Created",
+        204 => "No Content",
+        400 => "Bad Request",
+        404 => "Not Found",
+        500 => "Internal Server Error",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
+        _ => "OK",
+    };
+    let mut out = format!("HTTP/1.1 {status} {reason}\r\n");
+    for line in headers.lines() {
+        let line = line.trim_end_matches('\r');
+        if line.is_empty() {
+            continue;
+        }
+        let name = line.split(':').next().unwrap_or("").trim();
+        if name.eq_ignore_ascii_case("content-length")
+            || name.eq_ignore_ascii_case("connection")
+            || name.eq_ignore_ascii_case("transfer-encoding")
+            || name.eq_ignore_ascii_case("access-control-allow-origin")
+        {
+            continue;
+        }
+        out.push_str(line);
+        out.push_str("\r\n");
+    }
+    out.push_str(&format!(
+        "Content-Length: {}\r\nConnection: close\r\nAccess-Control-Allow-Origin: *\r\n\r\n",
+        body.len()
+    ));
+    stream.write_all(out.as_bytes())?;
     stream.write_all(body)?;
     stream.flush()?;
     Ok(())

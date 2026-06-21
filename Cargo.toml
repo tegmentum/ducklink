@@ -9,6 +9,7 @@ members = [
     "extensions/isin",
     "extensions/isin-component",
     "extensions/baseN-component",
+    "handlers/echo-handler",
 ]
 
 resolver = "2"

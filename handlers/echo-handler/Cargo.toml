@@ -1,0 +1,21 @@
+[package]
+name = "echo-handler"
+version = "0.1.0"
+edition = "2021"
+description = "Reference duckdb-wasm-httpd request handler: echoes a summary of the request."
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+
+[package.metadata.component]
+package = "duckdb:handler"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:handler/request-handler"

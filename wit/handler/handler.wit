@@ -1,0 +1,26 @@
+package duckdb:handler;
+
+/// A wasm component that handles one HTTP request for duckdb-wasm-httpd
+/// (`duckdb-host serve`, route `kind='wasm'`). The native host loads the
+/// component via `--load NAME=PATH`, then instantiates it fresh per request
+/// (stateless across requests — persistent state belongs in the database).
+interface handler {
+    /// Handle one request. `request` is the JSON-encoded HTTP request:
+    ///   {
+    ///     "method":  "POST",
+    ///     "path":    "/upload",
+    ///     "query":   "v=1" | null,
+    ///     "remote":  "127.0.0.1:55432",
+    ///     "headers": { "content-type": "application/json", ... },
+    ///     "body":    { "text": "..." } | { "bytes_hex": "deadbeef..." }
+    ///   }
+    /// Returns the response body verbatim, OR a JSON object
+    ///   { "status": 201, "body": "...", "ctype": "text/plain" }
+    /// to override the status/content-type. An `Err` becomes a 500.
+    handle: func(request: string) -> result<string, string>;
+}
+
+/// The world every duckdb-wasm-httpd request handler targets.
+world request-handler {
+    export handler;
+}

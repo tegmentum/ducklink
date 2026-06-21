@@ -14,8 +14,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-HOST=./target/release/duckdb-host
-[[ -x "$HOST" ]] || cargo build --release -p duckdb-component-host --bin duckdb-host
+HOST=./target/release/ducklink
+[[ -x "$HOST" ]] || cargo build --release -p duckdb-component-host --bin ducklink
 
 echo "=== 1. azure secret type registers (CREATE SECRET TYPE azure) ==="
 printf "CREATE SECRET s (TYPE azure, CONNECTION_STRING 'DefaultEndpointsProtocol=https;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;');\nSELECT name, type FROM duckdb_secrets() WHERE name='s';\n" | \

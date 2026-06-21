@@ -120,7 +120,8 @@ interface database {
     /// One response from the DuckDB UI extension's bridged HTTP handler.
     record ui-response {
         status: u16,
-        content-type: string,
+        /// All response headers as a "Key: Value\n"-delimited block.
+        headers: string,
         body: list<u8>,
     }
 

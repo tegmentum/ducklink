@@ -108,7 +108,7 @@ also works. No code changes needed.
 `tooling/iceberg_smoke.py` (`make iceberg-smoke`) generates consistent pyiceberg
 fixtures (deflate + snappy, partitioned, multi-snapshot, gzip-metadata) under the
 gitignored `build/iceberg-fixtures/` and asserts the whole surface through
-`duckdb-host` — 11 checks: read_avro (deflate/snappy), iceberg_scan
+`ducklink` — 11 checks: read_avro (deflate/snappy), iceberg_scan
 (local/snappy/partitioned), gzip metadata, time travel, remote HTTP (range
 server), and REST catalog none/bearer/**sigv4** (the sigv4 mock recomputes the
 signature). Servers run in background threads. Requires `pyiceberg[snappy]` +

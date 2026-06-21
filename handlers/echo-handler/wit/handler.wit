@@ -1,0 +1,12 @@
+package duckdb:handler;
+
+/// A wasm component that handles one HTTP request for duckdb-wasm-httpd.
+interface handler {
+    /// Handle one request. `request` is the JSON-encoded HTTP request; returns
+    /// the response body verbatim, or a JSON object {status, body, ctype}.
+    handle: func(request: string) -> result<string, string>;
+}
+
+world request-handler {
+    export handler;
+}

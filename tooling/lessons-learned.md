@@ -44,9 +44,9 @@ Two structural facts shaped the harness:
 - The wac-composed **standalone CLI links a no-op loader stub** and cannot
   instantiate extension components (`request_load` returns false). So smoke
   cannot run through the standalone — it runs through the **native host runner**
-  `duckdb-host` (crates/duckdb-component-host), which has the real wasmtime
+  `ducklink` (crates/duckdb-component-host), which has the real wasmtime
   loader and resolves `artifacts/extensions/<name>.wasm`. `tooling/smoke.py`
-  drives that binary. (T-3 new) smoke harness spawns one `duckdb-host` process
+  drives that binary. (T-3 new) smoke harness spawns one `ducklink` process
   per extension and runs them serially; for a large catalog this wants a
   `-j`/parallel mode like sqlite-wasm's smoke.py grew. Left open until the
   catalog is big enough to feel it.

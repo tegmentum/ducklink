@@ -1,6 +1,6 @@
 # DuckDB UI on wasm — WORKING (real SPA, offline + online)
 
-The real DuckDB UI runs against the wasm DuckDB core. `duckdb-host ui` serves it
+The real DuckDB UI runs against the wasm DuckDB core. `ducklink ui` serves it
 three ways:
 - `--offline` (default): the genuine ui.duckdb.org SPA from captured assets
   (`web/duckdb-ui/`), no network.

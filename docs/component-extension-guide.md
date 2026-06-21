@@ -43,6 +43,32 @@ cargo run -p duckdb-component-host --release -- \
   :memory: --load-extension my_extension -c "select my_extension_function();"
 ```
 
+This is the **plugin** path: the extension stays a separate `.wasm` artifact and
+the core loads it at runtime — nothing is baked into the core.
+
+### 5. Or embed it into the core (`compose`)
+
+The same extension can instead be **compiled into the core component** — it then
+registers as a native scalar (no per-row WIT boundary, faster) and works in the
+standalone with no host. Embedding is opt-in: by default the core embeds nothing
+extra. Add an `embed-<name>` feature to the core crate (`dep:<crate>`; see
+`embed-isin`), then select it with a command-line flag (mirrors sqlite-wasm's
+`sqlink compose`):
+
+```bash
+# list extensions that expose an embed-<name> core feature
+ducklink compose --list
+
+# build a core with isin (and others) embedded; optionally precompile to .cwasm
+DUCKDB_STATIC_LIB=… DUCKDB_INCLUDE_DIR=… \
+  ducklink compose --embed isin --output build/core-isin.wasm --precompile
+```
+
+`--embed a,b` maps to `cargo component build … --features wasi,embed-a,embed-b`.
+The embed path doesn't disable the runtime loader — `LOAD`/`--load-extension`
+still works for everything else. (`make core-embed EMBED=embed-isin` is the
+equivalent Make target.)
+
 ### Tips
 
 - Keep the sample extension handy as a reference for capability registration and runtime callbacks.

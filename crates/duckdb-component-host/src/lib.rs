@@ -64,6 +64,10 @@ use wasmtime::{AsContextMut, Config, Engine, Store, StoreContextMut};
 
 mod ui_server;
 pub use ui_server::{serve_ui, UiMode};
+mod handler;
+pub use handler::HandlerRegistry;
+mod httpd;
+pub use httpd::{serve_httpd, HttpdOptions, TlsMode};
 use wasmtime_wasi::p2::{
     self,
     pipe::{MemoryInputPipe, MemoryOutputPipe},
@@ -2603,7 +2607,7 @@ impl cli_db::Host for HostState {
             .map(convert_cli_capability)
             .collect();
         eprintln!(
-            "[duckdb-host] register_extension requested: name='{extension_name}', capabilities={capability_summary}"
+            "[ducklink] register_extension requested: name='{extension_name}', capabilities={capability_summary}"
         );
         let result = match self.with_core(|core| {
             core.with_database(|guest, store| {
@@ -2613,7 +2617,7 @@ impl cli_db::Host for HostState {
             Ok(result) => result,
             Err(err) => {
                 eprintln!(
-                    "[duckdb-host] failed to invoke core register_extension for '{extension_name}': {err}"
+                    "[ducklink] failed to invoke core register_extension for '{extension_name}': {err}"
                 );
                 return Err(trap_to_cli_string(err));
             }
@@ -2621,14 +2625,14 @@ impl cli_db::Host for HostState {
         match result {
             Ok(value) => {
                 eprintln!(
-                    "[duckdb-host] core register_extension completed for '{extension_name}' (registered={value})"
+                    "[ducklink] core register_extension completed for '{extension_name}' (registered={value})"
                 );
                 Ok(value)
             }
             Err(err) => {
                 let err_msg: String = err.clone().into();
                 eprintln!(
-                    "[duckdb-host] core register_extension rejected '{extension_name}': {err_msg}"
+                    "[ducklink] core register_extension rejected '{extension_name}': {err_msg}"
                 );
                 Err(err)
             }

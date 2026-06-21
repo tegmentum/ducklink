@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Capture the DuckDB UI SPA (ui.duckdb.org) for OFFLINE serving by `duckdb-host ui`.
+# Capture the DuckDB UI SPA (ui.duckdb.org) for OFFLINE serving by `ducklink ui`.
 # The SPA is a single monolithic bundle (no lazy chunks): index.html + a hashed
 # bundle.js + css, plus a function-docs file used for autocomplete. The host serves
 # these for /<asset> in offline mode (or proxies ui.duckdb.org in online mode), and

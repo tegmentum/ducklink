@@ -2932,21 +2932,21 @@ impl exported_database::Guest for Component {
             u32::from_ne_bytes([slice[off], slice[off + 1], slice[off + 2], slice[off + 3]]) as usize
         };
         let status = read_u32(0) as u16;
-        let ctype_len = read_u32(4);
+        let headers_len = read_u32(4);
         let result = (|| {
-            let ctype_end = 8usize.checked_add(ctype_len)?;
-            if ctype_end + 4 > out_len {
+            let headers_end = 8usize.checked_add(headers_len)?;
+            if headers_end + 4 > out_len {
                 return None;
             }
-            let content_type = String::from_utf8_lossy(&slice[8..ctype_end]).into_owned();
-            let body_len = read_u32(ctype_end);
-            let body_start = ctype_end + 4;
+            let headers = String::from_utf8_lossy(&slice[8..headers_end]).into_owned();
+            let body_len = read_u32(headers_end);
+            let body_start = headers_end + 4;
             if body_start.checked_add(body_len)? > out_len {
                 return None;
             }
             Some(exported_database::UiResponse {
                 status,
-                content_type,
+                headers,
                 body: slice[body_start..body_start + body_len].to_vec(),
             })
         })();

@@ -11,8 +11,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-HOST=./target/release/duckdb-host
-[[ -x "$HOST" ]] || cargo build --release -p duckdb-component-host --bin duckdb-host
+HOST=./target/release/ducklink
+[[ -x "$HOST" ]] || cargo build --release -p duckdb-component-host --bin ducklink
 
 echo "=== 1. env-var credential chain -> load_aws_credentials() ==="
 AWS_ACCESS_KEY_ID=AKIAEXAMPLE123 AWS_SECRET_ACCESS_KEY=secretExampleKey \

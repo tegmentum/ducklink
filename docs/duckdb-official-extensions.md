@@ -6,32 +6,44 @@ realistic way to ship them on wasm — the same approach upstream duckdb-wasm
 uses — is to **statically link them into the core**, not to wrap each as a
 separate component. They then register as builtins (no runtime `LOAD` needed).
 
-## How extension selection works
+## How extension selection works — fully lean by default, opt-in to embed
 
-Which in-tree extensions get compiled into `artifacts/libduckdb-wasi.a` and
-registered as builtins is driven by **`cmake/wasm-extension-config.cmake`**
-(a list of `duckdb_extension_load(<name>)` calls), passed to DuckDB's CMake via
-`-DDUCKDB_EXTENSION_CONFIGS` in `scripts/build-libduckdb-wasm.sh`.
+C++ extensions can't be runtime wasm plugins on wasip2 (no dynamic linking, and
+DuckDB's extension API is deep C++ internals, not a narrow SPI). They're
+statically compiled into `artifacts/libduckdb-wasi.a` and the generated
+builtin-extension loader hard-references each one — so the selection has to
+happen at the **libduckdb cmake build**, not later.
+
+The selector is **`EMBED_EXTENSIONS`** (a comma-separated list, read by both
+`cmake/wasm-extension-config.cmake` and `scripts/build-libduckdb-wasm.sh`).
+**Default empty ⇒ fully lean**: the archive contains only DuckDB's base
+`core_functions` + `parquet`. Naming an extension gates, in lockstep, (a) its
+`duckdb_extension_load`, (b) its source staging + patches, and (c) merging its
+native-dep archives — so an unselected extension adds nothing.
 
 > The `WASM_EXTENSIONS` env var is **not** the selector — it only flips DuckDB's
-> internal `WASM_ENABLED` flag. The real selection is the cmake config above.
+> internal `WASM_ENABLED` flag.
 
-DuckDB's base config always links `core_functions` + `parquet`; everything else
-is added in our config file. Each entry makes DuckDB (a) compile the extension's
-C++ into the archive and (b) list it in the generated builtin-extension loader.
 `crates/libduckdb-sys/build.rs` auto-discovers every `extension/<name>/lib*.a`
-the build produced, so adding an extension needs no Rust-side edit.
+the build produced, so the core component links exactly the embedded set with no
+Rust-side edit. (The Rust *component* extensions have their own opt-in flag —
+`ducklink compose --embed <name>` / `make core-embed EMBED=embed-<name>` —
+which is the fast cargo-feature path; `EMBED_EXTENSIONS` is the libduckdb-rebuild
+path for the C++ extensions.)
 
-To add one:
+To build a core with some extensions embedded:
 
 ```bash
-# 1. add a line to cmake/wasm-extension-config.cmake:
-#      duckdb_extension_load(<name>)
-# 2. clean rebuild the archive (WASI_TARGET_TRIPLE matters — see below):
+# fully lean (default) — only core_functions + parquet:
 WASI_SDK_PREFIX=… DUCKDB_SOURCE_DIR=external/duckdb ./scripts/build-libduckdb-wasm.sh
-# 3. rebuild the core component and verify:
+
+# embed a chosen set (each also needs its prebuilt native deps present):
+EMBED_EXTENSIONS="json,icu,httpfs,spatial" \
+  WASI_SDK_PREFIX=… DUCKDB_SOURCE_DIR=external/duckdb ./scripts/build-libduckdb-wasm.sh
+
+# then rebuild the core component and verify:
 make core
-./target/release/duckdb-host -- :memory: -c "SELECT …"
+./target/release/ducklink -- :memory: -c "SELECT …"
 ```
 
 Only DuckDB's **in-tree** extensions are eligible (under
@@ -88,9 +100,12 @@ triple (`…/lib/wasm32-wasip2/eh`), which it does automatically via
 
 These live in **separate repos**, fetched at configure time via
 `duckdb_extension_load(<name> GIT_URL <repo> GIT_TAG <commit>)`. The full
-authoritative set (from DuckDB's `extension_entries.hpp`): `avro`, `aws`,
-`azure`, `ducklake`, `excel`, `fts`, `httpfs`, `iceberg`, `inet`,
-`mysql_scanner`, `postgres_scanner`, `spatial`, `sqlite_scanner`, `ui`, `vss`.
+authoritative set (DuckDB's `extension_entries.hpp` `AUTOLOADABLE_EXTENSIONS`):
+`avro`, `aws`, `azure`, `ducklake`, `encodings`, `excel`, `fts`, `httpfs`,
+`iceberg`, `inet`, `mysql_scanner`, `postgres_scanner`, `spatial`,
+`sqlite_scanner`, `uc_catalog`, `ui`, `vss`. (Not portable / out of scope:
+`motherduck` — proprietary, ships as a closed binary; `sqlsmith` — a fuzzer;
+`jemalloc` — N/A under the wasm allocator model.)
 
 **Use the DuckDB-pinned commit, not `main`.** Each extension's `main` tracks the
 latest DuckDB and will fail against this checkout with header-not-found errors
@@ -108,6 +123,8 @@ so anything network- or large-native-dep-bound is out. Feasibility:
 | **fts** | snowball stemmer + BM25 + SQL macros | **working** — `stem()` + `create_fts_index` + `match_bm25` (`@39376623`, `INCLUDE_DIR extension/fts/include`). |
 | **vss** | pure C++ HNSW (usearch) | **working** — `CREATE INDEX … USING HNSW` + `array_distance` NN search (`@c8a4efe`, `INCLUDE_DIR src/include`). |
 | **sqlite_scanner** | vendored sqlite3 + WASI VFS | **working** — `sqlite_scan(...)` + `ATTACH … (TYPE SQLITE)` read real `.sqlite` files. `-DSQLITE_OS_OTHER=1` drops sqlite3.c's unix VFS; a WASI VFS reused from `~/git/sqlite-wasm` (`cmake/sqlite-wasi-vfs/`, registered by `sqlite3_os_init`) backs file I/O. |
+| **encodings** | pure C++ (generated charset tables), no deps | **working** — `read_csv(…, encoding='shift_jis')` (and the rest of the legacy codecs core lacks) decode correctly; verified a Shift-JIS CSV → `テスト`. `@b5a547e`, `INCLUDE_DIR src/include`. Large (the generated maps add ~80 MB to the core wasm). DuckDB guards it off on their own emscripten build (`NOT WASM_ENABLED`); we link it anyway. |
+| **uc_catalog** | pure C++ + raw libcurl; needs httpfs + delta at runtime | **builds + loads** — pinned to the exact v1.4.0 commit `@4638e9b` (`INCLUDE_DIR src/include`); later commits call `DatabaseManager::FinalizeAttach` (private until 1.4.2). Registers the `uc` secret type + the `uc_catalog` storage type (`ATTACH … (TYPE UC_CATALOG, SECRET …)` recognized; `CREATE SECRET (TYPE UC, …)` works). `apply_extension_patches` swaps its `CURLOPT_CAINFO` file path for an embedded `CURLOPT_CAINFO_BLOB` (openssl-wasm can't read a CA file through the wrapped FS) and strips a stray `catch.hpp` include. **Unverified end-to-end**: the live Unity Catalog round-trip needs real Databricks credentials; and since our `delta` uses the local sync engine, only UC tables whose storage is local-file-reachable would scan (remote s3:// data is not yet served). |
 | **excel** | xlsx reader + vcpkg dep | **deferred** — `find_package` + `vcpkg.json`; needs a vcpkg native dep built for wasi (no vcpkg toolchain here). |
 | **avro** | DuckDB's avro-c fork + jansson + snappy | **working** — `read_avro('…')` verified with **deflate + snappy + xz** manifests. Needs DuckDB's **fork** `duckdb/duckdb-avro-c` (the field-id API; stock apache/avro lacks it) + jansson + snappy + liblzma, built for wasi by `scripts/build-wasi-deps.sh` (zstd not supported by avro-c). |
 | **httpfs** | HTTP/S3 over TCP+TLS | **working, out of the box** — plain `read_csv_auto('https://…')` fetches over HTTPS via `wasi:sockets` + parses (verified, iris.csv → 150 rows; secure cert verification ON, no settings). **curl is the default client on wasi** (build script patches httpfs `LoadInternal`); the vendored httplib client compiles but its connect select/poll path fails at runtime. BSD sockets come from grafting the wasip2 libc socket objects into the wasip1 core module (`scripts/build-libduckdb-wasm.sh`); openssl-wasm + curl-wasm (libcurl/nghttp2/ngtcp2/nghttp3/brotli) supply HTTP/TLS. Cert verification is secure-by-default: an embedded Mozilla CA bundle (`cmake/ca-bundle/cacert.pem`) is loaded in-memory via `CURLOPT_CAINFO_BLOB` (openssl-wasm can't load a CA *file* — its file BIO doesn't reach the wrapped host FS). |

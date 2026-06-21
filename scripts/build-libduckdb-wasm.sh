@@ -27,6 +27,21 @@ WASM_EXTENSIONS=${WASM_EXTENSIONS:-"json"}
 # DUCKDB_EXTENSION_CONFIGS to point at a different file.
 DUCKDB_EXTENSION_CONFIGS=${DUCKDB_EXTENSION_CONFIGS:-"$(pwd)/cmake/wasm-extension-config.cmake"}
 
+# EMBED_EXTENSIONS: comma-separated list of extensions to compile + embed into
+# libduckdb-wasi.a. Default empty => FULLY LEAN (only DuckDB's base
+# core_functions + parquet). Both the cmake config (which duckdb_extension_load
+# calls fire) and the source-staging/patching/dep-merging steps below gate on
+# this same list, so an unselected extension adds nothing. Example:
+#   EMBED_EXTENSIONS="httpfs,json,icu,spatial" ./scripts/build-libduckdb-wasm.sh
+export EMBED_EXTENSIONS=${EMBED_EXTENSIONS:-""}
+echo "  embed extensions: ${EMBED_EXTENSIONS:-<none — fully lean>}" >&2
+
+# Is extension <name> selected for embedding? (membership in EMBED_EXTENSIONS)
+ext_selected() {
+  local want="$1" list=",${EMBED_EXTENSIONS//[[:space:]]/},"
+  [[ "$list" == *",$want,"* ]]
+}
+
 BUILD_DIR=${BUILD_DIR:-"$(pwd)/build/duckdb-wasi"}
 mkdir -p "$BUILD_DIR"
 
@@ -43,6 +58,7 @@ configure_duckdb() {
     -DCMAKE_TOOLCHAIN_FILE="$(pwd)/cmake/toolchains/wasi-sdk.cmake" \
     -DWASI_SDK_PREFIX:PATH="$WASI_SDK_PREFIX" \
     -DDUCKDB_EXTENSION_CONFIGS="$DUCKDB_EXTENSION_CONFIGS" \
+    -DEMBED_EXTENSIONS="$EMBED_EXTENSIONS" \
     -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
     -DCMAKE_CXX_FLAGS="${EXTRA_CXX_FLAGS:-}" \
     -DCMAKE_C_FLAGS="${EXTRA_C_FLAGS:-${EXTRA_CXX_FLAGS:-}}" \
@@ -66,7 +82,7 @@ apply_extension_patches() {
 # httpfs source) and before the build; idempotent (skips if already patched).
 HTTPFS_SRC="$BUILD_DIR/_deps/httpfs_extension_fc-src/extension/httpfs"
 CA_BUNDLE="$(pwd)/cmake/ca-bundle/cacert.pem"
-if grep -q "duckdb_extension_load(httpfs" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+if ext_selected httpfs \
    && [[ -d "$HTTPFS_SRC" && -f "$CA_BUNDLE" ]]; then
   { printf '{'; xxd -i < "$CA_BUNDLE"; printf '}'; } > "$HTTPFS_SRC/duckdb_ca_bundle.inc"
   python3 - "$HTTPFS_SRC/httpfs_curl_client.cpp" <<'PY'
@@ -141,10 +157,61 @@ print('patched httpfs_extension.cpp: curl is the default client on wasi')
 PY
 fi
 
+# uc_catalog: the v1.4.0 extension talks to the Unity Catalog REST API with raw
+# libcurl and sets CURLOPT_CAINFO to a host CA *file* path -- which openssl-wasm
+# can't read through the wrapped FS. Embed the CA bundle and load it from memory
+# via CURLOPT_CAINFO_BLOB on wasi (same fix as httpfs/azure). Idempotent.
+UC_SRC="$BUILD_DIR/_deps/uc_catalog_extension_fc-src"
+if ext_selected uc_catalog \
+   && [[ -d "$UC_SRC" && -f "$CA_BUNDLE" ]]; then
+  { printf '{'; xxd -i < "$CA_BUNDLE"; printf '}'; } > "$UC_SRC/src/uc_catalog_ca_bundle.inc"
+  python3 - "$UC_SRC/src/uc_api.cpp" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+if 'duckdb_wasi_ca_bundle' in s:
+    sys.exit(0)
+anchor = 'static bool SetCurlCAFileInfo(CURL* curl) {\n'
+if anchor not in s:
+    sys.stderr.write('SetCurlCAFileInfo anchor not found in uc_api.cpp\n'); sys.exit(1)
+inject = anchor + '''#ifdef __wasi__
+\t// wasi: openssl can't read a CA file through the wrapped FS; use an embedded
+\t// bundle from memory (CURLOPT_CAINFO_BLOB, no file I/O).
+\t{
+\t\tstatic const unsigned char duckdb_wasi_ca_bundle[] =
+#include "uc_catalog_ca_bundle.inc"
+\t\t;
+\t\tstruct curl_blob ca_blob;
+\t\tca_blob.data = (void *)duckdb_wasi_ca_bundle;
+\t\tca_blob.len = sizeof(duckdb_wasi_ca_bundle);
+\t\tca_blob.flags = CURL_BLOB_COPY;
+\t\tcurl_easy_setopt(curl, CURLOPT_CAINFO_BLOB, &ca_blob);
+\t\treturn true;
+\t}
+#endif
+'''
+s = s.replace(anchor, inject, 1)
+open(p, 'w').write(s)
+print('patched uc_api.cpp for embedded CA bundle (CURLOPT_CAINFO_BLOB)')
+PY
+  echo "Embedded CA bundle into uc_catalog curl client" >&2
+  # uc_table_entry.cpp has a stray (unused) include of the catch test header via a
+  # broken relative path that doesn't resolve in the FetchContent layout. Strip it.
+  python3 - "$UC_SRC/src/storage/uc_table_entry.cpp" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+needle = '#include "../../duckdb/third_party/catch/catch.hpp"\n'
+if needle in s:
+    open(p, 'w').write(s.replace(needle, ''))
+    print('stripped stray catch.hpp include from uc_table_entry.cpp')
+PY
+fi
+
 # duckdb-avro: our wasi avro-c is deflate-only (no lzma/snappy), so drop those
 # REQUIRED find_library() calls + their use in ALL_AVRO_LIBRARIES. Idempotent.
 AVRO_SRC="$BUILD_DIR/_deps/avro_extension_fc-src"
-if grep -q "duckdb_extension_load(avro" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+if ext_selected avro \
    && [[ -f "$AVRO_SRC/CMakeLists.txt" ]]; then
   python3 - "$AVRO_SRC/CMakeLists.txt" <<'PY'
 import re, sys
@@ -172,7 +239,7 @@ fi
 # the AWS SDK. EMSCRIPTEN keeps the upstream stub.
 ICE_SRC="$BUILD_DIR/_deps/iceberg_extension_fc-src"
 AWS_WASI_INC="$(pwd)/cmake/iceberg-wasi/aws_wasi.inc"
-if grep -q "duckdb_extension_load(iceberg" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+if ext_selected iceberg \
    && [[ -d "$ICE_SRC" ]]; then
   # CMake: skip AWS/CURL find_package on WASI as well as Emscripten
   if ! grep -q 'STREQUAL "WASI"' "$ICE_SRC/CMakeLists.txt"; then
@@ -218,7 +285,7 @@ fi
 # and turn network off on wasi (like the upstream Emscripten path).
 SPATIAL_SRC="$BUILD_DIR/_deps/spatial_extension_fc-src"
 SPATIAL_DEPS_CMAKE="$(pwd)/cmake/spatial-deps.cmake"
-if grep -q "duckdb_extension_load(spatial" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+if ext_selected spatial \
    && [[ -f "$SPATIAL_SRC/CMakeLists.txt" ]]; then
   python3 - "$SPATIAL_SRC/CMakeLists.txt" "$SPATIAL_DEPS_CMAKE" <<'PY'
 import sys
@@ -274,7 +341,7 @@ fi
 # the minizip-ng built by build-wasi-deps.sh).
 EXCEL_SRC="$BUILD_DIR/_deps/excel_extension_fc-src"
 EXCEL_DEPS_CMAKE="$(pwd)/cmake/excel-deps.cmake"
-if grep -q "duckdb_extension_load(excel" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+if ext_selected excel \
    && [[ -f "$EXCEL_SRC/CMakeLists.txt" ]]; then
   python3 - "$EXCEL_SRC/CMakeLists.txt" "$EXCEL_DEPS_CMAKE" <<'PY'
 import sys
@@ -304,7 +371,7 @@ fi
 PG_SRC="$BUILD_DIR/_deps/postgres_scanner_extension_fc-src"
 PG_DEPS_CMAKE="$(pwd)/cmake/postgres-deps.cmake"
 PG_STAGED="$(pwd)/build/wasi-deps/src/postgresql-15.13"
-if grep -q "duckdb_extension_load(postgres_scanner" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+if ext_selected postgres_scanner \
    && [[ -f "$PG_SRC/CMakeLists.txt" ]]; then
   python3 - "$PG_SRC/CMakeLists.txt" "$PG_DEPS_CMAKE" <<'PY'
 import sys
@@ -360,7 +427,7 @@ fi
 # socket graft + getaddrinfo wrapper.
 MY_SRC="$BUILD_DIR/_deps/mysql_scanner_extension_fc-src"
 MY_DEPS_CMAKE="$(pwd)/cmake/mysql-deps.cmake"
-if grep -q "duckdb_extension_load(mysql_scanner" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+if ext_selected mysql_scanner \
    && [[ -f "$MY_SRC/CMakeLists.txt" ]]; then
   python3 - "$MY_SRC/CMakeLists.txt" "$MY_DEPS_CMAKE" <<'PY'
 import sys
@@ -443,7 +510,7 @@ fi
 # prebuilt .a where the patched CMakeLists' DELTA_KERNEL_LIBPATH expects it.
 # Runs before configure because the delta CMakeLists is read at configure time.
 stage_delta_kernel() {
-  grep -q "duckdb_extension_load(delta" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null || return 0
+  ext_selected delta || return 0
   local OUT_DIR="$(pwd)/build/delta-kernel/out"
   if [[ ! -f "$OUT_DIR/libdelta_kernel_ffi.a" ]]; then
     echo "delta: building wasm sync-engine kernel" >&2
@@ -478,7 +545,7 @@ stage_delta_kernel() {
 # region) under __wasi__ via cmake/aws-wasi/aws_wasi_credentials.hpp. Pure C++,
 # no extra deps. Runs before configure (in-tree extension read at configure time).
 stage_aws_extension() {
-  grep -q "duckdb_extension_load(aws" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null || return 0
+  ext_selected aws || return 0
   local AWS_DIR="$DUCKDB_SOURCE_DIR/extension/aws"
   local PIN="812ce80fde0bfa6e4641b6fd798087349a610795"
   if [[ ! -f "$AWS_DIR/CMakeLists.txt" ]]; then
@@ -505,7 +572,7 @@ stage_aws_extension() {
 # Wraps the Azure SDK for C++; the SDK is prebuilt for wasm32-wasip2 (libcurl
 # transport over curl-wasm) and merged into libduckdb-wasi.a below.
 stage_azure_extension() {
-  grep -q "duckdb_extension_load(azure" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null || return 0
+  ext_selected azure || return 0
   if [[ ! -f "$(pwd)/build/azure-sdk/out/lib/libazure-storage-blobs.a" ]]; then
     echo "azure: building Azure SDK for wasm" >&2
     WASI_SDK_PREFIX="$WASI_SDK_PREFIX" "$(pwd)/scripts/build-azure-sdk-wasm.sh"
@@ -541,11 +608,11 @@ stage_azure_extension() {
 }
 
 # ui: the real DuckDB UI. httplib can't listen() in the wasip2 sandbox, so the
-# native host (duckdb-host ui) owns the socket and bridges each request to the
+# native host (ducklink ui) owns the socket and bridges each request to the
 # extension's HttpServer::HandleRequest (exposed as duckdb_ui_handle_request).
 # Vendor duckdb-ui @ ded075b (DuckDB 1.4.0) + apply the wasm patches (cmake/ui-deps/).
 stage_ui_extension() {
-  grep -q "duckdb_extension_load(ui" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null || return 0
+  ext_selected ui || return 0
   local UI_DIR="$DUCKDB_SOURCE_DIR/extension/ui"
   local PIN="ded075b"
   if [[ ! -f "$UI_DIR/CMakeLists.txt" ]]; then
@@ -731,7 +798,7 @@ fi
 # is enabled in the config; harmless if the libs are absent.
 OPENSSL_WASM_BUILD="${OPENSSL_WASM_BUILD:-$HOME/git/openssl-wasm/build/openssl}"
 CURL_WASM_BUILD="${CURL_WASM_BUILD:-$HOME/git/curl-wasm/build}"
-if grep -q "duckdb_extension_load(httpfs" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+if ext_selected httpfs; then
   # curl-wasm is built with HTTP/2 (nghttp2) + HTTP/3 (USE_NGTCP2: ngtcp2 +
   # nghttp3). Merge those too, alongside openssl/zlib/zstd/brotli.
   for src in "$OPENSSL_WASM_BUILD/libssl.a" "$OPENSSL_WASM_BUILD/libcrypto.a" \
@@ -797,17 +864,43 @@ if grep -q "duckdb_extension_load(httpfs" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/nul
   echo "Merging getpid stub into libduckdb-wasi.a" >&2
 fi
 
+# UI bridge fallback. The core component unconditionally references the ui
+# extension's duckdb_ui_handle_request/duckdb_ui_free (the host bridges /ddb/*
+# through them). When `ui` is NOT embedded those symbols are absent, so provide
+# no-op stubs (handle-ui-request then returns none) so the core still links.
+# When `ui` IS embedded its real symbols (http_server.cpp) are the only ones --
+# the stub is omitted to avoid a duplicate definition.
+if ! ext_selected ui; then
+  cat > "$TMPDIR/ui_bridge_stub.c" <<'EOF'
+#include <stddef.h>
+#include <stdint.h>
+uint8_t *duckdb_ui_handle_request(
+    const char *method, const char *path, const char *headers,
+    const uint8_t *body, size_t body_len, size_t *out_len) {
+  (void)method; (void)path; (void)headers; (void)body; (void)body_len;
+  if (out_len) { *out_len = 0; }
+  return NULL;
+}
+void duckdb_ui_free(uint8_t *ptr) { (void)ptr; }
+EOF
+  "$WASI_SDK_PREFIX/bin/clang" --target="${WASI_TARGET_TRIPLE:-wasm32-wasip2}" \
+    -O2 -c "$TMPDIR/ui_bridge_stub.c" -o "$TMPDIR/ui_bridge_stub.o"
+  "$WASI_SDK_PREFIX/bin/llvm-ar" rcs "$TMPDIR/libuibridgestub.a" "$TMPDIR/ui_bridge_stub.o"
+  ADDLIBS="$ADDLIBS"$'\n'"ADDLIB libuibridgestub.a"
+  echo "Merging UI bridge no-op stub into libduckdb-wasi.a (ui not embedded)" >&2
+fi
+
 # avro extension links libavro + libjansson (deflate codec uses zlib, already
 # merged with httpfs). iceberg links libroaring. Merge the wasi deps built by
 # scripts/build-wasi-deps.sh so the core resolves their symbols.
 WASI_DEPS="${WASI_DEPS:-$(pwd)/build/wasi-deps}"
-if grep -q "duckdb_extension_load(avro" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+if ext_selected avro; then
   deps=("$WASI_DEPS/avro-c/lib/libavro.a" "$WASI_DEPS/jansson/lib/libjansson.a" \
         "$WASI_DEPS/snappy/lib/libsnappy.a" "$WASI_DEPS/lzma/lib/liblzma.a")
   # zlib (deflate codec) -- only if httpfs didn't already merge it
-  grep -q "duckdb_extension_load(httpfs" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+  ext_selected httpfs \
     || deps+=("$HOME/git/curl-wasm/build/zlib/lib/libz.a")
-  grep -q "duckdb_extension_load(iceberg" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+  ext_selected iceberg \
     && deps+=("$WASI_DEPS/roaring/lib/libroaring.a")
   for src in "${deps[@]}"; do
     name="$(basename "$src")"
@@ -823,7 +916,7 @@ fi
 # links it to the extension target via target_link_libraries, but a static lib
 # doesn't bundle its link deps, so the kernel symbols must be merged into the
 # combined archive the core links against (same as avro/iceberg/spatial).
-if grep -q "duckdb_extension_load(delta" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+if ext_selected delta; then
   KERNEL_A="$(pwd)/build/delta-kernel/out/libdelta_kernel_ffi.a"
   if [[ -f "$KERNEL_A" ]]; then
     cp "$KERNEL_A" "$TMPDIR/libdelta_kernel_ffi.a"
@@ -839,7 +932,7 @@ fi
 # Azure:: targets on native, but on wasm they're separate static libs that must
 # be in the combined archive the core links against. curl-wasm + openssl-wasm
 # (the transport + crypto) are already merged for httpfs.
-if grep -q "duckdb_extension_load(azure" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+if ext_selected azure; then
   AZURE_LIB="$(pwd)/build/azure-sdk/out/lib"
   azure_deps=("$AZURE_LIB/libazure-storage-files-datalake.a" "$AZURE_LIB/libazure-storage-blobs.a"
               "$AZURE_LIB/libazure-storage-common.a" "$AZURE_LIB/libazure-identity.a"
@@ -860,7 +953,7 @@ fi
 # spatial: merge the geo stack (GEOS + PROJ + GDAL + tiff/jpeg/png/expat/sqlite +
 # proj data) from the ~/git/*-wasm libs, plus a stubs lib for the ~24 wasi-missing
 # symbols GDAL references (dlopen/fork/exec/sqlite-extras). zlib comes from httpfs.
-if grep -q "duckdb_extension_load(spatial" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+if ext_selected spatial; then
   # compile the weak stubs
   "$WASI_SDK_PREFIX/bin/clang" --target="${WASI_TARGET_TRIPLE:-wasm32-wasip2}" -O2 \
     -c "$(pwd)/cmake/spatial-deps/stubs.c" -o "$TMPDIR/spatial_stubs.o"
@@ -920,12 +1013,12 @@ fi
 
 # excel: xlsx = zip(expat-parsed XML). Merge minizip-ng + expat + zlib (the
 # latter two only if not already merged by spatial/httpfs/avro).
-if grep -q "duckdb_extension_load(excel" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+if ext_selected excel; then
   WASI_DEPS="${WASI_DEPS:-$(pwd)/build/wasi-deps}"
   xdeps=("$WASI_DEPS/minizip/lib/libminizip-ng.a")
-  grep -q "duckdb_extension_load(spatial" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+  ext_selected spatial \
     || xdeps+=("$HOME/git/expat-wasm/build/lib/libexpat.a")
-  grep -qE "duckdb_extension_load\((spatial|httpfs|avro)" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null \
+  { ext_selected spatial || ext_selected httpfs || ext_selected avro; } \
     || xdeps+=("$HOME/git/curl-wasm/build/zlib/lib/libz.a")
   for src in "${xdeps[@]}"; do
     name="$(basename "$src")"
@@ -944,7 +1037,7 @@ fi
 # resolve locally; wasi's getaddrinfo rejects them via resolve-addresses).
 # Sockets + openssl come from httpfs's wasip2 graft, so both DB scanners require
 # httpfs. postgres compiles libpq inline; mysql merges a prebuilt libmariadb.
-if grep -qE "duckdb_extension_load\((postgres|mysql)_scanner" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+if ext_selected postgres_scanner || ext_selected mysql_scanner; then
   "$WASI_SDK_PREFIX/bin/clang" --target="${WASI_TARGET_TRIPLE:-wasm32-wasip2}" -O2 \
     -c "$(pwd)/cmake/postgres-wasi/stubs.c" -o "$TMPDIR/pg_stubs.o" \
     -I"$(pwd)/cmake/postgres-wasi/include"
@@ -956,7 +1049,7 @@ if grep -qE "duckdb_extension_load\((postgres|mysql)_scanner" "$DUCKDB_EXTENSION
 fi
 # mysql_scanner: merge the prebuilt MariaDB Connector/C (libpq is inline; this
 # is the equivalent for mysql).
-if grep -q "duckdb_extension_load(mysql_scanner" "$DUCKDB_EXTENSION_CONFIGS" 2>/dev/null; then
+if ext_selected mysql_scanner; then
   WASI_DEPS="${WASI_DEPS:-$(pwd)/build/wasi-deps}"
   if [[ -f "$WASI_DEPS/mariadb/lib/mariadb/libmariadbclient.a" ]]; then
     cp "$WASI_DEPS/mariadb/lib/mariadb/libmariadbclient.a" "$TMPDIR/libmariadbclient.a"

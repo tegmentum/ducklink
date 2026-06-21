@@ -1,7 +1,7 @@
 WASI_TARGET?=wasm32-wasip2
 BROWSER_TARGET?=wasm32-unknown-unknown
 
-.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile
+.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension echo-handler smoke-httpd ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile
 
 all: core standalone-cli loader-stub
 
@@ -50,6 +50,17 @@ sample-extension: all
 smoke-extension:
 	cargo test -p duckdb-component-host load_sample_extension_component
 
+# Build the reference duckdb-wasm-httpd request handler (kind='wasm' dispatch
+# target). Load it with: ducklink serve --load echo=<artifact>.
+echo-handler:
+	cargo component build -p echo-handler --target $(WASI_TARGET) --release
+	mkdir -p artifacts/handlers
+	cp target/$(WASI_TARGET)/release/echo_handler.wasm artifacts/handlers/echo_handler.wasm
+
+# duckdb-wasm-httpd end-to-end smoke (built-ins + every route kind incl. wasm).
+smoke-httpd: host echo-handler
+	./test/smoke-httpd.sh
+
 # Tiered Virtual Memory (>4 GiB spill tier) tests.
 #   make tvm-test-host -- fast, pure-node free-list/handle unit test (no build)
 #   make tvm-test      -- native larger-than-memory spill round-trip
@@ -66,10 +77,10 @@ tvm-test: host
 # wasmtime-version specific -- regenerate per target. Pass the .cwasm paths to
 # --core-component/--cli-component to use them.
 precompile: host
-	./target/release/duckdb-host precompile \
+	./target/release/ducklink precompile \
 	  target/$(WASI_TARGET)/release/duckdb_core_component.wasm \
 	  target/$(WASI_TARGET)/release/duckdb_core_component.cwasm
-	./target/release/duckdb-host precompile \
+	./target/release/ducklink precompile \
 	  target/$(WASI_TARGET)/release/duckdb_cli_component.wasm \
 	  target/$(WASI_TARGET)/release/duckdb_cli_component.cwasm
 
@@ -79,13 +90,13 @@ ci-local:
 
 # ---- Componentized extensions (tooling/) ----------------------------------
 # The extension tracking + scaffolding + smoke system mirrors ~/git/sqlite-wasm.
-# Extensions load through the native host runner (duckdb-host); the standalone
+# Extensions load through the native host runner (ducklink); the standalone
 # CLI links a no-op loader stub and cannot instantiate them. Build core + cli
 # components first with `make all` (needs DUCKDB_STATIC_LIB / DUCKDB_INCLUDE_DIR).
 
 # Native host runner that has the real component extension loader.
 host:
-	cargo build --release -p duckdb-component-host --bin duckdb-host
+	cargo build --release -p duckdb-component-host --bin ducklink
 
 # Scaffold a new extension:  make ext-scaffold NAME=foo [CRATE=base32,bs58]
 ext-scaffold:
@@ -104,7 +115,7 @@ ext-smoke-all: host
 
 # Iceberg + Avro regression: generates pyiceberg fixtures and asserts the
 # iceberg/avro surface (local + remote reads, codecs, time travel, REST catalog
-# none/bearer/sigv4) through duckdb-host. Needs: pip install 'pyiceberg[snappy]' pyarrow.
+# none/bearer/sigv4) through ducklink. Needs: pip install 'pyiceberg[snappy]' pyarrow.
 iceberg-smoke: host
 	python3 tooling/iceberg_smoke.py
 
