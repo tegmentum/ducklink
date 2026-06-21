@@ -3420,6 +3420,105 @@
       ],
       "crates": [],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "phonenumber",
+      "version": "0.1.0",
+      "description": "Phone-number validation + formatting (phonenumber, a libphonenumber port with embedded metadata): phone_valid, phone_format (e164/international/national/rfc3966), phone_country_code. region is a 2-letter code; empty for +-prefixed numbers.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "phone",
+        "libphonenumber",
+        "validate",
+        "format"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/phonenumber-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/phonenumber.wasm",
+      "exports": [
+        "phone_valid",
+        "phone_format",
+        "phone_country_code"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "phonenumber"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "pwstrength",
+      "version": "0.1.0",
+      "description": "Password-strength scoring (passwords crate; pure compute): password_score(pw) -> 0-100, password_strength(pw) -> label. Replaces zxcvbn, which is infeasible on wasip2 (needs a wasm-bindgen time import).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "password",
+        "strength",
+        "security",
+        "score"
+      ],
+      "categories": [
+        "cryptography"
+      ],
+      "source": "extensions/pwstrength-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/pwstrength.wasm",
+      "exports": [
+        "password_score",
+        "password_strength"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "passwords"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "qrcode",
+      "version": "0.1.0",
+      "description": "QR code generation (qrcode, SVG output): qr_svg(text) -> an SVG document. Data too large for a QR symbol -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "qr",
+        "qrcode",
+        "barcode",
+        "svg"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/qrcode-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/qrcode.wasm",
+      "exports": [
+        "qr_svg"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "qrcode"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {

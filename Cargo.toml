@@ -107,6 +107,9 @@ members = [
     "extensions/piglatin-component",
     "extensions/rle-component",
     "extensions/bbcode-component",
+    "extensions/phonenumber-component",
+    "extensions/qrcode-component",
+    "extensions/pwstrength-component",
 ]
 
 resolver = "2"
