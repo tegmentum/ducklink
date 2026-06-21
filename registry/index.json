@@ -1696,6 +1696,134 @@
       ],
       "crates": [],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "ascii85",
+      "version": "0.1.0",
+      "description": "Ascii85 / Base85 encode/decode (ascii85): ascii85_encode -> <~...~>, ascii85_decode. Non-UTF-8 decode -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "ascii85",
+        "base85",
+        "encoding"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/ascii85-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/ascii85.wasm",
+      "exports": [
+        "ascii85_encode",
+        "ascii85_decode"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "ascii85"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "quotedprintable",
+      "version": "0.1.0",
+      "description": "MIME quoted-printable (quoted_printable): qp_encode / qp_decode (robust). Non-UTF-8 decode -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "quoted-printable",
+        "mime",
+        "email",
+        "encoding"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/quotedprintable-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/quotedprintable.wasm",
+      "exports": [
+        "qp_encode",
+        "qp_decode"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "quoted_printable"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "unitconv",
+      "version": "0.1.0",
+      "description": "Physical unit conversion (hand-rolled): unit_convert(value, from, to) for length, mass, and temperature. Cross-category / unknown unit -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "units",
+        "convert",
+        "length",
+        "mass",
+        "temperature"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/unitconv-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/unitconv.wasm",
+      "exports": [
+        "unit_convert"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "wordwrap",
+      "version": "0.1.0",
+      "description": "Word-wrap text (textwrap): word_wrap(text, width) greedy-fills to a column width, newline separated. Non-positive width -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "wrap",
+        "fill",
+        "text",
+        "format"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/wordwrap-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/wordwrap.wasm",
+      "exports": [
+        "word_wrap"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "textwrap"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {

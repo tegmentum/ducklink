@@ -54,6 +54,10 @@ members = [
     "extensions/numwords-component",
     "extensions/ordinal-component",
     "extensions/nato-component",
+    "extensions/ascii85-component",
+    "extensions/quotedprintable-component",
+    "extensions/unitconv-component",
+    "extensions/wordwrap-component",
 ]
 
 resolver = "2"
