@@ -70,6 +70,7 @@ members = [
     "extensions/base58check-component",
     "extensions/checksums-component",
     "extensions/siphash-component",
+    "extensions/tiktoken-component",
 ]
 
 resolver = "2"

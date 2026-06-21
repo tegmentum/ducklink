@@ -2219,6 +2219,41 @@
         "siphasher"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "tiktoken",
+      "version": "0.1.0",
+      "description": "OpenAI BPE tokenization (tiktoken-rs, embedded tables, no network): tiktoken_count / tiktoken_encode (JSON ids) / tiktoken_decode for o200k_base, cl100k_base, p50k_base, p50k_edit, r50k_base. Mirrors the standalone tiktoken:tokenizer component in the duckdb:extension world.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "tiktoken",
+        "bpe",
+        "tokenizer",
+        "llm",
+        "openai"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/tiktoken-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/tiktoken.wasm",
+      "exports": [
+        "tiktoken_count",
+        "tiktoken_encode",
+        "tiktoken_decode"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "tiktoken-rs"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {
