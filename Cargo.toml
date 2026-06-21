@@ -8,6 +8,7 @@ members = [
     "extensions/sample-extension-component",
     "extensions/isin",
     "extensions/greet-dotcmd",
+    "extensions/core-dotcmd",
     "extensions/isin-component",
     "extensions/baseN-component",
     "handlers/echo-handler",

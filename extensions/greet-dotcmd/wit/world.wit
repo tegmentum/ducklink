@@ -1,9 +1,17 @@
 package duckdb:dotcmd@0.1.0;
 
-/// A pluggable CLI dot-command provider. The host calls `list` once at load to
-/// learn the commands a component registers, then routes `.NAME args` typed at
-/// the duckdb prompt to `invoke(id, args)`. One declaration powers the prompt
-/// today; argv + `dot_command()` SQL share the same registry in later phases.
+/// SQL access to the CLI's live connection, provided by the host. A dot-command
+/// component running during a session shares the very connection the user is
+/// typing into, so it sees temp tables, settings, and `:memory:` state.
+interface spi {
+    /// Run SQL on the CLI's live connection. Returns the rows as text: one row
+    /// per line, columns tab-separated, NULL as empty, no header. Error -> err.
+    query: func(sql: string) -> result<string, string>;
+}
+
+/// A pluggable CLI dot-command provider. The host calls `list-commands` at load
+/// to learn the commands a component registers, then routes `.NAME args` typed at
+/// the duckdb prompt to `invoke(id, args)`.
 interface registry {
     record command-spec {
         /// Stable id the host passes back to `invoke`.
@@ -12,7 +20,7 @@ interface registry {
         name: string,
         /// One-line summary, surfaced by `.help`.
         summary: string,
-        /// Usage hint, e.g. "greet [NAME]".
+        /// Usage hint, e.g. "count TABLE".
         usage: string,
     }
     /// Declare the dot commands this component provides.
@@ -23,5 +31,6 @@ interface registry {
 }
 
 world dotcmd {
+    import spi;
     export registry;
 }

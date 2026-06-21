@@ -733,10 +733,72 @@ fn network_grant_allows(extension: &str) -> bool {
 struct DotcmdState {
     wasi: WasiCtx,
     table: ResourceTable,
+    /// The core (for spi SQL execution) and the CLI's live connection handle.
+    core: Arc<Mutex<CoreExecution>>,
+    current_connection: Arc<Mutex<Option<ResourceAny>>>,
 }
 impl WasiView for DotcmdState {
     fn ctx(&mut self) -> WasiCtxView<'_> {
         WasiCtxView { ctx: &mut self.wasi, table: &mut self.table }
+    }
+}
+impl wasmtime::component::HasData for DotcmdState {
+    type Data<'a> = &'a mut DotcmdState;
+}
+
+/// `duckdb:dotcmd/spi` — run SQL on the CLI's live connection, returned as
+/// tab/newline-delimited text. Shares the user's connection (temp tables,
+/// `:memory:` state, settings).
+impl dotcmd_bindings::duckdb::dotcmd::spi::Host for DotcmdState {
+    fn query(&mut self, sql: String) -> Result<String, String> {
+        let handle = self
+            .current_connection
+            .lock()
+            .expect("current connection mutex poisoned")
+            .clone()
+            .ok_or_else(|| "spi: no active database connection".to_string())?;
+        let mut core = self.core.lock().expect("core mutex poisoned");
+        let result = core
+            .with_database(|guest, store| guest.call_execute(store, handle, &sql))
+            .map_err(|trap| format!("spi query trapped: {trap}"))?;
+        match result {
+            Ok(qr) => Ok(spi_render_rows(qr)),
+            Err(err) => Err(core_duckerror_message(err)),
+        }
+    }
+}
+
+/// The human-readable message inside a core Duckerror (drops the variant noise).
+fn core_duckerror_message(err: core_types::Duckerror) -> String {
+    match err {
+        core_types::Duckerror::Invalidargument(m)
+        | core_types::Duckerror::Unsupported(m)
+        | core_types::Duckerror::Invalidstate(m)
+        | core_types::Duckerror::Io(m)
+        | core_types::Duckerror::Internal(m) => m,
+    }
+}
+
+/// Render a core query result as text: one row per line, tab-separated columns,
+/// NULL as empty, no header.
+fn spi_render_rows(qr: core_db_exports::QueryResult) -> String {
+    let mut out = String::new();
+    for row in qr.rows {
+        let cells: Vec<String> = row.iter().map(spi_value_text).collect();
+        out.push_str(&cells.join("\t"));
+        out.push('\n');
+    }
+    out
+}
+fn spi_value_text(v: &core_types::Duckvalue) -> String {
+    match v {
+        core_types::Duckvalue::Null => String::new(),
+        core_types::Duckvalue::Boolean(b) => b.to_string(),
+        core_types::Duckvalue::Int64(n) => n.to_string(),
+        core_types::Duckvalue::Uint64(n) => n.to_string(),
+        core_types::Duckvalue::Float64(f) => f.to_string(),
+        core_types::Duckvalue::Text(s) => s.clone(),
+        core_types::Duckvalue::Blob(b) => format!("<blob {} bytes>", b.len()),
     }
 }
 
@@ -757,7 +819,13 @@ pub struct DotcmdRegistry {
 
 impl DotcmdRegistry {
     /// Load every `*.wasm` dot-command component in `dir` (missing dir = empty).
-    fn load(engine: &Engine, dir: &Path) -> Self {
+    /// `core` + `current_connection` back the spi import (SQL on the live conn).
+    fn load(
+        engine: &Engine,
+        dir: &Path,
+        core: Arc<Mutex<CoreExecution>>,
+        current_connection: Arc<Mutex<Option<ResourceAny>>>,
+    ) -> Self {
         let mut components = Vec::new();
         let mut by_name = HashMap::new();
         let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
@@ -769,7 +837,7 @@ impl DotcmdRegistry {
             .collect();
         paths.sort();
         for path in paths {
-            match Self::load_one(engine, &path) {
+            match Self::load_one(engine, &path, core.clone(), current_connection.clone()) {
                 Ok((inst, specs)) => {
                     let idx = components.len();
                     let names: Vec<String> = specs.iter().map(|(n, _)| n.clone()).collect();
@@ -792,12 +860,26 @@ impl DotcmdRegistry {
     fn load_one(
         engine: &Engine,
         path: &Path,
+        core: Arc<Mutex<CoreExecution>>,
+        current_connection: Arc<Mutex<Option<ResourceAny>>>,
     ) -> wasmtime::Result<(DotcmdInstance, Vec<(String, u64)>)> {
         let component = load_component(engine, path)?;
         let mut linker = Linker::<DotcmdState>::new(engine);
         p2::add_to_linker_sync(&mut linker)?;
+        dotcmd_bindings::duckdb::dotcmd::spi::add_to_linker::<DotcmdState, DotcmdState>(
+            &mut linker,
+            |s| s,
+        )?;
         let wasi = WasiCtxBuilder::new().inherit_stdio().build();
-        let mut store = Store::new(engine, DotcmdState { wasi, table: ResourceTable::new() });
+        let mut store = Store::new(
+            engine,
+            DotcmdState {
+                wasi,
+                table: ResourceTable::new(),
+                core,
+                current_connection,
+            },
+        );
         let bindings = dotcmd_bindings::Dotcmd::instantiate(&mut store, &component, &linker)?;
         let specs = bindings
             .duckdb_dotcmd_registry()
@@ -1499,6 +1581,8 @@ pub struct HostState {
     core: Arc<Mutex<CoreExecution>>,
     extension_manager: Arc<Mutex<ExtensionManager>>,
     dotcmd_registry: Arc<Mutex<DotcmdRegistry>>,
+    /// The CLI's live connection handle, shared with dot-command components' spi.
+    current_connection: Arc<Mutex<Option<ResourceAny>>>,
     next_resource_id: u32,
     connections: HashMap<u32, ConnectionEntry>,
     streams: HashMap<u32, StreamEntry>,
@@ -2539,6 +2623,19 @@ impl cli_db::HostAppender for HostState {
 }
 
 impl cli_db::Host for HostState {
+    /// The UI server drives the core's `handle-ui-request` directly (see
+    /// `ui_server.rs`); the CLI shell never serves UI through its connection, so
+    /// this host-side database function is a no-op for the CLI.
+    fn handle_ui_request(
+        &mut self,
+        _method: CliString,
+        _path: CliString,
+        _headers: CliString,
+        _body: wasmtime::component::__internal::Vec<u8>,
+    ) -> Option<cli_db::UiResponse> {
+        None
+    }
+
     fn open(&mut self, path: Option<CliString>) -> Result<Resource<cli_db::Connection>, CliString> {
         let owned: Option<String> = path.map(|s| s.into());
         let result = self
@@ -2549,6 +2646,12 @@ impl cli_db::Host for HostState {
         match result {
             Ok(handle) => {
                 let id = self.alloc_resource_id();
+                // Track the CLI's live connection so dot-command components' spi
+                // runs SQL on the same connection (shared temp tables / state).
+                *self
+                    .current_connection
+                    .lock()
+                    .expect("current connection mutex poisoned") = Some(handle.clone());
                 self.connections.insert(
                     id,
                     ConnectionEntry {
@@ -2582,6 +2685,12 @@ impl cli_db::Host for HostState {
         match result {
             Ok(handle) => {
                 let id = self.alloc_resource_id();
+                // Track the CLI's live connection so dot-command components' spi
+                // runs SQL on the same connection (shared temp tables / state).
+                *self
+                    .current_connection
+                    .lock()
+                    .expect("current connection mutex poisoned") = Some(handle.clone());
                 self.connections.insert(
                     id,
                     ConnectionEntry {
@@ -3848,13 +3957,20 @@ impl CliHarness {
                 .expect("extension manager mutex poisoned");
             manager.attach_core(core.clone());
         }
-        let dotcmd_registry = Arc::new(Mutex::new(DotcmdRegistry::load(&engine, &dotcmd_root())));
+        let current_connection = Arc::new(Mutex::new(None));
+        let dotcmd_registry = Arc::new(Mutex::new(DotcmdRegistry::load(
+            &engine,
+            &dotcmd_root(),
+            core.clone(),
+            current_connection.clone(),
+        )));
         let host_state = HostState {
             table: ResourceTable::new(),
             wasi: cli_wasi,
             core: core.clone(),
             extension_manager: extension_manager.clone(),
             dotcmd_registry,
+            current_connection,
             next_resource_id: 1,
             connections: HashMap::new(),
             streams: HashMap::new(),
@@ -3979,13 +4095,20 @@ pub fn run_cli_with_stdio(
             .expect("extension manager mutex poisoned");
         manager.attach_core(core.clone());
     }
-    let dotcmd_registry = Arc::new(Mutex::new(DotcmdRegistry::load(&engine, &dotcmd_root())));
+    let current_connection = Arc::new(Mutex::new(None));
+    let dotcmd_registry = Arc::new(Mutex::new(DotcmdRegistry::load(
+        &engine,
+        &dotcmd_root(),
+        core.clone(),
+        current_connection.clone(),
+    )));
     let host_state = HostState {
         table: ResourceTable::new(),
         wasi: cli_wasi,
         core: core.clone(),
         extension_manager: extension_manager.clone(),
         dotcmd_registry,
+        current_connection,
         next_resource_id: 1,
         connections: HashMap::new(),
         streams: HashMap::new(),
