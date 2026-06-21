@@ -1042,6 +1042,137 @@
       ],
       "crates": [],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "humantime",
+      "version": "0.1.0",
+      "description": "Human-friendly durations: humantime_parse('1h 30m') -> seconds and humantime_format(seconds) -> text (humantime). Unparseable -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "duration",
+        "time",
+        "parse",
+        "format"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/humantime-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/humantime.wasm",
+      "exports": [
+        "humantime_parse",
+        "humantime_format"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "humantime"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "iso",
+      "version": "0.1.0",
+      "description": "ISO 3166 country lookups by alpha-2 code: iso_country_name, iso_country_alpha3, iso_country_numeric (rust_iso3166). Unknown -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "iso",
+        "country",
+        "3166",
+        "lookup"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/iso-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/iso.wasm",
+      "exports": [
+        "iso_country_name",
+        "iso_country_alpha3",
+        "iso_country_numeric"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "rust_iso3166"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "morse",
+      "version": "0.1.0",
+      "description": "International Morse code (hand-rolled): morse_encode(text) -> dots/dashes (words separated by ' / '), morse_decode(code) -> text. Case-insensitive.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "morse",
+        "code",
+        "encode",
+        "decode"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/morse-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/morse.wasm",
+      "exports": [
+        "morse_encode",
+        "morse_decode"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "color",
+      "version": "0.1.0",
+      "description": "WCAG color math (parsing via csscolorparser): color_luminance(css) -> relative luminance 0..1, color_contrast(a,b) -> ratio 1..21. Unparseable -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "color",
+        "wcag",
+        "contrast",
+        "accessibility"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/color-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/color.wasm",
+      "exports": [
+        "color_luminance",
+        "color_contrast"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "csscolorparser"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {

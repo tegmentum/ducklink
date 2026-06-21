@@ -34,6 +34,10 @@ members = [
     "extensions/idna-component",
     "extensions/mac-component",
     "extensions/isbn-component",
+    "extensions/morse-component",
+    "extensions/humantime-component",
+    "extensions/color-component",
+    "extensions/iso-component",
 ]
 
 resolver = "2"
