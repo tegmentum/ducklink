@@ -2387,6 +2387,140 @@
         "nanohtml2text"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "textstat",
+      "version": "0.1.0",
+      "description": "Readability statistics (hand-rolled): word_count, sentence_count, syllable_count, flesch_reading_ease, reading_time_minutes (200 wpm). NULL where a ratio is undefined.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "readability",
+        "nlp",
+        "flesch",
+        "wordcount"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/textstat-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/textstat.wasm",
+      "exports": [
+        "word_count",
+        "sentence_count",
+        "syllable_count",
+        "flesch_reading_ease",
+        "reading_time_minutes"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "hashids",
+      "version": "0.1.0",
+      "description": "Hashids integer-id obfuscation (harsh): hashids_encode(number, salt) -> YouTube-style id, hashids_decode(text, salt) -> bigint. Undecodable -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "hashids",
+        "obfuscate",
+        "id",
+        "encode"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/hashids-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/hashids.wasm",
+      "exports": [
+        "hashids_encode",
+        "hashids_decode"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "harsh"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "checkdigit",
+      "version": "0.1.0",
+      "description": "Verhoeff + Damm check digits (hand-rolled): verhoeff_validate/append, damm_validate/append. Stronger than Luhn (catches all single-digit + adjacent-transposition errors).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "checkdigit",
+        "verhoeff",
+        "damm",
+        "validation"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/checkdigit-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/checkdigit.wasm",
+      "exports": [
+        "verhoeff_validate",
+        "verhoeff_append",
+        "damm_validate",
+        "damm_append"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "dice",
+      "version": "0.1.0",
+      "description": "RPG dice notation (rand): dice_roll(notation) (random, e.g. '2d6+3'), dice_min/dice_max (deterministic bounds). Bad notation -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "dice",
+        "rpg",
+        "random",
+        "game"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/dice-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/dice.wasm",
+      "exports": [
+        "dice_roll",
+        "dice_min",
+        "dice_max"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "rand"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {

@@ -75,6 +75,10 @@ members = [
     "extensions/uuid5-component",
     "extensions/gravatar-component",
     "extensions/html2text-component",
+    "extensions/textstat-component",
+    "extensions/hashids-component",
+    "extensions/checkdigit-component",
+    "extensions/dice-component",
 ]
 
 resolver = "2"
