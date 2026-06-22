@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/libduckdb-sys",
+    "crates/ducklink-runtime",
     "crates/ducklink-core",
     "crates/ducklink-cli",
     "crates/ducklink-loader",

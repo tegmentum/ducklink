@@ -1,0 +1,9 @@
+[package]
+name = "ducklink-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Reusable wasm-component-loading engine shared by the ducklink host and the native-DuckDB ducklink extension"
+license = "MIT"
+publish = false
+
+[lib]

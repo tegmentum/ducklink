@@ -67,6 +67,7 @@ use duckdb_extension_bindings::duckdb::extension::{
 };
 use duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
 use wasmtime::component::__internal::Vec as BindgenVec;
+use ducklink_runtime::{CallbackEntry, CallbackKind, CallbackRegistry};
 use wasmtime::component::{Component, Linker, Resource, ResourceAny, ResourceTable};
 use wasmtime::{AsContextMut, Config, Engine, Store, StoreContextMut};
 
@@ -529,83 +530,8 @@ struct AppenderEntry {
     handle: ResourceAny,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum CallbackKind {
-    Scalar,
-    Table,
-    Aggregate,
-    Pragma,
-    Cast,
-}
-
-#[derive(Clone, Debug)]
-struct CallbackEntry {
-    extension: String,
-    dispatcher_handle: u32,
-    kind: CallbackKind,
-}
-
-#[derive(Default)]
-struct CallbackRegistry {
-    next_handle: u32,
-    entries: HashMap<u32, CallbackEntry>,
-}
-
-impl CallbackRegistry {
-    fn new() -> Self {
-        Self {
-            next_handle: 1,
-            entries: HashMap::new(),
-        }
-    }
-
-    fn allocate(&mut self, extension: &str, kind: CallbackKind, dispatcher_handle: u32) -> u32 {
-        let handle = self.next_handle;
-        self.next_handle = self.next_handle.wrapping_add(1).max(1);
-        self.entries.insert(
-            handle,
-            CallbackEntry {
-                extension: extension.to_string(),
-                dispatcher_handle,
-                kind,
-            },
-        );
-        eprintln!(
-            "[extension-manager] registered {} callback handle {} for '{}' (dispatcher={dispatcher_handle})",
-            describe_callback_kind(kind),
-            handle,
-            extension
-        );
-        handle
-    }
-
-    fn remove(&mut self, handle: u32) {
-        if let Some(entry) = self.entries.remove(&handle) {
-            eprintln!(
-                "[extension-manager] released {} callback handle {} for '{}'",
-                describe_callback_kind(entry.kind),
-                handle,
-                entry.extension
-            );
-        }
-    }
-
-    fn remove_extension(&mut self, extension: &str) {
-        let initial = self.entries.len();
-        self.entries.retain(|_, entry| entry.extension != extension);
-        let removed = initial.saturating_sub(self.entries.len());
-        if removed > 0 {
-            eprintln!(
-                "[extension-manager] purged {removed} callback handles after unloading '{}'",
-                extension
-            );
-        }
-    }
-
-    fn get(&self, handle: u32) -> Option<CallbackEntry> {
-        self.entries.get(&handle).cloned()
-    }
-}
+// CallbackKind / CallbackEntry / CallbackRegistry moved to the `ducklink-runtime`
+// crate (imported at the top of this file).
 
 struct ExtensionInstance {
     store: Store<ExtensionStoreState>,
@@ -3280,16 +3206,6 @@ fn describe_cli_capability(kind: cli_types::Capabilitykind) -> &'static str {
         cli_types::Capabilitykind::Macro => "macro",
         cli_types::Capabilitykind::Catalog => "catalog",
         cli_types::Capabilitykind::FileFormat => "file-format",
-    }
-}
-
-fn describe_callback_kind(kind: CallbackKind) -> &'static str {
-    match kind {
-        CallbackKind::Scalar => "scalar",
-        CallbackKind::Table => "table",
-        CallbackKind::Aggregate => "aggregate",
-        CallbackKind::Pragma => "pragma",
-        CallbackKind::Cast => "cast",
     }
 }
 
