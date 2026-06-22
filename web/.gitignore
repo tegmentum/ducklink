@@ -6,3 +6,4 @@ public/
 package-lock.json
 *.wasm
 .tvm-aot/
+.corpus-results.json
