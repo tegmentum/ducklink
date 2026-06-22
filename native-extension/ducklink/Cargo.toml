@@ -1,0 +1,35 @@
+# The `ducklink` DuckDB community extension (Direction 2): a native-DuckDB
+# loadable extension that embeds wasmtime to run `duckdb:extension` WebAssembly
+# components. Detached from the wasm component workspace (its own [workspace]
+# table) because it builds for the NATIVE host triple with the DuckDB C
+# Extension API, not wasm32-wasip2.
+[package]
+name = "ducklink-extension"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Run WebAssembly component extensions inside DuckDB"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+name = "ducklink"
+
+[dependencies]
+# The shared engine: the duckdb:extension bindgen, the neutral reg::* capture
+# model, and the callback registry. Same crate the Direction-1 host uses, so a
+# component loads identically in both.
+ducklink-runtime = { path = "../../crates/ducklink-runtime" }
+# DuckDB C Extension API (loadable-extension build). Pinned to the DuckDB version
+# the community-extensions CI builds against; bumped per release.
+duckdb = { version = "1.1", features = ["vscalar", "vtab", "loadable-extension"] }
+duckdb-loadable-macros = "0.1"
+libduckdb-sys = { version = "1.1", features = ["loadable-extension"] }
+# wasmtime to run the component. Must match ducklink-runtime's pinned rev so the
+# generated bindings are ABI-identical.
+wasmtime = { git = "https://github.com/bytecodealliance/wasmtime", rev = "1ec866079720e573fc2aa06947c84f6132010993", features = ["component-model"] }
+wasmtime-wasi = { git = "https://github.com/bytecodealliance/wasmtime", rev = "1ec866079720e573fc2aa06947c84f6132010993" }
+anyhow = "1"
+
+# Detach from the wasm component workspace one level up.
+[workspace]
