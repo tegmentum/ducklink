@@ -1,8 +1,8 @@
 [workspace]
 members = [
-    "crates/libduckdb-sys",
+    # libduckdb-sys + the DuckDB-wasm core moved to the standalone ../duckdb-wasm
+    # repo (consumed by path); see crates/ducklink-host bindgen + the Makefile.
     "crates/ducklink-runtime",
-    "crates/ducklink-core",
     "crates/ducklink-cli",
     "crates/ducklink-loader",
     "crates/ducklink-host",

@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Run the DuckDB Wasm component in JS runtimes / the browser via wasi-polyfill",
   "scripts": {
-    "copy-wasm": "cp ../target/wasm32-wasip2/release/ducklink_core.wasm public/ && cp ../artifacts/extensions/sample_extension.wasm public/",
+    "copy-wasm": "cp ../../duckdb-wasm/target/wasm32-wasip2/release/ducklink_core.wasm public/ && cp ../artifacts/extensions/sample_extension.wasm public/",
     "predev": "npm run copy-wasm",
     "dev": "vite",
     "verify": "npm run copy-wasm && node verify.mjs",

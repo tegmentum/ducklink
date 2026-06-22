@@ -1,6 +1,6 @@
 pub mod duckdb_core_bindings {
     wasmtime::component::bindgen!({
-        path: "../../crates/ducklink-core/wit",
+        path: "../../../duckdb-wasm/core/wit",
         world: "duckdb:component/libduckdb",
         with: {
             "wasi:cli/environment": wasmtime_wasi::p2::bindings::cli::environment,

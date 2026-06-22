@@ -1,32 +1,42 @@
 WASI_TARGET?=wasm32-wasip2
 BROWSER_TARGET?=wasm32-unknown-unknown
+# The DuckDB-wasm core lives in a separate repo (../duckdb-wasm). The core
+# targets build it there and copy the artifact into this repo's target/ so
+# downstream targets (precompile, host, web copy-wasm) keep finding
+# ducklink_core.wasm at the usual path.
+DUCKDB_WASM_DIR?=../duckdb-wasm
 
 .PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk smoke-dotcmd sample-extension smoke-extension echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds
 
 all: core standalone-cli loader-stub dotcmds
 
 core:
-	./scripts/sync-core-wit.sh
+	$(DUCKDB_WASM_DIR)/scripts/sync-core-wit.sh
 	@ : "$${DUCKDB_STATIC_LIB:?set DUCKDB_STATIC_LIB to the prebuilt DuckDB static archive for this target}" \
 	 && : "$${DUCKDB_INCLUDE_DIR:?set DUCKDB_INCLUDE_DIR to the directory containing duckdb.h}" \
-	 && cargo component build -p ducklink-core --target $(WASI_TARGET) --release --features wasi
+	 && cd $(DUCKDB_WASM_DIR) \
+	 && cargo component build -p duckdb-component-core --target $(WASI_TARGET) --release --features wasi
+	mkdir -p target/$(WASI_TARGET)/release
+	cp $(DUCKDB_WASM_DIR)/target/$(WASI_TARGET)/release/ducklink_core.wasm target/$(WASI_TARGET)/release/ducklink_core.wasm
 
-# Build the core with selected extensions COMPILED IN (the embed framework):
-#   make core-embed EMBED=embed-isin
-# Embedded extensions register as native scalars (no WIT boundary -> faster) and
-# work in the standalone (wasmtime run) with no host. Add one embed-<name>
-# feature per extension (see the core crate's [features]).
+# NOTE: the embed framework (compile an extension into the core as a native
+# scalar) moved ducklink-side per the duckdb-wasm split — the embeddable crates
+# (isin, ...) and their embed-<name> features are NOT in ../duckdb-wasm/core.
+# Re-enabling embeds needs a ducklink-side overlay over duckdb-component-core;
+# until then this target is a no-op that explains the gap.
 EMBED ?= embed-isin
 core-embed:
-	./scripts/sync-core-wit.sh
-	@ : "$${DUCKDB_STATIC_LIB:?set DUCKDB_STATIC_LIB to the prebuilt DuckDB static archive for this target}" \
-	 && : "$${DUCKDB_INCLUDE_DIR:?set DUCKDB_INCLUDE_DIR to the directory containing duckdb.h}" \
-	 && cargo component build -p ducklink-core --target $(WASI_TARGET) --release --features wasi,$(EMBED)
+	@echo "core-embed is disabled: the embed framework moved ducklink-side in the duckdb-wasm split."
+	@echo "Build the plain core with 'make core'; embeddable-extension support is pending a ducklink overlay."
+	@exit 1
 
 core-browser:
 	@ : "$${DUCKDB_STATIC_LIB:?set DUCKDB_STATIC_LIB to the browser-appropriate DuckDB static archive}" \
 	 && : "$${DUCKDB_INCLUDE_DIR:?set DUCKDB_INCLUDE_DIR to the directory containing duckdb.h}" \
-	 && cargo component build -p ducklink-core --target $(BROWSER_TARGET) --release --no-default-features --features browser
+	 && cd $(DUCKDB_WASM_DIR) \
+	 && cargo component build -p duckdb-component-core --target $(BROWSER_TARGET) --release --no-default-features --features browser
+	mkdir -p target/$(BROWSER_TARGET)/release
+	cp $(DUCKDB_WASM_DIR)/target/$(BROWSER_TARGET)/release/ducklink_core.wasm target/$(BROWSER_TARGET)/release/ducklink_core.wasm
 
 standalone-cli:
 	./scripts/sync-cli-wit.sh
