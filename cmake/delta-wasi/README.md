@@ -24,7 +24,7 @@ ${WASM_ENABLED}`), so this sync-engine path is novel.
 - **`scripts/build-libduckdb-wasm.sh`** (`stage_delta_kernel`) — stages that `.a`
   where the (patched, vendored) delta CMakeLists expects it, and merges the
   kernel into `libduckdb-wasi.a`.
-- **`crates/duckdb-core-component/build.rs`** — adds
+- **`crates/ducklink-core/build.rs`** — adds
   `--allow-multiple-definition` to the core link when the lib contains the kernel
   (the kernel is a Rust `staticlib` bundling its own std runtime, which collides
   with the core's std; same toolchain, so the linker keeps the first copy).
@@ -61,7 +61,7 @@ FFI sync-engine feature, so the patch:
 Delta is the first extension to list a non-empty directory through the core's
 `__wrap_readdir`. That shim sized the name buffer from `libc::dirent.d_name`,
 which is a zero-length flexible-array member on wasm (`cap=0`) -> every entry hit
-`ENAMETOOLONG`. Fixed in `crates/duckdb-core-component/src/lib.rs` by backing the
+`ENAMETOOLONG`. Fixed in `crates/ducklink-core/src/lib.rs` by backing the
 dirent with an over-sized buffer and writing the name at the `d_name` offset.
 
 ## Scope / costs

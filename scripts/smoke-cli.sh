@@ -3,11 +3,11 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET_DIR="${TARGET_DIR:-$ROOT/target/wasm32-wasip2/release}"
-CLI_COMPONENT="${CLI_COMPONENT:-$TARGET_DIR/duckdb_cli_component.wasm}"
-CORE_COMPONENT="${CORE_COMPONENT:-$TARGET_DIR/duckdb_core_component.wasm}"
-STUB_COMPONENT="${STUB_COMPONENT:-$TARGET_DIR/duckdb_loader_stub.wasm}"
-CORE_LOADED_COMPONENT="${CORE_LOADED_COMPONENT:-$TARGET_DIR/duckdb_core_loaded.wasm}"
-OUTPUT_COMPONENT="${OUTPUT_COMPONENT:-$TARGET_DIR/duckdb_cli_standalone.wasm}"
+CLI_COMPONENT="${CLI_COMPONENT:-$TARGET_DIR/ducklink_cli.wasm}"
+CORE_COMPONENT="${CORE_COMPONENT:-$TARGET_DIR/ducklink_core.wasm}"
+STUB_COMPONENT="${STUB_COMPONENT:-$TARGET_DIR/ducklink_loader.wasm}"
+CORE_LOADED_COMPONENT="${CORE_LOADED_COMPONENT:-$TARGET_DIR/ducklink_core_loaded.wasm}"
+OUTPUT_COMPONENT="${OUTPUT_COMPONENT:-$TARGET_DIR/ducklink_cli_standalone.wasm}"
 SQL="${SQL:-select 1 as answer;}"
 DB_PATH="${DB_PATH:-:memory:}"
 # The core component uses wasm C++ exceptions, so the standalone needs them on.

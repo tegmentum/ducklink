@@ -15,7 +15,7 @@ component (verified: `SELECT 42 AS answer` round-trips through the bridge).
 
 httplib can't `listen()` in the wasip2 sandbox (the select/poll gap that broke
 the httplib client). So the NATIVE host owns the listening socket + accept loop
-(`crates/duckdb-component-host/src/ui_server.rs`) and bridges each request to the
+(`crates/ducklink-host/src/ui_server.rs`) and bridges each request to the
 component. The component runs the real `HttpServer::Handle*` logic via a chain:
 host -> `handle-ui-request` (WIT export) -> `duckdb_ui_handle_request` (the C
 bridge added to the ui extension) -> the private `Handle*` methods. GET asset

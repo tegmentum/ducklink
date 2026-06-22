@@ -1,7 +1,7 @@
 # Component-Based Extension Loading Plan
 
 > Status (2026-06): the loader described below is **implemented and working**
-> through the native host (`duckdb-component-host`). `ensure_extension_loaded`
+> through the native host (`ducklink-host`). `ensure_extension_loaded`
 > instantiates the extension component with wasmtime, runs its `load()`, drains
 > the captured scalar/table/aggregate registrations, and forwards them to the
 > core component so `--load-extension <name>` registers real DuckDB functions.

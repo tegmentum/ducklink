@@ -6,7 +6,7 @@
 # libduckdb pipeline, which isn't Docker-friendly):
 #   1. the native `ducklink` binary, built for the IMAGE's arch (linux/amd64 for
 #      Cloud Run — cross-compile or build in CI; a macOS binary won't run here)
-#   2. target/wasm32-wasip2/release/duckdb_core_component.wasm
+#   2. target/wasm32-wasip2/release/ducklink_core.wasm
 #   3. extensions-site/registry.db  (python3 extensions-site/build.py)
 #
 # `ducklink` locates the core at <compile-time workspace>/target/wasm32-wasip2/
@@ -41,7 +41,7 @@ RUN apt-get update \
 # /src/target/wasm32-wasip2/release/ and we run from /src.
 WORKDIR /src
 COPY build-artifacts/ducklink /usr/local/bin/ducklink
-COPY build-artifacts/duckdb_core_component.wasm /src/target/wasm32-wasip2/release/duckdb_core_component.wasm
+COPY build-artifacts/ducklink_core.wasm /src/target/wasm32-wasip2/release/ducklink_core.wasm
 COPY --from=db-builder /src/extensions-site/registry.db /src/extensions-site/registry.db
 
 ENV PORT=8080

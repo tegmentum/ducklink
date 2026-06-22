@@ -1,6 +1,6 @@
 pub mod duckdb_core_bindings {
     wasmtime::component::bindgen!({
-        path: "../../crates/duckdb-core-component/wit",
+        path: "../../crates/ducklink-core/wit",
         world: "duckdb:component/libduckdb",
         with: {
             "wasi:cli/environment": wasmtime_wasi::p2::bindings::cli::environment,
@@ -16,7 +16,7 @@ pub mod duckdb_core_bindings {
 
 pub mod duckdb_cli_bindings {
     wasmtime::component::bindgen!({
-        path: "../../crates/duckdb-cli-component/wit",
+        path: "../../crates/ducklink-cli/wit",
         world: "duckdb:cli/duckdb-cli",
         with: {
             "wasi:cli/environment": wasmtime_wasi::p2::bindings::cli::environment,
@@ -3761,8 +3761,8 @@ pub struct ComponentArtifacts {
 impl ComponentArtifacts {
     pub fn resolve_default() -> Result<Self> {
         Ok(Self {
-            core_component: locate_component("duckdb_core_component.wasm")?,
-            cli_component: locate_component("duckdb_cli_component.wasm")?,
+            core_component: locate_component("ducklink_core.wasm")?,
+            cli_component: locate_component("ducklink_cli.wasm")?,
         })
     }
 

@@ -42,8 +42,8 @@ from urllib.parse import urlparse
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TARGET = REPO_ROOT / "target" / "wasm32-wasip2" / "release"
 HOST_BIN = REPO_ROOT / "target" / "release" / "duckdb-host"
-CORE = TARGET / "duckdb_core_component.wasm"
-CLI = TARGET / "duckdb_cli_component.wasm"
+CORE = TARGET / "ducklink_core.wasm"
+CLI = TARGET / "ducklink_cli.wasm"
 FIX = REPO_ROOT / "build" / "iceberg-fixtures"
 WH = FIX / "wh"
 

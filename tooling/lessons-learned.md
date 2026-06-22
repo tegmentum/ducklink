@@ -44,7 +44,7 @@ Two structural facts shaped the harness:
 - The wac-composed **standalone CLI links a no-op loader stub** and cannot
   instantiate extension components (`request_load` returns false). So smoke
   cannot run through the standalone — it runs through the **native host runner**
-  `ducklink` (crates/duckdb-component-host), which has the real wasmtime
+  `ducklink` (crates/ducklink-host), which has the real wasmtime
   loader and resolves `artifacts/extensions/<name>.wasm`. `tooling/smoke.py`
   drives that binary. (T-3 new) smoke harness spawns one `ducklink` process
   per extension and runs them serially; for a large catalog this wants a
@@ -74,7 +74,7 @@ returned all of them as one mega-statement. Net effect: only the first SQL
 statement in a piped script ran. Smoke pipes a multi-statement `smoke.sql`, so
 this had to be fixed for any assertion past line 1.
 Fix: serve a complete buffered line before reading more; only `blocking_read`
-when no newline is buffered. `crates/duckdb-cli-component/src/lib.rs::read_line`.
+when no newline is buffered. `crates/ducklink-cli/src/lib.rs::read_line`.
 (T-1 closed) fixed inline; interactive REPL unaffected, piped scripts now run
 every statement.
 
@@ -103,7 +103,7 @@ uninitialized vector data: `base58_decode('invalid…')` came back as a 4.5 MB
 garbage blob instead of SQL NULL; INT64 and TEXT NULL returns were equally
 broken. Fix: `duckdb_vector_ensure_validity_writable(vector)` then re-fetch the
 mask before marking the row invalid (added the missing binding to
-`libduckdb-sys`). `crates/duckdb-core-component/src/lib.rs::write_duckvalue_to_vector`.
+`libduckdb-sys`). `crates/ducklink-core/src/lib.rs::write_duckvalue_to_vector`.
 (T-2 closed) fixed; verified NULL now propagates for blob, int64, and text
 scalar results, and the sample-extension host test + standalone smoke still pass.
 

@@ -1,6 +1,6 @@
 # DuckDB component in the browser via wasi-polyfill
 
-Runs the same `duckdb_core_component.wasm` (wasip2 component) that the native
+Runs the same `ducklink_core.wasm` (wasip2 component) that the native
 `ducklink` runs, but in a JS runtime / browser — WASI is provided by
 [`@tegmentum/wasi-polyfill`](https://github.com/.../wasi-polyfill) and the
 component is transpiled with [jco](https://github.com/bytecodealliance/jco).
@@ -17,7 +17,7 @@ component is transpiled with [jco](https://github.com/bytecodealliance/jco).
 ```bash
 npm install
 # copy the core wasm next to index.html so the page can fetch it:
-cp ../target/wasm32-wasip2/release/duckdb_core_component.wasm .
+cp ../target/wasm32-wasip2/release/ducklink_core.wasm .
 ```
 
 ## Run it

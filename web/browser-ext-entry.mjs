@@ -15,7 +15,7 @@ async function main() {
   out.dataset.status = 'running'
   try {
     const [coreBytes, extBytes] = await Promise.all([
-      bytes('./duckdb_core_component.wasm'),
+      bytes('./ducklink_core.wasm'),
       bytes('./sample_extension.wasm'),
     ])
 

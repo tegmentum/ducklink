@@ -1,7 +1,7 @@
 // Unit test for the browser TVM host (web/tvm-host.mjs). Runs in plain Node --
 // no wasm needed -- by driving the same `tvm:memory` import surface the core
 // component calls, including the guest's pool-and-overflow allocation pattern
-// (crates/duckdb-core-component/src/tvm_spill.rs::alloc_in_pool).
+// (crates/ducklink-core/src/tvm_spill.rs::alloc_in_pool).
 //
 // The host uses the jco import convention: functions return their value
 // directly and throw `{ payload: <tvm-error> }` for the err case.

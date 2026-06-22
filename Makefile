@@ -9,7 +9,7 @@ core:
 	./scripts/sync-core-wit.sh
 	@ : "$${DUCKDB_STATIC_LIB:?set DUCKDB_STATIC_LIB to the prebuilt DuckDB static archive for this target}" \
 	 && : "$${DUCKDB_INCLUDE_DIR:?set DUCKDB_INCLUDE_DIR to the directory containing duckdb.h}" \
-	 && cargo component build -p duckdb-core-component --target $(WASI_TARGET) --release --features wasi
+	 && cargo component build -p ducklink-core --target $(WASI_TARGET) --release --features wasi
 
 # Build the core with selected extensions COMPILED IN (the embed framework):
 #   make core-embed EMBED=embed-isin
@@ -21,20 +21,20 @@ core-embed:
 	./scripts/sync-core-wit.sh
 	@ : "$${DUCKDB_STATIC_LIB:?set DUCKDB_STATIC_LIB to the prebuilt DuckDB static archive for this target}" \
 	 && : "$${DUCKDB_INCLUDE_DIR:?set DUCKDB_INCLUDE_DIR to the directory containing duckdb.h}" \
-	 && cargo component build -p duckdb-core-component --target $(WASI_TARGET) --release --features wasi,$(EMBED)
+	 && cargo component build -p ducklink-core --target $(WASI_TARGET) --release --features wasi,$(EMBED)
 
 core-browser:
 	@ : "$${DUCKDB_STATIC_LIB:?set DUCKDB_STATIC_LIB to the browser-appropriate DuckDB static archive}" \
 	 && : "$${DUCKDB_INCLUDE_DIR:?set DUCKDB_INCLUDE_DIR to the directory containing duckdb.h}" \
-	 && cargo component build -p duckdb-core-component --target $(BROWSER_TARGET) --release --no-default-features --features browser
+	 && cargo component build -p ducklink-core --target $(BROWSER_TARGET) --release --no-default-features --features browser
 
 standalone-cli:
 	./scripts/sync-cli-wit.sh
-	cargo component build -p duckdb-cli-component --target $(WASI_TARGET) --release
+	cargo component build -p ducklink-cli --target $(WASI_TARGET) --release
 
 loader-stub:
 	./scripts/sync-stub-wit.sh
-	cargo component build -p duckdb-loader-stub --target $(WASI_TARGET) --release
+	cargo component build -p ducklink-loader --target $(WASI_TARGET) --release
 
 dotcmds:
 	cargo component build -p greet-dotcmd -p core-dotcmd \
@@ -65,7 +65,7 @@ sample-extension: all
 	cp target/$(WASI_TARGET)/release/sample_extension_component.wasm artifacts/extensions/sample_extension.wasm
 
 smoke-extension:
-	cargo test -p duckdb-component-host load_sample_extension_component
+	cargo test -p ducklink-host load_sample_extension_component
 
 # Build the reference duckdb-wasm-httpd request handler (kind='wasm' dispatch
 # target). Load it with: ducklink serve --load echo=<artifact>.
@@ -106,11 +106,11 @@ tvm-test: host
 # --core-component/--cli-component to use them.
 precompile: host
 	./target/release/ducklink precompile \
-	  target/$(WASI_TARGET)/release/duckdb_core_component.wasm \
-	  target/$(WASI_TARGET)/release/duckdb_core_component.cwasm
+	  target/$(WASI_TARGET)/release/ducklink_core.wasm \
+	  target/$(WASI_TARGET)/release/ducklink_core.cwasm
 	./target/release/ducklink precompile \
-	  target/$(WASI_TARGET)/release/duckdb_cli_component.wasm \
-	  target/$(WASI_TARGET)/release/duckdb_cli_component.cwasm
+	  target/$(WASI_TARGET)/release/ducklink_cli.wasm \
+	  target/$(WASI_TARGET)/release/ducklink_cli.cwasm
 
 # Run the smoke-tests GitHub Actions workflow locally via nektos/act (Docker).
 ci-local:
@@ -124,7 +124,7 @@ ci-local:
 
 # Native host runner that has the real component extension loader.
 host:
-	cargo build --release -p duckdb-component-host --bin ducklink
+	cargo build --release -p ducklink-host --bin ducklink
 
 # Scaffold a new extension:  make ext-scaffold NAME=foo [CRATE=base32,bs58]
 ext-scaffold:

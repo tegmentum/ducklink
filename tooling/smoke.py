@@ -8,7 +8,7 @@ extension preregistered (`--load-extension <name>`).
 
 NOTE on the loader: the wac-composed *standalone* CLI links a no-op loader stub
 and cannot instantiate extension components, so smoke runs through `ducklink`
-(crates/duckdb-component-host) instead. That binary resolves `<name>.wasm` under
+(crates/ducklink-host) instead. That binary resolves `<name>.wasm` under
 artifacts/extensions/, instantiates it with wasmtime, runs its `load()`, and
 forwards the captured registrations to the core component.
 
@@ -48,8 +48,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 TARGET_DIR = REPO_ROOT / "target" / "wasm32-wasip2" / "release"
 
 HOST_BIN = REPO_ROOT / "target" / "release" / "ducklink"
-CORE_COMPONENT = TARGET_DIR / "duckdb_core_component.wasm"
-CLI_COMPONENT = TARGET_DIR / "duckdb_cli_component.wasm"
+CORE_COMPONENT = TARGET_DIR / "ducklink_core.wasm"
+CLI_COMPONENT = TARGET_DIR / "ducklink_cli.wasm"
 EXT_ROOT = REPO_ROOT / "artifacts" / "extensions"
 
 # Strip leading REPL prompts the CLI prints: "D> " and "...> ". Several can chain
@@ -204,7 +204,7 @@ def smoke_one(name: str, timeout: int = 60) -> tuple[bool, str]:
         return (False, f"no smoke.sql at {smoke.relative_to(REPO_ROOT)}")
     if not HOST_BIN.exists():
         return (False, f"host runner not built: {HOST_BIN.relative_to(REPO_ROOT)} missing; "
-                       f"run: cargo build --release -p duckdb-component-host")
+                       f"run: cargo build --release -p ducklink-host")
     if not CORE_COMPONENT.exists() or not CLI_COMPONENT.exists():
         return (False, "core/cli components not built; run: make all")
     artifact = EXT_ROOT / f"{bare(name)}.wasm"

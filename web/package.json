@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Run the DuckDB Wasm component in JS runtimes / the browser via wasi-polyfill",
   "scripts": {
-    "copy-wasm": "cp ../target/wasm32-wasip2/release/duckdb_core_component.wasm public/ && cp ../artifacts/extensions/sample_extension.wasm public/",
+    "copy-wasm": "cp ../target/wasm32-wasip2/release/ducklink_core.wasm public/ && cp ../artifacts/extensions/sample_extension.wasm public/",
     "predev": "npm run copy-wasm",
     "dev": "vite",
     "verify": "npm run copy-wasm && node verify.mjs",
@@ -13,7 +13,7 @@
     "verify-prepared": "npm run copy-wasm && node verify.mjs /index-prepared.html",
     "test-tvm-host": "node tvm-host.test.mjs",
     "verify-tvm-spill": "npm run copy-wasm && node verify.mjs /index-tvm.html",
-    "verify-tvm-aot": "npm run copy-wasm && jco transpile public/duckdb_core_component.wasm -o .tvm-aot --instantiation async --no-nodejs-compat && AOT_DIR=.tvm-aot node aot-tvm-test.mjs"
+    "verify-tvm-aot": "npm run copy-wasm && jco transpile public/ducklink_core.wasm -o .tvm-aot --instantiation async --no-nodejs-compat && AOT_DIR=.tvm-aot node aot-tvm-test.mjs"
   },
   "dependencies": {
     "@tegmentum/wasi-polyfill": "file:../../../wasi-polyfill",

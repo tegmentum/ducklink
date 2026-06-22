@@ -88,7 +88,7 @@ CREATE TABLE site_meta     (key VARCHAR PRIMARY KEY, value VARCHAR);
 
 Unlike sqlite-wasm's site (a self-contained binary), `ducklink serve` runs the
 **wasm core component**, so the runtime image needs three prebuilt artifacts: the
-native `ducklink` binary, `duckdb_core_component.wasm`, and `registry.db`. Build
+native `ducklink` binary, `ducklink_core.wasm`, and `registry.db`. Build
 them on the host first (`make host` + `python3 extensions-site/build.py`), then:
 
 ```bash

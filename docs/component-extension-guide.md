@@ -35,11 +35,11 @@ Copy it into `artifacts/extensions/my_extension.wasm` (or any directory scanned 
 
 ### 4. Load it through the host
 
-The host runtime (`duckdb-component-host`) automatically looks in `artifacts/extensions`. Launch
+The host runtime (`ducklink-host`) automatically looks in `artifacts/extensions`. Launch
 the CLI with:
 
 ```bash
-cargo run -p duckdb-component-host --release -- \
+cargo run -p ducklink-host --release -- \
   :memory: --load-extension my_extension -c "select my_extension_function();"
 ```
 

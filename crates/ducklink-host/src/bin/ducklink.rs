@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::{ArgAction, Parser};
-use duckdb_component_host::{
+use ducklink_host::{
     precompile_component_to_file, run_cli_with_stdio, serve_httpd, serve_ui, set_extension_root,
     ComponentArtifacts, HandlerRegistry, HttpdOptions, TlsMode, UiMode,
 };
@@ -15,11 +15,11 @@ use duckdb_component_host::{
     arg_required_else_help = true
 )]
 struct Opts {
-    /// Override path to the compiled duckdb_core_component.wasm artifact
+    /// Override path to the compiled ducklink_core.wasm artifact
     #[arg(long)]
     core_component: Option<PathBuf>,
 
-    /// Override path to the compiled duckdb_cli_component.wasm artifact
+    /// Override path to the compiled ducklink_cli.wasm artifact
     #[arg(long)]
     cli_component: Option<PathBuf>,
 
@@ -185,10 +185,10 @@ fn run_compose(args: &[String]) -> Result<()> {
     if !rust_sel.is_empty() {
         eprintln!("Embedding Rust extensions: {}", rust_sel.join(", "));
     }
-    eprintln!("  cargo component build -p duckdb-core-component --target wasm32-wasip2 --release --features {features}");
+    eprintln!("  cargo component build -p ducklink-core --target wasm32-wasip2 --release --features {features}");
     let status = std::process::Command::new("cargo")
         .args([
-            "component", "build", "-p", "duckdb-core-component", "--target", "wasm32-wasip2",
+            "component", "build", "-p", "ducklink-core", "--target", "wasm32-wasip2",
             "--release", "--features", &features,
         ])
         .current_dir(&repo_root)
@@ -198,7 +198,7 @@ fn run_compose(args: &[String]) -> Result<()> {
         anyhow::bail!("cargo component build failed");
     }
 
-    let core_wasm = repo_root.join("target/wasm32-wasip2/release/duckdb_core_component.wasm");
+    let core_wasm = repo_root.join("target/wasm32-wasip2/release/ducklink_core.wasm");
     let final_wasm = if let Some(out) = &output {
         if let Some(parent) = out.parent() {
             std::fs::create_dir_all(parent).ok();
@@ -223,7 +223,7 @@ fn run_compose(args: &[String]) -> Result<()> {
 /// Discover embeddable extensions from the core crate's `[features]`: every
 /// `embed-<name>` feature corresponds to an extension that can be compiled in.
 fn discover_embeddable_extensions(repo_root: &Path) -> Result<Vec<String>> {
-    let cargo_toml = repo_root.join("crates/duckdb-core-component/Cargo.toml");
+    let cargo_toml = repo_root.join("crates/ducklink-core/Cargo.toml");
     let text = std::fs::read_to_string(&cargo_toml)
         .map_err(|e| anyhow::anyhow!("read {}: {e} (pass --repo-root)", cargo_toml.display()))?;
     let mut out = Vec::new();

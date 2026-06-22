@@ -1,5 +1,5 @@
 [package]
-name = "duckdb-cli-component"
+name = "ducklink-loader"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,11 +10,11 @@ crate-type = ["cdylib"]
 wit-bindgen-rt = { version = "0.41.0", features = ["bitflags"] }
 
 [package.metadata.component]
-package = "duckdb:cli"
+package = "duckdb:loader-stub"
 
 [package.metadata.component.target]
 path = "wit"
-world = "duckdb:cli/duckdb-cli"
+world = "duckdb:loader-stub/loader-stub"
 
 [package.metadata.component.target.dependencies]
 "duckdb:component" = { path = "wit/deps/duckdb" }

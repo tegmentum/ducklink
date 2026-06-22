@@ -99,7 +99,7 @@ export async function runQuery(componentBytes, sql = 'SELECT 42 AS answer, 1 + 1
 if (typeof process !== 'undefined' && import.meta.url === `file://${process.argv[1]}`) {
   const { readFile } = await import('node:fs/promises')
   const wasm = new Uint8Array(
-    await readFile(new URL('../target/wasm32-wasip2/release/duckdb_core_component.wasm', import.meta.url)),
+    await readFile(new URL('../target/wasm32-wasip2/release/ducklink_core.wasm', import.meta.url)),
   )
   const result = await runQuery(wasm)
   console.log('columns:', result.columns.map((c) => c.name))

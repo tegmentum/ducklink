@@ -11,7 +11,7 @@ async function main() {
   const out = document.getElementById('out')
   out.dataset.status = 'running'
   try {
-    const resp = await fetch('./duckdb_core_component.wasm')
+    const resp = await fetch('./ducklink_core.wasm')
     const bytes = new Uint8Array(await resp.arrayBuffer())
     const db = await instantiateCore(bytes)
     const conn = db.open(undefined) // in-memory

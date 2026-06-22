@@ -11,7 +11,7 @@ FIXTURE="$ROOT/test/fixtures/delta_people"
 [[ -d "$FIXTURE/_delta_log" ]] || { echo "missing fixture: $FIXTURE" >&2; exit 1; }
 
 HOST=./target/release/ducklink
-[[ -x "$HOST" ]] || cargo build --release -p duckdb-component-host --bin ducklink
+[[ -x "$HOST" ]] || cargo build --release -p ducklink-host --bin ducklink
 
 # Preopen the fixtures dir as guest /fixtures; run delta_scan over it.
 "$HOST" --dir "$ROOT/test/fixtures::/fixtures" -- \

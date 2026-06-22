@@ -1,10 +1,10 @@
 [workspace]
 members = [
     "crates/libduckdb-sys",
-    "crates/duckdb-core-component",
-    "crates/duckdb-cli-component",
-    "crates/duckdb-loader-stub",
-    "crates/duckdb-component-host",
+    "crates/ducklink-core",
+    "crates/ducklink-cli",
+    "crates/ducklink-loader",
+    "crates/ducklink-host",
     "extensions/sample-extension-component",
     "extensions/isin",
     "extensions/greet-dotcmd",

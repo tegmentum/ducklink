@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 HOST=./target/release/ducklink
-[[ -x "$HOST" ]] || cargo build --release -p duckdb-component-host --bin ducklink
+[[ -x "$HOST" ]] || cargo build --release -p ducklink-host --bin ducklink
 
 # Build the reference request-handler component (kind='wasm' dispatch target).
 HANDLER=target/wasm32-wasip2/release/echo_handler.wasm

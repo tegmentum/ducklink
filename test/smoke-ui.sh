@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 HOST=./target/release/ducklink
-[[ -x "$HOST" ]] || cargo build --release -p duckdb-component-host --bin ducklink
+[[ -x "$HOST" ]] || cargo build --release -p ducklink-host --bin ducklink
 
 run() { # mode port
   local mode="$1" port="$2"

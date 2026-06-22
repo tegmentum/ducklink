@@ -5,7 +5,7 @@
 #       --config extensions-site/cloudbuild.yaml \
 #       --substitutions _REGION=us-central1,_SERVICE=ducklink-extensions-site
 #
-# Prereq: the linux/amd64 `ducklink` binary + `duckdb_core_component.wasm` must
+# Prereq: the linux/amd64 `ducklink` binary + `ducklink_core.wasm` must
 # be present under build-artifacts/ in the submitted context (the wasm core
 # can't be built in-container; produce both in a prior CI step).
 

@@ -660,7 +660,7 @@ apply_extension_patches
 
 # TVM spill: route the buffer manager's temporary-block spill (evicted blocks +
 # larger-than-memory sort/hash/aggregate) to host-owned Tiered Virtual Memory
-# regions (cmake/.. crates/duckdb-core-component/src/tvm_spill.rs) instead of
+# regions (cmake/.. crates/ducklink-core/src/tvm_spill.rs) instead of
 # temp files -- extending capacity past the wasm32 4 GiB ceiling. The hooks fall
 # back to temp files when no TVM host is wired, so this is always safe.
 python3 - "$DUCKDB_SOURCE_DIR/src/storage/standard_buffer_manager.cpp" <<'PY'
@@ -671,7 +671,7 @@ if 'tvm_spill_write' in s:
 # 1) extern "C" decls of the bridge (wasm-only)
 decls = ('\n#ifdef __wasi__\n'
          'extern "C" {\n'
-         '// TVM spill bridge (crates/duckdb-core-component/src/tvm_spill.rs).\n'
+         '// TVM spill bridge (crates/ducklink-core/src/tvm_spill.rs).\n'
          'int tvm_spill_write(uint8_t tag, int64_t block_id, const uint8_t *data,\n'
          '                    uint64_t alloc_size, uint64_t logical_size, uint64_t header_size);\n'
          'int tvm_spill_query(int64_t block_id, uint64_t *out_logical, uint64_t *out_header);\n'
@@ -727,7 +727,7 @@ p = sys.argv[1]; s = open(p).read()
 if 'tvm_spill_available' in s:
     sys.exit(0)
 decl = ('\n#ifdef __wasi__\n'
-        '// TVM spill bridge (crates/duckdb-core-component/src/tvm_spill.rs).\n'
+        '// TVM spill bridge (crates/ducklink-core/src/tvm_spill.rs).\n'
         'extern "C" int tvm_spill_available();\n'
         '#endif\n')
 s = s.replace('namespace duckdb {\n', 'namespace duckdb {\n' + decl, 1)

@@ -22,14 +22,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET_DIR="${TARGET_DIR:-$ROOT/target/wasm32-wasip2/release}"
 HOST_BIN="${HOST_BIN:-$ROOT/target/release/ducklink}"
-CORE_COMPONENT="${CORE_COMPONENT:-$TARGET_DIR/duckdb_core_component.wasm}"
-CLI_COMPONENT="${CLI_COMPONENT:-$TARGET_DIR/duckdb_cli_component.wasm}"
+CORE_COMPONENT="${CORE_COMPONENT:-$TARGET_DIR/ducklink_core.wasm}"
+CLI_COMPONENT="${CLI_COMPONENT:-$TARGET_DIR/ducklink_cli.wasm}"
 MEMORY_LIMIT="${MEMORY_LIMIT:-128MB}"
 ROWS="${ROWS:-20000000}"
 
 for f in "$HOST_BIN" "$CORE_COMPONENT" "$CLI_COMPONENT"; do
   if [[ ! -f "$f" ]]; then
-    echo "missing: $f (build the host with 'cargo build --release -p duckdb-component-host' and the components first)" >&2
+    echo "missing: $f (build the host with 'cargo build --release -p ducklink-host' and the components first)" >&2
     exit 1
   fi
 done

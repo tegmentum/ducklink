@@ -6,7 +6,7 @@ async function main() {
   const out = document.getElementById('out')
   out.dataset.status = 'running'
   try {
-    const resp = await fetch('./duckdb_core_component.wasm')
+    const resp = await fetch('./ducklink_core.wasm')
     const bytes = new Uint8Array(await resp.arrayBuffer())
     const result = await runQuery(bytes, 'SELECT 42 AS answer, 1 + 1 AS two')
     // Typed integer columns come back as JS BigInt; serialize them safely.

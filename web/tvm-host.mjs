@@ -2,7 +2,7 @@
 //
 // Satisfies the core component's `tvm:memory/manager` + `tvm:memory/bytes`
 // imports (package tvm:memory@0.1.0) with regions backed by host JS byte arrays,
-// mirroring the native Rust host (crates/duckdb-component-host: RegionDirectory
+// mirroring the native Rust host (crates/ducklink-host: RegionDirectory
 // over VecBackedRegion). DuckDB spills evicted buffer-pool blocks here, so the
 // spilled working set lives in the page's heap rather than the wasm32 4 GiB
 // linear memory -- the same >4 GiB-spill capability the native host provides.

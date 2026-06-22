@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WIT_ROOT="$REPO_ROOT/wit"
-CLI_DIR="$REPO_ROOT/crates/duckdb-cli-component/wit"
+CLI_DIR="$REPO_ROOT/crates/ducklink-cli/wit"
 
 rm -rf "$CLI_DIR"
 mkdir -p "$CLI_DIR/deps/duckdb/deps"

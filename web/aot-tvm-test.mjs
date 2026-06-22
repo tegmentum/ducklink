@@ -12,7 +12,7 @@ import { cli, clocks, filesystem, io, random, sockets } from '@bytecodealliance/
 import { createTvmHost, tvmDebugEnabled } from './tvm-host.mjs'
 
 const AOT = process.env.AOT_DIR ?? '/tmp/tvm-aot'
-const { instantiate } = await import(pathToFileURL(join(AOT, 'duckdb_core_component.js')).href)
+const { instantiate } = await import(pathToFileURL(join(AOT, 'ducklink_core.js')).href)
 // Sync Module (works for both sync and async --instantiation modes).
 const getCoreModule = (name) => new WebAssembly.Module(readFileSync(join(AOT, basename(name))))
 

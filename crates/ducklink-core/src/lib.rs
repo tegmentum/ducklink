@@ -3564,7 +3564,7 @@ struct ConfigHost;
 
 impl config_exports::Guest for ConfigHost {
     fn provider_version() -> String {
-        "duckdb-core-component".to_string()
+        "ducklink-core".to_string()
     }
 
     fn list_keys(_prefix: Option<String>) -> Vec<String> {

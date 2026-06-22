@@ -1,5 +1,5 @@
 [package]
-name = "duckdb-core-component"
+name = "ducklink-core"
 version = "0.1.0"
 edition = "2021"
 

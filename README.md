@@ -6,8 +6,8 @@
 
 This repository contains a pair of WebAssembly components that wrap the DuckDB C API (`libduckdb`) and expose it through the Wasm component model.
 
-- `duckdb-core-component`: Implements the `duckdb:component/database` world and provides structured access to DuckDB connections and SQL execution.
-- `duckdb-cli-component`: Implements the `wasi:cli/run` world and offers a WASI-native command line interface that mirrors the behaviour of the native DuckDB shell while delegating database access through the component interface.
+- `ducklink-core`: Implements the `duckdb:component/database` world and provides structured access to DuckDB connections and SQL execution.
+- `ducklink-cli`: Implements the `wasi:cli/run` world and offers a WASI-native command line interface that mirrors the behaviour of the native DuckDB shell while delegating database access through the component interface.
 
 Both components are intended to run in preview2-capable runtimes such as `wasmtime 16.0+`.
 
@@ -30,8 +30,8 @@ wit/
   browser/             Browser-oriented database world
 crates/
   libduckdb-sys/       bindgen-based bindings to the DuckDB C API
-  duckdb-core-component/ Component implementation of the DuckDB API
-  duckdb-cli-component/ WASI CLI component built on top of the exported API
+  ducklink-core/ Component implementation of the DuckDB API
+  ducklink-cli/ WASI CLI component built on top of the exported API
 scripts/
   build-libduckdb-wasm.sh  Helper for cross-compiling DuckDB to wasm32-wasi
 cmake/toolchains/
@@ -73,7 +73,7 @@ export DUCKDB_STATIC_LIB="$(pwd)/artifacts/libduckdb-wasi.a"
 
 ### Browser-oriented static library
 
-For the browser component you will need a DuckDB archive compiled for the appropriate `wasm32-unknown-unknown` (or equivalent) target. Once built, point `DUCKDB_STATIC_LIB` at that archive and use the `make core-browser` target to produce `duckdb_core_component.wasm` with the `browser` feature enabled.
+For the browser component you will need a DuckDB archive compiled for the appropriate `wasm32-unknown-unknown` (or equivalent) target. Once built, point `DUCKDB_STATIC_LIB` at that archive and use the `make core-browser` target to produce `ducklink_core.wasm` with the `browser` feature enabled.
 
 ## Building the components
 
@@ -87,7 +87,7 @@ Individual targets are also available:
 
 ```bash
 make core
-make duckdb-cli-component
+make ducklink-cli
 
 # Build the browser-oriented core (requires a browser-compatible DuckDB static archive)
 make core-browser BROWSER_TARGET=wasm32-unknown-unknown
@@ -95,8 +95,8 @@ make core-browser BROWSER_TARGET=wasm32-unknown-unknown
 
 The resulting component binaries are generated in `target/wasm32-wasi/release/`:
 
-- `duckdb_core_component.wasm`
-- `duckdb_cli_component.wasm`
+- `ducklink_core.wasm`
+- `ducklink_cli.wasm`
 
 ## Developing component extensions
 
@@ -141,7 +141,7 @@ capability surface and packaging details.
 Instantiate the database component with a runtime that supports the component model. For example, using `wasmtime`:
 
 ```bash
-wasmtime component run target/wasm32-wasi/release/duckdb_core_component.wasm --dir .
+wasmtime component run target/wasm32-wasi/release/ducklink_core.wasm --dir .
 ```
 
 Pre-open directories that contain database files (e.g. `--dir .`) so the component can access them via WASI.
@@ -155,8 +155,8 @@ The CLI component imports the database world and exposes a `wasi:cli` entry poin
 cargo install wac-cli
 
 # Compose the CLI + core component pair
-wac plug target/wasm32-wasip2/release/duckdb_cli_component.wasm \
-  --plug target/wasm32-wasip2/release/duckdb_core_component.wasm \
+wac plug target/wasm32-wasip2/release/ducklink_cli.wasm \
+  --plug target/wasm32-wasip2/release/ducklink_core.wasm \
   -o artifacts/duckdb-cli.wasm
 
 # Execute a query (grant directory access for any on-disk database file)
@@ -177,7 +177,7 @@ to the CLI before the query runs.
 
 The CLI supports:
 
-- Connecting to a database file or running purely in-memory (`duckdb_cli_component.wasm :memory:`)
+- Connecting to a database file or running purely in-memory (`ducklink_cli.wasm :memory:`)
 - Executing a single command via `-c "SQL"`
 - Preloading componentized extensions via `--load-extension <name>` (repeat for multiple extensions); this issues a `LOAD <name>` statement before user SQL runs
 - Interactive REPL with `.help`, `.exit`, and `.quit`
@@ -200,11 +200,11 @@ of the extension interfaces.
 
 ### Native host runner
 
-The `duckdb-component-host` crate provides a reusable Wasmtime runner that composes the CLI
+The `ducklink-host` crate provides a reusable Wasmtime runner that composes the CLI
 and core components along with the componentized extension loader. Build and execute it via:
 
 ```bash
-cargo run -p duckdb-component-host --bin ducklink -- -- duckdb-cli :memory: -c "select 42 as answer;"
+cargo run -p ducklink-host --bin ducklink -- -- duckdb-cli :memory: -c "select 42 as answer;"
 ```
 
 Additional directories can be exposed to the CLI with `--dir /host/path::/guest/path`, and
@@ -222,7 +222,7 @@ This repository ships a minimal sample extension under `extensions/sample-extens
 make smoke-extension
 ```
 
-The target runs the `duckdb-component-host` test `load_sample_extension_component`, which:
+The target runs the `ducklink-host` test `load_sample_extension_component`, which:
 
 1. Builds the sample extension (if it is not already present).
 2. Copies the resulting component to `artifacts/extensions/sample_extension.wasm`.

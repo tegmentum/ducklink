@@ -17,9 +17,9 @@ suite. Remaining work is the DuckDB-side wiring of catalog/files registrations
 - `wit/duckdb-extension/worlds/duckdb-extension.wit`: imports `catalog`/`files`
   (also mirrored into the sample extension's world).
 - Rust: `Catalog`/`FileFormat` match arms restored in
-  `crates/duckdb-component-host/src/lib.rs` (`convert_core_capabilitykind`,
+  `crates/ducklink-host/src/lib.rs` (`convert_core_capabilitykind`,
   `convert_cli_capability`, `describe_cli_capability`) and in
-  `crates/duckdb-core-component/src/extension_loader.rs` (`describe_capability`).
+  `crates/ducklink-core/src/extension_loader.rs` (`describe_capability`).
 - Host: `extension_catalog::Host` + `extension_files::Host` implemented for
   `ExtensionStoreState` and added to the extension linker in
   `ensure_extension_loaded`, so extensions that import `catalog`/`files`
@@ -123,7 +123,7 @@ made the path mechanical. What was done:
    into `libduckdb-wasi.a`.
 3. `crates/libduckdb-sys/build.rs`: stop separately linking c++abi/c++ (now baked
    in the archive) to avoid duplicate `__cxa_*`; link only `m`.
-4. `crates/duckdb-core-component/src/lib.rs`: remove the old aborting `__cxa_*`
+4. `crates/ducklink-core/src/lib.rs`: remove the old aborting `__cxa_*`
    stubs (the real EH libc++abi now provides them).
 5. Host `build_engine`: `config.wasm_exceptions(true)`.
 6. `MACRO_EXECUTION_ENABLED = true`.
@@ -137,7 +137,7 @@ connection (which now surfaces a real error instead of being silently tolerated)
 
 ## The archive blocker — RESOLVED (2026-06)
 
-Rebuilding the core component requires recompiling `duckdb-core-component`,
+Rebuilding the core component requires recompiling `ducklink-core`,
 which links `artifacts/libduckdb-wasi.a`. The 2025-11-10 archive was incomplete:
 
 ```
@@ -158,7 +158,7 @@ Fix applied:
   on `DUCKDB_STATIC_LIB` so cargo stops bundling a stale archive into the rlib.
 
 The archive now rebuilds cleanly (`llvm-nm` shows no `_ZTVN6duckdb8HTTPUtilE`
-reference) and `duckdb-core-component` links and runs. A second issue surfaced
+reference) and `ducklink-core` links and runs. A second issue surfaced
 and was fixed at the same time: the core is a reactor component whose host does
 not wire `wasi:cli/stderr`, so std `eprintln!` aborted DuckDB mid-load — core
 logging now goes through a non-panicking `clog!` macro (see `src/lib.rs`).
