@@ -9,10 +9,13 @@
 //! function's `State`. Other shapes are skipped with a logged note — extending
 //! to them is more `VScalar` impls keyed by `reg::LogicalType`.
 
+use std::cell::RefCell;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use duckdb::core::{DataChunkHandle, FlatVector, LogicalTypeHandle, LogicalTypeId};
+use duckdb::core::{DataChunkHandle, FlatVector, Inserter, LogicalTypeHandle, LogicalTypeId};
+use duckdb::ffi::duckdb_string_t;
+use duckdb::types::DuckString;
 use duckdb::vscalar::{ScalarFunctionSignature, VScalar};
 use duckdb::vtab::arrow::WritableVector;
 use duckdb::Connection;
@@ -22,30 +25,34 @@ use ducklink_runtime::reg;
 use crate::engine::{Engine2, ScalarFunc};
 
 /// Per-function state DuckDB hands back to `invoke`: which component callback to
-/// dispatch to, and the shared engine that owns the loaded component.
+/// dispatch to, the shared engine, and the function's argument / return type
+/// codes (so one `WasmScalar` serves every signature).
 #[derive(Clone)]
 struct WasmScalarState {
     callback_handle: u32,
     engine: Arc<Mutex<Engine2>>,
+    arg_codes: Vec<u8>,
+    ret_code: u8,
 }
 
-// Type codes for the const-generic scalar bridge. Each (arg, return) pair is a
-// distinct `WasmScalar<A, R>` monomorphization, because duckdb-rs derives the SQL
-// signature from a static `VScalar::signatures()`.
+// Bridge type codes — one per DuckDB logical type the scalar bridge marshals.
 const T_I64: u8 = 0;
 const T_U64: u8 = 1;
 const T_F64: u8 = 2;
 const T_BOOL: u8 = 3;
+const T_TEXT: u8 = 4;
+const T_BLOB: u8 = 5;
 
-/// Map a neutral logical type to a bridge type code, or `None` if unsupported
-/// (Text/Blob — those need string-vector marshalling, a follow-up).
-fn type_code(lt: reg::LogicalType) -> Option<u8> {
+/// Map a neutral logical type to a bridge type code. All current `reg`
+/// logical types are supported.
+fn type_code(lt: reg::LogicalType) -> u8 {
     match lt {
-        reg::LogicalType::Int64 => Some(T_I64),
-        reg::LogicalType::Uint64 => Some(T_U64),
-        reg::LogicalType::Float64 => Some(T_F64),
-        reg::LogicalType::Boolean => Some(T_BOOL),
-        reg::LogicalType::Text | reg::LogicalType::Blob => None,
+        reg::LogicalType::Int64 => T_I64,
+        reg::LogicalType::Uint64 => T_U64,
+        reg::LogicalType::Float64 => T_F64,
+        reg::LogicalType::Boolean => T_BOOL,
+        reg::LogicalType::Text => T_TEXT,
+        reg::LogicalType::Blob => T_BLOB,
     }
 }
 
@@ -55,6 +62,8 @@ fn logical_type(code: u8) -> LogicalTypeHandle {
         T_U64 => LogicalTypeId::UBigint,
         T_F64 => LogicalTypeId::Double,
         T_BOOL => LogicalTypeId::Boolean,
+        T_TEXT => LogicalTypeId::Varchar,
+        T_BLOB => LogicalTypeId::Blob,
         _ => unreachable!("type code out of range"),
     };
     LogicalTypeHandle::from(id)
@@ -67,6 +76,14 @@ fn read_arg(code: u8, vec: &FlatVector, i: usize, len: usize) -> reg::DuckValue 
         T_U64 => reg::DuckValue::Uint64(unsafe { vec.as_slice_with_len::<u64>(len) }[i]),
         T_F64 => reg::DuckValue::Float64(unsafe { vec.as_slice_with_len::<f64>(len) }[i]),
         T_BOOL => reg::DuckValue::Boolean(unsafe { vec.as_slice_with_len::<bool>(len) }[i]),
+        T_TEXT => {
+            let mut s = unsafe { vec.as_slice_with_len::<duckdb_string_t>(len) }[i];
+            reg::DuckValue::Text(DuckString::new(&mut s).as_str().into_owned())
+        }
+        T_BLOB => {
+            let mut s = unsafe { vec.as_slice_with_len::<duckdb_string_t>(len) }[i];
+            reg::DuckValue::Blob(DuckString::new(&mut s).as_bytes().to_vec())
+        }
         _ => unreachable!("type code out of range"),
     }
 }
@@ -96,6 +113,8 @@ fn write_ret(
             let s = unsafe { vec.as_mut_slice_with_len::<bool>(len) };
             s[i] = x;
         }
+        (T_TEXT, reg::DuckValue::Text(x)) => vec.insert(i, x.as_str()),
+        (T_BLOB, reg::DuckValue::Blob(x)) => vec.insert(i, x.as_slice()),
         (_, other) => {
             return Err(format!(
                 "component returned {other:?}, incompatible with declared return type"
@@ -106,12 +125,20 @@ fn write_ret(
     Ok(())
 }
 
-/// A unary numeric/bool scalar backed by a wasm component function. `A` is the
-/// argument type code, `R` the return type code (see `T_*`). Each invocation
-/// dispatches every row through `Engine2::dispatch_scalar` into the component.
-struct WasmScalar<const A: u8, const R: u8>;
+// The signature for the next `register_scalar_function_with_state` call.
+// `VScalar::signatures()` is a static method with no access to the function's
+// state, so the per-function signature is handed to it through this thread-local,
+// set immediately before the (synchronous) registration call.
+thread_local! {
+    static PENDING_SIGNATURE: RefCell<Option<(Vec<u8>, u8)>> = const { RefCell::new(None) };
+}
 
-impl<const A: u8, const R: u8> VScalar for WasmScalar<A, R> {
+/// One `VScalar` impl serving every component scalar. The argument / return
+/// types come from the state (for dispatch) and from `PENDING_SIGNATURE` (for
+/// the SQL signature), so any arity and any supported type combination works.
+struct WasmScalar;
+
+impl VScalar for WasmScalar {
     type State = WasmScalarState;
 
     fn invoke(
@@ -120,76 +147,40 @@ impl<const A: u8, const R: u8> VScalar for WasmScalar<A, R> {
         output: &mut dyn WritableVector,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let len = input.len();
-        let in_vec = input.flat_vector(0);
-        let mut out_vec = output.flat_vector();
+        let cols: Vec<FlatVector> = (0..state.arg_codes.len())
+            .map(|j| input.flat_vector(j))
+            .collect();
+        let mut out = output.flat_vector();
 
         let mut engine = state.engine.lock().expect("engine mutex poisoned");
         for i in 0..len {
-            let arg = read_arg(A, &in_vec, i, len);
+            let args: Vec<reg::DuckValue> = state
+                .arg_codes
+                .iter()
+                .enumerate()
+                .map(|(j, &code)| read_arg(code, &cols[j], i, len))
+                .collect();
             let result = engine
-                .dispatch_scalar(state.callback_handle, i as u64, vec![arg])
+                .dispatch_scalar(state.callback_handle, i as u64, args)
                 .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
-            write_ret(R, &mut out_vec, i, len, result)?;
+            write_ret(state.ret_code, &mut out, i, len, result)?;
         }
         Ok(())
     }
 
     fn signatures() -> Vec<ScalarFunctionSignature> {
+        let (arg_codes, ret_code) = PENDING_SIGNATURE
+            .with(|s| s.borrow().clone())
+            .expect("PENDING_SIGNATURE must be set before registration");
         vec![ScalarFunctionSignature::exact(
-            vec![logical_type(A)],
-            logical_type(R),
+            arg_codes.into_iter().map(logical_type).collect(),
+            logical_type(ret_code),
         )]
     }
 }
 
-/// The (arg, return) type codes for `f`, if it is a unary scalar over the
-/// numeric/bool types this bridge covers; `None` otherwise.
-fn supported_codes(f: &ScalarFunc) -> Option<(u8, u8)> {
-    if f.arguments.len() != 1 {
-        return None;
-    }
-    Some((type_code(f.arguments[0].logical)?, type_code(f.returns)?))
-}
-
-/// Register one scalar, dispatching to the `WasmScalar<A, R>` monomorphization
-/// for the given type codes.
-fn register_one(
-    con: &Connection,
-    name: &str,
-    state: &WasmScalarState,
-    a: u8,
-    r: u8,
-) -> duckdb::Result<()> {
-    macro_rules! go {
-        ($A:literal, $R:literal) => {
-            con.register_scalar_function_with_state::<WasmScalar<$A, $R>>(name, state)
-        };
-    }
-    match (a, r) {
-        (0, 0) => go!(0, 0),
-        (0, 1) => go!(0, 1),
-        (0, 2) => go!(0, 2),
-        (0, 3) => go!(0, 3),
-        (1, 0) => go!(1, 0),
-        (1, 1) => go!(1, 1),
-        (1, 2) => go!(1, 2),
-        (1, 3) => go!(1, 3),
-        (2, 0) => go!(2, 0),
-        (2, 1) => go!(2, 1),
-        (2, 2) => go!(2, 2),
-        (2, 3) => go!(2, 3),
-        (3, 0) => go!(3, 0),
-        (3, 1) => go!(3, 1),
-        (3, 2) => go!(3, 2),
-        (3, 3) => go!(3, 3),
-        _ => unreachable!("type codes are 0..4"),
-    }
-}
-
-/// Register every supported component scalar on `con`. Returns the count
-/// registered; unsupported shapes (multi-arg, or Text/Blob) are skipped with a
-/// logged note. The bridge covers unary INT64/UINT64/DOUBLE/BOOLEAN -> any of
-/// the same.
+/// Register every component scalar on `con`. Returns the count registered. All
+/// `reg` logical types are supported across any arity.
 pub fn register_scalars(
     con: &Connection,
     engine: Arc<Mutex<Engine2>>,
@@ -197,21 +188,19 @@ pub fn register_scalars(
 ) -> duckdb::Result<usize> {
     let mut registered = 0usize;
     for f in scalars {
-        let (a, r) = match supported_codes(f) {
-            Some(codes) => codes,
-            None => {
-                eprintln!(
-                    "[ducklink] skipping scalar '{}': unsupported signature (bridge covers unary INT64/UINT64/DOUBLE/BOOLEAN)",
-                    f.name
-                );
-                continue;
-            }
-        };
+        let arg_codes: Vec<u8> = f.arguments.iter().map(|a| type_code(a.logical)).collect();
+        let ret_code = type_code(f.returns);
         let state = WasmScalarState {
             callback_handle: f.callback_handle,
             engine: engine.clone(),
+            arg_codes: arg_codes.clone(),
+            ret_code,
         };
-        register_one(con, &f.name, &state, a, r)?;
+        // Hand the signature to `WasmScalar::signatures()` for this one call.
+        PENDING_SIGNATURE.with(|s| *s.borrow_mut() = Some((arg_codes, ret_code)));
+        let result = con.register_scalar_function_with_state::<WasmScalar>(&f.name, &state);
+        PENDING_SIGNATURE.with(|s| *s.borrow_mut() = None);
+        result?;
         registered += 1;
     }
     Ok(registered)
