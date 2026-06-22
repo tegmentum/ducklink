@@ -12,24 +12,33 @@ description = "Run WebAssembly component extensions inside DuckDB"
 publish = false
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 name = "ducklink"
+
+[features]
+default = []
+# The native loadable-extension build (links the DuckDB C Extension API; needs
+# the DuckDB toolchain). Off by default so the Direction-2 engine glue
+# (engine.rs) can be checked against ducklink-runtime WITHOUT a DuckDB build.
+loadable = ["dep:duckdb", "dep:duckdb-loadable-macros", "dep:libduckdb-sys"]
 
 [dependencies]
 # The shared engine: the duckdb:extension bindgen, the neutral reg::* capture
-# model, and the callback registry. Same crate the Direction-1 host uses, so a
-# component loads identically in both.
+# model, the callback registry, and the load_component loader. Same crate the
+# Direction-1 host uses, so a component loads identically in both.
 ducklink-runtime = { path = "../../crates/ducklink-runtime" }
-# DuckDB C Extension API (loadable-extension build). Pinned to the DuckDB version
-# the community-extensions CI builds against; bumped per release.
-duckdb = { version = "1.1", features = ["vscalar", "vtab", "loadable-extension"] }
-duckdb-loadable-macros = "0.1"
-libduckdb-sys = { version = "1.1", features = ["loadable-extension"] }
-# wasmtime to run the component. Must match ducklink-runtime's pinned rev so the
-# generated bindings are ABI-identical.
+# wasmtime to run the component. MUST match ducklink-runtime's pinned rev so the
+# WasiCtx / generated bindings are the same types across the crate boundary.
 wasmtime = { git = "https://github.com/bytecodealliance/wasmtime", rev = "1ec866079720e573fc2aa06947c84f6132010993", features = ["component-model"] }
 wasmtime-wasi = { git = "https://github.com/bytecodealliance/wasmtime", rev = "1ec866079720e573fc2aa06947c84f6132010993" }
 anyhow = "1"
+
+# DuckDB C Extension API (loadable-extension build) — only when building the
+# actual loadable artifact. Pinned to the DuckDB version community-extensions
+# CI builds against; bumped per release.
+duckdb = { version = "1.1", features = ["vscalar", "vtab", "loadable-extension"], optional = true }
+duckdb-loadable-macros = { version = "0.1", optional = true }
+libduckdb-sys = { version = "1.1", features = ["loadable-extension"], optional = true }
 
 # Detach from the wasm component workspace one level up.
 [workspace]
