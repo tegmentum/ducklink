@@ -107,12 +107,24 @@ pub struct TableFunc {
     pub callback_handle: u32,
 }
 
+/// An aggregate function a loaded component registered. `arguments` are the
+/// input columns; the component computes over all rows at finalize.
+#[derive(Clone, Debug)]
+pub struct AggregateFunc {
+    pub extension: String,
+    pub name: String,
+    pub arguments: Vec<reg::FuncArg>,
+    pub returns: reg::LogicalType,
+    pub callback_handle: u32,
+}
+
 /// What a component registered: the functions a direction-specific sink bridges
 /// into the database.
 #[derive(Clone, Debug, Default)]
 pub struct LoadedComponent {
     pub scalars: Vec<ScalarFunc>,
     pub tables: Vec<TableFunc>,
+    pub aggregates: Vec<AggregateFunc>,
 }
 
 /// Process-wide Direction-2 engine: loads components and dispatches DuckDB
@@ -169,8 +181,23 @@ impl Engine2 {
                 callback_handle: t.callback_handle,
             })
             .collect();
+        let aggregates = pending
+            .aggregates
+            .into_iter()
+            .map(|a| AggregateFunc {
+                extension: a.extension,
+                name: a.name,
+                arguments: a.arguments,
+                returns: a.returns,
+                callback_handle: a.callback_handle,
+            })
+            .collect();
         self.instances.insert(extension.to_string(), instance);
-        Ok(LoadedComponent { scalars, tables })
+        Ok(LoadedComponent {
+            scalars,
+            tables,
+            aggregates,
+        })
     }
 
     /// Invoke a component scalar for one row. `callback_handle` is the value
@@ -231,6 +258,35 @@ impl Engine2 {
             .into_iter()
             .map(|row| row.into_iter().map(wit_to_neutral).collect())
             .collect())
+    }
+
+    /// Invoke a component aggregate over all accumulated input `rows` (each row is
+    /// the function's argument tuple), returning the single aggregate result. The
+    /// component computes the whole aggregate at once. `callback_handle` resolves
+    /// through the callback registry to the owning component instance.
+    pub fn dispatch_aggregate(
+        &mut self,
+        callback_handle: u32,
+        rows: Vec<Vec<reg::DuckValue>>,
+    ) -> Result<reg::DuckValue> {
+        let entry = {
+            let registry = self.callbacks.lock().expect("callback registry poisoned");
+            registry
+                .get(callback_handle)
+                .ok_or_else(|| anyhow!("unknown callback handle {callback_handle}"))?
+        };
+        let instance = self
+            .instances
+            .get_mut(&entry.extension)
+            .ok_or_else(|| anyhow!("extension '{}' is not loaded", entry.extension))?;
+        let wit_rows: Vec<Vec<extension_types::Duckvalue>> = rows
+            .into_iter()
+            .map(|row| row.into_iter().map(neutral_to_wit).collect())
+            .collect();
+        let result = instance
+            .dispatch_aggregate(entry.dispatcher_handle, &wit_rows)
+            .map_err(|e| anyhow!("aggregate dispatch failed: {e:?}"))?;
+        Ok(wit_to_neutral(result))
     }
 }
 

@@ -24,7 +24,7 @@ use duckdb::Connection;
 
 use ducklink_runtime::reg;
 
-use crate::engine::{Engine2, ScalarFunc, TableFunc};
+use crate::engine::{AggregateFunc, Engine2, ScalarFunc, TableFunc};
 
 /// Per-function state DuckDB hands back to `invoke`: which component callback to
 /// dispatch to, the shared engine, and the function's argument / return type
@@ -361,6 +361,260 @@ pub fn register_tables(
     Ok(registered)
 }
 
+// ---------------------------------------------------------------------------
+// Aggregate functions (raw C API)
+// ---------------------------------------------------------------------------
+//
+// duckdb-rs has no safe aggregate wrapper, so aggregates go through the raw C
+// API. DuckDB's aggregate is incremental (init/update/combine/finalize); the
+// wasm component computes over ALL rows at once, so each group's state simply
+// accumulates its input rows and `finalize` hands them to the component.
+
+use std::ffi::CString;
+use std::os::raw::{c_char, c_void};
+
+use duckdb::ffi;
+
+/// Per-group aggregate state: the input rows accumulated for this group, each a
+/// tuple of the function's argument values.
+type AggState = Vec<Vec<reg::DuckValue>>;
+
+/// Per-function data DuckDB hands to the aggregate callbacks via extra-info.
+struct AggExtra {
+    callback_handle: u32,
+    engine: Arc<Mutex<Engine2>>,
+    arg_codes: Vec<u8>,
+    ret_code: u8,
+}
+
+fn duckdb_type_of(code: u8) -> ffi::duckdb_type {
+    match code {
+        T_I64 => ffi::DUCKDB_TYPE_DUCKDB_TYPE_BIGINT,
+        T_U64 => ffi::DUCKDB_TYPE_DUCKDB_TYPE_UBIGINT,
+        T_F64 => ffi::DUCKDB_TYPE_DUCKDB_TYPE_DOUBLE,
+        T_BOOL => ffi::DUCKDB_TYPE_DUCKDB_TYPE_BOOLEAN,
+        T_TEXT => ffi::DUCKDB_TYPE_DUCKDB_TYPE_VARCHAR,
+        T_BLOB => ffi::DUCKDB_TYPE_DUCKDB_TYPE_BLOB,
+        _ => ffi::DUCKDB_TYPE_DUCKDB_TYPE_VARCHAR,
+    }
+}
+
+/// Read row `i` of a raw input vector (type `code`) into a neutral value.
+unsafe fn read_arg_raw(code: u8, vector: ffi::duckdb_vector, i: usize) -> reg::DuckValue {
+    let validity = ffi::duckdb_vector_get_validity(vector);
+    if !validity.is_null() && !ffi::duckdb_validity_row_is_valid(validity, i as u64) {
+        return reg::DuckValue::Null;
+    }
+    let data = ffi::duckdb_vector_get_data(vector);
+    match code {
+        T_I64 => reg::DuckValue::Int64(*(data as *const i64).add(i)),
+        T_U64 => reg::DuckValue::Uint64(*(data as *const u64).add(i)),
+        T_F64 => reg::DuckValue::Float64(*(data as *const f64).add(i)),
+        T_BOOL => reg::DuckValue::Boolean(*(data as *const bool).add(i)),
+        T_TEXT => {
+            let mut s = *(data as *const duckdb_string_t).add(i);
+            reg::DuckValue::Text(DuckString::new(&mut s).as_str().into_owned())
+        }
+        T_BLOB => {
+            let mut s = *(data as *const duckdb_string_t).add(i);
+            reg::DuckValue::Blob(DuckString::new(&mut s).as_bytes().to_vec())
+        }
+        _ => reg::DuckValue::Null,
+    }
+}
+
+/// Write a neutral value into row `i` of a raw result vector (type `code`).
+unsafe fn write_ret_raw(
+    code: u8,
+    vector: ffi::duckdb_vector,
+    i: usize,
+    v: reg::DuckValue,
+) -> Result<(), String> {
+    if matches!(v, reg::DuckValue::Null) {
+        ffi::duckdb_vector_ensure_validity_writable(vector);
+        let validity = ffi::duckdb_vector_get_validity(vector);
+        ffi::duckdb_validity_set_row_validity(validity, i as u64, false);
+        return Ok(());
+    }
+    let data = ffi::duckdb_vector_get_data(vector);
+    match (code, v) {
+        (T_I64, reg::DuckValue::Int64(x)) => *(data as *mut i64).add(i) = x,
+        (T_U64, reg::DuckValue::Uint64(x)) => *(data as *mut u64).add(i) = x,
+        (T_F64, reg::DuckValue::Float64(x)) => *(data as *mut f64).add(i) = x,
+        (T_BOOL, reg::DuckValue::Boolean(x)) => *(data as *mut bool).add(i) = x,
+        (T_TEXT, reg::DuckValue::Text(s)) => {
+            ffi::duckdb_vector_assign_string_element_len(
+                vector,
+                i as u64,
+                s.as_ptr() as *const c_char,
+                s.len() as u64,
+            );
+        }
+        (T_BLOB, reg::DuckValue::Blob(b)) => {
+            ffi::duckdb_vector_assign_string_element_len(
+                vector,
+                i as u64,
+                b.as_ptr() as *const c_char,
+                b.len() as u64,
+            );
+        }
+        (_, other) => {
+            return Err(format!(
+                "component returned {other:?}, incompatible with declared aggregate return type"
+            ));
+        }
+    }
+    Ok(())
+}
+
+unsafe extern "C" fn agg_state_size(_info: ffi::duckdb_function_info) -> ffi::idx_t {
+    std::mem::size_of::<*mut AggState>() as ffi::idx_t
+}
+
+unsafe extern "C" fn agg_init(_info: ffi::duckdb_function_info, state: ffi::duckdb_aggregate_state) {
+    let slot = state as *mut *mut AggState;
+    *slot = Box::into_raw(Box::new(AggState::new()));
+}
+
+unsafe extern "C" fn agg_update(
+    info: ffi::duckdb_function_info,
+    input: ffi::duckdb_data_chunk,
+    states: *mut ffi::duckdb_aggregate_state,
+) {
+    let extra = &*(ffi::duckdb_aggregate_function_get_extra_info(info) as *const AggExtra);
+    let n = ffi::duckdb_data_chunk_get_size(input) as usize;
+    let ncols = extra.arg_codes.len();
+    let vectors: Vec<ffi::duckdb_vector> = (0..ncols)
+        .map(|c| ffi::duckdb_data_chunk_get_vector(input, c as u64))
+        .collect();
+    for row in 0..n {
+        // The state for this input row (states is parallel to the input chunk).
+        let st = *states.add(row);
+        let group = &mut **(st as *mut *mut AggState);
+        let argrow: Vec<reg::DuckValue> = (0..ncols)
+            .map(|c| read_arg_raw(extra.arg_codes[c], vectors[c], row))
+            .collect();
+        group.push(argrow);
+    }
+}
+
+unsafe extern "C" fn agg_combine(
+    _info: ffi::duckdb_function_info,
+    source: *mut ffi::duckdb_aggregate_state,
+    target: *mut ffi::duckdb_aggregate_state,
+    count: ffi::idx_t,
+) {
+    for i in 0..count as usize {
+        let s = &mut **(*source.add(i) as *mut *mut AggState);
+        let t = &mut **(*target.add(i) as *mut *mut AggState);
+        t.append(s);
+    }
+}
+
+unsafe extern "C" fn agg_finalize(
+    info: ffi::duckdb_function_info,
+    source: *mut ffi::duckdb_aggregate_state,
+    result: ffi::duckdb_vector,
+    count: ffi::idx_t,
+    offset: ffi::idx_t,
+) {
+    let extra = &*(ffi::duckdb_aggregate_function_get_extra_info(info) as *const AggExtra);
+    for i in 0..count as usize {
+        let group = &mut **(*source.add(i) as *mut *mut AggState);
+        let rows = std::mem::take(group);
+        let dispatched = {
+            let mut engine = extra.engine.lock().expect("engine mutex poisoned");
+            engine.dispatch_aggregate(extra.callback_handle, rows)
+        };
+        let out = offset as usize + i;
+        let write = dispatched
+            .map_err(|e| e.to_string())
+            .and_then(|v| write_ret_raw(extra.ret_code, result, out, v));
+        if let Err(msg) = write {
+            if let Ok(c) = CString::new(msg) {
+                ffi::duckdb_aggregate_function_set_error(info, c.as_ptr());
+            }
+            return;
+        }
+    }
+}
+
+unsafe extern "C" fn agg_destroy(states: *mut ffi::duckdb_aggregate_state, count: ffi::idx_t) {
+    for i in 0..count as usize {
+        let p = *(*states.add(i) as *mut *mut AggState);
+        if !p.is_null() {
+            drop(Box::from_raw(p));
+        }
+    }
+}
+
+unsafe extern "C" fn agg_extra_destroy(ptr: *mut c_void) {
+    if !ptr.is_null() {
+        drop(Box::from_raw(ptr as *mut AggExtra));
+    }
+}
+
+/// Register every component aggregate function on the raw connection `raw_con`
+/// via the DuckDB C API. Functions registered on any connection of a database
+/// are visible to all its connections, so `raw_con` need only share the database
+/// with the connection used for queries.
+///
+/// # Safety
+/// `raw_con` must be a valid `duckdb_connection`.
+pub unsafe fn register_aggregates(
+    raw_con: ffi::duckdb_connection,
+    engine: Arc<Mutex<Engine2>>,
+    aggregates: &[AggregateFunc],
+) -> duckdb::Result<usize> {
+    let mut registered = 0usize;
+    for f in aggregates {
+        let arg_codes: Vec<u8> = f.arguments.iter().map(|a| type_code(a.logical)).collect();
+        let ret_code = type_code(f.returns);
+
+        let func = ffi::duckdb_create_aggregate_function();
+        let cname = CString::new(f.name.as_str())
+            .map_err(|_| duckdb::Error::DuckDBFailure(ffi::Error::new(ffi::DuckDBError), None))?;
+        ffi::duckdb_aggregate_function_set_name(func, cname.as_ptr());
+        for &code in &arg_codes {
+            let mut lt = ffi::duckdb_create_logical_type(duckdb_type_of(code));
+            ffi::duckdb_aggregate_function_add_parameter(func, lt);
+            ffi::duckdb_destroy_logical_type(&mut lt);
+        }
+        let mut rlt = ffi::duckdb_create_logical_type(duckdb_type_of(ret_code));
+        ffi::duckdb_aggregate_function_set_return_type(func, rlt);
+        ffi::duckdb_destroy_logical_type(&mut rlt);
+
+        let extra = Box::into_raw(Box::new(AggExtra {
+            callback_handle: f.callback_handle,
+            engine: engine.clone(),
+            arg_codes,
+            ret_code,
+        })) as *mut c_void;
+        ffi::duckdb_aggregate_function_set_extra_info(func, extra, Some(agg_extra_destroy));
+        ffi::duckdb_aggregate_function_set_functions(
+            func,
+            Some(agg_state_size),
+            Some(agg_init),
+            Some(agg_update),
+            Some(agg_combine),
+            Some(agg_finalize),
+        );
+        ffi::duckdb_aggregate_function_set_destructor(func, Some(agg_destroy));
+
+        let rc = ffi::duckdb_register_aggregate_function(raw_con, func);
+        let mut func_mut = func;
+        ffi::duckdb_destroy_aggregate_function(&mut func_mut);
+        if rc != ffi::DuckDBSuccess {
+            return Err(duckdb::Error::DuckDBFailure(
+                ffi::Error::new(ffi::DuckDBError),
+                Some(format!("failed to register aggregate '{}'", f.name)),
+            ));
+        }
+        registered += 1;
+    }
+    Ok(registered)
+}
+
 /// A component to load at extension-load time: a display name and a path to the
 /// `.wasm` artifact.
 #[derive(Clone, Debug)]
@@ -398,12 +652,20 @@ pub fn component_specs_from_env() -> Vec<ComponentSpec> {
         .collect()
 }
 
-/// Load each component and register its scalar functions on `con`, sharing one
-/// `engine`. Returns the total number of scalar functions registered. The
-/// `engine` `Arc` is cloned into every registered function's state, so the loaded
-/// components stay alive as long as the functions remain in the catalog.
+/// Load each component and register its functions, sharing one `engine`. Scalars
+/// and table functions register on the duckdb-rs `con`; aggregates (which need
+/// the raw C API) register on `raw_con` when supplied — pass `None` (e.g. the
+/// loadable entry point, which has no raw connection) to skip them with a note.
+/// Returns the total number of functions registered. The `engine` `Arc` is
+/// cloned into every registered function's state, so the loaded components stay
+/// alive as long as the functions remain in the catalog.
+///
+/// # Safety
+/// When `Some`, `raw_con` must be a valid `duckdb_connection` sharing the
+/// database with `con` (so the aggregates it registers are visible to `con`).
 pub fn register_components(
     con: &Connection,
+    raw_con: Option<ffi::duckdb_connection>,
     engine: Arc<Mutex<Engine2>>,
     specs: &[ComponentSpec],
 ) -> anyhow::Result<usize> {
@@ -415,6 +677,19 @@ pub fn register_components(
         };
         total += register_scalars(con, engine.clone(), &loaded.scalars)?;
         total += register_tables(con, engine.clone(), &loaded.tables)?;
+        match raw_con {
+            Some(rc) => {
+                total += unsafe { register_aggregates(rc, engine.clone(), &loaded.aggregates)? };
+            }
+            None if !loaded.aggregates.is_empty() => {
+                eprintln!(
+                    "[ducklink] skipping {} aggregate function(s) from '{}': no raw connection available",
+                    loaded.aggregates.len(),
+                    spec.name
+                );
+            }
+            None => {}
+        }
     }
     Ok(total)
 }
@@ -470,7 +745,7 @@ mod tests {
             path: sample_component(),
         }];
         let con = Connection::open_in_memory().expect("open duckdb");
-        let n = register_components(&con, engine, &specs).expect("register components");
+        let n = register_components(&con, None, engine, &specs).expect("register components");
         assert!(n >= 1, "expected >=1 scalar registered, got {n}");
 
         let v: i64 = con
@@ -490,7 +765,7 @@ mod tests {
             path: sample_component(),
         }];
         let con = Connection::open_in_memory().expect("open duckdb");
-        register_components(&con, engine, &specs).expect("register components");
+        register_components(&con, None, engine, &specs).expect("register components");
 
         let count: i64 = con
             .query_row("SELECT count(*) FROM sample_emit_sequence(5)", [], |r| {
@@ -524,5 +799,28 @@ mod tests {
         assert_eq!(specs[0].path, PathBuf::from("/a/b.wasm"));
         assert_eq!(specs[1].name, "isin", "bare path -> file stem as name");
         assert_eq!(specs[1].path, PathBuf::from("/c/isin.wasm"));
+    }
+
+    /// Feasibility probe for the aggregate bridge: are functions registered via
+    /// the C API visible across connections of the same database? (Aggregate
+    /// registration needs a raw `duckdb_connection`, which the duckdb-rs
+    /// `Connection` doesn't expose — so we'd register on a separate connection of
+    /// the same db and rely on db-wide visibility.)
+    #[test]
+    fn registered_function_visible_across_connections() {
+        let mut engine = Engine2::new().expect("engine");
+        let loaded = engine
+            .load("sample_extension", &sample_component())
+            .expect("load");
+        let engine = Arc::new(Mutex::new(engine));
+        let con = Connection::open_in_memory().expect("open");
+        register_scalars(&con, engine, &loaded.scalars).expect("register");
+
+        // sample_plus_one is registered on `con`; query it from a clone.
+        let con2 = con.try_clone().expect("clone connection");
+        let v: i64 = con2
+            .query_row("SELECT sample_plus_one(41)", [], |r| r.get(0))
+            .expect("query on cloned connection");
+        assert_eq!(v, 42, "C-API function should be visible on a sibling connection");
     }
 }

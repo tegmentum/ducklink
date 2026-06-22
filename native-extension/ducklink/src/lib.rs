@@ -52,7 +52,10 @@ mod loadable {
         let engine = Arc::new(Mutex::new(Engine2::new().map_err(stringify)?));
         let specs = component_specs_from_env();
         let registered =
-            register_components(&con, engine, &specs).map_err(stringify)?;
+            // No raw connection here (the entry point only receives a duckdb-rs
+            // Connection), so aggregate functions are skipped with a note; scalar
+            // and table functions register fine.
+            register_components(&con, None, engine, &specs).map_err(stringify)?;
         eprintln!(
             "[ducklink] loaded {} component(s); registered {registered} scalar function(s)",
             specs.len()

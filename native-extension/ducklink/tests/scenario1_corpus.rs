@@ -216,27 +216,54 @@ fn run_inner(case: &Case) -> Result<Option<String>, String> {
     let engine = Arc::new(Mutex::new(
         Engine2::new().map_err(|e| format!("engine: {e}"))?,
     ));
-    let con = Connection::open_in_memory().map_err(|e| format!("open: {e}"))?;
+
+    // Create the database directly so we have a raw connection for aggregate
+    // registration (the duckdb-rs `Connection` doesn't expose its raw handle).
+    // The duckdb-rs `Connection` (for scalars/tables/queries) and the raw
+    // connection are siblings on the same db, so functions register db-wide.
+    let mut db: duckdb::ffi::duckdb_database = std::ptr::null_mut();
+    if unsafe { duckdb::ffi::duckdb_open(std::ptr::null(), &mut db) } != duckdb::ffi::DuckDBSuccess {
+        return Err("duckdb_open failed".into());
+    }
+    let con = unsafe { Connection::open_from_raw(db) }.map_err(|e| format!("open: {e}"))?;
+    let mut raw_con: duckdb::ffi::duckdb_connection = std::ptr::null_mut();
+    if unsafe { duckdb::ffi::duckdb_connect(db, &mut raw_con) } != duckdb::ffi::DuckDBSuccess {
+        unsafe { duckdb::ffi::duckdb_close(&mut db) };
+        return Err("duckdb_connect failed".into());
+    }
+
     let specs = vec![ComponentSpec {
         name: case.name.clone(),
         path: case.artifact.clone(),
     }];
-    register_components(&con, engine, &specs).map_err(|e| format!("register: {e}"))?;
 
-    let sql = fs::read_to_string(&case.smoke_sql).map_err(|e| e.to_string())?;
-    let mut produced = Vec::new();
-    for stmt in statements(&sql) {
-        let lines = run_stmt(&con, &stmt).map_err(|e| format!("exec `{stmt}`: {e}"))?;
-        produced.extend(lines);
-    }
+    let outcome = (|| -> Result<Option<String>, String> {
+        register_components(&con, Some(raw_con), engine, &specs)
+            .map_err(|e| format!("register: {e}"))?;
 
-    match &case.expected {
-        Some(exp) => match compare(&produced, &load_expected(exp)) {
-            Ok(()) => Ok(None),
-            Err(diff) => Ok(Some(diff)),
-        },
-        None => Ok(None),
+        let sql = fs::read_to_string(&case.smoke_sql).map_err(|e| e.to_string())?;
+        let mut produced = Vec::new();
+        for stmt in statements(&sql) {
+            let lines = run_stmt(&con, &stmt).map_err(|e| format!("exec `{stmt}`: {e}"))?;
+            produced.extend(lines);
+        }
+        match &case.expected {
+            Some(exp) => match compare(&produced, &load_expected(exp)) {
+                Ok(()) => Ok(None),
+                Err(diff) => Ok(Some(diff)),
+            },
+            None => Ok(None),
+        }
+    })();
+
+    // Tear down: drop the duckdb-rs connection first, then the raw sibling, then
+    // the database.
+    drop(con);
+    unsafe {
+        duckdb::ffi::duckdb_disconnect(&mut raw_con);
+        duckdb::ffi::duckdb_close(&mut db);
     }
+    outcome
 }
 
 fn run_case(case: &Case) -> Outcome {
