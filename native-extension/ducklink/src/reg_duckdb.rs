@@ -99,6 +99,9 @@ fn write_ret(
     v: reg::DuckValue,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match (code, v) {
+        // A component may return SQL NULL for any declared return type (e.g. a
+        // validator on bad input) — mark the output row invalid.
+        (_, reg::DuckValue::Null) => vec.set_null(i),
         (T_I64, reg::DuckValue::Int64(x)) => {
             let s = unsafe { vec.as_mut_slice_with_len::<i64>(len) };
             s[i] = x;
