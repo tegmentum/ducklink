@@ -1346,59 +1346,19 @@ struct PendingAggregateRegistry {
     entries: Vec<PendingAggregate>,
 }
 
-struct PendingScalar {
-    extension: String,
-    name: String,
-    arguments: Vec<core_runtime_exports::Funcarg>,
-    returns: core_runtime_exports::Logicaltype,
-    callback_handle: u32,
-    options: Option<core_runtime_exports::Funcopts>,
-}
-
-struct PendingTable {
-    extension: String,
-    name: String,
-    arguments: Vec<core_runtime_exports::Funcarg>,
-    columns: Vec<core_runtime_exports::Columndef>,
-    callback_handle: u32,
-    options: Option<core_runtime_exports::Extopts>,
-}
-
-struct PendingAggregate {
-    extension: String,
-    name: String,
-    arguments: Vec<core_runtime_exports::Funcarg>,
-    returns: core_runtime_exports::Logicaltype,
-    callback_handle: u32,
-    options: Option<core_runtime_exports::Funcopts>,
-}
-
-struct PendingMacro {
-    extension: String,
-    schema: String,
-    name: String,
-    parameters: Vec<String>,
-    definition_sql: String,
-}
-
-struct PendingReplacementScan {
-    extension: String,
-    extensions: Vec<String>,
-    function_name: String,
-}
-
-struct PendingLogicalType {
-    extension: String,
-    name: String,
-    physical: String,
-}
-
-struct PendingCast {
-    extension: String,
-    source: String,
-    target: String,
-    callback_handle: u32,
-}
+// The pending-registration records are the neutral capture model, defined in
+// ducklink-runtime so both directions (wasm-DuckDB host, native-DuckDB
+// extension) share one representation. Capture converts the extension's WIT
+// types into these; each direction's sink converts these into its own loader
+// types. See `convert_extension_*` (capture) and `convert_pending_*` (sink).
+use ducklink_runtime::reg;
+type PendingScalar = reg::ScalarReg;
+type PendingTable = reg::TableReg;
+type PendingAggregate = reg::AggregateReg;
+type PendingMacro = reg::MacroReg;
+type PendingReplacementScan = reg::ReplacementScanReg;
+type PendingLogicalType = reg::LogicalTypeReg;
+type PendingCast = reg::CastReg;
 
 #[derive(Default)]
 struct PendingRegistrationsData {
@@ -3046,7 +3006,7 @@ fn convert_pending_scalar_registration(
     core_extension_hooks::ScalarRegistration {
         name: entry.name,
         arguments: convert_funcargs_to_loader(entry.arguments),
-        returns: entry.returns,
+        returns: neutral_logicaltype_to_core(entry.returns),
         callback_handle: entry.callback_handle,
         options: entry.options.map(convert_funcopts_to_loader),
     }
@@ -3059,7 +3019,12 @@ fn convert_pending_table_registration(
     core_extension_hooks::TableRegistration {
         name: entry.name,
         arguments: convert_funcargs_to_loader(entry.arguments),
-        columns: entry.columns.into_iter().collect::<Vec<_>>().into(),
+        columns: entry
+            .columns
+            .into_iter()
+            .map(neutral_columndef_to_core)
+            .collect::<Vec<_>>()
+            .into(),
         callback_handle: entry.callback_handle,
         options: entry.options.map(convert_extopts_to_loader),
     }
@@ -3072,35 +3037,72 @@ fn convert_pending_aggregate_registration(
     core_extension_hooks::AggregateRegistration {
         name: entry.name,
         arguments: convert_funcargs_to_loader(entry.arguments),
-        returns: entry.returns,
+        returns: neutral_logicaltype_to_core(entry.returns),
         callback_handle: entry.callback_handle,
         options: entry.options.map(convert_funcopts_to_loader),
     }
 }
 
-fn convert_funcargs_to_loader(
-    args: Vec<core_runtime_exports::Funcarg>,
-) -> BindgenVec<core_extension_hooks::FuncArg> {
+// Direction-1 sink: neutral `reg::*` capture records -> wasm-DuckDB-core loader
+// types. (Direction 2, the native extension, will provide its own sink against
+// the DuckDB C API.)
+fn neutral_logicaltype_to_core(ty: reg::LogicalType) -> core_runtime_exports::Logicaltype {
+    match ty {
+        reg::LogicalType::Boolean => core_runtime_exports::Logicaltype::Boolean,
+        reg::LogicalType::Int64 => core_runtime_exports::Logicaltype::Int64,
+        reg::LogicalType::Uint64 => core_runtime_exports::Logicaltype::Uint64,
+        reg::LogicalType::Float64 => core_runtime_exports::Logicaltype::Float64,
+        reg::LogicalType::Text => core_runtime_exports::Logicaltype::Text,
+        reg::LogicalType::Blob => core_runtime_exports::Logicaltype::Blob,
+    }
+}
+
+fn neutral_funcflags_to_core(flags: reg::FuncFlags) -> core_types::Funcflags {
+    let mut result = core_types::Funcflags::empty();
+    if flags.deterministic {
+        result |= core_types::Funcflags::DETERMINISTIC;
+    }
+    if flags.commutative {
+        result |= core_types::Funcflags::COMMUTATIVE;
+    }
+    if flags.stateless {
+        result |= core_types::Funcflags::STATELESS;
+    }
+    if flags.side_effecting {
+        result |= core_types::Funcflags::SIDEEFFECTING;
+    }
+    if flags.deprecated {
+        result |= core_types::Funcflags::DEPRECATED;
+    }
+    result
+}
+
+fn neutral_columndef_to_core(col: reg::ColumnDef) -> core_runtime_exports::Columndef {
+    core_runtime_exports::Columndef {
+        name: col.name,
+        logical: neutral_logicaltype_to_core(col.logical),
+    }
+}
+
+fn convert_funcargs_to_loader(args: Vec<reg::FuncArg>) -> BindgenVec<core_extension_hooks::FuncArg> {
     args.into_iter()
         .map(|arg| core_extension_hooks::FuncArg {
             name: arg.name,
-            logical: arg.logical,
+            logical: neutral_logicaltype_to_core(arg.logical),
         })
         .collect::<Vec<_>>()
         .into()
 }
 
-fn convert_funcopts_to_loader(
-    opts: core_runtime_exports::Funcopts,
-) -> core_extension_hooks::FuncOpts {
+fn convert_funcopts_to_loader(opts: reg::FuncOpts) -> core_extension_hooks::FuncOpts {
     core_extension_hooks::FuncOpts {
         description: opts.description,
         tags: opts.tags.into_iter().collect::<Vec<_>>().into(),
-        attributes: opts.attributes,
+        attributes: neutral_funcflags_to_core(opts.attributes),
     }
 }
 
-fn convert_extopts_to_loader(opts: core_runtime_exports::Extopts) -> core_extension_hooks::ExtOpts {
+fn convert_extopts_to_loader(opts: reg::ExtOpts) -> core_extension_hooks::ExtOpts {
     core_extension_hooks::ExtOpts {
         description: opts.description,
         tags: opts.tags.into_iter().collect::<Vec<_>>().into(),
@@ -3214,9 +3216,9 @@ fn log_scalar_registration(
     name: &str,
     registry_id: u32,
     callback_handle: u32,
-    args: &[core_runtime_exports::Funcarg],
-    returns: &core_runtime_exports::Logicaltype,
-    options: Option<&core_runtime_exports::Funcopts>,
+    args: &[reg::FuncArg],
+    returns: &reg::LogicalType,
+    options: Option<&reg::FuncOpts>,
 ) {
     let arg_summary = summarize_runtime_funcargs(args);
     let return_ty = describe_runtime_logicaltype(returns);
@@ -3231,9 +3233,9 @@ fn log_table_registration(
     name: &str,
     registry_id: u32,
     callback_handle: u32,
-    args: &[core_runtime_exports::Funcarg],
-    columns: &[core_runtime_exports::Columndef],
-    options: Option<&core_runtime_exports::Extopts>,
+    args: &[reg::FuncArg],
+    columns: &[reg::ColumnDef],
+    options: Option<&reg::ExtOpts>,
 ) {
     let arg_summary = summarize_runtime_funcargs(args);
     let column_summary = summarize_runtime_columns(columns);
@@ -3248,9 +3250,9 @@ fn log_aggregate_registration(
     name: &str,
     registry_id: u32,
     callback_handle: u32,
-    args: &[core_runtime_exports::Funcarg],
-    returns: &core_runtime_exports::Logicaltype,
-    options: Option<&core_runtime_exports::Funcopts>,
+    args: &[reg::FuncArg],
+    returns: &reg::LogicalType,
+    options: Option<&reg::FuncOpts>,
 ) {
     let arg_summary = summarize_runtime_funcargs(args);
     let return_ty = describe_runtime_logicaltype(returns);
@@ -3260,7 +3262,7 @@ fn log_aggregate_registration(
     );
 }
 
-fn summarize_runtime_funcargs(args: &[core_runtime_exports::Funcarg]) -> String {
+fn summarize_runtime_funcargs(args: &[reg::FuncArg]) -> String {
     if args.is_empty() {
         return "[]".to_string();
     }
@@ -3278,7 +3280,7 @@ fn summarize_runtime_funcargs(args: &[core_runtime_exports::Funcarg]) -> String 
     format!("[{}]", parts.join(", "))
 }
 
-fn summarize_runtime_columns(columns: &[core_runtime_exports::Columndef]) -> String {
+fn summarize_runtime_columns(columns: &[reg::ColumnDef]) -> String {
     if columns.is_empty() {
         return "[]".to_string();
     }
@@ -3295,7 +3297,7 @@ fn summarize_runtime_columns(columns: &[core_runtime_exports::Columndef]) -> Str
     format!("[{}]", parts.join(", "))
 }
 
-fn summarize_funcopts(options: Option<&core_runtime_exports::Funcopts>) -> String {
+fn summarize_funcopts(options: Option<&reg::FuncOpts>) -> String {
     match options {
         None => "none".to_string(),
         Some(opts) => {
@@ -3309,13 +3311,13 @@ fn summarize_funcopts(options: Option<&core_runtime_exports::Funcopts>) -> Strin
             } else {
                 format!("[{}]", opts.tags.join(", "))
             };
-            let attrs = describe_runtime_funcflags(opts.attributes);
+            let attrs = opts.attributes.describe();
             format!("description='{description}', tags={tags}, attrs={attrs}")
         }
     }
 }
 
-fn summarize_extopts(options: Option<&core_runtime_exports::Extopts>) -> String {
+fn summarize_extopts(options: Option<&reg::ExtOpts>) -> String {
     match options {
         None => "none".to_string(),
         Some(opts) => {
@@ -3334,39 +3336,8 @@ fn summarize_extopts(options: Option<&core_runtime_exports::Extopts>) -> String 
     }
 }
 
-fn describe_runtime_logicaltype(ty: &core_runtime_exports::Logicaltype) -> &'static str {
-    match ty {
-        core_runtime_exports::Logicaltype::Boolean => "BOOLEAN",
-        core_runtime_exports::Logicaltype::Int64 => "INT64",
-        core_runtime_exports::Logicaltype::Uint64 => "UINT64",
-        core_runtime_exports::Logicaltype::Float64 => "FLOAT64",
-        core_runtime_exports::Logicaltype::Text => "TEXT",
-        core_runtime_exports::Logicaltype::Blob => "BLOB",
-    }
-}
-
-fn describe_runtime_funcflags(flags: core_types::Funcflags) -> String {
-    let mut parts = Vec::new();
-    if flags.contains(core_types::Funcflags::DETERMINISTIC) {
-        parts.push("deterministic");
-    }
-    if flags.contains(core_types::Funcflags::COMMUTATIVE) {
-        parts.push("commutative");
-    }
-    if flags.contains(core_types::Funcflags::STATELESS) {
-        parts.push("stateless");
-    }
-    if flags.contains(core_types::Funcflags::SIDEEFFECTING) {
-        parts.push("sideeffecting");
-    }
-    if flags.contains(core_types::Funcflags::DEPRECATED) {
-        parts.push("deprecated");
-    }
-    if parts.is_empty() {
-        "none".to_string()
-    } else {
-        format!("[{}]", parts.join(", "))
-    }
+fn describe_runtime_logicaltype(ty: &reg::LogicalType) -> &'static str {
+    ty.describe()
 }
 
 fn log_pending_scalar_conversion(entry: &PendingScalar) {
@@ -3722,75 +3693,59 @@ fn sanitize_extension_name(raw: &str) -> String {
     sanitized
 }
 
-fn convert_extension_funcargs(
-    args: Vec<extension_runtime::Funcarg>,
-) -> Vec<core_runtime_exports::Funcarg> {
+fn convert_extension_funcargs(args: Vec<extension_runtime::Funcarg>) -> Vec<reg::FuncArg> {
     args.into_iter()
-        .map(|arg| core_runtime_exports::Funcarg {
+        .map(|arg| reg::FuncArg {
             name: arg.name,
             logical: convert_extension_logicaltype(arg.logical),
         })
         .collect()
 }
 
-fn convert_extension_logicaltype(
-    ty: extension_runtime::Logicaltype,
-) -> core_runtime_exports::Logicaltype {
+fn convert_extension_logicaltype(ty: extension_runtime::Logicaltype) -> reg::LogicalType {
     match ty {
-        extension_runtime::Logicaltype::Boolean => core_runtime_exports::Logicaltype::Boolean,
-        extension_runtime::Logicaltype::Int64 => core_runtime_exports::Logicaltype::Int64,
-        extension_runtime::Logicaltype::Uint64 => core_runtime_exports::Logicaltype::Uint64,
-        extension_runtime::Logicaltype::Float64 => core_runtime_exports::Logicaltype::Float64,
-        extension_runtime::Logicaltype::Text => core_runtime_exports::Logicaltype::Text,
-        extension_runtime::Logicaltype::Blob => core_runtime_exports::Logicaltype::Blob,
+        extension_runtime::Logicaltype::Boolean => reg::LogicalType::Boolean,
+        extension_runtime::Logicaltype::Int64 => reg::LogicalType::Int64,
+        extension_runtime::Logicaltype::Uint64 => reg::LogicalType::Uint64,
+        extension_runtime::Logicaltype::Float64 => reg::LogicalType::Float64,
+        extension_runtime::Logicaltype::Text => reg::LogicalType::Text,
+        extension_runtime::Logicaltype::Blob => reg::LogicalType::Blob,
     }
 }
 
-fn convert_extension_funcopts(opts: extension_runtime::Funcopts) -> core_runtime_exports::Funcopts {
-    core_runtime_exports::Funcopts {
+fn convert_extension_funcopts(opts: extension_runtime::Funcopts) -> reg::FuncOpts {
+    reg::FuncOpts {
         description: opts.description,
         tags: opts.tags.into_iter().collect(),
         attributes: convert_extension_funcflags(opts.attributes),
     }
 }
 
-fn convert_extension_columndefs(
-    columns: Vec<extension_runtime::Columndef>,
-) -> Vec<core_runtime_exports::Columndef> {
+fn convert_extension_columndefs(columns: Vec<extension_runtime::Columndef>) -> Vec<reg::ColumnDef> {
     columns
         .into_iter()
-        .map(|col| core_runtime_exports::Columndef {
+        .map(|col| reg::ColumnDef {
             name: col.name,
             logical: convert_extension_logicaltype(col.logical),
         })
         .collect()
 }
 
-fn convert_extension_extopts(opts: extension_runtime::Extopts) -> core_runtime_exports::Extopts {
-    core_runtime_exports::Extopts {
+fn convert_extension_extopts(opts: extension_runtime::Extopts) -> reg::ExtOpts {
+    reg::ExtOpts {
         description: opts.description,
         tags: opts.tags.into_iter().collect(),
     }
 }
 
-fn convert_extension_funcflags(flags: extension_types::Funcflags) -> core_types::Funcflags {
-    let mut result = core_types::Funcflags::empty();
-    if flags.contains(extension_types::Funcflags::DETERMINISTIC) {
-        result |= core_types::Funcflags::DETERMINISTIC;
+fn convert_extension_funcflags(flags: extension_types::Funcflags) -> reg::FuncFlags {
+    reg::FuncFlags {
+        deterministic: flags.contains(extension_types::Funcflags::DETERMINISTIC),
+        commutative: flags.contains(extension_types::Funcflags::COMMUTATIVE),
+        stateless: flags.contains(extension_types::Funcflags::STATELESS),
+        side_effecting: flags.contains(extension_types::Funcflags::SIDEEFFECTING),
+        deprecated: flags.contains(extension_types::Funcflags::DEPRECATED),
     }
-    if flags.contains(extension_types::Funcflags::COMMUTATIVE) {
-        result |= core_types::Funcflags::COMMUTATIVE;
-    }
-    if flags.contains(extension_types::Funcflags::STATELESS) {
-        result |= core_types::Funcflags::STATELESS;
-    }
-    if flags.contains(extension_types::Funcflags::SIDEEFFECTING) {
-        result |= core_types::Funcflags::SIDEEFFECTING;
-    }
-    if flags.contains(extension_types::Funcflags::DEPRECATED) {
-        result |= core_types::Funcflags::DEPRECATED;
-    }
-    result
 }
 
 fn convert_core_duckvalue_to_extension(value: core_types::Duckvalue) -> extension_types::Duckvalue {

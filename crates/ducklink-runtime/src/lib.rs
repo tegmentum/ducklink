@@ -48,6 +48,185 @@ impl CallbackKind {
     }
 }
 
+/// Neutral registration model. A wasm extension's `load()` registers scalars,
+/// tables, aggregates, macros, casts, etc. against the host's capability surface.
+/// These types capture *what* was registered without referencing either the
+/// wasm-DuckDB-core bindings (Direction 1) or the native DuckDB C API
+/// (Direction 2), so the same capture path feeds both sinks. Each direction
+/// converts these neutral records into its own loader/registration types.
+pub mod reg {
+    /// A DuckDB logical type, restricted to the value kinds the extension ABI
+    /// currently exchanges.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum LogicalType {
+        Boolean,
+        Int64,
+        Uint64,
+        Float64,
+        Text,
+        Blob,
+    }
+
+    impl LogicalType {
+        pub fn describe(self) -> &'static str {
+            match self {
+                LogicalType::Boolean => "BOOLEAN",
+                LogicalType::Int64 => "INT64",
+                LogicalType::Uint64 => "UINT64",
+                LogicalType::Float64 => "FLOAT64",
+                LogicalType::Text => "TEXT",
+                LogicalType::Blob => "BLOB",
+            }
+        }
+    }
+
+    /// A scalar/aggregate/table function argument. `name` is optional because
+    /// positional arguments may be anonymous.
+    #[derive(Clone, Debug)]
+    pub struct FuncArg {
+        pub name: Option<String>,
+        pub logical: LogicalType,
+    }
+
+    /// A named output column of a table function.
+    #[derive(Clone, Debug)]
+    pub struct ColumnDef {
+        pub name: String,
+        pub logical: LogicalType,
+    }
+
+    /// Function attribute flags (mirrors `duckdb:extension/types.funcflags`).
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    pub struct FuncFlags {
+        pub deterministic: bool,
+        pub commutative: bool,
+        pub stateless: bool,
+        pub side_effecting: bool,
+        pub deprecated: bool,
+    }
+
+    impl FuncFlags {
+        pub fn describe(self) -> String {
+            let mut parts = Vec::new();
+            if self.deterministic {
+                parts.push("deterministic");
+            }
+            if self.commutative {
+                parts.push("commutative");
+            }
+            if self.stateless {
+                parts.push("stateless");
+            }
+            if self.side_effecting {
+                parts.push("sideeffecting");
+            }
+            if self.deprecated {
+                parts.push("deprecated");
+            }
+            if parts.is_empty() {
+                "none".to_string()
+            } else {
+                format!("[{}]", parts.join(", "))
+            }
+        }
+    }
+
+    /// Optional metadata attached to a scalar/aggregate registration.
+    #[derive(Clone, Debug)]
+    pub struct FuncOpts {
+        pub description: Option<String>,
+        pub tags: Vec<String>,
+        pub attributes: FuncFlags,
+    }
+
+    /// Optional metadata attached to a table-function registration.
+    #[derive(Clone, Debug)]
+    pub struct ExtOpts {
+        pub description: Option<String>,
+        pub tags: Vec<String>,
+    }
+
+    /// A scalar value exchanged across the callback boundary.
+    #[derive(Clone, Debug)]
+    pub enum DuckValue {
+        Null,
+        Boolean(bool),
+        Int64(i64),
+        Uint64(u64),
+        Float64(f64),
+        Text(String),
+        Blob(Vec<u8>),
+    }
+
+    /// A scalar function registered by an extension.
+    #[derive(Clone, Debug)]
+    pub struct ScalarReg {
+        pub extension: String,
+        pub name: String,
+        pub arguments: Vec<FuncArg>,
+        pub returns: LogicalType,
+        pub callback_handle: u32,
+        pub options: Option<FuncOpts>,
+    }
+
+    /// A table function registered by an extension.
+    #[derive(Clone, Debug)]
+    pub struct TableReg {
+        pub extension: String,
+        pub name: String,
+        pub arguments: Vec<FuncArg>,
+        pub columns: Vec<ColumnDef>,
+        pub callback_handle: u32,
+        pub options: Option<ExtOpts>,
+    }
+
+    /// An aggregate function registered by an extension.
+    #[derive(Clone, Debug)]
+    pub struct AggregateReg {
+        pub extension: String,
+        pub name: String,
+        pub arguments: Vec<FuncArg>,
+        pub returns: LogicalType,
+        pub callback_handle: u32,
+        pub options: Option<FuncOpts>,
+    }
+
+    /// A SQL macro registered by an extension.
+    #[derive(Clone, Debug)]
+    pub struct MacroReg {
+        pub extension: String,
+        pub schema: String,
+        pub name: String,
+        pub parameters: Vec<String>,
+        pub definition_sql: String,
+    }
+
+    /// A replacement scan binding a set of file extensions to a table function.
+    #[derive(Clone, Debug)]
+    pub struct ReplacementScanReg {
+        pub extension: String,
+        pub extensions: Vec<String>,
+        pub function_name: String,
+    }
+
+    /// A user-defined logical type alias over a physical type.
+    #[derive(Clone, Debug)]
+    pub struct LogicalTypeReg {
+        pub extension: String,
+        pub name: String,
+        pub physical: String,
+    }
+
+    /// A cast between two named types, dispatched through a callback.
+    #[derive(Clone, Debug)]
+    pub struct CastReg {
+        pub extension: String,
+        pub source: String,
+        pub target: String,
+        pub callback_handle: u32,
+    }
+}
+
 /// One registered callback: which extension owns it, the guest-side dispatcher
 /// handle to invoke, and the function kind.
 #[derive(Clone, Debug)]
