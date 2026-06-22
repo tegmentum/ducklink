@@ -1,0 +1,21 @@
+[package]
+name = "duckdb-utils-maint"
+version = "0.1.0"
+edition = "2021"
+description = "sqlite-utils maint commands ported as DuckDB dot commands (spi on the live connection)"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+
+[package.metadata.component]
+package = "duckdb:dotcmd"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:dotcmd/dotcmd"

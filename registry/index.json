@@ -3880,6 +3880,146 @@
       "requires": [],
       "crates": [],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "duckdb-utils-schema",
+      "version": "0.1.0",
+      "description": "sqlite-utils schema commands ported to DuckDB: create/drop/rename/duplicate tables, views, indexes, add/transform columns, and index foreign keys.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "dot-command",
+        "sqlite-utils",
+        "schema",
+        "ddl"
+      ],
+      "categories": [
+        "dot-commands"
+      ],
+      "source": "dotcmd-component",
+      "status": "working",
+      "artifact": "artifacts/dotcmds/duckdb-utils-schema.wasm",
+      "commands": [
+        "views",
+        "create_table",
+        "create_index",
+        "create_view",
+        "drop_table",
+        "drop_view",
+        "rename_table",
+        "duplicate",
+        "add_column",
+        "transform",
+        "index_fks"
+      ],
+      "requires": [
+        "spi"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "duckdb-utils-data",
+      "version": "0.1.0",
+      "description": "sqlite-utils data commands ported to DuckDB: ingest json/csv/tsv/parquet, upsert, per-column stats, convert columns, and store files as BLOBs.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "dot-command",
+        "sqlite-utils",
+        "ingest",
+        "data"
+      ],
+      "categories": [
+        "dot-commands"
+      ],
+      "source": "dotcmd-component",
+      "status": "working",
+      "artifact": "artifacts/dotcmds/duckdb-utils-data.wasm",
+      "commands": [
+        "rows",
+        "analyze_tables",
+        "insert",
+        "upsert",
+        "convert",
+        "insert_files"
+      ],
+      "requires": [
+        "spi"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "duckdb-utils-fts",
+      "version": "0.1.0",
+      "description": "sqlite-utils FTS commands ported to DuckDB's fts extension: enable/disable/rebuild a full-text index and BM25 search.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "dot-command",
+        "sqlite-utils",
+        "fts",
+        "search"
+      ],
+      "categories": [
+        "dot-commands"
+      ],
+      "source": "dotcmd-component",
+      "status": "working",
+      "artifact": "artifacts/dotcmds/duckdb-utils-fts.wasm",
+      "commands": [
+        "enable_fts",
+        "disable_fts",
+        "rebuild_fts",
+        "search"
+      ],
+      "requires": [
+        "spi"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "duckdb-utils-maint",
+      "version": "0.1.0",
+      "description": "sqlite-utils maintenance commands adapted to DuckDB: vacuum, analyze, checkpoint, and database-size reporting.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "keywords": [
+        "dot-command",
+        "sqlite-utils",
+        "maintenance"
+      ],
+      "categories": [
+        "dot-commands"
+      ],
+      "source": "dotcmd-component",
+      "status": "working",
+      "artifact": "artifacts/dotcmds/duckdb-utils-maint.wasm",
+      "commands": [
+        "vacuum",
+        "analyze",
+        "checkpoint",
+        "db_size"
+      ],
+      "requires": [
+        "spi"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "categories": {
