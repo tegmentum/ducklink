@@ -10,5 +10,8 @@ publish = false
 # The wasm engine. Pinned to the same rev the host uses so the generated
 # `duckdb:extension` bindings are ABI-identical across both directions.
 wasmtime = { git = "https://github.com/bytecodealliance/wasmtime", rev = "1ec866079720e573fc2aa06947c84f6132010993", features = ["component-model", "cache"] }
+# The extension store-state holds a WasiCtx and implements WasiView (components
+# target wasip2). Pinned to the same rev as wasmtime.
+wasmtime-wasi = { git = "https://github.com/bytecodealliance/wasmtime", rev = "1ec866079720e573fc2aa06947c84f6132010993" }
 
 [lib]

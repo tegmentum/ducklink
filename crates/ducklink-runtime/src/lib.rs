@@ -11,7 +11,20 @@
 //! Increment 2: the `duckdb:extension` wasmtime bindings. The WIT world and its
 //! generated host/guest types live here so both directions instantiate the same
 //! component ABI; the host implements the `Host*` traits against its own store.
+//!
+//! Increment 4: the extension store-state + loaded-component instance (see the
+//! [`extension`] module). The store-state implements the capability `Host*`
+//! traits (capturing registrations into [`reg`]) and services config/logging
+//! through an [`extension::ExtensionServices`] sink — the one direction-specific
+//! seam.
 use std::collections::HashMap;
+
+pub mod extension;
+pub use extension::{
+    describe_runtime_logicaltype, summarize_funcopts, summarize_extopts, summarize_registration_names,
+    summarize_runtime_columns, summarize_runtime_funcargs, ConfigError, ExtensionInstance,
+    ExtensionServices, ExtensionStoreState, LogField, LogLevel, PendingRegistrationsData,
+};
 
 /// The generated wasmtime bindings for the `duckdb:extension-host` world — the
 /// capability surface a wasm extension component imports (register-scalar,

@@ -65,9 +65,18 @@ use ducklink_runtime::duckdb_extension_bindings::duckdb::extension::{
     catalog as extension_catalog, config as extension_config, files as extension_files,
     logging as extension_logging, runtime as extension_runtime, types as extension_types,
 };
-use ducklink_runtime::duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
+use ducklink_runtime::duckdb_extension_bindings::DuckdbExtensionPre;
 use wasmtime::component::__internal::Vec as BindgenVec;
 use ducklink_runtime::{CallbackEntry, CallbackKind, CallbackRegistry};
+// The extension engine (store-state, loaded-component instance, capture model)
+// now lives in ducklink-runtime; the host supplies the Direction-1 service sink
+// (CoreServices) and the Direction-1 registration sink (convert_pending_*).
+use ducklink_runtime::{
+    describe_runtime_logicaltype, summarize_extopts, summarize_funcopts,
+    summarize_registration_names, summarize_runtime_columns, summarize_runtime_funcargs,
+    ConfigError, ExtensionInstance, ExtensionServices, ExtensionStoreState, LogField, LogLevel,
+    PendingRegistrationsData,
+};
 use wasmtime::component::{Component, Linker, Resource, ResourceAny, ResourceTable};
 use wasmtime::{AsContextMut, Config, Engine, Store, StoreContextMut};
 
@@ -533,99 +542,6 @@ struct AppenderEntry {
 // CallbackKind / CallbackEntry / CallbackRegistry moved to the `ducklink-runtime`
 // crate (imported at the top of this file).
 
-struct ExtensionInstance {
-    store: Store<ExtensionStoreState>,
-    bindings: DuckdbExtension,
-}
-
-impl ExtensionInstance {
-    fn dispatch_scalar(
-        &mut self,
-        dispatcher_handle: u32,
-        args: &[extension_types::Duckvalue],
-        ctx: extension_runtime::Invokeinfo,
-    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
-        let guest = self.bindings.duckdb_extension_callback_dispatch();
-        let mut store = self.store.as_context_mut();
-        guest
-            .call_call_scalar(&mut store, dispatcher_handle, args, ctx)
-            .map_err(map_extension_trap)?
-            .map_err(|err| err)
-    }
-
-    #[allow(clippy::ptr_arg)] // the bindgen call takes &Vec (the rowbatch type), not a slice
-    fn dispatch_scalar_batch(
-        &mut self,
-        dispatcher_handle: u32,
-        rows: &Vec<Vec<extension_types::Duckvalue>>,
-        ctx: extension_runtime::Invokeinfo,
-    ) -> Result<Vec<extension_types::Duckvalue>, extension_types::Duckerror> {
-        let guest = self.bindings.duckdb_extension_callback_dispatch();
-        let mut store = self.store.as_context_mut();
-        guest
-            .call_call_scalar_batch(&mut store, dispatcher_handle, rows, ctx)
-            .map_err(map_extension_trap)?
-            .map_err(|err| err)
-    }
-
-    fn dispatch_table(
-        &mut self,
-        dispatcher_handle: u32,
-        args: &[extension_types::Duckvalue],
-    ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
-        let guest = self.bindings.duckdb_extension_callback_dispatch();
-        let mut store = self.store.as_context_mut();
-        guest
-            .call_call_table(&mut store, dispatcher_handle, args)
-            .map_err(map_extension_trap)?
-            .map_err(|err| err)
-    }
-
-    fn dispatch_aggregate(
-        &mut self,
-        dispatcher_handle: u32,
-        rows: &extension_runtime::Rowbatch,
-    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
-        let guest = self.bindings.duckdb_extension_callback_dispatch();
-        let mut store = self.store.as_context_mut();
-        guest
-            .call_call_aggregate(&mut store, dispatcher_handle, rows)
-            .map_err(map_extension_trap)?
-            .map_err(|err| err)
-    }
-
-    fn dispatch_pragma(
-        &mut self,
-        dispatcher_handle: u32,
-        args: &[extension_types::Duckvalue],
-    ) -> Result<Option<extension_types::Duckvalue>, extension_types::Duckerror> {
-        let guest = self.bindings.duckdb_extension_callback_dispatch();
-        let mut store = self.store.as_context_mut();
-        guest
-            .call_call_pragma(&mut store, dispatcher_handle, args)
-            .map_err(map_extension_trap)?
-            .map_err(|err| err)
-    }
-
-    fn dispatch_cast(
-        &mut self,
-        dispatcher_handle: u32,
-        value: &extension_types::Duckvalue,
-    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
-        let guest = self.bindings.duckdb_extension_callback_dispatch();
-        let mut store = self.store.as_context_mut();
-        guest
-            .call_call_cast(&mut store, dispatcher_handle, value)
-            .map_err(map_extension_trap)?
-            .map_err(|err| err)
-    }
-
-    fn drain_pending(&mut self) -> PendingRegistrationsData {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).drain_pending() }
-    }
-}
 
 /// Best-effort network capability policy for extension components, read from the
 /// `DUCKLINK_NETWORK_GRANT` environment variable:
@@ -1194,7 +1110,12 @@ impl ExtensionManager {
             let wasi = builder.build();
             let mut store = Store::new(
                 &engine,
-                ExtensionStoreState::new(wasi, core, callback_registry, extension_name.clone()),
+                ExtensionStoreState::new(
+                    wasi,
+                    Box::new(CoreServices { core }),
+                    callback_registry,
+                    extension_name.clone(),
+                ),
             );
             let mut linker = Linker::<ExtensionStoreState>::new(&engine);
             p2::add_to_linker_sync(&mut linker)?;
@@ -1249,7 +1170,7 @@ impl ExtensionManager {
                 .call_load(store.as_context_mut())
                 .map_err(|err| err)?;
             match result {
-                Ok(_) => Ok(ExtensionInstance { store, bindings }),
+                Ok(_) => Ok(ExtensionInstance::new(store, bindings)),
                 Err(err) => Err(wasmtime::Error::msg(format!(
                     "extension component returned error for {extension_name}: {err:?}"
                 ))),
@@ -1306,45 +1227,11 @@ impl ExtensionManager {
         aggregated
     }
 }
-struct ExtensionStoreState {
-    table: ResourceTable,
-    wasi: WasiCtx,
-    core: Arc<Mutex<CoreExecution>>,
-    next_resource_id: u32,
-    scalar_registries: HashMap<u32, PendingScalarRegistry>,
-    table_registries: HashMap<u32, PendingTableRegistry>,
-    aggregate_registries: HashMap<u32, PendingAggregateRegistry>,
-    // Registrations are retained here once their registry resource is dropped by
-    // the guest (which happens as soon as `load()` returns), so they survive
-    // until `drain_pending` forwards them to the core component.
-    pending_scalars: Vec<PendingScalar>,
-    pending_tables: Vec<PendingTable>,
-    pending_aggregates: Vec<PendingAggregate>,
-    pending_macros: Vec<PendingMacro>,
-    pending_replacement_scans: Vec<PendingReplacementScan>,
-    pending_logical_types: Vec<PendingLogicalType>,
-    pending_casts: Vec<PendingCast>,
-    /// Maps the handle returned from `table-registry.register` to the table
-    /// function name, so `files.register-replacement-scan` can resolve it.
-    table_handle_names: HashMap<u32, String>,
-    callback_registry: Arc<Mutex<CallbackRegistry>>,
-    extension_name: String,
-}
-
-#[derive(Default)]
-struct PendingScalarRegistry {
-    entries: Vec<PendingScalar>,
-}
-
-#[derive(Default)]
-struct PendingTableRegistry {
-    entries: Vec<PendingTable>,
-}
-
-#[derive(Default)]
-struct PendingAggregateRegistry {
-    entries: Vec<PendingAggregate>,
-}
+// ExtensionStoreState, its pending-registry buffers, PendingRegistrationsData,
+// summarize_registration_names, and the ExtensionStoreState capability `Host*`
+// impls now live in `ducklink-runtime` (imported above). The host retains only
+// the Direction-1 sinks: CoreServices (config/logging) and convert_pending_*
+// (registration forwarding into the wasm DuckDB core).
 
 // The pending-registration records are the neutral capture model, defined in
 // ducklink-runtime so both directions (wasm-DuckDB host, native-DuckDB
@@ -1359,170 +1246,6 @@ type PendingMacro = reg::MacroReg;
 type PendingReplacementScan = reg::ReplacementScanReg;
 type PendingLogicalType = reg::LogicalTypeReg;
 type PendingCast = reg::CastReg;
-
-#[derive(Default)]
-struct PendingRegistrationsData {
-    scalars: Vec<PendingScalar>,
-    tables: Vec<PendingTable>,
-    aggregates: Vec<PendingAggregate>,
-    macros: Vec<PendingMacro>,
-    replacement_scans: Vec<PendingReplacementScan>,
-    logical_types: Vec<PendingLogicalType>,
-    casts: Vec<PendingCast>,
-}
-
-impl PendingRegistrationsData {
-    fn append(&mut self, mut other: PendingRegistrationsData) {
-        self.scalars.append(&mut other.scalars);
-        self.tables.append(&mut other.tables);
-        self.aggregates.append(&mut other.aggregates);
-        self.macros.append(&mut other.macros);
-        self.replacement_scans.append(&mut other.replacement_scans);
-        self.logical_types.append(&mut other.logical_types);
-        self.casts.append(&mut other.casts);
-    }
-}
-
-fn summarize_registration_names<T, F>(entries: &[T], mut project: F) -> String
-where
-    F: FnMut(&T) -> &str,
-{
-    if entries.is_empty() {
-        return "none".to_string();
-    }
-    const PREVIEW: usize = 3;
-    let mut listed: Vec<String> = entries
-        .iter()
-        .take(PREVIEW)
-        .map(|entry| project(entry).to_string())
-        .collect();
-    if entries.len() > PREVIEW {
-        listed.push(format!("+{} more", entries.len() - PREVIEW));
-    }
-    listed.join(", ")
-}
-
-impl ExtensionStoreState {
-    fn new(
-        wasi: WasiCtx,
-        core: Arc<Mutex<CoreExecution>>,
-        callback_registry: Arc<Mutex<CallbackRegistry>>,
-        extension_name: String,
-    ) -> Self {
-        Self {
-            table: ResourceTable::new(),
-            wasi,
-            core,
-            next_resource_id: 1,
-            scalar_registries: HashMap::new(),
-            table_registries: HashMap::new(),
-            aggregate_registries: HashMap::new(),
-            pending_scalars: Vec::new(),
-            pending_tables: Vec::new(),
-            pending_aggregates: Vec::new(),
-            pending_macros: Vec::new(),
-            pending_replacement_scans: Vec::new(),
-            pending_logical_types: Vec::new(),
-            pending_casts: Vec::new(),
-            table_handle_names: HashMap::new(),
-            callback_registry,
-            extension_name,
-        }
-    }
-
-    fn with_core<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&mut CoreExecution) -> R,
-    {
-        let mut core = self.core.lock().expect("core mutex poisoned");
-        f(&mut core)
-    }
-
-    fn alloc_resource_id(&mut self) -> u32 {
-        let id = self.next_resource_id;
-        self.next_resource_id = self.next_resource_id.wrapping_add(1).max(1);
-        id
-    }
-
-    fn allocate_callback_handle(&self, dispatcher_handle: u32, kind: CallbackKind) -> u32 {
-        let mut registry = self
-            .callback_registry
-            .lock()
-            .expect("callback registry mutex poisoned");
-        registry.allocate(&self.extension_name, kind, dispatcher_handle)
-    }
-
-    fn release_callback_handle(&self, handle: u32) {
-        let mut registry = self
-            .callback_registry
-            .lock()
-            .expect("callback registry mutex poisoned");
-        registry.remove(handle);
-    }
-
-    fn drain_pending(&mut self) -> PendingRegistrationsData {
-        // Combine registrations retained from dropped registries with any that
-        // belong to registries still held alive by the guest.
-        let mut scalars = std::mem::take(&mut self.pending_scalars);
-        scalars.extend(
-            self.scalar_registries
-                .drain()
-                .flat_map(|(_, registry)| registry.entries),
-        );
-        let mut tables = std::mem::take(&mut self.pending_tables);
-        tables.extend(
-            self.table_registries
-                .drain()
-                .flat_map(|(_, registry)| registry.entries),
-        );
-        let mut aggregates = std::mem::take(&mut self.pending_aggregates);
-        aggregates.extend(
-            self.aggregate_registries
-                .drain()
-                .flat_map(|(_, registry)| registry.entries),
-        );
-        let macros = std::mem::take(&mut self.pending_macros);
-        let replacement_scans = std::mem::take(&mut self.pending_replacement_scans);
-        let logical_types = std::mem::take(&mut self.pending_logical_types);
-        let casts = std::mem::take(&mut self.pending_casts);
-        let pending = PendingRegistrationsData {
-            scalars,
-            tables,
-            aggregates,
-            macros,
-            replacement_scans,
-            logical_types,
-            casts,
-        };
-        let scalar_names = summarize_registration_names(&pending.scalars, |entry| entry.name.as_str());
-        let table_names =
-            summarize_registration_names(&pending.tables, |entry| entry.name.as_str());
-        let aggregate_names = summarize_registration_names(&pending.aggregates, |entry| entry.name.as_str());
-        let macro_names = summarize_registration_names(&pending.macros, |entry| entry.name.as_str());
-        eprintln!(
-            "[extension-runtime:{}] draining pending registrations: scalars={} ({scalar_names}), tables={} ({table_names}), aggregates={} ({aggregate_names}), macros={} ({macro_names})",
-            self.extension_name,
-            pending.scalars.len(),
-            pending.tables.len(),
-            pending.aggregates.len(),
-            pending.macros.len()
-        );
-        pending
-    }
-}
-
-impl WasiView for ExtensionStoreState {
-    fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView {
-            ctx: &mut self.wasi,
-            table: &mut self.table,
-        }
-    }
-}
-
-impl wasmtime::component::HasData for ExtensionStoreState {
-    type Data<'a> = &'a mut ExtensionStoreState;
-}
 
 pub struct HostState {
     table: ResourceTable,
@@ -1692,708 +1415,13 @@ impl HostState {
     }
 }
 
+// Retained only for the test mocks below (the production impls moved to
+// ducklink-runtime).
+#[cfg(test)]
 fn unsupported_runtime_error() -> extension_types::Duckerror {
     extension_types::Duckerror::Unsupported(
         "component runtime not available in CLI host".to_string(),
     )
-}
-
-impl extension_types::Host for ExtensionStoreState {}
-
-impl extension_runtime::Host for ExtensionStoreState {
-    fn get_capability(
-        &mut self,
-        kind: extension_runtime::Capabilitykind,
-    ) -> Option<extension_runtime::Capability> {
-        match kind {
-            extension_runtime::Capabilitykind::Scalar => {
-                let id = self.alloc_resource_id();
-                self.scalar_registries
-                    .insert(id, PendingScalarRegistry::default());
-                Some(extension_runtime::Capability::Scalar(
-                    wasmtime::component::Resource::new_own(id),
-                ))
-            }
-            extension_runtime::Capabilitykind::Table => {
-                let id = self.alloc_resource_id();
-                self.table_registries
-                    .insert(id, PendingTableRegistry::default());
-                Some(extension_runtime::Capability::Table(
-                    wasmtime::component::Resource::new_own(id),
-                ))
-            }
-            extension_runtime::Capabilitykind::Aggregate => {
-                let id = self.alloc_resource_id();
-                self.aggregate_registries
-                    .insert(id, PendingAggregateRegistry::default());
-                Some(extension_runtime::Capability::Aggregate(
-                    wasmtime::component::Resource::new_own(id),
-                ))
-            }
-            _ => None,
-        }
-    }
-
-    fn list_capabilities(&mut self) -> BindgenVec<extension_runtime::Capabilitykind> {
-        vec![
-            extension_runtime::Capabilitykind::Scalar,
-            extension_runtime::Capabilitykind::Table,
-            extension_runtime::Capabilitykind::Aggregate,
-        ]
-        .into()
-    }
-}
-
-impl extension_runtime::HostScalarCallback for ExtensionStoreState {
-    fn new(
-        &mut self,
-        handle: u32,
-    ) -> wasmtime::component::Resource<extension_runtime::ScalarCallback> {
-        let id = self.allocate_callback_handle(handle, CallbackKind::Scalar);
-        wasmtime::component::Resource::new_own(id)
-    }
-
-    fn call(
-        &mut self,
-        _self_: wasmtime::component::Resource<extension_runtime::ScalarCallback>,
-        _args: BindgenVec<extension_types::Duckvalue>,
-        _ctx: extension_runtime::Invokeinfo,
-    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
-        Err(unsupported_runtime_error())
-    }
-
-    fn drop(
-        &mut self,
-        rep: wasmtime::component::Resource<extension_runtime::ScalarCallback>,
-    ) -> wasmtime::Result<()> {
-        self.release_callback_handle(rep.rep());
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostTableCallback for ExtensionStoreState {
-    fn new(
-        &mut self,
-        handle: u32,
-    ) -> wasmtime::component::Resource<extension_runtime::TableCallback> {
-        let id = self.allocate_callback_handle(handle, CallbackKind::Table);
-        wasmtime::component::Resource::new_own(id)
-    }
-
-    fn call(
-        &mut self,
-        _self_: wasmtime::component::Resource<extension_runtime::TableCallback>,
-        _args: BindgenVec<extension_types::Duckvalue>,
-    ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
-        Err(unsupported_runtime_error())
-    }
-
-    fn drop(
-        &mut self,
-        rep: wasmtime::component::Resource<extension_runtime::TableCallback>,
-    ) -> wasmtime::Result<()> {
-        self.release_callback_handle(rep.rep());
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostAggregateCallback for ExtensionStoreState {
-    fn new(
-        &mut self,
-        handle: u32,
-    ) -> wasmtime::component::Resource<extension_runtime::AggregateCallback> {
-        let id = self.allocate_callback_handle(handle, CallbackKind::Aggregate);
-        wasmtime::component::Resource::new_own(id)
-    }
-
-    fn call(
-        &mut self,
-        _self_: wasmtime::component::Resource<extension_runtime::AggregateCallback>,
-        _rows: extension_runtime::Rowbatch,
-    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
-        Err(unsupported_runtime_error())
-    }
-
-    fn drop(
-        &mut self,
-        rep: wasmtime::component::Resource<extension_runtime::AggregateCallback>,
-    ) -> wasmtime::Result<()> {
-        self.release_callback_handle(rep.rep());
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostPragmaCallback for ExtensionStoreState {
-    fn new(
-        &mut self,
-        handle: u32,
-    ) -> wasmtime::component::Resource<extension_runtime::PragmaCallback> {
-        let id = self.allocate_callback_handle(handle, CallbackKind::Pragma);
-        wasmtime::component::Resource::new_own(id)
-    }
-
-    fn call(
-        &mut self,
-        _self_: wasmtime::component::Resource<extension_runtime::PragmaCallback>,
-        _args: BindgenVec<extension_types::Duckvalue>,
-    ) -> Result<Option<extension_types::Duckvalue>, extension_types::Duckerror> {
-        Err(unsupported_runtime_error())
-    }
-
-    fn drop(
-        &mut self,
-        rep: wasmtime::component::Resource<extension_runtime::PragmaCallback>,
-    ) -> wasmtime::Result<()> {
-        self.release_callback_handle(rep.rep());
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostCastCallback for ExtensionStoreState {
-    fn new(
-        &mut self,
-        handle: u32,
-    ) -> wasmtime::component::Resource<extension_runtime::CastCallback> {
-        let id = self.allocate_callback_handle(handle, CallbackKind::Cast);
-        wasmtime::component::Resource::new_own(id)
-    }
-
-    fn call(
-        &mut self,
-        _self_: wasmtime::component::Resource<extension_runtime::CastCallback>,
-        _value: extension_types::Duckvalue,
-    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
-        Err(unsupported_runtime_error())
-    }
-
-    fn drop(
-        &mut self,
-        rep: wasmtime::component::Resource<extension_runtime::CastCallback>,
-    ) -> wasmtime::Result<()> {
-        self.release_callback_handle(rep.rep());
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostScalarRegistry for ExtensionStoreState {
-    fn register(
-        &mut self,
-        self_: wasmtime::component::Resource<extension_runtime::ScalarRegistry>,
-        name: String,
-        arguments: BindgenVec<extension_runtime::Funcarg>,
-        returns: extension_runtime::Logicaltype,
-        callback: wasmtime::component::Resource<extension_runtime::ScalarCallback>,
-        options: Option<extension_runtime::Funcopts>,
-    ) -> Result<u32, extension_types::Duckerror> {
-        {
-            let registry = self
-                .callback_registry
-                .lock()
-                .expect("callback registry mutex poisoned");
-            match registry.get(callback.rep()) {
-                Some(entry) if entry.kind == CallbackKind::Scalar => {}
-                Some(_) => {
-                    return Err(extension_types::Duckerror::Invalidargument(
-                        "callback handle is not scalar".to_string(),
-                    ))
-                }
-                None => {
-                    return Err(extension_types::Duckerror::Internal(
-                        "unknown scalar callback handle".to_string(),
-                    ))
-                }
-            }
-        }
-
-        let registry_id = self_.rep();
-        let registry = self.scalar_registries.get_mut(&registry_id).ok_or_else(|| {
-            extension_types::Duckerror::Internal("unknown scalar registry handle".to_string())
-        })?;
-
-        let callback_handle = callback.rep();
-        std::mem::forget(callback);
-
-        let converted_arguments = convert_extension_funcargs(arguments.into());
-        let converted_returns = convert_extension_logicaltype(returns);
-        let converted_options = options.map(convert_extension_funcopts);
-        log_scalar_registration(
-            &self.extension_name,
-            &name,
-            registry_id,
-            callback_handle,
-            &converted_arguments,
-            &converted_returns,
-            converted_options.as_ref(),
-        );
-
-        registry.entries.push(PendingScalar {
-            extension: self.extension_name.clone(),
-            name,
-            arguments: converted_arguments,
-            returns: converted_returns,
-            callback_handle,
-            options: converted_options,
-        });
-
-        Ok(self.alloc_resource_id())
-    }
-
-    fn drop(
-        &mut self,
-        rep: wasmtime::component::Resource<extension_runtime::ScalarRegistry>,
-    ) -> wasmtime::Result<()> {
-        if let Some(registry) = self.scalar_registries.remove(&rep.rep()) {
-            self.pending_scalars.extend(registry.entries);
-        }
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostTableRegistry for ExtensionStoreState {
-    fn register(
-        &mut self,
-        self_: wasmtime::component::Resource<extension_runtime::TableRegistry>,
-        name: String,
-        arguments: BindgenVec<extension_runtime::Funcarg>,
-        columns: BindgenVec<extension_runtime::Columndef>,
-        callback: wasmtime::component::Resource<extension_runtime::TableCallback>,
-        options: Option<extension_runtime::Extopts>,
-    ) -> Result<u32, extension_types::Duckerror> {
-        {
-            let registry = self
-                .callback_registry
-                .lock()
-                .expect("callback registry mutex poisoned");
-            match registry.get(callback.rep()) {
-                Some(entry) if entry.kind == CallbackKind::Table => {}
-                Some(_) => {
-                    return Err(extension_types::Duckerror::Invalidargument(
-                        "callback handle is not a table callback".to_string(),
-                    ))
-                }
-                None => {
-                    return Err(extension_types::Duckerror::Internal(
-                        "unknown table callback handle".to_string(),
-                    ))
-                }
-            }
-        }
-
-        let registry_id = self_.rep();
-        let registry = self.table_registries.get_mut(&registry_id).ok_or_else(|| {
-            extension_types::Duckerror::Internal("unknown table registry handle".to_string())
-        })?;
-
-        let callback_handle = callback.rep();
-        std::mem::forget(callback);
-
-        let converted_arguments = convert_extension_funcargs(arguments.into());
-        let converted_columns = convert_extension_columndefs(columns.into());
-        let converted_options = options.map(convert_extension_extopts);
-        log_table_registration(
-            &self.extension_name,
-            &name,
-            registry_id,
-            callback_handle,
-            &converted_arguments,
-            &converted_columns,
-            converted_options.as_ref(),
-        );
-
-        let table_name = name.clone();
-        registry.entries.push(PendingTable {
-            extension: self.extension_name.clone(),
-            name,
-            arguments: converted_arguments,
-            columns: converted_columns,
-            callback_handle,
-            options: converted_options,
-        });
-
-        // The returned handle is what the extension later passes to
-        // `files.register-replacement-scan`; remember which table function it
-        // names so we can resolve it.
-        let handle = self.alloc_resource_id();
-        self.table_handle_names.insert(handle, table_name);
-        Ok(handle)
-    }
-
-    fn drop(
-        &mut self,
-        rep: wasmtime::component::Resource<extension_runtime::TableRegistry>,
-    ) -> wasmtime::Result<()> {
-        if let Some(registry) = self.table_registries.remove(&rep.rep()) {
-            self.pending_tables.extend(registry.entries);
-        }
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostAggregateRegistry for ExtensionStoreState {
-    fn register(
-        &mut self,
-        self_: wasmtime::component::Resource<extension_runtime::AggregateRegistry>,
-        name: String,
-        arguments: BindgenVec<extension_runtime::Funcarg>,
-        returns: extension_runtime::Logicaltype,
-        callback: wasmtime::component::Resource<extension_runtime::AggregateCallback>,
-        options: Option<extension_runtime::Funcopts>,
-    ) -> Result<u32, extension_types::Duckerror> {
-        {
-            let registry = self
-                .callback_registry
-                .lock()
-                .expect("callback registry mutex poisoned");
-            match registry.get(callback.rep()) {
-                Some(entry) if entry.kind == CallbackKind::Aggregate => {}
-                Some(_) => {
-                    return Err(extension_types::Duckerror::Invalidargument(
-                        "callback handle is not aggregate".to_string(),
-                    ))
-                }
-                None => {
-                    return Err(extension_types::Duckerror::Internal(
-                        "unknown aggregate callback handle".to_string(),
-                    ))
-                }
-            }
-        }
-
-        let registry_id = self_.rep();
-        let registry = self
-            .aggregate_registries
-            .get_mut(&registry_id)
-            .ok_or_else(|| {
-                extension_types::Duckerror::Internal(
-                    "unknown aggregate registry handle".to_string(),
-                )
-            })?;
-
-        let callback_handle = callback.rep();
-        std::mem::forget(callback);
-
-        let converted_arguments = convert_extension_funcargs(arguments.into());
-        let converted_returns = convert_extension_logicaltype(returns);
-        let converted_options = options.map(convert_extension_funcopts);
-        log_aggregate_registration(
-            &self.extension_name,
-            &name,
-            registry_id,
-            callback_handle,
-            &converted_arguments,
-            &converted_returns,
-            converted_options.as_ref(),
-        );
-
-        registry.entries.push(PendingAggregate {
-            extension: self.extension_name.clone(),
-            name,
-            arguments: converted_arguments,
-            returns: converted_returns,
-            callback_handle,
-            options: converted_options,
-        });
-
-        Ok(self.alloc_resource_id())
-    }
-
-    fn drop(
-        &mut self,
-        rep: wasmtime::component::Resource<extension_runtime::AggregateRegistry>,
-    ) -> wasmtime::Result<()> {
-        if let Some(registry) = self.aggregate_registries.remove(&rep.rep()) {
-            self.pending_aggregates.extend(registry.entries);
-        }
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostPragmaRegistry for ExtensionStoreState {
-    fn register_call(
-        &mut self,
-        _self_: wasmtime::component::Resource<extension_runtime::PragmaRegistry>,
-        _name: String,
-        _arguments: BindgenVec<extension_runtime::Funcarg>,
-        _returns: extension_runtime::Logicaltype,
-        _callback: wasmtime::component::Resource<extension_runtime::PragmaCallback>,
-        _options: Option<extension_runtime::Extopts>,
-    ) -> Result<u32, extension_types::Duckerror> {
-        Err(unsupported_runtime_error())
-    }
-
-    fn drop(
-        &mut self,
-        _rep: wasmtime::component::Resource<extension_runtime::PragmaRegistry>,
-    ) -> wasmtime::Result<()> {
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostMacroRegistry for ExtensionStoreState {
-    fn register_scalar(
-        &mut self,
-        _self_: wasmtime::component::Resource<extension_runtime::MacroRegistry>,
-        _name: String,
-        _parameters: BindgenVec<String>,
-        _body_sql: String,
-        _options: Option<extension_runtime::Extopts>,
-    ) -> Result<bool, extension_types::Duckerror> {
-        Err(unsupported_runtime_error())
-    }
-
-    fn drop(
-        &mut self,
-        _rep: wasmtime::component::Resource<extension_runtime::MacroRegistry>,
-    ) -> wasmtime::Result<()> {
-        Ok(())
-    }
-}
-
-impl extension_config::Host for ExtensionStoreState {
-    fn provider_version(&mut self) -> String {
-        self.with_core(|core| core.with_config(|guest, store| guest.call_provider_version(store)))
-            .unwrap_or_else(|err| {
-                eprintln!("extension config provider-version failed: {err}");
-                "duckdb-extension-host".into()
-            })
-    }
-
-    fn list_keys(&mut self, prefix: Option<String>) -> BindgenVec<String> {
-        let prefix_ref = prefix.as_deref();
-        self.with_core(|core| {
-            core.with_config(|guest, store| guest.call_list_keys(store, prefix_ref))
-        })
-        .unwrap_or_else(|err| {
-            eprintln!("extension config list-keys failed: {err}");
-            Vec::new()
-        })
-        .into()
-    }
-
-    fn get_string(&mut self, path: String) -> Result<Option<String>, extension_types::Configerror> {
-        let result = self
-            .with_core(|core| core.with_config(|guest, store| guest.call_get_string(store, &path)));
-        result
-            .map_err(map_config_trap)?
-            .map_err(convert_config_error)
-    }
-
-    fn get_bool(&mut self, path: String) -> Result<Option<bool>, extension_types::Configerror> {
-        let result = self
-            .with_core(|core| core.with_config(|guest, store| guest.call_get_bool(store, &path)));
-        result
-            .map_err(map_config_trap)?
-            .map_err(convert_config_error)
-    }
-
-    fn get_i64(&mut self, path: String) -> Result<Option<i64>, extension_types::Configerror> {
-        let result = self
-            .with_core(|core| core.with_config(|guest, store| guest.call_get_i64(store, &path)));
-        result
-            .map_err(map_config_trap)?
-            .map_err(convert_config_error)
-    }
-
-    fn get_u64(&mut self, path: String) -> Result<Option<u64>, extension_types::Configerror> {
-        let result = self
-            .with_core(|core| core.with_config(|guest, store| guest.call_get_u64(store, &path)));
-        result
-            .map_err(map_config_trap)?
-            .map_err(convert_config_error)
-    }
-
-    fn get_f64(&mut self, path: String) -> Result<Option<f64>, extension_types::Configerror> {
-        let result = self
-            .with_core(|core| core.with_config(|guest, store| guest.call_get_f64(store, &path)));
-        result
-            .map_err(map_config_trap)?
-            .map_err(convert_config_error)
-    }
-
-    fn get_bytes(
-        &mut self,
-        path: String,
-    ) -> Result<Option<BindgenVec<u8>>, extension_types::Configerror> {
-        let result = self
-            .with_core(|core| core.with_config(|guest, store| guest.call_get_bytes(store, &path)));
-        let value = result
-            .map_err(map_config_trap)?
-            .map_err(convert_config_error)?;
-        Ok(value.map(|bytes| bytes.into()))
-    }
-
-    fn get_string_list(
-        &mut self,
-        path: String,
-    ) -> Result<Option<BindgenVec<String>>, extension_types::Configerror> {
-        let result = self.with_core(|core| {
-            core.with_config(|guest, store| guest.call_get_string_list(store, &path))
-        });
-        let value = result
-            .map_err(map_config_trap)?
-            .map_err(convert_config_error)?;
-        Ok(value.map(|items| items.into()))
-    }
-}
-
-impl extension_logging::Host for ExtensionStoreState {
-    fn log(&mut self, level: extension_logging::Loglevel, message: String, target: Option<String>) {
-        let result = self.with_core(|core| {
-            core.with_logging(|guest, store| {
-                guest.call_log(
-                    store,
-                    convert_log_level_to_core(level),
-                    &message,
-                    target.as_deref(),
-                )
-            })
-        });
-        if let Err(err) = result {
-            match target {
-                Some(t) => {
-                    eprintln!("[duckdb-extension:{level:?}:{t}] {message} (core log failed: {err})")
-                }
-                None => {
-                    eprintln!("[duckdb-extension:{level:?}] {message} (core log failed: {err})")
-                }
-            }
-        }
-    }
-
-    fn log_fields(
-        &mut self,
-        level: extension_logging::Loglevel,
-        message: String,
-        fields: BindgenVec<extension_logging::Logfield>,
-    ) {
-        let converted_fields = convert_log_fields(
-            fields
-                .into_iter()
-                .collect::<Vec<extension_logging::Logfield>>(),
-        );
-        let result = self.with_core(|core| {
-            core.with_logging(|guest, store| {
-                guest.call_log_fields(
-                    store,
-                    convert_log_level_to_core(level),
-                    &message,
-                    converted_fields.as_slice(),
-                )
-            })
-        });
-        if let Err(err) = result {
-            eprintln!("[duckdb-extension:{level:?}] {message} (core log_fields failed: {err})");
-        }
-    }
-}
-
-// The `catalog` and `files` interfaces are part of the extension world so that
-// extensions can register logical types, casts, macros, replacement scans, and
-// copy handlers. The host satisfies the imports here so such extensions
-// instantiate and load; the requests are acknowledged and logged. Forwarding
-// them into DuckDB (via new core hooks + C API calls) is a follow-up — see
-// docs/PLAN-capability-migration.md.
-impl extension_catalog::Host for ExtensionStoreState {
-    fn register_logical_type(
-        &mut self,
-        ty: extension_catalog::LogicalType,
-    ) -> Result<u32, String> {
-        let handle = self.alloc_resource_id();
-        eprintln!(
-            "[extension-manager] catalog register-logical-type '{}' (physical={}) for '{}' -> handle {handle}",
-            ty.name, ty.physical, self.extension_name
-        );
-        self.pending_logical_types.push(PendingLogicalType {
-            extension: self.extension_name.clone(),
-            name: ty.name,
-            physical: ty.physical,
-        });
-        Ok(handle)
-    }
-
-    fn register_cast(
-        &mut self,
-        spec: extension_catalog::CastSpec,
-        callback: wasmtime::component::Resource<extension_catalog::CastCallback>,
-    ) -> Result<(), String> {
-        let callback_handle = callback.rep();
-        std::mem::forget(callback);
-        eprintln!(
-            "[extension-manager] catalog register-cast {}->{} ({:?}, callback={callback_handle}) for '{}'",
-            spec.from, spec.to, spec.kind, self.extension_name
-        );
-        self.pending_casts.push(PendingCast {
-            extension: self.extension_name.clone(),
-            source: spec.from,
-            target: spec.to,
-            callback_handle,
-        });
-        Ok(())
-    }
-
-    fn register_macro(&mut self, def: extension_catalog::MacroDef) -> Result<(), String> {
-        eprintln!(
-            "[extension-manager] catalog register-macro '{}.{}' ({} params) for '{}'",
-            def.schema,
-            def.name,
-            def.parameters.len(),
-            self.extension_name
-        );
-        self.pending_macros.push(PendingMacro {
-            extension: self.extension_name.clone(),
-            schema: def.schema,
-            name: def.name,
-            parameters: def.parameters.into_iter().collect(),
-            definition_sql: def.definition_sql,
-        });
-        Ok(())
-    }
-}
-
-impl extension_files::Host for ExtensionStoreState {
-    fn register_replacement_scan(
-        &mut self,
-        scan: extension_files::ReplacementScan,
-    ) -> Result<u32, String> {
-        let function_name = self
-            .table_handle_names
-            .get(&scan.table_function)
-            .cloned()
-            .ok_or_else(|| {
-                format!(
-                    "replacement scan references unknown table-function handle {}",
-                    scan.table_function
-                )
-            })?;
-        let id = self.alloc_resource_id();
-        let extensions: Vec<String> = scan.extensions.into_iter().collect();
-        eprintln!(
-            "[extension-manager] files register-replacement-scan exts={:?} ({:?}) -> '{}' for '{}' (id {id})",
-            extensions, scan.mode, function_name, self.extension_name
-        );
-        self.pending_replacement_scans.push(PendingReplacementScan {
-            extension: self.extension_name.clone(),
-            extensions,
-            function_name,
-        });
-        Ok(id)
-    }
-
-    fn register_copy_handler(
-        &mut self,
-        handler: extension_files::CopyHandler,
-    ) -> Result<u32, String> {
-        // DuckDB's C API exposes no copy-function registration, so this cannot
-        // be honoured. Fail loudly rather than silently pretending it worked.
-        eprintln!(
-            "[extension-manager] files register-copy-handler ext='{}' for '{}' rejected: unsupported",
-            handler.extension, self.extension_name
-        );
-        Err(
-            "copy handlers are not supported: DuckDB's C API has no copy-function registration"
-                .to_string(),
-        )
-    }
 }
 
 impl cli_db::HostConnection for HostState {
@@ -3211,135 +2239,6 @@ fn describe_cli_capability(kind: cli_types::Capabilitykind) -> &'static str {
     }
 }
 
-fn log_scalar_registration(
-    extension: &str,
-    name: &str,
-    registry_id: u32,
-    callback_handle: u32,
-    args: &[reg::FuncArg],
-    returns: &reg::LogicalType,
-    options: Option<&reg::FuncOpts>,
-) {
-    let arg_summary = summarize_runtime_funcargs(args);
-    let return_ty = describe_runtime_logicaltype(returns);
-    let option_summary = summarize_funcopts(options);
-    eprintln!(
-        "[extension-runtime:{extension}] queued scalar '{name}' (registry={registry_id}, callback={callback_handle}) args={arg_summary} returns={return_ty} opts={option_summary}"
-    );
-}
-
-fn log_table_registration(
-    extension: &str,
-    name: &str,
-    registry_id: u32,
-    callback_handle: u32,
-    args: &[reg::FuncArg],
-    columns: &[reg::ColumnDef],
-    options: Option<&reg::ExtOpts>,
-) {
-    let arg_summary = summarize_runtime_funcargs(args);
-    let column_summary = summarize_runtime_columns(columns);
-    let option_summary = summarize_extopts(options);
-    eprintln!(
-        "[extension-runtime:{extension}] queued table '{name}' (registry={registry_id}, callback={callback_handle}) args={arg_summary} columns={column_summary} opts={option_summary}"
-    );
-}
-
-fn log_aggregate_registration(
-    extension: &str,
-    name: &str,
-    registry_id: u32,
-    callback_handle: u32,
-    args: &[reg::FuncArg],
-    returns: &reg::LogicalType,
-    options: Option<&reg::FuncOpts>,
-) {
-    let arg_summary = summarize_runtime_funcargs(args);
-    let return_ty = describe_runtime_logicaltype(returns);
-    let option_summary = summarize_funcopts(options);
-    eprintln!(
-        "[extension-runtime:{extension}] queued aggregate '{name}' (registry={registry_id}, callback={callback_handle}) args={arg_summary} returns={return_ty} opts={option_summary}"
-    );
-}
-
-fn summarize_runtime_funcargs(args: &[reg::FuncArg]) -> String {
-    if args.is_empty() {
-        return "[]".to_string();
-    }
-    let parts: Vec<String> = args
-        .iter()
-        .map(|arg| {
-            let name = arg
-                .name
-                .as_ref()
-                .map(|s| s.as_str())
-                .unwrap_or("-");
-            format!("{name}:{}", describe_runtime_logicaltype(&arg.logical))
-        })
-        .collect();
-    format!("[{}]", parts.join(", "))
-}
-
-fn summarize_runtime_columns(columns: &[reg::ColumnDef]) -> String {
-    if columns.is_empty() {
-        return "[]".to_string();
-    }
-    let parts: Vec<String> = columns
-        .iter()
-        .map(|col| {
-            format!(
-                "{}:{}",
-                col.name,
-                describe_runtime_logicaltype(&col.logical)
-            )
-        })
-        .collect();
-    format!("[{}]", parts.join(", "))
-}
-
-fn summarize_funcopts(options: Option<&reg::FuncOpts>) -> String {
-    match options {
-        None => "none".to_string(),
-        Some(opts) => {
-            let description = opts
-                .description
-                .as_ref()
-                .map(|s| s.as_str())
-                .unwrap_or("-");
-            let tags = if opts.tags.is_empty() {
-                "none".to_string()
-            } else {
-                format!("[{}]", opts.tags.join(", "))
-            };
-            let attrs = opts.attributes.describe();
-            format!("description='{description}', tags={tags}, attrs={attrs}")
-        }
-    }
-}
-
-fn summarize_extopts(options: Option<&reg::ExtOpts>) -> String {
-    match options {
-        None => "none".to_string(),
-        Some(opts) => {
-            let description = opts
-                .description
-                .as_ref()
-                .map(|s| s.as_str())
-                .unwrap_or("-");
-            let tags = if opts.tags.is_empty() {
-                "none".to_string()
-            } else {
-                format!("[{}]", opts.tags.join(", "))
-            };
-            format!("description='{description}', tags={tags}")
-        }
-    }
-}
-
-fn describe_runtime_logicaltype(ty: &reg::LogicalType) -> &'static str {
-    ty.describe()
-}
-
 fn log_pending_scalar_conversion(entry: &PendingScalar) {
     let arg_summary = summarize_runtime_funcargs(&entry.arguments);
     let return_ty = describe_runtime_logicaltype(&entry.returns);
@@ -3414,47 +2313,143 @@ fn log_pending_aggregate_conversion(entry: &PendingAggregate) {
     );
 }
 
-fn convert_config_error(err: core_config_exports::Configerror) -> extension_types::Configerror {
+// The Direction-1 service sink: routes a loaded component's config/logging
+// requests (expressed via ducklink-runtime's neutral types) to the wasm DuckDB
+// core's config/logging guest interfaces.
+struct CoreServices {
+    core: Arc<Mutex<CoreExecution>>,
+}
+
+impl CoreServices {
+    fn with_core<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut CoreExecution) -> R,
+    {
+        let mut core = self.core.lock().expect("core mutex poisoned");
+        f(&mut core)
+    }
+}
+
+fn core_trap_to_config_error(err: wasmtime::Error) -> ConfigError {
+    ConfigError::InternalConfig(err.to_string())
+}
+
+fn core_config_error_to_neutral(err: core_config_exports::Configerror) -> ConfigError {
     match err {
-        core_config_exports::Configerror::Invalidkey(msg) => {
-            extension_types::Configerror::Invalidkey(msg.into())
-        }
-        core_config_exports::Configerror::Typemismatch(msg) => {
-            extension_types::Configerror::Typemismatch(msg.into())
-        }
-        core_config_exports::Configerror::Unavailable(msg) => {
-            extension_types::Configerror::Unavailable(msg.into())
-        }
+        core_config_exports::Configerror::Invalidkey(msg) => ConfigError::InvalidKey(msg.into()),
+        core_config_exports::Configerror::Typemismatch(msg) => ConfigError::TypeMismatch(msg.into()),
+        core_config_exports::Configerror::Unavailable(msg) => ConfigError::Unavailable(msg.into()),
         core_config_exports::Configerror::Internalconfig(msg) => {
-            extension_types::Configerror::Internalconfig(msg.into())
+            ConfigError::InternalConfig(msg.into())
         }
     }
 }
 
-fn map_config_trap(err: wasmtime::Error) -> extension_types::Configerror {
-    extension_types::Configerror::Internalconfig(err.to_string())
-}
-
-fn convert_log_level_to_core(level: extension_logging::Loglevel) -> core_logging_exports::Loglevel {
+fn neutral_loglevel_to_core(level: LogLevel) -> core_logging_exports::Loglevel {
     match level {
-        extension_logging::Loglevel::Trace => core_logging_exports::Loglevel::Trace,
-        extension_logging::Loglevel::Debug => core_logging_exports::Loglevel::Debug,
-        extension_logging::Loglevel::Info => core_logging_exports::Loglevel::Info,
-        extension_logging::Loglevel::Warn => core_logging_exports::Loglevel::Warn,
-        extension_logging::Loglevel::Error => core_logging_exports::Loglevel::Error,
+        LogLevel::Trace => core_logging_exports::Loglevel::Trace,
+        LogLevel::Debug => core_logging_exports::Loglevel::Debug,
+        LogLevel::Info => core_logging_exports::Loglevel::Info,
+        LogLevel::Warn => core_logging_exports::Loglevel::Warn,
+        LogLevel::Error => core_logging_exports::Loglevel::Error,
     }
 }
 
-fn convert_log_fields(
-    fields: Vec<extension_logging::Logfield>,
-) -> Vec<core_logging_exports::Logfield> {
-    fields
-        .into_iter()
-        .map(|field| core_logging_exports::Logfield {
-            key: field.key.into(),
-            value: field.value.into(),
+impl ExtensionServices for CoreServices {
+    fn provider_version(&mut self) -> Result<String, ConfigError> {
+        self.with_core(|core| core.with_config(|guest, store| guest.call_provider_version(store)))
+            .map_err(core_trap_to_config_error)
+    }
+
+    fn list_keys(&mut self, prefix: Option<&str>) -> Result<Vec<String>, ConfigError> {
+        self.with_core(|core| core.with_config(|guest, store| guest.call_list_keys(store, prefix)))
+            .map_err(core_trap_to_config_error)
+    }
+
+    fn get_string(&mut self, path: &str) -> Result<Option<String>, ConfigError> {
+        self.with_core(|core| core.with_config(|guest, store| guest.call_get_string(store, path)))
+            .map_err(core_trap_to_config_error)?
+            .map_err(core_config_error_to_neutral)
+    }
+
+    fn get_bool(&mut self, path: &str) -> Result<Option<bool>, ConfigError> {
+        self.with_core(|core| core.with_config(|guest, store| guest.call_get_bool(store, path)))
+            .map_err(core_trap_to_config_error)?
+            .map_err(core_config_error_to_neutral)
+    }
+
+    fn get_i64(&mut self, path: &str) -> Result<Option<i64>, ConfigError> {
+        self.with_core(|core| core.with_config(|guest, store| guest.call_get_i64(store, path)))
+            .map_err(core_trap_to_config_error)?
+            .map_err(core_config_error_to_neutral)
+    }
+
+    fn get_u64(&mut self, path: &str) -> Result<Option<u64>, ConfigError> {
+        self.with_core(|core| core.with_config(|guest, store| guest.call_get_u64(store, path)))
+            .map_err(core_trap_to_config_error)?
+            .map_err(core_config_error_to_neutral)
+    }
+
+    fn get_f64(&mut self, path: &str) -> Result<Option<f64>, ConfigError> {
+        self.with_core(|core| core.with_config(|guest, store| guest.call_get_f64(store, path)))
+            .map_err(core_trap_to_config_error)?
+            .map_err(core_config_error_to_neutral)
+    }
+
+    fn get_bytes(&mut self, path: &str) -> Result<Option<Vec<u8>>, ConfigError> {
+        self.with_core(|core| core.with_config(|guest, store| guest.call_get_bytes(store, path)))
+            .map_err(core_trap_to_config_error)?
+            .map_err(core_config_error_to_neutral)
+    }
+
+    fn get_string_list(&mut self, path: &str) -> Result<Option<Vec<String>>, ConfigError> {
+        self.with_core(|core| {
+            core.with_config(|guest, store| guest.call_get_string_list(store, path))
         })
-        .collect()
+        .map_err(core_trap_to_config_error)?
+        .map_err(core_config_error_to_neutral)
+    }
+
+    fn log(&mut self, level: LogLevel, message: &str, target: Option<&str>) {
+        let result = self.with_core(|core| {
+            core.with_logging(|guest, store| {
+                guest.call_log(store, neutral_loglevel_to_core(level), message, target)
+            })
+        });
+        if let Err(err) = result {
+            match target {
+                Some(t) => {
+                    eprintln!("[duckdb-extension:{level:?}:{t}] {message} (core log failed: {err})")
+                }
+                None => {
+                    eprintln!("[duckdb-extension:{level:?}] {message} (core log failed: {err})")
+                }
+            }
+        }
+    }
+
+    fn log_fields(&mut self, level: LogLevel, message: &str, fields: &[LogField]) {
+        let converted: Vec<core_logging_exports::Logfield> = fields
+            .iter()
+            .map(|field| core_logging_exports::Logfield {
+                key: field.key.clone().into(),
+                value: field.value.clone().into(),
+            })
+            .collect();
+        let result = self.with_core(|core| {
+            core.with_logging(|guest, store| {
+                guest.call_log_fields(
+                    store,
+                    neutral_loglevel_to_core(level),
+                    message,
+                    converted.as_slice(),
+                )
+            })
+        });
+        if let Err(err) = result {
+            eprintln!("[duckdb-extension:{level:?}] {message} (core log_fields failed: {err})");
+        }
+    }
 }
 
 fn trap_to_cli_string(err: wasmtime::Error) -> CliString {
@@ -3693,61 +2688,6 @@ fn sanitize_extension_name(raw: &str) -> String {
     sanitized
 }
 
-fn convert_extension_funcargs(args: Vec<extension_runtime::Funcarg>) -> Vec<reg::FuncArg> {
-    args.into_iter()
-        .map(|arg| reg::FuncArg {
-            name: arg.name,
-            logical: convert_extension_logicaltype(arg.logical),
-        })
-        .collect()
-}
-
-fn convert_extension_logicaltype(ty: extension_runtime::Logicaltype) -> reg::LogicalType {
-    match ty {
-        extension_runtime::Logicaltype::Boolean => reg::LogicalType::Boolean,
-        extension_runtime::Logicaltype::Int64 => reg::LogicalType::Int64,
-        extension_runtime::Logicaltype::Uint64 => reg::LogicalType::Uint64,
-        extension_runtime::Logicaltype::Float64 => reg::LogicalType::Float64,
-        extension_runtime::Logicaltype::Text => reg::LogicalType::Text,
-        extension_runtime::Logicaltype::Blob => reg::LogicalType::Blob,
-    }
-}
-
-fn convert_extension_funcopts(opts: extension_runtime::Funcopts) -> reg::FuncOpts {
-    reg::FuncOpts {
-        description: opts.description,
-        tags: opts.tags.into_iter().collect(),
-        attributes: convert_extension_funcflags(opts.attributes),
-    }
-}
-
-fn convert_extension_columndefs(columns: Vec<extension_runtime::Columndef>) -> Vec<reg::ColumnDef> {
-    columns
-        .into_iter()
-        .map(|col| reg::ColumnDef {
-            name: col.name,
-            logical: convert_extension_logicaltype(col.logical),
-        })
-        .collect()
-}
-
-fn convert_extension_extopts(opts: extension_runtime::Extopts) -> reg::ExtOpts {
-    reg::ExtOpts {
-        description: opts.description,
-        tags: opts.tags.into_iter().collect(),
-    }
-}
-
-fn convert_extension_funcflags(flags: extension_types::Funcflags) -> reg::FuncFlags {
-    reg::FuncFlags {
-        deterministic: flags.contains(extension_types::Funcflags::DETERMINISTIC),
-        commutative: flags.contains(extension_types::Funcflags::COMMUTATIVE),
-        stateless: flags.contains(extension_types::Funcflags::STATELESS),
-        side_effecting: flags.contains(extension_types::Funcflags::SIDEEFFECTING),
-        deprecated: flags.contains(extension_types::Funcflags::DEPRECATED),
-    }
-}
-
 fn convert_core_duckvalue_to_extension(value: core_types::Duckvalue) -> extension_types::Duckvalue {
     match value {
         core_types::Duckvalue::Null => extension_types::Duckvalue::Null,
@@ -3831,9 +2771,6 @@ fn map_runtime_trap(err: wasmtime::Error) -> extension_types::Duckerror {
     extension_types::Duckerror::Internal(format!("core runtime trap: {err}"))
 }
 
-fn map_extension_trap(err: wasmtime::Error) -> extension_types::Duckerror {
-    extension_types::Duckerror::Internal(format!("extension trap: {err}"))
-}
 
 pub struct CliHarness {
     store: Store<HostState>,
