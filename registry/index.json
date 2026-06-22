@@ -1,7 +1,7 @@
 {
   "version": "0.1.0",
   "updated": "2026-06-21",
-  "registry_url": "https://github.com/tegmentum/duckdb-webassembly-component",
+  "registry_url": "https://github.com/tegmentum/ducklink",
   "_schema": {
     "description": "Catalog of componentized DuckDB-wasm extensions. Each entry describes one extension component built against the duckdb:extension world. The full planned roadmap (with per-extension batch + native-coverage notes) lives in PLAN-duckdb-extensions.md.",
     "status_values": {
@@ -135,7 +135,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "sample",
         "reference",
@@ -173,7 +173,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "isin",
         "validation",
@@ -208,7 +208,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "base32",
         "base58",
@@ -245,7 +245,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "luhn",
         "checksum",
@@ -276,7 +276,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "iban",
         "validation",
@@ -310,7 +310,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "ean",
         "upc",
@@ -342,7 +342,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "aba",
         "routing",
@@ -372,7 +372,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "creditcard",
         "luhn",
@@ -418,7 +418,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "source": "extensions/uuidx-component",
       "artifact": "artifacts/extensions/uuidx.wasm",
       "keywords": [
@@ -457,7 +457,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "source": "extensions/crypto-component",
       "artifact": "artifacts/extensions/crypto.wasm",
       "keywords": [
@@ -477,7 +477,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "markdown",
         "commonmark",
@@ -510,7 +510,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "hash",
         "xxhash",
@@ -547,7 +547,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "fuzzy",
         "string",
@@ -582,7 +582,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "case",
         "snake",
@@ -620,7 +620,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "css",
         "color",
@@ -654,7 +654,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "url",
         "uri",
@@ -689,7 +689,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "email",
         "validate",
@@ -722,7 +722,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "semver",
         "version",
@@ -757,7 +757,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "slug",
         "url",
@@ -788,7 +788,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "escape",
         "html",
@@ -824,7 +824,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "sort",
         "natural",
@@ -855,7 +855,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "roman",
         "numeral",
@@ -887,7 +887,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "format",
         "bytes",
@@ -919,7 +919,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "ulid",
         "nanoid",
@@ -954,7 +954,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "idna",
         "punycode",
@@ -987,7 +987,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "mac",
         "address",
@@ -1020,7 +1020,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "isbn",
         "book",
@@ -1051,7 +1051,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "duration",
         "time",
@@ -1084,7 +1084,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "iso",
         "country",
@@ -1118,7 +1118,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "morse",
         "code",
@@ -1149,7 +1149,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "color",
         "wcag",
@@ -1182,7 +1182,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "geohash",
         "geo",
@@ -1216,7 +1216,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "currency",
         "iso",
@@ -1251,7 +1251,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "hmac",
         "crypto",
@@ -1285,7 +1285,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "phonetic",
         "soundex",
@@ -1318,7 +1318,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "jwt",
         "token",
@@ -1351,7 +1351,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "totp",
         "2fa",
@@ -1385,7 +1385,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "base",
         "radix",
@@ -1415,7 +1415,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "emoji",
         "unicode",
@@ -1449,7 +1449,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "language",
         "detection",
@@ -1483,7 +1483,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "ip",
         "network",
@@ -1515,7 +1515,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "mime",
         "content-type",
@@ -1548,7 +1548,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "pluralize",
         "singular",
@@ -1581,7 +1581,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "haversine",
         "distance",
@@ -1612,7 +1612,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "number",
         "words",
@@ -1645,7 +1645,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "ordinal",
         "number",
@@ -1675,7 +1675,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "nato",
         "phonetic",
@@ -1705,7 +1705,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "ascii85",
         "base85",
@@ -1737,7 +1737,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "quoted-printable",
         "mime",
@@ -1770,7 +1770,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "units",
         "convert",
@@ -1801,7 +1801,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "wrap",
         "fill",
@@ -1833,7 +1833,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "timezone",
         "iana",
@@ -1868,7 +1868,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "rot13",
         "caesar",
@@ -1899,7 +1899,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "leet",
         "leetspeak",
@@ -1929,7 +1929,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "dms",
         "coordinates",
@@ -1960,7 +1960,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "cbor",
         "codec",
@@ -1995,7 +1995,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "msgpack",
         "messagepack",
@@ -2030,7 +2030,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "chemistry",
         "periodic-table",
@@ -2064,7 +2064,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "vigenere",
         "cipher",
@@ -2095,7 +2095,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "petname",
         "random",
@@ -2127,7 +2127,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "base58",
         "base58check",
@@ -2160,7 +2160,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "checksum",
         "crc",
@@ -2196,7 +2196,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "siphash",
         "hash",
@@ -2228,7 +2228,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "tiktoken",
         "bpe",
@@ -2263,7 +2263,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "bech32",
         "bitcoin",
@@ -2298,7 +2298,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "uuid",
         "v5",
@@ -2331,7 +2331,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "gravatar",
         "avatar",
@@ -2364,7 +2364,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "html",
         "text",
@@ -2396,7 +2396,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "readability",
         "nlp",
@@ -2430,7 +2430,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "hashids",
         "obfuscate",
@@ -2463,7 +2463,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "checkdigit",
         "verhoeff",
@@ -2496,7 +2496,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "dice",
         "rpg",
@@ -2530,7 +2530,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "gray",
         "graycode",
@@ -2561,7 +2561,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "creditcard",
         "brand",
@@ -2591,7 +2591,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "money",
         "currency",
@@ -2623,7 +2623,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "ngram",
         "nlp",
@@ -2656,7 +2656,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "stem",
         "snowball",
@@ -2688,7 +2688,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "transliterate",
         "ascii",
@@ -2720,7 +2720,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "pluscode",
         "olc",
@@ -2756,7 +2756,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "rot47",
         "cipher",
@@ -2786,7 +2786,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "stopwords",
         "nlp",
@@ -2819,7 +2819,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "isbn",
         "convert",
@@ -2850,7 +2850,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "password",
         "random",
@@ -2883,7 +2883,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "braille",
         "accessibility",
@@ -2913,7 +2913,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "toml",
         "config",
@@ -2947,7 +2947,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "yaml",
         "config",
@@ -2981,7 +2981,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "unicode",
         "normalize",
@@ -3016,7 +3016,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "unicode",
         "grapheme",
@@ -3050,7 +3050,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "color",
         "hsl",
@@ -3082,7 +3082,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "json",
         "schema",
@@ -3114,7 +3114,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "simhash",
         "lsh",
@@ -3145,7 +3145,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "ksuid",
         "cuid2",
@@ -3179,7 +3179,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "phonetic",
         "nysiis",
@@ -3213,7 +3213,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "z85",
         "base85",
@@ -3246,7 +3246,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "initials",
         "acronym",
@@ -3277,7 +3277,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "luhn",
         "checkdigit",
@@ -3308,7 +3308,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "atbash",
         "cipher",
@@ -3338,7 +3338,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "piglatin",
         "text",
@@ -3368,7 +3368,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "rle",
         "compression",
@@ -3399,7 +3399,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "bbcode",
         "html",
@@ -3429,7 +3429,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "phone",
         "libphonenumber",
@@ -3463,7 +3463,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "password",
         "strength",
@@ -3496,7 +3496,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "qr",
         "qrcode",
@@ -3528,7 +3528,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "aggregate",
         "statistics",
@@ -3558,7 +3558,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "bloom",
         "sketch",
@@ -3590,7 +3590,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "minhash",
         "jaccard",
@@ -3622,7 +3622,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "count-min",
         "frequency",
@@ -3654,7 +3654,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "dns",
         "network",
@@ -3686,7 +3686,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "http",
         "https",
@@ -3722,7 +3722,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "lorem",
         "ipsum",
@@ -3755,7 +3755,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "fake",
         "mock",
@@ -3791,7 +3791,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "passphrase",
         "diceware",
@@ -3825,7 +3825,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "dot-command",
         "cli",
@@ -3861,7 +3861,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "dot-command",
         "cli",
@@ -3889,7 +3889,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "dot-command",
         "sqlite-utils",
@@ -3932,7 +3932,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "dot-command",
         "sqlite-utils",
@@ -3969,7 +3969,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "dot-command",
         "sqlite-utils",
@@ -4002,7 +4002,7 @@
       "authors": [
         "Tegmentum"
       ],
-      "repository": "https://github.com/tegmentum/duckdb-webassembly-component",
+      "repository": "https://github.com/tegmentum/ducklink",
       "keywords": [
         "dot-command",
         "sqlite-utils",

@@ -9,7 +9,7 @@
 - `docs/`: Design notes and future plans (e.g., `component-plugin-plan.md`).
 
 ## Build, Test, and Development Commands
-- `export WASI_SDK_PREFIX=<repo>/duckdb-webassembly-component/external/wasi-sdk-33.0-<platform> && DUCKDB_STATIC_LIB=... && DUCKDB_INCLUDE_DIR=...`: Required environment variables before any build (see README for exact paths). Set `WASI_TARGET_TRIPLE=wasm32-wasip2` when compiling the DuckDB archive so it matches the component target. Use `WASM_EXTENSIONS` (defaults to `json`) to control which built-in DuckDB extensions are compiled into the static library.
+- `export WASI_SDK_PREFIX=<repo>/ducklink/external/wasi-sdk-33.0-<platform> && DUCKDB_STATIC_LIB=... && DUCKDB_INCLUDE_DIR=...`: Required environment variables before any build (see README for exact paths). Set `WASI_TARGET_TRIPLE=wasm32-wasip2` when compiling the DuckDB archive so it matches the component target. Use `WASM_EXTENSIONS` (defaults to `json`) to control which built-in DuckDB extensions are compiled into the static library.
 - `cargo component build -p ducklink-core --target wasm32-wasip2 --release --features "wasi fs_shims"`: Builds the core Wasm component with filesystem shims.
 - `cargo component build -p ducklink-cli --target wasm32-wasip2 --release`: Builds the CLI component.
 - `scripts/smoke-cli.sh`: Composes core + CLI via `wac plug` and runs a Wasmtime sanity query (`SQL` and `DB_PATH` env vars configurable).

@@ -7,7 +7,7 @@ plan to distribute as a component (as opposed to compiling it directly into Duck
 ### 1. Scaffold a crate
 
 ```bash
-cd duckdb-webassembly-component
+cd ducklink
 scripts/new-component-extension.sh my_extension
 ```
 
