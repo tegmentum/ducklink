@@ -134,7 +134,15 @@ fn fmt_value(v: &Value) -> String {
         Value::Float(x) => x.to_string(),
         Value::Double(x) => x.to_string(),
         Value::Text(s) => s.clone(),
-        Value::Blob(b) => String::from_utf8_lossy(b).into_owned(),
+        // DuckDB's CLI renders BLOB as `0x` + lowercase hex.
+        Value::Blob(b) => {
+            let mut s = String::with_capacity(2 + b.len() * 2);
+            s.push_str("0x");
+            for byte in b {
+                s.push_str(&format!("{byte:02x}"));
+            }
+            s
+        }
         other => format!("{other:?}"),
     }
 }
@@ -164,7 +172,14 @@ fn run_stmt(con: &Connection, sql: &str) -> Result<Vec<String>, String> {
     for vals in data {
         out.push(vals.join(","));
     }
-    Ok(out)
+    // A CSV value containing newlines (e.g. html2text/markdown/wordwrap output) is
+    // quoted but spans multiple PHYSICAL lines, which is how the CLI-seeded
+    // smoke.expected captures it. Split on embedded newlines so the produced
+    // physical lines align with the expected.
+    Ok(out
+        .into_iter()
+        .flat_map(|line| line.split('\n').map(str::to_string).collect::<Vec<_>>())
+        .collect())
 }
 
 /// Expected lines, dropping `#` comment lines but keeping blanks (a blank line is

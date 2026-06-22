@@ -100,7 +100,10 @@ function runStmt(db, conn, sql) {
   for (const row of result.rows || []) {
     lines.push(row.map((cell) => csvField(fmtCell(cell))).join(','))
   }
-  return lines
+  // A CSV value containing newlines (html2text/markdown/wordwrap) is quoted but
+  // spans multiple PHYSICAL lines, which is how the CLI-seeded smoke.expected
+  // captures it. Split so the produced physical lines align with the expected.
+  return lines.flatMap((l) => l.split('\n'))
 }
 
 /** Expected lines: drop `#` comments, keep blanks (blank = NULL). */

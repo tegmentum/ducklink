@@ -149,7 +149,16 @@ impl Engine2 {
     pub fn load(&mut self, extension: &str, path: &Path) -> Result<LoadedComponent> {
         let component = Component::from_file(&self.engine, path)
             .with_context(|| format!("loading component at {}", path.display()))?;
-        let wasi: WasiCtx = WasiCtxBuilder::new().inherit_env().inherit_stdio().build();
+        // Grant outbound network + name lookup so network-using components (dns,
+        // http, httpfs, ...) work. Best-effort, not a sandbox: a component that
+        // does not use sockets is unaffected. (A future opt-in gate could mirror
+        // the host's DUCKLINK_NETWORK_GRANT.)
+        let wasi: WasiCtx = WasiCtxBuilder::new()
+            .inherit_env()
+            .inherit_stdio()
+            .inherit_network()
+            .allow_ip_name_lookup(true)
+            .build();
         let mut instance = load_component(
             &self.engine,
             &component,
