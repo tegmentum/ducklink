@@ -16,7 +16,7 @@
     "verify-tvm-aot": "npm run copy-wasm && jco transpile public/ducklink_core.wasm -o .tvm-aot --instantiation async --no-nodejs-compat && AOT_DIR=.tvm-aot node aot-tvm-test.mjs"
   },
   "dependencies": {
-    "@tegmentum/wasi-polyfill": "file:../../../wasi-polyfill",
+    "@tegmentum/wasi-polyfill": "file:../../wasi-polyfill",
     "@bytecodealliance/jco": "^1.23.0"
   },
   "devDependencies": {
