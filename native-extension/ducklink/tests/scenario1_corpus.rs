@@ -180,6 +180,17 @@ fn load_expected(path: &Path) -> Vec<String> {
 
 /// Diff produced vs expected, honoring `~~` (skip) and `?` (any non-empty).
 fn compare(produced: &[String], expected: &[String]) -> Result<(), String> {
+    // A trailing empty value (e.g. an empty-string result from the final SELECT,
+    // like `initials('   ')`) renders as a blank line that the CLI-seeded golden
+    // doesn't capture. Drop trailing blanks from the produced output so the line
+    // counts align; a genuine trailing-NULL in the expected still matches because
+    // a missing produced line defaults to "" below.
+    let mut end = produced.len();
+    while end > 0 && produced[end - 1].trim_end().is_empty() {
+        end -= 1;
+    }
+    let produced = &produced[..end];
+
     for (i, exp) in expected.iter().enumerate() {
         if exp == "~~" {
             continue;

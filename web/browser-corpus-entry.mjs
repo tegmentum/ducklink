@@ -119,6 +119,13 @@ function expectedLines(text) {
 
 /** Diff produced vs expected, honoring ~~ (skip) and ? (any non-empty). */
 function compare(produced, expected) {
+  // A trailing empty value (e.g. an empty-string final SELECT result) renders as
+  // a blank line the CLI-seeded golden doesn't capture; drop trailing blanks so
+  // line counts align (a genuine trailing-NULL still matches via the ?? '' below).
+  let end = produced.length
+  while (end > 0 && produced[end - 1].replace(/[\r ]+$/, '') === '') end--
+  produced = produced.slice(0, end)
+
   for (let i = 0; i < expected.length; i++) {
     const exp = expected[i]
     if (exp === '~~') continue
