@@ -9,6 +9,7 @@
 //! function's `State`. Other shapes are skipped with a logged note — extending
 //! to them is more `VScalar` impls keyed by `reg::LogicalType`.
 
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use duckdb::core::{DataChunkHandle, LogicalTypeHandle, LogicalTypeId};
@@ -101,6 +102,63 @@ pub fn register_scalars(
     Ok(registered)
 }
 
+/// A component to load at extension-load time: a display name and a path to the
+/// `.wasm` artifact.
+#[derive(Clone, Debug)]
+pub struct ComponentSpec {
+    pub name: String,
+    pub path: PathBuf,
+}
+
+/// Parse the `DUCKLINK_COMPONENTS` environment variable into specs. The value is
+/// a `:`-separated list; each entry is either `name=path` or a bare `path`
+/// (whose file stem becomes the name). Empty / unset yields no specs.
+///
+/// This is how a deployment selects which components `LOAD ducklink` exposes —
+/// catalog registration is a load-time operation, so components are named up
+/// front rather than via an in-query `CALL`.
+pub fn component_specs_from_env() -> Vec<ComponentSpec> {
+    let raw = std::env::var("DUCKLINK_COMPONENTS").unwrap_or_default();
+    raw.split(':')
+        .filter(|entry| !entry.is_empty())
+        .map(|entry| match entry.split_once('=') {
+            Some((name, path)) => ComponentSpec {
+                name: name.to_string(),
+                path: PathBuf::from(path),
+            },
+            None => {
+                let path = PathBuf::from(entry);
+                let name = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("component")
+                    .to_string();
+                ComponentSpec { name, path }
+            }
+        })
+        .collect()
+}
+
+/// Load each component and register its scalar functions on `con`, sharing one
+/// `engine`. Returns the total number of scalar functions registered. The
+/// `engine` `Arc` is cloned into every registered function's state, so the loaded
+/// components stay alive as long as the functions remain in the catalog.
+pub fn register_components(
+    con: &Connection,
+    engine: Arc<Mutex<Engine2>>,
+    specs: &[ComponentSpec],
+) -> anyhow::Result<usize> {
+    let mut total = 0usize;
+    for spec in specs {
+        let scalars = {
+            let mut e = engine.lock().expect("engine mutex poisoned");
+            e.load(&spec.name, &spec.path)?
+        };
+        total += register_scalars(con, engine.clone(), &scalars)?;
+    }
+    Ok(total)
+}
+
 #[cfg(all(test, feature = "bundled"))]
 mod tests {
     use super::*;
@@ -140,5 +198,41 @@ mod tests {
             )
             .expect("query batch");
         assert_eq!(sum, 1 + 2 + 3 + 4 + 5, "sum of (i+1) for i in 0..5");
+    }
+
+    /// `register_components` — the path the loadable entry point takes — loads a
+    /// component by spec and registers its scalars.
+    #[test]
+    fn register_components_exposes_scalar() {
+        let engine = Arc::new(Mutex::new(Engine2::new().expect("engine")));
+        let specs = vec![ComponentSpec {
+            name: "sample_extension".to_string(),
+            path: sample_component(),
+        }];
+        let con = Connection::open_in_memory().expect("open duckdb");
+        let n = register_components(&con, engine, &specs).expect("register components");
+        assert!(n >= 1, "expected >=1 scalar registered, got {n}");
+
+        let v: i64 = con
+            .query_row("SELECT sample_plus_one(7)", [], |r| r.get(0))
+            .expect("query");
+        assert_eq!(v, 8);
+    }
+
+    #[test]
+    fn env_specs_parse_name_and_bare_path() {
+        // Safety: single-threaded within this test; no other test reads the var.
+        unsafe {
+            std::env::set_var("DUCKLINK_COMPONENTS", "sample=/a/b.wasm:/c/isin.wasm");
+        }
+        let specs = component_specs_from_env();
+        unsafe {
+            std::env::remove_var("DUCKLINK_COMPONENTS");
+        }
+        assert_eq!(specs.len(), 2);
+        assert_eq!(specs[0].name, "sample");
+        assert_eq!(specs[0].path, PathBuf::from("/a/b.wasm"));
+        assert_eq!(specs[1].name, "isin", "bare path -> file stem as name");
+        assert_eq!(specs[1].path, PathBuf::from("/c/isin.wasm"));
     }
 }

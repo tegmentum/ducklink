@@ -25,22 +25,42 @@ pub mod reg_duckdb;
 #[cfg(feature = "loadable")]
 mod loadable {
     use std::error::Error;
+    use std::sync::{Arc, Mutex};
 
     use duckdb::Connection;
     use duckdb_loadable_macros::duckdb_entrypoint_c_api;
 
-    /// Loadable-extension entry point. DuckDB calls this when `LOAD ducklink`
-    /// runs. Registers the `ducklink_load` control function.
-    #[duckdb_entrypoint_c_api]
-    pub unsafe fn ducklink_init(con: Connection) -> Result<(), Box<dyn Error>> {
-        // TODO (native build): register a `ducklink_load(path VARCHAR)` function.
-        // On call it uses a process-wide `engine::Engine2` to load the component
-        // and, for each returned `engine::ScalarFunc`, registers a DuckDB scalar
-        // function via the C API (`duckdb_create_scalar_function` +
-        // `set_extra_info` carrying the `callback_handle`); that callback unpacks
-        // the input vector to `reg::DuckValue`s, calls `Engine2::dispatch_scalar`,
-        // and writes the result back into the output vector.
-        let _ = con;
+    use crate::engine::Engine2;
+    use crate::reg_duckdb::{component_specs_from_env, register_components};
+
+    /// Loadable-extension entry point. DuckDB calls this `ducklink_init_c_api`
+    /// when `LOAD ducklink` runs.
+    ///
+    /// Loads every component named in the `DUCKLINK_COMPONENTS` environment
+    /// variable (a `:`-separated list of `name=path` or `path`) and registers
+    /// their scalar functions into the catalog, so they are usable from SQL:
+    ///
+    /// ```sh
+    /// DUCKLINK_COMPONENTS=sample=/path/sample_extension.wasm \
+    ///   duckdb -unsigned -c "LOAD 'ducklink.duckdb_extension'; SELECT sample_plus_one(41);"
+    /// ```
+    ///
+    /// The shared `Engine2` is kept alive by the `Arc` cloned into each
+    /// registered function's state.
+    #[duckdb_entrypoint_c_api(ext_name = "ducklink", min_duckdb_version = "v1.0.0")]
+    pub fn ducklink_init(con: Connection) -> Result<(), Box<dyn Error>> {
+        let engine = Arc::new(Mutex::new(Engine2::new().map_err(stringify)?));
+        let specs = component_specs_from_env();
+        let registered =
+            register_components(&con, engine, &specs).map_err(stringify)?;
+        eprintln!(
+            "[ducklink] loaded {} component(s); registered {registered} scalar function(s)",
+            specs.len()
+        );
         Ok(())
+    }
+
+    fn stringify(err: impl std::fmt::Display) -> Box<dyn Error> {
+        err.to_string().into()
     }
 }
