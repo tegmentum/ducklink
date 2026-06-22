@@ -1,7 +1,7 @@
 WASI_TARGET?=wasm32-wasip2
 BROWSER_TARGET?=wasm32-unknown-unknown
 
-.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk sample-extension smoke-extension echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds
+.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk smoke-dotcmd sample-extension smoke-extension echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds
 
 all: core standalone-cli loader-stub dotcmds
 
@@ -53,6 +53,11 @@ smoke-cli: all
 
 smoke-cli-disk: all
 	ON_DISK_SMOKE=1 ./scripts/smoke-cli.sh
+
+# Smoke-test the pluggable dot-command components (artifacts/dotcmds) end-to-end
+# through ducklink. Needs the host + dotcmds built (covered by `all`).
+smoke-dotcmd: host dotcmds
+	python3 tooling/smoke-dotcmd.py
 
 sample-extension: all
 	cargo component build -p sample-extension-component --target $(WASI_TARGET) --release

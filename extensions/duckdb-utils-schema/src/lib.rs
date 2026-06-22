@@ -1,7 +1,7 @@
 //! sqlite-utils "schema" commands ported to the DuckDB dot-command world.
-//! Everything runs on the CLI's live connection via `spi`. Commands that have no
-//! DuckDB equivalent (triggers, post-hoc ADD FOREIGN KEY) are intentionally
-//! omitted; DuckDB has no triggers and ALTER TABLE can't add FK constraints.
+//! Everything runs on the CLI's live connection via `spi`. `add_fk`/`add_fks`
+//! rebuild the table (copy-and-swap) because DuckDB can't ALTER TABLE ADD a
+//! foreign key in place. `.triggers` is omitted: DuckDB has no triggers.
 //!   .views                          list views
 //!   .create_table NAME C:T ...      create a table from a name:type colspec
 //!   .create_index TABLE C [C ...]   create an index
@@ -13,6 +13,9 @@
 //!   .add_column TABLE COL TYPE      add a column
 //!   .transform TABLE --rename a:b --drop c --type c:T   alter columns
 //!   .index_fks [TABLE]             create an index on every foreign-key column
+//!   .add_fk TABLE COL OTHER [OCOL] add a foreign key (rebuilds the table)
+//!   .add_fks TABLE COL:OTHER ...   add several foreign keys in one rebuild
+//!   .extract TABLE COL ...         normalize column(s) into a lookup table
 use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:dotcmd/dotcmd" });
@@ -32,6 +35,74 @@ const FID_DUPLICATE: u64 = 8;
 const FID_ADD_COLUMN: u64 = 9;
 const FID_TRANSFORM: u64 = 10;
 const FID_INDEX_FKS: u64 = 11;
+const FID_ADD_FK: u64 = 12;
+const FID_ADD_FKS: u64 = 13;
+const FID_EXTRACT: u64 = 14;
+
+fn sql_str(s: &str) -> std::string::String {
+    s.replace('\'', "''")
+}
+
+/// One column's rebuild definition: `"name" TYPE [NOT NULL]`.
+fn column_defs(table: &str) -> Result<Vec<std::string::String>, String> {
+    let rows = spi::query(&format!(
+        "SELECT column_name, data_type, is_nullable FROM information_schema.columns \
+         WHERE table_name = '{}' ORDER BY ordinal_position",
+        sql_str(table)
+    ))?;
+    let mut defs = vec![];
+    for line in rows.lines().filter(|l| !l.trim().is_empty()) {
+        let mut p = line.split('\t');
+        let (name, ty, nullable) = (p.next(), p.next(), p.next());
+        if let (Some(name), Some(ty)) = (name, ty) {
+            let notnull = if nullable == Some("NO") { " NOT NULL" } else { "" };
+            defs.push(format!("{} {}{}", quote_ident(name), ty, notnull));
+        }
+    }
+    if defs.is_empty() {
+        return Err(format!("no such table: {table}"));
+    }
+    Ok(defs)
+}
+
+/// A table's primary-key columns (in name order), via duckdb_constraints().
+fn pk_cols(table: &str) -> Result<Vec<std::string::String>, String> {
+    let rows = spi::query(&format!(
+        "SELECT unnest(constraint_column_names) FROM duckdb_constraints() \
+         WHERE table_name = '{}' AND constraint_type = 'PRIMARY KEY'",
+        sql_str(table)
+    ))?;
+    Ok(rows.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).map(|l| l.to_string()).collect())
+}
+
+/// Rebuild `table` with extra constraint clauses appended (DuckDB can't ALTER
+/// TABLE ADD a foreign key in place): create a new table carrying the original
+/// columns + PK + the new clauses, copy rows, drop the old, rename.
+fn rebuild_with_clauses(table: &str, extra: &[std::string::String]) -> Result<(), String> {
+    let mut clauses = column_defs(table)?;
+    let pks = pk_cols(table)?;
+    if !pks.is_empty() {
+        let list = pks.iter().map(|c| quote_ident(c)).collect::<Vec<_>>().join(", ");
+        clauses.push(format!("PRIMARY KEY ({list})"));
+    }
+    clauses.extend_from_slice(extra);
+    let qtable = quote_ident(table);
+    let tmp = quote_ident(&format!("__rebuild_{table}"));
+    spi::query("BEGIN TRANSACTION")?;
+    let body = (|| -> Result<(), String> {
+        spi::query(&format!("CREATE TABLE {tmp} ({})", clauses.join(", ")))?;
+        spi::query(&format!("INSERT INTO {tmp} SELECT * FROM {qtable}"))?;
+        spi::query(&format!("DROP TABLE {qtable}"))?;
+        spi::query(&format!("ALTER TABLE {tmp} RENAME TO {qtable}"))?;
+        Ok(())
+    })();
+    if body.is_err() {
+        let _ = spi::query("ROLLBACK");
+        return body;
+    }
+    spi::query("COMMIT")?;
+    Ok(())
+}
 
 fn quote_ident(name: &str) -> std::string::String {
     format!("\"{}\"", name.replace('"', "\"\""))
@@ -86,6 +157,12 @@ impl Guest for Component {
             c(FID_TRANSFORM, "transform", "Alter columns (rename/drop/retype)",
               "transform TABLE [--rename A:B] [--drop C] [--type C:TYPE]"),
             c(FID_INDEX_FKS, "index_fks", "Index every foreign-key column", "index_fks [TABLE]"),
+            c(FID_ADD_FK, "add_fk", "Add a foreign key (rebuilds the table)",
+              "add_fk TABLE COLUMN OTHER_TABLE [OTHER_COLUMN]"),
+            c(FID_ADD_FKS, "add_fks", "Add several foreign keys in one rebuild",
+              "add_fks TABLE COL:OTHER[:OTHERCOL] ..."),
+            c(FID_EXTRACT, "extract", "Normalize column(s) into a lookup table",
+              "extract TABLE COL [COL ...] [--table LOOKUP] [--fk-column FK]"),
         ]
     }
 
@@ -267,6 +344,115 @@ impl Guest for Component {
                 } else {
                     format!("created {} index(es): {}", made.len(), made.join(", "))
                 }))
+            }
+
+            FID_ADD_FK => {
+                // TABLE COLUMN OTHER_TABLE [OTHER_COLUMN]
+                if t.len() < 3 {
+                    return Err("usage: .add_fk TABLE COLUMN OTHER_TABLE [OTHER_COLUMN]".into());
+                }
+                let (table, col, other) = (t[0], t[1], t[2]);
+                let refcol = match t.get(3) {
+                    Some(c) => c.to_string(),
+                    None => pk_cols(other)?
+                        .into_iter()
+                        .next()
+                        .ok_or_else(|| format!("{other} has no primary key; pass OTHER_COLUMN"))?,
+                };
+                let clause = format!(
+                    "FOREIGN KEY ({}) REFERENCES {} ({})",
+                    quote_ident(col), quote_ident(other), quote_ident(&refcol)
+                );
+                rebuild_with_clauses(table, &[clause])?;
+                Ok(note(format!("added FK {table}.{col} -> {other}.{refcol}")))
+            }
+
+            FID_ADD_FKS => {
+                // TABLE COL:OTHER[:OTHERCOL] ...
+                let table = t.first().ok_or(
+                    "usage: .add_fks TABLE COL:OTHER[:OTHERCOL] ...",
+                )?;
+                if t.len() < 2 {
+                    return Err("add_fks needs at least one COL:OTHER[:OTHERCOL] spec".into());
+                }
+                let mut clauses = vec![];
+                let mut applied = vec![];
+                for spec in &t[1..] {
+                    let parts: Vec<&str> = spec.split(':').collect();
+                    if parts.len() < 2 {
+                        return Err(format!("bad spec '{spec}', expected COL:OTHER[:OTHERCOL]"));
+                    }
+                    let (col, other) = (parts[0], parts[1]);
+                    let refcol = match parts.get(2) {
+                        Some(c) => c.to_string(),
+                        None => pk_cols(other)?.into_iter().next().ok_or_else(|| {
+                            format!("{other} has no primary key; use COL:OTHER:OTHERCOL")
+                        })?,
+                    };
+                    clauses.push(format!(
+                        "FOREIGN KEY ({}) REFERENCES {} ({})",
+                        quote_ident(col), quote_ident(other), quote_ident(&refcol)
+                    ));
+                    applied.push(format!("{col}->{other}.{refcol}"));
+                }
+                rebuild_with_clauses(table, &clauses)?;
+                Ok(note(format!("added {} FK(s) to {table}: {}", applied.len(), applied.join(", "))))
+            }
+
+            FID_EXTRACT => {
+                // TABLE COL [COL ...] [--table LOOKUP] [--fk-column FK]
+                if t.len() < 2 {
+                    return Err(
+                        "usage: .extract TABLE COL [COL ...] [--table LOOKUP] [--fk-column FK]".into(),
+                    );
+                }
+                let table = t[0];
+                let mut cols: Vec<&str> = vec![];
+                let mut lookup: Option<&str> = None;
+                let mut fk_col: Option<&str> = None;
+                let mut i = 1;
+                while i < t.len() {
+                    match t[i] {
+                        "--table" => { lookup = t.get(i + 1).copied(); i += 2; }
+                        "--fk-column" => { fk_col = t.get(i + 1).copied(); i += 2; }
+                        c => { cols.push(c); i += 1; }
+                    }
+                }
+                if cols.is_empty() {
+                    return Err("extract needs at least one COL".into());
+                }
+                let lookup = lookup.map(|s| s.to_string()).unwrap_or_else(|| cols[0].to_string());
+                let fk_col = fk_col.map(|s| s.to_string()).unwrap_or_else(|| format!("{lookup}_id"));
+                let qtable = quote_ident(table);
+                let qlookup = quote_ident(&lookup);
+                let qfk = quote_ident(&fk_col);
+                let col_list = cols.iter().map(|c| quote_ident(c)).collect::<Vec<_>>().join(", ");
+                // 1. lookup table of distinct value combos, with a synthetic id.
+                spi::query(&format!(
+                    "CREATE TABLE {qlookup} AS \
+                     SELECT row_number() OVER () AS id, {col_list} \
+                     FROM (SELECT DISTINCT {col_list} FROM {qtable})"
+                ))?;
+                // 2. fk column, populated by matching the moved values (NULL-safe).
+                spi::query(&format!("ALTER TABLE {qtable} ADD COLUMN {qfk} BIGINT"))?;
+                let join = cols
+                    .iter()
+                    .map(|c| {
+                        let qc = quote_ident(c);
+                        format!("{qtable}.{qc} IS NOT DISTINCT FROM l.{qc}")
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" AND ");
+                spi::query(&format!(
+                    "UPDATE {qtable} SET {qfk} = l.id FROM {qlookup} l WHERE {join}"
+                ))?;
+                // 3. drop the now-normalized source columns.
+                for c in &cols {
+                    spi::query(&format!("ALTER TABLE {qtable} DROP COLUMN {}", quote_ident(c)))?;
+                }
+                Ok(note(format!(
+                    "extracted {} into {lookup} (fk {fk_col})", cols.join(", ")
+                )))
             }
 
             other => Err(format!("duckdb-utils-schema: unknown command id {other}")),

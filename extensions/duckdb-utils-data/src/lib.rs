@@ -6,8 +6,12 @@
 //!   .upsert TABLE FILE --pk COL    upsert a file into a table on the given pk
 //!   .convert TABLE COL EXPR ...    UPDATE TABLE SET COL = EXPR
 //!   .insert_files TABLE FILE ...   store files (path, content, size) in a table
-//! The sqlite-utils `bulk` and `memory` commands are omitted (bulk needs
-//! parameter binding; memory needs stdin, which spi does not provide).
+//!   .memory FILE [NAME]            load a file into a temp table you can query
+//!   .bulk FILE SQL ...             run SQL against the file exposed as `data`
+//! DuckDB adaptation: sqlite-utils `memory` reads stdin and `bulk` binds named
+//! params per row; spi exposes neither, so both take a FILE — `memory`
+//! materializes it as a temp table, and `bulk` exposes it as a relation named
+//! `data` that the provided (set-based) SQL references.
 use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:dotcmd/dotcmd" });
@@ -22,6 +26,23 @@ const FID_INSERT: u64 = 3;
 const FID_UPSERT: u64 = 4;
 const FID_CONVERT: u64 = 5;
 const FID_INSERT_FILES: u64 = 6;
+const FID_MEMORY: u64 = 7;
+const FID_BULK: u64 = 8;
+
+/// Derive a SQL identifier from a file path (stem, non-alnum -> '_').
+fn name_from_file(file: &str) -> std::string::String {
+    let stem = file.rsplit('/').next().unwrap_or(file);
+    let stem = stem.split('.').next().unwrap_or(stem);
+    let cleaned: std::string::String = stem
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    if cleaned.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(true) {
+        format!("t_{cleaned}")
+    } else {
+        cleaned
+    }
+}
 
 fn quote_ident(name: &str) -> std::string::String {
     format!("\"{}\"", name.replace('"', "\"\""))
@@ -95,6 +116,10 @@ impl Guest for Component {
             c(FID_CONVERT, "convert", "UPDATE TABLE SET COL = EXPR", "convert TABLE COL EXPR ..."),
             c(FID_INSERT_FILES, "insert_files", "Store files (path, content, size) in a table",
               "insert_files TABLE FILE [FILE ...]"),
+            c(FID_MEMORY, "memory", "Load a file into a queryable temp table",
+              "memory FILE [NAME]"),
+            c(FID_BULK, "bulk", "Run SQL against a file exposed as relation `data`",
+              "bulk FILE SQL ..."),
         ]
     }
 
@@ -261,6 +286,46 @@ impl Guest for Component {
                      SELECT filename, content, size FROM read_blob([{list}])"
                 ))?;
                 Ok(note(format!("inserted {} file(s) into {table}", files.len())))
+            }
+
+            FID_MEMORY => {
+                let file = t.first().ok_or("usage: .memory FILE [NAME]")?;
+                let reader = reader_for(file)?;
+                let name = t.get(1).map(|s| s.to_string()).unwrap_or_else(|| name_from_file(file));
+                run(
+                    &format!(
+                        "CREATE OR REPLACE TEMP TABLE {} AS SELECT * FROM {reader}('{}')",
+                        quote_ident(&name), sql_str(file)
+                    ),
+                    format!("loaded {file} as temp table {name}"),
+                )
+            }
+
+            FID_BULK => {
+                // Expose FILE as a temp relation `data`, run the user's SQL, drop it.
+                if t.len() < 2 {
+                    return Err("usage: .bulk FILE SQL ...".into());
+                }
+                let file = t[0];
+                let reader = reader_for(file)?;
+                let sql = args.trim_start();
+                let sql = sql.strip_prefix(file).unwrap_or(sql).trim();
+                if sql.is_empty() {
+                    return Err("usage: .bulk FILE SQL ...".into());
+                }
+                spi::query(&format!(
+                    "CREATE OR REPLACE TEMP VIEW data AS SELECT * FROM {reader}('{}')",
+                    sql_str(file)
+                ))?;
+                let result = spi::query(sql);
+                // Always drop the helper view, regardless of the statement outcome.
+                let _ = spi::query("DROP VIEW IF EXISTS data");
+                let out = result?;
+                Ok(if out.trim().is_empty() {
+                    note(format!("bulk applied SQL over {file}"))
+                } else {
+                    plain(out)
+                })
             }
 
             other => Err(format!("duckdb-utils-data: unknown command id {other}")),

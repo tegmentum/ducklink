@@ -3884,7 +3884,7 @@
     {
       "name": "duckdb-utils-schema",
       "version": "0.1.0",
-      "description": "sqlite-utils schema commands ported to DuckDB: create/drop/rename/duplicate tables, views, indexes, add/transform columns, and index foreign keys.",
+      "description": "sqlite-utils schema commands ported to DuckDB: create/drop/rename/duplicate tables, views, indexes, add/transform columns, add/index foreign keys (via table rebuild), and extract columns into a lookup table.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -3913,7 +3913,10 @@
         "duplicate",
         "add_column",
         "transform",
-        "index_fks"
+        "index_fks",
+        "add_fk",
+        "add_fks",
+        "extract"
       ],
       "requires": [
         "spi"
@@ -3924,7 +3927,7 @@
     {
       "name": "duckdb-utils-data",
       "version": "0.1.0",
-      "description": "sqlite-utils data commands ported to DuckDB: ingest json/csv/tsv/parquet, upsert, per-column stats, convert columns, and store files as BLOBs.",
+      "description": "sqlite-utils data commands ported to DuckDB: ingest json/csv/tsv/parquet, upsert, per-column stats, convert columns, store files as BLOBs, load a file as a queryable temp table, and run set-based bulk SQL over a file.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -3948,7 +3951,9 @@
         "insert",
         "upsert",
         "convert",
-        "insert_files"
+        "insert_files",
+        "memory",
+        "bulk"
       ],
       "requires": [
         "spi"
