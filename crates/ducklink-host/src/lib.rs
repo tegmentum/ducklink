@@ -62,9 +62,17 @@ use duckdb_core_bindings::exports::duckdb::extension::{
     config as core_config_exports, logging as core_logging_exports, runtime as core_runtime_exports,
 };
 use ducklink_runtime::duckdb_extension_bindings::duckdb::extension::{
-    catalog as extension_catalog, config as extension_config, files as extension_files,
-    logging as extension_logging, runtime as extension_runtime, types as extension_types,
+    runtime as extension_runtime, types as extension_types,
 };
+// The catalog/config/files/logging interfaces + DuckdbExtensionPre are only
+// named by the in-crate test harness now (TestExtensionHost mocks + a direct
+// instantiate); the engine itself moved to ducklink-runtime.
+#[cfg(test)]
+use ducklink_runtime::duckdb_extension_bindings::duckdb::extension::{
+    catalog as extension_catalog, config as extension_config, files as extension_files,
+    logging as extension_logging,
+};
+#[cfg(test)]
 use ducklink_runtime::duckdb_extension_bindings::DuckdbExtensionPre;
 use wasmtime::component::__internal::Vec as BindgenVec;
 use ducklink_runtime::{CallbackEntry, CallbackKind, CallbackRegistry};
@@ -74,7 +82,7 @@ use ducklink_runtime::{CallbackEntry, CallbackKind, CallbackRegistry};
 use ducklink_runtime::{
     describe_runtime_logicaltype, summarize_extopts, summarize_funcopts,
     summarize_registration_names, summarize_runtime_columns, summarize_runtime_funcargs,
-    ConfigError, ExtensionInstance, ExtensionServices, ExtensionStoreState, LogField, LogLevel,
+    ConfigError, ExtensionInstance, ExtensionServices, LogField, LogLevel,
     PendingRegistrationsData,
 };
 use wasmtime::component::{Component, Linker, Resource, ResourceAny, ResourceTable};
@@ -1108,73 +1116,24 @@ impl ExtensionManager {
                 builder.inherit_network().allow_ip_name_lookup(true);
             }
             let wasi = builder.build();
-            let mut store = Store::new(
-                &engine,
-                ExtensionStoreState::new(
-                    wasi,
-                    Box::new(CoreServices { core }),
-                    callback_registry,
-                    extension_name.clone(),
-                ),
-            );
-            let mut linker = Linker::<ExtensionStoreState>::new(&engine);
-            p2::add_to_linker_sync(&mut linker)?;
-            extension_types::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
-                &mut linker,
-                |state| state,
-            )?;
-            extension_runtime::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
-                &mut linker,
-                |state| state,
-            )?;
-            extension_config::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
-                &mut linker,
-                |state| state,
-            )?;
-            extension_logging::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
-                &mut linker,
-                |state| state,
-            )?;
-            extension_catalog::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
-                &mut linker,
-                |state| state,
-            )?;
-            extension_files::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
-                &mut linker,
-                |state| state,
-            )?;
-
             let component = Component::from_file(&engine, &artifact_path).map_err(|err| {
                 wasmtime::Error::msg(format!(
                     "failed to load component for {extension_name} at {}: {err}",
                     artifact_path.display()
                 ))
             })?;
-            let instance_pre = linker.instantiate_pre(&component).map_err(|err| {
-                wasmtime::Error::msg(format!(
-                    "failed to instantiate extension linker for {extension_name}: {err}"
-                ))
-            })?;
-            let pre = DuckdbExtensionPre::new(instance_pre).map_err(|err| {
-                wasmtime::Error::msg(format!(
-                    "failed to prepare extension {extension_name}: {err}"
-                ))
-            })?;
-            let bindings = pre.instantiate(store.as_context_mut()).map_err(|err| {
-                wasmtime::Error::msg(format!(
-                    "failed to instantiate extension store for {extension_name}: {err}"
-                ))
-            })?;
-            let result = bindings
-                .duckdb_extension_guest()
-                .call_load(store.as_context_mut())
-                .map_err(|err| err)?;
-            match result {
-                Ok(_) => Ok(ExtensionInstance::new(store, bindings)),
-                Err(err) => Err(wasmtime::Error::msg(format!(
-                    "extension component returned error for {extension_name}: {err:?}"
-                ))),
-            }
+            // The instantiate -> run load() orchestration is the direction-agnostic
+            // loader, shared from ducklink-runtime. The host supplies the wasi
+            // context (it owns the network-grant policy above) and CoreServices
+            // (config/logging routed to DuckDB-compiled-to-wasm).
+            ducklink_runtime::load_component(
+                &engine,
+                &component,
+                wasi,
+                Box::new(CoreServices { core }),
+                callback_registry,
+                extension_name.clone(),
+            )
         });
 
         let instance = match handle.join() {

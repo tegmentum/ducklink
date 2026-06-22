@@ -21,9 +21,10 @@ use std::collections::HashMap;
 
 pub mod extension;
 pub use extension::{
-    describe_runtime_logicaltype, summarize_funcopts, summarize_extopts, summarize_registration_names,
-    summarize_runtime_columns, summarize_runtime_funcargs, ConfigError, ExtensionInstance,
-    ExtensionServices, ExtensionStoreState, LogField, LogLevel, PendingRegistrationsData,
+    add_extension_interfaces_to_linker, describe_runtime_logicaltype, load_component,
+    summarize_extopts, summarize_funcopts, summarize_registration_names, summarize_runtime_columns,
+    summarize_runtime_funcargs, ConfigError, ExtensionInstance, ExtensionServices,
+    ExtensionStoreState, LogField, LogLevel, PendingRegistrationsData,
 };
 
 /// The generated wasmtime bindings for the `duckdb:extension-host` world — the

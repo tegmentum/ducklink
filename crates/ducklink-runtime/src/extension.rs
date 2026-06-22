@@ -14,15 +14,15 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use wasmtime::component::{Resource, ResourceTable};
-use wasmtime::{AsContextMut, Store};
+use wasmtime::component::{Component, Linker, Resource, ResourceTable};
+use wasmtime::{AsContextMut, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 use crate::duckdb_extension_bindings::duckdb::extension::{
     catalog as extension_catalog, config as extension_config, files as extension_files,
     logging as extension_logging, runtime as extension_runtime, types as extension_types,
 };
-use crate::duckdb_extension_bindings::DuckdbExtension;
+use crate::duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
 use crate::reg;
 use crate::{CallbackKind, CallbackRegistry};
 
@@ -1203,4 +1203,60 @@ impl ExtensionInstance {
         let data: *mut ExtensionStoreState = ctx.data_mut();
         unsafe { (*data).drain_pending() }
     }
+}
+
+/// Add the full `duckdb:extension` capability surface to `linker`: the wasip2
+/// preview interfaces (so the component's WASI imports resolve) plus all six
+/// extension interfaces (types, runtime, config, logging, catalog, files), each
+/// dispatched to the `ExtensionStoreState`. Used by both directions before
+/// instantiating a component.
+pub fn add_extension_interfaces_to_linker(
+    linker: &mut Linker<ExtensionStoreState>,
+) -> wasmtime::Result<()> {
+    wasmtime_wasi::p2::add_to_linker_sync(linker)?;
+    extension_types::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    extension_runtime::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    extension_config::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    extension_logging::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    extension_catalog::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    extension_files::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    Ok(())
+}
+
+/// Load a `duckdb:extension` component and run its `load()`, returning the
+/// instantiated [`ExtensionInstance`] (which then holds the registrations the
+/// component captured into its store-state via the `Host*` impls).
+///
+/// This is the direction-agnostic loader: the caller supplies the `wasi` context
+/// (so it owns the sandbox/network policy) and the [`ExtensionServices`] sink
+/// (so config/logging route to its database). Direction 1 (the wasm-DuckDB host)
+/// and Direction 2 (the native-DuckDB extension) call this identically; only the
+/// `services` they pass differ.
+pub fn load_component(
+    engine: &Engine,
+    component: &Component,
+    wasi: WasiCtx,
+    services: Box<dyn ExtensionServices>,
+    callback_registry: Arc<Mutex<CallbackRegistry>>,
+    extension_name: String,
+) -> wasmtime::Result<ExtensionInstance> {
+    let mut store = Store::new(
+        engine,
+        ExtensionStoreState::new(wasi, services, callback_registry, extension_name.clone()),
+    );
+    let mut linker = Linker::<ExtensionStoreState>::new(engine);
+    add_extension_interfaces_to_linker(&mut linker)?;
+
+    let instance_pre = linker.instantiate_pre(component)?;
+    let pre = DuckdbExtensionPre::new(instance_pre)?;
+    let bindings = pre.instantiate(store.as_context_mut())?;
+    bindings
+        .duckdb_extension_guest()
+        .call_load(store.as_context_mut())?
+        .map_err(|err| {
+            wasmtime::Error::msg(format!(
+                "extension component '{extension_name}' returned error from load(): {err:?}"
+            ))
+        })?;
+    Ok(ExtensionInstance::new(store, bindings))
 }
