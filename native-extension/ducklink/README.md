@@ -7,11 +7,15 @@ platform DuckDB supports — no per-platform native extension builds. `ducklink`
 embeds [wasmtime](https://wasmtime.dev), loads the component, runs its `load()`
 to discover the functions it registers, and bridges them into DuckDB's catalog.
 
-```sql
-LOAD ducklink;
-CALL ducklink_load('isin.wasm');
-SELECT isin_is_valid('US0378331005');
+```sh
+# Name the component(s) to expose, then LOAD ducklink registers their functions.
+DUCKLINK_COMPONENTS=sample=/path/sample_extension.wasm \
+  duckdb -unsigned -c "LOAD 'ducklink.duckdb_extension'; SELECT sample_plus_one(41);"
 ```
+
+Catalog registration happens at extension-load time (DuckDB's model), so the
+components are named up front via `DUCKLINK_COMPONENTS` (a `:`-separated list of
+`name=path` or `path`) rather than an in-query `CALL`.
 
 ## Three deployment scenarios, one component
 
@@ -70,8 +74,16 @@ static-musl / mingw triples.
 
 ## Status
 
-The Direction-2 engine (`src/engine.rs`) is implemented and compiles against the
-shared runtime. Remaining: the `loadable` C-API binding — register
-`ducklink_load(path)` and bridge each `ScalarFunc` to a DuckDB scalar function
-(per-row callback → `Engine2::dispatch_scalar`) — plus a native DuckDB build to
-compile/test it end to end.
+Working and verified end-to-end against a real in-process DuckDB (the `bundled`
+test): `LOAD ducklink` loads each `DUCKLINK_COMPONENTS` entry, registers its
+scalar functions, and `SELECT fn(x)` dispatches every row into the wasm
+component (`SELECT sample_plus_one(41)` → 42, computed in wasm).
+
+Scalar coverage: unary `INT64` / `UINT64` / `DOUBLE` / `BOOLEAN` → any of the
+same (one `WasmScalar<A, R>` const-generic per pair). Text/Blob args, multi-arg
+scalars, and table/aggregate functions are follow-ups; unsupported shapes are
+skipped with a logged note.
+
+Packaging the `loadable` cdylib (which exports `ducklink_init_c_api`) as a
+loadable `.duckdb_extension` — the metadata footer + a DuckDB-version-matched
+build — is handled by the community-extensions CI.
