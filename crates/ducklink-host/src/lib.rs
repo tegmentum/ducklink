@@ -61,11 +61,11 @@ use duckdb_core_bindings::exports::duckdb::component::database as core_db_export
 use duckdb_core_bindings::exports::duckdb::extension::{
     config as core_config_exports, logging as core_logging_exports, runtime as core_runtime_exports,
 };
-use duckdb_extension_bindings::duckdb::extension::{
+use ducklink_runtime::duckdb_extension_bindings::duckdb::extension::{
     catalog as extension_catalog, config as extension_config, files as extension_files,
     logging as extension_logging, runtime as extension_runtime, types as extension_types,
 };
-use duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
+use ducklink_runtime::duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
 use wasmtime::component::__internal::Vec as BindgenVec;
 use ducklink_runtime::{CallbackEntry, CallbackKind, CallbackRegistry};
 use wasmtime::component::{Component, Linker, Resource, ResourceAny, ResourceTable};
@@ -5352,13 +5352,6 @@ mod tests {
             Ok(0)
         }
     }
-}
-pub mod duckdb_extension_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension",
-        require_store_data_send: true,
-    });
 }
 fn resolve_preopens_with_default(preopens: &[(&Path, &str)]) -> Result<Vec<(PathBuf, String)>> {
     let mut merged = Vec::with_capacity(preopens.len() + 1);

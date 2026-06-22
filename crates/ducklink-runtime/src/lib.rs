@@ -7,7 +7,24 @@
 //!
 //! Increment 1: the callback registry — maps a DuckDB-side function invocation
 //! (by opaque handle) back to the owning wasm extension and its dispatcher.
+//!
+//! Increment 2: the `duckdb:extension` wasmtime bindings. The WIT world and its
+//! generated host/guest types live here so both directions instantiate the same
+//! component ABI; the host implements the `Host*` traits against its own store.
 use std::collections::HashMap;
+
+/// The generated wasmtime bindings for the `duckdb:extension-host` world — the
+/// capability surface a wasm extension component imports (register-scalar,
+/// register-table, config, logging, catalog, files) plus the guest's exported
+/// `load()` / `callback-dispatch`. Both the `ducklink` host and the native
+/// `ducklink` DuckDB extension instantiate components against these bindings.
+pub mod duckdb_extension_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension",
+        require_store_data_send: true,
+    });
+}
 
 /// The kind of callback a handle dispatches to inside an extension component.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
