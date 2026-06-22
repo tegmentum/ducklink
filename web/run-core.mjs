@@ -10,7 +10,7 @@
 // from a browser bundle (see README.md); a Node run reaches transpilation and
 // then fails on `import(blob:)`.
 import { createRuntimeBindgen } from '@tegmentum/wasi-polyfill/wasip2/runtime'
-import { createDevPolyfill } from '@tegmentum/wasi-polyfill/wasip2'
+import { Polyfill, AllowAllPolicy } from '@tegmentum/wasi-polyfill/wasip2'
 import * as cli from '@tegmentum/wasi-polyfill/wasip2/plugins/cli'
 import * as io from '@tegmentum/wasi-polyfill/wasip2/plugins/io'
 import * as fs from '@tegmentum/wasi-polyfill/wasip2/plugins/filesystem'
@@ -20,18 +20,33 @@ import * as sockets from '@tegmentum/wasi-polyfill/wasip2/plugins/sockets'
 import { createTvmHost, tvmDebugEnabled } from './tvm-host.mjs'
 
 export function configurePolyfill() {
-  const polyfill = createDevPolyfill()
-  polyfill.registerPlugin(cli.environmentPlugin, {
-    implementation: 'virtual',
-    environment: {},
-    args: ['duckdb-core'],
-  })
+  // Plugin config comes from the policy (registerPlugin's config arg is ignored).
+  // Allow-all (dev) + a writable in-memory filesystem: the preopens plugin
+  // otherwise defaults to "empty" (no preopens), leaving DuckDB with no writable
+  // directory. A "/" preopen plus a pre-created ~/.duckdb (DuckDB's
+  // CreateDirectory is non-recursive) let it create its extension dir on LOAD.
+  class FsPolicy extends AllowAllPolicy {
+    configure(iface) {
+      const cfg = super.configure(iface)
+      if (iface.package === 'wasi:filesystem') {
+        cfg.implementation = 'memory'
+        cfg.options = {
+          ...(cfg.options || {}),
+          preopens: [{ path: '/' }],
+          mkdirs: ['/.duckdb'],
+        }
+      }
+      return cfg
+    }
+  }
+  const polyfill = new Polyfill({ policy: new FsPolicy() })
   for (const p of [
+    cli.environmentPlugin,
     cli.exitPlugin, cli.stdoutPlugin, cli.stderrPlugin, cli.stdinPlugin,
     cli.terminalInputPlugin, cli.terminalOutputPlugin, cli.terminalStdinPlugin,
     cli.terminalStdoutPlugin, cli.terminalStderrPlugin,
     io.streamsPlugin, io.pollPlugin, io.errorPlugin,
-    fs.filesystemPreopensPlugin, fs.filesystemTypesPlugin,
+    fs.filesystemTypesPlugin, fs.filesystemPreopensPlugin,
     clocks.monotonicClockPlugin, clocks.wallClockPlugin,
     random.randomPlugin, random.insecureRandomPlugin, random.insecureSeedPlugin,
     // The core links socket-using extensions (httpfs/postgres/mysql), so it
