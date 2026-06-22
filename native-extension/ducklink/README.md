@@ -79,10 +79,16 @@ test): `LOAD ducklink` loads each `DUCKLINK_COMPONENTS` entry, registers its
 scalar functions, and `SELECT fn(x)` dispatches every row into the wasm
 component (`SELECT sample_plus_one(41)` → 42, computed in wasm).
 
-Scalar coverage: unary `INT64` / `UINT64` / `DOUBLE` / `BOOLEAN` → any of the
-same (one `WasmScalar<A, R>` const-generic per pair). Text/Blob args, multi-arg
-scalars, and table/aggregate functions are follow-ups; unsupported shapes are
-skipped with a logged note.
+Coverage:
+- **Scalar functions** — any arity, all logical types
+  (`INT64`/`UINT64`/`DOUBLE`/`BOOLEAN`/`VARCHAR`/`BLOB`). One dynamic `WasmScalar`
+  serves every signature (the per-function signature is fed to the static
+  `VScalar::signatures()` via a thread-local set during registration).
+- **Table functions** — verified end to end (`SELECT * FROM sample_emit_sequence(5)`
+  streams rows from the component through a `VTab` bridge).
+- **Aggregate functions** — not bridged: duckdb-rs exposes no safe aggregate API
+  (would require raw C-FFI). Components' aggregate registrations are captured but
+  not registered; this is the one known gap.
 
 Packaging the `loadable` cdylib (which exports `ducklink_init_c_api`) as a
 loadable `.duckdb_extension` — the metadata footer + a DuckDB-version-matched

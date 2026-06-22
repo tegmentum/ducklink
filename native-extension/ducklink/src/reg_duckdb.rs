@@ -11,6 +11,7 @@
 
 use std::cell::RefCell;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use duckdb::core::{DataChunkHandle, FlatVector, Inserter, LogicalTypeHandle, LogicalTypeId};
@@ -18,11 +19,12 @@ use duckdb::ffi::duckdb_string_t;
 use duckdb::types::DuckString;
 use duckdb::vscalar::{ScalarFunctionSignature, VScalar};
 use duckdb::vtab::arrow::WritableVector;
+use duckdb::vtab::{BindInfo, InitInfo, TableFunctionInfo, VTab, Value};
 use duckdb::Connection;
 
 use ducklink_runtime::reg;
 
-use crate::engine::{Engine2, ScalarFunc};
+use crate::engine::{Engine2, ScalarFunc, TableFunc};
 
 /// Per-function state DuckDB hands back to `invoke`: which component callback to
 /// dispatch to, the shared engine, and the function's argument / return type
@@ -206,6 +208,156 @@ pub fn register_scalars(
     Ok(registered)
 }
 
+// ---------------------------------------------------------------------------
+// Table functions
+// ---------------------------------------------------------------------------
+
+/// Convert a DuckDB call-parameter value (from `BindInfo::get_parameter`) into a
+/// neutral value, extracting it as the function's declared argument type `code`.
+fn param_to_neutral(code: u8, v: &Value) -> reg::DuckValue {
+    if v.is_null() {
+        return reg::DuckValue::Null;
+    }
+    match code {
+        T_I64 => reg::DuckValue::Int64(v.to_int64()),
+        T_U64 => reg::DuckValue::Uint64(v.to_uint64()),
+        T_F64 => reg::DuckValue::Float64(v.to_double()),
+        T_BOOL => reg::DuckValue::Boolean(v.to_bool()),
+        T_TEXT => reg::DuckValue::Text(v.to_string()),
+        // No raw blob getter on the param value; fall back to its text form.
+        T_BLOB => reg::DuckValue::Blob(v.to_string().into_bytes()),
+        _ => reg::DuckValue::Null,
+    }
+}
+
+/// Per-function table data, passed to the static `VTab` callbacks via DuckDB's
+/// extra-info slot.
+#[derive(Clone)]
+struct WasmTableExtra {
+    callback_handle: u32,
+    engine: Arc<Mutex<Engine2>>,
+    arg_codes: Vec<u8>,
+    col_codes: Vec<u8>,
+    col_names: Vec<String>,
+}
+
+/// Bind result: the full set of rows the component produced for this call, plus
+/// the column type codes used to write them out.
+struct WasmTableBind {
+    rows: Vec<Vec<reg::DuckValue>>,
+    col_codes: Vec<u8>,
+}
+
+/// Init state: a cursor over `WasmTableBind::rows` across `func` chunks.
+struct WasmTableInit {
+    cursor: AtomicUsize,
+}
+
+// The parameter types for the next table-function registration — handed to the
+// static `VTab::parameters()` the same way `PENDING_SIGNATURE` feeds scalars.
+thread_local! {
+    static PENDING_TABLE_PARAMS: RefCell<Option<Vec<u8>>> = const { RefCell::new(None) };
+}
+
+/// One `VTab` impl serving every component table function. `bind` runs the
+/// component once with the call parameters and buffers all rows; `func` streams
+/// them back in DuckDB vector-sized chunks.
+struct WasmTable;
+
+impl VTab for WasmTable {
+    type InitData = WasmTableInit;
+    type BindData = WasmTableBind;
+
+    fn bind(bind: &BindInfo) -> Result<Self::BindData, Box<dyn std::error::Error>> {
+        let extra = unsafe { &*bind.get_extra_info::<WasmTableExtra>() };
+        for (name, &code) in extra.col_names.iter().zip(&extra.col_codes) {
+            bind.add_result_column(name, logical_type(code));
+        }
+        let args: Vec<reg::DuckValue> = extra
+            .arg_codes
+            .iter()
+            .enumerate()
+            .map(|(j, &code)| param_to_neutral(code, &bind.get_parameter(j as u64)))
+            .collect();
+        let rows = {
+            let mut engine = extra.engine.lock().expect("engine mutex poisoned");
+            engine
+                .dispatch_table(extra.callback_handle, args)
+                .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?
+        };
+        Ok(WasmTableBind {
+            rows,
+            col_codes: extra.col_codes.clone(),
+        })
+    }
+
+    fn init(_: &InitInfo) -> Result<Self::InitData, Box<dyn std::error::Error>> {
+        Ok(WasmTableInit {
+            cursor: AtomicUsize::new(0),
+        })
+    }
+
+    fn func(
+        func: &TableFunctionInfo<Self>,
+        output: &mut DataChunkHandle,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let bind = func.get_bind_data();
+        let init = func.get_init_data();
+        let start = init.cursor.load(Ordering::Relaxed);
+        let n = bind.rows.len().saturating_sub(start).min(2048);
+        if n == 0 {
+            output.set_len(0);
+            return Ok(());
+        }
+        for (c, &code) in bind.col_codes.iter().enumerate() {
+            let mut col = output.flat_vector(c);
+            for r in 0..n {
+                let val = bind.rows[start + r][c].clone();
+                write_ret(code, &mut col, r, n, val)?;
+            }
+        }
+        init.cursor.store(start + n, Ordering::Relaxed);
+        output.set_len(n);
+        Ok(())
+    }
+
+    fn parameters() -> Option<Vec<LogicalTypeHandle>> {
+        PENDING_TABLE_PARAMS
+            .with(|s| s.borrow().clone())
+            .map(|codes| codes.into_iter().map(logical_type).collect())
+    }
+}
+
+/// Register every component table function on `con`. Returns the count
+/// registered. Parameter and column types use the same `reg` logical-type set as
+/// scalars.
+pub fn register_tables(
+    con: &Connection,
+    engine: Arc<Mutex<Engine2>>,
+    tables: &[TableFunc],
+) -> duckdb::Result<usize> {
+    let mut registered = 0usize;
+    for t in tables {
+        let arg_codes: Vec<u8> = t.arguments.iter().map(|a| type_code(a.logical)).collect();
+        let col_codes: Vec<u8> = t.columns.iter().map(|c| type_code(c.logical)).collect();
+        let col_names: Vec<String> = t.columns.iter().map(|c| c.name.clone()).collect();
+        let extra = WasmTableExtra {
+            callback_handle: t.callback_handle,
+            engine: engine.clone(),
+            arg_codes: arg_codes.clone(),
+            col_codes,
+            col_names,
+        };
+        PENDING_TABLE_PARAMS.with(|s| *s.borrow_mut() = Some(arg_codes));
+        let result =
+            con.register_table_function_with_extra_info::<WasmTable, WasmTableExtra>(&t.name, &extra);
+        PENDING_TABLE_PARAMS.with(|s| *s.borrow_mut() = None);
+        result?;
+        registered += 1;
+    }
+    Ok(registered)
+}
+
 /// A component to load at extension-load time: a display name and a path to the
 /// `.wasm` artifact.
 #[derive(Clone, Debug)]
@@ -254,11 +406,12 @@ pub fn register_components(
 ) -> anyhow::Result<usize> {
     let mut total = 0usize;
     for spec in specs {
-        let scalars = {
+        let loaded = {
             let mut e = engine.lock().expect("engine mutex poisoned");
             e.load(&spec.name, &spec.path)?
         };
-        total += register_scalars(con, engine.clone(), &scalars)?;
+        total += register_scalars(con, engine.clone(), &loaded.scalars)?;
+        total += register_tables(con, engine.clone(), &loaded.tables)?;
     }
     Ok(total)
 }
@@ -279,13 +432,13 @@ mod tests {
     #[test]
     fn sample_plus_one_dispatches_into_wasm() {
         let mut engine = Engine2::new().expect("engine");
-        let scalars = engine
+        let loaded = engine
             .load("sample_extension", &sample_component())
             .expect("load component");
         let engine = Arc::new(Mutex::new(engine));
 
         let con = Connection::open_in_memory().expect("open duckdb");
-        let n = register_scalars(&con, engine.clone(), &scalars).expect("register");
+        let n = register_scalars(&con, engine.clone(), &loaded.scalars).expect("register");
         assert!(n >= 1, "expected at least one BIGINT->BIGINT scalar, got {n}");
 
         let v: i64 = con
@@ -321,6 +474,36 @@ mod tests {
             .query_row("SELECT sample_plus_one(7)", [], |r| r.get(0))
             .expect("query");
         assert_eq!(v, 8);
+    }
+
+    /// End-to-end table function: `sample_emit_sequence(limit)` emits rows
+    /// `0..limit` from inside the wasm component, streamed back through the VTab
+    /// bridge.
+    #[test]
+    fn sample_emit_sequence_streams_from_wasm() {
+        let engine = Arc::new(Mutex::new(Engine2::new().expect("engine")));
+        let specs = vec![ComponentSpec {
+            name: "sample_extension".to_string(),
+            path: sample_component(),
+        }];
+        let con = Connection::open_in_memory().expect("open duckdb");
+        register_components(&con, engine, &specs).expect("register components");
+
+        let count: i64 = con
+            .query_row("SELECT count(*) FROM sample_emit_sequence(5)", [], |r| {
+                r.get(0)
+            })
+            .expect("count query");
+        assert_eq!(count, 5, "sample_emit_sequence(5) emits 5 rows");
+
+        let sum: i64 = con
+            .query_row(
+                "SELECT sum(value) FROM sample_emit_sequence(5)",
+                [],
+                |r| r.get(0),
+            )
+            .expect("sum query");
+        assert_eq!(sum, 0 + 1 + 2 + 3 + 4, "sum of values 0..5");
     }
 
     #[test]

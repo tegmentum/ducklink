@@ -96,6 +96,25 @@ pub struct ScalarFunc {
     pub callback_handle: u32,
 }
 
+/// A table function a loaded component registered. `arguments` are the call
+/// parameters; `columns` are the result schema; `callback_handle` dispatches.
+#[derive(Clone, Debug)]
+pub struct TableFunc {
+    pub extension: String,
+    pub name: String,
+    pub arguments: Vec<reg::FuncArg>,
+    pub columns: Vec<reg::ColumnDef>,
+    pub callback_handle: u32,
+}
+
+/// What a component registered: the functions a direction-specific sink bridges
+/// into the database.
+#[derive(Clone, Debug, Default)]
+pub struct LoadedComponent {
+    pub scalars: Vec<ScalarFunc>,
+    pub tables: Vec<TableFunc>,
+}
+
 /// Process-wide Direction-2 engine: loads components and dispatches DuckDB
 /// invocations into them. A DuckDB extension holds one of these.
 pub struct Engine2 {
@@ -114,8 +133,8 @@ impl Engine2 {
     }
 
     /// Load a `duckdb:extension` component, run its `load()`, and return the
-    /// scalar functions it registered. The instance is retained for dispatch.
-    pub fn load(&mut self, extension: &str, path: &Path) -> Result<Vec<ScalarFunc>> {
+    /// functions it registered. The instance is retained for dispatch.
+    pub fn load(&mut self, extension: &str, path: &Path) -> Result<LoadedComponent> {
         let component = Component::from_file(&self.engine, path)
             .with_context(|| format!("loading component at {}", path.display()))?;
         let wasi: WasiCtx = WasiCtxBuilder::new().inherit_env().inherit_stdio().build();
@@ -139,8 +158,19 @@ impl Engine2 {
                 callback_handle: s.callback_handle,
             })
             .collect();
+        let tables = pending
+            .tables
+            .into_iter()
+            .map(|t| TableFunc {
+                extension: t.extension,
+                name: t.name,
+                arguments: t.arguments,
+                columns: t.columns,
+                callback_handle: t.callback_handle,
+            })
+            .collect();
         self.instances.insert(extension.to_string(), instance);
-        Ok(scalars)
+        Ok(LoadedComponent { scalars, tables })
     }
 
     /// Invoke a component scalar for one row. `callback_handle` is the value
@@ -172,6 +202,35 @@ impl Engine2 {
             .dispatch_scalar(entry.dispatcher_handle, &wit_args, ctx)
             .map_err(|e| anyhow!("scalar dispatch failed: {e:?}"))?;
         Ok(wit_to_neutral(result))
+    }
+
+    /// Invoke a component table function with the given call arguments, returning
+    /// all result rows. `callback_handle` resolves through the callback registry
+    /// to the owning component instance.
+    pub fn dispatch_table(
+        &mut self,
+        callback_handle: u32,
+        args: Vec<reg::DuckValue>,
+    ) -> Result<Vec<Vec<reg::DuckValue>>> {
+        let entry = {
+            let registry = self.callbacks.lock().expect("callback registry poisoned");
+            registry
+                .get(callback_handle)
+                .ok_or_else(|| anyhow!("unknown callback handle {callback_handle}"))?
+        };
+        let instance = self
+            .instances
+            .get_mut(&entry.extension)
+            .ok_or_else(|| anyhow!("extension '{}' is not loaded", entry.extension))?;
+        let wit_args: Vec<extension_types::Duckvalue> =
+            args.into_iter().map(neutral_to_wit).collect();
+        let rows = instance
+            .dispatch_table(entry.dispatcher_handle, &wit_args)
+            .map_err(|e| anyhow!("table dispatch failed: {e:?}"))?;
+        Ok(rows
+            .into_iter()
+            .map(|row| row.into_iter().map(wit_to_neutral).collect())
+            .collect())
     }
 }
 
