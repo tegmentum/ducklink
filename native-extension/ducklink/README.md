@@ -13,19 +13,30 @@ CALL ducklink_load('isin.wasm');
 SELECT isin_is_valid('US0378331005');
 ```
 
-## Two directions, one component
+## Three deployment scenarios, one component
 
-The same component artifact runs in both:
+The same `duckdb:extension` component artifact, built once, runs unmodified in
+three deployments:
 
-- **Direction 1** — the standalone `ducklink` host, which runs
-  DuckDB-compiled-to-wasm and loads components alongside it.
-- **Direction 2** — *this* extension, embedding wasmtime inside **native**
-  DuckDB.
+1. **Native DuckDB + the `ducklink` extension** (*this crate*) — native DuckDB
+   loads `ducklink`, which embeds the wasmtime WebAssembly runtime and runs the
+   component inside the native process. Lets a single portable component extend
+   DuckDB on any platform without per-platform native extension builds.
+2. **Standalone WebAssembly DuckDB** — the `ducklink` host runs
+   DuckDB-compiled-to-WebAssembly and loads components alongside it, as a native
+   CLI/server. WebAssembly throughout, no native DuckDB.
+3. **WebAssembly DuckDB in a web browser** — the same WebAssembly DuckDB build,
+   running extension components directly in-browser (the `web/` build). Extensions
+   ship and run client-side with zero install.
 
-Both share the [`ducklink-runtime`](../../crates/ducklink-runtime) engine crate:
-the `duckdb:extension` wasmtime bindings, the neutral `reg::*` registration
-model, and the callback registry. A component therefore loads identically in
-either direction.
+Scenario 1 is "embed WebAssembly into native DuckDB"; scenarios 2 and 3 are
+"run a WebAssembly DuckDB that hosts WebAssembly extensions" — natively and in
+the browser respectively.
+
+All three share the [`ducklink-runtime`](../../crates/ducklink-runtime) engine
+crate: the `duckdb:extension` wasmtime bindings, the neutral `reg::*`
+registration model, and the callback registry. A component therefore loads
+identically in every scenario.
 
 ## Layout
 

@@ -16,6 +16,12 @@
 
 pub mod engine;
 
+/// The Direction-2 DuckDB sink (registration + dispatch). Present whenever the
+/// duckdb crate is available (the `loadable` and `bundled` features both enable
+/// it); the `bundled` end-to-end test lives in this module.
+#[cfg(feature = "duckdb-api")]
+pub mod reg_duckdb;
+
 #[cfg(feature = "loadable")]
 mod loadable {
     use std::error::Error;
