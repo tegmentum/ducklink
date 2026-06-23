@@ -27,11 +27,45 @@ mod loadable {
     use std::error::Error;
     use std::sync::{Arc, Mutex};
 
+    use duckdb::core::{DataChunkHandle, Inserter, LogicalTypeId};
+    use duckdb::vscalar::{ScalarFunctionSignature, VScalar};
+    use duckdb::vtab::arrow::WritableVector;
     use duckdb::Connection;
     use duckdb_loadable_macros::duckdb_entrypoint_c_api;
 
     use crate::engine::Engine2;
     use crate::reg_duckdb::{component_specs_from_env, register_components};
+
+    /// `ducklink_version()` -> the extension's version string. Registered
+    /// unconditionally (needs no WebAssembly component), so
+    /// `LOAD ducklink; SELECT ducklink_version();` is a self-contained smoke
+    /// test that the extension built and loaded.
+    struct DucklinkVersion;
+
+    impl VScalar for DucklinkVersion {
+        type State = ();
+
+        fn invoke(
+            _: &Self::State,
+            input: &mut DataChunkHandle,
+            output: &mut dyn WritableVector,
+        ) -> Result<(), Box<dyn Error>> {
+            let len = input.len();
+            let mut out = output.flat_vector();
+            let version = concat!("ducklink ", env!("CARGO_PKG_VERSION"));
+            for i in 0..len {
+                out.insert(i, version);
+            }
+            Ok(())
+        }
+
+        fn signatures() -> Vec<ScalarFunctionSignature> {
+            vec![ScalarFunctionSignature::exact(
+                vec![],
+                LogicalTypeId::Varchar.into(),
+            )]
+        }
+    }
 
     /// Loadable-extension entry point. DuckDB calls this `ducklink_init_c_api`
     /// when `LOAD ducklink` runs.
@@ -47,8 +81,12 @@ mod loadable {
     ///
     /// The shared `Engine2` is kept alive by the `Arc` cloned into each
     /// registered function's state.
-    #[duckdb_entrypoint_c_api(ext_name = "ducklink", min_duckdb_version = "v1.0.0")]
+    #[duckdb_entrypoint_c_api(ext_name = "ducklink", min_duckdb_version = "v1.5.4")]
     pub fn ducklink_init(con: Connection) -> Result<(), Box<dyn Error>> {
+        // Always-available built-in, so the extension is usable (and testable)
+        // even before any component is configured.
+        con.register_scalar_function::<DucklinkVersion>("ducklink_version")
+            .map_err(stringify)?;
         let engine = Arc::new(Mutex::new(Engine2::new().map_err(stringify)?));
         let specs = component_specs_from_env();
         let registered =
