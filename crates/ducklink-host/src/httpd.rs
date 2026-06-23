@@ -408,7 +408,7 @@ fn run_sql(core: &mut CoreExecution, conn: &ResourceAny, sql: &str) -> HttpRespo
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum RouteKind {
     Sql,
     Static,
@@ -1009,4 +1009,303 @@ fn build_tls(mode: &TlsMode) -> Result<Option<Arc<ServerConfig>>> {
 fn install_crypto_provider() {
     // Idempotent: ignore the error if a provider is already installed.
     let _ = rustls::crypto::ring::default_provider().install_default();
+}
+
+// ---------------------------------------------------------------------------
+// Tests — pure request/route/value helpers (no socket, no DuckDB core).
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dv_text(s: &str) -> core_types::Duckvalue {
+        core_types::Duckvalue::Text(s.to_string())
+    }
+
+    fn req(method: &str, path: &str, query: Option<&str>, body: &[u8]) -> Request {
+        Request {
+            method: method.to_string(),
+            path: path.to_string(),
+            query: query.map(|s| s.to_string()),
+            headers: vec![],
+            body: body.to_vec(),
+        }
+    }
+
+    fn route(kind: RouteKind, status: i64, ctype: Option<&str>) -> RouteMatch {
+        RouteMatch {
+            kind,
+            handler: "h".to_string(),
+            status,
+            ctype: ctype.map(|s| s.to_string()),
+        }
+    }
+
+    // --- reason_phrase ------------------------------------------------------
+
+    #[test]
+    fn reason_phrase_known_and_default() {
+        assert_eq!(reason_phrase(200), "OK");
+        assert_eq!(reason_phrase(201), "Created");
+        assert_eq!(reason_phrase(404), "Not Found");
+        assert_eq!(reason_phrase(422), "Unprocessable Entity");
+        assert_eq!(reason_phrase(500), "Internal Server Error");
+        assert_eq!(reason_phrase(599), "OK", "unknown status falls back to OK");
+    }
+
+    // --- percent_decode / parse_q ------------------------------------------
+
+    #[test]
+    fn percent_decode_handles_escapes_plus_and_invalid() {
+        assert_eq!(percent_decode("plain"), "plain");
+        assert_eq!(percent_decode("a%20b"), "a b");
+        assert_eq!(percent_decode("%41%42"), "AB");
+        assert_eq!(percent_decode("a+b"), "a b");
+        assert_eq!(percent_decode("100%25"), "100%");
+        // Invalid hex digits are passed through verbatim (the '%' stays).
+        assert_eq!(percent_decode("%zz"), "%zz");
+        // A truncated escape at end of input keeps the literal bytes.
+        assert_eq!(percent_decode("ab%2"), "ab%2");
+    }
+
+    #[test]
+    fn parse_q_finds_decoded_param() {
+        assert_eq!(
+            parse_q("q=SELECT+1"),
+            Some("SELECT 1".to_string())
+        );
+        assert_eq!(
+            parse_q("a=1&q=x%20y&b=2"),
+            Some("x y".to_string()),
+            "q anywhere in the query string"
+        );
+        assert_eq!(parse_q("a=1&b=2"), None, "no q → None");
+        assert_eq!(parse_q("query=1"), None, "only an exact 'q' key matches");
+    }
+
+    // --- is_safe_ident ------------------------------------------------------
+
+    #[test]
+    fn is_safe_ident_rejects_unsafe() {
+        assert!(is_safe_ident("routes"));
+        assert!(is_safe_ident("my_table_1"));
+        assert!(!is_safe_ident(""), "empty is not a safe identifier");
+        assert!(!is_safe_ident("a-b"));
+        assert!(!is_safe_ident("a b"));
+        assert!(!is_safe_ident("t;DROP"));
+        assert!(!is_safe_ident("'x'"));
+    }
+
+    // --- clamp_status / RouteKind::parse -----------------------------------
+
+    #[test]
+    fn clamp_status_bounds_to_http_range() {
+        assert_eq!(clamp_status(200), 200);
+        assert_eq!(clamp_status(100), 100);
+        assert_eq!(clamp_status(599), 599);
+        assert_eq!(clamp_status(99), 200, "below range → 200");
+        assert_eq!(clamp_status(600), 200, "above range → 200");
+        assert_eq!(clamp_status(-5), 200);
+        assert_eq!(clamp_status(1_000_000), 200);
+    }
+
+    #[test]
+    fn route_kind_parse_is_case_insensitive_with_sql_default() {
+        assert_eq!(RouteKind::parse("static"), RouteKind::Static);
+        assert_eq!(RouteKind::parse("WASM"), RouteKind::Wasm);
+        assert_eq!(RouteKind::parse("Blob"), RouteKind::Blob);
+        assert_eq!(RouteKind::parse("sql"), RouteKind::Sql);
+        assert_eq!(RouteKind::parse("nonsense"), RouteKind::Sql, "unknown → sql");
+    }
+
+    // --- Duckvalue accessors / coercions -----------------------------------
+
+    #[test]
+    fn opt_text_maps_some_and_none() {
+        assert!(matches!(opt_text(Some("x".to_string())), core_types::Duckvalue::Text(s) if s == "x"));
+        assert!(matches!(opt_text(None), core_types::Duckvalue::Null));
+    }
+
+    #[test]
+    fn dv_as_str_and_i64_accessors() {
+        assert_eq!(dv_as_str(&dv_text("hi")), Some("hi"));
+        assert_eq!(dv_as_str(&core_types::Duckvalue::Int64(1)), None);
+        assert_eq!(dv_as_i64(&core_types::Duckvalue::Int64(7)), Some(7));
+        assert_eq!(dv_as_i64(&core_types::Duckvalue::Uint64(7)), Some(7));
+        assert_eq!(dv_as_i64(&dv_text("7")), None, "text is not coerced to i64");
+    }
+
+    #[test]
+    fn dv_to_body_bytes_per_variant() {
+        assert_eq!(dv_to_body_bytes(core_types::Duckvalue::Null), Vec::<u8>::new());
+        assert_eq!(dv_to_body_bytes(core_types::Duckvalue::Boolean(true)), b"true");
+        assert_eq!(dv_to_body_bytes(core_types::Duckvalue::Boolean(false)), b"false");
+        assert_eq!(dv_to_body_bytes(core_types::Duckvalue::Int64(-3)), b"-3");
+        assert_eq!(dv_to_body_bytes(core_types::Duckvalue::Uint64(9)), b"9");
+        assert_eq!(dv_to_body_bytes(dv_text("body")), b"body");
+        assert_eq!(
+            dv_to_body_bytes(core_types::Duckvalue::Blob(vec![1, 2, 3])),
+            vec![1u8, 2, 3]
+        );
+    }
+
+    // --- JSON rendering -----------------------------------------------------
+
+    #[test]
+    fn row_to_json_object_pads_missing_with_null() {
+        let cols = vec!["a".to_string(), "b".to_string()];
+        assert_eq!(
+            row_to_json_object(&cols, &[core_types::Duckvalue::Int64(1), dv_text("x")]),
+            r#"{"a":1,"b":"x"}"#
+        );
+        assert_eq!(
+            row_to_json_object(&cols, &[core_types::Duckvalue::Int64(1)]),
+            r#"{"a":1,"b":null}"#,
+            "a column with no value renders null"
+        );
+    }
+
+    #[test]
+    fn rows_to_result_json_shape() {
+        let rows = Rows {
+            cols: vec!["n".to_string()],
+            rows: vec![
+                vec![core_types::Duckvalue::Int64(1)],
+                vec![core_types::Duckvalue::Int64(2)],
+            ],
+        };
+        assert_eq!(
+            rows_to_result_json(&rows),
+            r#"{"columns":["n"],"rows":[[1],[2]],"rowcount":2}"#
+        );
+        let empty = Rows {
+            cols: vec!["n".to_string()],
+            rows: vec![],
+        };
+        assert_eq!(
+            rows_to_result_json(&empty),
+            r#"{"columns":["n"],"rows":[],"rowcount":0}"#
+        );
+    }
+
+    // --- parse_structured_response -----------------------------------------
+
+    #[test]
+    fn structured_response_full_object() {
+        let (status, ctype, body) =
+            parse_structured_response(r#"{"status":201,"ctype":"text/plain","body":"hello"}"#)
+                .expect("structured object recognized");
+        assert_eq!(status, Some(201));
+        assert_eq!(ctype.as_deref(), Some("text/plain"));
+        assert_eq!(body, b"hello");
+    }
+
+    #[test]
+    fn structured_response_partial_and_clamped_status() {
+        let (status, ctype, body) =
+            parse_structured_response(r#"{"status":99}"#).expect("status key recognized");
+        assert_eq!(status, Some(200), "out-of-range status is clamped");
+        assert!(ctype.is_none());
+        assert!(body.is_empty(), "no body key → empty body");
+    }
+
+    #[test]
+    fn structured_response_body_serialization() {
+        // A string body is emitted verbatim.
+        let (_, _, body) = parse_structured_response(r#"{"body":"x"}"#).unwrap();
+        assert_eq!(body, b"x");
+        // A non-string body is re-serialized as JSON.
+        let (_, _, body) = parse_structured_response(r#"{"body":{"k":1}}"#).unwrap();
+        assert_eq!(body, br#"{"k":1}"#);
+        // A null body is empty.
+        let (_, _, body) = parse_structured_response(r#"{"body":null}"#).unwrap();
+        assert!(body.is_empty());
+    }
+
+    #[test]
+    fn structured_response_rejects_non_structured() {
+        assert!(parse_structured_response(r#"{"other":1}"#).is_none(), "no status/body/ctype keys");
+        assert!(parse_structured_response(r#""plain string""#).is_none(), "JSON string, not object");
+        assert!(parse_structured_response("not json").is_none());
+        assert!(parse_structured_response("[1,2]").is_none(), "array, not object");
+    }
+
+    #[test]
+    fn parse_handler_response_structured_vs_raw() {
+        // Structured object: status/ctype from the body override the route.
+        let m = route(RouteKind::Wasm, 200, Some("application/json"));
+        let resp = parse_handler_response(&m, r#"{"status":418,"body":"teapot"}"#.to_string());
+        assert_eq!(resp.status, 418);
+        assert_eq!(resp.body, b"teapot");
+
+        // Raw (non-JSON) body: whole string is the body, route status/ctype apply.
+        let m = route(RouteKind::Sql, 201, Some("text/html"));
+        let resp = parse_handler_response(&m, "<h1>hi</h1>".to_string());
+        assert_eq!(resp.status, 201);
+        assert_eq!(resp.ctype, "text/html");
+        assert_eq!(resp.body, b"<h1>hi</h1>");
+    }
+
+    // --- build_request_json -------------------------------------------------
+
+    #[test]
+    fn build_request_json_text_body() {
+        let mut r = req("GET", "/x", Some("a=1"), b"hi");
+        r.headers = vec![("h".to_string(), "v".to_string())];
+        assert_eq!(
+            build_request_json(&r, "1.2.3.4"),
+            r#"{"method":"GET","path":"/x","query":"a=1","remote":"1.2.3.4","headers":{"h":"v"},"body":{"text":"hi"}}"#
+        );
+    }
+
+    #[test]
+    fn build_request_json_null_query_and_binary_body() {
+        let r = req("POST", "/up", None, &[0xff, 0xfe]);
+        assert_eq!(
+            build_request_json(&r, "::1"),
+            r#"{"method":"POST","path":"/up","query":null,"remote":"::1","headers":{},"body":{"bytes_hex":"fffe"}}"#
+        );
+    }
+
+    // --- ordered_handler_params --------------------------------------------
+
+    #[test]
+    fn ordered_params_follow_first_appearance() {
+        let r = req("GET", "/p", Some("z=1"), b"payload");
+        // path appears before method in the SQL → bound in that order.
+        let bound = ordered_handler_params("SELECT $path, $method", &r, "peer");
+        assert_eq!(bound.len(), 2);
+        assert!(matches!(&bound[0], core_types::Duckvalue::Text(s) if s == "/p"));
+        assert!(matches!(&bound[1], core_types::Duckvalue::Text(s) if s == "GET"));
+    }
+
+    #[test]
+    fn ordered_params_dedup_and_unknown_and_null() {
+        let r = req("GET", "/p", None, b"");
+        // $body twice → bound once; $bogus ignored; $query is NULL (no query).
+        let bound = ordered_handler_params("SELECT $query, $body, $body, $bogus", &r, "peer");
+        assert_eq!(bound.len(), 2, "query + first body only");
+        assert!(matches!(&bound[0], core_types::Duckvalue::Null), "absent query → NULL");
+        assert!(matches!(&bound[1], core_types::Duckvalue::Text(s) if s.is_empty()));
+
+        // No params referenced → empty binding.
+        assert!(ordered_handler_params("SELECT 1", &r, "peer").is_empty());
+    }
+
+    // --- HttpResponse constructors -----------------------------------------
+
+    #[test]
+    fn http_response_constructors() {
+        let t = HttpResponse::text(200, "ok");
+        assert_eq!((t.status, t.ctype.as_str(), t.body), (200, "text/plain; charset=utf-8", b"ok".to_vec()));
+
+        let j = HttpResponse::json(201, r#"{"a":1}"#.to_string());
+        assert_eq!(j.ctype, "application/json");
+
+        let e = HttpResponse::error(404, "no such route");
+        assert_eq!(e.status, 404);
+        assert_eq!(e.ctype, "application/json");
+        assert_eq!(e.body, br#"{"error":"no such route"}"#);
+    }
 }

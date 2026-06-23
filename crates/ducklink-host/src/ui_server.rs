@@ -457,3 +457,81 @@ fn write_response_with_headers(
 }
 
 const CONSOLE_HTML: &str = include_str!("ui_console.html");
+
+// ---------------------------------------------------------------------------
+// Tests — pure JSON rendering of DuckDB values (the wire format the SPA reads).
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn js(s: &str) -> String {
+        let mut out = String::new();
+        json_string(&mut out, s);
+        out
+    }
+
+    fn jv(v: &core_types::Duckvalue) -> String {
+        let mut out = String::new();
+        json_value(&mut out, v);
+        out
+    }
+
+    #[test]
+    fn json_string_escapes_control_and_meta_chars() {
+        assert_eq!(js("plain"), r#""plain""#);
+        assert_eq!(js("a\"b"), r#""a\"b""#);
+        assert_eq!(js("a\\b"), r#""a\\b""#);
+        assert_eq!(js("a\nb\tc\rd"), r#""a\nb\tc\rd""#);
+        // Other control chars below 0x20 use the \uXXXX form.
+        assert_eq!(js("\u{0001}"), r#""\u0001""#);
+        assert_eq!(js("\u{001f}"), r#""\u001f""#);
+        // A printable above the control range is emitted verbatim (incl. unicode).
+        assert_eq!(js("é"), "\"é\"");
+    }
+
+    #[test]
+    fn json_value_per_variant() {
+        assert_eq!(jv(&core_types::Duckvalue::Null), "null");
+        assert_eq!(jv(&core_types::Duckvalue::Boolean(true)), "true");
+        assert_eq!(jv(&core_types::Duckvalue::Boolean(false)), "false");
+        assert_eq!(jv(&core_types::Duckvalue::Int64(-7)), "-7");
+        assert_eq!(jv(&core_types::Duckvalue::Uint64(7)), "7");
+        assert_eq!(jv(&core_types::Duckvalue::Text("x\"y".to_string())), r#""x\"y""#);
+    }
+
+    #[test]
+    fn json_value_float_finite_vs_nonfinite() {
+        assert_eq!(jv(&core_types::Duckvalue::Float64(1.5)), "1.5");
+        // NaN/Infinity aren't valid JSON numbers, so they're emitted as strings.
+        assert_eq!(jv(&core_types::Duckvalue::Float64(f64::NAN)), r#""NaN""#);
+        assert_eq!(jv(&core_types::Duckvalue::Float64(f64::INFINITY)), r#""inf""#);
+    }
+
+    #[test]
+    fn json_value_blob_is_summarized() {
+        assert_eq!(
+            jv(&core_types::Duckvalue::Blob(vec![1, 2, 3])),
+            r#""\\x3 bytes""#
+        );
+    }
+
+    #[test]
+    fn duckerror_message_unwraps_every_variant() {
+        assert_eq!(
+            duckerror_message(&core_types::Duckerror::Invalidargument("bad".into())),
+            "bad"
+        );
+        assert_eq!(
+            duckerror_message(&core_types::Duckerror::Internal("boom".into())),
+            "boom"
+        );
+    }
+
+    #[test]
+    fn json_error_wraps_message() {
+        assert_eq!(json_error("oops"), r#"{"error":"oops"}"#);
+        assert_eq!(json_error("a\"b"), r#"{"error":"a\"b"}"#);
+    }
+}
