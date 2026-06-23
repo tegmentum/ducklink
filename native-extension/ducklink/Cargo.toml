@@ -50,9 +50,9 @@ anyhow = "1"
 # Features come from this crate's feature flags (duckdb-api / loadable / bundled),
 # NOT here — listing loadable-extension here would force the function-pointer
 # C-API binding even for the in-process `bundled` build.
-duckdb = { version = "1.1", optional = true, default-features = false }
-duckdb-loadable-macros = { version = "0.1", optional = true }
-libduckdb-sys = { version = "1.1", features = ["loadable-extension"], optional = true }
+duckdb = { version = "1.10504.0", optional = true, default-features = false }
+duckdb-loadable-macros = { version = "1.10504.0", optional = true }
+libduckdb-sys = { version = "1.10504.0", features = ["loadable-extension"], optional = true }
 
 # Detach from the wasm component workspace one level up.
 [workspace]
