@@ -6,6 +6,7 @@ bold
 "<p>a <strong>b</strong> c</p>
 "
 plain
-Title  some bold text
+"Title
+some bold text"
 null_in
 NULL

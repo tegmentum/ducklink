@@ -182,30 +182,34 @@ fn run_stmt(con: &Connection, sql: &str) -> Result<Vec<String>, String> {
         .collect())
 }
 
-/// Expected lines, dropping `#` comment lines but keeping blanks (a blank line is
-/// a NULL value).
-fn load_expected(path: &Path) -> Vec<String> {
-    fs::read_to_string(path)
-        .unwrap_or_default()
-        .lines()
-        .filter(|l| !l.trim_start().starts_with('#'))
+/// Normalize CLI-shaped output the way smoke.py does (its `splitlines()` + rstrip
+/// + drop-blank-lines): rstrip each line (also strips the trailing `\r` from
+/// CRLF, which HTML/markdown extensions emit) and drop blank lines. DuckDB's CLI
+/// emits blank lines for empty-string values and inside multi-line values; the
+/// corpus drops them (NULL renders as the literal "NULL", not blank).
+fn normalize(lines: Vec<String>) -> Vec<String> {
+    lines
+        .into_iter()
         .map(|l| l.trim_end().to_string())
+        .filter(|l| !l.is_empty())
         .collect()
 }
 
-/// Diff produced vs expected, honoring `~~` (skip) and `?` (any non-empty).
-fn compare(produced: &[String], expected: &[String]) -> Result<(), String> {
-    // A trailing empty value (e.g. an empty-string result from the final SELECT,
-    // like `initials('   ')`) renders as a blank line that the CLI-seeded golden
-    // doesn't capture. Drop trailing blanks from the produced output so the line
-    // counts align; a genuine trailing-NULL in the expected still matches because
-    // a missing produced line defaults to "" below.
-    let mut end = produced.len();
-    while end > 0 && produced[end - 1].trim_end().is_empty() {
-        end -= 1;
-    }
-    let produced = &produced[..end];
+/// Expected lines: drop `#` comment lines, then normalize (rstrip + drop blanks).
+fn load_expected(path: &Path) -> Vec<String> {
+    normalize(
+        fs::read_to_string(path)
+            .unwrap_or_default()
+            .lines()
+            .filter(|l| !l.trim_start().starts_with('#'))
+            .map(|l| l.to_string())
+            .collect(),
+    )
+}
 
+/// Diff produced vs expected, honoring `~~` (skip) and `?` (any non-empty).
+/// Both sides are already `normalize`d (rstripped, blanks dropped).
+fn compare(produced: &[String], expected: &[String]) -> Result<(), String> {
     for (i, exp) in expected.iter().enumerate() {
         if exp == "~~" {
             continue;
@@ -274,7 +278,7 @@ fn run_inner(case: &Case) -> Result<Option<String>, String> {
             produced.extend(lines);
         }
         match &case.expected {
-            Some(exp) => match compare(&produced, &load_expected(exp)) {
+            Some(exp) => match compare(&normalize(produced), &load_expected(exp)) {
                 Ok(()) => Ok(None),
                 Err(diff) => Ok(Some(diff)),
             },
