@@ -1,0 +1,3 @@
+[submodule "native-extension/ducklink"]
+	path = native-extension/ducklink
+	url = https://github.com/tegmentum/ducklink-extension.git

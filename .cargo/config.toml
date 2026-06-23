@@ -1,0 +1,10 @@
+# Local-only override for the native ducklink extension submodule.
+#
+# native-extension/ducklink is a git submodule of the standalone, published
+# ducklink-extension repo, whose Cargo.toml resolves the shared engine
+# `ducklink-runtime` over git (a pinned rev) so the community-extensions CI can
+# build it on its own. Inside this monorepo we want the extension to build
+# against the LOCAL working-tree crate so runtime edits are picked up without a
+# commit + re-pin round trip. This config lives at the monorepo root (outside the
+# submodule), so the standalone repo / CI never sees it and uses the git dep.
+paths = ["crates/ducklink-runtime"]
