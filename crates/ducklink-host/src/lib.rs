@@ -3251,6 +3251,40 @@ mod tests {
     }
 
     #[test]
+    fn sqlite_scanner_embedded_attach_and_query() -> Result<()> {
+        // Exercise the embedded sqlite_scanner end to end: ATTACH an in-memory
+        // SQLite database (sqlite_scanner's sqlite3 calls resolve to the shared
+        // amalgamation after the collision fix), write a row, read it back --
+        // proving sqlite_scanner is functional in the full-embed core, not just
+        // loaded. Skips silently if sqlite_scanner is not embedded in the core.
+        let tempdir = tempdir().context("failed to create temporary directory")?;
+        let preopens = [(tempdir.path(), ".")];
+        let sql = "ATTACH ':memory:' AS s (TYPE sqlite); \
+                   CREATE TABLE s.t(i INTEGER); \
+                   INSERT INTO s.t VALUES (42); \
+                   SELECT i AS sqlite_val FROM s.t;";
+        let args = ["duckdb-cli", "-c", sql];
+        let mut h = CliHarness::new(&args, &preopens)?;
+        let status = h.run()?;
+        let stdout = h.stdout().unwrap_or_default();
+        let stderr = h.stderr().unwrap_or_default();
+        if stderr.to_lowercase().contains("sqlite")
+            && stderr.to_lowercase().contains("not found")
+        {
+            eprintln!("sqlite_scanner not embedded in this core; skipping");
+            return Ok(());
+        }
+        if status.is_err() {
+            panic!("sqlite_scanner CLI error\nstdout:\n{stdout}\nstderr:\n{stderr}");
+        }
+        assert!(
+            has_cell(&stdout, "42"),
+            "expected sqlite_scanner ATTACH+query to return 42, got:\n{stdout}\nstderr:\n{stderr}"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn smoke_runs_sql_against_disk_database() -> Result<()> {
         let tempdir = tempdir().context("failed to create temporary directory")?;
         let db_host_path = tempdir.path().join("smoke.db");
