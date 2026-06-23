@@ -93,8 +93,8 @@ function fmtCell(cell) {
 }
 
 /** Execute one statement -> CSV lines (header of column names, then rows). */
-function runStmt(db, conn, sql) {
-  const result = db.execute(conn, sql)
+async function runStmt(db, conn, sql) {
+  const result = await db.execute(conn, sql) // execute is JSPI-promised (async)
   const header = (result.columns || []).map((c) => csvField(c.name)).join(',')
   const lines = [header]
   for (const row of result.rows || []) {
@@ -106,29 +106,23 @@ function runStmt(db, conn, sql) {
   return lines.flatMap((l) => l.split('\n'))
 }
 
-/** Expected lines: drop `#` comments, keep blanks (blank = NULL). */
-function expectedLines(text) {
-  return text
-    .split('\n')
-    .filter((l) => !l.trimStart().startsWith('#'))
-    .map((l) => l.replace(/[\r ]+$/, ''))
-    // Drop a single trailing empty line from the file's final newline.
-    .reduce((acc, l, i, arr) => {
-      if (i === arr.length - 1 && l === '') return acc
-      acc.push(l)
-      return acc
-    }, [])
+/** Normalize CLI-shaped output the way smoke.py does (splitlines + rstrip +
+ *  drop blanks): rstrip each line (strips the trailing \r from CRLF, which
+ *  HTML/markdown extensions emit) and drop blank lines. DuckDB's CLI emits blanks
+ *  for empty-string values and inside multi-line values; the corpus drops them
+ *  (NULL renders as the literal "NULL", not blank). */
+function normalize(lines) {
+  return lines.map((l) => l.replace(/[\r ]+$/, '')).filter((l) => l !== '')
 }
 
-/** Diff produced vs expected, honoring ~~ (skip) and ? (any non-empty). */
-function compare(produced, expected) {
-  // A trailing empty value (e.g. an empty-string final SELECT result) renders as
-  // a blank line the CLI-seeded golden doesn't capture; drop trailing blanks so
-  // line counts align (a genuine trailing-NULL still matches via the ?? '' below).
-  let end = produced.length
-  while (end > 0 && produced[end - 1].replace(/[\r ]+$/, '') === '') end--
-  produced = produced.slice(0, end)
+/** Expected lines: drop `#` comments, then normalize (rstrip + drop blanks). */
+function expectedLines(text) {
+  return normalize(text.split('\n').filter((l) => !l.trimStart().startsWith('#')))
+}
 
+/** Diff produced vs expected, honoring ~~ (skip) and ? (any non-empty). Both
+ *  sides are already normalized (rstripped, blanks dropped). */
+function compare(produced, expected) {
   for (let i = 0; i < expected.length; i++) {
     const exp = expected[i]
     if (exp === '~~') continue
@@ -154,15 +148,15 @@ async function runExtension(coreBytes, entry) {
   const db = await instantiateCore(coreBytes, host.coreImports())
   const conn = db.open(undefined)
   try {
-    db.execute(conn, `LOAD ${entry.name}`)
+    await db.execute(conn, `LOAD ${entry.name}`)
     const produced = []
     for (const stmt of statements(entry.smokeSql)) {
-      produced.push(...runStmt(db, conn, stmt))
+      produced.push(...(await runStmt(db, conn, stmt)))
     }
     if (entry.smokeExpected == null) {
       return { name: entry.name, status: 'PASS', note: 'ran (no expected)' }
     }
-    const diff = compare(produced, expectedLines(entry.smokeExpected))
+    const diff = compare(normalize(produced), expectedLines(entry.smokeExpected))
     return diff
       ? { name: entry.name, status: 'MISMATCH', note: diff }
       : { name: entry.name, status: 'PASS' }

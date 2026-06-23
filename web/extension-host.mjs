@@ -128,6 +128,39 @@ export function createExtensionHost() {
       const bindgen = createRuntimeBindgen({
         polyfill,
         additionalImports: buildExtensionImports(pending),
+        // JSPI (nested): socket-using extensions (dns, http) block the guest on
+        // async I/O (DoH fetch / ws-gateway WebSocket) via wasi:io/poll while a
+        // scalar callback runs. Promote the blocking poll imports to suspending
+        // and the scalar dispatch exports to promising, so the extension stack
+        // can suspend. The core suspends on its `call-scalar-batch` import (see
+        // run-core.mjs) and the JS bridge (coreImports) awaits these promises,
+        // threading one continuous async chain core -> bridge -> extension.
+        jcoOptions: {
+          asyncMode: 'jspi',
+          asyncImports: [
+            'wasi:io/poll@0.2.6#[method]pollable.block',
+            'wasi:io/poll@0.2.6#poll',
+            // The http extension blocks on raw-TCP I/O directly via the stream's
+            // blocking-* methods (not just poll). With the ws-gateway `tunneled`
+            // tcp impl these are async (await a WebSocket round-trip), so promote
+            // them to suspending too — otherwise the sync import boundary gets a
+            // Promise where it expects a value and the guest traps.
+            // The http extension's client (std TcpStream + read_to_end) drains
+            // with the non-blocking `read` in a busy loop, treating empty as
+            // "retry", never re-arming a poll. Over the ws-gateway tunnel that
+            // spin starves the event loop so the next WebSocket frame / the EOF
+            // never arrives. The tunneled `read` impl suspends when its buffer
+            // is empty-but-not-closed (await more data), so promote `read` too.
+            'wasi:io/streams@0.2.6#[method]input-stream.read',
+            'wasi:io/streams@0.2.6#[method]input-stream.blocking-read',
+            'wasi:io/streams@0.2.6#[method]output-stream.blocking-write-and-flush',
+            'wasi:io/streams@0.2.6#[method]output-stream.blocking-flush',
+          ],
+          asyncExports: [
+            'duckdb:extension/callback-dispatch#call-scalar',
+            'duckdb:extension/callback-dispatch#call-scalar-batch',
+          ],
+        },
       })
       const inst = await bindgen.instantiate(bytes)
       const ext = inst.exports ?? inst
@@ -163,12 +196,25 @@ export function createExtensionHost() {
           callScalar: dispatch('callScalar'),
           // Phase 1a: the core→host crossing is batched (one call per chunk);
           // the extension is still invoked per row. Row i's index is base + i.
-          callScalarBatch: (handle, rows, ctx) => {
+          // The extension's call-scalar export is JSPI-promised (socket-using
+          // scalars suspend on async I/O), so each per-row call returns a
+          // Promise; await them and return the resolved batch. This async bridge
+          // is what suspends the core, which imports call-scalar-batch as a
+          // suspending import (see run-core.mjs). Sequential await preserves
+          // row order and connection-state ordering across the dispatch.
+          callScalarBatch: async (handle, rows, ctx) => {
             const callScalar = dispatch('callScalar')
             const base = ctx.rowindex ?? 0n
-            return rows.map((args, i) =>
-              callScalar(handle, args, { rowindex: base + BigInt(i), iswindow: ctx.iswindow }),
-            )
+            const out = []
+            for (let i = 0; i < rows.length; i++) {
+              out.push(
+                await callScalar(handle, rows[i], {
+                  rowindex: base + BigInt(i),
+                  iswindow: ctx.iswindow,
+                }),
+              )
+            }
+            return out
           },
           callTable: dispatch('callTable'),
           callAggregate: dispatch('callAggregate'),

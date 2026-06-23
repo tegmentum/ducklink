@@ -43,7 +43,7 @@ async function main() {
 
     // Config API: open a connection with options applied.
     const cfgConn = db.openWithConfig(undefined, [['default_order', 'desc']])
-    const cfg = db.execute(cfgConn, "SELECT current_setting('default_order') AS v")
+    const cfg = await db.execute(cfgConn, "SELECT current_setting('default_order') AS v")
     check('open-with-config', cfg.rows, [[{ tag: 'text', val: 'DESC' }]])
     db.close(cfgConn)
 

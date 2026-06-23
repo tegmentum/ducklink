@@ -24,7 +24,7 @@ async function main() {
 
     const db = await instantiateCore(coreBytes, host.coreImports())
     const conn = db.open(undefined)
-    db.execute(conn, 'LOAD sample_extension')
+    await db.execute(conn, 'LOAD sample_extension')
 
     // Exercise every capability the sample extension registers — scalar / table
     // / aggregate / cast dispatch back to the loaded extension instance, while
@@ -41,15 +41,18 @@ async function main() {
     let failed = 0
     // BigInt-safe stringify: typed integer columns come back as JS BigInt.
     const ser = (x) => JSON.stringify(x, (_, v) => (typeof v === 'bigint' ? `${v}n` : v))
-    const lines = cases.map(([label, sql]) => {
+    // execute is JSPI-promised (async); run cases sequentially so the await
+    // chain preserves order and the shared connection's statement ordering.
+    const lines = []
+    for (const [label, sql] of cases) {
       try {
-        const result = db.execute(conn, sql)
-        return label.padEnd(38) + ' = ' + ser(result.rows)
+        const result = await db.execute(conn, sql)
+        lines.push(label.padEnd(38) + ' = ' + ser(result.rows))
       } catch (e) {
         failed++
-        return label.padEnd(38) + ' = ERROR ' + ser((e && e.payload) || String(e))
+        lines.push(label.padEnd(38) + ' = ERROR ' + ser((e && e.payload) || String(e)))
       }
-    })
+    }
     db.close(conn)
 
     out.textContent = lines.join('\n')

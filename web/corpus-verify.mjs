@@ -10,6 +10,7 @@
 //   CORPUS_ONLY=isin,luhn node corpus-verify.mjs
 import { createServer } from 'vite'
 import { chromium } from 'playwright'
+import { createTcpGatewayServer } from '@tegmentum/wasi-polyfill/wasip2/plugins/ws-gateway/server'
 import { readFileSync, writeFileSync, existsSync, readdirSync, copyFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, join } from 'node:path'
@@ -67,6 +68,15 @@ const server = await createServer({
 })
 await server.listen()
 const base = server.resolvedUrls?.local?.[0] ?? 'http://localhost:5189/'
+
+// ws-gateway TCP relay: socket-using extensions (http) tunnel raw TCP through
+// this Node server (browsers can't do raw TCP; the extension's TLS stays
+// end-to-end through the byte relay). DNS uses DoH directly (no server). The
+// page reads __WS_GATEWAY_URL__ (injected per page below).
+const gateway = await createTcpGatewayServer({ port: 0 })
+const gatewayUrl = `ws://localhost:${gateway.port}`
+console.log(`ws-gateway listening at ${gatewayUrl}`)
+
 let browser = await chromium.launch()
 
 // Run one extension. A hung/crashed renderer must not block node, so the whole
@@ -75,6 +85,8 @@ let browser = await chromium.launch()
 async function runOne(entry) {
   const page = await browser.newPage()
   try {
+    // Tell the in-page polyfill where the ws-gateway is (before any page script).
+    await page.addInitScript((url) => { window.__WS_GATEWAY_URL__ = url }, gatewayUrl)
     const work = (async () => {
       await page.goto(new URL(`/index-corpus.html?ext=${encodeURIComponent(entry.name)}`, base).href, { waitUntil: 'load', timeout: PER_EXT })
       await page.waitForFunction(
@@ -116,6 +128,7 @@ for (const entry of todo) {
 }
 process.stdout.write('\n')
 await browser.close().catch(() => {})
+await gateway.close().catch(() => {})
 await server.close()
 
 // --- report -----------------------------------------------------------------

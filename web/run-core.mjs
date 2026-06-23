@@ -20,6 +20,17 @@ import * as sockets from '@tegmentum/wasi-polyfill/wasip2/plugins/sockets'
 import { createTvmHost, tvmDebugEnabled } from './tvm-host.mjs'
 
 export function configurePolyfill() {
+  // The http extension's HTTP client (std TcpStream + read_to_end) drains the
+  // socket with the non-blocking `input-stream.read` in a tight loop, treating
+  // an empty read as "retry" without re-arming a poll. Over the ws-gateway TCP
+  // tunnel that spin starves the browser event loop, so the next WebSocket
+  // frame / the connection-close EOF never arrives and the read loops forever.
+  // Opt into the polyfill's empty-read yield: on an empty read it returns a
+  // Promise that yields a macrotask (letting pending WS frames land) and then
+  // re-reads. Needs the JSPI transpile to mark `input-stream.read` async (see
+  // extension-host.mjs asyncImports); without that the env/flag is a no-op.
+  io.setAsyncReadYield(true)
+
   // Plugin config comes from the policy (registerPlugin's config arg is ignored).
   // Allow-all (dev) + a writable in-memory filesystem: the preopens plugin
   // otherwise defaults to "empty" (no preopens), leaving DuckDB with no writable
@@ -34,6 +45,25 @@ export function configurePolyfill() {
           ...(cfg.options || {}),
           preopens: [{ path: '/' }],
           mkdirs: ['/.duckdb'],
+        }
+      }
+      if (iface.package === 'wasi:sockets') {
+        // Real browser networking for socket-using extensions (dns, http, ...):
+        //  - ip-name-lookup -> DNS-over-HTTPS (server-free; CORS via Cloudflare).
+        //    `localhost` is statically `::1` (the dns smoke expects IPv6 loopback).
+        //  - tcp -> the ws-gateway WebSocket proxy (the http extension does its own
+        //    TLS over raw TCP, so fetch can't substitute; the gateway relays raw
+        //    bytes, TLS stays end-to-end). The driver sets __WS_GATEWAY_URL__.
+        // Non-network extensions never touch these, so this is otherwise inert.
+        const gatewayUrl =
+          (typeof globalThis !== 'undefined' && globalThis.__WS_GATEWAY_URL__) ||
+          'ws://localhost:8080'
+        if (iface.name === 'ip-name-lookup') {
+          cfg.implementation = 'doh'
+          cfg.options = { ...(cfg.options || {}), staticMappings: { localhost: ['::1'] } }
+        } else if (iface.name === 'tcp' || iface.name === 'tcp-create-socket') {
+          cfg.implementation = 'tunneled'
+          cfg.options = { ...(cfg.options || {}), gatewayUrl }
         }
       }
       return cfg
@@ -92,6 +122,26 @@ export async function instantiateCore(componentBytes, additionalImports = duckdb
   const bindgen = createRuntimeBindgen({
     polyfill,
     additionalImports: { ...additionalImports, ...tvm.imports },
+    // JSPI: socket-using extensions (dns, http) block the guest on async I/O
+    // (DoH fetch / ws-gateway WebSocket) via wasi:io/poll. In the default sync
+    // mode the guest can't suspend on the polyfill's async plugins (deadlock), so
+    // promote the blocking poll imports to suspending and the DuckDB query export
+    // (`execute`, which transitively polls) to promising. Requires host JSPI
+    // (Chrome 137+ / the bundled Playwright Chromium has it).
+    jcoOptions: {
+      asyncMode: 'jspi',
+      asyncImports: [
+        'wasi:io/poll@0.2.6#[method]pollable.block',
+        'wasi:io/poll@0.2.6#poll',
+        // The scalar callback runs in the extension component, which does the
+        // async socket I/O. The extension's scalar export is promised (see
+        // extension-host.mjs) and the JS bridge awaits it, so this import
+        // returns a Promise; promote it to suspending so the core's `execute`
+        // stack yields across the whole nested DoH/ws-gateway round-trip.
+        'duckdb:extension/callback-dispatch#call-scalar-batch',
+      ],
+      asyncExports: ['duckdb:component/database#execute'],
+    },
   })
   const instance = await bindgen.instantiate(componentBytes)
   const root = instance.exports ?? instance
@@ -104,7 +154,7 @@ export async function instantiateCore(componentBytes, additionalImports = duckdb
 export async function runQuery(componentBytes, sql = 'SELECT 42 AS answer, 1 + 1 AS two') {
   const db = await instantiateCore(componentBytes)
   const conn = db.open(undefined) // none -> in-memory database
-  const result = db.execute(conn, sql)
+  const result = await db.execute(conn, sql) // execute is JSPI-promised (async)
   db.close(conn)
   return result
 }

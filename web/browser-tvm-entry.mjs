@@ -19,10 +19,10 @@ async function main() {
     // memory_limit from the URL hash (#2GB disables spilling as a control).
     const limit = (location.hash || '#64MB').slice(1)
     // No temp_directory: TVM availability alone must make blocks evictable.
-    db.execute(conn, `SET memory_limit='${limit}'`)
-    db.execute(conn, 'SET threads=1')
+    await db.execute(conn, `SET memory_limit='${limit}'`)
+    await db.execute(conn, 'SET threads=1')
     // 10M int64 sorted ~= 80 MiB > the 64 MiB limit -> forces a spill.
-    const result = db.execute(
+    const result = await db.execute(
       conn,
       'SELECT count(*) AS n, min(i) AS lo, max(i) AS hi ' +
         'FROM (SELECT i FROM range(10000000) t(i) ORDER BY i DESC) sub',
