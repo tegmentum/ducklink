@@ -285,3 +285,13 @@ Beyond `execute` / `open-stream`, the `database` interface exposes:
 
 - Flesh out remaining CLI scripting parity with the native shell
 - Resolve GitHub Actions billing so the smoke-tests workflow can run
+
+## Acknowledgments
+
+This project owes a clear debt to [Simon Willison](https://simonwillison.net/)
+and [`sqlite-utils`](https://sqlite-utils.datasette.io/). The extension catalog,
+the scaffold → smoke → feedback tooling loop, and much of the CLI ergonomics here
+follow the patterns Simon established with `sqlite-utils` and the wider Datasette
+ecosystem for making a database pleasant to extend and script from the command
+line. Many of the component extensions also mirror utilities first popularized in
+that ecosystem. Thank you.
