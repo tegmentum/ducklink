@@ -32,6 +32,18 @@ fn build_engine() -> Result<Engine> {
     let mut config = Config::new();
     config.wasm_component_model(true);
     config.wasm_exceptions(true);
+    // Cache compiled artifacts on disk. Cranelift-compiling a component dominates
+    // load time; with the cache a repeated load of the same component deserializes
+    // in ~ms instead of recompiling. Fall back silently if the cache is
+    // unavailable (e.g. no writable home dir) — it is a pure performance hint.
+    match wasmtime::Cache::from_file(None) {
+        Ok(cache) => {
+            config.cache(Some(cache));
+        }
+        Err(err) => {
+            eprintln!("[ducklink] wasmtime compile cache unavailable: {err}");
+        }
+    }
     Engine::new(&config).context("failed to create wasmtime engine")
 }
 
@@ -238,6 +250,41 @@ impl Engine2 {
             .dispatch_scalar(entry.dispatcher_handle, &wit_args, ctx)
             .map_err(|e| anyhow!("scalar dispatch failed: {e:?}"))?;
         Ok(wit_to_neutral(result))
+    }
+
+    /// Invoke a component scalar over a whole chunk of rows in a single WIT
+    /// crossing. `rows[i]` is the argument tuple for row `base_row_index + i`;
+    /// the returned vector is the per-row result, one entry per input row. This
+    /// collapses the N per-row `dispatch_scalar` boundary crossings of a DuckDB
+    /// data chunk into one, which is the dominant cost when N is large.
+    pub fn dispatch_scalar_batch(
+        &mut self,
+        callback_handle: u32,
+        base_row_index: u64,
+        rows: Vec<Vec<reg::DuckValue>>,
+    ) -> Result<Vec<reg::DuckValue>> {
+        let entry = {
+            let registry = self.callbacks.lock().expect("callback registry poisoned");
+            registry
+                .get(callback_handle)
+                .ok_or_else(|| anyhow!("unknown callback handle {callback_handle}"))?
+        };
+        let instance = self
+            .instances
+            .get_mut(&entry.extension)
+            .ok_or_else(|| anyhow!("extension '{}' is not loaded", entry.extension))?;
+        let wit_rows: Vec<Vec<extension_types::Duckvalue>> = rows
+            .into_iter()
+            .map(|row| row.into_iter().map(neutral_to_wit).collect())
+            .collect();
+        let ctx = extension_runtime::Invokeinfo {
+            rowindex: Some(base_row_index),
+            iswindow: false,
+        };
+        let result = instance
+            .dispatch_scalar_batch(entry.dispatcher_handle, &wit_rows, ctx)
+            .map_err(|e| anyhow!("scalar batch dispatch failed: {e:?}"))?;
+        Ok(result.into_iter().map(wit_to_neutral).collect())
     }
 
     /// Invoke a component table function with the given call arguments, returning

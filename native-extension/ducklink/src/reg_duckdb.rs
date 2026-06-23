@@ -157,17 +157,38 @@ impl VScalar for WasmScalar {
             .collect();
         let mut out = output.flat_vector();
 
+        // Marshal the whole chunk, then cross into the component once. DuckDB
+        // hands us a chunk of up to STANDARD_VECTOR_SIZE rows; dispatching each
+        // row individually pays a WIT boundary crossing per row, which dominates
+        // for cheap scalars. Build every row's argument tuple up front and call
+        // the batched dispatcher a single time.
+        let rows: Vec<Vec<reg::DuckValue>> = (0..len)
+            .map(|i| {
+                state
+                    .arg_codes
+                    .iter()
+                    .enumerate()
+                    .map(|(j, &code)| read_arg(code, &cols[j], i, len))
+                    .collect()
+            })
+            .collect();
+
         let mut engine = state.engine.lock().expect("engine mutex poisoned");
-        for i in 0..len {
-            let args: Vec<reg::DuckValue> = state
-                .arg_codes
-                .iter()
-                .enumerate()
-                .map(|(j, &code)| read_arg(code, &cols[j], i, len))
-                .collect();
-            let result = engine
-                .dispatch_scalar(state.callback_handle, i as u64, args)
-                .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
+        let results = engine
+            .dispatch_scalar_batch(state.callback_handle, 0, rows)
+            .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
+        drop(engine);
+
+        if results.len() != len {
+            return Err(format!(
+                "scalar (callback {}) returned {} results for {} input rows",
+                state.callback_handle,
+                results.len(),
+                len
+            )
+            .into());
+        }
+        for (i, result) in results.into_iter().enumerate() {
             write_ret(state.ret_code, &mut out, i, len, result)?;
         }
         Ok(())
