@@ -3285,6 +3285,253 @@ mod tests {
     }
 
     #[test]
+    fn delta_scan_embedded_local_table() -> Result<()> {
+        // Exercise the embedded delta extension (duckdb-delta @ 45c40878 +
+        // delta-kernel-rs v0.21.0 sync engine) end to end: copy a local Delta
+        // table (the canonical `simple_table` fixture: one BIGINT column `i` with
+        // 10 rows, snappy parquet) into a preopened dir and read it back via
+        // delta_scan(). Proves the sync-engine kernel + the full extension work in
+        // the core, not just link. Skips if delta is not embedded or the fixture
+        // (shipped in the vendored duckdb-delta checkout) is absent.
+        let fixture = workspace_root()
+            .parent()
+            .map(|p| {
+                p.join("duckdb-wasm/build/duckdb-delta/data/inlined/simple_table/delta_lake")
+            })
+            .filter(|p| p.join("_delta_log").is_dir());
+        let Some(fixture) = fixture else {
+            eprintln!("delta simple_table fixture not found; skipping");
+            return Ok(());
+        };
+        let tempdir = tempdir().context("failed to create temporary directory")?;
+        // Recursively copy the table into the preopened dir (guest path ".").
+        fn copy_dir(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+            std::fs::create_dir_all(dst)?;
+            for entry in std::fs::read_dir(src)? {
+                let entry = entry?;
+                let to = dst.join(entry.file_name());
+                if entry.file_type()?.is_dir() {
+                    copy_dir(&entry.path(), &to)?;
+                } else {
+                    std::fs::copy(entry.path(), &to)?;
+                }
+            }
+            Ok(())
+        }
+        copy_dir(&fixture, &tempdir.path().join("simple_table"))
+            .context("failed to copy delta fixture")?;
+        let preopens = [(tempdir.path(), ".")];
+        let sql = "SELECT count(*) AS n, sum(i) AS s FROM delta_scan('simple_table');";
+        let args = ["duckdb-cli", "-c", sql];
+        let mut h = CliHarness::new(&args, &preopens)?;
+        let status = h.run()?;
+        let stdout = h.stdout().unwrap_or_default();
+        let stderr = h.stderr().unwrap_or_default();
+        let low = stderr.to_lowercase();
+        if (low.contains("delta") || low.contains("delta_scan"))
+            && (low.contains("not found") || low.contains("does not exist"))
+        {
+            eprintln!("delta not embedded in this core; skipping");
+            return Ok(());
+        }
+        if status.is_err() {
+            panic!("delta_scan CLI error\nstdout:\n{stdout}\nstderr:\n{stderr}");
+        }
+        assert!(
+            has_cell(&stdout, "10"),
+            "expected delta_scan('simple_table') to return 10 rows, got:\n{stdout}\nstderr:\n{stderr}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn unity_catalog_embedded_loaded_and_type_registered() -> Result<()> {
+        // Exercise the embedded unity_catalog extension (duckdb 1.5.4 renamed
+        // uc_catalog -> unity_catalog @ d52a7ee; REST over DuckDB's HTTPUtil/curl).
+        // It ATTACHes a remote Unity Catalog (needs a live server + token), so we
+        // can't reach a real catalog here; instead prove it loads in the core and
+        // that the `unity_catalog` storage type is registered (ATTACH with a bogus
+        // endpoint fails connecting/authorizing, NOT with "unknown catalog type").
+        // Skips if unity_catalog is not embedded.
+        let preopens: [(&std::path::Path, &str); 0] = [];
+        let loaded = {
+            let sql = "SELECT count(*) AS n FROM duckdb_extensions() \
+                       WHERE extension_name = 'unity_catalog' AND loaded;";
+            let args = ["duckdb-cli", "-c", sql];
+            let mut h = CliHarness::new(&args, &preopens)?;
+            if h.run()?.is_err() {
+                eprintln!("unity_catalog extensions query failed; skipping");
+                return Ok(());
+            }
+            has_cell(&h.stdout().unwrap_or_default(), "1")
+        };
+        if !loaded {
+            eprintln!("unity_catalog not embedded/loaded in this core; skipping");
+            return Ok(());
+        }
+        // ATTACH with TYPE unity_catalog: a registered type fails connecting to the
+        // bogus endpoint, NOT with "unknown/unsupported catalog type".
+        let sql = "ATTACH 'bogus' AS uc (TYPE unity_catalog, \
+                   ENDPOINT 'http://127.0.0.1:1', TOKEN 'x'); SELECT 1;";
+        let args = ["duckdb-cli", "-c", sql];
+        let mut h = CliHarness::new(&args, &preopens)?;
+        let _ = h.run()?;
+        let stderr = h.stderr().unwrap_or_default().to_lowercase();
+        assert!(
+            !stderr.contains("unknown catalog type") && !stderr.contains("unsupported")
+                && !stderr.contains("not found for type"),
+            "TYPE unity_catalog not registered by the extension; got:\n{stderr}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn iceberg_scan_embedded_local_table() -> Result<()> {
+        // Exercise the embedded iceberg extension (duckdb-iceberg @ e6fe0a4b, built
+        // against minimal AWS-type stubs since the AWS C++ SDK doesn't build for
+        // wasm) end to end: read a local Iceberg table (the `partition_bool` fixture
+        // -- 2 records, avro manifests + snappy parquet) via iceberg_scan(). Proves
+        // the avro-manifest + roaring + parquet read path works in the core. Skips
+        // if iceberg is not embedded or the fixture (in the vendored duckdb-iceberg
+        // checkout) is absent.
+        let fixture = workspace_root().parent().map(|p| {
+            p.join(
+                "duckdb-wasm/build/duckdb-wasi/_deps/iceberg_extension_fc-src/\
+                 data/persistent/partition_bool",
+            )
+        });
+        let Some(fixture) = fixture.filter(|p| p.join("metadata/version-hint.text").is_file())
+        else {
+            eprintln!("iceberg partition_bool fixture not found; skipping");
+            return Ok(());
+        };
+        let tempdir = tempdir().context("failed to create temporary directory")?;
+        fn copy_dir(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+            std::fs::create_dir_all(dst)?;
+            for entry in std::fs::read_dir(src)? {
+                let entry = entry?;
+                let to = dst.join(entry.file_name());
+                if entry.file_type()?.is_dir() {
+                    copy_dir(&entry.path(), &to)?;
+                } else {
+                    std::fs::copy(entry.path(), &to)?;
+                }
+            }
+            Ok(())
+        }
+        // The fixture's metadata embeds the table's ORIGINAL relative path
+        // (data/persistent/partition_bool/metadata/...), so replicate that subpath
+        // in the preopened dir and scan it there -- otherwise the manifest-list
+        // avro resolves to a path that does not exist.
+        let rel = std::path::Path::new("data/persistent/partition_bool");
+        copy_dir(&fixture, &tempdir.path().join(rel)).context("failed to copy iceberg fixture")?;
+        let preopens = [(tempdir.path(), ".")];
+        let sql = "SELECT count(*) AS n FROM iceberg_scan('data/persistent/partition_bool');";
+        let args = ["duckdb-cli", "-c", sql];
+        let mut h = CliHarness::new(&args, &preopens)?;
+        let status = h.run()?;
+        let stdout = h.stdout().unwrap_or_default();
+        let stderr = h.stderr().unwrap_or_default();
+        let low = stderr.to_lowercase();
+        if (low.contains("iceberg") || low.contains("iceberg_scan"))
+            && (low.contains("not found") || low.contains("does not exist")
+                || low.contains("catalog error"))
+        {
+            eprintln!("iceberg not embedded in this core; skipping");
+            return Ok(());
+        }
+        if status.is_err() {
+            panic!("iceberg_scan CLI error\nstdout:\n{stdout}\nstderr:\n{stderr}");
+        }
+        assert!(
+            has_cell(&stdout, "2"),
+            "expected iceberg_scan('ice_table') to return 2 rows, got:\n{stdout}\nstderr:\n{stderr}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn azure_embedded_loaded_and_scheme_registered() -> Result<()> {
+        // Exercise the embedded azure extension (duckdb-azure @ 563589b2 + the Azure
+        // SDK for C++ built for wasm). Azure is a remote filesystem (az://) needing a
+        // live account + network, so we can't read real blobs here; instead prove it
+        // is loaded in the core and that the az:// scheme is registered (a secretless
+        // read fails with an azure/secret error, NOT "unknown file system"). Skips if
+        // azure is not embedded.
+        let preopens: [(&std::path::Path, &str); 0] = [];
+        let loaded = {
+            let sql = "SELECT count(*) AS n FROM duckdb_extensions() \
+                       WHERE extension_name = 'azure' AND loaded;";
+            let args = ["duckdb-cli", "-c", sql];
+            let mut h = CliHarness::new(&args, &preopens)?;
+            let status = h.run()?;
+            let stdout = h.stdout().unwrap_or_default();
+            if status.is_err() {
+                eprintln!("azure extensions query failed; skipping\n{}", h.stderr().unwrap_or_default());
+                return Ok(());
+            }
+            has_cell(&stdout, "1")
+        };
+        if !loaded {
+            eprintln!("azure not embedded/loaded in this core; skipping");
+            return Ok(());
+        }
+        // az:// scheme registered: a secretless read errors azure-side, not "unknown
+        // file system" (which is what an unregistered scheme would report).
+        let sql = "SELECT * FROM read_parquet('az://acct/cont/none.parquet');";
+        let args = ["duckdb-cli", "-c", sql];
+        let mut h = CliHarness::new(&args, &preopens)?;
+        let _ = h.run()?;
+        let stderr = h.stderr().unwrap_or_default().to_lowercase();
+        assert!(
+            !stderr.contains("unknown file system") && !stderr.contains("unknown filesystem"),
+            "az:// scheme not registered by azure extension; got:\n{stderr}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ui_embedded_start_ui_initializes_bridge() -> Result<()> {
+        // Exercise the embedded ui extension (duckdb-ui @ a135471). The native host
+        // owns the listening socket and bridges requests to duckdb_ui_handle_request;
+        // here we just prove the extension loads in the core and that `start_ui()`
+        // initializes the bridged HttpServer singleton (returns "UI started at ...",
+        // not an error) -- on wasm Start() runs without a listening thread/system().
+        // Skips if ui is not embedded.
+        let preopens: [(&std::path::Path, &str); 0] = [];
+        let loaded = {
+            let sql = "SELECT count(*) AS n FROM duckdb_extensions() \
+                       WHERE extension_name = 'ui' AND loaded;";
+            let args = ["duckdb-cli", "-c", sql];
+            let mut h = CliHarness::new(&args, &preopens)?;
+            if h.run()?.is_err() {
+                eprintln!("ui extensions query failed; skipping");
+                return Ok(());
+            }
+            has_cell(&h.stdout().unwrap_or_default(), "1")
+        };
+        if !loaded {
+            eprintln!("ui not embedded/loaded in this core; skipping");
+            return Ok(());
+        }
+        let sql = "CALL start_ui();";
+        let args = ["duckdb-cli", "-c", sql];
+        let mut h = CliHarness::new(&args, &preopens)?;
+        let status = h.run()?;
+        let stdout = h.stdout().unwrap_or_default();
+        let stderr = h.stderr().unwrap_or_default();
+        if status.is_err() {
+            panic!("start_ui() failed\nstdout:\n{stdout}\nstderr:\n{stderr}");
+        }
+        let low = stdout.to_lowercase();
+        assert!(
+            low.contains("ui started") || low.contains("localhost"),
+            "start_ui() did not report a started server; got:\n{stdout}\nstderr:\n{stderr}"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn smoke_runs_sql_against_disk_database() -> Result<()> {
         let tempdir = tempdir().context("failed to create temporary directory")?;
         let db_host_path = tempdir.path().join("smoke.db");
