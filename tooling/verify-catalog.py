@@ -26,10 +26,15 @@ for e in exts:
     if not e.get("exports"):
         issues.append(f"{n}: no exports declared")
 
-# orphan artifacts (a .wasm with no registry entry)
+# orphan artifacts (a .wasm with no registry entry). Server-dependent backends
+# (mysqlwasm/postgreswasm/webfs) are intentionally NOT registered -- their smoke
+# needs a live external server, so they ship a `smoke.sql.requires-live-server`
+# marker instead of a smoke.sql and are excluded from the catalog and `--all`.
 registered = {e["name"] for e in exts} | {"sample_extension"}
+def is_live_server_backend(name):
+    return (ROOT / "extensions" / f"{name}-component" / "smoke.sql.requires-live-server").exists()
 for wasm in sorted(art_dir.glob("*.wasm")):
-    if wasm.stem not in registered:
+    if wasm.stem not in registered and not is_live_server_backend(wasm.stem):
         issues.append(f"orphan artifact: {wasm.name} (no registry entry)")
 
 agg = [e["name"] for e in exts if "aggregate" in (e.get("requires") or [])]
