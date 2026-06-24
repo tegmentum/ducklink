@@ -1467,6 +1467,9 @@ pub struct HostState {
     pending_stream_drops: Vec<Resource<cli_db::ResultStream>>,
     pending_prepared_drops: Vec<Resource<cli_db::PreparedStatement>>,
     pending_appender_drops: Vec<Resource<cli_db::Appender>>,
+    /// One-shot guard: the DUCKLINK_AUTOLOAD extensions are loaded once, right
+    /// after the first connection opens (the database now exists).
+    did_autoload: bool,
 }
 
 impl WasiView for HostState {
@@ -1487,6 +1490,59 @@ impl HostState {
         let id = self.next_resource_id;
         self.next_resource_id = self.next_resource_id.wrapping_add(1).max(1);
         id
+    }
+
+    /// Load the components named in DUCKLINK_AUTOLOAD (comma/space separated)
+    /// exactly once, right after the first connection opens. Deployments running
+    /// the lean core (no embedded json/etc.) set this to the replacement
+    /// components, e.g. DUCKLINK_AUTOLOAD=jsonfns. Best-effort: a failure (e.g.
+    /// a name colliding with a still-embedded function on a fat core) is logged
+    /// and skipped rather than aborting startup.
+    fn maybe_autoload(&mut self) {
+        if self.did_autoload {
+            return;
+        }
+        self.did_autoload = true;
+        let spec = match std::env::var("DUCKLINK_AUTOLOAD") {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        // Run `LOAD <name>` as SQL on the freshly-opened connection so the core's
+        // normal load orchestration applies the component's registrations to the
+        // connection (calling ensure_extension_loaded directly only buffers them).
+        let handle = match self
+            .current_connection
+            .lock()
+            .expect("current connection mutex poisoned")
+            .clone()
+        {
+            Some(h) => h,
+            None => return,
+        };
+        for name in spec.split(|c: char| c == ',' || c.is_whitespace()) {
+            let name = name.trim();
+            if name.is_empty() {
+                continue;
+            }
+            if !name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+            {
+                eprintln!("[autoload] skipped invalid extension name '{name}'");
+                continue;
+            }
+            let sql = format!("LOAD {name};");
+            let res = self.with_core(|core| {
+                core.with_database(|guest, store| guest.call_execute(store, handle.clone(), &sql))
+            });
+            match res {
+                Ok(Ok(_)) => eprintln!("[autoload] loaded '{name}'"),
+                Ok(Err(err)) => {
+                    eprintln!("[autoload] skipped '{name}': {}", core_duckerror_message(err))
+                }
+                Err(trap) => eprintln!("[autoload] skipped '{name}': {trap}"),
+            }
+        }
     }
 
     fn with_core<F, R>(&self, f: F) -> R
@@ -1839,6 +1895,7 @@ impl cli_db::Host for HostState {
                         closed: false,
                     },
                 );
+                self.maybe_autoload();
                 Ok(Resource::new_own(id))
             }
             Err(err) => Err(err),
@@ -1878,6 +1935,7 @@ impl cli_db::Host for HostState {
                         closed: false,
                     },
                 );
+                self.maybe_autoload();
                 Ok(Resource::new_own(id))
             }
             Err(err) => Err(err),
@@ -3138,6 +3196,7 @@ impl CliHarness {
             pending_stream_drops: Vec::new(),
             pending_prepared_drops: Vec::new(),
             pending_appender_drops: Vec::new(),
+            did_autoload: false,
         };
         let mut store = Store::new(&engine, host_state);
 
@@ -3278,6 +3337,7 @@ pub fn run_cli_with_stdio(
         pending_stream_drops: Vec::new(),
         pending_prepared_drops: Vec::new(),
         pending_appender_drops: Vec::new(),
+            did_autoload: false,
     };
     let mut store = Store::new(&engine, host_state);
 

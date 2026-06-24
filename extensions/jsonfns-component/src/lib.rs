@@ -1,0 +1,474 @@
+//! DuckDB `json` extension SCALAR surface, reimplemented as a ducklink component.
+//!
+//! These are registered under their REAL official names (json_valid,
+//! json_extract, ...). They will COLLIDE with the json scalars currently
+//! embedded in the core, so this component can only load against a LEAN core
+//! where json has been de-embedded; until then correctness is proven by the
+//! native `cargo test` suite at the bottom of this file.
+//!
+//! Semantics follow DuckDB's json extension as closely as practical:
+//!   - invalid input / missing path -> NULL (never panic)
+//!   - path syntax: DuckDB `$`-style (`$.a.b`, `$[0]`, `$.a[0]`, bare `$`)
+//!     and JSONPointer (`/a/b`, `/a/0`).
+//!
+//! The pure-logic layer (`logic` module) takes/returns plain Rust values so it
+//! builds and tests on the host; the wit glue only marshals Duckvalues.
+
+mod logic;
+
+#[cfg(not(test))]
+mod component {
+    use super::logic;
+    use std::collections::HashMap;
+    use std::sync::{
+        atomic::{AtomicU32, Ordering},
+        Mutex, OnceLock,
+    };
+    use wit_bindgen::rt::string::String;
+    use wit_bindgen::rt::vec::Vec;
+
+    wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension" });
+    use duckdb::extension::{runtime, types};
+    use exports::duckdb::extension::{callback_dispatch, guest};
+
+    struct Extension;
+
+    impl guest::Guest for Extension {
+        fn load() -> Result<types::Loadresult, types::Duckerror> {
+            register_scalars()?;
+            Ok(types::Loadresult {
+                name: "jsonfns".into(),
+                version: Some(env!("CARGO_PKG_VERSION").into()),
+                requires: Vec::new().into(),
+            })
+        }
+        fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> {
+            Ok(false)
+        }
+        fn shutdown() -> Result<bool, types::Duckerror> {
+            Ok(false)
+        }
+    }
+
+    fn text_arg(args: &[types::Duckvalue], i: usize) -> Option<std::string::String> {
+        match args.get(i) {
+            Some(types::Duckvalue::Text(s)) => Some(s.to_string()),
+            _ => None,
+        }
+    }
+
+    /// Map an Option<String> result into a Text/Null Duckvalue.
+    fn opt_text(v: Option<std::string::String>) -> types::Duckvalue {
+        match v {
+            Some(s) => types::Duckvalue::Text(s.into()),
+            None => types::Duckvalue::Null,
+        }
+    }
+
+    impl callback_dispatch::Guest for Extension {
+        fn call_scalar_batch(
+            h: u32,
+            rows: Vec<Vec<types::Duckvalue>>,
+            ctx: types::Invokeinfo,
+        ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
+            let base = ctx.rowindex.unwrap_or(0);
+            let mut out = Vec::with_capacity(rows.len());
+            for (i, a) in rows.into_iter().enumerate() {
+                out.push(Self::call_scalar(
+                    h,
+                    a,
+                    types::Invokeinfo {
+                        rowindex: Some(base + i as u64),
+                        iswindow: ctx.iswindow,
+                    },
+                )?);
+            }
+            Ok(out)
+        }
+
+        fn call_scalar(
+            handle: u32,
+            args: Vec<types::Duckvalue>,
+            _c: types::Invokeinfo,
+        ) -> Result<types::Duckvalue, types::Duckerror> {
+            let which = handlers()
+                .lock()
+                .unwrap()
+                .get(&handle)
+                .copied()
+                .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
+
+            // First arg is always the json text for every function here.
+            let json = text_arg(&args, 0);
+            // Optional path/needle arg lives at index 1 for the 2-arg overloads.
+            let arg1 = text_arg(&args, 1);
+
+            Ok(match which {
+                F::Valid => match &json {
+                    Some(s) => types::Duckvalue::Boolean(logic::json_valid(s)),
+                    None => types::Duckvalue::Null,
+                },
+                F::Extract => opt_text(
+                    json.as_deref()
+                        .zip(arg1.as_deref())
+                        .and_then(|(j, p)| logic::json_extract(j, p)),
+                ),
+                F::ExtractString => opt_text(
+                    json.as_deref()
+                        .zip(arg1.as_deref())
+                        .and_then(|(j, p)| logic::json_extract_string(j, p)),
+                ),
+                F::ArrayLen1 => match json
+                    .as_deref()
+                    .and_then(|j| logic::json_array_length(j, None))
+                {
+                    Some(n) => types::Duckvalue::Int64(n),
+                    None => types::Duckvalue::Null,
+                },
+                F::ArrayLen2 => match json
+                    .as_deref()
+                    .zip(arg1.as_deref())
+                    .and_then(|(j, p)| logic::json_array_length(j, Some(p)))
+                {
+                    Some(n) => types::Duckvalue::Int64(n),
+                    None => types::Duckvalue::Null,
+                },
+                F::Type1 => opt_text(json.as_deref().and_then(|j| logic::json_type(j, None))),
+                F::Type2 => opt_text(
+                    json.as_deref()
+                        .zip(arg1.as_deref())
+                        .and_then(|(j, p)| logic::json_type(j, Some(p))),
+                ),
+                F::Keys1 => opt_text(json.as_deref().and_then(|j| logic::json_keys(j, None))),
+                F::Keys2 => opt_text(
+                    json.as_deref()
+                        .zip(arg1.as_deref())
+                        .and_then(|(j, p)| logic::json_keys(j, Some(p))),
+                ),
+                F::Contains => match json.as_deref().zip(arg1.as_deref()) {
+                    Some((j, n)) => match logic::json_contains(j, n) {
+                        Some(b) => types::Duckvalue::Boolean(b),
+                        None => types::Duckvalue::Null,
+                    },
+                    None => types::Duckvalue::Null,
+                },
+                F::Quote => opt_text(json.as_deref().map(logic::json_quote)),
+            })
+        }
+
+        fn call_table(
+            _h: u32,
+            _a: Vec<types::Duckvalue>,
+        ) -> Result<types::Resultset, types::Duckerror> {
+            Err(types::Duckerror::Unsupported("jsonfns: no table fns".into()))
+        }
+        fn call_aggregate(
+            _h: u32,
+            _r: types::Rowbatch,
+        ) -> Result<types::Duckvalue, types::Duckerror> {
+            Err(types::Duckerror::Unsupported("jsonfns: no aggs".into()))
+        }
+        fn call_pragma(
+            _h: u32,
+            _a: Vec<types::Duckvalue>,
+        ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
+            Err(types::Duckerror::Unsupported("jsonfns: no pragmas".into()))
+        }
+        fn call_cast(
+            _h: u32,
+            _v: types::Duckvalue,
+        ) -> Result<types::Duckvalue, types::Duckerror> {
+            Err(types::Duckerror::Unsupported("jsonfns: no casts".into()))
+        }
+    }
+
+    export!(Extension);
+
+    #[derive(Clone, Copy, PartialEq)]
+    enum F {
+        Valid,
+        Extract,
+        ExtractString,
+        ArrayLen1,
+        ArrayLen2,
+        Type1,
+        Type2,
+        Keys1,
+        Keys2,
+        Contains,
+        Quote,
+    }
+
+    static NEXT: AtomicU32 = AtomicU32::new(1);
+    static HANDLERS: OnceLock<Mutex<HashMap<u32, F>>> = OnceLock::new();
+    fn handlers() -> &'static Mutex<HashMap<u32, F>> {
+        HANDLERS.get_or_init(|| Mutex::new(HashMap::new()))
+    }
+
+    fn register_scalars() -> Result<(), types::Duckerror> {
+        let cap = runtime::get_capability(types::Capabilitykind::Scalar)
+            .ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
+        let reg = match cap {
+            runtime::Capability::Scalar(r) => r,
+            _ => return Err(types::Duckerror::Internal("bad capability".into())),
+        };
+        let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
+
+        let reg_fn = |name: &str,
+                          f: F,
+                          arg_specs: &[(&str, types::Logicaltype)],
+                          ret: types::Logicaltype,
+                          desc: &str|
+         -> Result<(), types::Duckerror> {
+            let h = NEXT.fetch_add(1, Ordering::Relaxed);
+            handlers().lock().unwrap().insert(h, f);
+            let argv: Vec<runtime::Funcarg> = arg_specs
+                .iter()
+                .map(|(n, lt)| runtime::Funcarg {
+                    name: Some((*n).into()),
+                    logical: *lt,
+                })
+                .collect();
+            reg.register(
+                name,
+                &argv,
+                ret,
+                runtime::ScalarCallback::new(h),
+                Some(&runtime::Funcopts {
+                    description: Some(desc.into()),
+                    tags: vec!["json".into()],
+                    attributes: det,
+                }),
+            )?;
+            Ok(())
+        };
+
+        use types::Logicaltype as L;
+        let json = ("json", L::Text);
+        let path = ("path", L::Text);
+
+        reg_fn("json_valid", F::Valid, &[json], L::Boolean, "valid JSON?")?;
+        reg_fn(
+            "json_extract",
+            F::Extract,
+            &[json, path],
+            L::Text,
+            "JSON text at path",
+        )?;
+        reg_fn(
+            "json_extract_string",
+            F::ExtractString,
+            &[json, path],
+            L::Text,
+            "unquoted string at path",
+        )?;
+        reg_fn(
+            "json_array_length",
+            F::ArrayLen1,
+            &[json],
+            L::Int64,
+            "length of top-level JSON array",
+        )?;
+        reg_fn(
+            "json_array_length",
+            F::ArrayLen2,
+            &[json, path],
+            L::Int64,
+            "length of JSON array at path",
+        )?;
+        reg_fn("json_type", F::Type1, &[json], L::Text, "type of JSON value")?;
+        reg_fn(
+            "json_type",
+            F::Type2,
+            &[json, path],
+            L::Text,
+            "type of JSON value at path",
+        )?;
+        reg_fn("json_keys", F::Keys1, &[json], L::Text, "JSON array of keys")?;
+        reg_fn(
+            "json_keys",
+            F::Keys2,
+            &[json, path],
+            L::Text,
+            "JSON array of keys at path",
+        )?;
+        reg_fn(
+            "json_contains",
+            F::Contains,
+            &[json, ("needle", L::Text)],
+            L::Boolean,
+            "haystack contains needle?",
+        )?;
+        reg_fn("json_quote", F::Quote, &[json], L::Text, "wrap value as JSON")?;
+        reg_fn("to_json", F::Quote, &[json], L::Text, "wrap value as JSON")?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::logic::*;
+
+    #[test]
+    fn valid() {
+        assert!(json_valid(r#"{"a":1}"#));
+        assert!(json_valid("[1,2,3]"));
+        assert!(json_valid("42"));
+        assert!(json_valid("\"hi\""));
+        assert!(json_valid("null"));
+        assert!(json_valid("true"));
+        assert!(!json_valid("{not json}"));
+        assert!(!json_valid("{\"a\":}"));
+        assert!(!json_valid(""));
+    }
+
+    #[test]
+    fn array_length_toplevel() {
+        assert_eq!(json_array_length("[1,2,3]", None), Some(3));
+        assert_eq!(json_array_length("[]", None), Some(0));
+        // not an array -> NULL
+        assert_eq!(json_array_length(r#"{"a":1}"#, None), None);
+        assert_eq!(json_array_length("5", None), None);
+        // invalid json -> NULL
+        assert_eq!(json_array_length("nope", None), None);
+    }
+
+    #[test]
+    fn array_length_path() {
+        assert_eq!(json_array_length(r#"{"a":[1,2,3,4]}"#, Some("$.a")), Some(4));
+        assert_eq!(json_array_length(r#"{"a":[1,2,3,4]}"#, Some("/a")), Some(4));
+        assert_eq!(
+            json_array_length(r#"{"a":[[1],[2]]}"#, Some("$.a[0]")),
+            Some(1)
+        );
+        // path points at non-array
+        assert_eq!(json_array_length(r#"{"a":1}"#, Some("$.a")), None);
+        // missing path
+        assert_eq!(json_array_length(r#"{"a":[1]}"#, Some("$.b")), None);
+    }
+
+    #[test]
+    fn extract_returns_json_text() {
+        // object value stays as JSON text
+        assert_eq!(
+            json_extract(r#"{"a":{"b":1}}"#, "$.a"),
+            Some(r#"{"b":1}"#.to_string())
+        );
+        // scalar number
+        assert_eq!(
+            json_extract(r#"{"a":{"b":1}}"#, "$.a.b"),
+            Some("1".to_string())
+        );
+        // string keeps its quotes in json_extract
+        assert_eq!(
+            json_extract(r#"{"a":"hi"}"#, "$.a"),
+            Some("\"hi\"".to_string())
+        );
+        // array index
+        assert_eq!(json_extract("[10,20,30]", "$[1]"), Some("20".to_string()));
+        // JSONPointer style
+        assert_eq!(
+            json_extract(r#"{"a":{"b":2}}"#, "/a/b"),
+            Some("2".to_string())
+        );
+        // bare root
+        assert_eq!(json_extract("[1,2]", "$"), Some("[1,2]".to_string()));
+        // missing -> NULL
+        assert_eq!(json_extract(r#"{"a":1}"#, "$.z"), None);
+        // invalid json -> NULL
+        assert_eq!(json_extract("bad", "$.a"), None);
+    }
+
+    #[test]
+    fn extract_string_unquoted() {
+        assert_eq!(
+            json_extract_string(r#"{"a":"hi"}"#, "$.a"),
+            Some("hi".to_string())
+        );
+        // number: textual form
+        assert_eq!(json_extract_string(r#"{"a":1}"#, "$.a"), Some("1".to_string()));
+        // bool
+        assert_eq!(
+            json_extract_string(r#"{"a":true}"#, "$.a"),
+            Some("true".to_string())
+        );
+        // object: serialized json text (no surrounding quotes to strip)
+        assert_eq!(
+            json_extract_string(r#"{"a":{"b":1}}"#, "$.a"),
+            Some(r#"{"b":1}"#.to_string())
+        );
+        // JSON null at path -> SQL NULL
+        assert_eq!(json_extract_string(r#"{"a":null}"#, "$.a"), None);
+        // missing -> NULL
+        assert_eq!(json_extract_string(r#"{"a":1}"#, "$.z"), None);
+    }
+
+    #[test]
+    fn type_names() {
+        assert_eq!(json_type(r#"{"a":1}"#, None), Some("OBJECT".to_string()));
+        assert_eq!(json_type("[1]", None), Some("ARRAY".to_string()));
+        assert_eq!(json_type("\"s\"", None), Some("VARCHAR".to_string()));
+        assert_eq!(json_type("1", None), Some("BIGINT".to_string()));
+        assert_eq!(json_type("1.5", None), Some("DOUBLE".to_string()));
+        assert_eq!(json_type("true", None), Some("BOOLEAN".to_string()));
+        assert_eq!(json_type("null", None), Some("NULL".to_string()));
+        // at path
+        assert_eq!(
+            json_type(r#"{"a":[1]}"#, Some("$.a")),
+            Some("ARRAY".to_string())
+        );
+        assert_eq!(
+            json_type(r#"{"a":2}"#, Some("$.a")),
+            Some("BIGINT".to_string())
+        );
+        // missing path -> NULL
+        assert_eq!(json_type(r#"{"a":1}"#, Some("$.z")), None);
+        // invalid json -> NULL
+        assert_eq!(json_type("bad", None), None);
+    }
+
+    #[test]
+    fn keys() {
+        assert_eq!(
+            json_keys(r#"{"a":1,"b":2}"#, None),
+            Some(r#"["a","b"]"#.to_string())
+        );
+        assert_eq!(json_keys("{}", None), Some("[]".to_string()));
+        // not an object -> NULL
+        assert_eq!(json_keys("[1,2]", None), None);
+        // at path
+        assert_eq!(
+            json_keys(r#"{"o":{"x":1,"y":2}}"#, Some("$.o")),
+            Some(r#"["x","y"]"#.to_string())
+        );
+        // invalid -> NULL
+        assert_eq!(json_keys("bad", None), None);
+    }
+
+    #[test]
+    fn contains() {
+        // value in array
+        assert_eq!(json_contains("[1,2,3]", "2"), Some(true));
+        assert_eq!(json_contains("[1,2,3]", "9"), Some(false));
+        // string value in array
+        assert_eq!(json_contains(r#"["a","b"]"#, "\"a\""), Some(true));
+        // key/value subset of object
+        assert_eq!(json_contains(r#"{"a":1,"b":2}"#, r#"{"a":1}"#), Some(true));
+        assert_eq!(json_contains(r#"{"a":1,"b":2}"#, r#"{"a":9}"#), Some(false));
+        // nested object containment
+        assert_eq!(
+            json_contains(r#"{"a":{"b":1,"c":2}}"#, r#"{"a":{"b":1}}"#),
+            Some(true)
+        );
+        // invalid -> NULL
+        assert_eq!(json_contains("bad", "1"), None);
+        assert_eq!(json_contains("[1]", "bad"), None);
+    }
+
+    #[test]
+    fn quote() {
+        assert_eq!(json_quote("hello"), "\"hello\"".to_string());
+        assert_eq!(json_quote("he\"llo"), "\"he\\\"llo\"".to_string());
+    }
+}
