@@ -1,0 +1,23 @@
+# AUTO-SEEDED by smoke.py --seed-expected. Review and trim:
+#   - csv mode emits a header line per SELECT; keep or drop as you like
+#   - replace nondeterministic lines (timestamps, rng) with ~~
+#   - replace order-sensitive lines with ? if any-non-empty is OK
+#   - delete this banner once you've reviewed each line
+ncdf
+0.5
+npdf
+0.3989
+nq
+1.96
+bpmf
+0.3125
+ppmf
+0.224
+ecdf
+0.6321
+becdf
+0.5
+nullin
+NULL
+badsd
+NULL

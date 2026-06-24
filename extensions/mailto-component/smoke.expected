@@ -1,0 +1,12 @@
+recipients
+"[""alice@example.com""]"
+subject
+Hello World
+cc
+bob@example.com
+bcc
+NULL
+full
+"{""to"":[""alice@example.com"",""carol@example.com""],""subject"":""Hi"",""body"":""Yo"",""cc"":""bob@example.com""}"
+nonmailto
+NULL

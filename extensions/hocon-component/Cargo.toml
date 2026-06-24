@@ -1,0 +1,25 @@
+[package]
+name = "hocon-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+HOCON config parsing (Typesafe Config) -> JSON
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+hocon = { version = "*", default-features = false, features = ["serde-support"] }
+serde_json = "*"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

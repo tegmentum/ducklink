@@ -1,0 +1,9 @@
+# vcard extension smoke golden. csv mode emits a header line per SELECT.
+cnt
+1
+names
+"[""Alice Smith""]"
+j
+"[{""email"":""alice@example.com"",""fn"":""Alice Smith"",""org"":""Acme Inc."",""tel"":""+1-555-1234""}]"
+bad
+NULL

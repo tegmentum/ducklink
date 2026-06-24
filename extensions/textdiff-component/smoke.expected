@@ -1,0 +1,9 @@
+# Golden captured from this build (cargo component build --release).
+# csv mode emits a header line per SELECT, then its row(s).
+ratio
+0.64
+changed
+2
+identical
+null_in
+NULL

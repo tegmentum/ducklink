@@ -1,0 +1,15 @@
+# netquack smoke golden (.mode csv: each SELECT emits a header line then rows).
+reg
+example.co.uk
+suf
+co.uk
+sub
+a.b
+label
+example
+reg2
+example.com
+sub_empty
+
+bad
+NULL

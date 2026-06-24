@@ -1,0 +1,9 @@
+# minimal 1-message FIT fixture, melted: file_id.type = activity.
+record_no,kind,field,value
+1,file_id,type,activity
+# malformed blob -> 0 rows
+bad_rows
+0
+# empty blob -> 0 rows
+empty_rows
+0

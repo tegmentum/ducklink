@@ -1209,6 +1209,40 @@
       "min_duckdb_version": "1.0.0"
     },
     {
+      "name": "parsertools",
+      "version": "0.1.0",
+      "description": "Extract structure from SQL text (sqlparser-rs, generic dialect): sql_tables(sql) -> JSON array of referenced table names, sql_is_valid(sql) -> boolean, sql_statement_type(sql) -> first statement kind (SELECT/INSERT/...). NULL / false on parse error.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "sql",
+        "parser",
+        "ast",
+        "tables"
+      ],
+      "categories": [
+        "utility"
+      ],
+      "source": "extensions/parsertools-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/parsertools.wasm",
+      "exports": [
+        "sql_tables",
+        "sql_is_valid",
+        "sql_statement_type"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "sqlparser"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
       "name": "currency",
       "version": "0.1.0",
       "description": "ISO 4217 currency lookups by code: currency_name, currency_symbol, currency_numeric, currency_exponent (minor-unit digits) via iso_currency. Unknown -> NULL.",
@@ -1924,7 +1958,7 @@
     {
       "name": "dms",
       "version": "0.1.0",
-      "description": "Geographic coordinate conversion (hand-rolled): dms_to_decimal(deg,min,sec) and decimal_to_dms(decimal) -> D\u00b0M'S\". Sign-aware.",
+      "description": "Geographic coordinate conversion (hand-rolled): dms_to_decimal(deg,min,sec) and decimal_to_dms(decimal) -> D°M'S\". Sign-aware.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -2586,7 +2620,7 @@
     {
       "name": "money",
       "version": "0.1.0",
-      "description": "Currency amount formatting (iso_currency): format_money(amount, code) -> '$1,234.50' / '\u00a51,000', using the currency symbol + minor-unit count, thousands-grouped. Unknown -> NULL.",
+      "description": "Currency amount formatting (iso_currency): format_money(amount, code) -> '$1,234.50' / '¥1,000', using the currency symbol + minor-unit count, thousands-grouped. Unknown -> NULL.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -2683,7 +2717,7 @@
     {
       "name": "transliterate",
       "version": "0.1.0",
-      "description": "Unicode -> ASCII transliteration (deunicode): deunicode(text), e.g. '\u00c6neid caf\u00e9' -> 'AEneid cafe'. NULL -> NULL.",
+      "description": "Unicode -> ASCII transliteration (deunicode): deunicode(text), e.g. 'Æneid café' -> 'AEneid cafe'. NULL -> NULL.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -3814,6 +3848,1234 @@
         "chbs"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "h3",
+      "version": "0.1.0",
+      "description": "Uber H3 hexagonal geospatial indexing (h3o).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "h3",
+        "geospatial",
+        "hexagon",
+        "index"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/h3-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/h3.wasm",
+      "exports": [
+        "h3_latlng_to_cell",
+        "h3_cell_to_lat",
+        "h3_cell_to_lng",
+        "h3_cell_to_parent",
+        "h3_grid_distance",
+        "h3_is_valid_cell"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "h3o"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "lindel",
+      "version": "0.1.0",
+      "description": "Space-filling curve linearization: Morton/Z-order + Hilbert encode/decode.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "morton",
+        "hilbert",
+        "z-order",
+        "space-filling"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/lindel-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/lindel.wasm",
+      "exports": [
+        "morton_encode",
+        "morton_decode_x",
+        "morton_decode_y",
+        "hilbert_encode",
+        "hilbert_decode_x",
+        "hilbert_decode_y"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "magic",
+      "version": "0.1.0",
+      "description": "File content-type sniffing from magic bytes (infer).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "magic",
+        "mime",
+        "content-type",
+        "infer"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/magic-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/magic.wasm",
+      "exports": [
+        "magic_mime",
+        "magic_extension",
+        "magic_matcher_type",
+        "is_image"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "infer"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "tsid",
+      "version": "0.1.0",
+      "description": "Time-sorted unique IDs (Snowflake/TSID style), deterministic encode/decode/timestamp.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "tsid",
+        "snowflake",
+        "identifier",
+        "id"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/tsid-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/tsid.wasm",
+      "exports": [
+        "tsid_encode",
+        "tsid_decode",
+        "tsid_timestamp",
+        "tsid_from_timestamp"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "rhai",
+      "version": "0.1.0",
+      "description": "Evaluate a sandboxed Rhai expression as a SQL scalar (rhai).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "rhai",
+        "script",
+        "eval",
+        "expression"
+      ],
+      "categories": [
+        "utility"
+      ],
+      "source": "extensions/rhai-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/rhai.wasm",
+      "exports": [
+        "rhai_eval",
+        "rhai_eval_int",
+        "rhai_eval_double"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "rhai"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "bitfilters",
+      "version": "0.1.0",
+      "description": "Xor approximate-membership filter: aggregate build + query scalar (xorf).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "xor",
+        "filter",
+        "membership",
+        "bloom"
+      ],
+      "categories": [
+        "math"
+      ],
+      "source": "extensions/bitfilters-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/bitfilters.wasm",
+      "exports": [
+        "xor_filter",
+        "xor_filter_contains"
+      ],
+      "requires": [
+        "aggregate",
+        "scalar"
+      ],
+      "crates": [
+        "xorf",
+        "bincode"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "prql",
+      "version": "0.1.0",
+      "description": "Compile PRQL to SQL: prql_to_sql, prql_is_valid (prqlc).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "utility"
+      ],
+      "source": "extensions/prql-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/prql.wasm",
+      "exports": [
+        "prql_to_sql",
+        "prql_is_valid"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "prqlc"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "jaq",
+      "version": "0.1.0",
+      "description": "jq-style JSON query: jq(json,filter), jq_first (jaq interpreter).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/jaq-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/jaq.wasm",
+      "exports": [
+        "jq",
+        "jq_first"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "jaq-core",
+        "jaq-std",
+        "jaq-json"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "cron",
+      "version": "0.1.0",
+      "description": "Cron expression evaluation (UTC, deterministic): cron_is_valid, cron_next, cron_prev (croner).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "utility"
+      ],
+      "source": "extensions/cron-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/cron.wasm",
+      "exports": [
+        "cron_is_valid",
+        "cron_next",
+        "cron_prev"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "croner"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "xml",
+      "version": "0.1.0",
+      "description": "XML parse + simple XPath extraction: xml_valid, xml_extract, xml_extract_all (roxmltree).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/xml-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/xml.wasm",
+      "exports": [
+        "xml_valid",
+        "xml_extract",
+        "xml_extract_all"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "roxmltree"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "pinyin",
+      "version": "0.1.0",
+      "description": "Chinese Hanzi -> pinyin romanization: to_pinyin, to_pinyin_plain, to_pinyin_initials (pinyin).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/pinyin-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/pinyin.wasm",
+      "exports": [
+        "to_pinyin",
+        "to_pinyin_plain",
+        "to_pinyin_initials"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "pinyin"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "sqlformat",
+      "version": "0.1.0",
+      "description": "SQL pretty-printer: sql_format, sql_format_compact (sqlformat).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/sqlformat-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/sqlformat.wasm",
+      "exports": [
+        "sql_format",
+        "sql_format_compact"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "sqlformat"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "bencode",
+      "version": "0.1.0",
+      "description": "BitTorrent bencoding: bencode_to_json, bencode_is_valid (serde_bencode).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "encoding"
+      ],
+      "source": "extensions/bencode-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/bencode.wasm",
+      "exports": [
+        "bencode_to_json",
+        "bencode_is_valid"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "serde_bencode"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "maidenhead",
+      "version": "0.1.0",
+      "description": "Maidenhead grid locator (ham radio): to_maidenhead, maidenhead_lat, maidenhead_lon.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/maidenhead-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/maidenhead.wasm",
+      "exports": [
+        "to_maidenhead",
+        "maidenhead_lat",
+        "maidenhead_lon"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "base45",
+      "version": "0.1.0",
+      "description": "Base45 encoding (RFC 9285): base45_encode, base45_decode (base45).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "encoding"
+      ],
+      "source": "extensions/base45-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/base45.wasm",
+      "exports": [
+        "base45_encode",
+        "base45_decode"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "base45"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "numfmt",
+      "version": "0.1.0",
+      "description": "Number formatting: num_group (thousands grouping), num_si (SI/metric prefix).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/numfmt-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/numfmt.wasm",
+      "exports": [
+        "num_group",
+        "num_si"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "mailto",
+      "version": "0.1.0",
+      "description": "Parse mailto: URIs (RFC 6068): mailto_to, mailto_field, mailto_to_json (percent-encoding).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "networking"
+      ],
+      "source": "extensions/mailto-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/mailto.wasm",
+      "exports": [
+        "mailto_to",
+        "mailto_field",
+        "mailto_to_json"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "percent-encoding"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "hexdump",
+      "version": "0.1.0",
+      "description": "Hex dumps: hexdump (canonical hex+ASCII), hex_pretty (space-separated hex).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "encoding"
+      ],
+      "source": "extensions/hexdump-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/hexdump.wasm",
+      "exports": [
+        "hexdump",
+        "hex_pretty"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "secp256k1",
+      "version": "0.1.0",
+      "description": "ECDSA on the secp256k1 curve: secp256k1_pubkey, secp256k1_sign (RFC 6979), secp256k1_verify (k256). BLOB I/O.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "cryptography"
+      ],
+      "source": "extensions/secp256k1-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/secp256k1.wasm",
+      "exports": [
+        "secp256k1_pubkey",
+        "secp256k1_sign",
+        "secp256k1_verify"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "k256"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "bibtex",
+      "version": "0.1.0",
+      "description": "BibTeX parsing: bibtex_count, bibtex_to_json, bibtex_keys (biblatex). NULL on parse error.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/bibtex-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/bibtex.wasm",
+      "exports": [
+        "bibtex_count",
+        "bibtex_to_json",
+        "bibtex_keys"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "biblatex"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "useragent",
+      "version": "0.1.0",
+      "description": "User-Agent string parsing: ua_browser, ua_browser_version, ua_os, ua_category, ua_is_bot (woothee).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "networking"
+      ],
+      "source": "extensions/useragent-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/useragent.wasm",
+      "exports": [
+        "ua_browser",
+        "ua_browser_version",
+        "ua_os",
+        "ua_category",
+        "ua_is_bot"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "woothee"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "ical",
+      "version": "0.1.0",
+      "description": "iCalendar (.ics) parsing: ical_event_count, ical_to_json, ical_summaries (ical). Parse error -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/ical-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/ical.wasm",
+      "exports": [
+        "ical_event_count",
+        "ical_to_json",
+        "ical_summaries"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "ical",
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "tdigest",
+      "version": "0.1.0",
+      "description": "t-digest quantile estimation: aggregate build + tdigest_quantile / tdigest_count query scalars (tdigest).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "math"
+      ],
+      "source": "extensions/tdigest-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/tdigest.wasm",
+      "exports": [
+        "tdigest",
+        "tdigest_quantile",
+        "tdigest_count"
+      ],
+      "requires": [
+        "aggregate",
+        "scalar"
+      ],
+      "crates": [
+        "tdigest",
+        "bincode"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "urlpattern",
+      "version": "0.1.0",
+      "description": "WHATWG URLPattern matching: url_pattern_test(pattern, url) -> boolean, url_pattern_match -> json named groups (urlpattern).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "networking"
+      ],
+      "source": "extensions/urlpattern-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/urlpattern.wasm",
+      "exports": [
+        "url_pattern_test",
+        "url_pattern_match"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "urlpattern"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "celestial",
+      "version": "0.1.0",
+      "description": "Astronomical coordinate conversions: equatorial_to_galactic_l/_b, angular_separation, hms_to_deg, dms_to_deg.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "math"
+      ],
+      "source": "extensions/celestial-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/celestial.wasm",
+      "exports": [
+        "equatorial_to_galactic_l",
+        "equatorial_to_galactic_b",
+        "angular_separation",
+        "hms_to_deg",
+        "dms_to_deg"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "textlines",
+      "version": "0.1.0",
+      "description": "Split text into rows: split_lines(text) -> table(line_no, line).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/textlines-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/textlines.wasm",
+      "exports": [
+        "split_lines"
+      ],
+      "requires": [
+        "table"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "netquack",
+      "version": "0.1.0",
+      "description": "Public-suffix-aware URL/domain parsing: registrable_domain, public_suffix, subdomain, domain_label (psl).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "networking"
+      ],
+      "source": "extensions/netquack-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/netquack.wasm",
+      "exports": [
+        "registrable_domain",
+        "public_suffix",
+        "subdomain",
+        "domain_label"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "psl"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "openprompt",
+      "version": "0.1.0",
+      "description": "Call an OpenAI-compatible LLM HTTP API: prompt, prompt_model (network-gated, rustls over wasi:sockets).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "networking"
+      ],
+      "source": "extensions/openprompt-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/openprompt.wasm",
+      "exports": [
+        "prompt",
+        "prompt_model"
+      ],
+      "requires": [
+        "scalar",
+        "network"
+      ],
+      "crates": [
+        "rustls",
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "dbf",
+      "version": "0.1.0",
+      "description": "Read dBASE/.dbf files: read_dbf(data BLOB) -> table(record_no, field, value) melted (dbase).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/dbf-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/dbf.wasm",
+      "exports": [
+        "read_dbf"
+      ],
+      "requires": [
+        "table"
+      ],
+      "crates": [
+        "dbase"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "shapefile",
+      "version": "0.1.0",
+      "description": "Read ESRI .shp shapefiles: read_shp(data BLOB) -> table(shape_no, shape_type, wkt) (shapefile).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/shapefile-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/shapefile.wasm",
+      "exports": [
+        "read_shp"
+      ],
+      "requires": [
+        "table"
+      ],
+      "crates": [
+        "shapefile"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "fit",
+      "version": "0.1.0",
+      "description": "Read Garmin/ANT .FIT files: read_fit(data BLOB) -> table(record_no, kind, field, value) melted (fitparser).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/fit-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/fit.wasm",
+      "exports": [
+        "read_fit"
+      ],
+      "requires": [
+        "table"
+      ],
+      "crates": [
+        "fitparser"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "warc",
+      "version": "0.1.0",
+      "description": "Read WARC web-archive files: read_warc(data BLOB) -> table(record_no, warc_type, target_uri, content_type, content_length) (warc).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/warc-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/warc.wasm",
+      "exports": [
+        "read_warc"
+      ],
+      "requires": [
+        "table"
+      ],
+      "crates": [
+        "warc"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "html",
+      "version": "0.1.0",
+      "description": "HTML CSS-selector extraction: html_extract, html_extract_all, html_attr (scraper).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/html-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/html.wasm",
+      "exports": [
+        "html_extract",
+        "html_extract_all",
+        "html_attr"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "scraper"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "vcard",
+      "version": "0.1.0",
+      "description": "vCard (.vcf) contact parsing: vcard_count, vcard_to_json, vcard_names (ical).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/vcard-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/vcard.wasm",
+      "exports": [
+        "vcard_count",
+        "vcard_to_json",
+        "vcard_names"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "ical",
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "ini",
+      "version": "0.1.0",
+      "description": "INI / config parsing: ini_to_json, ini_get, ini_sections (rust-ini).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/ini-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/ini.wasm",
+      "exports": [
+        "ini_to_json",
+        "ini_get",
+        "ini_sections"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "rust-ini",
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "plist",
+      "version": "0.1.0",
+      "description": "Apple property-list parsing: plist_to_json(data) -> JSON (XML or binary plist), plist_get(data, key) -> top-level dict value as text (plist crate).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/plist-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/plist.wasm",
+      "exports": [
+        "plist_to_json",
+        "plist_get"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "plist"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "dotenv",
+      "version": "0.1.0",
+      "description": "Parse .env files: dotenv_to_json(text) -> JSON object {KEY:VALUE}, dotenv_get(text, key) -> value, dotenv_keys(text) -> JSON array of keys (hand-rolled parser; quotes stripped, inline # comments, export prefix).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/dotenv-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/dotenv.wasm",
+      "exports": [
+        "dotenv_to_json",
+        "dotenv_get",
+        "dotenv_keys"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "hocon",
+      "version": "0.1.0",
+      "description": "HOCON (Typesafe Config) parsing (hocon crate): hocon_to_json(text) -> JSON object, hocon_get(text, path) -> value at a dotted path. Invalid/absent -> NULL.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/hocon-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/hocon.wasm",
+      "exports": [
+        "hocon_to_json",
+        "hocon_get"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "hocon"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "uuid7",
+      "version": "0.1.0",
+      "description": "UUIDv7 (RFC 9562, time-ordered), deterministic: uuid7_build(unix_ms, rand_hex) constructs a canonical v7 UUID, uuid7_timestamp extracts the embedded unix-ms, uuid7_is_valid checks v7 well-formedness (uuid crate).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/uuid7-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/uuid7.wasm",
+      "exports": [
+        "uuid7_build",
+        "uuid7_timestamp",
+        "uuid7_is_valid"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "uuid"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "textdiff",
+      "version": "0.1.0",
+      "description": "Text diffing via the similar crate: text_diff(a, b) -> unified line diff ('' if identical), diff_ratio(a, b) -> similarity ratio [0,1], diff_changed_lines(a, b) -> count of inserted + deleted lines. NULL on NULL input.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/textdiff-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/textdiff.wasm",
+      "exports": [
+        "text_diff",
+        "diff_ratio",
+        "diff_changed_lines"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "similar"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "polyline",
+      "version": "0.1.0",
+      "description": "Google Encoded Polyline encode/decode: polyline_encode(coords_json [[lon,lat],...], precision) -> text, polyline_decode(encoded, precision) -> JSON [[lon,lat],...] (polyline crate).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/polyline-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/polyline.wasm",
+      "exports": [
+        "polyline_encode",
+        "polyline_decode"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "polyline"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "json_schema",
+      "version": "0.1.0",
+      "description": "JSON Schema validation (jsonschema crate; DuckDB core has only syntax-only json_valid): json_schema_valid(schema, doc) -> boolean, json_schema_errors(schema, doc) -> JSON array of error messages ('[]' if valid). NULL on NULL/unparseable input.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/json_schema-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/json_schema.wasm",
+      "exports": [
+        "json_schema_valid",
+        "json_schema_errors"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "jsonschema"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "stochastic",
+      "version": "0.1.0",
+      "description": "Probability-distribution scalars (statrs crate; DuckDB has aggregate stats but no distribution PDF/CDF): normal_cdf/normal_pdf/normal_quantile, binomial_pmf, poisson_pmf, exponential_cdf, beta_cdf. NULL on NULL/invalid params.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "math"
+      ],
+      "source": "extensions/stochastic-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/stochastic.wasm",
+      "exports": [
+        "normal_cdf",
+        "normal_pdf",
+        "normal_quantile",
+        "binomial_pmf",
+        "poisson_pmf",
+        "exponential_cdf",
+        "beta_cdf"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "statrs"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "dotcmds": [
@@ -4024,6 +5286,342 @@
         "spi"
       ],
       "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "secp256k1",
+      "version": "0.1.0",
+      "description": "ECDSA on secp256k1: secp256k1_pubkey, secp256k1_sign (RFC6979), secp256k1_verify (k256), BLOB I/O.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "cryptography"
+      ],
+      "source": "extensions/secp256k1-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/secp256k1.wasm",
+      "exports": [
+        "secp256k1_pubkey",
+        "secp256k1_sign",
+        "secp256k1_verify"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "k256"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "bibtex",
+      "version": "0.1.0",
+      "description": "BibTeX parsing: bibtex_count, bibtex_to_json, bibtex_keys (biblatex).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/bibtex-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/bibtex.wasm",
+      "exports": [
+        "bibtex_count",
+        "bibtex_to_json",
+        "bibtex_keys"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "biblatex"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "useragent",
+      "version": "0.1.0",
+      "description": "User-Agent parsing: ua_browser, ua_browser_version, ua_os, ua_category, ua_is_bot (woothee).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "networking"
+      ],
+      "source": "extensions/useragent-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/useragent.wasm",
+      "exports": [
+        "ua_browser",
+        "ua_browser_version",
+        "ua_os",
+        "ua_category",
+        "ua_is_bot"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "woothee"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "ical",
+      "version": "0.1.0",
+      "description": "iCalendar parsing: ical_event_count, ical_to_json, ical_summaries (ical).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/ical-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/ical.wasm",
+      "exports": [
+        "ical_event_count",
+        "ical_to_json",
+        "ical_summaries"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "ical",
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "tdigest",
+      "version": "0.1.0",
+      "description": "t-digest quantile estimation: aggregate build + tdigest_quantile/tdigest_count scalars (tdigest).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "math"
+      ],
+      "source": "extensions/tdigest-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/tdigest.wasm",
+      "exports": [
+        "tdigest",
+        "tdigest_quantile",
+        "tdigest_count"
+      ],
+      "requires": [
+        "aggregate",
+        "scalar"
+      ],
+      "crates": [
+        "tdigest",
+        "bincode"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "urlpattern",
+      "version": "0.1.0",
+      "description": "WHATWG URLPattern matching: url_pattern_test, url_pattern_match (urlpattern).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "networking"
+      ],
+      "source": "extensions/urlpattern-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/urlpattern.wasm",
+      "exports": [
+        "url_pattern_test",
+        "url_pattern_match"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "urlpattern"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "shapefile",
+      "version": "0.1.0",
+      "description": "Read ESRI .shp shapefiles: read_shp(data BLOB) -> table(shape_no, shape_type, wkt) (shapefile).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/shapefile-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/shapefile.wasm",
+      "exports": [
+        "read_shp"
+      ],
+      "requires": [
+        "table"
+      ],
+      "crates": [
+        "shapefile"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "fit",
+      "version": "0.1.0",
+      "description": "Read Garmin/ANT .FIT files: read_fit(data BLOB) -> table(record_no, kind, field, value) melted (fitparser).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/fit-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/fit.wasm",
+      "exports": [
+        "read_fit"
+      ],
+      "requires": [
+        "table"
+      ],
+      "crates": [
+        "fitparser"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "warc",
+      "version": "0.1.0",
+      "description": "Read WARC web-archive files: read_warc(data BLOB) -> table(record_no, warc_type, target_uri, content_type, content_length) (warc).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/warc-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/warc.wasm",
+      "exports": [
+        "read_warc"
+      ],
+      "requires": [
+        "table"
+      ],
+      "crates": [
+        "warc"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "html",
+      "version": "0.1.0",
+      "description": "HTML CSS-selector extraction: html_extract, html_extract_all, html_attr (scraper).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/html-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/html.wasm",
+      "exports": [
+        "html_extract",
+        "html_extract_all",
+        "html_attr"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "scraper"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "vcard",
+      "version": "0.1.0",
+      "description": "vCard (.vcf) contact parsing: vcard_count, vcard_to_json, vcard_names (ical).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/vcard-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/vcard.wasm",
+      "exports": [
+        "vcard_count",
+        "vcard_to_json",
+        "vcard_names"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "ical",
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "ini",
+      "version": "0.1.0",
+      "description": "INI / config parsing: ini_to_json, ini_get, ini_sections (rust-ini).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/ini-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/ini.wasm",
+      "exports": [
+        "ini_to_json",
+        "ini_get",
+        "ini_sections"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "rust-ini",
+        "serde_json"
+      ],
       "min_duckdb_version": "1.0.0"
     }
   ],

@@ -1,0 +1,6 @@
+sql
+SELECT   name FROM   employees WHERE   salary > 100
+ok
+true
+bad
+false

@@ -1,0 +1,24 @@
+[package]
+name = "secp256k1-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+ECDSA on the secp256k1 curve: pubkey derivation, deterministic (RFC 6979) sign, and verify (k256).
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+k256 = { version = "0.13", default-features = false, features = ["ecdsa", "sha256", "std"] }
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

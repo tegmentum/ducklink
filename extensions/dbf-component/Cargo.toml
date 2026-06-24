@@ -1,0 +1,25 @@
+[package]
+name = "dbf-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Read dBASE/.dbf files: read_dbf(data BLOB) -> table (record_no, field, value)
+in melted/long form, every field rendered as VARCHAR (dbase crate).
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+dbase = "0.7"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

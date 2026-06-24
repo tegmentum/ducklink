@@ -1,0 +1,33 @@
+-- secp256k1 extension smoke (deterministic RFC 6979 ECDSA).
+-- Fixed test vector: private key = 32 bytes of 0x01, message hash = 32 bytes of 0x42.
+-- unhex(...) yields a BLOB; hex(...) renders BLOB output as lowercase-free hex for golden diff.
+
+-- Derive the compressed public key (33 bytes). Deterministic -> golden hex.
+SELECT lower(hex(secp256k1_pubkey(
+  unhex('0101010101010101010101010101010101010101010101010101010101010101')))) AS pub;
+
+-- Deterministic signature (64-byte compact). Golden hex.
+SELECT lower(hex(secp256k1_sign(
+  unhex('4242424242424242424242424242424242424242424242424242424242424242'),
+  unhex('0101010101010101010101010101010101010101010101010101010101010101')))) AS sig;
+
+-- Round-trip: verify the real signature against the real hash + pubkey -> true.
+SELECT secp256k1_verify(
+  unhex('4242424242424242424242424242424242424242424242424242424242424242'),
+  secp256k1_sign(
+    unhex('4242424242424242424242424242424242424242424242424242424242424242'),
+    unhex('0101010101010101010101010101010101010101010101010101010101010101')),
+  secp256k1_pubkey(
+    unhex('0101010101010101010101010101010101010101010101010101010101010101'))) AS ok;
+
+-- Verify against a WRONG hash -> false.
+SELECT secp256k1_verify(
+  unhex('0000000000000000000000000000000000000000000000000000000000000000'),
+  secp256k1_sign(
+    unhex('4242424242424242424242424242424242424242424242424242424242424242'),
+    unhex('0101010101010101010101010101010101010101010101010101010101010101')),
+  secp256k1_pubkey(
+    unhex('0101010101010101010101010101010101010101010101010101010101010101'))) AS wrong;
+
+-- Bad private key length -> NULL.
+SELECT secp256k1_pubkey(unhex('0102')) AS bad_len;

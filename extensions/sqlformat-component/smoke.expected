@@ -1,0 +1,10 @@
+# Expected output for extensions/sqlformat-component/smoke.sql (reviewed).
+compact
+"select a, b from t"
+null_in
+NULL
+pretty
+"SELECT
+  1"
+roundtrip
+true

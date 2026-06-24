@@ -1,0 +1,4 @@
+has_10,has_30,has_50,has_999999
+true,true,true,false
+bad_filter
+NULL

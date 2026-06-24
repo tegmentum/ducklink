@@ -1,0 +1,11 @@
+# secp256k1 deterministic ECDSA golden (privkey=0x01*32, hash=0x42*32, RFC 6979).
+pub
+031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f
+sig
+351f7775548e4c561dd9726a9ce477c78f6854ab2db3815e69792463fa54f1fa46192778740b115adf0529c6d1730b22d5a0636ff8a0d3ea6d7e021a144c0f03
+ok
+true
+wrong
+false
+bad_len
+NULL

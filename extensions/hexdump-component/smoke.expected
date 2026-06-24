@@ -1,0 +1,8 @@
+# Expected output for extensions/hexdump-component/smoke.sql (reviewed).
+deadbeef
+de ad be ef
+hello
+"00000000  48 65 6c 6c 6f                                   |Hello|
+"
+null_in
+NULL

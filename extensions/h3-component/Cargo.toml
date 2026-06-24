@@ -1,0 +1,24 @@
+[package]
+name = "h3-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Uber H3 hexagonal geospatial indexing (h3o)
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+h3o = "*"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

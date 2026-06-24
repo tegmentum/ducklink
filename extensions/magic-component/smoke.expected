@@ -1,0 +1,31 @@
+# magic extension golden output (.mode csv: header line per SELECT, then rows).
+# Captured from the wasm32-wasip2 build via the ducklink CLI.
+# Note: infer 0.16 classifies PDF under matcher class "archive", not "doc".
+png_mime
+image/png
+png_ext
+png
+png_class
+image
+png_is_image
+true
+pdf_mime
+application/pdf
+pdf_ext
+pdf
+pdf_class
+archive
+pdf_is_image
+false
+gif_mime
+image/gif
+gif_ext
+gif
+jpg_mime
+image/jpeg
+jpg_ext
+jpg
+unknown_mime
+NULL
+unknown_is_image
+false

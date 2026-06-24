@@ -1,0 +1,10 @@
+# 2-shape .shp fixture (ShapeWriter: Point(1,2), Point(3,4)), ORDER BY shape_no.
+shape_no,shape_type,wkt
+1,Point,POINT(1 2)
+2,Point,POINT(3 4)
+# malformed blob -> 0 rows
+bad_rows
+0
+# empty blob -> 0 rows
+empty_rows
+0

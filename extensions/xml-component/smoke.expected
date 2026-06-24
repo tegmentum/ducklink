@@ -1,0 +1,11 @@
+# xml extension golden output (.mode csv: header line per SELECT, then rows).
+ok
+true
+bad
+false
+first_b
+x
+all_a
+"[""1"",""2""]"
+missing
+NULL

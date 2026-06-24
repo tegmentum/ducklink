@@ -1,0 +1,9 @@
+# ical extension smoke golden. csv mode emits a header line per SELECT.
+cnt
+2
+sums
+"[""Hello"",""World""]"
+j
+"[{""dtend"":""20260101T110000Z"",""dtstart"":""20260101T100000Z"",""summary"":""Hello"",""uid"":""a@x""}]"
+bad
+NULL

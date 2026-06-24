@@ -1,0 +1,12 @@
+# Expected output for extensions/base45-component/smoke.sql (reviewed).
+# `.mode csv` emits a header line (the AS alias) then the value, per SELECT.
+# BLOBs are rendered via lower(hex(...)) so values are deterministic.
+# RFC 9285: "AB" (0x41 0x42) <-> "BB8". Invalid base45 decode -> SQL NULL.
+enc
+BB8
+dec_hex
+4142
+roundtrip_hex
+48656c6c6f2121
+bad
+NULL

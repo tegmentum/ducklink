@@ -1,0 +1,10 @@
+# Valid 1-record WARC fixture: header fields only, body skipped.
+# Content-Type absent in the fixture -> NULL.
+record_no,warc_type,target_uri,content_type,content_length
+1,response,http://example.com/,NULL,5
+# malformed blob -> 0 rows
+bad_rows
+0
+# empty blob -> 0 rows
+empty_rows
+0

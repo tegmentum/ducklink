@@ -1,0 +1,31 @@
+[package]
+name = "prql-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Compile PRQL to SQL: prql_to_sql(prql) -> text, prql_is_valid(prql) -> boolean (prqlc crate).
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+prqlc = { version = "0.13", default-features = false }
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

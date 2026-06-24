@@ -1,0 +1,12 @@
+# jaq smoke golden. csv mode emits a header line per SELECT, then its rows.
+# Values with commas are CSV-quoted, so [2,4,6] prints as "[2,4,6]".
+a
+1
+doubled
+"[2,4,6]"
+multi
+"[1,2]"
+first
+1
+bad_json
+NULL

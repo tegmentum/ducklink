@@ -1,0 +1,19 @@
+# bencode smoke golden (csv mode: header line then row per SELECT).
+obj
+"{""bar"":""spam"",""foo"":42}"
+arr
+"[""spam"",""eggs""]"
+num
+42
+str
+"""spam"""
+ok
+true
+ok_dict
+true
+bad_unterminated
+false
+bad_garbage
+false
+bad
+NULL

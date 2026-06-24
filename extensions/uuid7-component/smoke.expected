@@ -1,0 +1,10 @@
+# Expected output for extensions/uuid7-component/smoke.sql (csv mode).
+# Fully deterministic: build from a fixed timestamp + zero random hex.
+built
+018bcfe5-6800-7000-8000-000000000000
+ts
+1700000000000
+ok
+true
+bad
+false
