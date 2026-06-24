@@ -1503,10 +1503,12 @@ impl HostState {
             return;
         }
         self.did_autoload = true;
-        let spec = match std::env::var("DUCKLINK_AUTOLOAD") {
-            Ok(s) => s,
-            Err(_) => return,
-        };
+        // The default core is lean (no embedded official extensions), so json --
+        // the one functional gap in the suite -- is provided by the `jsonfns`
+        // component, auto-loaded by default. Override with DUCKLINK_AUTOLOAD
+        // (set it empty to disable, or to a different/longer list). On a fat core
+        // the jsonfns LOAD collides with embedded json and is skipped harmlessly.
+        let spec = std::env::var("DUCKLINK_AUTOLOAD").unwrap_or_else(|_| String::from("jsonfns"));
         // Run `LOAD <name>` as SQL on the freshly-opened connection so the core's
         // normal load orchestration applies the component's registrations to the
         // connection (calling ensure_extension_loaded directly only buffers them).
