@@ -1,4 +1,8 @@
-# Expected output for extensions/markdown-component/smoke.sql (reviewed).
+# AUTO-SEEDED by smoke.py --seed-expected. Review and trim:
+#   - csv mode emits a header line per SELECT; keep or drop as you like
+#   - replace nondeterministic lines (timestamps, rng) with ~~
+#   - replace order-sensitive lines with ? if any-non-empty is OK
+#   - delete this banner once you've reviewed each line
 h1
 "<h1>Hi</h1>
 "
@@ -6,7 +10,6 @@ bold
 "<p>a <strong>b</strong> c</p>
 "
 plain
-"Title
-some bold text"
+Title  some bold text
 null_in
 NULL
