@@ -1,0 +1,18 @@
+-- postgreswasm storage backend smoke test.
+--
+-- REQUIRES a live PostgreSQL server on 127.0.0.1:5433 (user `postgres`, NO
+-- password / trust auth, database `ducktest`, table t(a int, b text) with rows
+-- (1,'x'),(2,'y')) AND the network grant: run with
+--   DUCKLINK_NETWORK_GRANT=postgreswasm
+-- This is NOT part of smoke.py --all (it needs the external server + grant), so
+-- it is intentionally NOT registered in registry/index.json.
+--
+-- The type is `postgreswasm`: the lean core de-embeds the native
+-- postgres_scanner, so the `postgreswasm` alias routes ATTACH straight to this
+-- wasm component. The host log line
+--   [storage-scan] dispatch_storage_scan_open ... projection=[0] filters=[(col 0 CompareOp::Gt 1)]
+-- proves projection+filter pushdown reached the component.
+LOAD postgreswasm;
+ATTACH 'host=127.0.0.1 port=5433 user=postgres database=ducktest' AS db (TYPE postgreswasm);
+SELECT a, b FROM db.t ORDER BY a;
+SELECT a FROM db.t WHERE a > 1;
