@@ -53,6 +53,7 @@ use duckdb_cli_bindings::duckdb::extension::types as cli_types;
 use duckdb_core_bindings::duckdb::component::extension_loader_hooks as core_extension_hooks;
 use duckdb_core_bindings::duckdb::component::host_extension_loader as core_host_loader;
 use duckdb_core_bindings::duckdb::extension::callback_dispatch as core_callback_dispatch;
+use duckdb_core_bindings::duckdb::extension::storage_host as core_storage_host;
 use duckdb_core_bindings::duckdb::extension::types as core_types;
 use duckdb_core_bindings::tvm::memory::bytes as core_tvm_bytes;
 use duckdb_core_bindings::tvm::memory::manager as core_tvm_manager;
@@ -76,6 +77,9 @@ use ducklink_runtime::duckdb_extension_bindings::duckdb::extension::{
 use ducklink_runtime::duckdb_extension_bindings::DuckdbExtensionPre;
 use wasmtime::component::__internal::Vec as BindgenVec;
 use ducklink_runtime::{CallbackEntry, CallbackKind, CallbackRegistry};
+// M2b: the storage interface's scan types (scan-request / scan-filter /
+// compare-op) used to drive a pushdown scan into a storage component.
+use ducklink_runtime::extension::storage_scan;
 // The extension engine (store-state, loaded-component instance, capture model)
 // now lives in ducklink-runtime; the host supplies the Direction-1 service sink
 // (CoreServices) and the Direction-1 registration sink (convert_pending_*).
@@ -278,6 +282,119 @@ impl core_callback_dispatch::Host for CoreStoreState {
         manager
             .dispatch_cast(handle, &converted)
             .map(convert_extension_duckvalue_to_core)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+}
+
+// M2a: the core imports `duckdb:extension/storage-host` for read-only
+// foreign-catalog enumeration; the host PROVIDES it and routes each call through
+// the ExtensionManager to the backing storage component's `storage-dispatch`
+// export (mirroring callback-dispatch above). storage-attach reads the host file
+// named by the DSN and stages it into the component.
+impl core_storage_host::Host for CoreStoreState {
+    fn storage_attach(&mut self, dsn: String) -> Result<u32, core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_attach(&dsn)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_list_tables(&mut self, catalog: u32) -> Result<Vec<String>, core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_list_tables(catalog)
+            .map(|tables| tables.into_iter().map(Into::into).collect())
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_table_columns(
+        &mut self,
+        catalog: u32,
+        table: String,
+    ) -> Result<Vec<core_types::Columndef>, core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_table_columns(catalog, &table)
+            .map(|cols| {
+                cols.into_iter()
+                    .map(convert_extension_columndef_to_core)
+                    .collect()
+            })
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    // M2b scan surface: engine-driven projection + filter pushdown. The core
+    // sends a scan-request (table + projection + filters + limit); the host
+    // routes it to the backing component's storage-dispatch.
+    fn storage_scan_open(
+        &mut self,
+        catalog: u32,
+        request: core_storage_host::ScanRequest,
+    ) -> Result<u32, core_types::Duckerror> {
+        // Criterion 2: prove the pushdown reached the host with the projection +
+        // filters the engine pushed.
+        let filter_log: Vec<String> = request
+            .filters
+            .iter()
+            .map(|f| {
+                format!(
+                    "(col {} {:?} {})",
+                    f.column,
+                    f.op,
+                    describe_core_duckvalue(&f.value)
+                )
+            })
+            .collect();
+        eprintln!(
+            "[storage-scan] dispatch_storage_scan_open catalog={} table={:?} projection={:?} filters=[{}] limit={:?}",
+            catalog,
+            request.table,
+            request.projection,
+            filter_log.join(", "),
+            request.limit,
+        );
+
+        let scan_request = convert_core_scan_request_to_storage(request);
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_scan_open(catalog, scan_request)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_scan_next(
+        &mut self,
+        scan: u32,
+        max_rows: u32,
+    ) -> Result<core_storage_host::Resultset, core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_scan_next(scan, max_rows)
+            .map(convert_extension_resultset_to_core)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_scan_close(&mut self, scan: u32) -> Result<bool, core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_scan_close(scan)
             .map_err(convert_extension_duckerror_to_core)
     }
 }
@@ -835,6 +952,11 @@ struct ExtensionManager {
     core: Option<Arc<Mutex<CoreExecution>>>,
     extensions: HashMap<String, ExtensionInstance>,
     callback_registry: Arc<Mutex<CallbackRegistry>>,
+    // M2a: registered ATTACH storage backends, captured from each extension's
+    // `register-storage`. Keyed by ATTACH TYPE name (e.g. "sqlitewasm"); the
+    // value is the backing extension name + the callback-handle the component
+    // expects on every storage-dispatch call.
+    storage_backends: HashMap<String, (String, u32)>,
 }
 
 impl ExtensionManager {
@@ -844,7 +966,99 @@ impl ExtensionManager {
             core: None,
             extensions: HashMap::new(),
             callback_registry: Arc::new(Mutex::new(CallbackRegistry::new())),
+            storage_backends: HashMap::new(),
         }
+    }
+
+    /// Resolve the storage backend that should service an ATTACH. For M2a the
+    /// type name is hardcoded "sqlitewasm" core-side, so prefer that backend and
+    /// otherwise fall back to the single registered backend (if unambiguous).
+    fn resolve_storage_backend(&self) -> Result<(String, u32), extension_types::Duckerror> {
+        if let Some((ext, handle)) = self.storage_backends.get("sqlitewasm") {
+            return Ok((ext.clone(), *handle));
+        }
+        if self.storage_backends.len() == 1 {
+            let (ext, handle) = self.storage_backends.values().next().unwrap();
+            return Ok((ext.clone(), *handle));
+        }
+        Err(extension_types::Duckerror::Invalidstate(format!(
+            "no storage backend registered for 'sqlitewasm' (have {} backend(s))",
+            self.storage_backends.len()
+        )))
+    }
+
+    /// Reads the foreign DB file at `dsn`, stages it into the backing component,
+    /// and opens the catalog; returns the component-side catalog handle.
+    fn dispatch_storage_attach(
+        &mut self,
+        dsn: &str,
+    ) -> Result<u32, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let bytes = std::fs::read(dsn).map_err(|e| {
+            extension_types::Duckerror::Io(format!("cannot read attach file '{dsn}': {e}"))
+        })?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_attach(handle, dsn, &bytes)
+    }
+
+    fn dispatch_storage_list_tables(
+        &mut self,
+        catalog: u32,
+    ) -> Result<Vec<String>, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_list_tables(handle, catalog)
+    }
+
+    fn dispatch_storage_table_columns(
+        &mut self,
+        catalog: u32,
+        table: &str,
+    ) -> Result<Vec<extension_types::Columndef>, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_table_columns(handle, catalog, table)
+    }
+
+    fn dispatch_storage_scan_open(
+        &mut self,
+        catalog: u32,
+        request: storage_scan::ScanRequest,
+    ) -> Result<u32, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_scan_open(handle, catalog, request)
+    }
+
+    fn dispatch_storage_scan_next(
+        &mut self,
+        scan: u32,
+        max_rows: u32,
+    ) -> Result<Vec<Vec<extension_types::Duckvalue>>, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_scan_next(handle, scan, max_rows)
+    }
+
+    fn dispatch_storage_scan_close(
+        &mut self,
+        scan: u32,
+    ) -> Result<bool, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_scan_close(handle, scan)
     }
 
     fn attach_core(&mut self, core: Arc<Mutex<CoreExecution>>) {
@@ -1152,6 +1366,22 @@ impl ExtensionManager {
         };
         let loaded_name = sanitized.clone();
         self.extensions.insert(sanitized, instance);
+        // M2a: capture this extension's storage backends NOW (right after load),
+        // so an `ATTACH ... (TYPE <name>)` can route to it without waiting for the
+        // core's function-registration drain. Only the storage registrations are
+        // taken; scalars/tables/... stay pending for the normal hook flow.
+        if let Some(instance) = self.extensions.get_mut(&loaded_name) {
+            for storage in instance.take_pending_storages() {
+                eprintln!(
+                    "[extension-manager] storage backend '{}' -> extension '{}' (callback={})",
+                    storage.type_name, storage.extension, storage.callback_handle
+                );
+                self.storage_backends.insert(
+                    storage.type_name.clone(),
+                    (storage.extension.clone(), storage.callback_handle),
+                );
+            }
+        }
         eprintln!(
             "[extension-manager] extension '{loaded_name}' loaded successfully and ready for registrations"
         );
@@ -1167,6 +1397,20 @@ impl ExtensionManager {
         let mut aggregated = PendingRegistrationsData::default();
         for instance in self.extensions.values_mut() {
             aggregated.append(instance.drain_pending());
+        }
+        // M2a: capture storage backends so ATTACH (TYPE ...) can route to the
+        // backing component. The core hooks don't carry storages, so record the
+        // type-name -> (extension, callback-handle) mapping here before the
+        // PendingRegistrationsData is converted (and `storages` dropped).
+        for storage in &aggregated.storages {
+            eprintln!(
+                "[extension-manager] storage backend '{}' -> extension '{}' (callback={})",
+                storage.type_name, storage.extension, storage.callback_handle
+            );
+            self.storage_backends.insert(
+                storage.type_name.clone(),
+                (storage.extension.clone(), storage.callback_handle),
+            );
         }
         let scalar_names =
             summarize_registration_names(&aggregated.scalars, |entry| entry.name.as_str());
@@ -2441,6 +2685,10 @@ fn instantiate_core(
         &mut linker,
         |state| state,
     )?;
+    core_storage_host::add_to_linker::<CoreStoreState, CoreStoreState>(
+        &mut linker,
+        |state| state,
+    )?;
     core_tvm_manager::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |state| state)?;
     core_tvm_bytes::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |state| state)?;
 
@@ -2728,6 +2976,86 @@ fn convert_core_duckerror_to_extension(err: core_types::Duckerror) -> extension_
 
 fn map_runtime_trap(err: wasmtime::Error) -> extension_types::Duckerror {
     extension_types::Duckerror::Internal(format!("core runtime trap: {err}"))
+}
+
+// M2a: storage-host result converters (extension-WIT -> core-WIT).
+fn convert_extension_logicaltype_to_core(
+    ty: extension_types::Logicaltype,
+) -> core_types::Logicaltype {
+    match ty {
+        extension_types::Logicaltype::Boolean => core_types::Logicaltype::Boolean,
+        extension_types::Logicaltype::Int64 => core_types::Logicaltype::Int64,
+        extension_types::Logicaltype::Uint64 => core_types::Logicaltype::Uint64,
+        extension_types::Logicaltype::Float64 => core_types::Logicaltype::Float64,
+        extension_types::Logicaltype::Text => core_types::Logicaltype::Text,
+        extension_types::Logicaltype::Blob => core_types::Logicaltype::Blob,
+    }
+}
+
+fn convert_extension_columndef_to_core(col: extension_types::Columndef) -> core_types::Columndef {
+    core_types::Columndef {
+        name: col.name,
+        logical: convert_extension_logicaltype_to_core(col.logical),
+    }
+}
+
+// M2b: convert a core-WIT scan-request into the storage-interface scan-request
+// the backing component's storage-dispatch expects.
+fn convert_core_compare_op_to_storage(op: core_storage_host::CompareOp) -> storage_scan::CompareOp {
+    match op {
+        core_storage_host::CompareOp::Eq => storage_scan::CompareOp::Eq,
+        core_storage_host::CompareOp::Ne => storage_scan::CompareOp::Ne,
+        core_storage_host::CompareOp::Lt => storage_scan::CompareOp::Lt,
+        core_storage_host::CompareOp::Le => storage_scan::CompareOp::Le,
+        core_storage_host::CompareOp::Gt => storage_scan::CompareOp::Gt,
+        core_storage_host::CompareOp::Ge => storage_scan::CompareOp::Ge,
+        core_storage_host::CompareOp::IsNull => storage_scan::CompareOp::IsNull,
+        core_storage_host::CompareOp::IsNotNull => storage_scan::CompareOp::IsNotNull,
+    }
+}
+
+fn convert_core_duckvalue_to_storage(value: core_types::Duckvalue) -> storage_scan::Duckvalue {
+    match value {
+        core_types::Duckvalue::Null => storage_scan::Duckvalue::Null,
+        core_types::Duckvalue::Boolean(v) => storage_scan::Duckvalue::Boolean(v),
+        core_types::Duckvalue::Int64(v) => storage_scan::Duckvalue::Int64(v),
+        core_types::Duckvalue::Uint64(v) => storage_scan::Duckvalue::Uint64(v),
+        core_types::Duckvalue::Float64(v) => storage_scan::Duckvalue::Float64(v),
+        core_types::Duckvalue::Text(v) => storage_scan::Duckvalue::Text(v),
+        core_types::Duckvalue::Blob(v) => storage_scan::Duckvalue::Blob(v),
+    }
+}
+
+fn convert_core_scan_request_to_storage(
+    request: core_storage_host::ScanRequest,
+) -> storage_scan::ScanRequest {
+    storage_scan::ScanRequest {
+        table: request.table,
+        projection: request.projection,
+        filters: request
+            .filters
+            .into_iter()
+            .map(|f| storage_scan::ScanFilter {
+                column: f.column,
+                op: convert_core_compare_op_to_storage(f.op),
+                value: convert_core_duckvalue_to_storage(f.value),
+            })
+            .collect(),
+        limit: request.limit,
+    }
+}
+
+/// Short human-readable rendering of a core Duckvalue for the pushdown log line.
+fn describe_core_duckvalue(value: &core_types::Duckvalue) -> String {
+    match value {
+        core_types::Duckvalue::Null => "NULL".to_string(),
+        core_types::Duckvalue::Boolean(v) => v.to_string(),
+        core_types::Duckvalue::Int64(v) => v.to_string(),
+        core_types::Duckvalue::Uint64(v) => v.to_string(),
+        core_types::Duckvalue::Float64(v) => v.to_string(),
+        core_types::Duckvalue::Text(v) => format!("{v:?}"),
+        core_types::Duckvalue::Blob(v) => format!("<blob {} bytes>", v.len()),
+    }
 }
 
 

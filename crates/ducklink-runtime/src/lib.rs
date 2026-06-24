@@ -40,6 +40,19 @@ pub mod duckdb_extension_bindings {
     });
 }
 
+/// Bindings for the storage-capable world (`duckdb-extension-storage`), which
+/// additionally exports `storage-dispatch`. Only storage backend components
+/// (e.g. sqlitewasm) satisfy this; the runtime builds these bindings lazily from
+/// an already-loaded component instance so non-storage extensions (which don't
+/// export storage-dispatch) still load against the base world above.
+pub mod duckdb_extension_storage_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-storage",
+        require_store_data_send: true,
+    });
+}
+
 /// The kind of callback a handle dispatches to inside an extension component.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CallbackKind {

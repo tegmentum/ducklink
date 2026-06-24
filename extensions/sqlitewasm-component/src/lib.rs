@@ -663,7 +663,10 @@ fn register_sqlite_scan() -> Result<(), types::Duckerror> {
 }
 
 fn register_storage_backend() -> Result<(), types::Duckerror> {
-    storage::register_storage("sqlite", STORAGE_HANDLE, None)?;
+    // M2d: the core's StorageExtension is keyed by the ATTACH TYPE name
+    // "sqlitewasm"; register under that name so the host's storage-backend lookup
+    // matches directly (the host keeps a single-backend fallback regardless).
+    storage::register_storage("sqlitewasm", STORAGE_HANDLE, None)?;
     Ok(())
 }
 

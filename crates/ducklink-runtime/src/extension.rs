@@ -256,6 +256,14 @@ impl ExtensionStoreState {
         registry.remove(handle);
     }
 
+    /// Drains ONLY the captured storage-backend registrations, leaving every
+    /// other pending registration (scalars/tables/...) intact for the normal
+    /// `drain_pending` hook flow. Used right after `load()` so an ATTACH backend
+    /// is routable before the core ever drains function registrations.
+    fn take_pending_storages(&mut self) -> Vec<PendingStorage> {
+        std::mem::take(&mut self.pending_storages)
+    }
+
     fn drain_pending(&mut self) -> PendingRegistrationsData {
         // Combine registrations retained from dropped registries with any that
         // belong to registries still held alive by the guest.
@@ -1154,15 +1162,107 @@ pub fn describe_runtime_logicaltype(ty: &reg::LogicalType) -> &'static str {
 pub struct ExtensionInstance {
     store: Store<ExtensionStoreState>,
     bindings: DuckdbExtension,
+    // Raw component instance, retained so the storage-capable bindings can be
+    // built on demand for storage backend components (which export
+    // storage-dispatch on top of the base world).
+    instance: wasmtime::component::Instance,
+    // Lazily-built storage bindings (None until first storage-dispatch call or
+    // for non-storage extensions).
+    storage_bindings: Option<crate::duckdb_extension_storage_bindings::DuckdbExtensionStorage>,
 }
 
 fn map_extension_trap(err: wasmtime::Error) -> extension_types::Duckerror {
     extension_types::Duckerror::Internal(format!("extension trap: {err}"))
 }
 
+// The storage-capable bindgen world generates its OWN (structurally identical)
+// `types`; convert those into the base `extension_types` the rest of the runtime
+// uses.
+mod storage_types {
+    pub use crate::duckdb_extension_storage_bindings::duckdb::extension::types::*;
+}
+
+// M2b: the storage interface's scan types (scan-request / scan-filter /
+// compare-op) used when driving a pushdown scan into the component.
+pub mod storage_scan {
+    pub use crate::duckdb_extension_storage_bindings::duckdb::extension::storage::*;
+    // The scan-filter `value` field is the storage world's own `types.duckvalue`;
+    // re-export it so the host can construct scan requests.
+    pub use crate::duckdb_extension_storage_bindings::duckdb::extension::types::Duckvalue;
+}
+
+fn storage_duckvalue_to_ext(value: storage_types::Duckvalue) -> extension_types::Duckvalue {
+    match value {
+        storage_types::Duckvalue::Null => extension_types::Duckvalue::Null,
+        storage_types::Duckvalue::Boolean(v) => extension_types::Duckvalue::Boolean(v),
+        storage_types::Duckvalue::Int64(v) => extension_types::Duckvalue::Int64(v),
+        storage_types::Duckvalue::Uint64(v) => extension_types::Duckvalue::Uint64(v),
+        storage_types::Duckvalue::Float64(v) => extension_types::Duckvalue::Float64(v),
+        storage_types::Duckvalue::Text(v) => extension_types::Duckvalue::Text(v),
+        storage_types::Duckvalue::Blob(v) => extension_types::Duckvalue::Blob(v),
+    }
+}
+
+fn storage_duckerror_to_ext(err: storage_types::Duckerror) -> extension_types::Duckerror {
+    match err {
+        storage_types::Duckerror::Invalidargument(m) => extension_types::Duckerror::Invalidargument(m),
+        storage_types::Duckerror::Unsupported(m) => extension_types::Duckerror::Unsupported(m),
+        storage_types::Duckerror::Invalidstate(m) => extension_types::Duckerror::Invalidstate(m),
+        storage_types::Duckerror::Io(m) => extension_types::Duckerror::Io(m),
+        storage_types::Duckerror::Internal(m) => extension_types::Duckerror::Internal(m),
+    }
+}
+
+fn storage_logicaltype_to_ext(ty: storage_types::Logicaltype) -> extension_types::Logicaltype {
+    match ty {
+        storage_types::Logicaltype::Boolean => extension_types::Logicaltype::Boolean,
+        storage_types::Logicaltype::Int64 => extension_types::Logicaltype::Int64,
+        storage_types::Logicaltype::Uint64 => extension_types::Logicaltype::Uint64,
+        storage_types::Logicaltype::Float64 => extension_types::Logicaltype::Float64,
+        storage_types::Logicaltype::Text => extension_types::Logicaltype::Text,
+        storage_types::Logicaltype::Blob => extension_types::Logicaltype::Blob,
+    }
+}
+
+fn storage_columndef_to_ext(col: storage_types::Columndef) -> extension_types::Columndef {
+    extension_types::Columndef {
+        name: col.name,
+        logical: storage_logicaltype_to_ext(col.logical),
+    }
+}
+
 impl ExtensionInstance {
-    pub fn new(store: Store<ExtensionStoreState>, bindings: DuckdbExtension) -> Self {
-        Self { store, bindings }
+    pub fn new(
+        store: Store<ExtensionStoreState>,
+        bindings: DuckdbExtension,
+        instance: wasmtime::component::Instance,
+    ) -> Self {
+        Self {
+            store,
+            bindings,
+            instance,
+            storage_bindings: None,
+        }
+    }
+
+    /// Builds (once) the storage-capable bindings from the raw instance. Errors
+    /// if this component does not export storage-dispatch (i.e. is not a storage
+    /// backend).
+    fn storage_bindings(
+        &mut self,
+    ) -> Result<
+        &crate::duckdb_extension_storage_bindings::DuckdbExtensionStorage,
+        extension_types::Duckerror,
+    > {
+        if self.storage_bindings.is_none() {
+            let built = crate::duckdb_extension_storage_bindings::DuckdbExtensionStorage::new(
+                self.store.as_context_mut(),
+                &self.instance,
+            )
+            .map_err(map_extension_trap)?;
+            self.storage_bindings = Some(built);
+        }
+        Ok(self.storage_bindings.as_ref().unwrap())
     }
 
     pub fn dispatch_scalar(
@@ -1245,6 +1345,131 @@ impl ExtensionInstance {
         let data: *mut ExtensionStoreState = ctx.data_mut();
         unsafe { (*data).drain_pending() }
     }
+
+    /// Drains only the captured storage-backend registrations (see
+    /// `ExtensionStoreState::take_pending_storages`).
+    pub fn take_pending_storages(&mut self) -> Vec<crate::reg::StorageReg> {
+        let mut ctx = self.store.as_context_mut();
+        let data: *mut ExtensionStoreState = ctx.data_mut();
+        unsafe { (*data).take_pending_storages() }
+    }
+
+    // --- M2a: storage-dispatch (foreign-catalog) re-entry ---
+    // Mirrors the callback-dispatch `dispatch_*` methods but drives the
+    // component's exported `storage-dispatch` interface. The native host stages
+    // the foreign DB bytes (attach-blob) then attaches, so `storage_attach`
+    // reads the host file at `dsn` and hands the bytes to the component.
+
+    /// Stage `bytes` under `dsn`, then open the catalog. Returns the
+    /// component-side catalog handle. `handle` is the storage backend's
+    /// callback-handle (passed by the component to register-storage).
+    pub fn storage_attach(
+        &mut self,
+        handle: u32,
+        dsn: &str,
+        bytes: &[u8],
+    ) -> Result<u32, extension_types::Duckerror> {
+        self.storage_bindings()?;
+        // Disjoint field borrows: bindings (immutable) + store (mutable).
+        let bindings = self.storage_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_storage_dispatch();
+        let store = &mut self.store;
+        guest
+            .call_attach_blob(store.as_context_mut(), handle, dsn, bytes)
+            .map_err(map_extension_trap)?
+            .map_err(storage_duckerror_to_ext)?;
+        guest
+            .call_storage_attach(store.as_context_mut(), handle, dsn, &[])
+            .map_err(map_extension_trap)?
+            .map_err(storage_duckerror_to_ext)
+    }
+
+    pub fn storage_list_tables(
+        &mut self,
+        handle: u32,
+        catalog: u32,
+    ) -> Result<Vec<String>, extension_types::Duckerror> {
+        self.storage_bindings()?;
+        let bindings = self.storage_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_storage_dispatch();
+        let store = &mut self.store;
+        guest
+            .call_storage_list_tables(store.as_context_mut(), handle, catalog)
+            .map_err(map_extension_trap)?
+            .map_err(storage_duckerror_to_ext)
+    }
+
+    pub fn storage_table_columns(
+        &mut self,
+        handle: u32,
+        catalog: u32,
+        table: &str,
+    ) -> Result<Vec<extension_types::Columndef>, extension_types::Duckerror> {
+        self.storage_bindings()?;
+        let bindings = self.storage_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_storage_dispatch();
+        let store = &mut self.store;
+        let cols = guest
+            .call_storage_table_columns(store.as_context_mut(), handle, catalog, table)
+            .map_err(map_extension_trap)?
+            .map_err(storage_duckerror_to_ext)?;
+        Ok(cols.into_iter().map(storage_columndef_to_ext).collect())
+    }
+
+    /// M2b: open a scan cursor for `(catalog, table)` honoring the request's
+    /// projection + filters + limit. Returns the component-side scan handle.
+    pub fn storage_scan_open(
+        &mut self,
+        handle: u32,
+        catalog: u32,
+        request: storage_scan::ScanRequest,
+    ) -> Result<u32, extension_types::Duckerror> {
+        self.storage_bindings()?;
+        let bindings = self.storage_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_storage_dispatch();
+        let store = &mut self.store;
+        guest
+            .call_storage_scan_open(store.as_context_mut(), handle, catalog, &request)
+            .map_err(map_extension_trap)?
+            .map_err(storage_duckerror_to_ext)
+    }
+
+    /// M2b: pull up to `max_rows` rows from a scan; empty resultset signals EOF.
+    pub fn storage_scan_next(
+        &mut self,
+        handle: u32,
+        scan: u32,
+        max_rows: u32,
+    ) -> Result<Vec<Vec<extension_types::Duckvalue>>, extension_types::Duckerror> {
+        self.storage_bindings()?;
+        let bindings = self.storage_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_storage_dispatch();
+        let store = &mut self.store;
+        let rows = guest
+            .call_storage_scan_next(store.as_context_mut(), handle, scan, max_rows)
+            .map_err(map_extension_trap)?
+            .map_err(storage_duckerror_to_ext)?;
+        Ok(rows
+            .into_iter()
+            .map(|row| row.into_iter().map(storage_duckvalue_to_ext).collect())
+            .collect())
+    }
+
+    /// M2b: close a scan cursor.
+    pub fn storage_scan_close(
+        &mut self,
+        handle: u32,
+        scan: u32,
+    ) -> Result<bool, extension_types::Duckerror> {
+        self.storage_bindings()?;
+        let bindings = self.storage_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_storage_dispatch();
+        let store = &mut self.store;
+        guest
+            .call_storage_scan_close(store.as_context_mut(), handle, scan)
+            .map_err(map_extension_trap)?
+            .map_err(storage_duckerror_to_ext)
+    }
 }
 
 /// Add the full `duckdb:extension` capability surface to `linker`: the wasip2
@@ -1290,9 +1515,14 @@ pub fn load_component(
     let mut linker = Linker::<ExtensionStoreState>::new(engine);
     add_extension_interfaces_to_linker(&mut linker)?;
 
+    // Instantiate via the linker to obtain the raw component instance, then build
+    // the typed base-world bindings from it. Retaining the raw instance lets a
+    // storage backend lazily build the storage-capable bindings later (the base
+    // world doesn't mandate storage-dispatch, so non-storage extensions still
+    // load here).
     let instance_pre = linker.instantiate_pre(component)?;
-    let pre = DuckdbExtensionPre::new(instance_pre)?;
-    let bindings = pre.instantiate(store.as_context_mut())?;
+    let instance = instance_pre.instantiate(store.as_context_mut())?;
+    let bindings = DuckdbExtension::new(store.as_context_mut(), &instance)?;
     bindings
         .duckdb_extension_guest()
         .call_load(store.as_context_mut())?
@@ -1301,5 +1531,5 @@ pub fn load_component(
                 "extension component '{extension_name}' returned error from load(): {err:?}"
             ))
         })?;
-    Ok(ExtensionInstance::new(store, bindings))
+    Ok(ExtensionInstance::new(store, bindings, instance))
 }

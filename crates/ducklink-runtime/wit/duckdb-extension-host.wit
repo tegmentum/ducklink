@@ -7,8 +7,13 @@ use duckdb:extension/logging;
 use duckdb:extension/catalog;
 use duckdb:extension/files;
 use duckdb:extension/storage;
+use duckdb:extension/storage-dispatch;
 use duckdb:extension/guest;
 
+// Base extension world: every loadable extension exports these. storage-dispatch
+// is NOT mandated here (non-storage extensions like geohash don't export it);
+// storage backends are driven through the separate `duckdb-extension-storage`
+// world below, instantiated from the SAME component instance on demand.
 world duckdb-extension {
   import duckdb:extension/runtime;
   import duckdb:extension/config;
@@ -18,4 +23,19 @@ world duckdb-extension {
   import duckdb:extension/storage;
   export duckdb:extension/guest;
   export callback-dispatch;
+}
+
+// Storage-capable world: additionally exports storage-dispatch. Only storage
+// backend components (e.g. sqlitewasm) satisfy this; the runtime instantiates
+// its bindings lazily from an already-loaded ExtensionInstance.
+world duckdb-extension-storage {
+  import duckdb:extension/runtime;
+  import duckdb:extension/config;
+  import duckdb:extension/logging;
+  import duckdb:extension/catalog;
+  import duckdb:extension/files;
+  import duckdb:extension/storage;
+  export duckdb:extension/guest;
+  export callback-dispatch;
+  export storage-dispatch;
 }

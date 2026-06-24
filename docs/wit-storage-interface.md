@@ -110,6 +110,59 @@ storage-detach:       func(handle: u32, catalog: u32) -> result<bool, duckerror>
    filter ids into `scan-request`. This is the only remaining piece that touches
    DuckDB C++ catalog classes (and a core rebuild); it adds NO new WIT.
 
+## Increment 3 — C++ StorageExtension shim (DONE, verified)
+
+> **Status: complete.** `LOAD sqlitewasm; ATTACH '/tmp/m2.sqlite' AS db (TYPE
+> sqlitewasm); SELECT a FROM db.t WHERE a>1;` returns `2` with the trace showing
+> `dispatch_storage_scan_open ... projection=[0] filters=[(col 0 CompareOp::Gt 1)]`
+> — engine-driven projection + filter pushdown into the wasm component's in-wasm
+> SQLite, behind the WIT boundary. M1 (compile/link/register/dispatch), M2a
+> (catalog enumeration), M2b (columnar scan + pushdown) all landed; geohash /
+> sqlitewasm smoke unaffected. ABI matched `sqlite_scanner`'s flags (libc++,
+> -fwasm-exceptions, legacy-eh=false). Key finding: `create_transaction_manager`
+> must be non-null or DuckDB silently falls back to native file storage.
+
+The wasm core is Rust over DuckDB's C API; literal `ATTACH (TYPE x)` needs
+`StorageExtension::Register(DBConfig&, ...)` + `Catalog` subclasses (C++-only),
+and engine-driven pushdown needs `TableFunctionInitInput::{column_ids,filters}`
+(not exposed by the C table-function API). So a C++ translation unit is added to
+the core build. Template: the embedded `sqlite_scanner`'s own
+`sqlite_catalog/sqlite_schema_entry/sqlite_table_entry` — "sqlite_scanner, but
+the storage backend is a wasm component over WIT".
+
+**Division of labor.** The C++ TU does the DuckDB catalog plumbing + pushdown
+extraction; the Rust core does the WIT marshalling (reusing existing code).
+
+C-ABI bridge (C++ shim → Rust core; the Rust core routes each to the component's
+storage-dispatch via a new core-imported storage-callback interface):
+```c
+uint32_t wasm_storage_attach(const char* dsn, /* options */);        // -> catalog
+size_t   wasm_storage_list_tables(uint32_t cat, /* out names */);
+size_t   wasm_storage_table_columns(uint32_t cat, const char* table, /* out (name,typecode) */);
+uint32_t wasm_storage_scan_open(uint32_t cat, const char* table,
+            const uint32_t* proj, size_t nproj,
+            const WasmScanFilter* filters, size_t nfilt, int64_t limit); // -> scan
+// Rust fills the DuckDB chunk directly, reusing write_duckvalue_to_vector:
+bool     wasm_storage_scan_fill(uint32_t scan, duckdb_data_chunk out);  // false = EOF
+void     wasm_storage_scan_close(uint32_t scan);
+void     wasm_storage_detach(uint32_t cat);
+```
+
+C++ classes (model on sqlite_scanner): `WasmStorageExtension : StorageExtension`
+(attach → `WasmCatalog`), `WasmCatalog : Catalog` (ScanSchemas/LookupSchema over
+one `WasmSchemaEntry`), `WasmSchemaEntry : SchemaCatalogEntry` (tables from
+`wasm_storage_list_tables`), `WasmTableEntry : TableCatalogEntry` (columns from
+`wasm_storage_table_columns`; `GetScanFunction` returns a `TableFunction` with
+`projection_pushdown = filter_pushdown = true` whose init reads
+`input.column_ids` + `input.filters` and calls `wasm_storage_scan_open`, whose
+function calls `wasm_storage_scan_fill(scan, output_chunk)`).
+
+Milestones: **M1** (de-risk) — a STUB `WasmStorageExtension` whose `attach`
+throws, reachable via `ATTACH (TYPE sqlitewasm)` (proves compile/link/register/
+dispatch). **M2** — the Catalog/Schema/Table classes + bridge + Rust storage
+callbacks + core rebuild. **M3** — engine-driven projection/filter pushdown
+through `GetScanFunction`'s pushdown flags, verified by a `WHERE`/`SELECT` plan.
+
 ## Proof target (increments 1 & 2)
 
 SQLite compiled to wasm32-wasip2 *inside* `extensions/sqlite-component` (rusqlite
