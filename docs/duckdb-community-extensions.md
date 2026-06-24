@@ -1,5 +1,24 @@
 # DuckDB Community Extensions on wasm — feasibility triage
 
+> **Status (2026-06): the feasible pure-wasm component set is built out.**
+> `registry/index.json` ships **155 working component extensions** (+ the
+> `sample_extension` template), `tooling/smoke.py --all` = 154 PASS + `http`
+> (network-bound, exercises only with real outbound HTTP — the documented
+> sandbox exception). Every Tier-A dep-free and Tier-B header-only candidate
+> below has been delivered as a Rust component (reimplementing the upstream
+> functionality, often via the same crates), e.g. `hashfuncs`←xxhash/murmur,
+> `json_schema`←json-schema-validator, `stochastic`←boost-math (statrs),
+> `celestial`, `bitfilters`, `tsid`, `crypto`. **What remains is genuinely
+> blocked or deferred, not skipped:** (1) runtime primitives wasip2 lacks —
+> threads/fork/exec/subprocess (`shellfs`, `system_stats`, `sshfs`); (2)
+> functionality needing deep DuckDB core internals not exposed over the WIT
+> boundary (`func_apply` → core function catalog; `scalarfs` → replacement-scan
+> / FS internals); (3) heavy native C++ SDKs needing a per-lib wasi-sdk build
+> (Tier C — effort, not a feasibility wall; deferred); (4) network-bound exts
+> (feasible via the `wasi:sockets` graft but gated off by default — deferred by
+> design). The sections below are the standing map for those deferred routes.
+
+
 The [DuckDB Community Extensions registry](https://duckdb.org/community_extensions/list_of_extensions)
 (`github.com/duckdb/community-extensions`) holds **262** third-party extensions
 (`h3`/`a5`, `lindel`, `crypto`, `markdown`, `bigquery`, `mongo`, …). These are
