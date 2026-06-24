@@ -54,6 +54,7 @@ use duckdb_core_bindings::duckdb::component::extension_loader_hooks as core_exte
 use duckdb_core_bindings::duckdb::component::host_extension_loader as core_host_loader;
 use duckdb_core_bindings::duckdb::extension::callback_dispatch as core_callback_dispatch;
 use duckdb_core_bindings::duckdb::extension::storage_host as core_storage_host;
+use duckdb_core_bindings::duckdb::extension::files_host as core_files_host;
 use duckdb_core_bindings::duckdb::extension::types as core_types;
 use duckdb_core_bindings::tvm::memory::bytes as core_tvm_bytes;
 use duckdb_core_bindings::tvm::memory::manager as core_tvm_manager;
@@ -404,6 +405,46 @@ impl core_storage_host::Host for CoreStoreState {
         manager
             .dispatch_storage_scan_close(scan)
             .map_err(convert_extension_duckerror_to_core)
+    }
+}
+
+// httpfs M2: the core imports `duckdb:extension/files-host` for remote file I/O;
+// the host PROVIDES it and routes each call through the ExtensionManager to the
+// registered files-backend component's `file-dispatch` export (mirroring
+// storage-host above). The error channel is plain strings (not duckerror).
+impl core_files_host::Host for CoreStoreState {
+    fn file_open(
+        &mut self,
+        url: String,
+    ) -> Result<core_files_host::FileOpenResult, String> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_file_open(&url)
+            .map(|(handle, size)| core_files_host::FileOpenResult { handle, size })
+    }
+
+    fn file_read(
+        &mut self,
+        handle: u32,
+        offset: u64,
+        len: u32,
+    ) -> Result<Vec<u8>, String> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager.dispatch_file_read(handle, offset, len)
+    }
+
+    fn file_close(&mut self, handle: u32) -> Result<(), String> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager.dispatch_file_close(handle)
     }
 }
 
@@ -965,6 +1006,10 @@ struct ExtensionManager {
     // value is the backing extension name + the callback-handle the component
     // expects on every storage-dispatch call.
     storage_backends: HashMap<String, (String, u32)>,
+    // httpfs M2: the single registered files backend (the component that backs
+    // http(s):// reads), as (extension name, callback-handle). Captured from a
+    // component's `files-reg.register-files` at load.
+    files_backend: Option<(String, u32)>,
 }
 
 impl ExtensionManager {
@@ -975,6 +1020,7 @@ impl ExtensionManager {
             extensions: HashMap::new(),
             callback_registry: Arc::new(Mutex::new(CallbackRegistry::new())),
             storage_backends: HashMap::new(),
+            files_backend: None,
         }
     }
 
@@ -1095,6 +1141,58 @@ impl ExtensionManager {
             extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
         })?;
         instance.storage_scan_close(handle, scan)
+    }
+
+    // httpfs M2: route file-open/read/close to the registered files backend's
+    // file-dispatch export. The error channel is plain strings (surfaced to the
+    // core's WasmFileSystem as an IOException message).
+
+    /// Resolve the files backend (extension name + callback-handle). Errors with
+    /// a clear message when no files component is loaded, so `http://` without
+    /// `LOAD webfs` fails cleanly.
+    fn resolve_files_backend(&self) -> Result<(String, u32), String> {
+        self.files_backend
+            .clone()
+            .ok_or_else(|| "no files backend loaded (LOAD a files extension, e.g. webfs)".to_string())
+    }
+
+    fn dispatch_file_open(&mut self, url: &str) -> Result<(u32, u64), String> {
+        let (ext, handle) = self.resolve_files_backend()?;
+        eprintln!("[file-open] dispatch_file_open ext='{ext}' url='{url}'");
+        let instance = self
+            .extensions
+            .get_mut(&ext)
+            .ok_or_else(|| format!("files extension '{ext}' not loaded"))?;
+        instance
+            .file_open(handle, url)
+            .map_err(|e| format!("{e:?}"))
+    }
+
+    fn dispatch_file_read(
+        &mut self,
+        file: u32,
+        offset: u64,
+        len: u32,
+    ) -> Result<Vec<u8>, String> {
+        let (ext, handle) = self.resolve_files_backend()?;
+        let instance = self
+            .extensions
+            .get_mut(&ext)
+            .ok_or_else(|| format!("files extension '{ext}' not loaded"))?;
+        instance
+            .file_read(handle, file, offset, len)
+            .map_err(|e| format!("{e:?}"))
+    }
+
+    fn dispatch_file_close(&mut self, file: u32) -> Result<(), String> {
+        let (ext, handle) = self.resolve_files_backend()?;
+        let instance = self
+            .extensions
+            .get_mut(&ext)
+            .ok_or_else(|| format!("files extension '{ext}' not loaded"))?;
+        instance
+            .file_close(handle, file)
+            .map_err(|e| format!("{e:?}"))
     }
 
     fn attach_core(&mut self, core: Arc<Mutex<CoreExecution>>) {
@@ -1416,6 +1514,16 @@ impl ExtensionManager {
                     storage.type_name.clone(),
                     (storage.extension.clone(), storage.callback_handle),
                 );
+            }
+            // httpfs M2: capture this extension's files backend NOW (right after
+            // load), so an http(s):// read can route to it. The last loaded
+            // files backend wins.
+            for files in instance.take_pending_files() {
+                eprintln!(
+                    "[extension-manager] files backend -> extension '{}' (callback={})",
+                    files.extension, files.callback_handle
+                );
+                self.files_backend = Some((files.extension.clone(), files.callback_handle));
             }
         }
         eprintln!(
@@ -2782,6 +2890,10 @@ fn instantiate_core(
         |state| state,
     )?;
     core_storage_host::add_to_linker::<CoreStoreState, CoreStoreState>(
+        &mut linker,
+        |state| state,
+    )?;
+    core_files_host::add_to_linker::<CoreStoreState, CoreStoreState>(
         &mut linker,
         |state| state,
     )?;

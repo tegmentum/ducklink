@@ -8,6 +8,8 @@ use duckdb:extension/catalog;
 use duckdb:extension/files;
 use duckdb:extension/storage;
 use duckdb:extension/storage-dispatch;
+use duckdb:extension/files-reg;
+use duckdb:extension/file-dispatch;
 use duckdb:extension/guest;
 
 // Base extension world: every loadable extension exports these. storage-dispatch
@@ -21,6 +23,7 @@ world duckdb-extension {
   import duckdb:extension/catalog;
   import duckdb:extension/files;
   import duckdb:extension/storage;
+  import duckdb:extension/files-reg;
   export duckdb:extension/guest;
   export callback-dispatch;
 }
@@ -38,4 +41,20 @@ world duckdb-extension-storage {
   export duckdb:extension/guest;
   export callback-dispatch;
   export storage-dispatch;
+}
+
+// Files-capable world: additionally exports file-dispatch. Only files backend
+// components (e.g. webfs) satisfy this; the runtime instantiates its bindings
+// lazily from an already-loaded ExtensionInstance.
+world duckdb-extension-files {
+  import duckdb:extension/runtime;
+  import duckdb:extension/config;
+  import duckdb:extension/logging;
+  import duckdb:extension/catalog;
+  import duckdb:extension/files;
+  import duckdb:extension/storage;
+  import duckdb:extension/files-reg;
+  export duckdb:extension/guest;
+  export callback-dispatch;
+  export file-dispatch;
 }

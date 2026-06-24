@@ -53,6 +53,19 @@ pub mod duckdb_extension_storage_bindings {
     });
 }
 
+/// Bindings for the files-capable world (`duckdb-extension-files`), which
+/// additionally exports `file-dispatch` (httpfs M2). Only files backend
+/// components (e.g. webfs) satisfy this; the runtime builds these bindings
+/// lazily from an already-loaded component instance so non-files extensions
+/// (which don't export file-dispatch) still load against the base world above.
+pub mod duckdb_extension_files_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-files",
+        require_store_data_send: true,
+    });
+}
+
 /// The kind of callback a handle dispatches to inside an extension component.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CallbackKind {
@@ -216,6 +229,15 @@ pub mod reg {
         pub type_name: String,
         pub callback_handle: u32,
         pub options: Option<ExtOpts>,
+    }
+
+    /// A files backend registered by an extension (httpfs M2). The
+    /// `callback_handle` routes every `file-dispatch` call back to the owning
+    /// component. Only one files backend is active at a time.
+    #[derive(Clone, Debug)]
+    pub struct FilesReg {
+        pub extension: String,
+        pub callback_handle: u32,
     }
 
     /// An aggregate function registered by an extension.

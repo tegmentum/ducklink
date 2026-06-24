@@ -20,8 +20,8 @@ use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 use crate::duckdb_extension_bindings::duckdb::extension::{
     catalog as extension_catalog, config as extension_config, files as extension_files,
-    logging as extension_logging, runtime as extension_runtime, storage as extension_storage,
-    types as extension_types,
+    files_reg as extension_files_reg, logging as extension_logging, runtime as extension_runtime,
+    storage as extension_storage, types as extension_types,
 };
 use crate::duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
 use crate::reg;
@@ -111,6 +111,7 @@ type PendingReplacementScan = reg::ReplacementScanReg;
 type PendingLogicalType = reg::LogicalTypeReg;
 type PendingCast = reg::CastReg;
 type PendingStorage = reg::StorageReg;
+type PendingFiles = reg::FilesReg;
 
 #[derive(Default)]
 struct PendingScalarRegistry {
@@ -198,6 +199,7 @@ pub struct ExtensionStoreState {
     pending_logical_types: Vec<PendingLogicalType>,
     pending_casts: Vec<PendingCast>,
     pending_storages: Vec<PendingStorage>,
+    pending_files: Vec<PendingFiles>,
     /// Maps the handle returned from `table-registry.register` to the table
     /// function name, so `files.register-replacement-scan` can resolve it.
     table_handle_names: HashMap<u32, String>,
@@ -228,6 +230,7 @@ impl ExtensionStoreState {
             pending_logical_types: Vec::new(),
             pending_casts: Vec::new(),
             pending_storages: Vec::new(),
+            pending_files: Vec::new(),
             table_handle_names: HashMap::new(),
             callback_registry,
             extension_name,
@@ -262,6 +265,13 @@ impl ExtensionStoreState {
     /// is routable before the core ever drains function registrations.
     fn take_pending_storages(&mut self) -> Vec<PendingStorage> {
         std::mem::take(&mut self.pending_storages)
+    }
+
+    /// Drains ONLY the captured files-backend registrations (httpfs M2), used
+    /// right after `load()` so the host knows which component backs http(s)
+    /// reads before any query runs.
+    fn take_pending_files(&mut self) -> Vec<PendingFiles> {
+        std::mem::take(&mut self.pending_files)
     }
 
     fn drain_pending(&mut self) -> PendingRegistrationsData {
@@ -975,6 +985,28 @@ impl extension_storage::Host for ExtensionStoreState {
     }
 }
 
+// httpfs M2: the `files-reg` interface lets a component declare itself the files
+// backend (an http(s) fetcher) in `load()`. The host satisfies the import so
+// files-capable components instantiate; the registration is captured into the
+// neutral pending buffer and driving the component's `file-dispatch` export is
+// the direction-specific sink's job.
+impl extension_files_reg::Host for ExtensionStoreState {
+    fn register_files(
+        &mut self,
+        callback_handle: u32,
+    ) -> Result<u32, extension_types::Duckerror> {
+        eprintln!(
+            "[extension-runtime:{}] registered files backend (callback={callback_handle})",
+            self.extension_name
+        );
+        self.pending_files.push(PendingFiles {
+            extension: self.extension_name.clone(),
+            callback_handle,
+        });
+        Ok(self.alloc_resource_id())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Capture conversions (extension WIT -> neutral reg::*) + logging helpers
 // ---------------------------------------------------------------------------
@@ -1169,6 +1201,9 @@ pub struct ExtensionInstance {
     // Lazily-built storage bindings (None until first storage-dispatch call or
     // for non-storage extensions).
     storage_bindings: Option<crate::duckdb_extension_storage_bindings::DuckdbExtensionStorage>,
+    // httpfs M2: lazily-built files bindings (None until first file-dispatch
+    // call or for non-files extensions).
+    files_bindings: Option<crate::duckdb_extension_files_bindings::DuckdbExtensionFiles>,
 }
 
 fn map_extension_trap(err: wasmtime::Error) -> extension_types::Duckerror {
@@ -1242,6 +1277,7 @@ impl ExtensionInstance {
             bindings,
             instance,
             storage_bindings: None,
+            files_bindings: None,
         }
     }
 
@@ -1352,6 +1388,14 @@ impl ExtensionInstance {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
         unsafe { (*data).take_pending_storages() }
+    }
+
+    /// httpfs M2: drains the captured files-backend registrations (see
+    /// `ExtensionStoreState::take_pending_files`).
+    pub fn take_pending_files(&mut self) -> Vec<crate::reg::FilesReg> {
+        let mut ctx = self.store.as_context_mut();
+        let data: *mut ExtensionStoreState = ctx.data_mut();
+        unsafe { (*data).take_pending_files() }
     }
 
     // --- M2a: storage-dispatch (foreign-catalog) re-entry ---
@@ -1470,6 +1514,85 @@ impl ExtensionInstance {
             .map_err(map_extension_trap)?
             .map_err(storage_duckerror_to_ext)
     }
+
+    // --- httpfs M2: file-dispatch (remote file I/O) re-entry ---
+    // Mirrors the storage-dispatch `storage_*` methods but drives the files
+    // backend component's exported `file-dispatch` interface. The component
+    // fetches the whole resource over wasi:sockets at open, caches it, and
+    // serves byte ranges. The error channel is plain strings (not duckerror).
+
+    /// Builds (once) the files-capable bindings from the raw instance. Errors if
+    /// this component does not export file-dispatch (i.e. is not a files
+    /// backend).
+    fn files_bindings(
+        &mut self,
+    ) -> Result<
+        &crate::duckdb_extension_files_bindings::DuckdbExtensionFiles,
+        extension_types::Duckerror,
+    > {
+        if self.files_bindings.is_none() {
+            let built = crate::duckdb_extension_files_bindings::DuckdbExtensionFiles::new(
+                self.store.as_context_mut(),
+                &self.instance,
+            )
+            .map_err(map_extension_trap)?;
+            self.files_bindings = Some(built);
+        }
+        Ok(self.files_bindings.as_ref().unwrap())
+    }
+
+    /// Open (fetch + cache) `url`. Returns (component-side file handle, size).
+    /// `handle` is the files backend's callback-handle (from register-files).
+    pub fn file_open(
+        &mut self,
+        handle: u32,
+        url: &str,
+    ) -> Result<(u32, u64), extension_types::Duckerror> {
+        self.files_bindings()?;
+        let bindings = self.files_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_file_dispatch();
+        let store = &mut self.store;
+        let res = guest
+            .call_file_open(store.as_context_mut(), handle, url)
+            .map_err(map_extension_trap)?
+            .map_err(extension_types::Duckerror::Io)?;
+        Ok((res.handle, res.size))
+    }
+
+    /// Read up to `len` bytes from `file` at `offset`. A short read at EOF is
+    /// allowed.
+    pub fn file_read(
+        &mut self,
+        handle: u32,
+        file: u32,
+        offset: u64,
+        len: u32,
+    ) -> Result<Vec<u8>, extension_types::Duckerror> {
+        self.files_bindings()?;
+        let bindings = self.files_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_file_dispatch();
+        let store = &mut self.store;
+        guest
+            .call_file_read(store.as_context_mut(), handle, file, offset, len)
+            .map_err(map_extension_trap)?
+            .map_err(extension_types::Duckerror::Io)
+    }
+
+    /// Drop the component-side cache entry for `file`.
+    pub fn file_close(
+        &mut self,
+        handle: u32,
+        file: u32,
+    ) -> Result<(), extension_types::Duckerror> {
+        self.files_bindings()?;
+        let bindings = self.files_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_file_dispatch();
+        let store = &mut self.store;
+        guest
+            .call_file_close(store.as_context_mut(), handle, file)
+            .map_err(map_extension_trap)?
+            .map_err(extension_types::Duckerror::Io)
+    }
 }
 
 /// Add the full `duckdb:extension` capability surface to `linker`: the wasip2
@@ -1488,6 +1611,7 @@ pub fn add_extension_interfaces_to_linker(
     extension_catalog::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_files::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_storage::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    extension_files_reg::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     Ok(())
 }
 
