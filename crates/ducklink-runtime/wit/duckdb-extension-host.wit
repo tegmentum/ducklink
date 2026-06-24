@@ -6,6 +6,7 @@ use duckdb:extension/config;
 use duckdb:extension/logging;
 use duckdb:extension/catalog;
 use duckdb:extension/files;
+use duckdb:extension/storage;
 use duckdb:extension/guest;
 
 world duckdb-extension {
@@ -14,6 +15,7 @@ world duckdb-extension {
   import duckdb:extension/logging;
   import duckdb:extension/catalog;
   import duckdb:extension/files;
+  import duckdb:extension/storage;
   export duckdb:extension/guest;
   export callback-dispatch;
 }

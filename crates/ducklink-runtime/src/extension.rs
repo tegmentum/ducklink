@@ -20,7 +20,8 @@ use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 use crate::duckdb_extension_bindings::duckdb::extension::{
     catalog as extension_catalog, config as extension_config, files as extension_files,
-    logging as extension_logging, runtime as extension_runtime, types as extension_types,
+    logging as extension_logging, runtime as extension_runtime, storage as extension_storage,
+    types as extension_types,
 };
 use crate::duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
 use crate::reg;
@@ -109,6 +110,7 @@ type PendingMacro = reg::MacroReg;
 type PendingReplacementScan = reg::ReplacementScanReg;
 type PendingLogicalType = reg::LogicalTypeReg;
 type PendingCast = reg::CastReg;
+type PendingStorage = reg::StorageReg;
 
 #[derive(Default)]
 struct PendingScalarRegistry {
@@ -136,6 +138,7 @@ pub struct PendingRegistrationsData {
     pub replacement_scans: Vec<PendingReplacementScan>,
     pub logical_types: Vec<PendingLogicalType>,
     pub casts: Vec<PendingCast>,
+    pub storages: Vec<PendingStorage>,
 }
 
 impl PendingRegistrationsData {
@@ -147,6 +150,7 @@ impl PendingRegistrationsData {
         self.replacement_scans.append(&mut other.replacement_scans);
         self.logical_types.append(&mut other.logical_types);
         self.casts.append(&mut other.casts);
+        self.storages.append(&mut other.storages);
     }
 }
 
@@ -193,6 +197,7 @@ pub struct ExtensionStoreState {
     pending_replacement_scans: Vec<PendingReplacementScan>,
     pending_logical_types: Vec<PendingLogicalType>,
     pending_casts: Vec<PendingCast>,
+    pending_storages: Vec<PendingStorage>,
     /// Maps the handle returned from `table-registry.register` to the table
     /// function name, so `files.register-replacement-scan` can resolve it.
     table_handle_names: HashMap<u32, String>,
@@ -222,6 +227,7 @@ impl ExtensionStoreState {
             pending_replacement_scans: Vec::new(),
             pending_logical_types: Vec::new(),
             pending_casts: Vec::new(),
+            pending_storages: Vec::new(),
             table_handle_names: HashMap::new(),
             callback_registry,
             extension_name,
@@ -275,6 +281,7 @@ impl ExtensionStoreState {
         let replacement_scans = std::mem::take(&mut self.pending_replacement_scans);
         let logical_types = std::mem::take(&mut self.pending_logical_types);
         let casts = std::mem::take(&mut self.pending_casts);
+        let storages = std::mem::take(&mut self.pending_storages);
         let pending = PendingRegistrationsData {
             scalars,
             tables,
@@ -283,6 +290,7 @@ impl ExtensionStoreState {
             replacement_scans,
             logical_types,
             casts,
+            storages,
         };
         let scalar_names =
             summarize_registration_names(&pending.scalars, |entry| entry.name.as_str());
@@ -932,6 +940,33 @@ impl extension_files::Host for ExtensionStoreState {
     }
 }
 
+// The `storage` interface lets a component register an ATTACH-able catalog
+// backend (a DB scanner) in `load()`. The host satisfies the import so
+// storage-capable components instantiate and load; the registration is captured
+// into the neutral pending buffer. Driving the component's `storage-dispatch`
+// export (attach/scan) is the direction-specific sink's job.
+impl extension_storage::Host for ExtensionStoreState {
+    fn register_storage(
+        &mut self,
+        type_name: String,
+        callback_handle: u32,
+        options: Option<extension_storage::Extopts>,
+    ) -> Result<u32, extension_types::Duckerror> {
+        let converted_options = options.map(convert_storage_extopts);
+        eprintln!(
+            "[extension-runtime:{}] registered storage backend '{type_name}' (callback={callback_handle})",
+            self.extension_name
+        );
+        self.pending_storages.push(PendingStorage {
+            extension: self.extension_name.clone(),
+            type_name,
+            callback_handle,
+            options: converted_options,
+        });
+        Ok(self.alloc_resource_id())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Capture conversions (extension WIT -> neutral reg::*) + logging helpers
 // ---------------------------------------------------------------------------
@@ -975,6 +1010,13 @@ fn convert_extension_columndefs(columns: Vec<extension_runtime::Columndef>) -> V
 }
 
 fn convert_extension_extopts(opts: extension_runtime::Extopts) -> reg::ExtOpts {
+    reg::ExtOpts {
+        description: opts.description,
+        tags: opts.tags.into_iter().collect(),
+    }
+}
+
+fn convert_storage_extopts(opts: extension_storage::Extopts) -> reg::ExtOpts {
     reg::ExtOpts {
         description: opts.description,
         tags: opts.tags.into_iter().collect(),
@@ -1220,6 +1262,7 @@ pub fn add_extension_interfaces_to_linker(
     extension_logging::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_catalog::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_files::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    extension_storage::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     Ok(())
 }
 

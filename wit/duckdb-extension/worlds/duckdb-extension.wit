@@ -7,6 +7,8 @@ use logging;
 use catalog;
 use files;
 use guest;
+use storage;
+use storage-dispatch;
 
 world duckdb-extension {
   import runtime;
@@ -16,4 +18,21 @@ world duckdb-extension {
   import files;
   export guest;
   export callback-dispatch;
+}
+
+// Storage-capable world: a superset that additionally imports the storage
+// registration surface and exports the storage-dispatch callbacks. Only
+// components that back an ATTACH-able catalog (e.g. the sqlite scanner) target
+// this world; the default `duckdb-extension` world is unchanged, so every
+// existing component's frozen WIT copy keeps linking identically.
+world duckdb-extension-storage {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import storage;
+  export guest;
+  export callback-dispatch;
+  export storage-dispatch;
 }

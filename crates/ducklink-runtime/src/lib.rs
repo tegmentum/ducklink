@@ -194,6 +194,17 @@ pub mod reg {
         pub options: Option<ExtOpts>,
     }
 
+    /// A storage / catalog backend registered by an extension. Keyed by an
+    /// ATTACH `type_name` (e.g. "sqlite"); `callback_handle` routes every
+    /// `storage-dispatch` call back to the owning component.
+    #[derive(Clone, Debug)]
+    pub struct StorageReg {
+        pub extension: String,
+        pub type_name: String,
+        pub callback_handle: u32,
+        pub options: Option<ExtOpts>,
+    }
+
     /// An aggregate function registered by an extension.
     #[derive(Clone, Debug)]
     pub struct AggregateReg {
