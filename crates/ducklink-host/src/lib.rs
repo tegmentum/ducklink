@@ -292,6 +292,14 @@ impl core_callback_dispatch::Host for CoreStoreState {
 // export (mirroring callback-dispatch above). storage-attach reads the host file
 // named by the DSN and stages it into the component.
 impl core_storage_host::Host for CoreStoreState {
+    fn storage_list_types(&mut self) -> Vec<String> {
+        let manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager.registered_storage_types()
+    }
+
     fn storage_attach(&mut self, dsn: String) -> Result<u32, core_types::Duckerror> {
         let mut manager = self
             .extension_manager
@@ -970,6 +978,14 @@ impl ExtensionManager {
         }
     }
 
+    /// The ATTACH `TYPE` names of every storage backend a component has
+    /// registered (via `register-storage`). The core pulls this list (through the
+    /// `storage-host.storage-list-types` import) and registers a wasm
+    /// StorageExtension for each, so `ATTACH ... (TYPE <name>)` dispatches here.
+    fn registered_storage_types(&self) -> Vec<String> {
+        self.storage_backends.keys().cloned().collect()
+    }
+
     /// Resolve the storage backend that should service an ATTACH. For M2a the
     /// type name is hardcoded "sqlitewasm" core-side, so prefer that backend and
     /// otherwise fall back to the single registered backend (if unambiguous).
@@ -980,6 +996,17 @@ impl ExtensionManager {
         if self.storage_backends.len() == 1 {
             let (ext, handle) = self.storage_backends.values().next().unwrap();
             return Ok((ext.clone(), *handle));
+        }
+        // Multiple type keys may alias the SAME backing extension (e.g. a
+        // backend that registers both "mysql" and "mysqlwasm"). If every key
+        // resolves to one extension, that backend is still unambiguous.
+        {
+            let mut iter = self.storage_backends.values();
+            if let Some(first) = iter.next() {
+                if iter.all(|v| v.0 == first.0) {
+                    return Ok((first.0.clone(), first.1));
+                }
+            }
         }
         Err(extension_types::Duckerror::Invalidstate(format!(
             "no storage backend registered for 'sqlitewasm' (have {} backend(s))",
@@ -994,9 +1021,18 @@ impl ExtensionManager {
         dsn: &str,
     ) -> Result<u32, extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
-        let bytes = std::fs::read(dsn).map_err(|e| {
-            extension_types::Duckerror::Io(format!("cannot read attach file '{dsn}': {e}"))
-        })?;
+        eprintln!("[storage-attach] dispatch_storage_attach ext='{ext}' dsn='{dsn}'");
+        // The dsn may be a FILE (sqlite-over-blob) or a CONNECTION STRING
+        // (e.g. mysql `host=... user=...`). Staging bytes via attach-blob is
+        // BEST-EFFORT: only when the dsn names an existing readable file. For a
+        // connection-string backend (mysql) the file read is skipped and the
+        // component's storage-attach receives the raw dsn to dial directly.
+        let bytes = match std::fs::metadata(dsn) {
+            Ok(m) if m.is_file() => std::fs::read(dsn).map_err(|e| {
+                extension_types::Duckerror::Io(format!("cannot read attach file '{dsn}': {e}"))
+            })?,
+            _ => Vec::new(),
+        };
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
             extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
         })?;
