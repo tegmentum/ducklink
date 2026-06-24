@@ -1,0 +1,26 @@
+[package]
+name = "textplot-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Text/terminal visualization: sparklines, bar charts, QR codes
+"""
+license = "MIT"
+publish = false
+
+[lib]
+name = "textplot"
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+serde_json = "1"
+qrcode = "0.14"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

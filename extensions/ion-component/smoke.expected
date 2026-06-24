@@ -1,0 +1,14 @@
+to_json
+"{""a"":1,""b"":""hi""}"
+from_json
+"{a: 1, b: ""hi""}"
+roundtrip
+"[1,2,3]"
+get_field
+2
+null_in
+NULL
+bad_in
+NULL
+bad_json
+NULL

@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**155 component extensions** · **380 SQL functions** · 6 expose aggregates · 3 require network.
+**159 component extensions** · **391 SQL functions** · 6 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -18,7 +18,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 - **Static embed (opt-in):** `ducklink compose --embed <name>` bakes an extension into the core at build time. Wired today for `isin` (`embed-isin` core feature); `ducklink compose --list` shows what's embeddable. Most extensions stay runtime-loaded by design.
 - **Network grant:** net extensions are denied by default; opt in with `--grant-network all` (or a name allowlist), equivalently the `DUCKLINK_NETWORK_GRANT` env var.
 
-## Data types & encoding (65)
+## Data types & encoding (67)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -54,6 +54,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **idextra** | `ksuid`, `cuid2` | svix-ksuid, cuid2 |  |
 | **ids** | `ulid`, `nanoid`, `ulid_timestamp` | ulid, nanoid |  |
 | **ini** | `ini_to_json`, `ini_get`, `ini_sections` | rust-ini, serde_json |  |
+| **ion** | `ion_to_json`, `ion_from_json`, `ion_get` | ion-rs |  |
 | **iso** | `iso_country_name`, `iso_country_alpha3`, `iso_country_numeric` | rust_iso3166 |  |
 | **jaq** | `jq`, `jq_first` | jaq-core, jaq-std, jaq-json |  |
 | **json_schema** | `json_schema_valid`, `json_schema_errors` | jsonschema |  |
@@ -61,6 +62,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **lindel** | `morton_encode`, `morton_decode_x`, `morton_decode_y`, `hilbert_encode`, `hilbert_decode_x`, `hilbert_decode_y` | hand-rolled |  |
 | **magic** | `magic_mime`, `magic_extension`, `magic_matcher_type`, `is_image` | infer |  |
 | **maidenhead** | `to_maidenhead`, `maidenhead_lat`, `maidenhead_lon` | hand-rolled |  |
+| **marisa** | `fst_contains`, `fst_prefix`, `fst_count` | fst |  |
 | **mime** | `mime_type`, `mime_from_ext` | mime_guess |  |
 | **minhash** | `minhash`, `minhash_similarity` | hand-rolled | aggregate |
 | **money** | `format_money` | iso_currency |  |
@@ -88,7 +90,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **yaml** | `yaml_to_json`, `json_to_yaml` | serde_yaml, serde_json |  |
 | **z85** | `z85_encode`, `z85_decode` | z85 |  |
 
-## Text & NLP (51)
+## Text & NLP (52)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -135,6 +137,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **stopwords** | `is_stopword`, `remove_stopwords` | stop-words |  |
 | **textdiff** | `text_diff`, `diff_ratio`, `diff_changed_lines` | similar |  |
 | **textlines** | `split_lines` | hand-rolled |  |
+| **textplot** | `plot_sparkline`, `plot_bars`, `qr_utf8` | qrcode |  |
 | **textstat** | `word_count`, `sentence_count`, `syllable_count`, `flesch_reading_ease`, `reading_time_minutes` | hand-rolled |  |
 | **tiktoken** | `tiktoken_count`, `tiktoken_encode`, `tiktoken_decode` | tiktoken-rs |  |
 | **transliterate** | `deunicode` | deunicode |  |
@@ -162,6 +165,17 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **totp** | `totp` | hmac, sha1, base32 |  |
 | **vigenere** | `vigenere_encrypt`, `vigenere_decrypt` | hand-rolled |  |
 
+## Math (6)
+
+| Extension | Functions | Backed by | Notes |
+|---|---|---|---|
+| **bitfilters** | `xor_filter`, `xor_filter_contains` | xorf, bincode | aggregate |
+| **celestial** | `equatorial_to_galactic_l`, `equatorial_to_galactic_b`, `angular_separation`, `hms_to_deg`, `dms_to_deg` | hand-rolled |  |
+| **frequentitems** | `top_k`, `top_k_value` | hand-rolled |  |
+| **hashfuncs** | `xxh32`, `xxh64`, `xxh3`, `murmur3` | twox-hash, murmur3 |  |
+| **stochastic** | `normal_cdf`, `normal_pdf`, `normal_quantile`, `binomial_pmf`, `poisson_pmf`, `exponential_cdf`, `beta_cdf` | statrs |  |
+| **tdigest** | `tdigest`, `tdigest_quantile`, `tdigest_count` | tdigest, bincode | aggregate |
+
 ## Validators (6)
 
 | Extension | Functions | Backed by | Notes |
@@ -172,16 +186,6 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **iban** | `iban_validate`, `iban_country`, `iban_bban` | hand-rolled |  |
 | **isin** | `isin_validate`, `isin_check_digit`, `isin_country`, `isin_nsin` | hand-rolled |  |
 | **luhn** | `luhn_validate`, `luhn_check_digit` | hand-rolled |  |
-
-## Math (5)
-
-| Extension | Functions | Backed by | Notes |
-|---|---|---|---|
-| **bitfilters** | `xor_filter`, `xor_filter_contains` | xorf, bincode | aggregate |
-| **celestial** | `equatorial_to_galactic_l`, `equatorial_to_galactic_b`, `angular_separation`, `hms_to_deg`, `dms_to_deg` | hand-rolled |  |
-| **hashfuncs** | `xxh32`, `xxh64`, `xxh3`, `murmur3` | twox-hash, murmur3 |  |
-| **stochastic** | `normal_cdf`, `normal_pdf`, `normal_quantile`, `binomial_pmf`, `poisson_pmf`, `exponential_cdf`, `beta_cdf` | statrs |  |
-| **tdigest** | `tdigest`, `tdigest_quantile`, `tdigest_count` | tdigest, bincode | aggregate |
 
 ## Networking (5)
 

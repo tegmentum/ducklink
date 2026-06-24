@@ -5077,6 +5077,115 @@
         "statrs"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "ion",
+      "version": "0.1.0",
+      "description": "Amazon Ion (typed JSON superset) conversion (ion-rs): ion_to_json(data) -> JSON (text or binary Ion), ion_from_json(json) -> Ion text, ion_get(data, field) -> top-level struct field. NULL on parse error.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/ion-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/ion.wasm",
+      "exports": [
+        "ion_to_json",
+        "ion_from_json",
+        "ion_get"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "ion-rs"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "textplot",
+      "version": "0.1.0",
+      "description": "Terminal/text visualization: plot_sparkline(nums_json) -> unicode sparkline, plot_bars(nums_json, width) -> ascii bar chart, qr_utf8(text) -> QR code as UTF-8 blocks (qrcode crate). NULL on bad input.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/textplot-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/textplot.wasm",
+      "exports": [
+        "plot_sparkline",
+        "plot_bars",
+        "qr_utf8"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "qrcode"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "marisa",
+      "version": "0.1.0",
+      "description": "Trie-backed string set/prefix lookup (fst crate): fst_contains(terms_json, key) -> bool, fst_prefix(terms_json, prefix) -> JSON array of matches, fst_count(terms_json) -> distinct count. NULL on bad input.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/marisa-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/marisa.wasm",
+      "exports": [
+        "fst_contains",
+        "fst_prefix",
+        "fst_count"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "fst"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "frequentitems",
+      "version": "0.1.0",
+      "description": "Top-K heavy-hitters over a JSON array (exact, deterministic): top_k(values_json, k) -> JSON [{value,count}], top_k_value(values_json, k) -> JSON array of the K most frequent values. NULL on bad input/k<=0.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "math"
+      ],
+      "source": "extensions/frequentitems-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/frequentitems.wasm",
+      "exports": [
+        "top_k",
+        "top_k_value"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "dotcmds": [

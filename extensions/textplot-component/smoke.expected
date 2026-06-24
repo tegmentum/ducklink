@@ -1,0 +1,17 @@
+# textplot smoke goldens (.mode csv: header line then rows per SELECT).
+spark
+▁▂▃▄▅▆▇█
+bad_spark
+NULL
+null_spark
+NULL
+bars
+"
+#####
+##########"
+bad_bars
+NULL
+qr_ok
+true
+null_qr
+NULL

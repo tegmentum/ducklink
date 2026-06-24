@@ -170,6 +170,10 @@ members = [
     "extensions/polyline-component",
     "extensions/json_schema-component",
     "extensions/stochastic-component",
+    "extensions/ion-component",
+    "extensions/textplot-component",
+    "extensions/marisa-component",
+    "extensions/frequentitems-component",
 ]
 
 resolver = "2"

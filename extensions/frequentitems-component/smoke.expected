@@ -1,0 +1,11 @@
+# frequentitems smoke golden: deterministic top-K over a bounded JSON array.
+tk
+"[{""count"":3,""value"":""a""},{""count"":2,""value"":""b""}]"
+tkv
+"[""a"",""b""]"
+nul
+NULL
+kzero
+NULL
+badjson
+NULL
