@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**155 component extensions** · **379 SQL functions** · 6 expose aggregates · 3 require network.
+**155 component extensions** · **380 SQL functions** · 6 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -10,7 +10,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 
 - **Scalars** — the default; pure per-row functions.
 - **Aggregates** — `aggstat`, `bloom`, `minhash`, `countmin`, `bitfilters`, `tdigest` use the whole-batch `call_aggregate` path.
-- **Network** — `dns`, `http`, `openprompt` need an outbound-network grant (`DUCKLINK_NETWORK_GRANT`), off by default.
+- **Network** — `dns`, `httpclient`, `openprompt` need an outbound-network grant (`DUCKLINK_NETWORK_GRANT`), off by default.
 
 ## Loading & embedding
 
@@ -216,7 +216,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
 | **dns** | `dns_lookup`, `dns_resolve_all` | hand-rolled | network |
-| **http** | `http_get`, `http_status` | rustls, rustls-rustcrypto, webpki-roots | network |
+| **httpclient** | `http_get`, `http_status`, `http_post` | rustls, rustls-rustcrypto, webpki-roots | network |
 
 ## Also in the registry (not component extensions)
 

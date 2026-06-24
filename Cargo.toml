@@ -122,7 +122,7 @@ members = [
     "extensions/minhash-component",
     "extensions/countmin-component",
     "extensions/dns-component",
-    "extensions/http-component",
+    "extensions/httpclient-component",
     "extensions/lorem-component",
     "extensions/faker-component",
     "extensions/passphrase-component",

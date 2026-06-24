@@ -1,14 +1,15 @@
 [package]
-name = "http-component"
+name = "httpclient-component"
 version = "0.1.0"
 edition = "2021"
 description = """
-HTTP client over wasi:sockets (plain HTTP)
+HTTP/HTTPS client over wasi:sockets (GET/POST), pure-Rust TLS
 """
 license = "MIT"
 publish = false
 
 [lib]
+name = "httpclient"
 crate-type = ["cdylib"]
 
 [dependencies]
@@ -17,7 +18,6 @@ wit-bindgen-rt = "0.41"
 rustls = { version = "0.23", default-features = false, features = ["std", "tls12"] }
 rustls-rustcrypto = "0.0.2-alpha"
 webpki-roots = "0.26"
-# add your upstream crate deps here
 
 [package.metadata.component]
 package = "duckdb:extension"

@@ -9,5 +9,7 @@ https_status
 200
 https_body
 true
+post_badurl_null
+true
 bad
 NULL

@@ -3713,9 +3713,9 @@
       "min_duckdb_version": "1.0.0"
     },
     {
-      "name": "http",
+      "name": "httpclient",
       "version": "0.1.0",
-      "description": "Minimal HTTP/1.1 client over wasi:sockets, with TLS for https:// via a pure-Rust stack (rustls + rustls-rustcrypto + webpki-roots): http_get(url) -> body, http_status(url) -> code. Nondeterministic; errors -> NULL.",
+      "description": "HTTP/HTTPS client over wasi:sockets with pure-Rust TLS (rustls): http_get(url) -> body, http_status(url) -> status code, http_post(url, body) -> response body. Network-gated (DUCKLINK_NETWORK_GRANT). Named httpclient because DuckDB core resolves the name http to built-in httpfs.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -3730,12 +3730,13 @@
       "categories": [
         "network"
       ],
-      "source": "extensions/http-component",
+      "source": "extensions/httpclient-component",
       "status": "working",
-      "artifact": "artifacts/extensions/http.wasm",
+      "artifact": "artifacts/extensions/httpclient.wasm",
       "exports": [
         "http_get",
-        "http_status"
+        "http_status",
+        "http_post"
       ],
       "requires": [
         "scalar",
