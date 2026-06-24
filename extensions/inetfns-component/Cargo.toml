@@ -8,9 +8,6 @@ DuckDB inet scalar surface (host/family/netmask/network/broadcast/contains)
 license = "MIT"
 publish = false
 
-# Standalone: not a member of the root workspace.
-[workspace]
-
 [lib]
 name = "inetfns"
 crate-type = ["cdylib"]

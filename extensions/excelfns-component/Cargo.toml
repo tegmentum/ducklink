@@ -1,0 +1,40 @@
+[package]
+name = "excelfns-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Read the READ side of DuckDB's official `excel` extension from an in-memory
+.xlsx BLOB:
+  xlsx_sheets(data BLOB) -> table(sheet VARCHAR)
+  read_xlsx(data BLOB)   -> table(sheet VARCHAR, row_no BIGINT, col VARCHAR, val VARCHAR)  -- MELTED
+  xlsx_cell(data BLOB, sheet VARCHAR, cell VARCHAR) -> table(val VARCHAR)
+Reimplements the feasible parts of DuckDB's official `excel` extension as a
+loadable ducklink component (pure-Rust `calamine` crate). The xlsx schema is
+dynamic, so read_xlsx melts each worksheet cell into a tuple. Usable against a
+lean core that has the embedded excel extension de-embedded.
+"""
+license = "MIT"
+publish = false
+
+[lib]
+name = "excelfns"
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+# calamine is pure Rust (its zip backend is `zip` with a pure-Rust feature set:
+# deflate via flate2/miniz_oxide, no C codecs). Builds for wasm32-wasip2.
+calamine = "0.26"
+
+[dev-dependencies]
+# In native tests we WRITE a tiny .xlsx in-memory to drive the readers;
+# rust_xlsxwriter is pure Rust and builds for the host.
+rust_xlsxwriter = "0.79"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

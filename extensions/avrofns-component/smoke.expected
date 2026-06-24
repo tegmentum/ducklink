@@ -1,0 +1,16 @@
+# avro_schema: two top-level fields and their Avro types
+field,type
+a,long
+b,string
+# read_avro (MELTED): one (row_no, col, val) tuple per field; 2 records x 2 fields
+row_no,col,val
+0,a,1
+0,b,x
+1,a,2
+1,b,y
+# malformed blob -> 0 rows
+bad_rows
+0
+# empty blob -> 0 rows
+empty_rows
+0

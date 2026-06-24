@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**160 component extensions** · **392 SQL functions** · 6 expose aggregates · 3 require network.
+**164 component extensions** · **413 SQL functions** · 6 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -18,7 +18,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 - **Static embed (opt-in):** `ducklink compose --embed <name>` bakes an extension into the core at build time. Wired today for `isin` (`embed-isin` core feature); `ducklink compose --list` shows what's embeddable. Most extensions stay runtime-loaded by design.
 - **Network grant:** net extensions are denied by default; opt in with `--grant-network all` (or a name allowlist), equivalently the `DUCKLINK_NETWORK_GRANT` env var.
 
-## Data types & encoding (67)
+## Data types & encoding (68)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -58,6 +58,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **iso** | `iso_country_name`, `iso_country_alpha3`, `iso_country_numeric` | rust_iso3166 |  |
 | **jaq** | `jq`, `jq_first` | jaq-core, jaq-std, jaq-json |  |
 | **json_schema** | `json_schema_valid`, `json_schema_errors` | jsonschema |  |
+| **jsonfns** | `json_valid`, `json_extract`, `json_extract_string`, `json_array_length`, `json_type`, `json_keys`, `json_contains`, `json_quote`, `to_json` | serde_json, serde_json_path |  |
 | **jsonschema** | `json_schema_valid` | jsonschema, serde_json |  |
 | **lindel** | `morton_encode`, `morton_decode_x`, `morton_decode_y`, `hilbert_encode`, `hilbert_decode_x`, `hilbert_decode_y` | hand-rolled |  |
 | **magic** | `magic_mime`, `magic_extension`, `magic_matcher_type`, `is_image` | infer |  |
@@ -176,6 +177,17 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **stochastic** | `normal_cdf`, `normal_pdf`, `normal_quantile`, `binomial_pmf`, `poisson_pmf`, `exponential_cdf`, `beta_cdf` | statrs |  |
 | **tdigest** | `tdigest`, `tdigest_quantile`, `tdigest_count` | tdigest, bincode | aggregate |
 
+## Networking (6)
+
+| Extension | Functions | Backed by | Notes |
+|---|---|---|---|
+| **inetfns** | `host`, `family`, `netmask`, `network`, `broadcast`, `inet_contains` | ipnetwork |  |
+| **mailto** | `mailto_to`, `mailto_field`, `mailto_to_json` | percent-encoding |  |
+| **netquack** | `registrable_domain`, `public_suffix`, `subdomain`, `domain_label` | psl |  |
+| **openprompt** | `prompt`, `prompt_model` | rustls, serde_json | network |
+| **urlpattern** | `url_pattern_test`, `url_pattern_match` | urlpattern |  |
+| **useragent** | `ua_browser`, `ua_browser_version`, `ua_os`, `ua_category`, `ua_is_bot` | woothee |  |
+
 ## Validators (6)
 
 | Extension | Functions | Backed by | Notes |
@@ -186,16 +198,6 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **iban** | `iban_validate`, `iban_country`, `iban_bban` | hand-rolled |  |
 | **isin** | `isin_validate`, `isin_check_digit`, `isin_country`, `isin_nsin` | hand-rolled |  |
 | **luhn** | `luhn_validate`, `luhn_check_digit` | hand-rolled |  |
-
-## Networking (5)
-
-| Extension | Functions | Backed by | Notes |
-|---|---|---|---|
-| **mailto** | `mailto_to`, `mailto_field`, `mailto_to_json` | percent-encoding |  |
-| **netquack** | `registrable_domain`, `public_suffix`, `subdomain`, `domain_label` | psl |  |
-| **openprompt** | `prompt`, `prompt_model` | rustls, serde_json | network |
-| **urlpattern** | `url_pattern_test`, `url_pattern_match` | urlpattern |  |
-| **useragent** | `ua_browser`, `ua_browser_version`, `ua_os`, `ua_category`, `ua_is_bot` | woothee |  |
 
 ## Encoding (4)
 
@@ -215,18 +217,20 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **prql** | `prql_to_sql`, `prql_is_valid` | prqlc |  |
 | **rhai** | `rhai_eval`, `rhai_eval_int`, `rhai_eval_double` | rhai |  |
 
+## Import Export (3)
+
+| Extension | Functions | Backed by | Notes |
+|---|---|---|---|
+| **avrofns** | `avro_schema`, `read_avro`, `avro_record_count` | apache-avro |  |
+| **excelfns** | `xlsx_sheets`, `read_xlsx`, `xlsx_cell` | calamine |  |
+| **sqlitewasm** | `sqlite_blob_scan` | rusqlite |  |
+
 ## Network (2)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
 | **dns** | `dns_lookup`, `dns_resolve_all` | hand-rolled | network |
 | **httpclient** | `http_get`, `http_status`, `http_post` | rustls, rustls-rustcrypto, webpki-roots | network |
-
-## Import Export (1)
-
-| Extension | Functions | Backed by | Notes |
-|---|---|---|---|
-| **sqlitewasm** | `sqlite_blob_scan` | rusqlite |  |
 
 ## Also in the registry (not component extensions)
 

@@ -5213,6 +5213,129 @@
         "rusqlite"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "jsonfns",
+      "version": "0.1.0",
+      "description": "Official `json` extension scalar surface as a loadable component (serde_json + serde_json_path), so json can be de-embedded from the lean core: json_valid/json_extract/json_extract_string/json_array_length/json_type/json_keys/json_contains/json_quote/to_json. Auto-loaded by default on the lean core.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/jsonfns-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/jsonfns.wasm",
+      "exports": [
+        "json_valid",
+        "json_extract",
+        "json_extract_string",
+        "json_array_length",
+        "json_type",
+        "json_keys",
+        "json_contains",
+        "json_quote",
+        "to_json"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "serde_json",
+        "serde_json_path"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "inetfns",
+      "version": "0.1.0",
+      "description": "Official `inet` extension functions as a loadable component (ipnetwork + std::net): host/family/netmask/network/broadcast/inet_contains. Replaces embedded inet on the lean core.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "networking"
+      ],
+      "source": "extensions/inetfns-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/inetfns.wasm",
+      "exports": [
+        "host",
+        "family",
+        "netmask",
+        "network",
+        "broadcast",
+        "inet_contains"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "ipnetwork"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "excelfns",
+      "version": "0.1.0",
+      "description": "Official `excel` extension reader as a loadable component (pure-Rust calamine): xlsx_sheets + a melted read_xlsx over a BLOB + xlsx_cell. Replaces embedded excel on the lean core.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "import-export"
+      ],
+      "source": "extensions/excelfns-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/excelfns.wasm",
+      "exports": [
+        "xlsx_sheets",
+        "read_xlsx",
+        "xlsx_cell"
+      ],
+      "requires": [
+        "table"
+      ],
+      "crates": [
+        "calamine"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "avrofns",
+      "version": "0.1.0",
+      "description": "Official `avro` extension reader as a loadable component (pure-Rust apache-avro): avro_schema + a melted read_avro over a BLOB + avro_record_count. Replaces embedded avro on the lean core.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "import-export"
+      ],
+      "source": "extensions/avrofns-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/avrofns.wasm",
+      "exports": [
+        "avro_schema",
+        "read_avro",
+        "avro_record_count"
+      ],
+      "requires": [
+        "table",
+        "scalar"
+      ],
+      "crates": [
+        "apache-avro"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "dotcmds": [

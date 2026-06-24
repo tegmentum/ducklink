@@ -1,0 +1,15 @@
+# excelfns smoke expectations (deterministic; 1-sheet 2x2 fixture).
+# xlsx_sheets -> the worksheet name.
+sheet
+Sheet1
+sheet,row_no,col,val
+Sheet1,1,A,a
+Sheet1,1,B,b
+Sheet1,2,A,1
+Sheet1,2,B,2
+val
+2
+bad_rows
+0
+empty_sheets
+0

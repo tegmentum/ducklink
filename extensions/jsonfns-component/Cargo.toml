@@ -10,9 +10,6 @@ scalars once they are de-embedded from the lean core.
 license = "MIT"
 publish = false
 
-# Standalone: NOT a member of the root workspace (integration handled separately).
-[workspace]
-
 [lib]
 name = "jsonfns"
 crate-type = ["cdylib"]

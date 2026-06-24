@@ -1,0 +1,41 @@
+[package]
+name = "avrofns-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Read Apache Avro Object Container Files handed in as an in-memory BLOB:
+  avro_schema(data BLOB)       -> table(field VARCHAR, type VARCHAR)
+  read_avro(data BLOB)         -> table(row_no BIGINT, col VARCHAR, val VARCHAR)  -- MELTED
+  avro_record_count(data BLOB) -> BIGINT  (scalar)
+Reimplements the READ side of DuckDB's official `avro` extension as a loadable
+ducklink component (pure-Rust `apache-avro` crate; default features only ->
+miniz_oxide deflate, no C codecs). Collides with the embedded `avro` extension,
+so usable only against a lean core that de-embeds it.
+"""
+license = "MIT"
+publish = false
+
+[lib]
+name = "avrofns"
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+# Pure-Rust Avro. Default features only: this pulls miniz_oxide (deflate) and no
+# C-backed codecs (snappy/zstd/bzip/xz are opt-in features we leave OFF), so it
+# builds clean for wasm32-wasip2 with no CC.
+apache-avro = { version = "0.21", default-features = false }
+# Pure-Rust JSON renderer for nested Avro values (already a transitive dep of
+# apache-avro, so no new code is pulled). Used to render Record/Array/Map cells.
+serde_json = "1"
+
+[dev-dependencies]
+apache-avro = { version = "0.21", default-features = false }
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"
