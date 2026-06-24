@@ -6,6 +6,7 @@ members = [
     "crates/ducklink-cli",
     "crates/ducklink-loader",
     "crates/ducklink-host",
+    "crates/storage-boundary-test",
     "extensions/sample-extension-component",
     "extensions/isin",
     "extensions/greet-dotcmd",
@@ -174,6 +175,7 @@ members = [
     "extensions/textplot-component",
     "extensions/marisa-component",
     "extensions/frequentitems-component",
+    "extensions/sqlitewasm-component",
 ]
 
 resolver = "2"

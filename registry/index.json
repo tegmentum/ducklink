@@ -5186,6 +5186,33 @@
       ],
       "crates": [],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "sqlitewasm",
+      "version": "0.1.0",
+      "description": "SQLite scanner: the SQLite C library compiled to wasm INSIDE the component (rusqlite bundled), behind the WIT boundary. sqlite_blob_scan(hex_db, table) melts a SQLite database (passed as a hex string) into (row_no,col,val) rows; the component also backs the storage/pushdown-scan WIT interface (attach-blob + projection/filter/limit scan) used for ATTACH. Demonstrates delivering a heavy C library as a durable WIT component.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "import-export"
+      ],
+      "source": "extensions/sqlitewasm-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/sqlitewasm.wasm",
+      "exports": [
+        "sqlite_blob_scan"
+      ],
+      "requires": [
+        "table",
+        "storage"
+      ],
+      "crates": [
+        "rusqlite"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "dotcmds": [

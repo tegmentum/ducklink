@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**159 component extensions** · **391 SQL functions** · 6 expose aggregates · 3 require network.
+**160 component extensions** · **392 SQL functions** · 6 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -221,6 +221,12 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 |---|---|---|---|
 | **dns** | `dns_lookup`, `dns_resolve_all` | hand-rolled | network |
 | **httpclient** | `http_get`, `http_status`, `http_post` | rustls, rustls-rustcrypto, webpki-roots | network |
+
+## Import Export (1)
+
+| Extension | Functions | Backed by | Notes |
+|---|---|---|---|
+| **sqlitewasm** | `sqlite_blob_scan` | rusqlite |  |
 
 ## Also in the registry (not component extensions)
 

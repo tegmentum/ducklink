@@ -1,0 +1,28 @@
+package duckdb:extension;
+
+use runtime;
+use callback-dispatch;
+use config;
+use logging;
+use catalog;
+use files;
+use guest;
+use storage;
+use storage-dispatch;
+
+// Mirrors the canonical `duckdb-extension-storage` world: same imports/exports.
+// Used host-side to bind the already-built sqlite component and drive its
+// storage-dispatch exports across the WIT boundary. Imports are satisfied with
+// trapping stubs at link time; they are never called because we never invoke
+// the guest `load`/`reconfigure`/`shutdown` exports.
+world boundary-test {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import storage;
+  export guest;
+  export callback-dispatch;
+  export storage-dispatch;
+}
