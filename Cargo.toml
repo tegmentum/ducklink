@@ -179,6 +179,10 @@ members = [
     "extensions/jsonfns-component",
     "extensions/inetfns-component",    "extensions/excelfns-component",
     "extensions/avrofns-component",
+    "extensions/spatialfns-component",
+    "extensions/ftsfns-component",
+    "extensions/icufns-component",
+    "extensions/vssfns-component",
 ]
 
 resolver = "2"

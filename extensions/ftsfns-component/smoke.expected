@@ -1,0 +1,16 @@
+toks
+"[""the"",""quick"",""brown"",""fox""]"
+stemmed
+run
+bad_lang
+NULL
+stems
+"[""run"",""fox""]"
+score
+0.2877
+m_true
+true
+m_false
+false
+null_in
+NULL

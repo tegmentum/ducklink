@@ -5336,6 +5336,131 @@
         "apache-avro"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "spatialfns",
+      "version": "0.1.0",
+      "description": "Subset of the official spatial extension's ST_* functions as a loadable component (geo+wkt+geojson; WKT text I/O): ST_Point/GeomFromText/AsText/X/Y/Distance/Area/Length/Centroid/Contains/Within/Intersects/Envelope/AsGeoJSON. Not full parity (no GEOMETRY type / GDAL-PROJ / R-tree index).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/spatialfns-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/spatialfns.wasm",
+      "exports": [
+        "ST_Point",
+        "ST_GeomFromText",
+        "ST_AsText",
+        "ST_X",
+        "ST_Y",
+        "ST_Distance",
+        "ST_Area",
+        "ST_Length",
+        "ST_Centroid",
+        "ST_Contains",
+        "ST_Within",
+        "ST_Intersects",
+        "ST_Envelope",
+        "ST_AsGeoJSON"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "geo",
+        "wkt",
+        "geojson"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "ftsfns",
+      "version": "0.1.0",
+      "description": "Full-text-search function layer as a loadable component (rust-stemmers): fts_tokenize, fts_stem, fts_stem_text, bm25_score (Okapi BM25 term score), fts_match. The create_fts_index PRAGMA (index+macros) needs core integration and is not covered.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/ftsfns-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/ftsfns.wasm",
+      "exports": [
+        "fts_tokenize",
+        "fts_stem",
+        "fts_stem_text",
+        "bm25_score",
+        "fts_match"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "rust-stemmers"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "icufns",
+      "version": "0.1.0",
+      "description": "ICU function layer as a loadable component (ICU4X icu_collator): icu_sort_key (locale collation sort key for ORDER BY), icu_compare (locale-aware compare), icu_casefold. Real COLLATE collations + TIMESTAMPTZ need new WIT surfaces (infra).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/icufns-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/icufns.wasm",
+      "exports": [
+        "icu_sort_key",
+        "icu_compare",
+        "icu_casefold"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "icu_collator"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "vssfns",
+      "version": "0.1.0",
+      "description": "Vector functions the core lacks, as a loadable component: vec_l1_distance (Manhattan), vec_linf_distance (Chebyshev), vec_normalize. The L2/cosine/dot distances are already in core_functions; vss's HNSW index needs a custom-index WIT surface (infra).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "math"
+      ],
+      "source": "extensions/vssfns-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/vssfns.wasm",
+      "exports": [
+        "vec_l1_distance",
+        "vec_linf_distance",
+        "vec_normalize"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "dotcmds": [

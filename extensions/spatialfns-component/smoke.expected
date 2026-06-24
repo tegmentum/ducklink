@@ -1,0 +1,34 @@
+pt
+POINT(1 2)
+norm
+POINT(1 2)
+bad
+NULL
+astext
+"LINESTRING(0 0,3 4)"
+x
+1
+y
+2
+dist
+5
+area
+4
+len
+5
+perim
+8
+cent
+POINT(1 1)
+contains
+true
+within
+true
+hit
+true
+miss
+false
+env
+"POLYGON((3 0,3 4,0 4,0 0,3 0))"
+gj
+"{""type"":""Point"",""coordinates"":[1.0,2.0]}"

@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**164 component extensions** · **413 SQL functions** · 6 expose aggregates · 3 require network.
+**168 component extensions** · **438 SQL functions** · 6 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -18,7 +18,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 - **Static embed (opt-in):** `ducklink compose --embed <name>` bakes an extension into the core at build time. Wired today for `isin` (`embed-isin` core feature); `ducklink compose --list` shows what's embeddable. Most extensions stay runtime-loaded by design.
 - **Network grant:** net extensions are denied by default; opt in with `--grant-network all` (or a name allowlist), equivalently the `DUCKLINK_NETWORK_GRANT` env var.
 
-## Data types & encoding (68)
+## Data types & encoding (69)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -78,6 +78,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **roman** | `to_roman`, `from_roman` | roman |  |
 | **semver** | `semver_valid`, `semver_major`, `semver_minor`, `semver_patch`, `semver_compare` | semver |  |
 | **shapefile** | `read_shp` | shapefile |  |
+| **spatialfns** | `ST_Point`, `ST_GeomFromText`, `ST_AsText`, `ST_X`, `ST_Y`, `ST_Distance`, `ST_Area`, `ST_Length`, `ST_Centroid`, `ST_Contains`, `ST_Within`, `ST_Intersects`, `ST_Envelope`, `ST_AsGeoJSON` | geo, wkt, geojson |  |
 | **timezone** | `tz_valid`, `tz_offset_seconds`, `tz_abbreviation` | chrono-tz, chrono |  |
 | **toml** | `toml_to_json`, `json_to_toml` | toml, serde_json |  |
 | **tsid** | `tsid_encode`, `tsid_decode`, `tsid_timestamp`, `tsid_from_timestamp` | hand-rolled |  |
@@ -91,7 +92,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **yaml** | `yaml_to_json`, `json_to_yaml` | serde_yaml, serde_json |  |
 | **z85** | `z85_encode`, `z85_decode` | z85 |  |
 
-## Text & NLP (52)
+## Text & NLP (54)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -103,9 +104,11 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **email** | `email_validate`, `email_domain`, `email_local` | email_address |  |
 | **emoji** | `emoji_name`, `emoji_shortcode`, `emoji_char` | emojis |  |
 | **escape** | `html_escape`, `html_unescape`, `url_encode`, `url_decode` | html-escape, percent-encoding |  |
+| **ftsfns** | `fts_tokenize`, `fts_stem`, `fts_stem_text`, `bm25_score`, `fts_match` | rust-stemmers |  |
 | **gravatar** | `gravatar_hash`, `gravatar_url` | md5 |  |
 | **html** | `html_extract`, `html_extract_all`, `html_attr` | scraper |  |
 | **html2text** | `html_to_text` | nanohtml2text |  |
+| **icufns** | `icu_sort_key`, `icu_compare`, `icu_casefold` | icu_collator |  |
 | **idna** | `idna_to_ascii`, `idna_to_unicode` | idna |  |
 | **initials** | `initials`, `initials_dotted` | hand-rolled |  |
 | **ipaddr** | `ip_valid`, `ip_version`, `ip_is_private` | hand-rolled |  |
@@ -166,7 +169,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **totp** | `totp` | hmac, sha1, base32 |  |
 | **vigenere** | `vigenere_encrypt`, `vigenere_decrypt` | hand-rolled |  |
 
-## Math (6)
+## Math (7)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -176,6 +179,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **hashfuncs** | `xxh32`, `xxh64`, `xxh3`, `murmur3` | twox-hash, murmur3 |  |
 | **stochastic** | `normal_cdf`, `normal_pdf`, `normal_quantile`, `binomial_pmf`, `poisson_pmf`, `exponential_cdf`, `beta_cdf` | statrs |  |
 | **tdigest** | `tdigest`, `tdigest_quantile`, `tdigest_count` | tdigest, bincode | aggregate |
+| **vssfns** | `vec_l1_distance`, `vec_linf_distance`, `vec_normalize` | hand-rolled |  |
 
 ## Networking (6)
 
