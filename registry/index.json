@@ -3335,6 +3335,68 @@
       "min_duckdb_version": "1.0.0"
     },
     {
+      "name": "pintest_a",
+      "prefix": "pintest_a",
+      "expansion": "com.tegmentum.ducklink.test.pin.a",
+      "version": "0.1.0",
+      "description": "PLAN-prefixes v1.1 pin-test probe A: pin_probe() -> INTEGER returns 111. Pairs with pintest_b (-> 222) under a distinct expansion to make the .prefix prefer/unprefer pin visibly flip.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "test",
+        "prefix",
+        "pin"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/pintest-a-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/pintest_a.wasm",
+      "exports": [
+        "pin_probe"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "pintest_b",
+      "prefix": "pintest_b",
+      "expansion": "com.tegmentum.ducklink.test.pin.b",
+      "version": "0.1.0",
+      "description": "PLAN-prefixes v1.1 pin-test probe B: pin_probe() -> INTEGER returns 222. Pairs with pintest_a (-> 111) under a distinct expansion to make the .prefix prefer/unprefer pin visibly flip.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "test",
+        "prefix",
+        "pin"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/pintest-b-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/pintest_b.wasm",
+      "exports": [
+        "pin_probe"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
       "name": "atbash",
       "version": "0.1.0",
       "description": "Atbash cipher (hand-rolled): atbash(text) maps a<->z within each case, self-inverse. Non-letters pass through.",

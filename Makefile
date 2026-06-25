@@ -6,7 +6,7 @@ BROWSER_TARGET?=wasm32-unknown-unknown
 # ducklink_core.wasm at the usual path.
 DUCKDB_WASM_DIR?=../duckdb-wasm
 
-.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk smoke-dotcmd sample-extension smoke-extension echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds
+.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk smoke-dotcmd sample-extension smoke-extension pintest-probes echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds
 
 all: core standalone-cli loader-stub dotcmds
 
@@ -78,6 +78,15 @@ sample-extension: all
 
 smoke-extension:
 	cargo test -p ducklink-host load_sample_extension_component
+
+# PLAN-prefixes v1.1 THE PIN: the two probe components that make the pin flip
+# VISIBLE (pintest_a -> 111, pintest_b -> 222 for the same bare pin_probe()).
+# See `make smoke-dotcmd prefix` for the end-to-end flip demo.
+pintest-probes:
+	cargo component build -p pintest-a-component -p pintest-b-component --target $(WASI_TARGET) --release
+	mkdir -p artifacts/extensions
+	cp target/$(WASI_TARGET)/release/pintest_a_component.wasm artifacts/extensions/pintest_a.wasm
+	cp target/$(WASI_TARGET)/release/pintest_b_component.wasm artifacts/extensions/pintest_b.wasm
 
 # Build the reference duckdb-wasm-httpd request handler (kind='wasm' dispatch
 # target). Load it with: ducklink serve --load echo=<artifact>.

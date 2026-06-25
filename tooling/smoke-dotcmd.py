@@ -97,6 +97,23 @@ CASES = [
     case("bundle",
          ".bundle loaded\n.bundle members\n.quit\n",
          ["core_functions", "parquet"]),
+
+    # PLAN-prefixes v1.1 THE PIN: two probe components register the same bare
+    # scalar pin_probe() returning DIFFERENT constants (a->111, b->222) under
+    # distinct expansions, so the pin flip is VISIBLE. b loads last (bare->222);
+    # `.prefix prefer pin_probe pintest_a` flips bare->111; `.prefix unprefer`
+    # reverts to 222. Asserts all three values appear under their labels.
+    case("prefix",
+         "LOAD pintest_a;\n"
+         "LOAD pintest_b;\n"
+         "SELECT pin_probe() AS step1;\n"
+         ".prefix prefer pin_probe pintest_a\n"
+         "SELECT pin_probe() AS step2;\n"
+         ".prefix unprefer pin_probe\n"
+         "SELECT pin_probe() AS step3;\n"
+         ".quit\n",
+         # step1=222 (b last loaded), step2=111 (pinned a), step3=222 (reverted)
+         ["222", "111", "re-registered NOW", "reverts to last-loaded"]),
 ]
 
 

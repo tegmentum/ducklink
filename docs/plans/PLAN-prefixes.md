@@ -257,15 +257,45 @@ rejected, exactly as in sqlink — spi suffices.
   warning, all three shapes.
 - A `BUILDS.md`-style note + README section.
 
+## v1.1 (DONE — host-only, no core rebuild)
+
+- **THE PIN (`.prefix prefer`/`unprefer`)** is real. The host retains every bare
+  registration def keyed by `(name, shape, n_args, expansion)` plus the prefix it
+  registered under (`RetainedDefs` in `crates/ducklink-host/src/prefix.rs`).
+  `.prefix prefer NAME TARGET [--shape S] [--args N]` resolves the target
+  prefix→expansion + the shape/arity (from `__ducklink_prefix_function`, erroring
+  on ambiguity and listing the `--shape/--args` options), writes the
+  `__ducklink_prefix_pin` row, then issues a host sentinel (`-- ducklink:prefix
+  apply-pins`) over the dotcmd `spi`. The host intercepts the sentinel, reads the
+  pin table, and effects the pin with a wrapper macro
+  `CREATE OR REPLACE MACRO {name}(args) AS ({prefix}__{name}(args))` against the
+  ALWAYS-registered qualified form. The wrapper SHADOWS any later bare-scalar
+  registration, so the pin is **load-order independent for free** (loading a new
+  impl can't steal the bare name). `unprefer` deletes the pin row + drops the
+  wrapper macro, reverting bare to the last-loaded scalar. (The
+  drop-and-re-register-into-the-core path was abandoned: DuckDB short-circuits
+  `LOAD` for an already-loaded extension, so the core never re-pulls
+  registrations — the macro wrapper is the reliable host-side lever.) A pair of
+  probe components (`extensions/pintest_{a,b}-component`, registering the same
+  bare `pin_probe()` → 111 / 222 under distinct expansions) make the flip
+  VISIBLE; `make smoke-dotcmd prefix` runs it end-to-end.
+- **Qualified forms for the remaining NAME-KEYED shapes**: collation, pragma, and
+  macro now get `{prefix}__{name}` duplicates + collision tracking, mirroring
+  scalar/table/aggregate. Collations/pragmas are re-asserted into the host maps
+  the core pulls by name; macros ride the normal `PendingRegistrationsData`
+  drain. Demos: `icufns__icu_en` collation, `sample_extension__sample_add_two`
+  macro, `ftsfns__create_fts_index` pragma all work alongside the bare forms.
+
 ## Out of scope (v2+)
 
 Same as sqlink, plus ducklink-specific items:
-- **The other registration shapes** (collation / pragma / cast / custom-index /
-  storage-backend / files-backend / macro) — namespace them in v1.1+ once the
-  scalar/table/aggregate pattern is proven. (sqlink's "all four shapes in v1"
-  becomes "three function-like shapes in v1" here because ducklink has ~10
-  shapes, several of which — storage/files/index — are keyed by an ATTACH TYPE /
-  protocol, a different collision surface.)
+- **CAST / STORAGE / FILES / INDEX shapes** remain unprefixed — DELIBERATELY.
+  CAST is keyed by `(from_type, to_type)` and is never called as `name(args)`, so
+  there is no `prefix__name` call surface. STORAGE/FILES/INDEX are keyed by an
+  ATTACH TYPE name / URL scheme / index-type name; they collide on TYPE/scheme
+  strings (`prefix__sqlitewasm` as an ATTACH TYPE is nonsensical), a different
+  collision surface that needs different semantics. (See the code comment at the
+  end of `apply_function_prefixes`.)
 - Per-query prefix overrides; prefix lock-in; prefix-scoped permissions; bulk
   import/export; typo auto-suggestion; cross-database sync; a hosted
   prefix/expansion registry. All as in sqlink.

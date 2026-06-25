@@ -115,6 +115,8 @@ members = [
     "extensions/z85-component",
     "extensions/initials-component",
     "extensions/luhngen-component",
+    "extensions/pintest_a-component",
+    "extensions/pintest_b-component",
     "extensions/atbash-component",
     "extensions/piglatin-component",
     "extensions/rle-component",

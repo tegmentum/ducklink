@@ -16,6 +16,8 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use ducklink_runtime::reg;
+
 /// The prefix + expansion an extension uses to namespace its functions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PrefixInfo {
@@ -149,11 +151,20 @@ pub fn sanitize_name(raw: &str) -> String {
 
 /// The shape (kind) of a function registration, used as a collision key
 /// component and recorded in `__ducklink_prefix_function.shape`.
+///
+/// v1 covered the three function-like shapes (scalar/table/aggregate). v1.1
+/// adds the remaining NAME-KEYED shapes — collation/pragma/macro — which are
+/// dispatched by a single name string, so `{prefix}__{name}` namespacing
+/// applies identically. The non-name-keyed shapes (cast, storage/files/index)
+/// are deliberately NOT here; see `apply_function_prefixes` for why.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Shape {
     Scalar,
     Table,
     Aggregate,
+    Collation,
+    Pragma,
+    Macro,
 }
 
 impl Shape {
@@ -162,6 +173,24 @@ impl Shape {
             Shape::Scalar => "scalar",
             Shape::Table => "table",
             Shape::Aggregate => "aggregate",
+            Shape::Collation => "collation",
+            Shape::Pragma => "pragma",
+            Shape::Macro => "macro",
+        }
+    }
+
+    /// Parse the `shape` text stored in `__ducklink_prefix_function.shape` /
+    /// `__ducklink_prefix_pin.shape` back into a `Shape`. Used when the host
+    /// reads the pin table to honor a pin.
+    pub fn from_str(s: &str) -> Option<Shape> {
+        match s {
+            "scalar" => Some(Shape::Scalar),
+            "table" => Some(Shape::Table),
+            "aggregate" => Some(Shape::Aggregate),
+            "collation" => Some(Shape::Collation),
+            "pragma" => Some(Shape::Pragma),
+            "macro" => Some(Shape::Macro),
+            _ => None,
         }
     }
 }
@@ -365,6 +394,126 @@ pub fn build_prefix_table_sql(rows: &[PrefixRow]) -> String {
     sql
 }
 
+/// One retained registration definition, kept so the host can RE-REGISTER a
+/// specific extension's BARE function on demand (the pin). DuckDB's C API uses
+/// ALTER_ON_CONFLICT, so re-registering a bare name = last-wins (no drop
+/// needed): forwarding a retained def under its bare name makes that impl own
+/// the bare name.
+///
+/// Each variant carries the bare (un-prefixed) registration. The
+/// scalar/table/aggregate/macro variants are re-forwarded through the normal
+/// `PendingRegistrationsData` → core drain. Collation/pragma are re-applied by
+/// re-inserting into the host's `collations`/`pragmas` maps (the core pulls
+/// those by name) — DuckDB collations don't re-register cleanly, so the pin for
+/// those shapes is recorded + the map updated, taking effect on the next core
+/// pull.
+#[derive(Clone, Debug)]
+pub enum RetainedDef {
+    Scalar(reg::ScalarReg),
+    Table(reg::TableReg),
+    Aggregate(reg::AggregateReg),
+    Macro(reg::MacroReg),
+    /// (name, transform_scalar, combinable)
+    Collation(String, String, bool),
+    /// (name, extension, callback_handle)
+    Pragma(String, String, u32),
+}
+
+/// Identity of a retained def: bare name + shape + arity + expansion. The
+/// expansion disambiguates between two extensions registering the same
+/// (name, shape, arity) — exactly what the pin selects between.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct RetainedKey {
+    pub name: String,
+    pub shape: Shape,
+    pub n_args: i32,
+    pub expansion: String,
+}
+
+/// Stores every bare registration the host has seen this session, keyed by
+/// `(name, shape, n_args, expansion)`, so a pin can resurrect a SPECIFIC
+/// extension's impl as the bare-name owner. Also remembers, per
+/// `(name, shape, n_args)`, the load order of expansions so "default owner" =
+/// the last-loaded expansion (what bare reverts to on `unprefer`).
+#[derive(Default, Debug)]
+pub struct RetainedDefs {
+    defs: HashMap<RetainedKey, RetainedDef>,
+    /// (name, shape, n_args) -> expansions in load order (last = default owner).
+    order: HashMap<(String, Shape, i32), Vec<String>>,
+    /// expansion -> the prefix it registered under, so a pin can build the
+    /// pinned impl's QUALIFIED name (`{prefix}__{name}`) for the alias macro.
+    prefix_of: HashMap<String, String>,
+}
+
+impl RetainedDefs {
+    /// Retain one bare registration def. Idempotent on the key; updates the
+    /// load-order list so the most-recently-seen expansion is last. `prefix` is
+    /// the expansion's SQL prefix (needed to build the qualified-name alias).
+    pub fn insert(
+        &mut self,
+        expansion: &str,
+        prefix: &str,
+        name: &str,
+        shape: Shape,
+        n_args: i32,
+        def: RetainedDef,
+    ) {
+        let key = RetainedKey {
+            name: name.to_string(),
+            shape,
+            n_args,
+            expansion: expansion.to_string(),
+        };
+        self.defs.insert(key, def);
+        self.prefix_of
+            .insert(expansion.to_string(), prefix.to_string());
+        let order = self
+            .order
+            .entry((name.to_string(), shape, n_args))
+            .or_default();
+        // Move-to-end semantics: a re-load of the same expansion makes it the
+        // newest default owner.
+        order.retain(|e| e != expansion);
+        order.push(expansion.to_string());
+    }
+
+    /// The SQL prefix an expansion registered under (for the qualified-name
+    /// alias). `None` if the expansion was never seen.
+    pub fn prefix_for(&self, expansion: &str) -> Option<&str> {
+        self.prefix_of.get(expansion).map(String::as_str)
+    }
+
+    /// The retained def for a specific (name, shape, arity, expansion), if seen.
+    pub fn get(&self, name: &str, shape: Shape, n_args: i32, expansion: &str) -> Option<&RetainedDef> {
+        self.defs.get(&RetainedKey {
+            name: name.to_string(),
+            shape,
+            n_args,
+            expansion: expansion.to_string(),
+        })
+    }
+
+    /// The expansion that is the DEFAULT bare owner for (name, shape, arity) —
+    /// the last-loaded one. `None` if nothing registered that key.
+    pub fn default_owner(&self, name: &str, shape: Shape, n_args: i32) -> Option<&str> {
+        self.order
+            .get(&(name.to_string(), shape, n_args))
+            .and_then(|v| v.last())
+            .map(String::as_str)
+    }
+
+    /// All (shape, arity, expansions-in-load-order) tuples retained for `name`,
+    /// across every shape/arity. Lets a caller see whether a bare name is
+    /// ambiguous (>1 shape/arity) without a SQL round-trip.
+    pub fn shapes_for_name(&self, name: &str) -> Vec<(Shape, i32, Vec<String>)> {
+        self.order
+            .iter()
+            .filter(|((n, _, _), _)| n == name)
+            .map(|((_, s, a), exps)| (*s, *a, exps.clone()))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -442,6 +591,89 @@ mod tests {
         assert!(!r2.is_collision); // different arity anyway
         let r3 = t.record("jsonfns", "com.x.json", &info, "json_type", Shape::Scalar, 1);
         assert!(!r3.is_collision); // same expansion, same key -> not a collision
+    }
+
+    #[test]
+    fn shape_roundtrips_through_strings() {
+        for s in [
+            Shape::Scalar,
+            Shape::Table,
+            Shape::Aggregate,
+            Shape::Collation,
+            Shape::Pragma,
+            Shape::Macro,
+        ] {
+            assert_eq!(Shape::from_str(s.as_str()), Some(s));
+        }
+        assert_eq!(Shape::from_str("cast"), None);
+        assert_eq!(Shape::from_str("storage"), None);
+    }
+
+    fn scalar_reg(ext: &str, name: &str, n_args: usize) -> reg::ScalarReg {
+        reg::ScalarReg {
+            extension: ext.into(),
+            name: name.into(),
+            arguments: (0..n_args)
+                .map(|_| reg::FuncArg {
+                    name: None,
+                    logical: reg::LogicalType::Text,
+                })
+                .collect(),
+            returns: reg::LogicalType::Int64,
+            callback_handle: 1,
+            options: None,
+        }
+    }
+
+    #[test]
+    fn retained_defs_default_owner_is_last_loaded() {
+        let mut r = RetainedDefs::default();
+        // a then b register the same (name, scalar, 0-arg) under distinct exps.
+        r.insert("com.x.a", "a", "pin_probe", Shape::Scalar, 0, RetainedDef::Scalar(scalar_reg("a", "pin_probe", 0)));
+        r.insert("com.x.b", "b", "pin_probe", Shape::Scalar, 0, RetainedDef::Scalar(scalar_reg("b", "pin_probe", 0)));
+        // default (bare) owner = last loaded = b.
+        assert_eq!(r.default_owner("pin_probe", Shape::Scalar, 0), Some("com.x.b"));
+        // both specific defs are retrievable for the pin to resurrect.
+        assert!(matches!(
+            r.get("pin_probe", Shape::Scalar, 0, "com.x.a"),
+            Some(RetainedDef::Scalar(_))
+        ));
+        assert!(r.get("pin_probe", Shape::Scalar, 0, "com.x.missing").is_none());
+    }
+
+    #[test]
+    fn retained_defs_reload_moves_to_end() {
+        let mut r = RetainedDefs::default();
+        r.insert("com.x.a", "a", "f", Shape::Scalar, 0, RetainedDef::Scalar(scalar_reg("a", "f", 0)));
+        r.insert("com.x.b", "b", "f", Shape::Scalar, 0, RetainedDef::Scalar(scalar_reg("b", "f", 0)));
+        // re-loading a makes a the newest default owner (move-to-end).
+        r.insert("com.x.a", "a", "f", Shape::Scalar, 0, RetainedDef::Scalar(scalar_reg("a", "f", 0)));
+        assert_eq!(r.default_owner("f", Shape::Scalar, 0), Some("com.x.a"));
+    }
+
+    #[test]
+    fn retained_defs_shape_arity_keys_are_distinct() {
+        let mut r = RetainedDefs::default();
+        r.insert("com.x.a", "a", "f", Shape::Scalar, 0, RetainedDef::Scalar(scalar_reg("a", "f", 0)));
+        r.insert("com.x.a", "a", "f", Shape::Collation, 0, RetainedDef::Collation("f".into(), "s".into(), false));
+        r.insert("com.x.a", "a", "f", Shape::Scalar, 1, RetainedDef::Scalar(scalar_reg("a", "f", 1)));
+        // Three distinct keys -> shapes_for_name reports all three.
+        let mut shapes = r.shapes_for_name("f");
+        shapes.sort_by_key(|(s, a, _)| (s.as_str(), *a));
+        assert_eq!(shapes.len(), 3);
+    }
+
+    #[test]
+    fn collision_tracker_tracks_new_shapes() {
+        // The new name-keyed shapes (collation/pragma/macro) collide the same way.
+        let mut t = CollisionTracker::default();
+        let a = PrefixInfo { prefix: "icufns".into(), expansion: "com.x.icu".into(), is_fallback: false };
+        let b = PrefixInfo { prefix: "other".into(), expansion: "com.x.other".into(), is_fallback: false };
+        let r1 = t.record("icufns", "com.x.icu", &a, "icu_en", Shape::Collation, 0);
+        assert!(!r1.is_collision);
+        let r2 = t.record("other", "com.x.other", &b, "icu_en", Shape::Collation, 0);
+        assert!(r2.is_collision);
+        assert_eq!(format_collision_warning(&r2).contains("collation/0-arg"), true);
     }
 
     #[test]

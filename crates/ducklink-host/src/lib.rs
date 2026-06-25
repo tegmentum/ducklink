@@ -914,6 +914,15 @@ impl dotcmd_bindings::duckdb::dotcmd::spi::Host for DotcmdState {
             .expect("current connection mutex poisoned")
             .clone()
             .ok_or_else(|| "spi: no active database connection".to_string())?;
+
+        // v1.1 THE PIN — the dotcmd<->host hook. `.prefix prefer/unprefer` writes
+        // the pin row via SQL then issues this sentinel so the host APPLIES the
+        // pins immediately (re-registers the pinned bare owners against the
+        // core). The sentinel never reaches the core SQL parser.
+        if sql.trim() == PREFIX_APPLY_PINS_SENTINEL {
+            return self.apply_prefix_pins(handle);
+        }
+
         // PLAN-prefixes: flush any staged __ducklink_prefix* rows onto the live
         // connection (ensures the tables exist + are populated before .prefix
         // reads them). Cheap + idempotent: only does work when rows are pending.
@@ -939,6 +948,87 @@ impl dotcmd_bindings::duckdb::dotcmd::spi::Host for DotcmdState {
             Ok(qr) => Ok(spi_render_rows(qr)),
             Err(err) => Err(core_duckerror_message(err)),
         }
+    }
+}
+
+/// v1.1 THE PIN — the dotcmd issues this exact string via `spi.query` after
+/// writing the pin row; the host intercepts it (it never reaches the core SQL
+/// parser) and runs the apply-pins pass.
+const PREFIX_APPLY_PINS_SENTINEL: &str = "-- ducklink:prefix apply-pins";
+
+impl DotcmdState {
+    /// v1.1 THE PIN — the apply-pins pass driven from the spi sentinel. Reads
+    /// `__ducklink_prefix_pin` off the live connection, hands the rows to the
+    /// ExtensionManager (which refreshes its in-memory pin cache + stages
+    /// re-registrations of the pinned owners), then triggers a core pending pull
+    /// via `LOAD <a-loaded-extension>` so the staged re-registrations land.
+    fn apply_prefix_pins(&mut self, handle: ResourceAny) -> Result<String, String> {
+        let mut core = self.core.lock().expect("core mutex poisoned");
+        // Read the pin table from the live connection.
+        let read = core
+            .with_database(|guest, store| {
+                guest.call_execute(
+                    store,
+                    handle.clone(),
+                    "SELECT function_name, shape, n_args, expansion FROM __ducklink_prefix_pin",
+                )
+            })
+            .map_err(|trap| format!("apply-pins read trapped: {trap}"))?;
+        let pins: Vec<(String, prefix::Shape, i32, String)> = match read {
+            Ok(qr) => qr
+                .rows
+                .iter()
+                .filter_map(|row| {
+                    let name = match row.first() {
+                        Some(core_types::Duckvalue::Text(s)) => s.clone(),
+                        _ => return None,
+                    };
+                    let shape_s = match row.get(1) {
+                        Some(core_types::Duckvalue::Text(s)) => s.clone(),
+                        _ => return None,
+                    };
+                    let shape = prefix::Shape::from_str(&shape_s)?;
+                    let n_args = match row.get(2) {
+                        Some(core_types::Duckvalue::Int32(n)) => *n,
+                        Some(core_types::Duckvalue::Int64(n)) => *n as i32,
+                        _ => return None,
+                    };
+                    let expansion = match row.get(3) {
+                        Some(core_types::Duckvalue::Text(s)) => s.clone(),
+                        _ => return None,
+                    };
+                    Some((name, shape, n_args, expansion))
+                })
+                .collect(),
+            Err(err) => return Err(core_duckerror_message(err)),
+        };
+
+        // Hand the pins to the manager: refresh the cache + compute the wrapper
+        // macro DDL (CREATE OR REPLACE for pins, DROP for unprefers).
+        let statements = {
+            let mut manager = self
+                .extension_manager
+                .lock()
+                .expect("extension manager mutex poisoned");
+            manager.apply_pins(&pins)
+        };
+
+        // Run the wrapper-macro DDL on the live connection so the pin takes
+        // effect IMMEDIATELY (and survives later extension loads — a macro
+        // shadows a same-name scalar in DuckDB resolution).
+        for stmt in statements {
+            match core.with_database(|guest, store| guest.call_execute(store, handle.clone(), &stmt)) {
+                Ok(Ok(_)) => {}
+                Ok(Err(err)) => {
+                    return Err(format!(
+                        "apply-pins: '{stmt}' failed: {}",
+                        core_duckerror_message(err)
+                    ))
+                }
+                Err(trap) => return Err(format!("apply-pins: '{stmt}' trapped: {trap}")),
+            }
+        }
+        Ok(String::new())
     }
 }
 
@@ -1262,6 +1352,17 @@ struct ExtensionManager {
     // Staged prefix rows awaiting a flush to the live connection (built during
     // the pure registration drain; written by `flush_prefix_tables`).
     pending_prefix_rows: Vec<prefix::PrefixRow>,
+    // v1.1 THE PIN: every bare registration def seen this session, keyed by
+    // (name, shape, n_args, expansion). Lets the host RE-REGISTER a specific
+    // extension's bare function on demand (`.prefix prefer`) and revert to the
+    // default last-loaded owner (`.prefix unprefer`).
+    prefix_retained: prefix::RetainedDefs,
+    // v1.1 THE PIN: in-memory mirror of __ducklink_prefix_pin, refreshed by the
+    // spi `apply_pins` pass. (name, shape, n_args) -> pinned expansion. Drives
+    // the unprefer diff (which wrapper macros to DROP). Load-order independence
+    // is automatic — the wrapper macro shadows any later bare-scalar
+    // re-registration — so no mid-drain honor pass is needed.
+    pin_cache: HashMap<(String, prefix::Shape, i32), String>,
 }
 
 impl ExtensionManager {
@@ -1282,6 +1383,8 @@ impl ExtensionManager {
             prefix_collisions: prefix::CollisionTracker::default(),
             prefix_recorded: std::collections::HashSet::new(),
             pending_prefix_rows: Vec::new(),
+            prefix_retained: prefix::RetainedDefs::default(),
+            pin_cache: HashMap::new(),
         }
     }
 
@@ -1306,6 +1409,15 @@ impl ExtensionManager {
                 n_args,
                 &info,
             );
+            // Retain the bare def so a pin can resurrect THIS expansion's impl.
+            self.prefix_retained.insert(
+                &info.expansion,
+                &info.prefix,
+                &entry.name,
+                Shape::Scalar,
+                n_args,
+                prefix::RetainedDef::Scalar(entry.clone()),
+            );
             if let Some(qname) = prefix::qualified_name(&info.prefix, &entry.name) {
                 let mut dup = entry.clone();
                 dup.name = qname;
@@ -1325,6 +1437,14 @@ impl ExtensionManager {
                 Shape::Table,
                 n_args,
                 &info,
+            );
+            self.prefix_retained.insert(
+                &info.expansion,
+                &info.prefix,
+                &entry.name,
+                Shape::Table,
+                n_args,
+                prefix::RetainedDef::Table(entry.clone()),
             );
             if let Some(qname) = prefix::qualified_name(&info.prefix, &entry.name) {
                 let mut dup = entry.clone();
@@ -1346,6 +1466,14 @@ impl ExtensionManager {
                 n_args,
                 &info,
             );
+            self.prefix_retained.insert(
+                &info.expansion,
+                &info.prefix,
+                &entry.name,
+                Shape::Aggregate,
+                n_args,
+                prefix::RetainedDef::Aggregate(entry.clone()),
+            );
             if let Some(qname) = prefix::qualified_name(&info.prefix, &entry.name) {
                 let mut dup = entry.clone();
                 dup.name = qname;
@@ -1353,6 +1481,45 @@ impl ExtensionManager {
             }
         }
         data.aggregates.extend(qualified_aggregates);
+
+        // MACROS (v1.1): a macro is dispatched by NAME (it becomes a DuckDB
+        // CREATE MACRO), so `{prefix}__{name}` namespacing applies identically.
+        // Arity is the parameter count.
+        let mut qualified_macros: Vec<reg::MacroReg> = Vec::new();
+        for entry in &data.macros {
+            let n_args = entry.parameters.len() as i32;
+            let info = self.prefix_registry.resolve(&entry.extension);
+            self.note_prefix_registration(
+                &entry.extension,
+                &entry.name,
+                Shape::Macro,
+                n_args,
+                &info,
+            );
+            self.prefix_retained.insert(
+                &info.expansion,
+                &info.prefix,
+                &entry.name,
+                Shape::Macro,
+                n_args,
+                prefix::RetainedDef::Macro(entry.clone()),
+            );
+            if let Some(qname) = prefix::qualified_name(&info.prefix, &entry.name) {
+                let mut dup = entry.clone();
+                dup.name = qname;
+                qualified_macros.push(dup);
+            }
+        }
+        data.macros.extend(qualified_macros);
+
+        // --- DELIBERATELY OUT OF SCOPE for prefix namespacing ---
+        // CAST is keyed by (from_type, to_type), NOT called by a name, so there
+        // is no `prefix__name` call surface — a `jsonfns__<cast>` is
+        // meaningless. STORAGE / FILES / INDEX are keyed by an ATTACH TYPE name
+        // / URL scheme / index-type name; those collide on TYPE/scheme strings,
+        // not on a function name, and `prefix__sqlitewasm` as an ATTACH TYPE is
+        // nonsensical. These shapes need a different collision surface and are
+        // intentionally NOT prefixed here. (See PLAN-prefixes "Out of scope".)
     }
 
     /// Record one registration into the collision tracker (warning on a
@@ -1392,6 +1559,169 @@ impl ExtensionManager {
                 n_args,
             });
         }
+    }
+
+    /// v1.1: for each captured collation, also register a qualified
+    /// `{prefix}__{name}` collation into the `collations` map (the core pulls it
+    /// by name), track collisions, stage prefix rows, and retain the bare def.
+    /// Collations carry no call args, so the arity key is 0.
+    fn prefix_collations(&mut self, collations: &[reg::CollationReg]) {
+        use prefix::Shape;
+        let mut qualified: Vec<(String, (String, bool))> = Vec::new();
+        for c in collations {
+            let info = self.prefix_registry.resolve(&c.extension);
+            self.note_prefix_registration(&c.extension, &c.name, Shape::Collation, 0, &info);
+            self.prefix_retained.insert(
+                &info.expansion,
+                &info.prefix,
+                &c.name,
+                Shape::Collation,
+                0,
+                prefix::RetainedDef::Collation(c.name.clone(), c.transform_scalar.clone(), c.combinable),
+            );
+            if let Some(qname) = prefix::qualified_name(&info.prefix, &c.name) {
+                qualified.push((qname, (c.transform_scalar.clone(), c.combinable)));
+            }
+        }
+        for (qname, val) in qualified {
+            self.collations.insert(qname, val);
+        }
+    }
+
+    /// v1.1: for each captured pragma, also register a qualified
+    /// `{prefix}__{name}` pragma into the `pragmas` map (the core intercepts the
+    /// qualified name too), track collisions, stage prefix rows, and retain the
+    /// bare def. Pragmas are variadic, so the arity key is -1.
+    fn prefix_pragmas(&mut self, pragmas: &[reg::PragmaReg]) {
+        use prefix::Shape;
+        let mut qualified: Vec<(String, (String, u32))> = Vec::new();
+        for p in pragmas {
+            let info = self.prefix_registry.resolve(&p.extension);
+            self.note_prefix_registration(&p.extension, &p.name, Shape::Pragma, -1, &info);
+            self.prefix_retained.insert(
+                &info.expansion,
+                &info.prefix,
+                &p.name,
+                Shape::Pragma,
+                -1,
+                prefix::RetainedDef::Pragma(p.name.clone(), p.extension.clone(), p.callback_handle),
+            );
+            if let Some(qname) = prefix::qualified_name(&info.prefix, &p.name) {
+                qualified.push((qname, (p.extension.clone(), p.callback_handle)));
+            }
+        }
+        for (qname, val) in qualified {
+            self.pragmas.insert(qname, val);
+        }
+    }
+
+    /// v1.1 THE PIN — re-register the pinned expansion's bare def for one
+    /// (name, shape, n_args), making that impl own the bare name NOW.
+    ///
+    /// THE MECHANISM (host-only, no core rebuild): the qualified form
+    /// `{prefix}__{name}` is ALWAYS registered (additive v1 behavior), so we
+    /// make the BARE name dispatch to the pinned impl by creating a wrapper
+    /// `CREATE OR REPLACE MACRO {name}(args) AS ({prefix}__{name}(args))`. A
+    /// macro shadows a same-name scalar/aggregate/macro in DuckDB resolution, so
+    /// this:
+    ///   * takes effect immediately on the connection,
+    ///   * SURVIVES a later extension loading + re-registering the bare scalar
+    ///     (the macro still shadows it) — load-order independence for free,
+    ///   * reverts cleanly on `DROP MACRO` (the bare scalar resurfaces).
+    /// (DuckDB's ALTER_ON_CONFLICT means a re-forwarded bare *function*
+    /// registration would also last-wins, but the core only re-pulls
+    /// registrations on a FRESH `LOAD`, which DuckDB short-circuits for an
+    /// already-loaded extension — so the macro wrapper is the reliable
+    /// host-side lever.)
+    ///
+    /// Returns the SQL to run, or `None` if the pinned (name,shape,arity,
+    /// expansion) has no retained def (extension not loaded) — logged + ignored.
+    /// Collation/pragma pins are recorded but not macro-wrappable (they are not
+    /// called as `name(args)`); for those the pin row stands and the qualified
+    /// `prefix__name` form is the disambiguation surface.
+    fn pin_macro_sql(
+        &self,
+        name: &str,
+        shape: prefix::Shape,
+        n_args: i32,
+        expansion: &str,
+    ) -> Option<String> {
+        if matches!(shape, prefix::Shape::Collation | prefix::Shape::Pragma) {
+            // Not call-by-`name(args)`: no macro wrapper. The qualified form is
+            // the disambiguation surface; the pin row is advisory.
+            return None;
+        }
+        let def = match self.prefix_retained.get(name, shape, n_args, expansion) {
+            Some(d) => d,
+            None => {
+                eprintln!(
+                    "[prefix] WARNING: pin for '{name}' ({}/{n_args}-arg) -> '{expansion}' has no retained def (extension not loaded?); ignored",
+                    shape.as_str()
+                );
+                return None;
+            }
+        };
+        let prefix = self.prefix_retained.prefix_for(expansion)?;
+        let qname = prefix::qualified_name(prefix, name)
+            .unwrap_or_else(|| format!("{prefix}__{name}"));
+        // Build the macro parameter list. Use the retained def's declared arg
+        // names when present, else positional p0..pN. Variadic (-1) wrappers
+        // are skipped (a macro can't forward an unknown arity).
+        let params = match def {
+            prefix::RetainedDef::Scalar(r) => Some(macro_param_names(&r.arguments)),
+            prefix::RetainedDef::Aggregate(r) => Some(macro_param_names(&r.arguments)),
+            prefix::RetainedDef::Table(_) => None, // table macros differ; skip
+            prefix::RetainedDef::Macro(r) => Some(r.parameters.clone()),
+            _ => None,
+        }?;
+        let param_list = params.join(", ");
+        eprintln!(
+            "[prefix] PIN: bare '{name}' ({}/{n_args}-arg) -> '{expansion}' via macro alias -> {qname}",
+            shape.as_str()
+        );
+        Some(format!(
+            "CREATE OR REPLACE MACRO {name}({param_list}) AS ({qname}({param_list}));"
+        ))
+    }
+
+    /// v1.1 THE PIN — the apply-pins pass. Given the CURRENT rows of
+    /// `__ducklink_prefix_pin` (function_name, shape, n_args, expansion),
+    /// returns the SQL the caller runs on the live connection:
+    ///   * `CREATE OR REPLACE MACRO` for each pinned key (the pin wins now);
+    ///   * `DROP MACRO IF EXISTS` for any key that WAS pinned but is no longer
+    ///     in the table (an `unprefer`) — the bare scalar/aggregate resurfaces.
+    /// Refreshes the in-memory `pin_cache` to the new set (also read at
+    /// load-time by `drain_pending_registrations` for the honor pass).
+    fn apply_pins(&mut self, pins: &[(String, prefix::Shape, i32, String)]) -> Vec<String> {
+        let mut sql: Vec<String> = Vec::new();
+        let new_set: HashMap<(String, prefix::Shape, i32), String> = pins
+            .iter()
+            .map(|(name, shape, n_args, expansion)| {
+                ((name.clone(), *shape, *n_args), expansion.clone())
+            })
+            .collect();
+        // Unpinned keys -> drop the wrapper macro to revert to the bare scalar.
+        let removed: Vec<(String, prefix::Shape, i32)> = self
+            .pin_cache
+            .keys()
+            .filter(|k| !new_set.contains_key(*k))
+            .cloned()
+            .collect();
+        for (name, shape, _n_args) in removed {
+            if matches!(shape, prefix::Shape::Collation | prefix::Shape::Pragma) {
+                continue;
+            }
+            eprintln!("[prefix] UNPIN: dropping wrapper macro for bare '{name}' (revert to last-loaded)");
+            sql.push(format!("DROP MACRO IF EXISTS {name};"));
+        }
+        // Pinned keys -> (re)create the wrapper macro.
+        for (name, shape, n_args, expansion) in pins {
+            if let Some(stmt) = self.pin_macro_sql(name, *shape, *n_args, expansion) {
+                sql.push(stmt);
+            }
+        }
+        self.pin_cache = new_set;
+        sql
     }
 
     /// Drain the staged __ducklink_prefix* rows as the SQL needed to upsert
@@ -1999,6 +2329,11 @@ impl ExtensionManager {
         };
         let loaded_name = sanitized.clone();
         self.extensions.insert(sanitized, instance);
+        // v1.1: collation/pragma defs taken inside the `instance` borrow below,
+        // then handed to `prefix_collations`/`prefix_pragmas` AFTER the borrow
+        // ends (those methods borrow `self` whole).
+        let mut collations_captured: Vec<reg::CollationReg> = Vec::new();
+        let mut pragmas_captured: Vec<reg::PragmaReg> = Vec::new();
         // M2a: capture this extension's storage backends NOW (right after load),
         // so an `ATTACH ... (TYPE <name>)` can route to it without waiting for the
         // core's function-registration drain. Only the storage registrations are
@@ -2038,7 +2373,9 @@ impl ExtensionManager {
             // Item 2: capture this extension's collations NOW (right after load),
             // so the core can register them (via collation-host.collation-list)
             // before the first query that uses `COLLATE <name>`.
-            for collation in instance.take_pending_collations() {
+            collations_captured = instance.take_pending_collations();
+            pragmas_captured = instance.take_pending_pragmas();
+            for collation in &collations_captured {
                 eprintln!(
                     "[extension-manager] collation '{}' -> extension '{}' (transform scalar='{}', combinable={})",
                     collation.name, collation.extension, collation.transform_scalar, collation.combinable
@@ -2051,7 +2388,7 @@ impl ExtensionManager {
             // Item 4: capture this extension's pragmas NOW (right after load), so
             // the core can intercept `PRAGMA <name>(...)` (via pragma-host.pragma-list)
             // before the first query that uses it.
-            for pragma in instance.take_pending_pragmas() {
+            for pragma in &pragmas_captured {
                 eprintln!(
                     "[extension-manager] pragma '{}' -> extension '{}' (callback={})",
                     pragma.name, pragma.extension, pragma.callback_handle
@@ -2062,6 +2399,14 @@ impl ExtensionManager {
                 );
             }
         }
+        // v1.1: collation/pragma are dispatched by NAME, so `{prefix}__{name}`
+        // namespacing applies identically — register the qualified form into the
+        // same map (the core pulls it by name), track cross-component collisions,
+        // stage __ducklink_prefix_function rows, and retain the bare def. Run
+        // OUTSIDE the `instance` borrow above (these methods borrow `self` whole).
+        // Collation arity = 0 (no call args); pragma arity = -1 (variadic).
+        self.prefix_collations(&collations_captured);
+        self.prefix_pragmas(&pragmas_captured);
         eprintln!(
             "[extension-manager] extension '{loaded_name}' loaded successfully and ready for registrations"
         );
@@ -2098,6 +2443,11 @@ impl ExtensionManager {
         // __ducklink_prefix_function rows. Pure (no SQL / no core re-entry); the
         // staged rows are flushed lazily on the live connection.
         self.apply_function_prefixes(&mut aggregated);
+        // v1.1 THE PIN — no mid-drain honor pass is needed: a pin is effected by
+        // a wrapper macro (`apply_pins`) that shadows ANY later bare-scalar
+        // re-registration, so load-order independence is automatic. The pinned
+        // owner keeps winning the bare name even after this fresh load.
+
         let scalar_names =
             summarize_registration_names(&aggregated.scalars, |entry| entry.name.as_str());
         let table_names =
@@ -3730,6 +4080,24 @@ pub fn set_extension_root<P: Into<PathBuf>>(path: P) {
     if EXTENSION_ROOT.set(path).is_err() {
         // already configured; ignore to avoid panic during tests configuring multiple times
     }
+}
+
+/// v1.1 THE PIN — macro parameter names for a wrapper alias. Uses each arg's
+/// declared name when present (and a valid identifier), else positional
+/// `p0..pN`. A nameless or duplicate set is normalized to positional to keep
+/// the generated `CREATE MACRO` well-formed.
+fn macro_param_names(args: &[reg::FuncArg]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::with_capacity(args.len());
+    let mut seen = std::collections::HashSet::new();
+    for (i, a) in args.iter().enumerate() {
+        let candidate = a
+            .name
+            .as_deref()
+            .and_then(prefix::sanitize_prefix)
+            .filter(|n| seen.insert(n.clone()));
+        out.push(candidate.unwrap_or_else(|| format!("p{i}")));
+    }
+    out
 }
 
 fn extension_artifact_path(name: &str) -> PathBuf {
