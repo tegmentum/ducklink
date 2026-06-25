@@ -207,7 +207,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         ("hilbert_encode", F::HilbertEncode, "2D Hilbert curve index of x, y"),
     ] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, f);
-        reg.register(name, &xy_args(), bigint(), runtime::ScalarCallback::new(h),
+        reg.register(name, &xy_args(), &bigint(), runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some(desc.into()), tags: vec!["lindel".into()], attributes: det }))?;
     }
 
@@ -219,7 +219,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         ("hilbert_decode_y", F::HilbertDecodeY, "h", "y component of a Hilbert index"),
     ] {
         let hd = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(hd, f);
-        reg.register(name, &one_arg(arg), bigint(), runtime::ScalarCallback::new(hd),
+        reg.register(name, &one_arg(arg), &bigint(), runtime::ScalarCallback::new(hd),
             Some(&runtime::Funcopts { description: Some(desc.into()), tags: vec!["lindel".into()], attributes: det }))?;
     }
     Ok(())

@@ -109,7 +109,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let bib_arg = || vec![runtime::Funcarg { name: Some("bib".into()), logical: types::Logicaltype::Text }];
 
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, B::Count);
-    reg.register("bibtex_count", &bib_arg(), types::Logicaltype::Int64, runtime::ScalarCallback::new(h),
+    reg.register("bibtex_count", &bib_arg(), &types::Logicaltype::Int64, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("Number of BibTeX entries; NULL on parse error".into()), tags: vec!["bibtex".into()], attributes: det }))?;
 
     for (name, b, desc) in [
@@ -117,7 +117,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         ("bibtex_keys", B::Keys, "BibTeX -> JSON array of citation keys; NULL on parse error"),
     ] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, b);
-        reg.register(name, &bib_arg(), types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        reg.register(name, &bib_arg(), &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some(desc.into()), tags: vec!["bibtex".into()], attributes: det }))?;
     }
     Ok(())

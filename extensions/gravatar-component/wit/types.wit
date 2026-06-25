@@ -1,7 +1,12 @@
 package duckdb:extension;
 
 interface types {
-  enum logicaltype {
+  // ESCAPE-HATCH logical type. The `complex` arm carries a DuckDB type-expression
+  // string (e.g. "INTEGER[]", "STRUCT(a INTEGER, b VARCHAR)"); the core resolves it
+  // to a real logical type. This makes `logicaltype` a `variant` (was an `enum`); the
+  // fieldless arms keep their discriminant order, so the canonical-ABI is appended-to,
+  // not reordered. Any FUTURE type rides this arm with no further contract bump.
+  variant logicaltype {
     boolean,
     int64,
     uint64,
@@ -22,6 +27,7 @@ interface types {
     decimal,
     interval,
     uuid,
+    complex(string),
   }
 
   // DuckDB DECIMAL is a HUGEINT-backed scaled integer:
@@ -46,6 +52,17 @@ interface types {
   record uuidvalue {
     hi: u64,
     lo: u64,
+  }
+
+  // ESCAPE-HATCH composite value. `type-expr` is a DuckDB type string (e.g.
+  // "INTEGER[]" / "STRUCT(a INTEGER, b VARCHAR)") and `json` is the value rendered
+  // as JSON (e.g. "[10,20,30]" / {"a":1,"b":"hi"}). This is a FLAT record -- it does
+  // NOT reference `duckvalue`, so there is no recursive WIT cycle. The core
+  // reconstructs the real LIST/STRUCT vector from the JSON via the duckdb C vector
+  // API (which has no recursion limit).
+  record complexvalue {
+    type-expr: string,
+    json: string,
   }
 
   record funcarg {
@@ -99,6 +116,7 @@ interface types {
     decimal(decimalvalue),
     interval(intervalvalue),
     uuid(uuidvalue),
+    complex(complexvalue),
   }
 
   type resultset = list<list<duckvalue>>;

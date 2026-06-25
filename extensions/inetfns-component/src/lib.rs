@@ -170,7 +170,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("inet_contains", &[
         runtime::Funcarg { name: Some("network".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("ip".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("does network contain ip".into()), tags: vec!["network".into()], attributes: det }))?;
     Ok(())
 }
@@ -178,7 +178,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
 fn one(reg: &runtime::ScalarRegistry, name: &str, ret: types::Logicaltype, attr: types::Funcflags, f: F) -> Result<(), types::Duckerror> {
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, f);
     reg.register(name, &[runtime::Funcarg { name: Some("inet".into()), logical: types::Logicaltype::Text }],
-        ret, runtime::ScalarCallback::new(h),
+        &ret, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("inet".into()), tags: vec!["network".into()], attributes: attr }))?;
     Ok(())
 }

@@ -95,17 +95,17 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     reg.register("ini_to_json", &[runtime::Funcarg { name: Some("ini".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("INI -> JSON object {section:{key:value}}".into()), tags: vec!["config".into()], attributes: det }))?;
     reg.register("ini_get", &[
             runtime::Funcarg { name: Some("ini".into()), logical: types::Logicaltype::Text },
             runtime::Funcarg { name: Some("section".into()), logical: types::Logicaltype::Text },
             runtime::Funcarg { name: Some("key".into()), logical: types::Logicaltype::Text },
         ],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("Value of section.key in INI; NULL if absent".into()), tags: vec!["config".into()], attributes: det }))?;
     reg.register("ini_sections", &[runtime::Funcarg { name: Some("ini".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(3),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(3),
         Some(&runtime::Funcopts { description: Some("JSON array of section names in INI".into()), tags: vec!["config".into()], attributes: det }))?;
     Ok(())
 }

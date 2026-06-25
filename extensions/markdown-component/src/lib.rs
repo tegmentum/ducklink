@@ -161,7 +161,7 @@ fn register_one(
         tags: vec!["markdown".into()],
         attributes,
     };
-    registry.register(name, &args, types::Logicaltype::Text, callback, Some(&opts))?;
+    registry.register(name, &args, &types::Logicaltype::Text, callback, Some(&opts))?;
     Ok(())
 }
 

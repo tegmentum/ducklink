@@ -48,7 +48,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let cb = runtime::ScalarCallback::new(handle);
     let args = vec![runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }];
     let opts = runtime::Funcopts { description: Some("URL-safe slug".into()), tags: vec!["slug".into()], attributes: det };
-    reg.register("slugify", &args, types::Logicaltype::Text, cb, Some(&opts))?;
+    reg.register("slugify", &args, &types::Logicaltype::Text, cb, Some(&opts))?;
     Ok(())
 }
 static NEXT: AtomicU32 = AtomicU32::new(1);

@@ -134,16 +134,16 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     reg.register("dotenv_to_json", &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some(".env text -> JSON object {KEY:VALUE}".into()), tags: vec!["config".into()], attributes: det }))?;
     reg.register("dotenv_get", &[
             runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text },
             runtime::Funcarg { name: Some("key".into()), logical: types::Logicaltype::Text },
         ],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("Value for KEY in .env text; NULL if absent".into()), tags: vec!["config".into()], attributes: det }))?;
     reg.register("dotenv_keys", &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(3),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(3),
         Some(&runtime::Funcopts { description: Some("JSON array of keys in .env text".into()), tags: vec!["config".into()], attributes: det }))?;
     Ok(())
 }

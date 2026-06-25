@@ -52,10 +52,10 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     reg.register("gray_encode", &[runtime::Funcarg { name: Some("n".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("binary -> Gray code".into()), tags: vec!["bits".into()], attributes: det }))?;
     reg.register("gray_decode", &[runtime::Funcarg { name: Some("g".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("Gray code -> binary".into()), tags: vec!["bits".into()], attributes: det }))?;
     Ok(())
 }

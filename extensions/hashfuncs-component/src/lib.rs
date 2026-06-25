@@ -150,7 +150,7 @@ fn register_one(
         tags: vec!["hashfuncs".into()],
         attributes,
     };
-    registry.register(name, &args, returns, callback, Some(&opts))?;
+    registry.register(name, &args, &returns, callback, Some(&opts))?;
     Ok(())
 }
 

@@ -495,7 +495,7 @@ fn run_scan(
         let mut emit: std::vec::Vec<types::Duckvalue> = std::vec::Vec::with_capacity(proj.len());
         for (slot, &ci) in proj.iter().enumerate() {
             let v = row.get_ref(slot).map_err(map_sqlite_err)?;
-            emit.push(value_to_duck(v, cols[ci].1));
+            emit.push(value_to_duck(v, &cols[ci].1));
         }
         out.push(emit);
     }
@@ -537,13 +537,15 @@ fn bind_value(
         types::Duckvalue::Uuid(u) => {
             Value::Text(format!("{:016x}{:016x}", u.hi, u.lo))
         }
+        // ESCAPE-HATCH: a nested value -- bind its JSON text into sqlite.
+        types::Duckvalue::Complex(c) => Value::Text(c.json.to_string()),
     };
     stmt.raw_bind_parameter(idx, val).map_err(map_sqlite_err)
 }
 
 /// Map a sqlite value to a duckvalue, coercing toward the projected column's
 /// declared logicaltype where it makes sense; NULL always -> Null.
-fn value_to_duck(v: ValueRef<'_>, ty: types::Logicaltype) -> types::Duckvalue {
+fn value_to_duck(v: ValueRef<'_>, ty: &types::Logicaltype) -> types::Duckvalue {
     match v {
         ValueRef::Null => types::Duckvalue::Null,
         ValueRef::Integer(i) => match ty {

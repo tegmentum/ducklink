@@ -171,7 +171,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register(
         "plist_to_json",
         &[runtime::Funcarg { name: Some("data".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text,
+        &types::Logicaltype::Text,
         runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("plist (XML/binary) -> JSON".into()), tags: vec!["data-types".into()], attributes: det }),
     )?;
@@ -181,7 +181,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
             runtime::Funcarg { name: Some("data".into()), logical: types::Logicaltype::Text },
             runtime::Funcarg { name: Some("key".into()), logical: types::Logicaltype::Text },
         ],
-        types::Logicaltype::Text,
+        &types::Logicaltype::Text,
         runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("plist top-level dict value by key".into()), tags: vec!["data-types".into()], attributes: det }),
     )?;

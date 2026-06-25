@@ -43,9 +43,9 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let nondet = types::Funcflags::empty();
     reg.register("lorem_words", &[runtime::Funcarg { name: Some("n".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("n words of lorem ipsum".into()), tags: vec!["text".into()], attributes: nondet }))?;
-    reg.register("lorem_title", &[], types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+    reg.register("lorem_title", &[], &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("a lorem ipsum title".into()), tags: vec!["text".into()], attributes: nondet }))?;
     Ok(())
 }

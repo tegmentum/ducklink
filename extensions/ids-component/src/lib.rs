@@ -57,13 +57,13 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, H::UlidTs);
     reg.register("ulid_timestamp",
         &[runtime::Funcarg { name: Some("ulid".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("ULID -> epoch ms".into()), tags: vec!["id".into()], attributes: det }))?;
     Ok(())
 }
 fn reg0(reg: &runtime::ScalarRegistry, name: &str, ret: types::Logicaltype, attr: types::Funcflags, h: H) -> Result<(), types::Duckerror> {
     let handle = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(handle, h);
-    reg.register(name, &[], ret, runtime::ScalarCallback::new(handle),
+    reg.register(name, &[], &ret, runtime::ScalarCallback::new(handle),
         Some(&runtime::Funcopts { description: Some("identifier generator".into()), tags: vec!["id".into()], attributes: attr }))?;
     Ok(())
 }

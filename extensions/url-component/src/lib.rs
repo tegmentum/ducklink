@@ -64,7 +64,7 @@ fn one(reg: &runtime::ScalarRegistry, name: &str, ret: types::Logicaltype, attr:
     let cb = runtime::ScalarCallback::new(handle);
     let args = vec![runtime::Funcarg { name: Some("url".into()), logical: types::Logicaltype::Text }];
     let opts = runtime::Funcopts { description: Some("URL component".into()), tags: vec!["url".into()], attributes: attr };
-    reg.register(name, &args, ret, cb, Some(&opts))?; Ok(())
+    reg.register(name, &args, &ret, cb, Some(&opts))?; Ok(())
 }
 #[derive(Clone, Copy)] enum H { Scheme, Host, Port, Path, Query }
 static NEXT: AtomicU32 = AtomicU32::new(1);

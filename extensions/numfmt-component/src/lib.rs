@@ -255,7 +255,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
                 logical: types::Logicaltype::Int64,
             },
         ],
-        types::Logicaltype::Text,
+        &types::Logicaltype::Text,
         runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts {
             description: Some("value -> fixed decimals with comma thousands-grouping".into()),
@@ -272,7 +272,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
             name: Some("value".into()),
             logical: types::Logicaltype::Float64,
         }],
-        types::Logicaltype::Text,
+        &types::Logicaltype::Text,
         runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts {
             description: Some("value -> SI/metric prefixed string (3 sig figs)".into()),

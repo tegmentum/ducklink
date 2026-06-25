@@ -41,7 +41,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("petname", &[
         runtime::Funcarg { name: Some("words".into()), logical: types::Logicaltype::Int64 },
         runtime::Funcarg { name: Some("separator".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("memorable random name".into()), tags: vec!["id".into()], attributes: nondet }))?;
     Ok(())
 }

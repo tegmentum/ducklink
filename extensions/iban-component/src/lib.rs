@@ -229,7 +229,7 @@ fn register_one(
         tags: vec!["iban".into()],
         attributes,
     };
-    registry.register(name, &args, returns, callback, Some(&opts))?;
+    registry.register(name, &args, &returns, callback, Some(&opts))?;
     Ok(())
 }
 

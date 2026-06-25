@@ -172,7 +172,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register(
         "hocon_to_json",
         &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text,
+        &types::Logicaltype::Text,
         runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts {
             description: Some("HOCON -> JSON object".into()),
@@ -186,7 +186,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
             runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text },
             runtime::Funcarg { name: Some("path".into()), logical: types::Logicaltype::Text },
         ],
-        types::Logicaltype::Text,
+        &types::Logicaltype::Text,
         runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts {
             description: Some("HOCON value at a dotted path".into()),

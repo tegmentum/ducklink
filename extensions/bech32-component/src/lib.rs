@@ -70,12 +70,12 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("bech32_encode", &[
         runtime::Funcarg { name: Some("hrp".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("hex".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("bech32 encode".into()), tags: vec!["encoding".into()], attributes: det }))?;
     for (name, b, ret) in [("bech32_hrp", B::Hrp, types::Logicaltype::Text), ("bech32_decode_hex", B::DecodeHex, types::Logicaltype::Text), ("bech32_valid", B::Valid, types::Logicaltype::Boolean)] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, b);
         reg.register(name, &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-            ret, runtime::ScalarCallback::new(h),
+            &ret, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some("bech32".into()), tags: vec!["encoding".into()], attributes: det }))?;
     }
     Ok(())

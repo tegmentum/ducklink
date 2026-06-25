@@ -247,7 +247,7 @@ fn register_marker() -> Result<(), types::Duckerror> {
     reg.register(
         "webfs_version",
         &[],
-        types::Logicaltype::Text,
+        &types::Logicaltype::Text,
         runtime::ScalarCallback::new(VERSION_HANDLE),
         Some(&runtime::Funcopts {
             description: Some("webfs files backend version".into()),

@@ -164,7 +164,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register(
         "secp256k1_pubkey",
         &[runtime::Funcarg { name: Some("privkey".into()), logical: types::Logicaltype::Blob }],
-        types::Logicaltype::Blob,
+        &types::Logicaltype::Blob,
         runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts {
             description: Some("32-byte private key -> 33-byte compressed public key".into()),
@@ -182,7 +182,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
             runtime::Funcarg { name: Some("msg_hash".into()), logical: types::Logicaltype::Blob },
             runtime::Funcarg { name: Some("privkey".into()), logical: types::Logicaltype::Blob },
         ],
-        types::Logicaltype::Blob,
+        &types::Logicaltype::Blob,
         runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts {
             description: Some("ECDSA sign a 32-byte hash (RFC 6979) -> 64-byte compact sig".into()),
@@ -201,7 +201,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
             runtime::Funcarg { name: Some("signature".into()), logical: types::Logicaltype::Blob },
             runtime::Funcarg { name: Some("pubkey".into()), logical: types::Logicaltype::Blob },
         ],
-        types::Logicaltype::Boolean,
+        &types::Logicaltype::Boolean,
         runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts {
             description: Some("Verify a 64-byte compact ECDSA sig over a 32-byte hash".into()),

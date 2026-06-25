@@ -169,7 +169,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         runtime::Funcarg { name: Some("geom_wkt".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("from_srid".into()), logical: types::Logicaltype::Int32 },
         runtime::Funcarg { name: Some("to_srid".into()), logical: types::Logicaltype::Int32 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts {
             description: Some("Reproject a WKT geometry between EPSG CRS via composed GDAL/PROJ".into()),
             tags: vec!["geo".into(), "gdal".into()],

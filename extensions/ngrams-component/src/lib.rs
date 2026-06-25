@@ -49,7 +49,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         reg.register(name, &[
             runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text },
             runtime::Funcarg { name: Some("n".into()), logical: types::Logicaltype::Int64 }],
-            types::Logicaltype::Text, runtime::ScalarCallback::new(cb),
+            &types::Logicaltype::Text, runtime::ScalarCallback::new(cb),
             Some(&runtime::Funcopts { description: Some("n-grams (JSON)".into()), tags: vec!["nlp".into()], attributes: det }))?;
     }
     Ok(())

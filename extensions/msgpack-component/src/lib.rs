@@ -51,10 +51,10 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     reg.register("msgpack_from_json", &[runtime::Funcarg { name: Some("json".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("JSON -> MessagePack hex".into()), tags: vec!["codec".into()], attributes: det }))?;
     reg.register("msgpack_to_json", &[runtime::Funcarg { name: Some("hex".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("MessagePack hex -> JSON".into()), tags: vec!["codec".into()], attributes: det }))?;
     Ok(())
 }

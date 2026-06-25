@@ -100,7 +100,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     ] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed);
         handlers().lock().unwrap().insert(h, u);
-        reg.register(name, &ua_arg(), ret, runtime::ScalarCallback::new(h),
+        reg.register(name, &ua_arg(), &ret, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some(desc.into()), tags: vec!["useragent".into()], attributes: det }))?;
     }
     Ok(())

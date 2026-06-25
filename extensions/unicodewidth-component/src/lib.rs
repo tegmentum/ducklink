@@ -42,10 +42,10 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     reg.register("grapheme_count", &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("grapheme cluster count".into()), tags: vec!["unicode".into()], attributes: det }))?;
     reg.register("display_width", &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("terminal display width".into()), tags: vec!["unicode".into()], attributes: det }))?;
     Ok(())
 }

@@ -279,7 +279,7 @@ fn register(
         .iter()
         .map(|(n, t)| runtime::Funcarg {
             name: Some((*n).into()),
-            logical: *t,
+            logical: t.clone(),
         })
         .collect();
     let opts = runtime::Funcopts {
@@ -287,7 +287,7 @@ fn register(
         tags: vec!["uuid".into(), "uuid7".into()],
         attributes,
     };
-    registry.register(name, &func_args, returns, callback, Some(&opts))?;
+    registry.register(name, &func_args, &returns, callback, Some(&opts))?;
     Ok(())
 }
 

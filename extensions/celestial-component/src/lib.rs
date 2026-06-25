@@ -150,27 +150,27 @@ fn register_scalars() -> Result<(), types::Duckerror> {
 
     let h = next(F::GalL);
     reg.register("equatorial_to_galactic_l",
-        &[arg("ra_deg"), arg("dec_deg")], dbl, runtime::ScalarCallback::new(h),
+        &[arg("ra_deg"), arg("dec_deg")], &dbl, runtime::ScalarCallback::new(h),
         Some(&opts("RA/Dec (J2000) -> galactic longitude (deg)")))?;
 
     let h = next(F::GalB);
     reg.register("equatorial_to_galactic_b",
-        &[arg("ra_deg"), arg("dec_deg")], dbl, runtime::ScalarCallback::new(h),
+        &[arg("ra_deg"), arg("dec_deg")], &dbl, runtime::ScalarCallback::new(h),
         Some(&opts("RA/Dec (J2000) -> galactic latitude (deg)")))?;
 
     let h = next(F::Sep);
     reg.register("angular_separation",
-        &[arg("ra1"), arg("dec1"), arg("ra2"), arg("dec2")], dbl, runtime::ScalarCallback::new(h),
+        &[arg("ra1"), arg("dec1"), arg("ra2"), arg("dec2")], &dbl, runtime::ScalarCallback::new(h),
         Some(&opts("Great-circle angle between two equatorial points (deg)")))?;
 
     let h = next(F::Hms);
     reg.register("hms_to_deg",
-        &[arg("h"), arg("m"), arg("s")], dbl, runtime::ScalarCallback::new(h),
+        &[arg("h"), arg("m"), arg("s")], &dbl, runtime::ScalarCallback::new(h),
         Some(&opts("Hours-minutes-seconds of RA -> degrees")))?;
 
     let h = next(F::Dms);
     reg.register("dms_to_deg",
-        &[arg("d"), arg("m"), arg("s")], dbl, runtime::ScalarCallback::new(h),
+        &[arg("d"), arg("m"), arg("s")], &dbl, runtime::ScalarCallback::new(h),
         Some(&opts("Degrees-minutes-seconds -> decimal degrees")))?;
     Ok(())
 }

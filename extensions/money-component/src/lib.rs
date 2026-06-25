@@ -65,7 +65,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("format_money", &[
         runtime::Funcarg { name: Some("amount".into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some("currency".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("format currency amount".into()), tags: vec!["money".into()], attributes: det }))?;
     Ok(())
 }

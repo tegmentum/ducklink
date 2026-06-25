@@ -46,10 +46,10 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     reg.register("toml_to_json", &[runtime::Funcarg { name: Some("toml".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("TOML -> JSON".into()), tags: vec!["config".into()], attributes: det }))?;
     reg.register("json_to_toml", &[runtime::Funcarg { name: Some("json".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("JSON -> TOML".into()), tags: vec!["config".into()], attributes: det }))?;
     Ok(())
 }

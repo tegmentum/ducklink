@@ -784,6 +784,10 @@ fn format_duckvalue(value: duckdb::Duckvalue) -> String {
         duckdb::Duckvalue::Decimal(d) => format_decimal_value(d.lower, d.upper, d.scale),
         duckdb::Duckvalue::Interval(iv) => format_interval(iv.months, iv.days, iv.micros),
         duckdb::Duckvalue::Uuid(u) => format_uuid_value(u.hi, u.lo),
+        // ESCAPE-HATCH: a NESTED LIST/STRUCT value carried as JSON. The core
+        // normally materializes these as a real vector so the CLI receives the
+        // native rendering; if a raw `complex` reaches here, show the JSON.
+        duckdb::Duckvalue::Complex(c) => c.json,
     }
 }
 

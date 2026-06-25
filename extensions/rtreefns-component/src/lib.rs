@@ -492,7 +492,7 @@ fn register_bbox4() -> Result<(), types::Duckerror> {
     reg.register(
         "bbox4",
         &args,
-        types::Logicaltype::Text,
+        &types::Logicaltype::Text,
         runtime::ScalarCallback::new(BBOX4_HANDLE),
         Some(&opts),
     )?;

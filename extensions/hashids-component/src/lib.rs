@@ -55,12 +55,12 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("hashids_encode", &[
         runtime::Funcarg { name: Some("number".into()), logical: types::Logicaltype::Int64 },
         runtime::Funcarg { name: Some("salt".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("Hashids encode".into()), tags: vec!["id".into()], attributes: det }))?;
     reg.register("hashids_decode", &[
         runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("salt".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("Hashids decode".into()), tags: vec!["id".into()], attributes: det }))?;
     Ok(())
 }

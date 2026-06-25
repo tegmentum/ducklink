@@ -53,7 +53,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     for (name, idx) in [("jwt_header", 0usize), ("jwt_payload", 1usize)] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, idx);
         reg.register(name, &[runtime::Funcarg { name: Some("token".into()), logical: types::Logicaltype::Text }],
-            types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+            &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some("decode JWT segment (no verify)".into()), tags: vec!["jwt".into()], attributes: det }))?;
     }
     Ok(())

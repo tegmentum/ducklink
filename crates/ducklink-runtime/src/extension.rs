@@ -1172,6 +1172,7 @@ fn convert_extension_logicaltype(ty: extension_runtime::Logicaltype) -> reg::Log
         extension_runtime::Logicaltype::Decimal => reg::LogicalType::Decimal,
         extension_runtime::Logicaltype::Interval => reg::LogicalType::Interval,
         extension_runtime::Logicaltype::Uuid => reg::LogicalType::Uuid,
+        extension_runtime::Logicaltype::Complex(expr) => reg::LogicalType::Complex(expr),
     }
 }
 
@@ -1324,7 +1325,7 @@ pub fn summarize_extopts(options: Option<&reg::ExtOpts>) -> String {
     }
 }
 
-pub fn describe_runtime_logicaltype(ty: &reg::LogicalType) -> &'static str {
+pub fn describe_runtime_logicaltype(ty: &reg::LogicalType) -> String {
     ty.describe()
 }
 
@@ -1372,7 +1373,7 @@ pub mod storage_scan {
     // re-export it (and the composite record types it carries) so the host can
     // construct scan requests.
     pub use crate::duckdb_extension_storage_bindings::duckdb::extension::types::{
-        Decimalvalue, Duckvalue, Intervalvalue, Uuidvalue,
+        Complexvalue, Decimalvalue, Duckvalue, Intervalvalue, Uuidvalue,
     };
 }
 
@@ -1414,6 +1415,12 @@ fn storage_duckvalue_to_ext(value: storage_types::Duckvalue) -> extension_types:
         storage_types::Duckvalue::Uuid(u) => {
             extension_types::Duckvalue::Uuid(extension_types::Uuidvalue { hi: u.hi, lo: u.lo })
         }
+        storage_types::Duckvalue::Complex(c) => {
+            extension_types::Duckvalue::Complex(extension_types::Complexvalue {
+                type_expr: c.type_expr,
+                json: c.json,
+            })
+        }
     }
 }
 
@@ -1449,6 +1456,7 @@ fn storage_logicaltype_to_ext(ty: storage_types::Logicaltype) -> extension_types
         storage_types::Logicaltype::Decimal => extension_types::Logicaltype::Decimal,
         storage_types::Logicaltype::Interval => extension_types::Logicaltype::Interval,
         storage_types::Logicaltype::Uuid => extension_types::Logicaltype::Uuid,
+        storage_types::Logicaltype::Complex(expr) => extension_types::Logicaltype::Complex(expr),
     }
 }
 

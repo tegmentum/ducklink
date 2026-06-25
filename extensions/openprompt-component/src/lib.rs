@@ -169,12 +169,12 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let net = types::Funcflags::empty();
     reg.register("prompt", &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("OpenAI-compatible chat completion (model from OPENAI_MODEL)".into()), tags: vec!["network".into()], attributes: net }))?;
     reg.register("prompt_model",
         &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text },
           runtime::Funcarg { name: Some("model".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("OpenAI-compatible chat completion (explicit model)".into()), tags: vec!["network".into()], attributes: net }))?;
     Ok(())
 }

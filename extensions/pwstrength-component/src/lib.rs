@@ -52,10 +52,10 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     reg.register("password_score", &[runtime::Funcarg { name: Some("password".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Float64, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Float64, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("password score 0-100".into()), tags: vec!["security".into()], attributes: det }))?;
     reg.register("password_strength", &[runtime::Funcarg { name: Some("password".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("password strength label".into()), tags: vec!["security".into()], attributes: det }))?;
     Ok(())
 }

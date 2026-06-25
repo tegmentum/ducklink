@@ -151,14 +151,14 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     handlers().lock().unwrap().insert(h, B::ToJson);
     reg.register("bencode_to_json",
         &[runtime::Funcarg { name: Some("data".into()), logical: types::Logicaltype::Blob }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("bencode BLOB -> JSON text".into()), tags: vec!["encoding".into()], attributes: det }))?;
 
     let h = NEXT.fetch_add(1, Ordering::Relaxed);
     handlers().lock().unwrap().insert(h, B::IsValid);
     reg.register("bencode_is_valid",
         &[runtime::Funcarg { name: Some("data".into()), logical: types::Logicaltype::Blob }],
-        types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("is the BLOB valid bencode?".into()), tags: vec!["encoding".into()], attributes: det }))?;
     Ok(())
 }

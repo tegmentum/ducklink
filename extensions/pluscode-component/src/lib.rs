@@ -64,16 +64,16 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         runtime::Funcarg { name: Some("lat".into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some("lon".into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some("length".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("lat/lon -> plus code".into()), tags: vec!["geo".into()], attributes: det }))?;
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, P::Valid);
     reg.register("pluscode_valid", &[runtime::Funcarg { name: Some("code".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("plus code valid?".into()), tags: vec!["geo".into()], attributes: det }))?;
     for (name, p) in [("pluscode_decode_lat", P::Lat), ("pluscode_decode_lon", P::Lon)] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, p);
         reg.register(name, &[runtime::Funcarg { name: Some("code".into()), logical: types::Logicaltype::Text }],
-            types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
+            &types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some("plus code center".into()), tags: vec!["geo".into()], attributes: det }))?;
     }
     Ok(())

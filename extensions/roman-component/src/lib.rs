@@ -58,12 +58,12 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let h1 = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h1, H::ToRoman);
     reg.register("to_roman",
         &[runtime::Funcarg { name: Some("n".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h1),
         Some(&runtime::Funcopts { description: Some("integer -> Roman numeral".into()), tags: vec!["roman".into()], attributes: det }))?;
     let h2 = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h2, H::FromRoman);
     reg.register("from_roman",
         &[runtime::Funcarg { name: Some("s".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(h2),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(h2),
         Some(&runtime::Funcopts { description: Some("Roman numeral -> integer".into()), tags: vec!["roman".into()], attributes: det }))?;
     Ok(())
 }

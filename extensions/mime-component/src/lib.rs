@@ -47,11 +47,11 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     let h1 = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h1, false);
     reg.register("mime_type", &[runtime::Funcarg { name: Some("path".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h1),
         Some(&runtime::Funcopts { description: Some("filename -> MIME type".into()), tags: vec!["mime".into()], attributes: det }))?;
     let h2 = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h2, true);
     reg.register("mime_from_ext", &[runtime::Funcarg { name: Some("ext".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h2),
         Some(&runtime::Funcopts { description: Some("extension -> MIME type".into()), tags: vec!["mime".into()], attributes: det }))?;
     Ok(())
 }

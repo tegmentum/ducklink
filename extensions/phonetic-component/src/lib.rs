@@ -48,7 +48,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     for (name, metaphone) in [("soundex", false), ("metaphone", true)] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, metaphone);
         reg.register(name, &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-            types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+            &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some("phonetic code".into()), tags: vec!["phonetic".into()], attributes: det }))?;
     }
     Ok(())

@@ -70,12 +70,12 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     reg.register("simhash", &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Uint64, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Uint64, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("SimHash fingerprint".into()), tags: vec!["hash".into()], attributes: det }))?;
     reg.register("simhash_distance", &[
         runtime::Funcarg { name: Some("a".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("b".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("SimHash Hamming distance".into()), tags: vec!["hash".into()], attributes: det }))?;
     Ok(())
 }

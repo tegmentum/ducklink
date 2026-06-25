@@ -56,12 +56,12 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("vigenere_encrypt", &[
         runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("key".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("Vigenere encrypt".into()), tags: vec!["cipher".into()], attributes: det }))?;
     reg.register("vigenere_decrypt", &[
         runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("key".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("Vigenere decrypt".into()), tags: vec!["cipher".into()], attributes: det }))?;
     Ok(())
 }

@@ -372,6 +372,8 @@ pub(crate) fn json_value(out: &mut String, val: &core_types::Duckvalue) {
             &format!("{}mon {}d {}us", iv.months, iv.days, iv.micros),
         ),
         core_types::Duckvalue::Uuid(u) => json_string(out, &crate::format_uuid(u.hi, u.lo)),
+        // ESCAPE-HATCH: the value is already JSON; emit it verbatim (unquoted).
+        core_types::Duckvalue::Complex(c) => out.push_str(&c.json),
     }
 }
 

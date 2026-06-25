@@ -36,7 +36,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let cap = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let nondet = types::Funcflags::empty();
-    reg.register("passphrase", &[], types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+    reg.register("passphrase", &[], &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("diceware passphrase".into()), tags: vec!["security".into()], attributes: nondet }))?;
     Ok(())
 }

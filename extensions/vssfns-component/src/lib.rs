@@ -226,7 +226,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         reg.register(
             name,
             &[dist_arg("a"), dist_arg("b")],
-            types::Logicaltype::Float64,
+            &types::Logicaltype::Float64,
             runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts {
                 description: Some(desc.into()),
@@ -241,7 +241,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register(
         "vec_normalize",
         &[dist_arg("a")],
-        types::Logicaltype::Text,
+        &types::Logicaltype::Text,
         runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts {
             description: Some("L2-normalize a JSON number array to a unit vector".into()),

@@ -55,10 +55,10 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         runtime::Funcarg { name: Some("deg".into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some("min".into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some("sec".into()), logical: types::Logicaltype::Float64 }],
-        types::Logicaltype::Float64, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Float64, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("DMS -> decimal degrees".into()), tags: vec!["geo".into()], attributes: det }))?;
     reg.register("decimal_to_dms", &[runtime::Funcarg { name: Some("decimal".into()), logical: types::Logicaltype::Float64 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("decimal degrees -> DMS".into()), tags: vec!["geo".into()], attributes: det }))?;
     Ok(())
 }

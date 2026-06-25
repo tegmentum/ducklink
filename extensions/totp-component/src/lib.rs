@@ -68,7 +68,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         runtime::Funcarg { name: Some("unix_time".into()), logical: types::Logicaltype::Int64 },
         runtime::Funcarg { name: Some("period".into()), logical: types::Logicaltype::Int64 },
         runtime::Funcarg { name: Some("digits".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("RFC 6238 TOTP".into()), tags: vec!["crypto".into(), "auth".into()], attributes: det }))?;
     Ok(())
 }

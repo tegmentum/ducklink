@@ -264,9 +264,11 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     let tags = || vec!["spatial".into(), "geo".into()];
-    let txt = types::Logicaltype::Text;
-    let dbl = types::Logicaltype::Float64;
-    let boolean = types::Logicaltype::Boolean;
+    // Closures returning fresh values: `Logicaltype` is no longer `Copy` (the
+    // escape-hatch `complex` arm carries a String), so each use needs its own.
+    let txt = || types::Logicaltype::Text;
+    let dbl = || types::Logicaltype::Float64;
+    let boolean = || types::Logicaltype::Boolean;
 
     let mut reg_one = |name: &str,
                        f: F,
@@ -280,13 +282,13 @@ fn register_scalars() -> Result<(), types::Duckerror> {
             .iter()
             .map(|(n, lt)| runtime::Funcarg {
                 name: Some((*n).into()),
-                logical: *lt,
+                logical: lt.clone(),
             })
             .collect();
         reg.register(
             name,
             &argv,
-            ret,
+            &ret,
             runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts {
                 description: Some(desc.into()),
@@ -300,75 +302,75 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg_one(
         "ST_Point",
         F::Point,
-        &[("x", dbl), ("y", dbl)],
-        txt,
+        &[("x", dbl()), ("y", dbl())],
+        txt(),
         "x,y -> POINT WKT",
     )?;
     reg_one(
         "ST_GeomFromText",
         F::GeomFromText,
-        &[("wkt", txt)],
-        txt,
+        &[("wkt", txt())],
+        txt(),
         "validate/normalize WKT",
     )?;
-    reg_one("ST_AsText", F::AsText, &[("geom", txt)], txt, "geometry -> WKT")?;
-    reg_one("ST_X", F::X, &[("geom", txt)], dbl, "point X coordinate")?;
-    reg_one("ST_Y", F::Y, &[("geom", txt)], dbl, "point Y coordinate")?;
+    reg_one("ST_AsText", F::AsText, &[("geom", txt())], txt(), "geometry -> WKT")?;
+    reg_one("ST_X", F::X, &[("geom", txt())], dbl(), "point X coordinate")?;
+    reg_one("ST_Y", F::Y, &[("geom", txt())], dbl(), "point Y coordinate")?;
     reg_one(
         "ST_Distance",
         F::Distance,
-        &[("a", txt), ("b", txt)],
-        dbl,
+        &[("a", txt()), ("b", txt())],
+        dbl(),
         "euclidean distance",
     )?;
-    reg_one("ST_Area", F::Area, &[("geom", txt)], dbl, "area")?;
+    reg_one("ST_Area", F::Area, &[("geom", txt())], dbl(), "area")?;
     reg_one(
         "ST_Length",
         F::Length,
-        &[("geom", txt)],
-        dbl,
+        &[("geom", txt())],
+        dbl(),
         "length/perimeter",
     )?;
     reg_one(
         "ST_Centroid",
         F::Centroid,
-        &[("geom", txt)],
-        txt,
+        &[("geom", txt())],
+        txt(),
         "centroid POINT WKT",
     )?;
     reg_one(
         "ST_Contains",
         F::Contains,
-        &[("a", txt), ("b", txt)],
-        boolean,
+        &[("a", txt()), ("b", txt())],
+        boolean(),
         "a contains b",
     )?;
     reg_one(
         "ST_Within",
         F::Within,
-        &[("a", txt), ("b", txt)],
-        boolean,
+        &[("a", txt()), ("b", txt())],
+        boolean(),
         "a within b",
     )?;
     reg_one(
         "ST_Intersects",
         F::Intersects,
-        &[("a", txt), ("b", txt)],
-        boolean,
+        &[("a", txt()), ("b", txt())],
+        boolean(),
         "a intersects b",
     )?;
     reg_one(
         "ST_Envelope",
         F::Envelope,
-        &[("geom", txt)],
-        txt,
+        &[("geom", txt())],
+        txt(),
         "bounding box POLYGON WKT",
     )?;
     reg_one(
         "ST_AsGeoJSON",
         F::AsGeoJSON,
-        &[("geom", txt)],
-        txt,
+        &[("geom", txt())],
+        txt(),
         "geometry -> GeoJSON",
     )?;
     Ok(())

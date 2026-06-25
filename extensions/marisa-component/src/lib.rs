@@ -105,18 +105,18 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("fst_contains", &[
         runtime::Funcarg { name: Some("terms_json".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("key".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("is key a member of the JSON-array string set?".into()), tags: vec!["trie".into(), "fst".into()], attributes: det }))?;
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, G::Prefix);
     reg.register("fst_prefix", &[
         runtime::Funcarg { name: Some("terms_json".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("prefix".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("JSON array of terms starting with prefix (sorted)".into()), tags: vec!["trie".into(), "fst".into()], attributes: det }))?;
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, G::Count);
     reg.register("fst_count", &[
         runtime::Funcarg { name: Some("terms_json".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("number of distinct terms in the set".into()), tags: vec!["trie".into(), "fst".into()], attributes: det }))?;
     Ok(())
 }

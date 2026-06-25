@@ -61,13 +61,13 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     let h = NEXT.fetch_add(1, Ordering::Relaxed); let _ = h;
     reg.register("dice_roll", &[runtime::Funcarg { name: Some("notation".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("roll dice".into()), tags: vec!["game".into()], attributes: types::Funcflags::empty() }))?;
     reg.register("dice_min", &[runtime::Funcarg { name: Some("notation".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("minimum roll".into()), tags: vec!["game".into()], attributes: det }))?;
     reg.register("dice_max", &[runtime::Funcarg { name: Some("notation".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(3),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(3),
         Some(&runtime::Funcopts { description: Some("maximum roll".into()), tags: vec!["game".into()], attributes: det }))?;
     Ok(())
 }

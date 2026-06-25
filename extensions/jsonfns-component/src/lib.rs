@@ -226,13 +226,13 @@ mod component {
                 .iter()
                 .map(|(n, lt)| runtime::Funcarg {
                     name: Some((*n).into()),
-                    logical: *lt,
+                    logical: lt.clone(),
                 })
                 .collect();
             reg.register(
                 name,
                 &argv,
-                ret,
+                &ret,
                 runtime::ScalarCallback::new(h),
                 Some(&runtime::Funcopts {
                     description: Some(desc.into()),
@@ -247,60 +247,60 @@ mod component {
         let json = ("json", L::Text);
         let path = ("path", L::Text);
 
-        reg_fn("json_valid", F::Valid, &[json], L::Boolean, "valid JSON?")?;
+        reg_fn("json_valid", F::Valid, &[json.clone()], L::Boolean, "valid JSON?")?;
         reg_fn(
             "json_extract",
             F::Extract,
-            &[json, path],
+            &[json.clone(), path.clone()],
             L::Text,
             "JSON text at path",
         )?;
         reg_fn(
             "json_extract_string",
             F::ExtractString,
-            &[json, path],
+            &[json.clone(), path.clone()],
             L::Text,
             "unquoted string at path",
         )?;
         reg_fn(
             "json_array_length",
             F::ArrayLen1,
-            &[json],
+            &[json.clone()],
             L::Int64,
             "length of top-level JSON array",
         )?;
         reg_fn(
             "json_array_length",
             F::ArrayLen2,
-            &[json, path],
+            &[json.clone(), path.clone()],
             L::Int64,
             "length of JSON array at path",
         )?;
-        reg_fn("json_type", F::Type1, &[json], L::Text, "type of JSON value")?;
+        reg_fn("json_type", F::Type1, &[json.clone()], L::Text, "type of JSON value")?;
         reg_fn(
             "json_type",
             F::Type2,
-            &[json, path],
+            &[json.clone(), path.clone()],
             L::Text,
             "type of JSON value at path",
         )?;
-        reg_fn("json_keys", F::Keys1, &[json], L::Text, "JSON array of keys")?;
+        reg_fn("json_keys", F::Keys1, &[json.clone()], L::Text, "JSON array of keys")?;
         reg_fn(
             "json_keys",
             F::Keys2,
-            &[json, path],
+            &[json.clone(), path.clone()],
             L::Text,
             "JSON array of keys at path",
         )?;
         reg_fn(
             "json_contains",
             F::Contains,
-            &[json, ("needle", L::Text)],
+            &[json.clone(), ("needle", L::Text)],
             L::Boolean,
             "haystack contains needle?",
         )?;
-        reg_fn("json_quote", F::Quote, &[json], L::Text, "wrap value as JSON")?;
-        reg_fn("to_json", F::Quote, &[json], L::Text, "wrap value as JSON")?;
+        reg_fn("json_quote", F::Quote, &[json.clone()], L::Text, "wrap value as JSON")?;
+        reg_fn("to_json", F::Quote, &[json.clone()], L::Text, "wrap value as JSON")?;
 
         Ok(())
     }

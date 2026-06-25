@@ -158,7 +158,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         reg.register(
             name,
             &[runtime::Funcarg { name: Some("data".into()), logical: types::Logicaltype::Blob }],
-            types::Logicaltype::Text,
+            &types::Logicaltype::Text,
             runtime::ScalarCallback::new(handle),
             Some(&runtime::Funcopts {
                 description: Some(desc.into()),

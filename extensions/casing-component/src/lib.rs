@@ -157,7 +157,7 @@ fn register_one(
         tags: vec!["casing".into()],
         attributes,
     };
-    registry.register(name, &args, types::Logicaltype::Text, callback, Some(&opts))?;
+    registry.register(name, &args, &types::Logicaltype::Text, callback, Some(&opts))?;
     Ok(())
 }
 

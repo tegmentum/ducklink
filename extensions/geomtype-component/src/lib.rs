@@ -307,12 +307,12 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         scalar_handlers().lock().unwrap().insert(h, f);
         let argv = vec![runtime::Funcarg {
             name: Some("geom".into()),
-            logical: geom,
+            logical: geom.clone(),
         }];
         reg.register(
             name,
             &argv,
-            ret,
+            &ret,
             runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts {
                 description: Some(desc.into()),

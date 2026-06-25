@@ -159,7 +159,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         reg.register(
             name,
             &[runtime::Funcarg { name: Some("expr".into()), logical: types::Logicaltype::Text }],
-            ret,
+            &ret,
             runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts {
                 description: Some(desc.into()),

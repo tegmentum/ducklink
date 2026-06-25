@@ -101,18 +101,18 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, C::Hsl);
     reg.register("hex_to_hsl", &[runtime::Funcarg { name: Some("hex".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("hex -> HSL".into()), tags: vec!["color".into()], attributes: det }))?;
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, C::Hsv);
     reg.register("hex_to_hsv", &[runtime::Funcarg { name: Some("hex".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("hex -> HSV".into()), tags: vec!["color".into()], attributes: det }))?;
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, C::ToHex);
     reg.register("hsl_to_hex", &[
         runtime::Funcarg { name: Some("h".into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some("s".into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some("l".into()), logical: types::Logicaltype::Float64 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("HSL -> hex".into()), tags: vec!["color".into()], attributes: det }))?;
     Ok(())
 }

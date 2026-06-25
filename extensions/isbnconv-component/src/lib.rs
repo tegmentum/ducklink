@@ -69,10 +69,10 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     reg.register("isbn10_to_13", &[runtime::Funcarg { name: Some("isbn10".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("ISBN-10 -> ISBN-13".into()), tags: vec!["isbn".into()], attributes: det }))?;
     reg.register("isbn13_to_10", &[runtime::Funcarg { name: Some("isbn13".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("ISBN-13 -> ISBN-10".into()), tags: vec!["isbn".into()], attributes: det }))?;
     Ok(())
 }

@@ -309,7 +309,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
             name: Some("uri".into()),
             logical: types::Logicaltype::Text,
         }],
-        types::Logicaltype::Text,
+        &types::Logicaltype::Text,
         runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts {
             description: Some("mailto: URI -> JSON array of recipient addresses".into()),
@@ -333,7 +333,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
                 logical: types::Logicaltype::Text,
             },
         ],
-        types::Logicaltype::Text,
+        &types::Logicaltype::Text,
         runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts {
             description: Some("mailto: header value (percent-decoded), NULL if absent".into()),
@@ -351,7 +351,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
             name: Some("uri".into()),
             logical: types::Logicaltype::Text,
         }],
-        types::Logicaltype::Text,
+        &types::Logicaltype::Text,
         runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts {
             description: Some("mailto: URI -> {to,subject,body,cc,bcc} JSON".into()),

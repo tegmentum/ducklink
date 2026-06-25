@@ -97,13 +97,13 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("polyline_encode", &[
         runtime::Funcarg { name: Some("coords_json".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("precision".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("JSON [[lon,lat],...] -> encoded polyline".into()), tags: vec!["geo".into()], attributes: det }))?;
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, P::Decode);
     reg.register("polyline_decode", &[
         runtime::Funcarg { name: Some("encoded".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("precision".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("encoded polyline -> JSON [[lon,lat],...]".into()), tags: vec!["geo".into()], attributes: det }))?;
     Ok(())
 }

@@ -98,6 +98,16 @@ impl callback_dispatch::Guest for Extension {
                 hi: 0x1234_5678_1234_5678,
                 lo: 0x1234_5678_1234_5678,
             }),
+            // ESCAPE-HATCH: a NESTED LIST returned via the complex arm.
+            T::List => types::Duckvalue::Complex(types::Complexvalue {
+                type_expr: "INTEGER[]".into(),
+                json: "[10,20,30]".into(),
+            }),
+            // ESCAPE-HATCH: a NESTED STRUCT returned via the complex arm.
+            T::Struct => types::Duckvalue::Complex(types::Complexvalue {
+                type_expr: "STRUCT(a INTEGER, b VARCHAR)".into(),
+                json: "{\"a\":1,\"b\":\"hi\"}".into(),
+            }),
         })
     }
     fn call_table(
@@ -141,7 +151,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register(
         "tt_int32",
         &[],
-        types::Logicaltype::Int32,
+        &types::Logicaltype::Int32,
         runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts {
             description: Some("returns i32::MAX as INTEGER".into()),
@@ -155,7 +165,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register(
         "tt_timestamp",
         &[],
-        types::Logicaltype::Timestamp,
+        &types::Logicaltype::Timestamp,
         runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts {
             description: Some("returns 2021-01-01 as TIMESTAMP".into()),
@@ -166,7 +176,9 @@ fn register_scalars() -> Result<(), types::Duckerror> {
 
     // Remaining fixed-width + temporal types. Each is a zero-arg scalar
     // returning a fixed value of the matching DuckDB type.
-    let extras: &[(&str, T, types::Logicaltype, &str)] = &[
+    // Owned Vec rather than a static slice: `Logicaltype::Complex` carries an
+    // owned String, so the entries are no longer `Copy`.
+    let extras: Vec<(&str, T, types::Logicaltype, &str)> = vec![
         ("tt_int8", T::Int8, types::Logicaltype::Int8, "returns 127 as TINYINT"),
         ("tt_int16", T::Int16, types::Logicaltype::Int16, "returns 32767 as SMALLINT"),
         ("tt_uint8", T::Uint8, types::Logicaltype::Uint8, "returns 255 as UTINYINT"),
@@ -179,14 +191,20 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         ("tt_decimal", T::Decimal, types::Logicaltype::Decimal, "returns 12345.6789 as DECIMAL"),
         ("tt_interval", T::Interval, types::Logicaltype::Interval, "returns 1 month 2 days 3s as INTERVAL"),
         ("tt_uuid", T::Uuid, types::Logicaltype::Uuid, "returns a fixed UUID"),
+        // ESCAPE-HATCH: the return type is declared via the `complex` arm carrying
+        // a DuckDB type-expression string; the core resolves it to a real type.
+        ("tt_list", T::List, types::Logicaltype::Complex("INTEGER[]".into()),
+            "returns [10,20,30] as INTEGER[]"),
+        ("tt_struct", T::Struct, types::Logicaltype::Complex("STRUCT(a INTEGER, b VARCHAR)".into()),
+            "returns {a:1,b:hi} as STRUCT(a INTEGER, b VARCHAR)"),
     ];
-    for (name, tag, ty, desc) in extras.iter().copied() {
+    for (name, tag, ty, desc) in extras.into_iter() {
         let h = NEXT.fetch_add(1, Ordering::Relaxed);
         handlers().lock().unwrap().insert(h, tag);
         reg.register(
             name,
             &[],
-            ty,
+            &ty,
             runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts {
                 description: Some(desc.into()),
@@ -214,6 +232,8 @@ enum T {
     Decimal,
     Interval,
     Uuid,
+    List,
+    Struct,
 }
 static NEXT: AtomicU32 = AtomicU32::new(1);
 static HANDLERS: OnceLock<Mutex<HashMap<u32, T>>> = OnceLock::new();

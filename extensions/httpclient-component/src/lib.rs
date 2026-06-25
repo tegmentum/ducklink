@@ -118,16 +118,16 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let net = types::Funcflags::empty();
     reg.register("http_get", &[runtime::Funcarg { name: Some("url".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("HTTP(S) GET body".into()), tags: vec!["network".into()], attributes: net }))?;
     reg.register("http_status", &[runtime::Funcarg { name: Some("url".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("HTTP(S) status code".into()), tags: vec!["network".into()], attributes: net }))?;
     reg.register("http_post", &[
             runtime::Funcarg { name: Some("url".into()), logical: types::Logicaltype::Text },
             runtime::Funcarg { name: Some("body".into()), logical: types::Logicaltype::Text },
         ],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(3),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(3),
         Some(&runtime::Funcopts { description: Some("HTTP(S) POST body -> response body".into()), tags: vec!["network".into()], attributes: net }))?;
     Ok(())
 }

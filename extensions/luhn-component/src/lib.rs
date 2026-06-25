@@ -219,7 +219,7 @@ fn register_one(
         tags: vec!["luhn".into()],
         attributes,
     };
-    registry.register(name, &args, returns, callback, Some(&opts))?;
+    registry.register(name, &args, &returns, callback, Some(&opts))?;
     Ok(())
 }
 

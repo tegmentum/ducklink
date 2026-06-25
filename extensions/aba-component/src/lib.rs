@@ -168,7 +168,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         tags: vec!["aba".into()],
         attributes: types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS,
     };
-    registry.register("aba_validate", &args, types::Logicaltype::Boolean, callback, Some(&opts))?;
+    registry.register("aba_validate", &args, &types::Logicaltype::Boolean, callback, Some(&opts))?;
     Ok(())
 }
 

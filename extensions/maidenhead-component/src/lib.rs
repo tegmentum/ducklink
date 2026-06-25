@@ -174,12 +174,12 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         runtime::Funcarg { name: Some("lat".into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some("lon".into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some("precision".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("lat/lon -> Maidenhead grid locator".into()), tags: vec!["geo".into(), "ham".into()], attributes: det }))?;
     for (name, m) in [("maidenhead_lat", M::Lat), ("maidenhead_lon", M::Lon)] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, m);
         reg.register(name, &[runtime::Funcarg { name: Some("grid".into()), logical: types::Logicaltype::Text }],
-            types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
+            &types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some("Maidenhead grid -> square-center coordinate".into()), tags: vec!["geo".into(), "ham".into()], attributes: det }))?;
     }
     Ok(())

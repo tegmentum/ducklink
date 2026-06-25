@@ -130,18 +130,18 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, T::Sparkline);
     reg.register("plot_sparkline", &[
         runtime::Funcarg { name: Some("nums_json".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("JSON number array -> unicode sparkline".into()), tags: vec!["viz".into()], attributes: det }))?;
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, T::Bars);
     reg.register("plot_bars", &[
         runtime::Funcarg { name: Some("nums_json".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("width".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("JSON number array -> multi-line bar chart".into()), tags: vec!["viz".into()], attributes: det }))?;
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, T::Qr);
     reg.register("qr_utf8", &[
         runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("text -> compact UTF-8 QR code".into()), tags: vec!["viz".into()], attributes: det }))?;
     Ok(())
 }

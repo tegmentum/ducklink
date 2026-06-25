@@ -50,7 +50,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     for (name, ordinal) in [("num_to_words", false), ("num_to_ordinal_words", true)] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, ordinal);
         reg.register(name, &[runtime::Funcarg { name: Some("n".into()), logical: types::Logicaltype::Int64 }],
-            types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+            &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some("number -> words".into()), tags: vec!["text".into()], attributes: det }))?;
     }
     Ok(())

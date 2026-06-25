@@ -71,12 +71,12 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         runtime::Funcarg { name: Some("lat".into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some("lon".into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some("precision".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("lat/lon -> geohash".into()), tags: vec!["geo".into()], attributes: det }))?;
     for (name, g) in [("geohash_decode_lat", G::Lat), ("geohash_decode_lon", G::Lon)] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, g);
         reg.register(name, &[runtime::Funcarg { name: Some("hash".into()), logical: types::Logicaltype::Text }],
-            types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
+            &types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some("geohash -> coordinate".into()), tags: vec!["geo".into()], attributes: det }))?;
     }
     Ok(())

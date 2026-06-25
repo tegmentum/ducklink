@@ -174,7 +174,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
             name: Some("expr".into()),
             logical: types::Logicaltype::Text,
         }],
-        types::Logicaltype::Boolean,
+        &types::Logicaltype::Boolean,
         runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts {
             description: Some("true if expr is a valid cron expression".into()),
@@ -210,7 +210,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
                     logical: types::Logicaltype::Int64,
                 },
             ],
-            types::Logicaltype::Int64,
+            &types::Logicaltype::Int64,
             runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts {
                 description: Some(desc.into()),

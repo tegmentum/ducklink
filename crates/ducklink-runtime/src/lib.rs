@@ -110,8 +110,9 @@ impl CallbackKind {
 /// converts these neutral records into its own loader/registration types.
 pub mod reg {
     /// A DuckDB logical type, restricted to the value kinds the extension ABI
-    /// currently exchanges.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    /// currently exchanges. NOTE: no longer `Copy` -- the `Complex` escape-hatch
+    /// arm carries an owned type-expression `String`.
+    #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum LogicalType {
         Boolean,
         Int64,
@@ -133,31 +134,36 @@ pub mod reg {
         Decimal,
         Interval,
         Uuid,
+        /// ESCAPE-HATCH: a DuckDB type-expression string (e.g. "INTEGER[]",
+        /// "STRUCT(a INTEGER, b VARCHAR)"). Carries an arbitrary declared return
+        /// type the core resolves at registration time.
+        Complex(String),
     }
 
     impl LogicalType {
-        pub fn describe(self) -> &'static str {
+        pub fn describe(&self) -> String {
             match self {
-                LogicalType::Boolean => "BOOLEAN",
-                LogicalType::Int64 => "INT64",
-                LogicalType::Uint64 => "UINT64",
-                LogicalType::Float64 => "FLOAT64",
-                LogicalType::Text => "TEXT",
-                LogicalType::Blob => "BLOB",
-                LogicalType::Int32 => "INT32",
-                LogicalType::Timestamp => "TIMESTAMP",
-                LogicalType::Int8 => "INT8",
-                LogicalType::Int16 => "INT16",
-                LogicalType::Uint8 => "UINT8",
-                LogicalType::Uint16 => "UINT16",
-                LogicalType::Uint32 => "UINT32",
-                LogicalType::Float32 => "FLOAT32",
-                LogicalType::Date => "DATE",
-                LogicalType::Time => "TIME",
-                LogicalType::Timestamptz => "TIMESTAMPTZ",
-                LogicalType::Decimal => "DECIMAL",
-                LogicalType::Interval => "INTERVAL",
-                LogicalType::Uuid => "UUID",
+                LogicalType::Boolean => "BOOLEAN".to_string(),
+                LogicalType::Int64 => "INT64".to_string(),
+                LogicalType::Uint64 => "UINT64".to_string(),
+                LogicalType::Float64 => "FLOAT64".to_string(),
+                LogicalType::Text => "TEXT".to_string(),
+                LogicalType::Blob => "BLOB".to_string(),
+                LogicalType::Int32 => "INT32".to_string(),
+                LogicalType::Timestamp => "TIMESTAMP".to_string(),
+                LogicalType::Int8 => "INT8".to_string(),
+                LogicalType::Int16 => "INT16".to_string(),
+                LogicalType::Uint8 => "UINT8".to_string(),
+                LogicalType::Uint16 => "UINT16".to_string(),
+                LogicalType::Uint32 => "UINT32".to_string(),
+                LogicalType::Float32 => "FLOAT32".to_string(),
+                LogicalType::Date => "DATE".to_string(),
+                LogicalType::Time => "TIME".to_string(),
+                LogicalType::Timestamptz => "TIMESTAMPTZ".to_string(),
+                LogicalType::Decimal => "DECIMAL".to_string(),
+                LogicalType::Interval => "INTERVAL".to_string(),
+                LogicalType::Uuid => "UUID".to_string(),
+                LogicalType::Complex(expr) => expr.clone(),
             }
         }
     }
@@ -271,6 +277,13 @@ pub mod reg {
         Uuid {
             hi: u64,
             lo: u64,
+        },
+        /// ESCAPE-HATCH composite value: a DuckDB type-expression string plus the
+        /// value rendered as JSON. The core reconstructs the real LIST/STRUCT vector
+        /// from the JSON via the duckdb C vector API.
+        Complex {
+            type_expr: String,
+            json: String,
         },
     }
 

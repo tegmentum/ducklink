@@ -65,7 +65,7 @@ fn register() -> Result<(), types::Duckerror> {
     let acap = runtime::get_capability(types::Capabilitykind::Aggregate).ok_or_else(|| types::Duckerror::Internal("no aggregate capability".into()))?;
     let areg = match acap { runtime::Capability::Aggregate(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     areg.register("bloom_filter", &[runtime::Funcarg { name: Some("value".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::AggregateCallback::new(1),
+        &types::Logicaltype::Text, runtime::AggregateCallback::new(1),
         Some(&runtime::Funcopts { description: Some("build bloom filter".into()), tags: vec!["sketch".into()], attributes: det }))?;
     // scalar
     let scap = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
@@ -73,7 +73,7 @@ fn register() -> Result<(), types::Duckerror> {
     sreg.register("bloom_contains", &[
         runtime::Funcarg { name: Some("filter".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("item".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Boolean, runtime::ScalarCallback::new(10),
+        &types::Logicaltype::Boolean, runtime::ScalarCallback::new(10),
         Some(&runtime::Funcopts { description: Some("bloom membership".into()), tags: vec!["sketch".into()], attributes: det }))?;
     Ok(())
 }

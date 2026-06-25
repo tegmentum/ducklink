@@ -46,7 +46,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     for (name, plural) in [("pluralize", true), ("singularize", false)] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, plural);
         reg.register(name, &[runtime::Funcarg { name: Some("word".into()), logical: types::Logicaltype::Text }],
-            types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+            &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some("English inflection".into()), tags: vec!["text".into()], attributes: det }))?;
     }
     Ok(())

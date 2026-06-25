@@ -76,13 +76,13 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("json_schema_valid", &[
         runtime::Funcarg { name: Some("schema".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("doc".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Boolean, runtime::ScalarCallback::new(valid_h),
+        &types::Logicaltype::Boolean, runtime::ScalarCallback::new(valid_h),
         Some(&runtime::Funcopts { description: Some("true iff doc validates against JSON Schema".into()), tags: vec!["json".into()], attributes: det }))?;
     let errs_h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(errs_h, J::Errors);
     reg.register("json_schema_errors", &[
         runtime::Funcarg { name: Some("schema".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("doc".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(errs_h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(errs_h),
         Some(&runtime::Funcopts { description: Some("JSON array of JSON Schema validation errors ('[]' if valid)".into()), tags: vec!["json".into()], attributes: det }))?;
     Ok(())
 }

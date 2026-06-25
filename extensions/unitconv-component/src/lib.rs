@@ -77,7 +77,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         runtime::Funcarg { name: Some("value".into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some("from".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("to".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Float64, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Float64, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("convert between units".into()), tags: vec!["units".into()], attributes: det }))?;
     Ok(())
 }

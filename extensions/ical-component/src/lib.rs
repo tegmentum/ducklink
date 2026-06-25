@@ -95,13 +95,13 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     let arg = |name: &str| runtime::Funcarg { name: Some(name.into()), logical: types::Logicaltype::Text };
     reg.register("ical_event_count", &[arg("ics")],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("number of VEVENTs in an iCalendar string".into()), tags: vec!["ical".into()], attributes: det }))?;
     reg.register("ical_to_json", &[arg("ics")],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("iCalendar VEVENTs -> JSON array of {summary,dtstart,dtend,uid}".into()), tags: vec!["ical".into()], attributes: det }))?;
     reg.register("ical_summaries", &[arg("ics")],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(3),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(3),
         Some(&runtime::Funcopts { description: Some("iCalendar VEVENT SUMMARYs -> JSON array".into()), tags: vec!["ical".into()], attributes: det }))?;
     Ok(())
 }

@@ -274,15 +274,15 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let txt = |name: &str| runtime::Funcarg { name: Some(name.into()), logical: types::Logicaltype::Text };
 
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::Tokenize);
-    reg.register("fts_tokenize", &[txt("text")], types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+    reg.register("fts_tokenize", &[txt("text")], &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("tokenize text -> JSON array of lowercased words".into()), tags: vec!["fts".into(), "nlp".into()], attributes: det }))?;
 
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::Stem);
-    reg.register("fts_stem", &[txt("word"), txt("language")], types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+    reg.register("fts_stem", &[txt("word"), txt("language")], &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("Snowball/Porter stem (default english); unknown language -> NULL".into()), tags: vec!["fts".into(), "nlp".into()], attributes: det }))?;
 
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::StemText);
-    reg.register("fts_stem_text", &[txt("text")], types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+    reg.register("fts_stem_text", &[txt("text")], &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("tokenize + English-stem each -> JSON array".into()), tags: vec!["fts".into(), "nlp".into()], attributes: det }))?;
 
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::Bm25);
@@ -292,11 +292,11 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         runtime::Funcarg { name: Some("doc_len".into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some("avg_doc_len".into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some("num_docs".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("Okapi BM25 term score (k1=1.2, b=0.75)".into()), tags: vec!["fts".into()], attributes: det }))?;
 
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::Match);
-    reg.register("fts_match", &[txt("doc"), txt("query")], types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
+    reg.register("fts_match", &[txt("doc"), txt("query")], &types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("true if all stemmed query tokens appear in stemmed doc (AND match)".into()), tags: vec!["fts".into()], attributes: det }))?;
     Ok(())
 }
@@ -322,7 +322,7 @@ fn register_pragmas() -> Result<(), types::Duckerror> {
     reg.register_call(
         "create_fts_index",
         &[txt("table_name"), txt("id_column"), txt("text_column")],
-        types::Logicaltype::Text,
+        &types::Logicaltype::Text,
         runtime::PragmaCallback::new(h),
         Some(&runtime::Extopts {
             description: Some("build an inverted FTS index + match_bm25 macro over a text column".into()),

@@ -63,7 +63,7 @@ fn one(reg: &runtime::ScalarRegistry, name: &str, attr: types::Funcflags, h: H) 
     let cb = runtime::ScalarCallback::new(handle);
     let args = vec![runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }];
     let opts = runtime::Funcopts { description: Some("escape".into()), tags: vec!["escape".into()], attributes: attr };
-    reg.register(name, &args, types::Logicaltype::Text, cb, Some(&opts))?; Ok(())
+    reg.register(name, &args, &types::Logicaltype::Text, cb, Some(&opts))?; Ok(())
 }
 #[derive(Clone, Copy)] enum H { HtmlEscape, HtmlUnescape, UrlEncode, UrlDecode }
 static NEXT: AtomicU32 = AtomicU32::new(1);

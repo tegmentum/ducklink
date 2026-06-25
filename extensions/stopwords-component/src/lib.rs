@@ -63,12 +63,12 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("is_stopword", &[
         runtime::Funcarg { name: Some("word".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("language".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Boolean, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Boolean, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("is a stop word?".into()), tags: vec!["nlp".into()], attributes: det }))?;
     reg.register("remove_stopwords", &[
         runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("language".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("strip stop words".into()), tags: vec!["nlp".into()], attributes: det }))?;
     Ok(())
 }

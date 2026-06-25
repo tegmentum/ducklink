@@ -111,16 +111,16 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let css_arg = || runtime::Funcarg { name: Some("css".into()), logical: types::Logicaltype::Text };
 
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, H::Extract);
-    reg.register("html_extract", &[html_arg(), css_arg()], types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+    reg.register("html_extract", &[html_arg(), css_arg()], &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("text of first element matching CSS selector".into()), tags: vec!["html".into()], attributes: det }))?;
 
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, H::ExtractAll);
-    reg.register("html_extract_all", &[html_arg(), css_arg()], types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+    reg.register("html_extract_all", &[html_arg(), css_arg()], &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("JSON array of texts of all matching elements".into()), tags: vec!["html".into()], attributes: det }))?;
 
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, H::Attr);
     reg.register("html_attr", &[html_arg(), css_arg(), runtime::Funcarg { name: Some("attr".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("attribute value of first matching element".into()), tags: vec!["html".into()], attributes: det }))?;
     Ok(())
 }

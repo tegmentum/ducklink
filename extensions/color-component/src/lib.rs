@@ -58,13 +58,13 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     let h1 = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h1, false);
     reg.register("color_luminance", &[runtime::Funcarg { name: Some("css".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Float64, runtime::ScalarCallback::new(h1),
+        &types::Logicaltype::Float64, runtime::ScalarCallback::new(h1),
         Some(&runtime::Funcopts { description: Some("WCAG relative luminance".into()), tags: vec!["color".into()], attributes: det }))?;
     let h2 = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h2, true);
     reg.register("color_contrast", &[
         runtime::Funcarg { name: Some("a".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("b".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Float64, runtime::ScalarCallback::new(h2),
+        &types::Logicaltype::Float64, runtime::ScalarCallback::new(h2),
         Some(&runtime::Funcopts { description: Some("WCAG contrast ratio".into()), tags: vec!["color".into()], attributes: det }))?;
     Ok(())
 }

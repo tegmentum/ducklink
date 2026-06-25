@@ -95,7 +95,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         ("diff_changed_lines", D::Changed, types::Logicaltype::Int64, "count of inserted + deleted lines"),
     ] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, d);
-        reg.register(name, &args(), ret, runtime::ScalarCallback::new(h),
+        reg.register(name, &args(), &ret, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some(desc.into()), tags: vec!["text".into()], attributes: det }))?;
     }
     Ok(())

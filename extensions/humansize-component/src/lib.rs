@@ -56,7 +56,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, binary);
         reg.register(name,
             &[runtime::Funcarg { name: Some("bytes".into()), logical: types::Logicaltype::Int64 }],
-            types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+            &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some("human-readable bytes".into()), tags: vec!["format".into()], attributes: det }))?;
     }
     Ok(())

@@ -109,7 +109,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         handlers().lock().unwrap().insert(h, mode);
         reg.register(name,
             &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-            types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+            &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some(desc.into()), tags: vec!["text".into()], attributes: det }))?;
     }
     Ok(())

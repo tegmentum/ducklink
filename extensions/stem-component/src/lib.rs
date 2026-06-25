@@ -57,7 +57,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("stem", &[
         runtime::Funcarg { name: Some("word".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("language".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("Snowball stem".into()), tags: vec!["nlp".into()], attributes: det }))?;
     Ok(())
 }

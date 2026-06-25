@@ -139,7 +139,7 @@ fn reg1(reg: &runtime::ScalarRegistry, name: &str, arg: &str, arg_ty: types::Log
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, t);
     reg.register(name,
         &[runtime::Funcarg { name: Some(arg.into()), logical: arg_ty }],
-        ret, runtime::ScalarCallback::new(h),
+        &ret, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some(desc.into()), tags: vec!["id".into()], attributes: attr }))?;
     Ok(())
 }

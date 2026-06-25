@@ -46,10 +46,10 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     ENCODE.store(1, std::sync::atomic::Ordering::Relaxed);
     reg.register("ascii85_encode", &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("Ascii85 encode".into()), tags: vec!["encoding".into()], attributes: det }))?;
     reg.register("ascii85_decode", &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("Ascii85 decode".into()), tags: vec!["encoding".into()], attributes: det }))?;
     Ok(())
 }

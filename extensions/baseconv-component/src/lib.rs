@@ -50,7 +50,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("from_base", &[
         runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("base".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("base-N text -> integer (inverse of to_base)".into()), tags: vec!["base".into()], attributes: det }))?;
     Ok(())
 }

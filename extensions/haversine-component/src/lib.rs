@@ -65,7 +65,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     ];
     for (name, miles) in [("haversine_km", false), ("haversine_mi", true)] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, miles);
-        reg.register(name, &coords(), types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
+        reg.register(name, &coords(), &types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some("great-circle distance".into()), tags: vec!["geo".into()], attributes: det }))?;
     }
     Ok(())

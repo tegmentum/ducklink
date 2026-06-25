@@ -57,10 +57,10 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let net = types::Funcflags::empty();
     reg.register("dns_lookup", &[runtime::Funcarg { name: Some("host".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("resolve host -> IP".into()), tags: vec!["network".into()], attributes: net }))?;
     reg.register("dns_resolve_all", &[runtime::Funcarg { name: Some("host".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("resolve host -> all IPs (JSON)".into()), tags: vec!["network".into()], attributes: net }))?;
     Ok(())
 }

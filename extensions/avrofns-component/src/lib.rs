@@ -429,7 +429,7 @@ fn register_all() -> Result<(), types::Duckerror> {
         let _ = sreg.register(
             "avro_record_count",
             &data_arg(),
-            types::Logicaltype::Int64,
+            &types::Logicaltype::Int64,
             runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts {
                 description: Some("Count of decodable records in an Avro OCF BLOB".into()),

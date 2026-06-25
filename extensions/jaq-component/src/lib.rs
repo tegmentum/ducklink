@@ -115,7 +115,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         reg.register(name, &[
             runtime::Funcarg { name: Some("json".into()), logical: types::Logicaltype::Text },
             runtime::Funcarg { name: Some("filter".into()), logical: types::Logicaltype::Text }],
-            types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+            &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some(desc.into()), tags: vec!["json".into()], attributes: det }))?;
     }
     Ok(())

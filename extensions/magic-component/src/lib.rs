@@ -233,7 +233,7 @@ fn register_one(
         tags: vec!["magic".into()],
         attributes: types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS,
     };
-    registry.register(name, &args, returns, callback, Some(&opts))?;
+    registry.register(name, &args, &returns, callback, Some(&opts))?;
     Ok(())
 }
 

@@ -184,7 +184,7 @@ fn register() -> Result<(), types::Duckerror> {
             name: Some("value".into()),
             logical: types::Logicaltype::Float64,
         }],
-        types::Logicaltype::Blob,
+        &types::Logicaltype::Blob,
         runtime::AggregateCallback::new(1),
         Some(&runtime::Funcopts {
             description: Some("build a t-digest quantile sketch".into()),
@@ -212,7 +212,7 @@ fn register() -> Result<(), types::Duckerror> {
                 logical: types::Logicaltype::Float64,
             },
         ],
-        types::Logicaltype::Float64,
+        &types::Logicaltype::Float64,
         runtime::ScalarCallback::new(10),
         Some(&runtime::Funcopts {
             description: Some("estimate the q-quantile from a t-digest".into()),
@@ -227,7 +227,7 @@ fn register() -> Result<(), types::Duckerror> {
             name: Some("digest".into()),
             logical: types::Logicaltype::Blob,
         }],
-        types::Logicaltype::Int64,
+        &types::Logicaltype::Int64,
         runtime::ScalarCallback::new(11),
         Some(&runtime::Funcopts {
             description: Some("total count of values in a t-digest".into()),

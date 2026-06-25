@@ -176,7 +176,7 @@ fn register() -> Result<(), types::Duckerror> {
             name: Some("value".into()),
             logical: types::Logicaltype::Int64,
         }],
-        types::Logicaltype::Blob,
+        &types::Logicaltype::Blob,
         runtime::AggregateCallback::new(1),
         Some(&runtime::Funcopts {
             description: Some("build an xor approximate-membership filter".into()),
@@ -203,7 +203,7 @@ fn register() -> Result<(), types::Duckerror> {
                 logical: types::Logicaltype::Int64,
             },
         ],
-        types::Logicaltype::Boolean,
+        &types::Logicaltype::Boolean,
         runtime::ScalarCallback::new(10),
         Some(&runtime::Funcopts {
             description: Some("xor filter membership".into()),

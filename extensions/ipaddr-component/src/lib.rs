@@ -65,7 +65,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
 fn one(reg: &runtime::ScalarRegistry, name: &str, ret: types::Logicaltype, attr: types::Funcflags, i: I) -> Result<(), types::Duckerror> {
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, i);
     reg.register(name, &[runtime::Funcarg { name: Some("ip".into()), logical: types::Logicaltype::Text }],
-        ret, runtime::ScalarCallback::new(h),
+        &ret, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("IP address".into()), tags: vec!["network".into()], attributes: attr }))?;
     Ok(())
 }

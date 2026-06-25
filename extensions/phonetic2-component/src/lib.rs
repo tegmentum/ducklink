@@ -56,7 +56,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
 fn one(reg: &runtime::ScalarRegistry, name: &str, p: Ph) -> Result<(), types::Duckerror> {
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, p);
     reg.register(name, &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("phonetic code".into()), tags: vec!["phonetic".into()], attributes: types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS }))?;
     Ok(())
 }

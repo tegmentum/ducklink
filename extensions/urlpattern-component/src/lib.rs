@@ -107,10 +107,10 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         runtime::Funcarg { name: Some("url".into()), logical: types::Logicaltype::Text },
     ];
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::Test);
-    reg.register("url_pattern_test", &args, types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
+    reg.register("url_pattern_test", &args, &types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("does url match URLPattern pattern?".into()), tags: vec!["networking".into()], attributes: det }))?;
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::Match);
-    reg.register("url_pattern_match", &args, types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+    reg.register("url_pattern_match", &args, &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("JSON of matched URLPattern named groups".into()), tags: vec!["networking".into()], attributes: det }))?;
     Ok(())
 }

@@ -87,11 +87,11 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         runtime::Funcarg { name: Some("input".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("encoding".into()), logical: types::Logicaltype::Text },
     ];
-    reg.register("tiktoken_count", &enc(), types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
+    reg.register("tiktoken_count", &enc(), &types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("BPE token count".into()), tags: vec!["nlp".into(), "llm".into()], attributes: det }))?;
-    reg.register("tiktoken_encode", &enc(), types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+    reg.register("tiktoken_encode", &enc(), &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("text -> BPE token ids (JSON)".into()), tags: vec!["nlp".into(), "llm".into()], attributes: det }))?;
-    reg.register("tiktoken_decode", &enc(), types::Logicaltype::Text, runtime::ScalarCallback::new(3),
+    reg.register("tiktoken_decode", &enc(), &types::Logicaltype::Text, runtime::ScalarCallback::new(3),
         Some(&runtime::Funcopts { description: Some("BPE token ids -> text".into()), tags: vec!["nlp".into(), "llm".into()], attributes: det }))?;
     Ok(())
 }

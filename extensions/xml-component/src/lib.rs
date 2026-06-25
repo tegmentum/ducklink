@@ -242,7 +242,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
                 name: Some("xml".into()),
                 logical: types::Logicaltype::Text,
             }],
-            types::Logicaltype::Boolean,
+            &types::Logicaltype::Boolean,
             runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts {
                 description: Some("true if the input is well-formed XML".into()),
@@ -279,7 +279,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
                     logical: types::Logicaltype::Text,
                 },
             ],
-            types::Logicaltype::Text,
+            &types::Logicaltype::Text,
             runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts {
                 description: Some(desc.into()),

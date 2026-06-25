@@ -96,13 +96,13 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     let arg = |name: &str| runtime::Funcarg { name: Some(name.into()), logical: types::Logicaltype::Text };
     reg.register("vcard_count", &[arg("vcf")],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("number of VCARD contacts in a vCard string".into()), tags: vec!["vcard".into()], attributes: det }))?;
     reg.register("vcard_to_json", &[arg("vcf")],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("vCard contacts -> JSON array of {fn,email,tel,org}".into()), tags: vec!["vcard".into()], attributes: det }))?;
     reg.register("vcard_names", &[arg("vcf")],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(3),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(3),
         Some(&runtime::Funcopts { description: Some("vCard FN (formatted name) values -> JSON array".into()), tags: vec!["vcard".into()], attributes: det }))?;
     Ok(())
 }

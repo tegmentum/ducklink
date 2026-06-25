@@ -50,6 +50,6 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         runtime::Funcarg { name: Some("b".into()), logical: types::Logicaltype::Text },
     ];
     let opts = runtime::Funcopts { description: Some("natural-order compare".into()), tags: vec!["sort".into()], attributes: det };
-    reg.register("natsort_compare", &args, types::Logicaltype::Int64, cb, Some(&opts))?;
+    reg.register("natsort_compare", &args, &types::Logicaltype::Int64, cb, Some(&opts))?;
     Ok(())
 }

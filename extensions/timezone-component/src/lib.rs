@@ -60,14 +60,14 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, T::Valid);
     reg.register("tz_valid", &[runtime::Funcarg { name: Some("name".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("IANA zone valid?".into()), tags: vec!["time".into()], attributes: det }))?;
     for (name, t) in [("tz_offset_seconds", T::Offset), ("tz_abbreviation", T::Abbr)] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, t);
         reg.register(name, &[
             runtime::Funcarg { name: Some("name".into()), logical: types::Logicaltype::Text },
             runtime::Funcarg { name: Some("unix_time".into()), logical: types::Logicaltype::Int64 }],
-            if t == T::Offset { types::Logicaltype::Int64 } else { types::Logicaltype::Text },
+            if t == T::Offset { &types::Logicaltype::Int64 } else { &types::Logicaltype::Text },
             runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some("zone offset/abbrev".into()), tags: vec!["time".into()], attributes: det }))?;
     }

@@ -334,7 +334,7 @@ fn register_scalar_function() -> Result<(), types::Duckerror> {
     registry.register(
         "sample_plus_one",
         &args,
-        types::Logicaltype::Int64,
+        &types::Logicaltype::Int64,
         callback,
         Some(&opts),
     )?;
@@ -419,7 +419,7 @@ fn register_aggregate_function() -> Result<(), types::Duckerror> {
     registry.register(
         "sample_sum",
         &args,
-        types::Logicaltype::Int64,
+        &types::Logicaltype::Int64,
         callback,
         Some(&opts),
     )?;

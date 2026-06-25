@@ -73,7 +73,7 @@ fn register(reg: &runtime::ScalarRegistry, name: &str, args: &[runtime::Funcarg]
     handlers().lock().unwrap().insert(handle, h);
     let cb = runtime::ScalarCallback::new(handle);
     let opts = runtime::Funcopts { description: Some("semver".into()), tags: vec!["semver".into()], attributes: attr };
-    reg.register(name, args, ret, cb, Some(&opts))?; Ok(())
+    reg.register(name, args, &ret, cb, Some(&opts))?; Ok(())
 }
 fn one1(reg: &runtime::ScalarRegistry, name: &str, ret: types::Logicaltype, attr: types::Funcflags, h: H) -> Result<(), types::Duckerror> {
     register(reg, name, &[runtime::Funcarg { name: Some("v".into()), logical: types::Logicaltype::Text }], ret, attr, h)

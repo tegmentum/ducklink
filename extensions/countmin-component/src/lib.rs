@@ -71,14 +71,14 @@ fn register() -> Result<(), types::Duckerror> {
     let acap = runtime::get_capability(types::Capabilitykind::Aggregate).ok_or_else(|| types::Duckerror::Internal("no aggregate capability".into()))?;
     let areg = match acap { runtime::Capability::Aggregate(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     areg.register("count_min", &[runtime::Funcarg { name: Some("value".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::AggregateCallback::new(1),
+        &types::Logicaltype::Text, runtime::AggregateCallback::new(1),
         Some(&runtime::Funcopts { description: Some("build Count-Min sketch".into()), tags: vec!["sketch".into()], attributes: det }))?;
     let scap = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
     let sreg = match scap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     sreg.register("cms_estimate", &[
         runtime::Funcarg { name: Some("sketch".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("item".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(10),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(10),
         Some(&runtime::Funcopts { description: Some("estimated frequency".into()), tags: vec!["sketch".into()], attributes: det }))?;
     Ok(())
 }

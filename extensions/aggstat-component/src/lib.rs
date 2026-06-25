@@ -47,7 +47,7 @@ fn register_aggregates() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Aggregate(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     reg.register("harmonic_mean", &[runtime::Funcarg { name: Some("x".into()), logical: types::Logicaltype::Float64 }],
-        types::Logicaltype::Float64, runtime::AggregateCallback::new(1),
+        &types::Logicaltype::Float64, runtime::AggregateCallback::new(1),
         Some(&runtime::Funcopts { description: Some("harmonic mean".into()), tags: vec!["stats".into()], attributes: det }))?;
     Ok(())
 }

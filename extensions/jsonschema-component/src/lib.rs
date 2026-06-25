@@ -47,7 +47,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("json_schema_valid", &[
         runtime::Funcarg { name: Some("schema".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("instance".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Boolean, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Boolean, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("validate JSON vs schema".into()), tags: vec!["json".into()], attributes: det }))?;
     Ok(())
 }

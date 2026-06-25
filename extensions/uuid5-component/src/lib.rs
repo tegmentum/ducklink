@@ -57,7 +57,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         reg.register(name, &[
             runtime::Funcarg { name: Some("namespace".into()), logical: types::Logicaltype::Text },
             runtime::Funcarg { name: Some("name".into()), logical: types::Logicaltype::Text }],
-            types::Logicaltype::Text, runtime::ScalarCallback::new(cb),
+            &types::Logicaltype::Text, runtime::ScalarCallback::new(cb),
             Some(&runtime::Funcopts { description: Some("namespace UUID".into()), tags: vec!["uuid".into()], attributes: det }))?;
     }
     Ok(())

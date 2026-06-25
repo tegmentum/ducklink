@@ -120,7 +120,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("icu_sort_key", &[
         runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("locale".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("hex UCA sort key; ORDER BY workaround for COLLATE".into()), tags: vec!["text".into()], attributes: det }))?;
     // icu_compare(a, b, locale) -> int
     let h = NEXT.fetch_add(1, AtOrdering::Relaxed); handlers().lock().unwrap().insert(h, F::Compare);
@@ -128,12 +128,12 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         runtime::Funcarg { name: Some("a".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("b".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("locale".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("locale-aware compare -> -1/0/1".into()), tags: vec!["text".into()], attributes: det }))?;
     // icu_casefold(text) -> text
     let h = NEXT.fetch_add(1, AtOrdering::Relaxed); handlers().lock().unwrap().insert(h, F::CaseFold);
     reg.register("icu_casefold", &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("full Unicode case folding".into()), tags: vec!["text".into()], attributes: det }))?;
     // Per-locale single-arg sort-key scalars + their collations. For each locale
     // we register icu_sortkey_<loc>(text) -> sort-key text, then declare a
@@ -145,7 +145,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         handlers().lock().unwrap().insert(h, F::SortKeyLocale(loc));
         reg.register(&scalar_name,
             &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-            types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+            &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts {
                 description: Some(format!("locale-bound ({loc}) UCA sort key; transform for COLLATE icu_{loc}")),
                 tags: vec!["text".into()], attributes: det }))?;

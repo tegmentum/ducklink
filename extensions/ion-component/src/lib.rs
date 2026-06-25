@@ -174,20 +174,20 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::ToJson);
     reg.register("ion_to_json",
         &[runtime::Funcarg { name: Some("data".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("Ion text/binary -> JSON text".into()), tags: vec!["ion".into(), "json".into()], attributes: det }))?;
 
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::FromJson);
     reg.register("ion_from_json",
         &[runtime::Funcarg { name: Some("json".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("JSON text -> Ion text".into()), tags: vec!["ion".into(), "json".into()], attributes: det }))?;
 
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::Get);
     reg.register("ion_get",
         &[runtime::Funcarg { name: Some("data".into()), logical: types::Logicaltype::Text },
           runtime::Funcarg { name: Some("field".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("top-level Ion struct field as text".into()), tags: vec!["ion".into()], attributes: det }))?;
     Ok(())
 }

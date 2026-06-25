@@ -53,11 +53,11 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     let h1 = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h1, true);
     reg.register("humantime_parse", &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(h1),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(h1),
         Some(&runtime::Funcopts { description: Some("duration text -> seconds".into()), tags: vec!["time".into()], attributes: det }))?;
     let h2 = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h2, false);
     reg.register("humantime_format", &[runtime::Funcarg { name: Some("seconds".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h2),
         Some(&runtime::Funcopts { description: Some("seconds -> duration text".into()), tags: vec!["time".into()], attributes: det }))?;
     Ok(())
 }

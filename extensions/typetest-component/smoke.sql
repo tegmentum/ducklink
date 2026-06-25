@@ -18,3 +18,8 @@ SELECT typeof(tt_timestamptz()) AS t, CAST(tt_timestamptz() AS VARCHAR) AS v;
 SELECT typeof(tt_decimal()) AS t, CAST(tt_decimal() AS VARCHAR) AS v;
 SELECT typeof(tt_interval()) AS t, CAST(tt_interval() AS VARCHAR) AS v;
 SELECT typeof(tt_uuid()) AS t, CAST(tt_uuid() AS VARCHAR) AS v;
+-- ESCAPE-HATCH complex types: a NESTED LIST/STRUCT returned via complex(type,json).
+-- typeof proves the honest declared type; the VARCHAR cast renders the real value
+-- the core reconstructed in a native LIST/STRUCT vector from the JSON.
+SELECT typeof(tt_list()) AS t, CAST(tt_list() AS VARCHAR) AS v;
+SELECT typeof(tt_struct()) AS t, CAST(tt_struct() AS VARCHAR) AS v;

@@ -48,7 +48,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         runtime::Funcarg { name: Some("key0".into()), logical: types::Logicaltype::Int64 },
         runtime::Funcarg { name: Some("key1".into()), logical: types::Logicaltype::Int64 },
         runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Uint64, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Uint64, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("keyed SipHash-1-3".into()), tags: vec!["hash".into()], attributes: det }))?;
     Ok(())
 }

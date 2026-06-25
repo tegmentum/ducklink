@@ -74,7 +74,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     for (name, enc) in [("morse_encode", true), ("morse_decode", false)] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, enc);
         reg.register(name, &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-            types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+            &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some("Morse code".into()), tags: vec!["morse".into()], attributes: det }))?;
     }
     Ok(())

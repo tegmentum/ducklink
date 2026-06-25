@@ -26,3 +26,7 @@ t,v
 INTERVAL,1 month 2 days 00:00:03
 t,v
 UUID,12345678-1234-5678-1234-567812345678
+t,v
+INTEGER[],"[10, 20, 30]"
+t,v
+"STRUCT(a INTEGER, b VARCHAR)","{'a': 1, 'b': hi}"

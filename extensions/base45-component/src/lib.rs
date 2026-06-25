@@ -212,7 +212,7 @@ fn register_one(
         tags: vec!["base45".into()],
         attributes: types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS,
     };
-    registry.register(name, &args, returns, callback, Some(&opts))?;
+    registry.register(name, &args, &returns, callback, Some(&opts))?;
     Ok(())
 }
 

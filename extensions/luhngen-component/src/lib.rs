@@ -59,10 +59,10 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     reg.register("luhn_check_digit", &[runtime::Funcarg { name: Some("partial".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("Luhn check digit".into()), tags: vec!["validation".into()], attributes: det }))?;
     reg.register("luhn_append", &[runtime::Funcarg { name: Some("partial".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("append Luhn check digit".into()), tags: vec!["validation".into()], attributes: det }))?;
     Ok(())
 }

@@ -207,7 +207,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
             arg("lng", types::Logicaltype::Float64),
             arg("res", types::Logicaltype::Int64),
         ],
-        types::Logicaltype::Int64,
+        &types::Logicaltype::Int64,
         runtime::ScalarCallback::new(h),
         Some(&opts("lat/lng/res -> H3 cell index", det)),
     )?;
@@ -221,7 +221,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         reg.register(
             name,
             &[arg("cell", types::Logicaltype::Int64)],
-            types::Logicaltype::Float64,
+            &types::Logicaltype::Float64,
             runtime::ScalarCallback::new(h),
             Some(&opts(desc, det)),
         )?;
@@ -235,7 +235,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
             arg("cell", types::Logicaltype::Int64),
             arg("res", types::Logicaltype::Int64),
         ],
-        types::Logicaltype::Int64,
+        &types::Logicaltype::Int64,
         runtime::ScalarCallback::new(h),
         Some(&opts("H3 cell -> parent at resolution", det)),
     )?;
@@ -248,7 +248,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
             arg("a", types::Logicaltype::Int64),
             arg("b", types::Logicaltype::Int64),
         ],
-        types::Logicaltype::Int64,
+        &types::Logicaltype::Int64,
         runtime::ScalarCallback::new(h),
         Some(&opts("grid distance between two H3 cells", det)),
     )?;
@@ -258,7 +258,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register(
         "h3_is_valid_cell",
         &[arg("cell", types::Logicaltype::Int64)],
-        types::Logicaltype::Boolean,
+        &types::Logicaltype::Boolean,
         runtime::ScalarCallback::new(h),
         Some(&opts("is the BIGINT a valid H3 cell index", det)),
     )?;

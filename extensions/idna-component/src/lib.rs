@@ -52,7 +52,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, to_ascii);
         reg.register(name,
             &[runtime::Funcarg { name: Some("domain".into()), logical: types::Logicaltype::Text }],
-            types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+            &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some("IDNA domain conversion".into()), tags: vec!["idna".into()], attributes: det }))?;
     }
     Ok(())

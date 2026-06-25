@@ -148,7 +148,7 @@ fn register_one(
         tags: vec!["csscolor".into()],
         attributes,
     };
-    registry.register(name, &args, returns, callback, Some(&opts))?;
+    registry.register(name, &args, &returns, callback, Some(&opts))?;
     Ok(())
 }
 

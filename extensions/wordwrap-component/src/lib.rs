@@ -41,7 +41,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("word_wrap", &[
         runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("width".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("wrap text to width".into()), tags: vec!["text".into()], attributes: det }))?;
     Ok(())
 }

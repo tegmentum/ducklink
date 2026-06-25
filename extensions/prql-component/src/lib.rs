@@ -83,13 +83,13 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, P::ToSql);
     reg.register("prql_to_sql",
         &[runtime::Funcarg { name: Some("prql".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("compile PRQL to SQL (DuckDB dialect); NULL on error".into()), tags: vec!["prql".into()], attributes: det }))?;
 
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, P::IsValid);
     reg.register("prql_is_valid",
         &[runtime::Funcarg { name: Some("prql".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("true if the PRQL compiles".into()), tags: vec!["prql".into()], attributes: det }))?;
     Ok(())
 }

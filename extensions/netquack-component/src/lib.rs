@@ -156,7 +156,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         reg.register(
             name,
             &[runtime::Funcarg { name: Some("host_or_url".into()), logical: types::Logicaltype::Text }],
-            types::Logicaltype::Text,
+            &types::Logicaltype::Text,
             runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts { description: Some(desc.into()), tags: vec!["networking".into()], attributes: det }),
         )?;

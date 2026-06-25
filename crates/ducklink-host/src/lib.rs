@@ -968,6 +968,8 @@ fn spi_value_text(v: &core_types::Duckvalue) -> String {
             format!("{} months {} days {} us", iv.months, iv.days, iv.micros)
         }
         core_types::Duckvalue::Uuid(u) => format_uuid(u.hi, u.lo),
+        // ESCAPE-HATCH: the value is already JSON; emit it verbatim.
+        core_types::Duckvalue::Complex(c) => c.json.clone(),
     }
 }
 
@@ -2868,6 +2870,7 @@ fn neutral_logicaltype_to_core(ty: reg::LogicalType) -> core_runtime_exports::Lo
         reg::LogicalType::Decimal => core_runtime_exports::Logicaltype::Decimal,
         reg::LogicalType::Interval => core_runtime_exports::Logicaltype::Interval,
         reg::LogicalType::Uuid => core_runtime_exports::Logicaltype::Uuid,
+        reg::LogicalType::Complex(expr) => core_runtime_exports::Logicaltype::Complex(expr),
     }
 }
 
@@ -2959,6 +2962,12 @@ fn convert_core_duckvalue(value: core_types::Duckvalue) -> cli_types::Duckvalue 
         core_types::Duckvalue::Uuid(u) => {
             cli_types::Duckvalue::Uuid(cli_types::Uuidvalue { hi: u.hi, lo: u.lo })
         }
+        core_types::Duckvalue::Complex(c) => {
+            cli_types::Duckvalue::Complex(cli_types::Complexvalue {
+                type_expr: c.type_expr,
+                json: c.json,
+            })
+        }
     }
 }
 
@@ -2999,6 +3008,12 @@ fn convert_cli_duckvalue(value: cli_types::Duckvalue) -> core_types::Duckvalue {
         }
         cli_types::Duckvalue::Uuid(u) => {
             core_types::Duckvalue::Uuid(core_types::Uuidvalue { hi: u.hi, lo: u.lo })
+        }
+        cli_types::Duckvalue::Complex(c) => {
+            core_types::Duckvalue::Complex(core_types::Complexvalue {
+                type_expr: c.type_expr,
+                json: c.json,
+            })
         }
     }
 }
@@ -3041,6 +3056,7 @@ fn convert_core_logicaltype(ty: core_types::Logicaltype) -> cli_types::Logicalty
         core_types::Logicaltype::Decimal => cli_types::Logicaltype::Decimal,
         core_types::Logicaltype::Interval => cli_types::Logicaltype::Interval,
         core_types::Logicaltype::Uuid => cli_types::Logicaltype::Uuid,
+        core_types::Logicaltype::Complex(expr) => cli_types::Logicaltype::Complex(expr),
     }
 }
 
@@ -3602,6 +3618,12 @@ fn convert_core_duckvalue_to_extension(value: core_types::Duckvalue) -> extensio
         core_types::Duckvalue::Uuid(u) => {
             extension_types::Duckvalue::Uuid(extension_types::Uuidvalue { hi: u.hi, lo: u.lo })
         }
+        core_types::Duckvalue::Complex(c) => {
+            extension_types::Duckvalue::Complex(extension_types::Complexvalue {
+                type_expr: c.type_expr,
+                json: c.json,
+            })
+        }
     }
 }
 
@@ -3642,6 +3664,12 @@ fn convert_extension_duckvalue_to_core(value: extension_types::Duckvalue) -> cor
         }
         extension_types::Duckvalue::Uuid(u) => {
             core_types::Duckvalue::Uuid(core_types::Uuidvalue { hi: u.hi, lo: u.lo })
+        }
+        extension_types::Duckvalue::Complex(c) => {
+            core_types::Duckvalue::Complex(core_types::Complexvalue {
+                type_expr: c.type_expr,
+                json: c.json,
+            })
         }
     }
 }
@@ -3730,6 +3758,7 @@ fn convert_extension_logicaltype_to_core(
         extension_types::Logicaltype::Decimal => core_types::Logicaltype::Decimal,
         extension_types::Logicaltype::Interval => core_types::Logicaltype::Interval,
         extension_types::Logicaltype::Uuid => core_types::Logicaltype::Uuid,
+        extension_types::Logicaltype::Complex(expr) => core_types::Logicaltype::Complex(expr),
     }
 }
 
@@ -3793,6 +3822,12 @@ fn convert_core_duckvalue_to_storage(value: core_types::Duckvalue) -> storage_sc
         core_types::Duckvalue::Uuid(u) => {
             storage_scan::Duckvalue::Uuid(storage_scan::Uuidvalue { hi: u.hi, lo: u.lo })
         }
+        core_types::Duckvalue::Complex(c) => {
+            storage_scan::Duckvalue::Complex(storage_scan::Complexvalue {
+                type_expr: c.type_expr,
+                json: c.json,
+            })
+        }
     }
 }
 
@@ -3841,6 +3876,7 @@ fn describe_core_duckvalue(value: &core_types::Duckvalue) -> String {
             format!("{}mon {}d {}us", iv.months, iv.days, iv.micros)
         }
         core_types::Duckvalue::Uuid(u) => format_uuid(u.hi, u.lo),
+        core_types::Duckvalue::Complex(c) => format!("{}:{}", c.type_expr, c.json),
     }
 }
 

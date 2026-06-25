@@ -119,7 +119,7 @@ fn reg3(reg: &runtime::ScalarRegistry, name: &str, a0: &str, a1: &str, a2: &str,
         runtime::Funcarg { name: Some(a0.into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some(a1.into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some(a2.into()), logical: types::Logicaltype::Float64 }],
-        types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some(desc.into()), tags: vec!["stats".into()], attributes: det }))?;
     Ok(())
 }
@@ -140,7 +140,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         runtime::Funcarg { name: Some("k".into()), logical: types::Logicaltype::Int64 },
         runtime::Funcarg { name: Some("n".into()), logical: types::Logicaltype::Int64 },
         runtime::Funcarg { name: Some("p".into()), logical: types::Logicaltype::Float64 }],
-        types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("binomial distribution PMF P(X=k)".into()), tags: vec!["stats".into()], attributes: det }))?;
 
     // poisson_pmf(k BIGINT, lambda DOUBLE)
@@ -148,7 +148,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("poisson_pmf", &[
         runtime::Funcarg { name: Some("k".into()), logical: types::Logicaltype::Int64 },
         runtime::Funcarg { name: Some("lambda".into()), logical: types::Logicaltype::Float64 }],
-        types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("poisson distribution PMF P(X=k)".into()), tags: vec!["stats".into()], attributes: det }))?;
 
     // exponential_cdf(x DOUBLE, rate DOUBLE)
@@ -156,7 +156,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("exponential_cdf", &[
         runtime::Funcarg { name: Some("x".into()), logical: types::Logicaltype::Float64 },
         runtime::Funcarg { name: Some("rate".into()), logical: types::Logicaltype::Float64 }],
-        types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("exponential distribution CDF P(X<=x)".into()), tags: vec!["stats".into()], attributes: det }))?;
 
     Ok(())

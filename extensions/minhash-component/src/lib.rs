@@ -74,14 +74,14 @@ fn register() -> Result<(), types::Duckerror> {
     let acap = runtime::get_capability(types::Capabilitykind::Aggregate).ok_or_else(|| types::Duckerror::Internal("no aggregate capability".into()))?;
     let areg = match acap { runtime::Capability::Aggregate(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     areg.register("minhash", &[runtime::Funcarg { name: Some("value".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::AggregateCallback::new(1),
+        &types::Logicaltype::Text, runtime::AggregateCallback::new(1),
         Some(&runtime::Funcopts { description: Some("MinHash signature".into()), tags: vec!["sketch".into()], attributes: det }))?;
     let scap = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
     let sreg = match scap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     sreg.register("minhash_similarity", &[
         runtime::Funcarg { name: Some("a".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("b".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Float64, runtime::ScalarCallback::new(10),
+        &types::Logicaltype::Float64, runtime::ScalarCallback::new(10),
         Some(&runtime::Funcopts { description: Some("estimated Jaccard".into()), tags: vec!["sketch".into()], attributes: det }))?;
     Ok(())
 }

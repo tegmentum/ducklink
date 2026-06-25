@@ -54,7 +54,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         ("fake_username", 3, "random username"), ("fake_city", 4, "random city"),
         ("fake_company", 5, "random company name"),
     ] {
-        reg.register(name, &[], types::Logicaltype::Text, runtime::ScalarCallback::new(cb),
+        reg.register(name, &[], &types::Logicaltype::Text, runtime::ScalarCallback::new(cb),
             Some(&runtime::Funcopts { description: Some(desc.into()), tags: vec!["fake".into()], attributes: nondet }))?;
     }
     Ok(())

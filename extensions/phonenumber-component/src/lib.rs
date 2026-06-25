@@ -72,20 +72,20 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("phone_valid", &[
         runtime::Funcarg { name: Some("number".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("region".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("valid phone number?".into()), tags: vec!["phone".into()], attributes: det }))?;
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::Format);
     reg.register("phone_format", &[
         runtime::Funcarg { name: Some("number".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("region".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("mode".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("format phone number".into()), tags: vec!["phone".into()], attributes: det }))?;
     let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::Code);
     reg.register("phone_country_code", &[
         runtime::Funcarg { name: Some("number".into()), logical: types::Logicaltype::Text },
         runtime::Funcarg { name: Some("region".into()), logical: types::Logicaltype::Text }],
-        types::Logicaltype::Int64, runtime::ScalarCallback::new(h),
+        &types::Logicaltype::Int64, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("country calling code".into()), tags: vec!["phone".into()], attributes: det }))?;
     Ok(())
 }

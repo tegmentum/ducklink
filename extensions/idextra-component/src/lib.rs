@@ -43,7 +43,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let nondet = types::Funcflags::empty();
     for (name, cb) in [("ksuid", 1u32), ("cuid2", 2u32)] {
-        reg.register(name, &[], types::Logicaltype::Text, runtime::ScalarCallback::new(cb),
+        reg.register(name, &[], &types::Logicaltype::Text, runtime::ScalarCallback::new(cb),
             Some(&runtime::Funcopts { description: Some("identifier generator".into()), tags: vec!["id".into()], attributes: nondet }))?;
     }
     Ok(())

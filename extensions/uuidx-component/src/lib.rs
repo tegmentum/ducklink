@@ -147,7 +147,7 @@ fn register(
         tags: vec!["uuid".into()],
         attributes,
     };
-    registry.register(name, &args, returns, callback, Some(&opts))?;
+    registry.register(name, &args, &returns, callback, Some(&opts))?;
     Ok(())
 }
 

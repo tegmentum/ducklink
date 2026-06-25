@@ -45,10 +45,10 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
     let nondet = types::Funcflags::empty();
     reg.register("gen_password", &[runtime::Funcarg { name: Some("length".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(1),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
         Some(&runtime::Funcopts { description: Some("random password".into()), tags: vec!["security".into()], attributes: nondet }))?;
     reg.register("gen_password_alnum", &[runtime::Funcarg { name: Some("length".into()), logical: types::Logicaltype::Int64 }],
-        types::Logicaltype::Text, runtime::ScalarCallback::new(2),
+        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
         Some(&runtime::Funcopts { description: Some("random alphanumeric password".into()), tags: vec!["security".into()], attributes: nondet }))?;
     Ok(())
 }

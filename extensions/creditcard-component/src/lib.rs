@@ -239,7 +239,7 @@ fn register_one(
         tags: vec!["creditcard".into()],
         attributes,
     };
-    registry.register(name, &args, returns, callback, Some(&opts))?;
+    registry.register(name, &args, &returns, callback, Some(&opts))?;
     Ok(())
 }
 
