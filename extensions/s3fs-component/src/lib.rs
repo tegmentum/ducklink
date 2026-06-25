@@ -74,13 +74,21 @@ impl guest::Guest for Extension {
 
 // --- s3:// -> virtual-hosted HTTPS mapping ---
 
-/// Parsed `s3://bucket/key` reference plus the derived virtual-hosted host/path.
+/// Parsed `s3://bucket/key` reference plus the derived request host/path.
 struct S3Ref {
     bucket: String,
     key: String,
     region: String,
+    /// Connection host (no port) — TLS SNI / TCP connect target.
     host: String,
-    /// Absolute request path (URI-encoded key), always starts with '/'.
+    /// `Host:` header value (host[:port] when the port is non-default). SigV4
+    /// signs this exact value.
+    host_header: String,
+    port: u16,
+    /// http (plain, e.g. minio) vs https (AWS / TLS endpoints).
+    tls: bool,
+    /// Absolute request path. Virtual-hosted = `/<key>`; path-style (endpoint
+    /// override) = `/<bucket>/<key>`. Always starts with '/'.
     path: String,
 }
 
@@ -113,23 +121,59 @@ fn parse_s3(url: &str) -> Result<(String, String), String> {
     Ok((bucket.to_string(), key.to_string()))
 }
 
-/// Build the virtual-hosted request from an `s3://` URL.
+/// Build the request from an `s3://` URL. Default is AWS virtual-hosted HTTPS;
+/// `AWS_ENDPOINT_URL` (e.g. http://127.0.0.1:9000 for minio, or an R2/Ceph/Wasabi
+/// endpoint) switches to PATH-STYLE against that endpoint (the scheme/port from
+/// the URL). SigV4 signs whatever host+path we actually send, so a custom
+/// endpoint stays correctly signed.
 fn s3_ref(url: &str) -> Result<S3Ref, String> {
     let (bucket, key) = parse_s3(url)?;
     let region = resolved_region();
-    // Virtual-hosted-style endpoint. us-east-1 historically used `s3.amazonaws.com`
-    // but `s3.us-east-1.amazonaws.com` is also valid and uniform, so we always use
-    // the regional form.
+    let enc_key = sigv4::uri_encode_path(&key);
+    if let Some(ep) = std::env::var("AWS_ENDPOINT_URL")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+    {
+        let (tls, rest) = if let Some(r) = ep.strip_prefix("https://") {
+            (true, r)
+        } else if let Some(r) = ep.strip_prefix("http://") {
+            (false, r)
+        } else {
+            (true, ep.as_str())
+        };
+        let rest = rest.trim_end_matches('/');
+        let default_port: u16 = if tls { 443 } else { 80 };
+        let (h, port) = match rest.rsplit_once(':') {
+            Some((h, p)) => (h.to_string(), p.parse().unwrap_or(default_port)),
+            None => (rest.to_string(), default_port),
+        };
+        let host_header = if port == default_port {
+            h.clone()
+        } else {
+            format!("{h}:{port}")
+        };
+        return Ok(S3Ref {
+            path: format!("/{bucket}/{enc_key}"), // path-style
+            bucket,
+            key,
+            region,
+            host: h,
+            host_header,
+            port,
+            tls,
+        });
+    }
+    // Default: AWS virtual-hosted-style HTTPS (the regional form is uniform).
     let host = format!("{bucket}.s3.{region}.amazonaws.com");
-    // The canonical URI is the URL-encoded key (each path segment encoded, '/'
-    // preserved). SigV4 for S3 signs this exact path.
-    let path = format!("/{}", sigv4::uri_encode_path(&key));
     Ok(S3Ref {
+        path: format!("/{enc_key}"),
         bucket,
         key,
         region,
+        host_header: host.clone(),
         host,
-        path,
+        port: 443,
+        tls: true,
     })
 }
 
@@ -162,7 +206,7 @@ fn s3_get(url: &str) -> Result<std::vec::Vec<u8>, String> {
     let amz_date = sigv4::amz_date_now();
     let payload_hash = sigv4::EMPTY_PAYLOAD_SHA256; // GET has no body
     let mut headers: Vec<(String, String)> = vec![
-        ("host".to_string(), s3.host.clone()),
+        ("host".to_string(), s3.host_header.clone()),
         ("x-amz-content-sha256".to_string(), payload_hash.to_string()),
         ("x-amz-date".to_string(), amz_date.clone()),
     ];
@@ -186,7 +230,11 @@ fn s3_get(url: &str) -> Result<std::vec::Vec<u8>, String> {
     }
     // else: anonymous mode (public bucket) — no Authorization header.
 
-    let raw = https_get(&s3.host, 443, &s3.path, &headers)?;
+    let raw = if s3.tls {
+        https_get(&s3.host, s3.port, &s3.path, &headers)?
+    } else {
+        http_get(&s3.host, s3.port, &s3.path, &headers)?
+    };
 
     // Split headers / body on the first CRLFCRLF.
     let sep = b"\r\n\r\n";
@@ -212,6 +260,32 @@ fn s3_get(url: &str) -> Result<std::vec::Vec<u8>, String> {
         ));
     }
     Ok(raw[body_start..].to_vec())
+}
+
+/// Plain HTTP GET over wasi:sockets (for `AWS_ENDPOINT_URL=http://...`, e.g.
+/// minio). Returns the raw (headers+body) bytes.
+fn http_get(host: &str, port: u16, path: &str, headers: &[(String, String)]) -> Result<std::vec::Vec<u8>, String> {
+    let mut stream = TcpStream::connect((host, port))
+        .map_err(|e| format!("s3fs: connect {host}:{port} failed: {e}"))?;
+    let mut req = format!("GET {path} HTTP/1.1\r\n");
+    for (k, v) in headers {
+        req.push_str(k);
+        req.push_str(": ");
+        req.push_str(v);
+        req.push_str("\r\n");
+    }
+    req.push_str("User-Agent: ducklink-s3fs/0.1\r\nAccept: */*\r\nConnection: close\r\n\r\n");
+    stream
+        .write_all(req.as_bytes())
+        .map_err(|e| format!("s3fs: send failed: {e}"))?;
+    let mut raw = std::vec::Vec::new();
+    stream
+        .read_to_end(&mut raw)
+        .map_err(|e| format!("s3fs: read failed: {e}"))?;
+    if raw.is_empty() {
+        return Err("s3fs: empty response".to_string());
+    }
+    Ok(raw)
 }
 
 /// HTTPS GET over wasi:sockets + rustls; returns the raw (headers+body) bytes.

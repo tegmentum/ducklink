@@ -1,3 +1,5 @@
+-- minio/R2/Ceph: set AWS_ENDPOINT_URL=http://127.0.0.1:9000 (+ creds) for a
+-- path-style S3-compatible endpoint; live-verified against minio.
 -- s3fs needs live S3 (and, for private buckets, AWS credentials). It cannot run
 -- in the offline sandbox; the SigV4 signing + s3:// URL parsing are covered by
 -- the native unit tests (`cargo test --release`). To run the live read path:
