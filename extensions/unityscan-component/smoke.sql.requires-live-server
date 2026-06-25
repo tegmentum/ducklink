@@ -15,6 +15,14 @@
 -- Type `unityscan` (alias of `unity`) routes ATTACH straight to this wasm
 -- component; `unity` is also registered in case the lean core lacks the native
 -- unity_catalog StorageExtension.
+-- LOCAL VERIFICATION (Unity Catalog OSS): docker run -p 8080:8080
+-- unitycatalog/unitycatalog:latest (ships catalog 'unity', schema 'default',
+-- tables numbers/marksheet/user_countries). Use the `endpoint=` DSN form, NOT a
+-- bare http(s):// path -- DuckDB's ATTACH binder intercepts an http(s)://-prefixed
+-- path and demands the httpfs extension (absent on the lean core); `endpoint=...`
+-- avoids that and routes straight to TYPE unityscan. LIVE-VERIFIED: ATTACH +
+-- SHOW ALL TABLES enumerates the UC tables; DESCRIBE gives columns over REST.
+--   ATTACH 'endpoint=http://127.0.0.1:8080;catalog=unity' AS uc (TYPE unityscan);
 LOAD unityscan;
 
 -- Open the UC catalog. The component GETs /schemas + /tables over the UC REST
