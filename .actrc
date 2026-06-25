@@ -2,11 +2,17 @@
 # nektos/act (https://github.com/nektos/act). Used as a stopgap for CI until the
 # repository is public (free Actions) or Actions billing is enabled.
 #
-# Map GitHub's `ubuntu-latest` to a runner image that ships the basics the
-# smoke-tests workflow needs (apt, curl, git, sudo, node). cmake/ninja are
-# installed by the workflow itself.
+# `act` runs ci.yml (the lightweight native checks: host build + unit tests incl.
+# the function-prefix logic + registry validation) end-to-end in a stock
+# container — no wasm toolchain, ~a minute. The heavy wasm smoke (smoke-tests.yml:
+# lean core + ~180 components via tooling/smoke.py --all) is GitHub-runner only;
+# run it locally with `python3 tooling/smoke.py --all`.
+#
+# Default to the lightweight workflow so `act` is fast + self-contained:
+-W .github/workflows/ci.yml
+
+# Map GitHub's `ubuntu-latest` to a runner image that ships apt/curl/git/node.
 -P ubuntu-latest=catthehacker/ubuntu:act-latest
 
-# Keep build caches (actions/cache) and the apt/cargo work between runs so the
-# expensive DuckDB archive build only happens once.
+# Keep cargo/apt caches between runs.
 --reuse

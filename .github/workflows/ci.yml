@@ -1,0 +1,48 @@
+# Lightweight CI — runs locally under nektos/act, self-contained.
+#
+# The ducklink host + components can't build from a ducklink-only checkout: the
+# host has path deps on sibling repos (../duckdb-wasm for the core, ../tvm-wasm
+# for tvm-core) and building it pulls native DuckDB + the wasi toolchain. So this
+# act-friendly job validates only what is self-contained: the registry catalog
+# (schema, source<->workspace<->prefix consistency) via pure Python — no cargo,
+# no sibling repos, no prebuilt .wasm artifacts. It runs in a stock `act`
+# container in seconds.
+#
+# The full native + wasm build (host unit tests incl. the function-prefix logic,
+# the lean core, ~180 components, the 494-function smoke) is the heavy job in
+# smoke-tests.yml (needs the sibling repos + wasi-sdk; GitHub-runner oriented).
+# Run it locally with `python3 tooling/smoke.py --all` after a normal checkout.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # registry<->source<->workspace<->prefix consistency, minus the built-.wasm
+      # artifact-presence + orphan checks (the artifacts are gitignored / absent
+      # in a fresh checkout). This still enforces: every entry has a source crate,
+      # a smoke.sql, a workspace membership, exports, and the v1.1 prefix/expansion.
+      - name: Validate the extension catalog (no artifacts)
+        run: python3 tooling/verify-catalog.py --no-artifacts
+
+      - name: Validate registry JSON schema
+        run: |
+          python3 - <<'PY'
+          import json
+          d = json.load(open("registry/index.json"))
+          exts = d["extensions"]
+          assert isinstance(exts, list) and len(exts) > 0, "registry has no extensions"
+          for e in exts:
+              for field in ("name", "artifact", "exports", "prefix", "expansion"):
+                  assert e.get(field) is not None, f"{e.get('name','?')}: missing {field}"
+          print(f"registry OK: {len(exts)} extensions, all with prefix/expansion")
+          PY

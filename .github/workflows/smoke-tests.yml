@@ -1,118 +1,82 @@
+# Full wasm component smoke — the HEAVY job (GitHub-hosted-runner oriented).
+#
+# This is NOT act-friendly: it needs wasi-sdk-33 + cargo-component + wac, the
+# sibling tegmentum/duckdb-wasm repo (the DuckDB-wasm core moved there), and a
+# multi-minute build of the lean core + ~180 components. For local CI use ci.yml
+# (the lightweight, act-runnable native checks); for the full suite locally run
+# `python3 tooling/smoke.py --all --build` directly.
+#
+# NOTE: the build/smoke commands below are the ones used in development and are
+# correct for the current architecture; the CI orchestration (the sibling
+# checkout + a token for tegmentum/duckdb-wasm) has not yet been validated on a
+# hosted runner. Manual-dispatch only until that is wired.
 name: smoke-tests
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
   workflow_dispatch:
 
-# The DuckDB wasm archive is the expensive input: it requires building patched
-# DuckDB (pinned in ci/duckdb-commit.txt + ci/duckdb-wasm.patch) with wasi-sdk.
-# It is cached and only rebuilt when the pin, patch, or build inputs change, so
-# steady-state runs just build the Rust components and run the smoke tests.
 env:
-  WASI_TARGET_TRIPLE: wasm32-wasip2
   WASI_SDK_RELEASE: wasi-sdk-33
-  DUCKDB_STATIC_LIB: ${{ github.workspace }}/artifacts/libduckdb-wasi.a
-  DUCKDB_BUILD_DIR: ${{ github.workspace }}/build/duckdb-wasi
-  DUCKDB_INCLUDE_DIR: ${{ github.workspace }}/ci/duckdb-include
 
 jobs:
-  wasi-preview2-smoke:
+  wasm-preview2-smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout ducklink
         uses: actions/checkout@v4
+        with:
+          path: ducklink
 
-      - name: Install system build dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
+      - name: Checkout the DuckDB-wasm core (sibling repo)
+        uses: actions/checkout@v4
+        with:
+          repository: tegmentum/duckdb-wasm
+          path: duckdb-wasm
+          token: ${{ secrets.DUCKDB_WASM_TOKEN }}
 
-      - name: Install Rust toolchain
+      - name: Install Rust + the wasip2 target
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-wasip2
-
-      - name: Cache cargo-installed tools
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin
-          key: cargo-tools-${{ runner.os }}-cargo-component-wac-wasmtime-v1
 
       - name: Install component tooling
         run: |
           set -euo pipefail
           command -v cargo-component >/dev/null || cargo install cargo-component --locked
           command -v wac >/dev/null            || cargo install wac-cli --locked
-          command -v wasmtime >/dev/null        || cargo install wasmtime-cli --locked
 
-      - name: Cache DuckDB wasm archive
-        id: duckdb-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            artifacts/libduckdb-wasi.a
-            build/duckdb-wasi
-            ci/duckdb-include
-          key: >-
-            duckdb-wasi-${{ runner.os }}-${{ env.WASI_SDK_RELEASE }}-${{ hashFiles(
-              'ci/duckdb-commit.txt',
-              'ci/duckdb-wasm.patch',
-              'scripts/build-libduckdb-wasm.sh',
-              'cmake/toolchains/wasi-sdk.cmake') }}
-
-      - name: Build DuckDB wasm archive (on cache miss)
-        if: steps.duckdb-cache.outputs.cache-hit != 'true'
+      - name: Install wasi-sdk
         run: |
           set -euo pipefail
-
-          # wasi-sdk (provides the exception-handling sysroot the archive needs).
-          # Pick the asset matching the host arch so this also runs natively
-          # under `act` on arm64 (GitHub's hosted runners are x86_64).
           case "$(uname -m)" in
-            x86_64) WASI_ARCH=x86_64 ;;
-            aarch64 | arm64) WASI_ARCH=arm64 ;;
-            *) echo "unsupported host arch: $(uname -m)" >&2; exit 1 ;;
+            x86_64) ARCH=x86_64 ;;
+            aarch64|arm64) ARCH=arm64 ;;
+            *) echo "unsupported arch $(uname -m)" >&2; exit 1 ;;
           esac
           curl -fsSL -o /tmp/wasi-sdk.tar.gz \
-            "https://github.com/WebAssembly/wasi-sdk/releases/download/${WASI_SDK_RELEASE}/${WASI_SDK_RELEASE}.0-${WASI_ARCH}-linux.tar.gz"
+            "https://github.com/WebAssembly/wasi-sdk/releases/download/${WASI_SDK_RELEASE}/${WASI_SDK_RELEASE}.0-${ARCH}-linux.tar.gz"
           mkdir -p "$HOME/wasi-sdk"
           tar xzf /tmp/wasi-sdk.tar.gz -C "$HOME/wasi-sdk" --strip-components=1
+
+      # The lean core embeds nothing optional (EMBED_EXTENSIONS="" default);
+      # official functionality ships as loadable components (json autoloaded).
+      - name: Build the lean DuckDB-wasm core
+        working-directory: duckdb-wasm
+        run: |
+          set -euo pipefail
           export WASI_SDK_PREFIX="$HOME/wasi-sdk"
+          source scripts/setup-env.sh
+          cargo component build -p duckdb-component-core --target wasm32-wasip2 --release --features wasi
+          mkdir -p ../ducklink/target/wasm32-wasip2/release
+          cp target/wasm32-wasip2/release/ducklink_core.wasm ../ducklink/target/wasm32-wasip2/release/
 
-          # DuckDB source at the pinned commit + the wasm port patch
-          DUCKDB_SRC="$HOME/duckdb-src"
-          git init -q "$DUCKDB_SRC"
-          git -C "$DUCKDB_SRC" remote add origin https://github.com/duckdb/duckdb.git
-          git -C "$DUCKDB_SRC" fetch -q --depth 1 origin "$(cat ci/duckdb-commit.txt)"
-          git -C "$DUCKDB_SRC" checkout -q FETCH_HEAD
-          git -C "$DUCKDB_SRC" apply "$GITHUB_WORKSPACE/ci/duckdb-wasm.patch"
-
-          # Build the merged static archive (-> artifacts/libduckdb-wasi.a)
-          export DUCKDB_SOURCE_DIR="$DUCKDB_SRC"
-          export BUILD_DIR="$DUCKDB_BUILD_DIR"
-          export CMAKE_GENERATOR=Ninja
-          export WASM_EXTENSIONS=json
-          scripts/build-libduckdb-wasm.sh
-
-          # The FFI crate links the third_party static libs from the build dir by
-          # path and checks that duckdb.h exists; keep just those .a files (to
-          # shrink the cache) and a copy of the headers.
-          mkdir -p ci/duckdb-include
-          cp -R "$DUCKDB_SRC/src/include/." ci/duckdb-include/
-          find "$DUCKDB_BUILD_DIR" -type f ! -name '*.a' -delete
-
-      - name: Build components (core + standalone CLI + loader stub)
-        run: make all
-
-      - name: Smoke test (:memory:)
-        run: scripts/smoke-cli.sh
-
-      - name: Smoke test (on-disk persistence)
-        run: ON_DISK_SMOKE=1 scripts/smoke-cli.sh
-
-      - name: TVM host unit test (free-list allocator + handle validation)
-        run: make tvm-test-host
-
-      - name: TVM larger-than-memory spill round-trip
-        run: make tvm-test
+      - name: Build host + every component, then run the full smoke
+        working-directory: ducklink
+        run: |
+          set -euo pipefail
+          export WASI_SDK_PREFIX="$HOME/wasi-sdk"
+          source ../duckdb-wasm/scripts/setup-env.sh
+          cargo build --release -p ducklink-host
+          # --build rebuilds each component + copies its artifact, then smokes.
+          python3 tooling/smoke.py --all --build
+          python3 tooling/verify-catalog.py

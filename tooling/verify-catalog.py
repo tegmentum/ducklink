@@ -5,6 +5,10 @@ are no orphan artifacts. Exit non-zero on any drift.
   python3 tooling/verify-catalog.py
 """
 import json, pathlib, sys
+# --no-artifacts: skip the built-.wasm checks (artifact presence + orphans) so the
+# registry<->source<->workspace<->prefix consistency can be validated WITHOUT the
+# wasm toolchain -- the self-contained subset CI (ci.yml) runs in `act`.
+NO_ARTIFACTS = "--no-artifacts" in sys.argv
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 reg = json.load(open(ROOT / "registry" / "index.json"))
 exts = [e for e in reg["extensions"] if e["name"] != "sample_extension"]
@@ -14,7 +18,7 @@ ws = (ROOT / "Cargo.toml").read_text()
 issues = []
 for e in exts:
     n = e["name"]
-    if not (art_dir / f"{n}.wasm").exists():
+    if not NO_ARTIFACTS and not (art_dir / f"{n}.wasm").exists():
         issues.append(f"{n}: missing artifact artifacts/extensions/{n}.wasm")
     src = ROOT / "extensions" / f"{n}-component"
     if not (src / "src" / "lib.rs").exists():
@@ -33,9 +37,10 @@ for e in exts:
 registered = {e["name"] for e in exts} | {"sample_extension", "sample-extension", "typetest"}
 def is_live_server_backend(name):
     return (ROOT / "extensions" / f"{name}-component" / "smoke.sql.requires-live-server").exists()
-for wasm in sorted(art_dir.glob("*.wasm")):
-    if wasm.stem not in registered and not is_live_server_backend(wasm.stem):
-        issues.append(f"orphan artifact: {wasm.name} (no registry entry)")
+if not NO_ARTIFACTS:
+    for wasm in sorted(art_dir.glob("*.wasm")):
+        if wasm.stem not in registered and not is_live_server_backend(wasm.stem):
+            issues.append(f"orphan artifact: {wasm.name} (no registry entry)")
 
 # PLAN-prefixes (v1.1 cutover, ENFORCED): every registry entry MUST declare
 # prefix + expansion so its functions get a stable qualified `prefix__name` form
