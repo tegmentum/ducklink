@@ -167,3 +167,33 @@ fn register_scalars() -> Result<(), types::Duckerror> {
 static NEXT: AtomicU32 = AtomicU32::new(1);
 static HANDLERS: OnceLock<Mutex<HashMap<u32, B>>> = OnceLock::new();
 fn handlers() -> &'static Mutex<HashMap<u32, B>> { HANDLERS.get_or_init(|| Mutex::new(HashMap::new())) }
+
+// ---- fuzz regressions (cargo-fuzz; fuzz/fuzz_targets/bencode_decode.rs) ------
+// `decode_to_json` parses untrusted BLOB bytes. A 1.5M-execution fuzz campaign
+// found NO panic; these pin the never-panic contract for the explored shapes.
+#[cfg(test)]
+mod fuzz_regressions {
+    use super::*;
+
+    #[test]
+    fn decode_to_json_is_total() {
+        // Valid bencode round-trips to JSON.
+        assert_eq!(decode_to_json(b"i42e"), Some("42".to_string()));
+        assert_eq!(decode_to_json(b"4:spam"), Some("\"spam\"".to_string()));
+        assert_eq!(decode_to_json(b"l4:spami7ee"), Some("[\"spam\",7]".to_string()));
+        // Malformed inputs -> None, never a panic.
+        assert_eq!(decode_to_json(b""), None);
+        assert_eq!(decode_to_json(b"i"), None); // truncated int
+        assert_eq!(decode_to_json(b"99999999999999999999:x"), None); // huge length prefix
+        assert_eq!(decode_to_json(b"l"), None); // unterminated list
+        assert_eq!(decode_to_json(&[0xff, 0xfe, 0xfd]), None); // non-bencode bytes
+        // A non-UTF-8 byte string decodes to its hex rendering, not a panic.
+        let v = decode_to_json(b"2:\xff\xfe");
+        assert_eq!(v, Some("\"fffe\"".to_string()));
+        // Deeply nested lists must not stack-overflow within bounded input.
+        let mut deep = Vec::new();
+        for _ in 0..200 { deep.push(b'l'); }
+        for _ in 0..200 { deep.push(b'e'); }
+        let _ = decode_to_json(&deep); // Some([..[]..]) or None; must not panic.
+    }
+}

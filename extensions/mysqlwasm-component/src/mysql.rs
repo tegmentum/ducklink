@@ -120,15 +120,7 @@ impl MyConn {
     /// sequence id header; does NOT reassemble 16MB-spanning packets, which the
     /// tiny result sets here never produce). Returns (payload, seq).
     fn read_packet(&mut self) -> Result<(Vec<u8>, u8)> {
-        let mut header = [0u8; 4];
-        self.stream.read_exact(&mut header)?;
-        let len = (header[0] as usize) | (header[1] as usize) << 8 | (header[2] as usize) << 16;
-        let seq = header[3];
-        let mut payload = vec![0u8; len];
-        if len > 0 {
-            self.stream.read_exact(&mut payload)?;
-        }
-        Ok((payload, seq))
+        read_packet_from(&mut self.stream)
     }
 
     /// Write one packet payload with the given sequence id.
@@ -264,66 +256,97 @@ impl MyConn {
         self.write_packet(0, &payload)?;
 
         let (first, _seq) = self.read_packet()?;
-        match first.first().copied() {
-            Some(0x00) => {
-                // OK packet: no result set (e.g. a DDL/DML statement).
-                return Ok(ResultSet {
-                    columns: Vec::new(),
-                    rows: Vec::new(),
-                });
-            }
-            Some(0xff) => {
-                return Err(MyError::new(format!(
-                    "query error: {}",
-                    parse_err_packet(&first)
-                )));
-            }
-            _ => {}
-        }
-        // Otherwise `first` is a length-encoded column count.
-        let mut r = Reader::new(&first);
-        let ncols = r
-            .lenenc_int()?
-            .ok_or_else(|| MyError::new("expected column count, got NULL"))?
-            as usize;
-
-        // Column definition packets.
-        let mut columns = Vec::with_capacity(ncols);
-        for _ in 0..ncols {
-            let (pkt, _s) = self.read_packet()?;
-            columns.push(parse_column_def(&pkt)?);
-        }
-
-        // Some servers send an EOF after the column defs (when CLIENT_DEPRECATE_EOF
-        // is off, which it is for us). Consume it if present.
-        let (mut pkt, _s) = self.read_packet()?;
-        if !is_eof(&pkt) {
-            // No EOF; `pkt` is already the first row. Fall through.
-        } else {
-            let (p, _s) = self.read_packet()?;
-            pkt = p;
-        }
-
-        // Rows until EOF / OK.
-        let mut rows = Vec::new();
-        loop {
-            if is_eof(&pkt) {
-                break;
-            }
-            if pkt.first().copied() == Some(0xff) {
-                return Err(MyError::new(format!(
-                    "error mid result set: {}",
-                    parse_err_packet(&pkt)
-                )));
-            }
-            rows.push(parse_text_row(&pkt, ncols)?);
-            let (p, _s) = self.read_packet()?;
-            pkt = p;
-        }
-
-        Ok(ResultSet { columns, rows })
+        parse_result_set(&mut self.stream, &first)
     }
 }
+
+/// Read one logical MySQL packet from any reader. Returns (payload, seq).
+///
+/// This is the pure framing routine, factored out of `MyConn::read_packet` so it
+/// can be driven over an in-memory cursor (fuzzing) as well as a `TcpStream`.
+/// Never panics: a truncated header/payload becomes an `io` error.
+fn read_packet_from<R: Read>(r: &mut R) -> Result<(Vec<u8>, u8)> {
+    let mut header = [0u8; 4];
+    r.read_exact(&mut header)?;
+    let len = (header[0] as usize) | (header[1] as usize) << 8 | (header[2] as usize) << 16;
+    let seq = header[3];
+    let mut payload = vec![0u8; len];
+    if len > 0 {
+        r.read_exact(&mut payload)?;
+    }
+    Ok((payload, seq))
+}
+
+/// Parse a COM_QUERY result set, given the already-read `first` packet (which is
+/// the OK / ERR / column-count packet) and a reader for the remaining packets
+/// (column defs, optional EOF, rows). Factored out of `MyConn::query` so it can
+/// be fuzzed over an in-memory cursor of untrusted server bytes. Never panics.
+pub fn parse_result_set<R: Read>(r: &mut R, first: &[u8]) -> Result<ResultSet> {
+    match first.first().copied() {
+        Some(0x00) => {
+            // OK packet: no result set (e.g. a DDL/DML statement).
+            return Ok(ResultSet {
+                columns: Vec::new(),
+                rows: Vec::new(),
+            });
+        }
+        Some(0xff) => {
+            return Err(MyError::new(format!(
+                "query error: {}",
+                parse_err_packet(first)
+            )));
+        }
+        _ => {}
+    }
+    // Otherwise `first` is a length-encoded column count.
+    let mut rdr = Reader::new(first);
+    let ncols = rdr
+        .lenenc_int()?
+        .ok_or_else(|| MyError::new("expected column count, got NULL"))?
+        as usize;
+
+    // Column definition packets.
+    let mut columns = Vec::with_capacity(ncols.min(MAX_PREALLOC));
+    for _ in 0..ncols {
+        let (pkt, _s) = read_packet_from(r)?;
+        columns.push(parse_column_def(&pkt)?);
+    }
+
+    // Some servers send an EOF after the column defs (when CLIENT_DEPRECATE_EOF
+    // is off, which it is for us). Consume it if present.
+    let (mut pkt, _s) = read_packet_from(r)?;
+    if !is_eof(&pkt) {
+        // No EOF; `pkt` is already the first row. Fall through.
+    } else {
+        let (p, _s) = read_packet_from(r)?;
+        pkt = p;
+    }
+
+    // Rows until EOF / OK.
+    let mut rows = Vec::new();
+    loop {
+        if is_eof(&pkt) {
+            break;
+        }
+        if pkt.first().copied() == Some(0xff) {
+            return Err(MyError::new(format!(
+                "error mid result set: {}",
+                parse_err_packet(&pkt)
+            )));
+        }
+        rows.push(parse_text_row(&pkt, ncols)?);
+        let (p, _s) = read_packet_from(r)?;
+        pkt = p;
+    }
+
+    Ok(ResultSet { columns, rows })
+}
+
+/// Cap on the up-front capacity we reserve from an untrusted count: a malicious
+/// `ncols`/length-encoded value must not let us pre-allocate gigabytes (which
+/// would abort with a capacity-overflow / OOM). The real data is still read in
+/// full via `push`, so correctness is unaffected.
+const MAX_PREALLOC: usize = 4096;
 
 // ---- mysql_native_password ------------------------------------------------
 
@@ -364,10 +387,12 @@ impl<'a> Reader<'a> {
         self.buf.len().saturating_sub(self.pos)
     }
     fn need(&self, n: usize) -> Result<()> {
-        if self.pos + n > self.buf.len() {
-            return Err(MyError::new("truncated packet"));
+        // Use checked addition: a length-encoded `n` can be up to u64::MAX, and
+        // `self.pos + n` would otherwise wrap on overflow and spuriously pass.
+        match self.pos.checked_add(n) {
+            Some(end) if end <= self.buf.len() => Ok(()),
+            _ => Err(MyError::new("truncated packet")),
         }
-        Ok(())
     }
     fn u8(&mut self) -> Result<u8> {
         self.need(1)?;
@@ -458,7 +483,7 @@ fn is_eof(pkt: &[u8]) -> bool {
 }
 
 /// Parse a Column Definition (protocol 41) packet -> (name, type).
-fn parse_column_def(pkt: &[u8]) -> Result<Column> {
+pub fn parse_column_def(pkt: &[u8]) -> Result<Column> {
     let mut r = Reader::new(pkt);
     r.skip_lenenc_str()?; // catalog ("def")
     r.skip_lenenc_str()?; // schema
@@ -481,9 +506,9 @@ fn parse_column_def(pkt: &[u8]) -> Result<Column> {
 }
 
 /// Parse a text-protocol result row: `ncols` length-encoded strings (NULL=0xfb).
-fn parse_text_row(pkt: &[u8], ncols: usize) -> Result<Vec<Option<String>>> {
+pub fn parse_text_row(pkt: &[u8], ncols: usize) -> Result<Vec<Option<String>>> {
     let mut r = Reader::new(pkt);
-    let mut row = Vec::with_capacity(ncols);
+    let mut row = Vec::with_capacity(ncols.min(MAX_PREALLOC));
     for _ in 0..ncols {
         row.push(r.lenenc_str()?);
     }
@@ -491,7 +516,7 @@ fn parse_text_row(pkt: &[u8], ncols: usize) -> Result<Vec<Option<String>>> {
 }
 
 /// Extract the human-readable message from an ERR packet (0xff header).
-fn parse_err_packet(pkt: &[u8]) -> String {
+pub fn parse_err_packet(pkt: &[u8]) -> String {
     // 0xff, error_code(2), [sql_state_marker '#' + sql_state(5)], message...
     if pkt.len() < 3 {
         return "unknown error".to_string();
@@ -503,4 +528,62 @@ fn parse_err_packet(pkt: &[u8]) -> String {
     }
     let msg = String::from_utf8_lossy(&pkt[idx..]).into_owned();
     format!("[{code}] {msg}")
+}
+
+// ---------------------------------------------------------------------------
+// Regression tests for the wire-parser hardening (found by cargo-fuzz against
+// untrusted server bytes; see fuzz/fuzz_targets/mysql_parse.rs). The contract is
+// NEVER PANIC: every malformed input must return an Err, not abort.
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod fuzz_regressions {
+    use super::*;
+    use std::io::Cursor;
+
+    /// Fuzz crash `fe ff ff ff ff ff ff ff ff`: a length-encoded integer with the
+    /// 0xfe (u64) prefix and a length of u64::MAX. Pre-fix, `Reader::need` did
+    /// `self.pos + n` which overflowed (panic "attempt to add with overflow" in
+    /// overflow-checked builds; a wrapped, spuriously-passing bounds check in
+    /// release). The checked_add fix returns a truncation error.
+    #[test]
+    fn lenenc_u64_max_length_does_not_overflow() {
+        let pkt = [0xfeu8, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+        // Reached via a text row (a length-encoded string with a giant length).
+        assert!(parse_text_row(&pkt, 1).is_err());
+        // And directly through the Reader.
+        let mut r = Reader::new(&pkt);
+        assert!(r.lenenc_str().is_err());
+    }
+
+    /// A 0xfd (u24) length larger than the buffer must error, never slice OOB.
+    #[test]
+    fn lenenc_u24_overrun_errors() {
+        let pkt = [0xfdu8, 0xff, 0xff, 0xff]; // length 0xffffff, no payload
+        assert!(parse_text_row(&pkt, 1).is_err());
+    }
+
+    /// A column-count packet claiming a huge number of columns must not
+    /// pre-allocate gigabytes; it errors out when the (absent) column-def
+    /// packets fail to read, with RSS bounded by MAX_PREALLOC.
+    #[test]
+    fn huge_column_count_does_not_ooom() {
+        // first packet = lenenc column count 0xfe + u64::MAX.
+        let first = [0xfeu8, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+        let mut empty = Cursor::new(&b""[..]);
+        assert!(parse_result_set(&mut empty, &first).is_err());
+    }
+
+    /// Truncated / empty packets are graceful (no panic).
+    #[test]
+    fn truncated_packets_are_graceful() {
+        assert!(parse_column_def(&[]).is_err());
+        // ncols=0 over an empty packet yields an empty row (no cells to read).
+        assert_eq!(parse_text_row(&[], 0).unwrap().len(), 0);
+        // ncols>0 over an empty packet errors on the first length-encoded cell.
+        assert!(parse_text_row(&[], 3).is_err());
+        let mut c = Cursor::new(&b"\x00"[..]);
+        // A 1-byte stream can't even form a packet header -> io error.
+        assert!(parse_result_set(&mut c, &[0x01]).is_err());
+        let _ = parse_err_packet(&[0xff, 0x01]); // short ERR packet: returns a string
+    }
 }

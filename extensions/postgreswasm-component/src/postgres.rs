@@ -104,20 +104,7 @@ impl PgConn {
     /// Read one tagged backend message: 1 tag byte + int32 length (BE, includes
     /// the 4 length bytes) + (length-4) payload bytes. Returns (tag, payload).
     fn read_message(&mut self) -> Result<(u8, Vec<u8>)> {
-        let mut tag = [0u8; 1];
-        self.stream.read_exact(&mut tag)?;
-        let mut len_buf = [0u8; 4];
-        self.stream.read_exact(&mut len_buf)?;
-        let len = i32::from_be_bytes(len_buf);
-        if len < 4 {
-            return Err(PgError::new(format!("bad message length {len}")));
-        }
-        let payload_len = (len - 4) as usize;
-        let mut payload = vec![0u8; payload_len];
-        if payload_len > 0 {
-            self.stream.read_exact(&mut payload)?;
-        }
-        Ok((tag[0], payload))
+        read_message_from(&mut self.stream)
     }
 
     /// Write a tagged frontend message: tag + int32 length (BE, includes the 4
@@ -224,42 +211,70 @@ impl PgConn {
         let mut p = Vec::with_capacity(sql.len() + 1);
         push_cstr(&mut p, sql);
         self.write_message(b'Q', &p)?;
+        parse_query_response(&mut self.stream)
+    }
+}
 
-        let mut columns: Vec<Column> = Vec::new();
-        let mut rows: Vec<Vec<Option<String>>> = Vec::new();
-        let mut pending_err: Option<String> = None;
+/// Read one tagged backend message from any reader: 1 tag byte + int32 length
+/// (BE, includes the 4 length bytes) + (length-4) payload bytes. Returns
+/// (tag, payload). Factored out of `PgConn::read_message` so it can be driven
+/// over an in-memory cursor (fuzzing). Never panics; truncation -> io error.
+fn read_message_from<R: Read>(r: &mut R) -> Result<(u8, Vec<u8>)> {
+    let mut tag = [0u8; 1];
+    r.read_exact(&mut tag)?;
+    let mut len_buf = [0u8; 4];
+    r.read_exact(&mut len_buf)?;
+    let len = i32::from_be_bytes(len_buf);
+    if len < 4 {
+        return Err(PgError::new(format!("bad message length {len}")));
+    }
+    let payload_len = (len - 4) as usize;
+    let mut payload = vec![0u8; payload_len];
+    if payload_len > 0 {
+        r.read_exact(&mut payload)?;
+    }
+    Ok((tag[0], payload))
+}
 
-        loop {
-            let (tag, payload) = self.read_message()?;
-            match tag {
-                b'T' => {
-                    // RowDescription.
-                    columns = parse_row_description(&payload)?;
-                }
-                b'D' => {
-                    // DataRow.
-                    rows.push(parse_data_row(&payload)?);
-                }
-                b'C' => {
-                    // CommandComplete -- a statement finished; keep reading (a
-                    // multi-statement string could follow), end at 'Z'.
-                }
-                b'E' => {
-                    // ErrorResponse: remember it, but keep reading until 'Z' so
-                    // the connection is left in a clean state.
-                    pending_err = Some(parse_error_response(&payload));
-                }
-                b'Z' => {
-                    // ReadyForQuery -- end of this query cycle.
-                    if let Some(msg) = pending_err {
-                        return Err(PgError::new(msg));
-                    }
-                    return Ok(ResultSet { columns, rows });
-                }
-                b'I' => { /* EmptyQueryResponse */ }
-                b'N' | b'S' => { /* NoticeResponse / ParameterStatus */ }
-                _ => { /* ignore other benign async messages */ }
+/// Drive the simple-query backend message loop over any reader, materializing
+/// the result set. Factored out of `PgConn::query` so the BE framing +
+/// RowDescription/DataRow/ErrorResponse parsing can be fuzzed over an in-memory
+/// cursor of untrusted server bytes. Never panics.
+pub fn parse_query_response<R: Read>(r: &mut R) -> Result<ResultSet> {
+    let mut columns: Vec<Column> = Vec::new();
+    let mut rows: Vec<Vec<Option<String>>> = Vec::new();
+    let mut pending_err: Option<String> = None;
+
+    loop {
+        let (tag, payload) = read_message_from(r)?;
+        match tag {
+            b'T' => {
+                // RowDescription.
+                columns = parse_row_description(&payload)?;
             }
+            b'D' => {
+                // DataRow.
+                rows.push(parse_data_row(&payload)?);
+            }
+            b'C' => {
+                // CommandComplete -- a statement finished; keep reading (a
+                // multi-statement string could follow), end at 'Z'.
+            }
+            b'E' => {
+                // ErrorResponse: remember it, but keep reading until 'Z' so
+                // the connection is left in a clean state.
+                pending_err = Some(parse_error_response(&payload));
+            }
+            b'Z' => {
+                // ReadyForQuery -- end of this query cycle.
+                if let Some(msg) = pending_err {
+                    return Err(PgError::new(msg));
+                }
+                return Ok(ResultSet { columns, rows });
+            }
+            b'I' => { /* EmptyQueryResponse */ }
+            b'N' | b'S' => { /* NoticeResponse / ParameterStatus */ }
+            _ => { /* ignore other benign async messages */ }
         }
     }
 }
@@ -311,10 +326,12 @@ impl<'a> Reader<'a> {
         Reader { buf, pos: 0 }
     }
     fn need(&self, n: usize) -> Result<()> {
-        if self.pos + n > self.buf.len() {
-            return Err(PgError::new("truncated message"));
+        // Checked add: `n` derived from an i32 length can be ~2 GiB, and on a
+        // 32-bit target `self.pos + n` could wrap and spuriously pass.
+        match self.pos.checked_add(n) {
+            Some(end) if end <= self.buf.len() => Ok(()),
+            _ => Err(PgError::new("truncated message")),
         }
-        Ok(())
     }
     fn i16(&mut self) -> Result<i16> {
         self.need(2)?;
@@ -352,7 +369,7 @@ impl<'a> Reader<'a> {
 ///   int16 field-count, then per field:
 ///     name\0, table-oid int32, col-attnum int16, type-oid int32,
 ///     type-size int16, type-mod int32, format int16
-fn parse_row_description(payload: &[u8]) -> Result<Vec<Column>> {
+pub fn parse_row_description(payload: &[u8]) -> Result<Vec<Column>> {
     let mut r = Reader::new(payload);
     let n = r.i16()?;
     if n < 0 {
@@ -378,7 +395,7 @@ fn parse_row_description(payload: &[u8]) -> Result<Vec<Column>> {
 /// Parse a DataRow ('D') message:
 ///   int16 col-count, then per col: int32 byte-length (-1 = NULL) + that many
 ///   bytes (the value in TEXT format).
-fn parse_data_row(payload: &[u8]) -> Result<Vec<Option<String>>> {
+pub fn parse_data_row(payload: &[u8]) -> Result<Vec<Option<String>>> {
     let mut r = Reader::new(payload);
     let n = r.i16()?;
     if n < 0 {
@@ -400,7 +417,7 @@ fn parse_data_row(payload: &[u8]) -> Result<Vec<Option<String>>> {
 /// Extract a human-readable message from an ErrorResponse ('E') message.
 /// The payload is a sequence of (field-type byte, value\0) pairs terminated by
 /// a single 0 byte. Field 'M' is the primary message; 'C' is the SQLSTATE.
-fn parse_error_response(payload: &[u8]) -> String {
+pub fn parse_error_response(payload: &[u8]) -> String {
     let mut r = Reader::new(payload);
     let mut message = String::new();
     let mut code = String::new();
@@ -534,5 +551,47 @@ mod tests {
         p.push(0);
         let msg = parse_error_response(&p);
         assert_eq!(msg, "[42P01] relation does not exist");
+    }
+
+    // ---- fuzz regressions (cargo-fuzz; fuzz/fuzz_targets/postgres_parse.rs) --
+
+    /// A DataRow claiming a column byte-length near i32::MAX must not let
+    /// `Reader::need` overflow `pos + n` (a panic in overflow-checked builds, a
+    /// wrapping OOB-pass in release). The checked_add fix returns a truncation
+    /// error. (On 32-bit wasm, `len as usize` is ~2 GiB and `pos + n` wraps.)
+    #[test]
+    fn data_row_huge_length_does_not_overflow() {
+        use std::io::Cursor;
+        let mut p = Vec::new();
+        p.extend_from_slice(&1i16.to_be_bytes()); // 1 column
+        p.extend_from_slice(&i32::MAX.to_be_bytes()); // claimed length ~2 GiB
+        // no payload follows -> must error, never panic / never allocate 2 GiB.
+        assert!(parse_data_row(&p).is_err());
+
+        // Same payload driven through the full BE message loop as a 'D' message.
+        let mut msg = Vec::new();
+        msg.push(b'D');
+        let total = (p.len() + 4) as i32;
+        msg.extend_from_slice(&total.to_be_bytes());
+        msg.extend_from_slice(&p);
+        let mut cur = Cursor::new(&msg[..]);
+        assert!(parse_query_response(&mut cur).is_err());
+    }
+
+    /// Truncated / negative-length frames are graceful (no panic).
+    #[test]
+    fn truncated_and_negative_frames_are_graceful() {
+        use std::io::Cursor;
+        // message length < 4 is rejected, not used to size a vec.
+        let mut bad = Vec::new();
+        bad.push(b'T');
+        bad.extend_from_slice(&1i32.to_be_bytes()); // claims length 1 (< 4)
+        let mut c = Cursor::new(&bad[..]);
+        assert!(parse_query_response(&mut c).is_err());
+
+        // Empty payloads to every parser: error, never panic.
+        assert!(parse_row_description(&[]).is_err());
+        assert!(parse_data_row(&[]).is_err());
+        let _ = parse_error_response(&[]); // returns "unknown error"
     }
 }

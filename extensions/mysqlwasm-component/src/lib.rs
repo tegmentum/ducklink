@@ -454,11 +454,21 @@ fn literal(v: &types::Duckvalue) -> std::string::String {
     match v {
         types::Duckvalue::Null => "NULL".to_string(),
         types::Duckvalue::Boolean(b) => if *b { "1" } else { "0" }.to_string(),
+        types::Duckvalue::Int8(i) => i.to_string(),
+        types::Duckvalue::Int16(i) => i.to_string(),
+        types::Duckvalue::Int32(i) => i.to_string(),
         types::Duckvalue::Int64(i) => i.to_string(),
+        types::Duckvalue::Uint8(u) => u.to_string(),
+        types::Duckvalue::Uint16(u) => u.to_string(),
+        types::Duckvalue::Uint32(u) => u.to_string(),
         types::Duckvalue::Uint64(u) => u.to_string(),
+        types::Duckvalue::Float32(f) => f.to_string(),
         types::Duckvalue::Float64(f) => f.to_string(),
         types::Duckvalue::Text(s) => quote_str(s),
         types::Duckvalue::Blob(b) => quote_str(&String::from_utf8_lossy(b)),
+        // Temporal / exotic types have no inline-literal form here; render their
+        // debug text quoted so a filter bind never panics on an unhandled arm.
+        other => quote_str(&std::format!("{other:?}")),
     }
 }
 

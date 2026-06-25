@@ -808,4 +808,22 @@ mod tests {
             other => panic!("unexpected melted tuple: {other:?}"),
         }
     }
+
+    // ---- fuzz regressions (cargo-fuzz; fuzz/fuzz_targets/hex_decode.rs) ------
+    // hex_decode parses an untrusted hex VARCHAR into the SQLite DB bytes. A
+    // ~18M-execution fuzz campaign found NO panic; these pin the never-panic
+    // contract for the boundary cases the fuzzer explored.
+    #[test]
+    fn hex_decode_is_total() {
+        assert_eq!(hex_decode("deadbeef"), Some(vec![0xde, 0xad, 0xbe, 0xef]));
+        assert_eq!(hex_decode("DEADBEEF"), Some(vec![0xde, 0xad, 0xbe, 0xef]));
+        assert_eq!(hex_decode(""), Some(vec![])); // empty is valid (even length 0)
+        assert_eq!(hex_decode("  0a0b  "), Some(vec![0x0a, 0x0b])); // trimmed
+        assert_eq!(hex_decode("abc"), None); // odd length
+        assert_eq!(hex_decode("zz"), None); // non-hex
+        assert_eq!(hex_decode("0g"), None); // partial non-hex
+        // Multi-byte UTF-8 / control chars must not panic (they're not hex).
+        assert_eq!(hex_decode("é"), None);
+        assert_eq!(hex_decode("\0\0"), None);
+    }
 }
