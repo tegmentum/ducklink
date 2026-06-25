@@ -8,6 +8,7 @@ use duckdb:extension/catalog;
 use duckdb:extension/files;
 use duckdb:extension/storage;
 use duckdb:extension/storage-dispatch;
+use duckdb:extension/collation;
 use duckdb:extension/files-reg;
 use duckdb:extension/file-dispatch;
 use duckdb:extension/guest;
@@ -23,6 +24,7 @@ world duckdb-extension {
   import duckdb:extension/catalog;
   import duckdb:extension/files;
   import duckdb:extension/storage;
+  import duckdb:extension/collation;
   import duckdb:extension/files-reg;
   export duckdb:extension/guest;
   export callback-dispatch;
@@ -38,6 +40,7 @@ world duckdb-extension-storage {
   import duckdb:extension/catalog;
   import duckdb:extension/files;
   import duckdb:extension/storage;
+  import duckdb:extension/collation;
   export duckdb:extension/guest;
   export callback-dispatch;
   export storage-dispatch;
@@ -53,6 +56,7 @@ world duckdb-extension-files {
   import duckdb:extension/catalog;
   import duckdb:extension/files;
   import duckdb:extension/storage;
+  import duckdb:extension/collation;
   import duckdb:extension/files-reg;
   export duckdb:extension/guest;
   export callback-dispatch;

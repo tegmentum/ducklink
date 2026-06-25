@@ -47,8 +47,8 @@ fn casefold(text: &str) -> std::string::String {
     caseless::default_case_fold_str(text)
 }
 // ---- WIT glue ----
-wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension" });
-use duckdb::extension::{runtime, types};
+wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension-collation" });
+use duckdb::extension::{collation, runtime, types};
 use exports::duckdb::extension::{callback_dispatch, guest};
 struct Extension;
 impl guest::Guest for Extension {
@@ -92,6 +92,17 @@ impl callback_dispatch::Guest for Extension {
                 Some(t) => types::Duckvalue::Text(casefold(&t).into()),
                 None => types::Duckvalue::Null,
             },
+            // Single-argument, locale-bound sort-key scalars. Each is the
+            // transform of one collation (icu_en/icu_sv/icu_de). A collation
+            // transform is (text) -> sort-key for ONE locale, so the locale is
+            // baked into the variant rather than passed as an argument.
+            F::SortKeyLocale(loc) => match text_arg(&args, 0) {
+                Some(t) => match sort_key_hex(&t, loc) {
+                    Some(s) => types::Duckvalue::Text(s.into()),
+                    None => types::Duckvalue::Null,
+                },
+                None => types::Duckvalue::Null,
+            },
         })
     }
     fn call_table(_h: u32, _a: Vec<types::Duckvalue>) -> Result<types::Resultset, types::Duckerror> { Err(types::Duckerror::Unsupported("icufns: no table fns".into())) }
@@ -124,9 +135,31 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     reg.register("icu_casefold", &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
         types::Logicaltype::Text, runtime::ScalarCallback::new(h),
         Some(&runtime::Funcopts { description: Some("full Unicode case folding".into()), tags: vec!["text".into()], attributes: det }))?;
+    // Per-locale single-arg sort-key scalars + their collations. For each locale
+    // we register icu_sortkey_<loc>(text) -> sort-key text, then declare a
+    // collation icu_<loc> whose transform IS that scalar. `ORDER BY x COLLATE
+    // icu_sv` then sorts in Swedish locale order ('z' before 'ä').
+    for &loc in COLLATION_LOCALES {
+        let scalar_name = format!("icu_sortkey_{loc}");
+        let h = NEXT.fetch_add(1, AtOrdering::Relaxed);
+        handlers().lock().unwrap().insert(h, F::SortKeyLocale(loc));
+        reg.register(&scalar_name,
+            &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
+            types::Logicaltype::Text, runtime::ScalarCallback::new(h),
+            Some(&runtime::Funcopts {
+                description: Some(format!("locale-bound ({loc}) UCA sort key; transform for COLLATE icu_{loc}")),
+                tags: vec!["text".into()], attributes: det }))?;
+        // Declare the collation reusing the scalar just registered. Non-combinable
+        // (a locale collation replaces, not stacks with, another locale's).
+        collation::register_collation(&format!("icu_{loc}"), &scalar_name, false)?;
+    }
     Ok(())
 }
-#[derive(Clone, Copy, PartialEq)] enum F { SortKey, Compare, CaseFold }
+#[derive(Clone, Copy, PartialEq)] enum F { SortKey, Compare, CaseFold, SortKeyLocale(&'static str) }
+// The locales we expose as first-class collations. Each gets a single-arg
+// sort-key scalar (icu_sortkey_<loc>) plus a collation (icu_<loc>) whose
+// transform is that scalar.
+const COLLATION_LOCALES: &[&str] = &["en", "sv", "de"];
 static NEXT: AtomicU32 = AtomicU32::new(1);
 static HANDLERS: OnceLock<Mutex<HashMap<u32, F>>> = OnceLock::new();
 fn handlers() -> &'static Mutex<HashMap<u32, F>> { HANDLERS.get_or_init(|| Mutex::new(HashMap::new())) }

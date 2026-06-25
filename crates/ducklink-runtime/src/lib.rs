@@ -277,6 +277,19 @@ pub mod reg {
         pub callback_handle: u32,
     }
 
+    /// A collation registered by an extension (Item 2). Declares a collation
+    /// `name` whose transform is the already-registered scalar `transform_scalar`
+    /// (text -> sort-key text). The collation reuses the existing scalar dispatch
+    /// entirely, so no callback handle is needed: the core looks the scalar up by
+    /// name in the catalog when it registers the collation.
+    #[derive(Clone, Debug)]
+    pub struct CollationReg {
+        pub extension: String,
+        pub name: String,
+        pub transform_scalar: String,
+        pub combinable: bool,
+    }
+
     /// An aggregate function registered by an extension.
     #[derive(Clone, Debug)]
     pub struct AggregateReg {

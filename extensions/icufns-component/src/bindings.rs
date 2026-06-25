@@ -6945,6 +6945,205 @@ pub mod duckdb {
                 }
             }
         }
+        /// Collation registration surface. A component that already registered a
+        /// sort-key SCALAR (text -> sort-key text) via `register-scalar` can declare a
+        /// COLLATION whose transform is that scalar, so `ORDER BY x COLLATE <name>`
+        /// resolves to it. No new dispatch is needed: the collation reuses the
+        /// already-registered scalar entirely.
+        ///
+        /// Kept as a SEPARATE interface (additive, like `storage` / `files-reg`) so
+        /// existing components' frozen WIT copies stay structurally unchanged. Only
+        /// collation-capable components (e.g. icufns) import it via a separate world.
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod collation {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            pub type Duckerror = super::super::super::duckdb::extension::types::Duckerror;
+            #[allow(unused_unsafe, clippy::all)]
+            /// Called by the component in load(), AFTER registering the sort-key scalar
+            /// `transform-scalar`. Declares a collation `name` whose transform is that
+            /// already-registered single-argument scalar (text -> sort-key text). The core
+            /// looks the scalar up in the catalog by name and wraps it in a DuckDB
+            /// CreateCollationInfo. `combinable` controls whether the collation can be
+            /// combined with other collations (e.g. `COLLATE nocase.icu_sv`).
+            pub fn register_collation(
+                name: &str,
+                transform_scalar: &str,
+                combinable: bool,
+            ) -> Result<(), Duckerror> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 4 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 4
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let vec0 = name;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    let vec1 = transform_scalar;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let ptr2 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "duckdb:extension/collation")]
+                    unsafe extern "C" {
+                        #[link_name = "register-collation"]
+                        fn wit_import3(
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: i32,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import3(
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: i32,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import3(
+                            ptr0.cast_mut(),
+                            len0,
+                            ptr1.cast_mut(),
+                            len1,
+                            match &combinable {
+                                true => 1,
+                                false => 0,
+                            },
+                            ptr2,
+                        )
+                    };
+                    let l4 = i32::from(*ptr2.add(0).cast::<u8>());
+                    let result22 = match l4 {
+                        0 => {
+                            let e = ();
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l5 = i32::from(
+                                    *ptr2.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                                );
+                                use super::super::super::duckdb::extension::types::Duckerror as V21;
+                                let v21 = match l5 {
+                                    0 => {
+                                        let e21 = {
+                                            let l6 = *ptr2
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l7 = *ptr2
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len8 = l7;
+                                            let bytes8 = _rt::Vec::from_raw_parts(
+                                                l6.cast(),
+                                                len8,
+                                                len8,
+                                            );
+                                            _rt::string_lift(bytes8)
+                                        };
+                                        V21::Invalidargument(e21)
+                                    }
+                                    1 => {
+                                        let e21 = {
+                                            let l9 = *ptr2
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l10 = *ptr2
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len11 = l10;
+                                            let bytes11 = _rt::Vec::from_raw_parts(
+                                                l9.cast(),
+                                                len11,
+                                                len11,
+                                            );
+                                            _rt::string_lift(bytes11)
+                                        };
+                                        V21::Unsupported(e21)
+                                    }
+                                    2 => {
+                                        let e21 = {
+                                            let l12 = *ptr2
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l13 = *ptr2
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len14 = l13;
+                                            let bytes14 = _rt::Vec::from_raw_parts(
+                                                l12.cast(),
+                                                len14,
+                                                len14,
+                                            );
+                                            _rt::string_lift(bytes14)
+                                        };
+                                        V21::Invalidstate(e21)
+                                    }
+                                    3 => {
+                                        let e21 = {
+                                            let l15 = *ptr2
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l16 = *ptr2
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len17 = l16;
+                                            let bytes17 = _rt::Vec::from_raw_parts(
+                                                l15.cast(),
+                                                len17,
+                                                len17,
+                                            );
+                                            _rt::string_lift(bytes17)
+                                        };
+                                        V21::Io(e21)
+                                    }
+                                    n => {
+                                        debug_assert_eq!(n, 4, "invalid enum discriminant");
+                                        let e21 = {
+                                            let l18 = *ptr2
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l19 = *ptr2
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len20 = l19;
+                                            let bytes20 = _rt::Vec::from_raw_parts(
+                                                l18.cast(),
+                                                len20,
+                                                len20,
+                                            );
+                                            _rt::string_lift(bytes20)
+                                        };
+                                        V21::Internal(e21)
+                                    }
+                                };
+                                v21
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result22
+                }
+            }
+        }
     }
 }
 #[rustfmt::skip]
@@ -10722,7 +10921,7 @@ mod _rt {
 /// ```
 #[allow(unused_macros)]
 #[doc(hidden)]
-macro_rules! __export_duckdb_extension_impl {
+macro_rules! __export_duckdb_extension_collation_impl {
     ($ty:ident) => {
         self::export!($ty with_types_in self);
     };
@@ -10737,15 +10936,15 @@ macro_rules! __export_duckdb_extension_impl {
     };
 }
 #[doc(inline)]
-pub(crate) use __export_duckdb_extension_impl as export;
+pub(crate) use __export_duckdb_extension_collation_impl as export;
 #[cfg(target_arch = "wasm32")]
 #[unsafe(
-    link_section = "component-type:wit-bindgen:0.41.0:duckdb:extension:duckdb-extension:encoded world"
+    link_section = "component-type:wit-bindgen:0.41.0:duckdb:extension:duckdb-extension-collation:encoded world"
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 4944] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xc9%\x01A\x02\x01A\x20\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 5087] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xce&\x01A\x02\x01A\"\
 \x01B&\x01m\x11\x07boolean\x05int64\x06uint64\x07float64\x04text\x04blob\x05int3\
 2\x09timestamp\x04int8\x05int16\x05uint8\x06uint16\x06uint32\x07float32\x04date\x04\
 time\x0btimestamptz\x04\0\x0blogicaltype\x03\0\0\x01ks\x01r\x02\x04name\x02\x07l\
@@ -10839,23 +11038,26 @@ mode\x09\x04\0\x10replacement-scan\x03\0\x0b\x01r\x02\x09extensions\x08function\
 \x04\0\x0ccopy-handler\x03\0\x0d\x01j\x01\x05\x01s\x01@\x01\x04scan\x0c\0\x0f\x04\
 \0\x19register-replacement-scan\x01\x10\x01j\x01\x07\x01s\x01@\x01\x07handler\x0e\
 \0\x11\x04\0\x15register-copy-handler\x01\x12\x03\0\x16duckdb:extension/files\x05\
-\x14\x02\x03\0\0\x0aloadresult\x01B\x0d\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\
-\0\0\x02\x03\x02\x01\x15\x04\0\x0aloadresult\x03\0\x02\x01j\x01\x03\x01\x01\x01@\
-\0\0\x04\x04\0\x04load\x01\x05\x01ps\x01j\x01\x7f\x01\x01\x01@\x01\x04keys\x06\0\
-\x07\x04\0\x0breconfigure\x01\x08\x01@\0\0\x07\x04\0\x08shutdown\x01\x09\x04\0\x16\
-duckdb:extension/guest\x05\x16\x01B\x1c\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\
-\0\0\x02\x03\x02\x01\x03\x04\0\x09duckvalue\x03\0\x02\x02\x03\x02\x01\x07\x04\0\x0a\
-invokeinfo\x03\0\x04\x02\x03\x02\x01\x09\x04\0\x09resultset\x03\0\x06\x02\x03\x02\
-\x01\x0a\x04\0\x08rowbatch\x03\0\x08\x01p\x03\x01j\x01\x03\x01\x01\x01@\x03\x06h\
-andley\x04args\x0a\x03ctx\x05\0\x0b\x04\0\x0bcall-scalar\x01\x0c\x01j\x01\x0a\x01\
-\x01\x01@\x03\x06handley\x04rows\x09\x03ctx\x05\0\x0d\x04\0\x11call-scalar-batch\
-\x01\x0e\x01j\x01\x07\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x0f\x04\0\x0acal\
-l-table\x01\x10\x01@\x02\x06handley\x04rows\x09\0\x0b\x04\0\x0ecall-aggregate\x01\
-\x11\x01k\x03\x01j\x01\x12\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x13\x04\0\x0b\
-call-pragma\x01\x14\x01@\x02\x06handley\x05value\x03\0\x0b\x04\0\x09call-cast\x01\
-\x15\x04\0\"duckdb:extension/callback-dispatch\x05\x17\x04\0!duckdb:extension/du\
-ckdb-extension\x04\0\x0b\x16\x01\0\x10duckdb-extension\x03\0\0\0G\x09producers\x01\
-\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
+\x14\x01B\x05\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\0\0\x01j\0\x01\x01\x01@\
+\x03\x04names\x10transform-scalars\x0acombinable\x7f\0\x02\x04\0\x12register-col\
+lation\x01\x03\x03\0\x1aduckdb:extension/collation\x05\x15\x02\x03\0\0\x0aloadre\
+sult\x01B\x0d\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\0\0\x02\x03\x02\x01\x16\
+\x04\0\x0aloadresult\x03\0\x02\x01j\x01\x03\x01\x01\x01@\0\0\x04\x04\0\x04load\x01\
+\x05\x01ps\x01j\x01\x7f\x01\x01\x01@\x01\x04keys\x06\0\x07\x04\0\x0breconfigure\x01\
+\x08\x01@\0\0\x07\x04\0\x08shutdown\x01\x09\x04\0\x16duckdb:extension/guest\x05\x17\
+\x01B\x1c\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\0\0\x02\x03\x02\x01\x03\x04\
+\0\x09duckvalue\x03\0\x02\x02\x03\x02\x01\x07\x04\0\x0ainvokeinfo\x03\0\x04\x02\x03\
+\x02\x01\x09\x04\0\x09resultset\x03\0\x06\x02\x03\x02\x01\x0a\x04\0\x08rowbatch\x03\
+\0\x08\x01p\x03\x01j\x01\x03\x01\x01\x01@\x03\x06handley\x04args\x0a\x03ctx\x05\0\
+\x0b\x04\0\x0bcall-scalar\x01\x0c\x01j\x01\x0a\x01\x01\x01@\x03\x06handley\x04ro\
+ws\x09\x03ctx\x05\0\x0d\x04\0\x11call-scalar-batch\x01\x0e\x01j\x01\x07\x01\x01\x01\
+@\x02\x06handley\x04args\x0a\0\x0f\x04\0\x0acall-table\x01\x10\x01@\x02\x06handl\
+ey\x04rows\x09\0\x0b\x04\0\x0ecall-aggregate\x01\x11\x01k\x03\x01j\x01\x12\x01\x01\
+\x01@\x02\x06handley\x04args\x0a\0\x13\x04\0\x0bcall-pragma\x01\x14\x01@\x02\x06\
+handley\x05value\x03\0\x0b\x04\0\x09call-cast\x01\x15\x04\0\"duckdb:extension/ca\
+llback-dispatch\x05\x18\x04\0+duckdb:extension/duckdb-extension-collation\x04\0\x0b\
+\x20\x01\0\x1aduckdb-extension-collation\x03\0\0\0G\x09producers\x01\x0cprocesse\
+d-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

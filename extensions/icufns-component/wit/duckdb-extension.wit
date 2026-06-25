@@ -6,6 +6,7 @@ use config;
 use logging;
 use catalog;
 use files;
+use collation;
 use guest;
 
 world duckdb-extension {
@@ -14,6 +15,22 @@ world duckdb-extension {
   import logging;
   import catalog;
   import files;
+  export guest;
+  export callback-dispatch;
+}
+
+// Collation-capable world: a superset that additionally imports the collation
+// registration surface. icufns targets this so it can declare locale-bound
+// collations (icu_sv, icu_de, ...) reusing its single-arg sort-key scalars. The
+// host provides `collation` to every extension world, so this is purely
+// additive -- no other component needs rebuilding.
+world duckdb-extension-collation {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import collation;
   export guest;
   export callback-dispatch;
 }

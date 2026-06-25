@@ -20,8 +20,8 @@ use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 use crate::duckdb_extension_bindings::duckdb::extension::{
     catalog as extension_catalog, config as extension_config, files as extension_files,
-    files_reg as extension_files_reg, logging as extension_logging, runtime as extension_runtime,
-    storage as extension_storage, types as extension_types,
+    collation as extension_collation, files_reg as extension_files_reg, logging as extension_logging,
+    runtime as extension_runtime, storage as extension_storage, types as extension_types,
 };
 use crate::duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
 use crate::reg;
@@ -112,6 +112,7 @@ type PendingLogicalType = reg::LogicalTypeReg;
 type PendingCast = reg::CastReg;
 type PendingStorage = reg::StorageReg;
 type PendingFiles = reg::FilesReg;
+type PendingCollation = reg::CollationReg;
 
 #[derive(Default)]
 struct PendingScalarRegistry {
@@ -200,6 +201,7 @@ pub struct ExtensionStoreState {
     pending_casts: Vec<PendingCast>,
     pending_storages: Vec<PendingStorage>,
     pending_files: Vec<PendingFiles>,
+    pending_collations: Vec<PendingCollation>,
     /// Maps the handle returned from `table-registry.register` to the table
     /// function name, so `files.register-replacement-scan` can resolve it.
     table_handle_names: HashMap<u32, String>,
@@ -231,6 +233,7 @@ impl ExtensionStoreState {
             pending_casts: Vec::new(),
             pending_storages: Vec::new(),
             pending_files: Vec::new(),
+            pending_collations: Vec::new(),
             table_handle_names: HashMap::new(),
             callback_registry,
             extension_name,
@@ -272,6 +275,14 @@ impl ExtensionStoreState {
     /// reads before any query runs.
     fn take_pending_files(&mut self) -> Vec<PendingFiles> {
         std::mem::take(&mut self.pending_files)
+    }
+
+    /// Drains ONLY the captured collation registrations (Item 2), used right
+    /// after `load()` so the host can surface them to the core (which pulls the
+    /// list via `collation-host.collation-list` and wraps each as a DuckDB
+    /// collation reusing the already-registered sort-key scalar).
+    fn take_pending_collations(&mut self) -> Vec<PendingCollation> {
+        std::mem::take(&mut self.pending_collations)
     }
 
     fn drain_pending(&mut self) -> PendingRegistrationsData {
@@ -1007,6 +1018,33 @@ impl extension_files_reg::Host for ExtensionStoreState {
     }
 }
 
+// Item 2: the `collation` interface lets a component declare a collation in
+// `load()` whose transform is an already-registered sort-key scalar. The host
+// satisfies the import so collation-capable components (e.g. icufns) instantiate
+// and load; the registration is captured into the neutral pending buffer. The
+// core later pulls the list (via `collation-host.collation-list`) and wraps each
+// as a DuckDB collation reusing the named scalar -- no new dispatch.
+impl extension_collation::Host for ExtensionStoreState {
+    fn register_collation(
+        &mut self,
+        name: String,
+        transform_scalar: String,
+        combinable: bool,
+    ) -> Result<(), extension_types::Duckerror> {
+        eprintln!(
+            "[extension-runtime:{}] registered collation '{name}' (transform scalar='{transform_scalar}', combinable={combinable})",
+            self.extension_name
+        );
+        self.pending_collations.push(PendingCollation {
+            extension: self.extension_name.clone(),
+            name,
+            transform_scalar,
+            combinable,
+        });
+        Ok(())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Capture conversions (extension WIT -> neutral reg::*) + logging helpers
 // ---------------------------------------------------------------------------
@@ -1431,6 +1469,14 @@ impl ExtensionInstance {
         unsafe { (*data).take_pending_files() }
     }
 
+    /// Item 2: drains the captured collation registrations (see
+    /// `ExtensionStoreState::take_pending_collations`).
+    pub fn take_pending_collations(&mut self) -> Vec<crate::reg::CollationReg> {
+        let mut ctx = self.store.as_context_mut();
+        let data: *mut ExtensionStoreState = ctx.data_mut();
+        unsafe { (*data).take_pending_collations() }
+    }
+
     // --- M2a: storage-dispatch (foreign-catalog) re-entry ---
     // Mirrors the callback-dispatch `dispatch_*` methods but drives the
     // component's exported `storage-dispatch` interface. The native host stages
@@ -1644,6 +1690,7 @@ pub fn add_extension_interfaces_to_linker(
     extension_catalog::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_files::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_storage::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    extension_collation::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_files_reg::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     Ok(())
 }

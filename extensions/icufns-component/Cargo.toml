@@ -27,7 +27,7 @@ package = "duckdb:extension"
 
 [package.metadata.component.target]
 path = "./wit"
-world = "duckdb:extension/duckdb-extension"
+world = "duckdb:extension/duckdb-extension-collation"
 
 [profile.release]
 opt-level = "s"

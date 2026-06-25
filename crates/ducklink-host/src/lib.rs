@@ -54,6 +54,7 @@ use duckdb_core_bindings::duckdb::component::extension_loader_hooks as core_exte
 use duckdb_core_bindings::duckdb::component::host_extension_loader as core_host_loader;
 use duckdb_core_bindings::duckdb::extension::callback_dispatch as core_callback_dispatch;
 use duckdb_core_bindings::duckdb::extension::storage_host as core_storage_host;
+use duckdb_core_bindings::duckdb::extension::collation_host as core_collation_host;
 use duckdb_core_bindings::duckdb::extension::files_host as core_files_host;
 use duckdb_core_bindings::duckdb::extension::types as core_types;
 use duckdb_core_bindings::tvm::memory::bytes as core_tvm_bytes;
@@ -405,6 +406,30 @@ impl core_storage_host::Host for CoreStoreState {
         manager
             .dispatch_storage_scan_close(scan)
             .map_err(convert_extension_duckerror_to_core)
+    }
+}
+
+// Item 2: the core imports `duckdb:extension/collation-host` to pull the
+// collations components have declared. The host PROVIDES it, returning each
+// collation's name + transform scalar + combinable flag. The core wraps each as
+// a DuckDB collation (CreateCollationInfo) reusing the named, already-registered
+// sort-key scalar -- no per-row dispatch (the scalar's own callback path drives
+// the transform).
+impl core_collation_host::Host for CoreStoreState {
+    fn collation_list(&mut self) -> Vec<core_collation_host::CollationSpec> {
+        let manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .registered_collations()
+            .into_iter()
+            .map(|(name, transform_scalar, combinable)| core_collation_host::CollationSpec {
+                name,
+                transform_scalar,
+                combinable,
+            })
+            .collect()
     }
 }
 
@@ -1021,6 +1046,11 @@ struct ExtensionManager {
     // http(s):// reads), as (extension name, callback-handle). Captured from a
     // component's `files-reg.register-files` at load.
     files_backend: Option<(String, u32)>,
+    // Item 2: collations components have declared via `collation.register-collation`.
+    // The core pulls this list (through the `collation-host.collation-list`
+    // import) and wraps each as a DuckDB collation reusing the named sort-key
+    // scalar. Keyed by collation name -> (transform scalar, combinable).
+    collations: HashMap<String, (String, bool)>,
 }
 
 impl ExtensionManager {
@@ -1032,7 +1062,18 @@ impl ExtensionManager {
             callback_registry: Arc::new(Mutex::new(CallbackRegistry::new())),
             storage_backends: HashMap::new(),
             files_backend: None,
+            collations: HashMap::new(),
         }
+    }
+
+    /// Item 2: the collations components have declared (via `register-collation`),
+    /// as (name, transform-scalar, combinable). The core pulls this through the
+    /// `collation-host.collation-list` import and wraps each as a DuckDB collation.
+    fn registered_collations(&self) -> Vec<(String, String, bool)> {
+        self.collations
+            .iter()
+            .map(|(name, (scalar, combinable))| (name.clone(), scalar.clone(), *combinable))
+            .collect()
     }
 
     /// The ATTACH `TYPE` names of every storage backend a component has
@@ -1535,6 +1576,19 @@ impl ExtensionManager {
                     files.extension, files.callback_handle
                 );
                 self.files_backend = Some((files.extension.clone(), files.callback_handle));
+            }
+            // Item 2: capture this extension's collations NOW (right after load),
+            // so the core can register them (via collation-host.collation-list)
+            // before the first query that uses `COLLATE <name>`.
+            for collation in instance.take_pending_collations() {
+                eprintln!(
+                    "[extension-manager] collation '{}' -> extension '{}' (transform scalar='{}', combinable={})",
+                    collation.name, collation.extension, collation.transform_scalar, collation.combinable
+                );
+                self.collations.insert(
+                    collation.name.clone(),
+                    (collation.transform_scalar.clone(), collation.combinable),
+                );
             }
         }
         eprintln!(
@@ -2945,6 +2999,10 @@ fn instantiate_core(
         |state| state,
     )?;
     core_storage_host::add_to_linker::<CoreStoreState, CoreStoreState>(
+        &mut linker,
+        |state| state,
+    )?;
+    core_collation_host::add_to_linker::<CoreStoreState, CoreStoreState>(
         &mut linker,
         |state| state,
     )?;
