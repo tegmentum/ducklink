@@ -587,6 +587,648 @@ pub fn adjust_p(p: &[f64], method: &str) -> Option<Vec<f64>> {
     Some(out)
 }
 
+// ============================================================================
+// PRIORITY 1 -- the "hard" normality / GOF / correlation tests with real
+// algorithms and correct p-values, matched to scipy reference values.
+// ============================================================================
+
+/// Inverse standard-normal CDF (Acklam's rational approximation, ~1e-9).
+fn norm_ppf(p: f64) -> f64 {
+    if p <= 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    if p >= 1.0 {
+        return f64::INFINITY;
+    }
+    // Coefficients for Acklam's algorithm.
+    const A: [f64; 6] = [
+        -3.969683028665376e+01,
+        2.209460984245205e+02,
+        -2.759285104469687e+02,
+        1.383577518672690e+02,
+        -3.066479806614716e+01,
+        2.506628277459239e+00,
+    ];
+    const B: [f64; 5] = [
+        -5.447609879822406e+01,
+        1.615858368580409e+02,
+        -1.556989798598866e+02,
+        6.680131188771972e+01,
+        -1.328068155288572e+01,
+    ];
+    const C: [f64; 6] = [
+        -7.784894002430293e-03,
+        -3.223964580411365e-01,
+        -2.400758277161838e+00,
+        -2.549732539343734e+00,
+        4.374664141464968e+00,
+        2.938163982698783e+00,
+    ];
+    const D: [f64; 4] = [
+        7.784695709041462e-03,
+        3.224671290700398e-01,
+        2.445134137142996e+00,
+        3.754408661907416e+00,
+    ];
+    let plow = 0.02425;
+    let phigh = 1.0 - plow;
+    if p < plow {
+        let q = (-2.0 * p.ln()).sqrt();
+        (((((C[0] * q + C[1]) * q + C[2]) * q + C[3]) * q + C[4]) * q + C[5])
+            / ((((D[0] * q + D[1]) * q + D[2]) * q + D[3]) * q + 1.0)
+    } else if p <= phigh {
+        let q = p - 0.5;
+        let r = q * q;
+        (((((A[0] * r + A[1]) * r + A[2]) * r + A[3]) * r + A[4]) * r + A[5]) * q
+            / (((((B[0] * r + B[1]) * r + B[2]) * r + B[3]) * r + B[4]) * r + 1.0)
+    } else {
+        let q = (-2.0 * (1.0 - p).ln()).sqrt();
+        -(((((C[0] * q + C[1]) * q + C[2]) * q + C[3]) * q + C[4]) * q + C[5])
+            / ((((D[0] * q + D[1]) * q + D[2]) * q + D[3]) * q + 1.0)
+    }
+}
+
+fn norm_cdf(x: f64) -> f64 {
+    Normal::new(0.0, 1.0).unwrap().cdf(x)
+}
+
+/// Shapiro-Wilk normality test via the Royston (1992) AS R94 algorithm.
+/// Returns {W, p_value, n}. Valid for 3 <= n <= 5000.
+pub fn shapiro_wilk(x: &[f64]) -> Option<Value> {
+    let n = x.len();
+    if n < 3 || n > 5000 {
+        return None;
+    }
+    let nf = n as f64;
+    let mut xs = x.to_vec();
+    xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+    // m_i = Phi^-1((i - 0.375) / (n + 0.25)), i = 1..n.
+    let mut m = vec![0.0_f64; n];
+    for i in 0..n {
+        m[i] = norm_ppf(((i + 1) as f64 - 0.375) / (nf + 0.25));
+    }
+    let ssm: f64 = m.iter().map(|v| v * v).sum();
+    let rsn = 1.0 / nf.sqrt();
+
+    // Royston's polynomial corrections for the two largest weights.
+    // Ascending-order polynomial: c[0] is the constant term, c[k] multiplies u^k.
+    let poly = |c: &[f64], u: f64| -> f64 {
+        let mut s = c[0];
+        let mut uu = 1.0;
+        for &coef in &c[1..] {
+            uu *= u;
+            s += coef * uu;
+        }
+        s
+    };
+    // Royston AS R94 weight-correction coefficients (ascending in u = 1/sqrt(n)).
+    let c1 = [0.0, 0.221157, -0.147981, -2.071190, 4.434685, -2.706056];
+    let c2 = [0.0, 0.042981, -0.293762, -1.752461, 5.682633, -3.582633];
+    let sqm = ssm.sqrt();
+    let mut a = vec![0.0_f64; n];
+    let an1 = m[n - 1] / sqm + poly(&c1, rsn);
+    let an2 = m[n - 2] / sqm + poly(&c2, rsn);
+
+    // `m` is antisymmetric (m[i] == -m[n-1-i]). Following AS R94: the two
+    // largest weights get the polynomial-corrected an1/an2; the interior
+    // weights are m_i / sqrt(phi) where phi normalizes sum(a_i^2) to 1.
+    // The weights `a` are themselves antisymmetric: a[0]=-an1, a[n-1]=+an1.
+    let (i1, phi);
+    if n > 5 {
+        i1 = 2; // number of corrected weights at each end
+        phi = (ssm - 2.0 * m[n - 1] * m[n - 1] - 2.0 * m[n - 2] * m[n - 2])
+            / (1.0 - 2.0 * an1 * an1 - 2.0 * an2 * an2);
+    } else {
+        i1 = 1;
+        phi = (ssm - 2.0 * m[n - 1] * m[n - 1]) / (1.0 - 2.0 * an1 * an1);
+    }
+    let sqphi = phi.sqrt();
+    for i in i1..(n - i1) {
+        a[i] = m[i] / sqphi;
+    }
+    a[0] = -an1;
+    a[n - 1] = an1;
+    if n > 5 {
+        a[1] = -an2;
+        a[n - 2] = an2;
+    }
+
+    // W = (sum a_i * x_(i))^2 / sum (x_i - xbar)^2.
+    let mean_x = xs.iter().sum::<f64>() / nf;
+    let ssx: f64 = xs.iter().map(|v| (v - mean_x).powi(2)).sum();
+    if ssx <= 0.0 {
+        return None;
+    }
+    let b: f64 = a.iter().zip(&xs).map(|(ai, xi)| ai * xi).sum();
+    let w = (b * b) / ssx;
+    let w = w.min(1.0);
+
+    // Royston's normalizing transformation for the p-value.
+    let p_value = if n == 3 {
+        // exact small-sample (Royston): pi/6 * (asin(sqrt(W)) - asin(sqrt(3/4)))
+        let pw = (std::f64::consts::PI / 6.0)
+            * ((w.sqrt()).asin() - (0.75_f64.sqrt()).asin());
+        (1.0 - pw).clamp(0.0, 1.0)
+    } else if n <= 11 {
+        // small-sample branch: gamma transform of (1-W), then standardize.
+        let g = [-2.273, 0.459];
+        let gamma = g[0] + g[1] * nf;
+        let c3 = [0.5440, -0.39978, 0.025054, -6.714e-4];
+        let c4 = [1.3822, -0.77857, 0.062767, -0.0020322];
+        let mu = poly(&c3, nf);
+        let sigma = poly(&c4, nf).exp();
+        let y = -(gamma - (1.0 - w).ln()).ln();
+        let z = (y - mu) / sigma;
+        (1.0 - norm_cdf(z)).clamp(0.0, 1.0)
+    } else {
+        // large-sample branch: log(1-W) standardized via log(n) polynomials.
+        let c5 = [-1.5861, -0.31082, -0.083751, 0.0038915];
+        let c6 = [-0.4803, -0.082676, 0.0030302];
+        let ln_n = nf.ln();
+        let mu = poly(&c5, ln_n);
+        let sigma = poly(&c6, ln_n).exp();
+        let y = (1.0 - w).ln();
+        let z = (y - mu) / sigma;
+        (1.0 - norm_cdf(z)).clamp(0.0, 1.0)
+    };
+    Some(json!({ "W": w, "p_value": p_value, "n": n }))
+}
+
+/// Anderson-Darling test for normality (mean+var estimated from the sample).
+/// Returns {A_squared, A_star, p_value, n}. p-value via D'Agostino & Stephens.
+pub fn anderson_darling(x: &[f64]) -> Option<Value> {
+    let n = x.len();
+    if n < 8 {
+        return None;
+    }
+    let nf = n as f64;
+    let mut xs = x.to_vec();
+    xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let mean_x = xs.iter().sum::<f64>() / nf;
+    let var = xs.iter().map(|v| (v - mean_x).powi(2)).sum::<f64>() / (nf - 1.0);
+    let sd = var.sqrt();
+    if sd <= 0.0 {
+        return None;
+    }
+    let mut s = 0.0;
+    for i in 0..n {
+        let zi = norm_cdf((xs[i] - mean_x) / sd);
+        let zj = norm_cdf((xs[n - 1 - i] - mean_x) / sd);
+        // guard log domain
+        let zi = zi.clamp(1e-12, 1.0 - 1e-12);
+        let zj = zj.clamp(1e-12, 1.0 - 1e-12);
+        s += (2.0 * (i + 1) as f64 - 1.0) * (zi.ln() + (1.0 - zj).ln());
+    }
+    let a2 = -nf - s / nf;
+    let a_star = a2 * (1.0 + 0.75 / nf + 2.25 / (nf * nf));
+    // D'Agostino & Stephens (1986) piecewise p-value for the case where mu and
+    // sigma are estimated (uses A_star).
+    let p = if a_star < 0.2 {
+        1.0 - (-13.436 + 101.14 * a_star - 223.73 * a_star * a_star).exp()
+    } else if a_star < 0.34 {
+        1.0 - (-8.318 + 42.796 * a_star - 59.938 * a_star * a_star).exp()
+    } else if a_star < 0.6 {
+        (1.2937 - 5.709 * a_star + 0.0186 * a_star * a_star).exp()
+    } else if a_star < 10.0 {
+        (1.0776 - 2.30695 * a_star + 0.43424 * a_star * a_star
+            - 0.082433 * a_star.powi(3)
+            + 0.0085481 * a_star.powi(4)
+            - 0.00034745 * a_star.powi(5))
+        .exp()
+    } else {
+        0.0
+    };
+    Some(json!({
+        "A_squared": a2, "A_star": a_star,
+        "p_value": p.clamp(0.0, 1.0), "n": n
+    }))
+}
+
+/// One-sample Kolmogorov-Smirnov test against a named distribution.
+/// dist: "normal" {mean,std} | "uniform" {min,max} | "exponential" {rate}.
+/// Returns {D, p_value, n}. p-value via the asymptotic Kolmogorov series.
+pub fn ks_test_1samp(sample: &[f64], dist: &str, params: &Value) -> Option<Value> {
+    let n = sample.len();
+    if n < 1 {
+        return None;
+    }
+    let p = |k: &str, d: f64| params.get(k).and_then(|v| v.as_f64()).unwrap_or(d);
+    let cdf: Box<dyn Fn(f64) -> f64> = match dist.to_ascii_lowercase().as_str() {
+        "normal" | "norm" | "gaussian" => {
+            let mean = p("mean", 0.0);
+            let std = p("std", 1.0);
+            if std <= 0.0 {
+                return None;
+            }
+            Box::new(move |v: f64| norm_cdf((v - mean) / std))
+        }
+        "uniform" | "unif" => {
+            let lo = p("min", 0.0);
+            let hi = p("max", 1.0);
+            if hi <= lo {
+                return None;
+            }
+            Box::new(move |v: f64| ((v - lo) / (hi - lo)).clamp(0.0, 1.0))
+        }
+        "exponential" | "expon" | "exp" => {
+            let rate = p("rate", 1.0);
+            if rate <= 0.0 {
+                return None;
+            }
+            Box::new(move |v: f64| if v < 0.0 { 0.0 } else { 1.0 - (-rate * v).exp() })
+        }
+        _ => return None,
+    };
+    let mut xs = sample.to_vec();
+    xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let nf = n as f64;
+    let mut d: f64 = 0.0;
+    for (i, &v) in xs.iter().enumerate() {
+        let f = cdf(v);
+        let d_plus = (i + 1) as f64 / nf - f;
+        let d_minus = f - i as f64 / nf;
+        d = d.max(d_plus).max(d_minus);
+    }
+    let en = nf.sqrt();
+    let p_value = ks_pvalue((en + 0.12 + 0.11 / en) * d);
+    Some(json!({ "D": d, "p_value": p_value, "n": n }))
+}
+
+/// Kendall's tau-b correlation with a normal-approximation (two-sided) p-value.
+/// Returns {tau, p_value, z_statistic, n, concordant, discordant}.
+pub fn kendall_test(x: &[f64], y: &[f64]) -> Option<Value> {
+    if x.len() != y.len() || x.len() < 3 {
+        return None;
+    }
+    let n = x.len();
+    let nf = n as f64;
+    let mut concordant = 0_i64;
+    let mut discordant = 0_i64;
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let a = (x[i] - x[j]).partial_cmp(&0.0).unwrap();
+            let b = (y[i] - y[j]).partial_cmp(&0.0).unwrap();
+            let dx = x[i] != x[j];
+            let dy = y[i] != y[j];
+            if dx && dy {
+                if a == b {
+                    concordant += 1;
+                } else {
+                    discordant += 1;
+                }
+            }
+        }
+    }
+    let n0 = nf * (nf - 1.0) / 2.0;
+    // tie corrections
+    let tie_sum = |v: &[f64]| -> (f64, f64, f64) {
+        let mut s = v.to_vec();
+        s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let (mut t1, mut t2, mut t3) = (0.0, 0.0, 0.0);
+        let mut i = 0;
+        while i < s.len() {
+            let mut j = i;
+            while j + 1 < s.len() && s[j + 1] == s[i] {
+                j += 1;
+            }
+            let t = (j - i + 1) as f64;
+            t1 += t * (t - 1.0) / 2.0;
+            t2 += t * (t - 1.0) * (t - 2.0);
+            t3 += t * (t - 1.0) * (2.0 * t + 5.0);
+            i = j + 1;
+        }
+        (t1, t2, t3)
+    };
+    let (n1, n1b, v1t) = tie_sum(x);
+    let (n2, n2b, v2t) = tie_sum(y);
+    let denom = ((n0 - n1) * (n0 - n2)).sqrt();
+    if denom <= 0.0 {
+        return None;
+    }
+    let tau = (concordant - discordant) as f64 / denom;
+    // Variance with tie correction (scipy's formula).
+    let v0 = nf * (nf - 1.0) * (2.0 * nf + 5.0);
+    let var = (v0 - v1t - v2t) / 18.0
+        + (n1b * n2b) / (9.0 * nf * (nf - 1.0) * (nf - 2.0))
+        + (n1 * n2) / (2.0 * n0);
+    if var <= 0.0 {
+        return None;
+    }
+    let s = (concordant - discordant) as f64;
+    let z = s / var.sqrt();
+    let p_value = normal_two_sided(z);
+    Some(json!({
+        "tau": tau, "p_value": p_value, "z_statistic": z,
+        "n": n, "concordant": concordant, "discordant": discordant
+    }))
+}
+
+/// Poisson-binomial CDF P(X <= k) for independent Bernoulli(p_i) via the exact
+/// DP recurrence. Out-of-range probabilities or k -> None.
+pub fn poibin_cdf(probs: &[f64], k: i64) -> Option<f64> {
+    if probs.is_empty() || probs.iter().any(|p| !(0.0..=1.0).contains(p)) {
+        return None;
+    }
+    let m = probs.len();
+    if k < 0 {
+        return Some(0.0);
+    }
+    if k as usize >= m {
+        return Some(1.0);
+    }
+    // dp[j] = P(exactly j successes among processed trials).
+    let mut dp = vec![0.0_f64; m + 1];
+    dp[0] = 1.0;
+    for &p in probs {
+        let q = 1.0 - p;
+        for j in (1..=m).rev() {
+            dp[j] = dp[j] * q + dp[j - 1] * p;
+        }
+        dp[0] *= q;
+    }
+    let cdf: f64 = dp[..=(k as usize)].iter().sum();
+    Some(cdf.clamp(0.0, 1.0))
+}
+
+// ============================================================================
+// PRIORITY 2 -- table-function backends (OLS, correlation matrix, descriptive
+// summary, histogram binning). These return plain Rust structures; the WIT glue
+// in lib.rs turns them into resultset rows.
+// ============================================================================
+
+/// Result of an OLS fit, enough to build both lm() and lm_summary() tables.
+pub struct OlsFit {
+    pub terms: Vec<String>,
+    pub estimate: Vec<f64>,
+    pub std_error: Vec<f64>,
+    pub t_value: Vec<f64>,
+    pub p_value: Vec<f64>,
+    pub r_squared: f64,
+    pub adj_r_squared: f64,
+    pub f_statistic: f64,
+    pub f_pvalue: f64,
+    pub residual_std_error: f64,
+    pub df_resid: f64,
+}
+
+/// Solve A x = b for a small square system via Gauss-Jordan elimination with
+/// partial pivoting. Also returns the inverse of A (for the covariance matrix).
+/// Returns None if A is singular.
+fn gauss_jordan_inverse(a: &[Vec<f64>]) -> Option<Vec<Vec<f64>>> {
+    let n = a.len();
+    // augmented [A | I]
+    let mut m: Vec<Vec<f64>> = (0..n)
+        .map(|i| {
+            let mut row = a[i].clone();
+            for j in 0..n {
+                row.push(if i == j { 1.0 } else { 0.0 });
+            }
+            row
+        })
+        .collect();
+    for col in 0..n {
+        // partial pivot
+        let mut piv = col;
+        for r in (col + 1)..n {
+            if m[r][col].abs() > m[piv][col].abs() {
+                piv = r;
+            }
+        }
+        if m[piv][col].abs() < 1e-12 {
+            return None;
+        }
+        m.swap(col, piv);
+        let d = m[col][col];
+        for c in 0..2 * n {
+            m[col][c] /= d;
+        }
+        for r in 0..n {
+            if r != col {
+                let f = m[r][col];
+                if f != 0.0 {
+                    for c in 0..2 * n {
+                        m[r][c] -= f * m[col][c];
+                    }
+                }
+            }
+        }
+    }
+    Some(m.iter().map(|row| row[n..].to_vec()).collect())
+}
+
+/// OLS fit of y on the predictor columns in `x` (each inner vec a predictor),
+/// with an intercept added. Verified against numpy/statsmodels reference.
+pub fn ols_fit(y: &[f64], x: &[Vec<f64>], names: &[String]) -> Option<OlsFit> {
+    let n = y.len();
+    let p = x.len(); // number of predictors (excl. intercept)
+    if n == 0 || x.iter().any(|c| c.len() != n) {
+        return None;
+    }
+    if !(n > p + 1) {
+        return None;
+    }
+    // design matrix rows: [1, x1, x2, ...]
+    let k = p + 1;
+    let mut xmat: Vec<Vec<f64>> = Vec::with_capacity(n);
+    for i in 0..n {
+        let mut row = Vec::with_capacity(k);
+        row.push(1.0);
+        for c in x {
+            row.push(c[i]);
+        }
+        xmat.push(row);
+    }
+    // X'X (k x k) and X'y (k)
+    let mut xtx = vec![vec![0.0; k]; k];
+    let mut xty = vec![0.0; k];
+    for i in 0..n {
+        for a in 0..k {
+            xty[a] += xmat[i][a] * y[i];
+            for b in 0..k {
+                xtx[a][b] += xmat[i][a] * xmat[i][b];
+            }
+        }
+    }
+    let inv = gauss_jordan_inverse(&xtx)?;
+    let beta: Vec<f64> = (0..k)
+        .map(|a| (0..k).map(|b| inv[a][b] * xty[b]).sum())
+        .collect();
+    // residual sum of squares (ssr) and total sum of squares (sst).
+    let mut ssr = 0.0;
+    let ybar = y.iter().sum::<f64>() / n as f64;
+    let mut sst = 0.0;
+    for i in 0..n {
+        let pred: f64 = (0..k).map(|a| beta[a] * xmat[i][a]).sum();
+        ssr += (y[i] - pred).powi(2);
+        sst += (y[i] - ybar).powi(2);
+    }
+    let df_resid = (n - k) as f64;
+    if df_resid <= 0.0 || sst <= 0.0 {
+        return None;
+    }
+    let sigma2 = ssr / df_resid;
+    let se: Vec<f64> = (0..k).map(|a| (sigma2 * inv[a][a]).sqrt()).collect();
+    let dist = StudentsT::new(0.0, 1.0, df_resid).ok()?;
+    let mut t_value = vec![0.0; k];
+    let mut p_value = vec![0.0; k];
+    for a in 0..k {
+        t_value[a] = beta[a] / se[a];
+        p_value[a] = (2.0 * (1.0 - dist.cdf(t_value[a].abs()))).clamp(0.0, 1.0);
+    }
+    let r2 = 1.0 - ssr / sst;
+    let adj = 1.0 - (1.0 - r2) * (n as f64 - 1.0) / df_resid;
+    let f_stat = (r2 / p as f64) / ((1.0 - r2) / df_resid);
+    let f_pvalue = match FisherSnedecor::new(p as f64, df_resid) {
+        Ok(d) => (1.0 - d.cdf(f_stat)).clamp(0.0, 1.0),
+        Err(_) => f64::NAN,
+    };
+    let mut terms = vec!["(Intercept)".to_string()];
+    for i in 0..p {
+        terms.push(
+            names
+                .get(i)
+                .cloned()
+                .unwrap_or_else(|| format!("x{}", i + 1)),
+        );
+    }
+    Some(OlsFit {
+        terms,
+        estimate: beta,
+        std_error: se,
+        t_value,
+        p_value,
+        r_squared: r2,
+        adj_r_squared: adj,
+        f_statistic: f_stat,
+        f_pvalue,
+        residual_std_error: sigma2.sqrt(),
+        df_resid,
+    })
+}
+
+/// Pearson correlation between two equal-length slices (None if degenerate).
+pub fn pearson_corr(x: &[f64], y: &[f64]) -> Option<f64> {
+    if x.len() != y.len() || x.len() < 2 {
+        return None;
+    }
+    let (mx, my) = (mean(x), mean(y));
+    let mut sxy = 0.0;
+    let mut sxx = 0.0;
+    let mut syy = 0.0;
+    for (a, b) in x.iter().zip(y) {
+        sxy += (a - mx) * (b - my);
+        sxx += (a - mx).powi(2);
+        syy += (b - my).powi(2);
+    }
+    if sxx <= 0.0 || syy <= 0.0 {
+        return None;
+    }
+    Some((sxy / (sxx * syy).sqrt()).clamp(-1.0, 1.0))
+}
+
+/// Spearman correlation (Pearson on the ranks).
+pub fn spearman_corr(x: &[f64], y: &[f64]) -> Option<f64> {
+    if x.len() != y.len() || x.len() < 2 {
+        return None;
+    }
+    pearson_corr(&rankdata(x), &rankdata(y))
+}
+
+/// Descriptive summary for one numeric column: (n, mean, sd, median, min, max).
+pub fn describe(xs: &[f64]) -> Option<(usize, f64, f64, f64, f64, f64)> {
+    if xs.is_empty() {
+        return None;
+    }
+    let n = xs.len();
+    let m = mean(xs);
+    let sd = if n >= 2 { var_samp(xs, m).sqrt() } else { f64::NAN };
+    let mut sorted = xs.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let median = if n % 2 == 1 {
+        sorted[n / 2]
+    } else {
+        (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0
+    };
+    Some((n, m, sd, median, sorted[0], sorted[n - 1]))
+}
+
+/// A single histogram bin (0-based index, half-open [lower, upper) except the
+/// last which is closed).
+pub struct Bin {
+    pub index: i64,
+    pub lower: f64,
+    pub upper: f64,
+    pub count: i64,
+}
+
+/// Histogram binning. method: "equal" (equal-width, `bins` bins), "sturges",
+/// or "fd" (Freedman-Diaconis). Returns one Bin per interval.
+pub fn bin_edges(sample: &[f64], method: &str, bins: i64) -> Option<Vec<Bin>> {
+    if sample.len() < 2 {
+        return None;
+    }
+    let mut xs = sample.to_vec();
+    xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let n = xs.len();
+    let lo = xs[0];
+    let hi = xs[n - 1];
+    if !(hi > lo) {
+        return None;
+    }
+    let nbins = match method.to_ascii_lowercase().as_str() {
+        "sturges" => ((n as f64).log2().ceil() as i64 + 1).max(1),
+        "fd" | "freedman-diaconis" => {
+            // IQR-based bin width -> count.
+            let q = |p: f64| -> f64 {
+                let pos = p * (n as f64 - 1.0);
+                let i = pos.floor() as usize;
+                let frac = pos - i as f64;
+                if i + 1 < n {
+                    xs[i] * (1.0 - frac) + xs[i + 1] * frac
+                } else {
+                    xs[i]
+                }
+            };
+            let iqr = q(0.75) - q(0.25);
+            if iqr <= 0.0 {
+                ((n as f64).log2().ceil() as i64 + 1).max(1)
+            } else {
+                let width = 2.0 * iqr / (n as f64).cbrt();
+                (((hi - lo) / width).ceil() as i64).max(1)
+            }
+        }
+        _ => bins.max(1),
+    };
+    let nbins = nbins.max(1) as usize;
+    let width = (hi - lo) / nbins as f64;
+    let mut counts = vec![0_i64; nbins];
+    for &v in &xs {
+        let mut idx = ((v - lo) / width).floor() as i64;
+        if idx < 0 {
+            idx = 0;
+        }
+        if idx >= nbins as i64 {
+            idx = nbins as i64 - 1; // include the max in the last bin
+        }
+        counts[idx as usize] += 1;
+    }
+    Some(
+        (0..nbins)
+            .map(|i| Bin {
+                index: i as i64,
+                lower: lo + i as f64 * width,
+                upper: if i + 1 == nbins {
+                    hi
+                } else {
+                    lo + (i + 1) as f64 * width
+                },
+                count: counts[i],
+            })
+            .collect(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -771,5 +1413,177 @@ mod tests {
         approx(h[3], 0.02, 1e-9);
         approx(h[1], 0.06, 1e-9);
         approx(h[2], 0.06, 1e-9);
+    }
+
+    // ---- Priority 1: the hard tests -------------------------------------
+
+    #[test]
+    fn shapiro_normalish() {
+        // scipy.stats.shapiro([2,4,5,7,8,9,11,12,14,15]) -> W=0.971567, p=0.904979
+        let s = [2.0, 4.0, 5.0, 7.0, 8.0, 9.0, 11.0, 12.0, 14.0, 15.0];
+        let r = shapiro_wilk(&s).unwrap();
+        approx(field(&r, "W"), 0.971567, 1e-3);
+        approx(field(&r, "p_value"), 0.904979, 5e-3);
+    }
+
+    #[test]
+    fn shapiro_skewed() {
+        // scipy.stats.shapiro([148,154,158,160,161,162,166,170,182,195,236])
+        // -> W=0.788815, p=0.006704 (n=11, the <=11 transform branch)
+        let s = [
+            148.0, 154.0, 158.0, 160.0, 161.0, 162.0, 166.0, 170.0, 182.0, 195.0, 236.0,
+        ];
+        let r = shapiro_wilk(&s).unwrap();
+        approx(field(&r, "W"), 0.788815, 2e-3);
+        approx(field(&r, "p_value"), 0.006704, 5e-3);
+    }
+
+    #[test]
+    fn anderson_normalish() {
+        // scipy.stats.anderson([2,4,5,7,8,9,11,12,14,15],'norm') statistic=0.140359
+        // (scipy reports the A_star adjusted? -- it reports raw A2=0.140359;
+        //  A_star=0.154044). Our piecewise p-value should be large (>0.5).
+        let s = [2.0, 4.0, 5.0, 7.0, 8.0, 9.0, 11.0, 12.0, 14.0, 15.0];
+        let r = anderson_darling(&s).unwrap();
+        approx(field(&r, "A_squared"), 0.140359, 1e-4);
+        approx(field(&r, "A_star"), 0.154044, 1e-4);
+        assert!(field(&r, "p_value") > 0.5);
+    }
+
+    #[test]
+    fn ks_normal() {
+        // scipy.stats.ks_1samp(samp, norm.cdf, method='asymp')
+        // -> D=0.100000, p=0.988261
+        let samp = [
+            0.1, 0.5, -0.3, 1.2, -1.1, 0.4, 0.8, -0.6, 0.2, -0.9, 1.5, -1.3, 0.7, 0.0, 0.3,
+            -0.4, 0.9, -0.7, 1.1, -0.2,
+        ];
+        let params = json!({"mean": 0.0, "std": 1.0});
+        let r = ks_test_1samp(&samp, "normal", &params).unwrap();
+        approx(field(&r, "D"), 0.100000, 1e-6);
+        approx(field(&r, "p_value"), 0.988261, 5e-3);
+    }
+
+    #[test]
+    fn ks_uniform_and_expon() {
+        // uniform(0,1): scipy D=0.100000, p=0.999965
+        let su = [0.1, 0.3, 0.5, 0.7, 0.9, 0.2, 0.4, 0.6, 0.8, 0.15];
+        let r = ks_test_1samp(&su, "uniform", &json!({"min":0.0,"max":1.0})).unwrap();
+        approx(field(&r, "D"), 0.100000, 1e-6);
+        assert!(field(&r, "p_value") > 0.95);
+        // exponential rate=1: scipy D=0.150671, p=0.977042
+        let se = [0.2, 0.5, 1.0, 1.5, 2.0, 0.3, 0.8, 1.2, 2.5, 0.1];
+        let r = ks_test_1samp(&se, "exponential", &json!({"rate":1.0})).unwrap();
+        approx(field(&r, "D"), 0.150671, 1e-5);
+        assert!(field(&r, "p_value") > 0.9);
+    }
+
+    #[test]
+    fn kendall_no_ties() {
+        // scipy.stats.kendalltau([1..8],[2,1,4,3,6,5,8,7], method='asymptotic')
+        // -> tau=0.714286, p=0.013348
+        let x = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let y = [2.0, 1.0, 4.0, 3.0, 6.0, 5.0, 8.0, 7.0];
+        let r = kendall_test(&x, &y).unwrap();
+        approx(field(&r, "tau"), 0.714286, 1e-5);
+        approx(field(&r, "p_value"), 0.013348, 1e-3);
+    }
+
+    #[test]
+    fn kendall_with_ties() {
+        // scipy kendalltau([1,1,2,2,3,3],[1,2,2,3,3,4], method='asymptotic')
+        // -> tau=0.800641, p=0.040104
+        let x = [1.0, 1.0, 2.0, 2.0, 3.0, 3.0];
+        let y = [1.0, 2.0, 2.0, 3.0, 3.0, 4.0];
+        let r = kendall_test(&x, &y).unwrap();
+        approx(field(&r, "tau"), 0.800641, 1e-4);
+        approx(field(&r, "p_value"), 0.040104, 5e-3);
+    }
+
+    #[test]
+    fn poibin() {
+        // direct DP reference: probs=[.1,.5,.9,.3,.7]
+        // cdf k=0..5 = .009450,.131100,.500000,.868900,.990550,1.0
+        let p = [0.1, 0.5, 0.9, 0.3, 0.7];
+        approx(poibin_cdf(&p, 0).unwrap(), 0.009450, 1e-6);
+        approx(poibin_cdf(&p, 1).unwrap(), 0.131100, 1e-6);
+        approx(poibin_cdf(&p, 2).unwrap(), 0.500000, 1e-6);
+        approx(poibin_cdf(&p, 3).unwrap(), 0.868900, 1e-6);
+        assert_eq!(poibin_cdf(&p, 5).unwrap(), 1.0);
+        assert!(poibin_cdf(&[1.5], 0).is_none());
+    }
+
+    // ---- Priority 2: table-function backends ----------------------------
+
+    #[test]
+    fn ols_simple() {
+        // numpy OLS y on x with intercept:
+        //   intercept=0.060000 se=0.108600 t=0.552487 p=0.59571
+        //   slope=1.990909 se=0.017502 t=113.750247 p=3.99e-14
+        //   r2=0.999382 adjr2=0.999305 F=12939.118705 rse=0.158974 df=8
+        let xs = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let ys = [2.1, 3.9, 6.2, 7.8, 10.1, 12.2, 13.8, 16.1, 18.0, 19.9];
+        let fit = ols_fit(&ys, &[xs], &["x".to_string()]).unwrap();
+        approx(fit.estimate[0], 0.060000, 1e-4);
+        approx(fit.std_error[0], 0.108600, 1e-4);
+        approx(fit.estimate[1], 1.990909, 1e-5);
+        approx(fit.std_error[1], 0.017502, 1e-5);
+        approx(fit.t_value[1], 113.750247, 1e-2);
+        approx(fit.r_squared, 0.999382, 1e-5);
+        approx(fit.adj_r_squared, 0.999305, 1e-5);
+        approx(fit.f_statistic, 12939.118705, 1e-1);
+        approx(fit.residual_std_error, 0.158974, 1e-5);
+        approx(fit.df_resid, 8.0, 1e-9);
+        assert_eq!(fit.terms, vec!["(Intercept)", "x"]);
+    }
+
+    #[test]
+    fn corr_pearson_spearman() {
+        // numpy: corr([1..5],[2,4,5,4,5])=0.774597; ([1..5],[5,3,2,4,1])=-0.7
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let b = [2.0, 4.0, 5.0, 4.0, 5.0];
+        let c = [5.0, 3.0, 2.0, 4.0, 1.0];
+        approx(pearson_corr(&a, &b).unwrap(), 0.774597, 1e-6);
+        approx(pearson_corr(&a, &c).unwrap(), -0.700000, 1e-6);
+        // scipy spearman([1..5],[2,4,5,4,5]) = 0.737865
+        approx(spearman_corr(&a, &b).unwrap(), 0.737865, 1e-5);
+    }
+
+    #[test]
+    fn describe_column() {
+        // numpy: n=5 mean=3 sd=1.581139 median=3 min=1 max=5
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let (n, m, sd, med, lo, hi) = describe(&a).unwrap();
+        assert_eq!(n, 5);
+        approx(m, 3.0, 1e-9);
+        approx(sd, 1.581139, 1e-6);
+        approx(med, 3.0, 1e-9);
+        approx(lo, 1.0, 1e-9);
+        approx(hi, 5.0, 1e-9);
+    }
+
+    #[test]
+    fn bins_sturges() {
+        // numpy histogram(1..20, bins=sturges=6):
+        //   counts [4,3,3,3,3,4], edges step 3.1667
+        let samp: Vec<f64> = (1..=20).map(|i| i as f64).collect();
+        let bins = bin_edges(&samp, "sturges", 0).unwrap();
+        assert_eq!(bins.len(), 6);
+        let counts: Vec<i64> = bins.iter().map(|b| b.count).collect();
+        assert_eq!(counts, vec![4, 3, 3, 3, 3, 4]);
+        approx(bins[0].lower, 1.0, 1e-9);
+        approx(bins[5].upper, 20.0, 1e-9);
+        approx(bins[1].lower, 4.166667, 1e-4);
+    }
+
+    #[test]
+    fn bins_equal_width() {
+        // 0..10 into 5 equal bins -> each width 2.
+        let samp = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let bins = bin_edges(&samp, "equal", 5).unwrap();
+        assert_eq!(bins.len(), 5);
+        approx(bins[0].upper - bins[0].lower, 2.0, 1e-9);
+        let total: i64 = bins.iter().map(|b| b.count).sum();
+        assert_eq!(total, 11);
     }
 }

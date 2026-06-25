@@ -52,10 +52,15 @@ struct Extension;
 impl guest::Guest for Extension {
     fn load() -> Result<types::Loadresult, types::Duckerror> {
         register_scalars()?;
+        register_tables()?;
         Ok(types::Loadresult {
             name: "statsduck".into(),
             version: Some(env!("CARGO_PKG_VERSION").into()),
-            requires: Vec::new().into(),
+            requires: vec![
+                types::Capabilitykind::Scalar,
+                types::Capabilitykind::Table,
+            ]
+            .into(),
         })
     }
     fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> {
@@ -175,12 +180,29 @@ impl callback_dispatch::Guest for Extension {
     }
 
     fn call_table(
-        _h: u32,
-        _a: Vec<types::Duckvalue>,
+        handle: u32,
+        args: Vec<types::Duckvalue>,
     ) -> Result<types::Resultset, types::Duckerror> {
-        Err(types::Duckerror::Unsupported(
-            "statsduck: no table fns".into(),
-        ))
+        let which = handlers()
+            .lock()
+            .unwrap()
+            .get(&handle)
+            .copied()
+            .ok_or_else(|| types::Duckerror::Internal("unknown table handle".into()))?;
+        // Every table fn returns zero rows on NULL/invalid JSON -- never panics.
+        let rows = match which {
+            F::Lm => lm_rows(&args),
+            F::LmSummary => lm_summary_rows(&args),
+            F::CorrMatrix => corr_matrix_rows(&args),
+            F::TableOne => table_one_rows(&args),
+            F::BinEdges => bin_edges_rows(&args),
+            _ => {
+                return Err(types::Duckerror::Internal(
+                    "scalar handle dispatched as table".into(),
+                ))
+            }
+        };
+        Ok(rows.into())
     }
     fn call_aggregate(
         _h: u32,
@@ -370,6 +392,44 @@ fn eval(which: F, args: &[types::Duckvalue]) -> types::Duckvalue {
             },
             _ => types::Duckvalue::Null,
         },
+        ShapiroWilk => match text_arg(args, 0).as_deref().and_then(parse_vec) {
+            Some(x) => json_text(stats::shapiro_wilk(&x)),
+            None => types::Duckvalue::Null,
+        },
+        AndersonDarling => match text_arg(args, 0).as_deref().and_then(parse_vec) {
+            Some(x) => json_text(stats::anderson_darling(&x)),
+            None => types::Duckvalue::Null,
+        },
+        KsTest1samp => {
+            let sample = text_arg(args, 0).as_deref().and_then(parse_vec);
+            let dist = text_arg(args, 1).unwrap_or_else(|| "normal".into());
+            // params_json is an optional JSON object; default empty -> defaults.
+            let params: Value = text_arg(args, 2)
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_else(|| Value::Object(Default::default()));
+            match sample {
+                Some(s) => json_text(stats::ks_test_1samp(&s, &dist, &params)),
+                None => types::Duckvalue::Null,
+            }
+        }
+        KendallTest => {
+            let x = text_arg(args, 0).as_deref().and_then(parse_vec);
+            let y = text_arg(args, 1).as_deref().and_then(parse_vec);
+            match (x, y) {
+                (Some(x), Some(y)) => json_text(stats::kendall_test(&x, &y)),
+                _ => types::Duckvalue::Null,
+            }
+        }
+        PoibinCdf => {
+            let probs = text_arg(args, 0).as_deref().and_then(parse_vec);
+            let k = f64_arg(args, 1);
+            match (probs, k) {
+                (Some(p), Some(k)) => fin(stats::poibin_cdf(&p, k as i64).unwrap_or(f64::NAN)),
+                _ => types::Duckvalue::Null,
+            }
+        }
+        // Table-function handles never reach scalar eval.
+        Lm | LmSummary | CorrMatrix | TableOne | BinEdges => types::Duckvalue::Null,
     }
 }
 
@@ -398,7 +458,26 @@ enum F {
     GammaCdf,
     WeibullCdf,
     LognormalCdf,
+    // Priority 1 -- the "hard" tests (real algorithms + correct p-values).
+    ShapiroWilk,
+    AndersonDarling,
+    KsTest1samp,
+    KendallTest,
+    PoibinCdf,
+    // Priority 2 -- table functions.
+    Lm,
+    LmSummary,
+    CorrMatrix,
+    TableOne,
+    BinEdges,
 }
+
+// OUT OF SCOPE (documented, deliberately not implemented):
+//   r* random samplers   -- non-deterministic; violates DETERMINISTIC|STATELESS
+//                           and is not reproducible in deterministic smoke tests.
+//   read_stat / SAS/SPSS COPY export -- needs file I/O (the `files` capability),
+//                           not available to scalar/table functions here.
+//   VISUALIZE / ggsql     -- a SQL parser hook, not a registrable function.
 
 static NEXT: AtomicU32 = AtomicU32::new(1);
 static HANDLERS: OnceLock<Mutex<HashMap<u32, F>>> = OnceLock::new();
@@ -599,6 +678,344 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         types::Logicaltype::Float64,
         F::LognormalCdf,
         "log-normal distribution CDF P(X<=x)",
+    )?;
+
+    // ---- Priority 1: the hard tests (real algorithms, correct p-values) ----
+    reg_fn(
+        "shapiro_wilk",
+        vec![txt("sample")],
+        types::Logicaltype::Text,
+        F::ShapiroWilk,
+        "Shapiro-Wilk normality test (Royston 1992) -> {W,p_value,n}",
+    )?;
+    reg_fn(
+        "anderson_darling",
+        vec![txt("sample")],
+        types::Logicaltype::Text,
+        F::AndersonDarling,
+        "Anderson-Darling normality test -> {A_squared,A_star,p_value,n}",
+    )?;
+    reg_fn(
+        "ks_test_1samp",
+        vec![txt("sample"), txt("dist"), txt("params")],
+        types::Logicaltype::Text,
+        F::KsTest1samp,
+        "1-sample KS test vs normal/uniform/exponential -> {D,p_value,n}",
+    )?;
+    reg_fn(
+        "kendall_test",
+        vec![txt("x"), txt("y")],
+        types::Logicaltype::Text,
+        F::KendallTest,
+        "Kendall's tau-b with tie correction -> {tau,p_value,z_statistic,...}",
+    )?;
+    reg_fn(
+        "poibin_cdf",
+        vec![txt("probs"), dbl("k")],
+        types::Logicaltype::Float64,
+        F::PoibinCdf,
+        "Poisson-binomial CDF P(X<=k) over a JSON array of probabilities",
+    )?;
+
+    Ok(())
+}
+
+// ============================================================================
+// Table functions. Data crosses the WIT boundary as a JSON VARCHAR argument
+// (LIST args don't cross cleanly). Each builder returns zero rows on NULL or
+// invalid JSON, and never panics.
+// ============================================================================
+
+type Row = std::vec::Vec<types::Duckvalue>;
+type Rows = std::vec::Vec<Row>;
+
+fn txt_v(s: impl ToString) -> types::Duckvalue {
+    types::Duckvalue::Text(s.to_string().into())
+}
+fn dbl_v(v: f64) -> types::Duckvalue {
+    if v.is_finite() {
+        types::Duckvalue::Float64(v)
+    } else {
+        types::Duckvalue::Null
+    }
+}
+fn i64_v(v: i64) -> types::Duckvalue {
+    types::Duckvalue::Int64(v)
+}
+
+/// Parse a column of numbers from a JSON value (array of finite numbers).
+fn json_col(v: &Value) -> Option<std::vec::Vec<f64>> {
+    let arr = v.as_array()?;
+    let out: Option<std::vec::Vec<f64>> = arr.iter().map(|x| x.as_f64()).collect();
+    let out = out?;
+    if out.iter().all(|x| x.is_finite()) {
+        Some(out)
+    } else {
+        None
+    }
+}
+
+/// Parse the data_json argument (arg 0) into a serde_json Value object.
+fn data_obj(args: &[types::Duckvalue]) -> Option<Value> {
+    let s = text_arg(args, 0)?;
+    let v: Value = serde_json::from_str(&s).ok()?;
+    if v.is_object() {
+        Some(v)
+    } else {
+        None
+    }
+}
+
+/// Extract y + predictor columns + names from {y:[...], x:[[col],...]} for lm.
+/// `x` is a JSON array of predictor columns; optional `names` array labels them.
+fn lm_inputs(args: &[types::Duckvalue]) -> Option<(Vec<f64>, Vec<Vec<f64>>, Vec<String>)> {
+    let obj = data_obj(args)?;
+    let y = json_col(obj.get("y")?)?;
+    let xraw = obj.get("x")?.as_array()?;
+    let mut x = std::vec::Vec::with_capacity(xraw.len());
+    for c in xraw {
+        x.push(json_col(c)?);
+    }
+    // names: optional, from formula_json arg 1 {"names":[...]} or data's "names".
+    let names: Vec<String> = text_arg(args, 1)
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+        .and_then(|v| v.get("names").and_then(|n| n.as_array()).cloned())
+        .map(|arr| {
+            arr.iter()
+                .map(|n| n.as_str().unwrap_or("").to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    Some((y, x, names))
+}
+
+fn lm_rows(args: &[types::Duckvalue]) -> Rows {
+    let Some((y, x, names)) = lm_inputs(args) else {
+        return Rows::new();
+    };
+    let Some(fit) = stats::ols_fit(&y, &x, &names) else {
+        return Rows::new();
+    };
+    (0..fit.terms.len())
+        .map(|i| {
+            vec![
+                txt_v(&fit.terms[i]),
+                dbl_v(fit.estimate[i]),
+                dbl_v(fit.std_error[i]),
+                dbl_v(fit.t_value[i]),
+                dbl_v(fit.p_value[i]),
+            ]
+        })
+        .collect()
+}
+
+fn lm_summary_rows(args: &[types::Duckvalue]) -> Rows {
+    let Some((y, x, names)) = lm_inputs(args) else {
+        return Rows::new();
+    };
+    let Some(fit) = stats::ols_fit(&y, &x, &names) else {
+        return Rows::new();
+    };
+    [
+        ("r_squared", fit.r_squared),
+        ("adj_r_squared", fit.adj_r_squared),
+        ("f_statistic", fit.f_statistic),
+        ("f_pvalue", fit.f_pvalue),
+        ("residual_std_error", fit.residual_std_error),
+        ("df", fit.df_resid),
+    ]
+    .iter()
+    .map(|(k, v)| vec![txt_v(k), dbl_v(*v)])
+    .collect()
+}
+
+fn corr_matrix_rows(args: &[types::Duckvalue]) -> Rows {
+    let Some(obj) = data_obj(args) else {
+        return Rows::new();
+    };
+    let method = text_arg(args, 1).unwrap_or_else(|| "pearson".into());
+    let spearman = method.eq_ignore_ascii_case("spearman");
+    // preserve insertion order of the columns.
+    let Some(map) = obj.as_object() else {
+        return Rows::new();
+    };
+    let cols: std::vec::Vec<(String, std::vec::Vec<f64>)> = map
+        .iter()
+        .filter_map(|(k, v)| json_col(v).map(|c| (k.clone(), c)))
+        .collect();
+    let mut out = Rows::new();
+    for i in 0..cols.len() {
+        for j in 0..cols.len() {
+            let r = if spearman {
+                stats::spearman_corr(&cols[i].1, &cols[j].1)
+            } else {
+                stats::pearson_corr(&cols[i].1, &cols[j].1)
+            };
+            match r {
+                Some(r) => out.push(vec![
+                    txt_v(&cols[i].0),
+                    txt_v(&cols[j].0),
+                    dbl_v(r),
+                ]),
+                None => {} // skip degenerate / mismatched pairs
+            }
+        }
+    }
+    out
+}
+
+fn table_one_rows(args: &[types::Duckvalue]) -> Rows {
+    let Some(obj) = data_obj(args) else {
+        return Rows::new();
+    };
+    let Some(map) = obj.as_object() else {
+        return Rows::new();
+    };
+    map.iter()
+        .filter_map(|(k, v)| {
+            let col = json_col(v)?;
+            let (n, mean, sd, median, mn, mx) = stats::describe(&col)?;
+            Some(vec![
+                txt_v(k),
+                i64_v(n as i64),
+                dbl_v(mean),
+                dbl_v(sd),
+                dbl_v(median),
+                dbl_v(mn),
+                dbl_v(mx),
+            ])
+        })
+        .collect()
+}
+
+fn bin_edges_rows(args: &[types::Duckvalue]) -> Rows {
+    // bin_edges(sample_json VARCHAR, method VARCHAR, bins INTEGER)
+    let sample = match text_arg(args, 0).as_deref().and_then(parse_vec) {
+        Some(s) => s,
+        None => return Rows::new(),
+    };
+    let method = text_arg(args, 1).unwrap_or_else(|| "equal".into());
+    let bins = match args.get(2) {
+        Some(types::Duckvalue::Int32(v)) => *v as i64,
+        Some(types::Duckvalue::Int64(v)) => *v,
+        _ => 10,
+    };
+    let Some(edges) = stats::bin_edges(&sample, &method, bins) else {
+        return Rows::new();
+    };
+    edges
+        .into_iter()
+        .map(|b| {
+            vec![
+                types::Duckvalue::Int32(b.index as i32),
+                dbl_v(b.lower),
+                dbl_v(b.upper),
+                i64_v(b.count),
+            ]
+        })
+        .collect()
+}
+
+fn register_tables() -> Result<(), types::Duckerror> {
+    let cap = runtime::get_capability(types::Capabilitykind::Table)
+        .ok_or_else(|| types::Duckerror::Internal("no table capability".into()))?;
+    let reg = match cap {
+        runtime::Capability::Table(r) => r,
+        _ => return Err(types::Duckerror::Internal("bad table capability".into())),
+    };
+
+    use types::Logicaltype::{Float64, Int32, Int64, Text};
+    let col = |name: &str, logical: types::Logicaltype| types::Columndef {
+        name: name.into(),
+        logical,
+    };
+    let txt = |n: &str| runtime::Funcarg {
+        name: Some(n.into()),
+        logical: Text,
+    };
+    let int = |n: &str| runtime::Funcarg {
+        name: Some(n.into()),
+        logical: Int32,
+    };
+
+    let reg_table = |name: &str,
+                         a: std::vec::Vec<runtime::Funcarg>,
+                         cols: std::vec::Vec<types::Columndef>,
+                         f: F,
+                         desc: &str|
+     -> Result<(), types::Duckerror> {
+        let h = NEXT.fetch_add(1, Ordering::Relaxed);
+        handlers().lock().unwrap().insert(h, f);
+        reg.register(
+            name,
+            &a,
+            &cols,
+            runtime::TableCallback::new(h),
+            Some(&runtime::Extopts {
+                description: Some(desc.into()),
+                tags: vec!["stats".into()],
+            }),
+        )?;
+        Ok(())
+    };
+
+    reg_table(
+        "lm",
+        vec![txt("data_json"), txt("formula_json")],
+        vec![
+            col("term", Text),
+            col("estimate", Float64),
+            col("std_error", Float64),
+            col("t_value", Float64),
+            col("p_value", Float64),
+        ],
+        F::Lm,
+        "OLS linear regression coefficient table from {y:[...],x:[[...]]}",
+    )?;
+    reg_table(
+        "lm_summary",
+        vec![txt("data_json"), txt("formula_json")],
+        vec![col("metric", Text), col("value", Float64)],
+        F::LmSummary,
+        "OLS fit summary (r_squared, F, residual_std_error, df, ...)",
+    )?;
+    reg_table(
+        "corr_matrix",
+        vec![txt("data_json"), txt("method")],
+        vec![
+            col("var1", Text),
+            col("var2", Text),
+            col("correlation", Float64),
+        ],
+        F::CorrMatrix,
+        "pairwise pearson/spearman correlations over the JSON columns (long format)",
+    )?;
+    reg_table(
+        "table_one",
+        vec![txt("data_json")],
+        vec![
+            col("variable", Text),
+            col("n", Int64),
+            col("mean", Float64),
+            col("sd", Float64),
+            col("median", Float64),
+            col("min", Float64),
+            col("max", Float64),
+        ],
+        F::TableOne,
+        "descriptive summary per numeric column of the JSON data",
+    )?;
+    reg_table(
+        "bin_edges",
+        vec![txt("sample_json"), txt("method"), int("bins")],
+        vec![
+            col("bin", Int32),
+            col("lower", Float64),
+            col("upper", Float64),
+            col("count", Int64),
+        ],
+        F::BinEdges,
+        "histogram binning (equal-width / sturges / fd) with per-bin counts",
     )?;
 
     Ok(())

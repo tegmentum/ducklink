@@ -1,5 +1,8 @@
-# statsduck expected output: hypothesis-test statistics/p-values and
-# distribution CDFs, rounded to 4 dp and matched against scipy/R references.
+# AUTO-SEEDED by smoke.py --seed-expected. Review and trim:
+#   - csv mode emits a header line per SELECT; keep or drop as you like
+#   - replace nondeterministic lines (timestamps, rng) with ~~
+#   - replace order-sensitive lines with ? if any-non-empty is OK
+#   - delete this banner once you've reviewed each line
 t1_t
 1.4142
 t1_p
@@ -56,3 +59,26 @@ badjson
 NULL
 toofew
 NULL
+sw
+"{""W"":0.9524380894611063,""n"":8,""p_value"":0.7357702323073284}"
+kendall
+"{""concordant"":8,""discordant"":2,""n"":5,""p_value"":0.14164469030135463,""tau"":0.6,""z_statistic"":1.4696938456699067}"
+ad
+"{""A_squared"":0.13400045880687372,""A_star"":0.1512739554499473,""n"":8,""p_value"":0.9614556929543924}"
+ks1
+"{""D"":0.15865525394505725,""n"":5,""p_value"":0.9986252856373297}"
+pb
+0.5
+term,est
+(Intercept),1
+x1,2
+var1,var2,r
+a,a,1
+a,b,1
+b,a,1
+b,b,1
+variable,n,mean
+a,5,3
+bin,lo,hi,count
+0,1,5.5,5
+1,5.5,10,5

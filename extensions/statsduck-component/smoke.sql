@@ -47,3 +47,23 @@ SELECT ttest_1samp(NULL, 6.0, 'two-sided') AS nullin;
 SELECT ttest_1samp('not json', 6.0, 'two-sided') AS badjson;
 -- too few observations yields NULL.
 SELECT ttest_1samp('[5]', 6.0, 'two-sided') AS toofew;
+
+-- === skipped-pieces (hard tests + table functions) ===
+-- shapiro_wilk: Royston W + p (deterministic JSON).
+SELECT shapiro_wilk('[2.1,2.4,2.0,2.5,2.3,2.2,2.6,2.1]') AS sw;
+-- kendall tau-b on a known pair.
+SELECT kendall_test('[1,2,3,4,5]', '[2,1,4,3,5]') AS kendall;
+-- anderson_darling normality A^2.
+SELECT anderson_darling('[1,2,3,4,5,6,7,8]') AS ad;
+-- 1-sample KS vs standard normal.
+SELECT ks_test_1samp('[-1,0,1,0.5,-0.5]', 'normal', '{"mean":0,"std":1}') AS ks1;
+-- poisson-binomial CDF P(X<=1) for three p=0.5 trials = 0.5.
+SELECT round(poibin_cdf('[0.5,0.5,0.5]', 1), 4) AS pb;
+-- lm: y=2x+1 -> intercept 1, slope 2 (x as a column).
+SELECT term, round(estimate, 4) AS est FROM lm('{"y":[3,5,7,9,11],"x":[[1,2,3,4,5]]}', '{}') ORDER BY term;
+-- corr_matrix: b=2a -> correlation 1.
+SELECT var1, var2, round(correlation, 4) AS r FROM corr_matrix('{"a":[1,2,3,4],"b":[2,4,6,8]}', 'pearson') ORDER BY var1, var2;
+-- table_one descriptive summary.
+SELECT variable, n, round(mean, 2) AS mean FROM table_one('{"a":[1,2,3,4,5]}');
+-- bin_edges: 2 equal-width bins over 1..10.
+SELECT bin, round(lower, 2) AS lo, round(upper, 2) AS hi, count FROM bin_edges('[1,2,3,4,5,6,7,8,9,10]', 'equal', 2) ORDER BY bin;

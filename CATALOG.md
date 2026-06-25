@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**180 component extensions** · **484 SQL functions** · 6 expose aggregates · 3 require network.
+**180 component extensions** · **494 SQL functions** · 6 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -184,7 +184,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **frequentitems** | `top_k`, `top_k_value` | hand-rolled |  |
 | **hashfuncs** | `xxh32`, `xxh64`, `xxh3`, `murmur3` | twox-hash, murmur3 |  |
 | **hnswfns** | `hnsw_search` | instant-distance |  |
-| **statsduck** | `ttest_1samp`, `ttest_2samp`, `ttest_paired`, `mann_whitney_u`, `wilcoxon_signed_rank`, `sign_test_1samp`, `sign_test_paired`, `pearson_test`, `spearman_test`, `anova_oneway`, `chisq_goodness_of_fit`, `chisq_independence`, `jarque_bera`, `ks_test_2samp`, `adjust_p`, `t_cdf`, `chisq_cdf`, `f_cdf`, `gamma_cdf`, `weibull_cdf`, `lognormal_cdf` | statrs, serde_json |  |
+| **statsduck** | `adjust_p`, `anderson_darling`, `anova_oneway`, `bin_edges`, `chisq_cdf`, `chisq_goodness_of_fit`, `chisq_independence`, `corr_matrix`, `f_cdf`, `gamma_cdf`, `jarque_bera`, `kendall_test`, `ks_test_1samp`, `ks_test_2samp`, `lm`, `lm_summary`, `lognormal_cdf`, `mann_whitney_u`, `pearson_test`, `poibin_cdf`, `shapiro_wilk`, `sign_test_1samp`, `sign_test_paired`, `spearman_test`, `t_cdf`, `table_one`, `ttest_1samp`, `ttest_2samp`, `ttest_paired`, `weibull_cdf`, `wilcoxon_signed_rank` | statrs, serde_json |  |
 | **stochastic** | `normal_cdf`, `normal_pdf`, `normal_quantile`, `binomial_pmf`, `poisson_pmf`, `exponential_cdf`, `beta_cdf` | statrs |  |
 | **tdigest** | `tdigest`, `tdigest_quantile`, `tdigest_count` | tdigest, bincode | aggregate |
 | **vssfns** | `vec_l1_distance`, `vec_linf_distance`, `vec_normalize` | hand-rolled |  |
