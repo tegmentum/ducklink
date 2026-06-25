@@ -290,6 +290,18 @@ pub mod reg {
         pub combinable: bool,
     }
 
+    /// A PRAGMA declared by an extension (Item 4). The user types
+    /// `PRAGMA <name>(...)`; the core intercepts it, dispatches via the
+    /// `callback_handle` (callback-dispatch.call-pragma), and the component
+    /// RETURNS a SQL script (text) that the core then runs on the connection.
+    /// No mid-callback re-entry into SQL, so no connection re-entrancy.
+    #[derive(Clone, Debug)]
+    pub struct PragmaReg {
+        pub extension: String,
+        pub name: String,
+        pub callback_handle: u32,
+    }
+
     /// An aggregate function registered by an extension.
     #[derive(Clone, Debug)]
     pub struct AggregateReg {

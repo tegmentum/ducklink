@@ -84,6 +84,71 @@ mod core {
         idf * (tf * (K1 + 1.0)) / denom
     }
 
+    /// Quote a SQL identifier by doubling embedded double-quotes and wrapping in
+    /// double-quotes. Inputs come from PRAGMA args, so this must be robust.
+    pub fn quote_ident(name: &str) -> std::string::String {
+        let mut out = std::string::String::with_capacity(name.len() + 2);
+        out.push('"');
+        for c in name.chars() {
+            if c == '"' {
+                out.push('"');
+            }
+            out.push(c);
+        }
+        out.push('"');
+        out
+    }
+
+    /// Generate the SQL script that `PRAGMA create_fts_index(table, id, textcol)`
+    /// returns; the core runs it on the connection. Builds an inverted index over
+    /// the English-stemmed tokens of `textcol`, plus a `match_bm25(docid, query)`
+    /// macro that sums Okapi BM25 over the stemmed query terms. Object names are
+    /// derived from the table; identifiers are quoted. A simplified-but-correct
+    /// BM25 over stemmed terms (k1=1.2, b=0.75 in bm25_score).
+    pub fn build_fts_index_sql(table: &str, id: &str, textcol: &str) -> std::string::String {
+        let t = quote_ident(table);
+        let idc = quote_ident(id);
+        let txt = quote_ident(textcol);
+        // Index object names: fts_<table>_<suffix>. Sanitize the table for the
+        // object-name part (keep it simple/identifier-safe); also quote it.
+        let safe: std::string::String = table
+            .chars()
+            .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+            .collect();
+        let terms = quote_ident(&format!("fts_{safe}_terms"));
+        let docs = quote_ident(&format!("fts_{safe}_docs"));
+        let dict = quote_ident(&format!("fts_{safe}_dict"));
+        let stats = quote_ident(&format!("fts_{safe}_stats"));
+        let macro_name = quote_ident(&format!("match_bm25"));
+        format!(
+            "DROP TABLE IF EXISTS {terms};\n\
+             CREATE TABLE {terms} AS \
+               SELECT src.{idc} AS docid, term \
+               FROM {t} AS src, UNNEST(CAST(fts_stem_text(src.{txt}) AS VARCHAR[])) AS exploded(term);\n\
+             DROP TABLE IF EXISTS {docs};\n\
+             CREATE TABLE {docs} AS \
+               SELECT docid, CAST(COUNT(*) AS BIGINT) AS doc_len FROM {terms} GROUP BY docid;\n\
+             DROP TABLE IF EXISTS {dict};\n\
+             CREATE TABLE {dict} AS \
+               SELECT term, CAST(COUNT(DISTINCT docid) AS BIGINT) AS df FROM {terms} GROUP BY term;\n\
+             DROP TABLE IF EXISTS {stats};\n\
+             CREATE TABLE {stats} AS \
+               SELECT CAST(COUNT(*) AS BIGINT) AS num_docs, \
+                      CAST(COALESCE(AVG(doc_len), 0.0) AS DOUBLE) AS avg_doc_len FROM {docs};\n\
+             CREATE OR REPLACE MACRO {macro_name}(p_docid, p_query) AS (\
+               SELECT COALESCE(SUM(bm25_score(tf.tf, dict.df, d.doc_len::DOUBLE, s.avg_doc_len, s.num_docs)), 0.0) \
+               FROM (SELECT term, CAST(COUNT(*) AS BIGINT) AS tf FROM {terms} \
+                     WHERE docid = p_docid GROUP BY term) AS tf \
+               JOIN (SELECT DISTINCT term FROM \
+                       UNNEST(CAST(fts_stem_text(p_query) AS VARCHAR[])) AS q(term)) AS qt \
+                 ON qt.term = tf.term \
+               JOIN {dict} AS dict ON dict.term = tf.term \
+               JOIN {docs} AS d ON d.docid = p_docid \
+               CROSS JOIN {stats} AS s\
+             );\n"
+        )
+    }
+
     /// True if every English-stemmed query token appears among the doc's
     /// English-stemmed tokens (simple AND match).
     pub fn fts_match(doc: &str, query: &str) -> bool {
@@ -103,6 +168,7 @@ struct Extension;
 impl guest::Guest for Extension {
     fn load() -> Result<types::Loadresult, types::Duckerror> {
         register_scalars()?;
+        register_pragmas()?;
         Ok(types::Loadresult { name: "ftsfns".into(), version: Some(env!("CARGO_PKG_VERSION").into()), requires: Vec::new().into() })
     }
     fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> { Ok(false) }
@@ -174,7 +240,29 @@ impl callback_dispatch::Guest for Extension {
     }
     fn call_table(_h: u32, _a: Vec<types::Duckvalue>) -> Result<types::Resultset, types::Duckerror> { Err(types::Duckerror::Unsupported("ftsfns: no table fns".into())) }
     fn call_aggregate(_h: u32, _r: types::Rowbatch) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("ftsfns: no aggs".into())) }
-    fn call_pragma(_h: u32, _a: Vec<types::Duckvalue>) -> Result<Option<types::Duckvalue>, types::Duckerror> { Err(types::Duckerror::Unsupported("ftsfns: no pragmas".into())) }
+    // Item 4: `PRAGMA create_fts_index('<table>','<id>','<textcol>')`. The core
+    // intercepts the PRAGMA, dispatches here mid-query, and we RETURN a SQL script
+    // (we do NOT re-enter SQL ourselves) that the core then runs on the connection:
+    // it builds an inverted-index (terms/docs/dict/stats tables) by tokenizing +
+    // English-stemming the text column (reusing our fts_stem_text scalar), and a
+    // per-index `match_bm25(docid, query)` macro summing bm25_score over the
+    // stemmed query terms. No connection re-entrancy.
+    fn call_pragma(handle: u32, args: Vec<types::Duckvalue>) -> Result<Option<types::Duckvalue>, types::Duckerror> {
+        let which = pragma_handlers().lock().unwrap().get(&handle).copied()
+            .ok_or_else(|| types::Duckerror::Internal("unknown pragma handle".into()))?;
+        match which {
+            P::CreateFtsIndex => {
+                let table = text_arg(&args, 0)
+                    .ok_or_else(|| types::Duckerror::Invalidargument("create_fts_index: table name (arg 0) required".into()))?;
+                let id = text_arg(&args, 1)
+                    .ok_or_else(|| types::Duckerror::Invalidargument("create_fts_index: id column (arg 1) required".into()))?;
+                let textcol = text_arg(&args, 2)
+                    .ok_or_else(|| types::Duckerror::Invalidargument("create_fts_index: text column (arg 2) required".into()))?;
+                let script = core::build_fts_index_sql(&table, &id, &textcol);
+                Ok(Some(types::Duckvalue::Text(script.into())))
+            }
+        }
+    }
     fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("ftsfns: no casts".into())) }
 }
 export!(Extension);
@@ -216,6 +304,33 @@ fn register_scalars() -> Result<(), types::Duckerror> {
 static NEXT: AtomicU32 = AtomicU32::new(1);
 static HANDLERS: OnceLock<Mutex<HashMap<u32, F>>> = OnceLock::new();
 fn handlers() -> &'static Mutex<HashMap<u32, F>> { HANDLERS.get_or_init(|| Mutex::new(HashMap::new())) }
+
+// Item 4: pragma capability. `create_fts_index` is the only pragma; it returns a
+// SQL script (see core::build_fts_index_sql) that the core runs on the connection.
+#[derive(Clone, Copy, PartialEq)] enum P { CreateFtsIndex }
+static PRAGMA_HANDLERS: OnceLock<Mutex<HashMap<u32, P>>> = OnceLock::new();
+fn pragma_handlers() -> &'static Mutex<HashMap<u32, P>> { PRAGMA_HANDLERS.get_or_init(|| Mutex::new(HashMap::new())) }
+
+fn register_pragmas() -> Result<(), types::Duckerror> {
+    let cap = runtime::get_capability(types::Capabilitykind::Pragma)
+        .ok_or_else(|| types::Duckerror::Internal("no pragma capability".into()))?;
+    let reg = match cap { runtime::Capability::Pragma(r) => r, _ => return Err(types::Duckerror::Internal("bad pragma capability".into())) };
+    let txt = |name: &str| runtime::Funcarg { name: Some(name.into()), logical: types::Logicaltype::Text };
+
+    let h = NEXT.fetch_add(1, Ordering::Relaxed);
+    pragma_handlers().lock().unwrap().insert(h, P::CreateFtsIndex);
+    reg.register_call(
+        "create_fts_index",
+        &[txt("table_name"), txt("id_column"), txt("text_column")],
+        types::Logicaltype::Text,
+        runtime::PragmaCallback::new(h),
+        Some(&runtime::Extopts {
+            description: Some("build an inverted FTS index + match_bm25 macro over a text column".into()),
+            tags: vec!["fts".into()],
+        }),
+    )?;
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {

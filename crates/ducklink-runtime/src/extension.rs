@@ -113,6 +113,7 @@ type PendingCast = reg::CastReg;
 type PendingStorage = reg::StorageReg;
 type PendingFiles = reg::FilesReg;
 type PendingCollation = reg::CollationReg;
+type PendingPragma = reg::PragmaReg;
 
 #[derive(Default)]
 struct PendingScalarRegistry {
@@ -202,6 +203,7 @@ pub struct ExtensionStoreState {
     pending_storages: Vec<PendingStorage>,
     pending_files: Vec<PendingFiles>,
     pending_collations: Vec<PendingCollation>,
+    pending_pragmas: Vec<PendingPragma>,
     /// Maps the handle returned from `table-registry.register` to the table
     /// function name, so `files.register-replacement-scan` can resolve it.
     table_handle_names: HashMap<u32, String>,
@@ -234,6 +236,7 @@ impl ExtensionStoreState {
             pending_storages: Vec::new(),
             pending_files: Vec::new(),
             pending_collations: Vec::new(),
+            pending_pragmas: Vec::new(),
             table_handle_names: HashMap::new(),
             callback_registry,
             extension_name,
@@ -283,6 +286,13 @@ impl ExtensionStoreState {
     /// collation reusing the already-registered sort-key scalar).
     fn take_pending_collations(&mut self) -> Vec<PendingCollation> {
         std::mem::take(&mut self.pending_collations)
+    }
+
+    /// Item 4: drains ONLY the captured pragma registrations, used right after
+    /// `load()` so the host can surface them to the core (which pulls the list
+    /// via `pragma-host.pragma-list` and intercepts `PRAGMA <name>(...)`).
+    fn take_pending_pragmas(&mut self) -> Vec<PendingPragma> {
+        std::mem::take(&mut self.pending_pragmas)
     }
 
     fn drain_pending(&mut self) -> PendingRegistrationsData {
@@ -392,6 +402,15 @@ impl extension_runtime::Host for ExtensionStoreState {
                     wasmtime::component::Resource::new_own(id),
                 ))
             }
+            // Item 4: pragma capability. The PragmaRegistry resource carries no
+            // per-registry buffer (register_call captures pragmas directly into
+            // pending_pragmas), so just hand back a fresh resource id.
+            extension_runtime::Capabilitykind::Pragma => {
+                let id = self.alloc_resource_id();
+                Some(extension_runtime::Capability::Pragma(
+                    wasmtime::component::Resource::new_own(id),
+                ))
+            }
             _ => None,
         }
     }
@@ -401,6 +420,7 @@ impl extension_runtime::Host for ExtensionStoreState {
             extension_runtime::Capabilitykind::Scalar,
             extension_runtime::Capabilitykind::Table,
             extension_runtime::Capabilitykind::Aggregate,
+            extension_runtime::Capabilitykind::Pragma,
         ]
         .into()
     }
@@ -732,16 +752,53 @@ impl extension_runtime::HostAggregateRegistry for ExtensionStoreState {
 }
 
 impl extension_runtime::HostPragmaRegistry for ExtensionStoreState {
+    // Item 4: a component declares a PRAGMA in `load()`. The host captures its
+    // name + the callback handle into the neutral pending buffer; the core later
+    // pulls the list (via `pragma-host.pragma-list`), intercepts
+    // `PRAGMA <name>(...)`, dispatches via callback-dispatch.call-pragma (the
+    // component RETURNS a SQL script as text), and runs that script.
     fn register_call(
         &mut self,
         _self_: Resource<extension_runtime::PragmaRegistry>,
-        _name: String,
+        name: String,
         _arguments: BindgenVec<extension_runtime::Funcarg>,
         _returns: extension_runtime::Logicaltype,
-        _callback: Resource<extension_runtime::PragmaCallback>,
+        callback: Resource<extension_runtime::PragmaCallback>,
         _options: Option<extension_runtime::Extopts>,
     ) -> Result<u32, extension_types::Duckerror> {
-        Err(unsupported_runtime_error())
+        {
+            let registry = self
+                .callback_registry
+                .lock()
+                .expect("callback registry mutex poisoned");
+            match registry.get(callback.rep()) {
+                Some(entry) if entry.kind == CallbackKind::Pragma => {}
+                Some(_) => {
+                    return Err(extension_types::Duckerror::Invalidargument(
+                        "callback handle is not a pragma".to_string(),
+                    ))
+                }
+                None => {
+                    return Err(extension_types::Duckerror::Internal(
+                        "unknown pragma callback handle".to_string(),
+                    ))
+                }
+            }
+        }
+
+        let callback_handle = callback.rep();
+        std::mem::forget(callback);
+
+        eprintln!(
+            "[extension-runtime:{}] registered pragma '{name}' (callback={callback_handle})",
+            self.extension_name
+        );
+        self.pending_pragmas.push(PendingPragma {
+            extension: self.extension_name.clone(),
+            name,
+            callback_handle,
+        });
+        Ok(self.alloc_resource_id())
     }
 
     fn drop(&mut self, _rep: Resource<extension_runtime::PragmaRegistry>) -> wasmtime::Result<()> {
@@ -1475,6 +1532,14 @@ impl ExtensionInstance {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
         unsafe { (*data).take_pending_collations() }
+    }
+
+    /// Item 4: drains the captured pragma registrations (see
+    /// `ExtensionStoreState::take_pending_pragmas`).
+    pub fn take_pending_pragmas(&mut self) -> Vec<crate::reg::PragmaReg> {
+        let mut ctx = self.store.as_context_mut();
+        let data: *mut ExtensionStoreState = ctx.data_mut();
+        unsafe { (*data).take_pending_pragmas() }
     }
 
     // --- M2a: storage-dispatch (foreign-catalog) re-entry ---

@@ -55,6 +55,7 @@ use duckdb_core_bindings::duckdb::component::host_extension_loader as core_host_
 use duckdb_core_bindings::duckdb::extension::callback_dispatch as core_callback_dispatch;
 use duckdb_core_bindings::duckdb::extension::storage_host as core_storage_host;
 use duckdb_core_bindings::duckdb::extension::collation_host as core_collation_host;
+use duckdb_core_bindings::duckdb::extension::pragma_host as core_pragma_host;
 use duckdb_core_bindings::duckdb::extension::files_host as core_files_host;
 use duckdb_core_bindings::duckdb::extension::types as core_types;
 use duckdb_core_bindings::tvm::memory::bytes as core_tvm_bytes;
@@ -428,6 +429,28 @@ impl core_collation_host::Host for CoreStoreState {
                 name,
                 transform_scalar,
                 combinable,
+            })
+            .collect()
+    }
+}
+
+// Item 4: the core imports `duckdb:extension/pragma-host` to pull the pragmas
+// components have declared. The host PROVIDES it, returning each pragma's name +
+// callback handle. The core intercepts `PRAGMA <name>(...)`, dispatches via
+// callback-dispatch.call-pragma (the component returns a SQL script), and runs
+// that script -- no mid-callback re-entry into SQL.
+impl core_pragma_host::Host for CoreStoreState {
+    fn pragma_list(&mut self) -> Vec<core_pragma_host::PragmaSpec> {
+        let manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .registered_pragmas()
+            .into_iter()
+            .map(|(name, callback_handle)| core_pragma_host::PragmaSpec {
+                name,
+                callback_handle,
             })
             .collect()
     }
@@ -1051,6 +1074,12 @@ struct ExtensionManager {
     // import) and wraps each as a DuckDB collation reusing the named sort-key
     // scalar. Keyed by collation name -> (transform scalar, combinable).
     collations: HashMap<String, (String, bool)>,
+    // Item 4: pragmas components have declared via `runtime.pragma-registry.register-call`.
+    // The core pulls this list (through the `pragma-host.pragma-list` import) and
+    // intercepts `PRAGMA <name>(...)`, dispatching via the callback handle (the
+    // component returns a SQL script the core runs). Keyed by pragma name ->
+    // (extension, callback-handle).
+    pragmas: HashMap<String, (String, u32)>,
 }
 
 impl ExtensionManager {
@@ -1063,6 +1092,7 @@ impl ExtensionManager {
             storage_backends: HashMap::new(),
             files_backend: None,
             collations: HashMap::new(),
+            pragmas: HashMap::new(),
         }
     }
 
@@ -1073,6 +1103,16 @@ impl ExtensionManager {
         self.collations
             .iter()
             .map(|(name, (scalar, combinable))| (name.clone(), scalar.clone(), *combinable))
+            .collect()
+    }
+
+    /// Item 4: the pragmas components have declared (via `register-call`), as
+    /// (name, callback-handle). The core pulls this through the
+    /// `pragma-host.pragma-list` import and intercepts `PRAGMA <name>(...)`.
+    fn registered_pragmas(&self) -> Vec<(String, u32)> {
+        self.pragmas
+            .iter()
+            .map(|(name, (_extension, handle))| (name.clone(), *handle))
             .collect()
     }
 
@@ -1588,6 +1628,19 @@ impl ExtensionManager {
                 self.collations.insert(
                     collation.name.clone(),
                     (collation.transform_scalar.clone(), collation.combinable),
+                );
+            }
+            // Item 4: capture this extension's pragmas NOW (right after load), so
+            // the core can intercept `PRAGMA <name>(...)` (via pragma-host.pragma-list)
+            // before the first query that uses it.
+            for pragma in instance.take_pending_pragmas() {
+                eprintln!(
+                    "[extension-manager] pragma '{}' -> extension '{}' (callback={})",
+                    pragma.name, pragma.extension, pragma.callback_handle
+                );
+                self.pragmas.insert(
+                    pragma.name.clone(),
+                    (pragma.extension.clone(), pragma.callback_handle),
                 );
             }
         }
@@ -3003,6 +3056,10 @@ fn instantiate_core(
         |state| state,
     )?;
     core_collation_host::add_to_linker::<CoreStoreState, CoreStoreState>(
+        &mut linker,
+        |state| state,
+    )?;
+    core_pragma_host::add_to_linker::<CoreStoreState, CoreStoreState>(
         &mut linker,
         |state| state,
     )?;
