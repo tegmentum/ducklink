@@ -1,5 +1,14 @@
 # Plan — remaining WIT capability surfaces
 
+> **STATUS (complete):** all 5 items implemented + verified in-sandbox on the
+> lean core; full smoke 171/171. Item 1 (rich types) was the one contract bump
+> (forced a full-catalog rebuild — the canonical-ABI finding); Items 2/4/3/5 are
+> additive new interfaces. Item 3's optimizer auto-rewrite (the planner choosing
+> a wasm component's HNSW index) was the keystone. Item 5 needed no core change
+> (register-cast was already wired). Deferred follow-ons: decimal/interval/uuid +
+> nested types (later type bump), GDAL/PROJ + R-tree (engineering on proven
+> capabilities), the full vss-style hnsw_index_scan TableFunction rewrite.
+
 The de-embed program has delivered every official extension whose surface fits
 the *existing* WIT capabilities (scalar / table / aggregate / cast / macro /
 pragma / catalog / files). What remains needs **new capability surfaces**. This
