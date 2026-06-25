@@ -20,8 +20,9 @@ use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 use crate::duckdb_extension_bindings::duckdb::extension::{
     catalog as extension_catalog, config as extension_config, files as extension_files,
-    collation as extension_collation, files_reg as extension_files_reg, logging as extension_logging,
-    runtime as extension_runtime, storage as extension_storage, types as extension_types,
+    collation as extension_collation, files_reg as extension_files_reg, index as extension_index,
+    logging as extension_logging, runtime as extension_runtime, storage as extension_storage,
+    types as extension_types,
 };
 use crate::duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
 use crate::reg;
@@ -111,6 +112,7 @@ type PendingReplacementScan = reg::ReplacementScanReg;
 type PendingLogicalType = reg::LogicalTypeReg;
 type PendingCast = reg::CastReg;
 type PendingStorage = reg::StorageReg;
+type PendingIndex = reg::IndexReg;
 type PendingFiles = reg::FilesReg;
 type PendingCollation = reg::CollationReg;
 type PendingPragma = reg::PragmaReg;
@@ -201,6 +203,7 @@ pub struct ExtensionStoreState {
     pending_logical_types: Vec<PendingLogicalType>,
     pending_casts: Vec<PendingCast>,
     pending_storages: Vec<PendingStorage>,
+    pending_indexes: Vec<PendingIndex>,
     pending_files: Vec<PendingFiles>,
     pending_collations: Vec<PendingCollation>,
     pending_pragmas: Vec<PendingPragma>,
@@ -234,6 +237,7 @@ impl ExtensionStoreState {
             pending_logical_types: Vec::new(),
             pending_casts: Vec::new(),
             pending_storages: Vec::new(),
+            pending_indexes: Vec::new(),
             pending_files: Vec::new(),
             pending_collations: Vec::new(),
             pending_pragmas: Vec::new(),
@@ -271,6 +275,15 @@ impl ExtensionStoreState {
     /// is routable before the core ever drains function registrations.
     fn take_pending_storages(&mut self) -> Vec<PendingStorage> {
         std::mem::take(&mut self.pending_storages)
+    }
+
+    /// Item 3 / M2a: drains ONLY the captured custom-index TYPE registrations,
+    /// used right after `load()` so the host can surface them to the core (which
+    /// pulls the list via `index-host.index-type-list` and registers a wasm
+    /// IndexType for each, routing `CREATE INDEX ... USING <type>` to the
+    /// component's index-dispatch export).
+    fn take_pending_indexes(&mut self) -> Vec<PendingIndex> {
+        std::mem::take(&mut self.pending_indexes)
     }
 
     /// Drains ONLY the captured files-backend registrations (httpfs M2), used
@@ -1053,6 +1066,28 @@ impl extension_storage::Host for ExtensionStoreState {
     }
 }
 
+// Item 3 / M2a: the `index` interface lets a component register a custom INDEX
+// TYPE (e.g. "wasm_hnsw") in `load()`. The host satisfies the import so
+// index-capable components instantiate and load; the registration is captured
+// into the neutral pending buffer. Driving the component's `index-dispatch`
+// export (create/append/build/search/drop) is the direction-specific sink's job.
+impl extension_index::Host for ExtensionStoreState {
+    fn register_index_type(
+        &mut self,
+        type_name: String,
+    ) -> Result<(), extension_types::Duckerror> {
+        eprintln!(
+            "[extension-runtime:{}] registered custom index type '{type_name}'",
+            self.extension_name
+        );
+        self.pending_indexes.push(PendingIndex {
+            extension: self.extension_name.clone(),
+            type_name,
+        });
+        Ok(())
+    }
+}
+
 // httpfs M2: the `files-reg` interface lets a component declare itself the files
 // backend (an http(s) fetcher) in `load()`. The host satisfies the import so
 // files-capable components instantiate; the registration is captured into the
@@ -1307,6 +1342,9 @@ pub struct ExtensionInstance {
     // Lazily-built storage bindings (None until first storage-dispatch call or
     // for non-storage extensions).
     storage_bindings: Option<crate::duckdb_extension_storage_bindings::DuckdbExtensionStorage>,
+    // Item 3 / M2a: lazily-built index bindings (None until first index-dispatch
+    // call or for non-index extensions).
+    index_bindings: Option<crate::duckdb_extension_index_bindings::DuckdbExtensionIndex>,
     // httpfs M2: lazily-built files bindings (None until first file-dispatch
     // call or for non-files extensions).
     files_bindings: Option<crate::duckdb_extension_files_bindings::DuckdbExtensionFiles>,
@@ -1394,6 +1432,26 @@ fn storage_columndef_to_ext(col: storage_types::Columndef) -> extension_types::C
     }
 }
 
+// Item 3 / M2a: the index-capable bindgen world generates its OWN (structurally
+// identical) `types`; convert those into the base `extension_types`.
+mod index_types {
+    pub use crate::duckdb_extension_index_bindings::duckdb::extension::types::*;
+}
+
+/// An index-dispatch nearest-neighbour hit (rowid + distance), re-exported for
+/// the host to surface up the index-host import.
+pub use crate::duckdb_extension_index_bindings::exports::duckdb::extension::index_dispatch::IndexHit;
+
+fn index_duckerror_to_ext(err: index_types::Duckerror) -> extension_types::Duckerror {
+    match err {
+        index_types::Duckerror::Invalidargument(m) => extension_types::Duckerror::Invalidargument(m),
+        index_types::Duckerror::Unsupported(m) => extension_types::Duckerror::Unsupported(m),
+        index_types::Duckerror::Invalidstate(m) => extension_types::Duckerror::Invalidstate(m),
+        index_types::Duckerror::Io(m) => extension_types::Duckerror::Io(m),
+        index_types::Duckerror::Internal(m) => extension_types::Duckerror::Internal(m),
+    }
+}
+
 impl ExtensionInstance {
     pub fn new(
         store: Store<ExtensionStoreState>,
@@ -1405,6 +1463,7 @@ impl ExtensionInstance {
             bindings,
             instance,
             storage_bindings: None,
+            index_bindings: None,
             files_bindings: None,
         }
     }
@@ -1516,6 +1575,14 @@ impl ExtensionInstance {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
         unsafe { (*data).take_pending_storages() }
+    }
+
+    /// Item 3 / M2a: drains the captured custom-index TYPE registrations (see
+    /// `ExtensionStoreState::take_pending_indexes`).
+    pub fn take_pending_indexes(&mut self) -> Vec<crate::reg::IndexReg> {
+        let mut ctx = self.store.as_context_mut();
+        let data: *mut ExtensionStoreState = ctx.data_mut();
+        unsafe { (*data).take_pending_indexes() }
     }
 
     /// httpfs M2: drains the captured files-backend registrations (see
@@ -1659,6 +1726,109 @@ impl ExtensionInstance {
             .map_err(storage_duckerror_to_ext)
     }
 
+    // --- Item 3 / M2a: index-dispatch (custom index build + search) re-entry ---
+    // Mirrors the storage-dispatch `storage_*` methods but drives the component's
+    // exported `index-dispatch` interface. The HNSW (or other ANN) build happens
+    // in-component over a create -> append -> build lifecycle; search returns kNN
+    // hits. No callback-handle is threaded (the component keys index state by
+    // index NAME), so these take no `handle` argument.
+
+    /// Builds (once) the index-capable bindings from the raw instance. Errors if
+    /// this component does not export index-dispatch (i.e. is not an index
+    /// backend).
+    fn index_bindings(
+        &mut self,
+    ) -> Result<
+        &crate::duckdb_extension_index_bindings::DuckdbExtensionIndex,
+        extension_types::Duckerror,
+    > {
+        if self.index_bindings.is_none() {
+            let built = crate::duckdb_extension_index_bindings::DuckdbExtensionIndex::new(
+                self.store.as_context_mut(),
+                &self.instance,
+            )
+            .map_err(map_extension_trap)?;
+            self.index_bindings = Some(built);
+        }
+        Ok(self.index_bindings.as_ref().unwrap())
+    }
+
+    /// Allocate an empty index builder for `(type_name, index_name)` over a
+    /// FLOAT[dims] key. Returns the component-side index-handle.
+    pub fn index_create(
+        &mut self,
+        type_name: &str,
+        index_name: &str,
+        dims: u32,
+    ) -> Result<u32, extension_types::Duckerror> {
+        self.index_bindings()?;
+        let bindings = self.index_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_index_dispatch();
+        let store = &mut self.store;
+        guest
+            .call_index_create(store.as_context_mut(), type_name, index_name, dims)
+            .map_err(map_extension_trap)?
+            .map_err(index_duckerror_to_ext)
+    }
+
+    /// Accumulate a batch of (rowid, vector) rows into the builder.
+    pub fn index_append(
+        &mut self,
+        handle: u32,
+        rowids: &[i64],
+        vectors: &[Vec<f32>],
+    ) -> Result<(), extension_types::Duckerror> {
+        self.index_bindings()?;
+        let bindings = self.index_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_index_dispatch();
+        let store = &mut self.store;
+        guest
+            .call_index_append(store.as_context_mut(), handle, rowids, vectors)
+            .map_err(map_extension_trap)?
+            .map_err(index_duckerror_to_ext)
+    }
+
+    /// Finalize: build the ANN map from every appended row.
+    pub fn index_build(&mut self, handle: u32) -> Result<(), extension_types::Duckerror> {
+        self.index_bindings()?;
+        let bindings = self.index_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_index_dispatch();
+        let store = &mut self.store;
+        guest
+            .call_index_build(store.as_context_mut(), handle)
+            .map_err(map_extension_trap)?
+            .map_err(index_duckerror_to_ext)
+    }
+
+    /// k nearest neighbours of `query`, closest first.
+    pub fn index_search(
+        &mut self,
+        handle: u32,
+        query: &[f32],
+        k: u32,
+    ) -> Result<Vec<IndexHit>, extension_types::Duckerror> {
+        self.index_bindings()?;
+        let bindings = self.index_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_index_dispatch();
+        let store = &mut self.store;
+        guest
+            .call_index_search(store.as_context_mut(), handle, query, k)
+            .map_err(map_extension_trap)?
+            .map_err(index_duckerror_to_ext)
+    }
+
+    /// Free the index + handle.
+    pub fn index_drop(&mut self, handle: u32) -> Result<(), extension_types::Duckerror> {
+        self.index_bindings()?;
+        let bindings = self.index_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_index_dispatch();
+        let store = &mut self.store;
+        guest
+            .call_index_drop(store.as_context_mut(), handle)
+            .map_err(map_extension_trap)?
+            .map_err(index_duckerror_to_ext)
+    }
+
     // --- httpfs M2: file-dispatch (remote file I/O) re-entry ---
     // Mirrors the storage-dispatch `storage_*` methods but drives the files
     // backend component's exported `file-dispatch` interface. The component
@@ -1755,6 +1925,7 @@ pub fn add_extension_interfaces_to_linker(
     extension_catalog::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_files::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_storage::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    extension_index::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_collation::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_files_reg::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     Ok(())

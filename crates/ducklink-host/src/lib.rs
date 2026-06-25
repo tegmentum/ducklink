@@ -54,6 +54,7 @@ use duckdb_core_bindings::duckdb::component::extension_loader_hooks as core_exte
 use duckdb_core_bindings::duckdb::component::host_extension_loader as core_host_loader;
 use duckdb_core_bindings::duckdb::extension::callback_dispatch as core_callback_dispatch;
 use duckdb_core_bindings::duckdb::extension::storage_host as core_storage_host;
+use duckdb_core_bindings::duckdb::extension::index_host as core_index_host;
 use duckdb_core_bindings::duckdb::extension::collation_host as core_collation_host;
 use duckdb_core_bindings::duckdb::extension::pragma_host as core_pragma_host;
 use duckdb_core_bindings::duckdb::extension::files_host as core_files_host;
@@ -406,6 +407,94 @@ impl core_storage_host::Host for CoreStoreState {
             .expect("extension manager mutex poisoned");
         manager
             .dispatch_storage_scan_close(scan)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+}
+
+// Item 3 / M2a: the core imports `duckdb:extension/index-host` for custom-index
+// build + search. The host PROVIDES it and routes each call through the
+// ExtensionManager to the backing index component's `index-dispatch` export
+// (mirroring storage-host). index-type-list lets the core register a wasm
+// IndexType per declared type so `CREATE INDEX ... USING <type>` dispatches here.
+impl core_index_host::Host for CoreStoreState {
+    fn index_type_list(&mut self) -> Vec<String> {
+        let manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager.registered_index_types()
+    }
+
+    fn index_create(
+        &mut self,
+        type_name: String,
+        index_name: String,
+        dims: u32,
+    ) -> Result<u32, core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_index_create(&type_name, &index_name, dims)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn index_append(
+        &mut self,
+        handle: u32,
+        rowids: Vec<i64>,
+        vectors: Vec<Vec<f32>>,
+    ) -> Result<(), core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_index_append(handle, &rowids, &vectors)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn index_build(&mut self, handle: u32) -> Result<(), core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_index_build(handle)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn index_search(
+        &mut self,
+        handle: u32,
+        query: Vec<f32>,
+        k: u32,
+    ) -> Result<Vec<core_index_host::IndexHit>, core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_index_search(handle, &query, k)
+            .map(|hits| {
+                hits.into_iter()
+                    .map(|h| core_index_host::IndexHit {
+                        rowid: h.rowid,
+                        distance: h.distance,
+                    })
+                    .collect()
+            })
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn index_drop(&mut self, handle: u32) -> Result<(), core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_index_drop(handle)
             .map_err(convert_extension_duckerror_to_core)
     }
 }
@@ -1065,6 +1154,12 @@ struct ExtensionManager {
     // value is the backing extension name + the callback-handle the component
     // expects on every storage-dispatch call.
     storage_backends: HashMap<String, (String, u32)>,
+    // Item 3 / M2a: registered custom INDEX TYPE backends, captured from each
+    // extension's `register-index-type`. Keyed by index TYPE name (e.g.
+    // "wasm_hnsw"); the value is the backing extension name. The core pulls the
+    // type names (via index-host.index-type-list) and registers a wasm IndexType
+    // for each, so `CREATE INDEX ... USING <type>` dispatches here.
+    index_backends: HashMap<String, String>,
     // httpfs M2: the single registered files backend (the component that backs
     // http(s):// reads), as (extension name, callback-handle). Captured from a
     // component's `files-reg.register-files` at load.
@@ -1090,6 +1185,7 @@ impl ExtensionManager {
             extensions: HashMap::new(),
             callback_registry: Arc::new(Mutex::new(CallbackRegistry::new())),
             storage_backends: HashMap::new(),
+            index_backends: HashMap::new(),
             files_backend: None,
             collations: HashMap::new(),
             pragmas: HashMap::new(),
@@ -1233,6 +1329,104 @@ impl ExtensionManager {
             extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
         })?;
         instance.storage_scan_close(handle, scan)
+    }
+
+    // --- Item 3 / M2a: custom index (build + search) routing ---
+
+    /// The custom index TYPE names every component has registered (via
+    /// `register-index-type`). The core pulls this list (through the
+    /// `index-host.index-type-list` import) and registers a wasm IndexType for
+    /// each, so `CREATE INDEX ... USING <type>` dispatches here.
+    fn registered_index_types(&self) -> Vec<String> {
+        self.index_backends.keys().cloned().collect()
+    }
+
+    /// Resolve the index backend that should service a `(type_name)` index
+    /// operation. Prefer the exact type-name match; otherwise fall back to the
+    /// single registered index backend (if unambiguous).
+    fn resolve_index_backend(
+        &self,
+        type_name: &str,
+    ) -> Result<String, extension_types::Duckerror> {
+        if let Some(ext) = self.index_backends.get(type_name) {
+            return Ok(ext.clone());
+        }
+        if self.index_backends.len() == 1 {
+            return Ok(self.index_backends.values().next().unwrap().clone());
+        }
+        {
+            let mut iter = self.index_backends.values();
+            if let Some(first) = iter.next() {
+                if iter.all(|v| v == first) {
+                    return Ok(first.clone());
+                }
+            }
+        }
+        Err(extension_types::Duckerror::Invalidstate(format!(
+            "no index backend registered for '{type_name}' (have {} backend(s))",
+            self.index_backends.len()
+        )))
+    }
+
+    fn dispatch_index_create(
+        &mut self,
+        type_name: &str,
+        index_name: &str,
+        dims: u32,
+    ) -> Result<u32, extension_types::Duckerror> {
+        let ext = self.resolve_index_backend(type_name)?;
+        eprintln!(
+            "[index-create] dispatch_index_create ext='{ext}' type='{type_name}' name='{index_name}' dims={dims}"
+        );
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
+        })?;
+        instance.index_create(type_name, index_name, dims)
+    }
+
+    fn dispatch_index_append(
+        &mut self,
+        handle: u32,
+        rowids: &[i64],
+        vectors: &[Vec<f32>],
+    ) -> Result<(), extension_types::Duckerror> {
+        // The build pipeline targets the single resolved index backend (M2a: one
+        // index extension at a time). Resolve by the empty type (falls back to the
+        // single registered backend).
+        let ext = self.resolve_index_backend("")?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
+        })?;
+        instance.index_append(handle, rowids, vectors)
+    }
+
+    fn dispatch_index_build(&mut self, handle: u32) -> Result<(), extension_types::Duckerror> {
+        let ext = self.resolve_index_backend("")?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
+        })?;
+        instance.index_build(handle)
+    }
+
+    fn dispatch_index_search(
+        &mut self,
+        handle: u32,
+        query: &[f32],
+        k: u32,
+    ) -> Result<Vec<ducklink_runtime::extension::IndexHit>, extension_types::Duckerror> {
+        let ext = self.resolve_index_backend("")?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
+        })?;
+        instance.index_search(handle, query, k)
+    }
+
+    fn dispatch_index_drop(&mut self, handle: u32) -> Result<(), extension_types::Duckerror> {
+        let ext = self.resolve_index_backend("")?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
+        })?;
+        instance.index_drop(handle)
     }
 
     // httpfs M2: route file-open/read/close to the registered files backend's
@@ -1606,6 +1800,17 @@ impl ExtensionManager {
                     storage.type_name.clone(),
                     (storage.extension.clone(), storage.callback_handle),
                 );
+            }
+            // Item 3 / M2a: capture this extension's custom index TYPEs NOW (right
+            // after load), so the core can register them (via
+            // index-host.index-type-list) before the first CREATE INDEX.
+            for index in instance.take_pending_indexes() {
+                eprintln!(
+                    "[extension-manager] index type '{}' -> extension '{}'",
+                    index.type_name, index.extension
+                );
+                self.index_backends
+                    .insert(index.type_name.clone(), index.extension.clone());
             }
             // httpfs M2: capture this extension's files backend NOW (right after
             // load), so an http(s):// read can route to it. The last loaded
@@ -3052,6 +3257,10 @@ fn instantiate_core(
         |state| state,
     )?;
     core_storage_host::add_to_linker::<CoreStoreState, CoreStoreState>(
+        &mut linker,
+        |state| state,
+    )?;
+    core_index_host::add_to_linker::<CoreStoreState, CoreStoreState>(
         &mut linker,
         |state| state,
     )?;

@@ -53,6 +53,20 @@ pub mod duckdb_extension_storage_bindings {
     });
 }
 
+/// Bindings for the index-capable world (`duckdb-extension-index`), which
+/// additionally exports `index-dispatch` (Item 3 / M2a custom index). Only
+/// custom-index backend components (e.g. hnswfns) satisfy this; the runtime
+/// builds these bindings lazily from an already-loaded component instance so
+/// non-index extensions (which don't export index-dispatch) still load against
+/// the base world above.
+pub mod duckdb_extension_index_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-index",
+        require_store_data_send: true,
+    });
+}
+
 /// Bindings for the files-capable world (`duckdb-extension-files`), which
 /// additionally exports `file-dispatch` (httpfs M2). Only files backend
 /// components (e.g. webfs) satisfy this; the runtime builds these bindings
@@ -275,6 +289,17 @@ pub mod reg {
     pub struct FilesReg {
         pub extension: String,
         pub callback_handle: u32,
+    }
+
+    /// A custom index TYPE registered by an extension (Item 3 / M2a). Declares an
+    /// index type `type_name` (e.g. "wasm_hnsw") so `CREATE INDEX ... USING
+    /// <type_name>` routes the build pipeline to the owning component's
+    /// `index-dispatch` export. The build/search lifecycle is keyed by index NAME
+    /// inside the component, so no per-type callback handle is needed.
+    #[derive(Clone, Debug)]
+    pub struct IndexReg {
+        pub extension: String,
+        pub type_name: String,
     }
 
     /// A collation registered by an extension (Item 2). Declares a collation
