@@ -93,6 +93,10 @@ CASES = [
          ["c", "2 row(s) in c", "id"]),
 
     case("greet", ".greet World\n.quit\n", ["World"]),
+
+    case("bundle",
+         ".bundle loaded\n.bundle members\n.quit\n",
+         ["core_functions", "parquet"]),
 ]
 
 

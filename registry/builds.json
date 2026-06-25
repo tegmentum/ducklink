@@ -1,0 +1,47 @@
+{
+  "version": "0.1.0",
+  "updated": "2026-06-25",
+  "_schema": "Embedding-tracking for ducklink builds (sqlink Bundles parity). Each record is a NAMED set of content-hashed embedding members keyed by set_hash. core_embedded = the wasm core's EMBED_EXTENSIONS set; components = loaded/autoloaded/composed component extensions; composed_of = inter-component (wac) compositions and what they embed. Members are BLAKE2b-256 content hashes; set_hash = BLAKE2b-256 over the sorted newline-terminated 'name\\thash\\n' member lines.",
+  "builds": [
+    {
+      "name": "lean-default",
+      "kind": "core",
+      "core_embedded": [
+        "core_functions",
+        "parquet"
+      ],
+      "components": [
+        {
+          "name": "jsonfns",
+          "artifact": "artifacts/extensions/jsonfns.wasm",
+          "hash": "9261b8523291bfa75cee1b5f6c1e255e86ee429827d39f06d191d243a5bbb332"
+        }
+      ],
+      "set_hash": "fbd54aaa1fda9e33ab20af212a402ed5763504c225ead45265d7e6fb1825d761",
+      "created_at": 1782396466
+    },
+    {
+      "name": "spatialproj",
+      "kind": "composed",
+      "core_embedded": [],
+      "components": [
+        {
+          "name": "spatialproj",
+          "artifact": "artifacts/extensions/spatialproj.wasm",
+          "hash": "25f254c9e62063ecf6b3f3a9786b0eaff71eebecbb3d68693d21c6acbb5b3e30"
+        }
+      ],
+      "composed_of": [
+        {
+          "name": "gdal",
+          "embeds": [
+            "PROJ",
+            "proj.db"
+          ]
+        }
+      ],
+      "set_hash": "f351e24b53a493fea20f68a7ff77bb10ed1a3be9bfb3c74cf06a0cdda0a65503",
+      "created_at": 1782396000
+    }
+  ]
+}

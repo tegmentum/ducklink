@@ -55,3 +55,30 @@ wac plug "$SP_RAW" --plug "$GDAL_FIXED" -o "$OUT"
 rm -f "$GDAL_FIXED"
 echo "composed -> $OUT"
 wasm-tools component wit "$OUT" | grep -E "import gdal|import duckdb|export duckdb" || true
+
+# Self-record the composition for ducklink's embedding-tracking ("Bundles")
+# feature. ducklink's tooling/builds.py ingests this manifest:
+#   python3 tooling/builds.py record spatialproj --kind composed \
+#       --from-manifest extensions/spatialproj-component/spatialproj.compose.json
+MANIFEST="$(dirname "$0")/spatialproj.compose.json"
+OUT_REL="artifacts/extensions/spatialproj.wasm"
+OUT_HASH="$(
+  { command -v b2sum >/dev/null 2>&1 && b2sum -l 256 "$OUT" 2>/dev/null; } \
+    || { command -v shasum >/dev/null 2>&1 && shasum -a 256 "$OUT" 2>/dev/null; } \
+    || { command -v sha256sum >/dev/null 2>&1 && sha256sum "$OUT" 2>/dev/null; } \
+    || echo "unknown -"
+)"
+OUT_HASH="${OUT_HASH%% *}"
+cat > "$MANIFEST" <<EOF
+{
+  "name": "spatialproj",
+  "kind": "composed",
+  "composed_of": [
+    { "name": "gdal", "embeds": ["PROJ", "proj.db"], "provides": ["gdal:core/srs"] }
+  ],
+  "output": "${OUT_REL}",
+  "output_hash": "${OUT_HASH}",
+  "built_at": $(date +%s)
+}
+EOF
+echo "recorded composition manifest -> $MANIFEST"
