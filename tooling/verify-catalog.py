@@ -37,12 +37,16 @@ for wasm in sorted(art_dir.glob("*.wasm")):
     if wasm.stem not in registered and not is_live_server_backend(wasm.stem):
         issues.append(f"orphan artifact: {wasm.name} (no registry entry)")
 
-# PLAN-prefixes (v1, warn-only): registry entries SHOULD declare prefix +
-# expansion so their functions get a stable qualified `prefix__name` form and a
-# global-identity expansion. Absent -> the host falls back to prefix=name,
-# expansion=ducklink-internal://name + a load warning (hard error after v1.1).
-missing_prefix = [e["name"] for e in exts
-                  if not (e.get("prefix") and e.get("expansion"))]
+# PLAN-prefixes (v1.1 cutover, ENFORCED): every registry entry MUST declare
+# prefix + expansion so its functions get a stable qualified `prefix__name` form
+# and a global-identity expansion. The full catalog was backfilled (181/181), so
+# this is now a hard check -- a new entry without both fails verification (vs the
+# v1 load-time fallback prefix=name, expansion=ducklink-internal://name).
+for e in exts:
+    if not e.get("prefix"):
+        issues.append(f"{e['name']}: missing `prefix` (PLAN-prefixes v1.1)")
+    if not e.get("expansion"):
+        issues.append(f"{e['name']}: missing `expansion` (PLAN-prefixes v1.1)")
 
 agg = [e["name"] for e in exts if "aggregate" in (e.get("requires") or [])]
 net = [e["name"] for e in exts if "network" in (e.get("requires") or [])]
@@ -50,10 +54,6 @@ print(f"catalog: {len(exts)} component extensions, "
       f"{sum(len(e.get('exports',[])) for e in exts)} functions")
 print(f"  scalars + {len(agg)} aggregate ({', '.join(agg)}) + {len(net)} network ({', '.join(net)})")
 print(f"  artifacts present: {len(list(art_dir.glob('*.wasm')))}")
-if missing_prefix:
-    print(f"\nWARNING (PLAN-prefixes, not fatal in v1) — {len(missing_prefix)} entr(ies) "
-          f"missing prefix/expansion (using load-time fallback): "
-          f"{', '.join(missing_prefix[:20])}{' ...' if len(missing_prefix) > 20 else ''}")
 if issues:
     print(f"\nFAILED — {len(issues)} issue(s):")
     for i in issues: print(f"  - {i}")

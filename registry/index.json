@@ -163,7 +163,9 @@
         "catalog"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "sample_extension",
+      "expansion": "com.tegmentum.ducklink.sample_extension"
     },
     {
       "name": "isin",
@@ -198,7 +200,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "isin",
+      "expansion": "com.tegmentum.ducklink.isin"
     },
     {
       "name": "baseN",
@@ -235,7 +239,9 @@
         "base32",
         "bs58"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "baseN",
+      "expansion": "com.tegmentum.ducklink.baseN"
     },
     {
       "name": "luhn",
@@ -266,7 +272,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "luhn",
+      "expansion": "com.tegmentum.ducklink.luhn"
     },
     {
       "name": "iban",
@@ -300,7 +308,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "iban",
+      "expansion": "com.tegmentum.ducklink.iban"
     },
     {
       "name": "ean",
@@ -332,7 +342,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "ean",
+      "expansion": "com.tegmentum.ducklink.ean"
     },
     {
       "name": "aba",
@@ -362,7 +374,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "aba",
+      "expansion": "com.tegmentum.ducklink.aba"
     },
     {
       "name": "creditcard",
@@ -393,7 +407,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "creditcard",
+      "expansion": "com.tegmentum.ducklink.creditcard"
     },
     {
       "name": "uuidx",
@@ -426,7 +442,9 @@
         "v7",
         "identifier"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "uuidx",
+      "expansion": "com.tegmentum.ducklink.uuidx"
     },
     {
       "name": "crypto",
@@ -467,7 +485,9 @@
         "blake3",
         "crc32"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "crypto",
+      "expansion": "com.tegmentum.ducklink.crypto"
     },
     {
       "name": "markdown",
@@ -500,7 +520,9 @@
       "crates": [
         "pulldown-cmark"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "markdown",
+      "expansion": "com.tegmentum.ducklink.markdown"
     },
     {
       "name": "hashfuncs",
@@ -537,7 +559,9 @@
         "twox-hash",
         "murmur3"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "hashfuncs",
+      "expansion": "com.tegmentum.ducklink.hashfuncs"
     },
     {
       "name": "rapidfuzz",
@@ -572,7 +596,9 @@
       "crates": [
         "rapidfuzz"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "rapidfuzz",
+      "expansion": "com.tegmentum.ducklink.rapidfuzz"
     },
     {
       "name": "casing",
@@ -610,7 +636,9 @@
       "crates": [
         "heck"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "casing",
+      "expansion": "com.tegmentum.ducklink.casing"
     },
     {
       "name": "csscolor",
@@ -644,7 +672,9 @@
       "crates": [
         "csscolorparser"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "csscolor",
+      "expansion": "com.tegmentum.ducklink.csscolor"
     },
     {
       "name": "url",
@@ -679,7 +709,9 @@
       "crates": [
         "url"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "url",
+      "expansion": "com.tegmentum.ducklink.url"
     },
     {
       "name": "email",
@@ -712,7 +744,9 @@
       "crates": [
         "email_address"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "email",
+      "expansion": "com.tegmentum.ducklink.email"
     },
     {
       "name": "semver",
@@ -747,7 +781,9 @@
       "crates": [
         "semver"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "semver",
+      "expansion": "com.tegmentum.ducklink.semver"
     },
     {
       "name": "slug",
@@ -778,7 +814,9 @@
       "crates": [
         "slug"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "slug",
+      "expansion": "com.tegmentum.ducklink.slug"
     },
     {
       "name": "escape",
@@ -814,7 +852,9 @@
         "html-escape",
         "percent-encoding"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "escape",
+      "expansion": "com.tegmentum.ducklink.escape"
     },
     {
       "name": "natsort",
@@ -845,7 +885,9 @@
       "crates": [
         "natord"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "natsort",
+      "expansion": "com.tegmentum.ducklink.natsort"
     },
     {
       "name": "roman",
@@ -877,7 +919,9 @@
       "crates": [
         "roman"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "roman",
+      "expansion": "com.tegmentum.ducklink.roman"
     },
     {
       "name": "humansize",
@@ -909,7 +953,9 @@
       "crates": [
         "humansize"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "humansize",
+      "expansion": "com.tegmentum.ducklink.humansize"
     },
     {
       "name": "ids",
@@ -944,7 +990,9 @@
         "ulid",
         "nanoid"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "ids",
+      "expansion": "com.tegmentum.ducklink.ids"
     },
     {
       "name": "idna",
@@ -977,7 +1025,9 @@
       "crates": [
         "idna"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "idna",
+      "expansion": "com.tegmentum.ducklink.idna"
     },
     {
       "name": "mac",
@@ -1010,7 +1060,9 @@
       "crates": [
         "macaddr"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "mac",
+      "expansion": "com.tegmentum.ducklink.mac"
     },
     {
       "name": "isbn",
@@ -1041,7 +1093,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "isbn",
+      "expansion": "com.tegmentum.ducklink.isbn"
     },
     {
       "name": "humantime",
@@ -1074,7 +1128,9 @@
       "crates": [
         "humantime"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "humantime",
+      "expansion": "com.tegmentum.ducklink.humantime"
     },
     {
       "name": "iso",
@@ -1108,7 +1164,9 @@
       "crates": [
         "rust_iso3166"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "iso",
+      "expansion": "com.tegmentum.ducklink.iso"
     },
     {
       "name": "morse",
@@ -1139,7 +1197,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "morse",
+      "expansion": "com.tegmentum.ducklink.morse"
     },
     {
       "name": "color",
@@ -1172,7 +1232,9 @@
       "crates": [
         "csscolorparser"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "color",
+      "expansion": "com.tegmentum.ducklink.color"
     },
     {
       "name": "geohash",
@@ -1206,7 +1268,9 @@
       "crates": [
         "geohash"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "geohash",
+      "expansion": "com.tegmentum.ducklink.geohash"
     },
     {
       "name": "parsertools",
@@ -1240,7 +1304,9 @@
       "crates": [
         "sqlparser"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "parsertools",
+      "expansion": "com.tegmentum.ducklink.parsertools"
     },
     {
       "name": "currency",
@@ -1275,7 +1341,9 @@
       "crates": [
         "iso_currency"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "currency",
+      "expansion": "com.tegmentum.ducklink.currency"
     },
     {
       "name": "hmac",
@@ -1309,7 +1377,9 @@
         "hmac",
         "sha2"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "hmac",
+      "expansion": "com.tegmentum.ducklink.hmac"
     },
     {
       "name": "phonetic",
@@ -1342,7 +1412,9 @@
       "crates": [
         "rphonetic"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "phonetic",
+      "expansion": "com.tegmentum.ducklink.phonetic"
     },
     {
       "name": "jwt",
@@ -1375,7 +1447,9 @@
       "crates": [
         "base64"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "jwt",
+      "expansion": "com.tegmentum.ducklink.jwt"
     },
     {
       "name": "totp",
@@ -1409,7 +1483,9 @@
         "sha1",
         "base32"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "totp",
+      "expansion": "com.tegmentum.ducklink.totp"
     },
     {
       "name": "baseconv",
@@ -1439,7 +1515,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "baseconv",
+      "expansion": "com.tegmentum.ducklink.baseconv"
     },
     {
       "name": "emoji",
@@ -1473,7 +1551,9 @@
       "crates": [
         "emojis"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "emoji",
+      "expansion": "com.tegmentum.ducklink.emoji"
     },
     {
       "name": "whatlang",
@@ -1507,7 +1587,9 @@
       "crates": [
         "whatlang"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "whatlang",
+      "expansion": "com.tegmentum.ducklink.whatlang"
     },
     {
       "name": "ipaddr",
@@ -1539,7 +1621,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "ipaddr",
+      "expansion": "com.tegmentum.ducklink.ipaddr"
     },
     {
       "name": "mime",
@@ -1572,7 +1656,9 @@
       "crates": [
         "mime_guess"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "mime",
+      "expansion": "com.tegmentum.ducklink.mime"
     },
     {
       "name": "pluralize",
@@ -1605,7 +1691,9 @@
       "crates": [
         "pluralizer"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "pluralize",
+      "expansion": "com.tegmentum.ducklink.pluralize"
     },
     {
       "name": "haversine",
@@ -1636,7 +1724,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "haversine",
+      "expansion": "com.tegmentum.ducklink.haversine"
     },
     {
       "name": "numwords",
@@ -1669,7 +1759,9 @@
       "crates": [
         "num2words"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "numwords",
+      "expansion": "com.tegmentum.ducklink.numwords"
     },
     {
       "name": "ordinal",
@@ -1699,7 +1791,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "ordinal",
+      "expansion": "com.tegmentum.ducklink.ordinal"
     },
     {
       "name": "nato",
@@ -1729,7 +1823,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "nato",
+      "expansion": "com.tegmentum.ducklink.nato"
     },
     {
       "name": "ascii85",
@@ -1761,7 +1857,9 @@
       "crates": [
         "ascii85"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "ascii85",
+      "expansion": "com.tegmentum.ducklink.ascii85"
     },
     {
       "name": "quotedprintable",
@@ -1794,7 +1892,9 @@
       "crates": [
         "quoted_printable"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "quotedprintable",
+      "expansion": "com.tegmentum.ducklink.quotedprintable"
     },
     {
       "name": "unitconv",
@@ -1825,7 +1925,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "unitconv",
+      "expansion": "com.tegmentum.ducklink.unitconv"
     },
     {
       "name": "wordwrap",
@@ -1857,7 +1959,9 @@
       "crates": [
         "textwrap"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "wordwrap",
+      "expansion": "com.tegmentum.ducklink.wordwrap"
     },
     {
       "name": "timezone",
@@ -1892,7 +1996,9 @@
         "chrono-tz",
         "chrono"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "timezone",
+      "expansion": "com.tegmentum.ducklink.timezone"
     },
     {
       "name": "rot13",
@@ -1923,7 +2029,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "rot13",
+      "expansion": "com.tegmentum.ducklink.rot13"
     },
     {
       "name": "leetspeak",
@@ -1953,7 +2061,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "leetspeak",
+      "expansion": "com.tegmentum.ducklink.leetspeak"
     },
     {
       "name": "dms",
@@ -1984,7 +2094,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "dms",
+      "expansion": "com.tegmentum.ducklink.dms"
     },
     {
       "name": "cbor",
@@ -2019,7 +2131,9 @@
         "serde_json",
         "hex"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "cbor",
+      "expansion": "com.tegmentum.ducklink.cbor"
     },
     {
       "name": "msgpack",
@@ -2054,7 +2168,9 @@
         "serde_json",
         "hex"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "msgpack",
+      "expansion": "com.tegmentum.ducklink.msgpack"
     },
     {
       "name": "elements",
@@ -2088,7 +2204,9 @@
       "crates": [
         "mendeleev"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "elements",
+      "expansion": "com.tegmentum.ducklink.elements"
     },
     {
       "name": "vigenere",
@@ -2119,7 +2237,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "vigenere",
+      "expansion": "com.tegmentum.ducklink.vigenere"
     },
     {
       "name": "petname",
@@ -2151,7 +2271,9 @@
       "crates": [
         "petname"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "petname",
+      "expansion": "com.tegmentum.ducklink.petname"
     },
     {
       "name": "base58check",
@@ -2184,7 +2306,9 @@
       "crates": [
         "bs58"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "base58check",
+      "expansion": "com.tegmentum.ducklink.base58check"
     },
     {
       "name": "checksums",
@@ -2220,7 +2344,9 @@
         "crc",
         "adler"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "checksums",
+      "expansion": "com.tegmentum.ducklink.checksums"
     },
     {
       "name": "siphash",
@@ -2252,7 +2378,9 @@
       "crates": [
         "siphasher"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "siphash",
+      "expansion": "com.tegmentum.ducklink.siphash"
     },
     {
       "name": "tiktoken",
@@ -2287,7 +2415,9 @@
       "crates": [
         "tiktoken-rs"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "tiktoken",
+      "expansion": "com.tegmentum.ducklink.tiktoken"
     },
     {
       "name": "bech32",
@@ -2322,7 +2452,9 @@
       "crates": [
         "bech32"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "bech32",
+      "expansion": "com.tegmentum.ducklink.bech32"
     },
     {
       "name": "uuid5",
@@ -2355,7 +2487,9 @@
       "crates": [
         "uuid"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "uuid5",
+      "expansion": "com.tegmentum.ducklink.uuid5"
     },
     {
       "name": "gravatar",
@@ -2388,7 +2522,9 @@
       "crates": [
         "md5"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "gravatar",
+      "expansion": "com.tegmentum.ducklink.gravatar"
     },
     {
       "name": "html2text",
@@ -2420,7 +2556,9 @@
       "crates": [
         "nanohtml2text"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "html2text",
+      "expansion": "com.tegmentum.ducklink.html2text"
     },
     {
       "name": "textstat",
@@ -2454,7 +2592,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "textstat",
+      "expansion": "com.tegmentum.ducklink.textstat"
     },
     {
       "name": "hashids",
@@ -2487,7 +2627,9 @@
       "crates": [
         "harsh"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "hashids",
+      "expansion": "com.tegmentum.ducklink.hashids"
     },
     {
       "name": "checkdigit",
@@ -2520,7 +2662,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "checkdigit",
+      "expansion": "com.tegmentum.ducklink.checkdigit"
     },
     {
       "name": "dice",
@@ -2554,7 +2698,9 @@
       "crates": [
         "rand"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "dice",
+      "expansion": "com.tegmentum.ducklink.dice"
     },
     {
       "name": "graycode",
@@ -2585,7 +2731,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "graycode",
+      "expansion": "com.tegmentum.ducklink.graycode"
     },
     {
       "name": "cardtype",
@@ -2615,7 +2763,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "cardtype",
+      "expansion": "com.tegmentum.ducklink.cardtype"
     },
     {
       "name": "money",
@@ -2647,7 +2797,9 @@
       "crates": [
         "iso_currency"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "money",
+      "expansion": "com.tegmentum.ducklink.money"
     },
     {
       "name": "ngrams",
@@ -2680,7 +2832,9 @@
       "crates": [
         "serde_json"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "ngrams",
+      "expansion": "com.tegmentum.ducklink.ngrams"
     },
     {
       "name": "stem",
@@ -2712,7 +2866,9 @@
       "crates": [
         "rust-stemmers"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "stem",
+      "expansion": "com.tegmentum.ducklink.stem"
     },
     {
       "name": "transliterate",
@@ -2744,7 +2900,9 @@
       "crates": [
         "deunicode"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "transliterate",
+      "expansion": "com.tegmentum.ducklink.transliterate"
     },
     {
       "name": "pluscode",
@@ -2780,7 +2938,9 @@
         "open-location-code",
         "geo"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "pluscode",
+      "expansion": "com.tegmentum.ducklink.pluscode"
     },
     {
       "name": "rot47",
@@ -2810,7 +2970,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "rot47",
+      "expansion": "com.tegmentum.ducklink.rot47"
     },
     {
       "name": "stopwords",
@@ -2843,7 +3005,9 @@
       "crates": [
         "stop-words"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "stopwords",
+      "expansion": "com.tegmentum.ducklink.stopwords"
     },
     {
       "name": "isbnconv",
@@ -2874,7 +3038,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "isbnconv",
+      "expansion": "com.tegmentum.ducklink.isbnconv"
     },
     {
       "name": "passgen",
@@ -2907,7 +3073,9 @@
       "crates": [
         "rand"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "passgen",
+      "expansion": "com.tegmentum.ducklink.passgen"
     },
     {
       "name": "braille",
@@ -2937,7 +3105,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "braille",
+      "expansion": "com.tegmentum.ducklink.braille"
     },
     {
       "name": "toml",
@@ -2971,7 +3141,9 @@
         "toml",
         "serde_json"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "toml",
+      "expansion": "com.tegmentum.ducklink.toml"
     },
     {
       "name": "yaml",
@@ -3005,7 +3177,9 @@
         "serde_yaml",
         "serde_json"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "yaml",
+      "expansion": "com.tegmentum.ducklink.yaml"
     },
     {
       "name": "unicodenorm",
@@ -3040,7 +3214,9 @@
       "crates": [
         "unicode-normalization"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "unicodenorm",
+      "expansion": "com.tegmentum.ducklink.unicodenorm"
     },
     {
       "name": "unicodewidth",
@@ -3074,7 +3250,9 @@
         "unicode-segmentation",
         "unicode-width"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "unicodewidth",
+      "expansion": "com.tegmentum.ducklink.unicodewidth"
     },
     {
       "name": "colorconv",
@@ -3106,7 +3284,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "colorconv",
+      "expansion": "com.tegmentum.ducklink.colorconv"
     },
     {
       "name": "jsonschema",
@@ -3138,7 +3318,9 @@
         "jsonschema",
         "serde_json"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "jsonschema",
+      "expansion": "com.tegmentum.ducklink.jsonschema"
     },
     {
       "name": "simhash",
@@ -3169,7 +3351,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "simhash",
+      "expansion": "com.tegmentum.ducklink.simhash"
     },
     {
       "name": "idextra",
@@ -3203,7 +3387,9 @@
         "svix-ksuid",
         "cuid2"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "idextra",
+      "expansion": "com.tegmentum.ducklink.idextra"
     },
     {
       "name": "phonetic2",
@@ -3237,7 +3423,9 @@
       "crates": [
         "rphonetic"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "phonetic2",
+      "expansion": "com.tegmentum.ducklink.phonetic2"
     },
     {
       "name": "z85",
@@ -3270,7 +3458,9 @@
       "crates": [
         "z85"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "z85",
+      "expansion": "com.tegmentum.ducklink.z85"
     },
     {
       "name": "initials",
@@ -3301,7 +3491,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "initials",
+      "expansion": "com.tegmentum.ducklink.initials"
     },
     {
       "name": "luhngen",
@@ -3332,7 +3524,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "luhngen",
+      "expansion": "com.tegmentum.ducklink.luhngen"
     },
     {
       "name": "pintest_a",
@@ -3424,7 +3618,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "atbash",
+      "expansion": "com.tegmentum.ducklink.atbash"
     },
     {
       "name": "piglatin",
@@ -3454,7 +3650,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "piglatin",
+      "expansion": "com.tegmentum.ducklink.piglatin"
     },
     {
       "name": "rle",
@@ -3485,7 +3683,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "rle",
+      "expansion": "com.tegmentum.ducklink.rle"
     },
     {
       "name": "bbcode",
@@ -3515,7 +3715,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "bbcode",
+      "expansion": "com.tegmentum.ducklink.bbcode"
     },
     {
       "name": "phonenumber",
@@ -3549,7 +3751,9 @@
       "crates": [
         "phonenumber"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "phonenumber",
+      "expansion": "com.tegmentum.ducklink.phonenumber"
     },
     {
       "name": "pwstrength",
@@ -3582,7 +3786,9 @@
       "crates": [
         "passwords"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "pwstrength",
+      "expansion": "com.tegmentum.ducklink.pwstrength"
     },
     {
       "name": "qrcode",
@@ -3614,7 +3820,9 @@
       "crates": [
         "qrcode"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "qrcode",
+      "expansion": "com.tegmentum.ducklink.qrcode"
     },
     {
       "name": "aggstat",
@@ -3644,7 +3852,9 @@
         "aggregate"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "aggstat",
+      "expansion": "com.tegmentum.ducklink.aggstat"
     },
     {
       "name": "bloom",
@@ -3676,7 +3886,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "bloom",
+      "expansion": "com.tegmentum.ducklink.bloom"
     },
     {
       "name": "minhash",
@@ -3708,7 +3920,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "minhash",
+      "expansion": "com.tegmentum.ducklink.minhash"
     },
     {
       "name": "countmin",
@@ -3740,7 +3954,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "countmin",
+      "expansion": "com.tegmentum.ducklink.countmin"
     },
     {
       "name": "dns",
@@ -3772,7 +3988,9 @@
         "network"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "dns",
+      "expansion": "com.tegmentum.ducklink.dns"
     },
     {
       "name": "httpclient",
@@ -3809,7 +4027,9 @@
         "rustls-rustcrypto",
         "webpki-roots"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "httpclient",
+      "expansion": "com.tegmentum.ducklink.httpclient"
     },
     {
       "name": "lorem",
@@ -3842,7 +4062,9 @@
       "crates": [
         "lipsum"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "lorem",
+      "expansion": "com.tegmentum.ducklink.lorem"
     },
     {
       "name": "faker",
@@ -3878,7 +4100,9 @@
       "crates": [
         "fake"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "faker",
+      "expansion": "com.tegmentum.ducklink.faker"
     },
     {
       "name": "passphrase",
@@ -3910,7 +4134,9 @@
       "crates": [
         "chbs"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "passphrase",
+      "expansion": "com.tegmentum.ducklink.passphrase"
     },
     {
       "name": "h3",
@@ -3947,7 +4173,9 @@
       "crates": [
         "h3o"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "h3",
+      "expansion": "com.tegmentum.ducklink.h3"
     },
     {
       "name": "lindel",
@@ -3982,7 +4210,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "lindel",
+      "expansion": "com.tegmentum.ducklink.lindel"
     },
     {
       "name": "magic",
@@ -4017,7 +4247,9 @@
       "crates": [
         "infer"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "magic",
+      "expansion": "com.tegmentum.ducklink.magic"
     },
     {
       "name": "tsid",
@@ -4050,7 +4282,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "tsid",
+      "expansion": "com.tegmentum.ducklink.tsid"
     },
     {
       "name": "rhai",
@@ -4084,7 +4318,9 @@
       "crates": [
         "rhai"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "rhai",
+      "expansion": "com.tegmentum.ducklink.rhai"
     },
     {
       "name": "bitfilters",
@@ -4119,7 +4355,9 @@
         "xorf",
         "bincode"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "bitfilters",
+      "expansion": "com.tegmentum.ducklink.bitfilters"
     },
     {
       "name": "prql",
@@ -4146,7 +4384,9 @@
       "crates": [
         "prqlc"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "prql",
+      "expansion": "com.tegmentum.ducklink.prql"
     },
     {
       "name": "jaq",
@@ -4175,7 +4415,9 @@
         "jaq-std",
         "jaq-json"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "jaq",
+      "expansion": "com.tegmentum.ducklink.jaq"
     },
     {
       "name": "cron",
@@ -4203,7 +4445,9 @@
       "crates": [
         "croner"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "cron",
+      "expansion": "com.tegmentum.ducklink.cron"
     },
     {
       "name": "xml",
@@ -4231,7 +4475,9 @@
       "crates": [
         "roxmltree"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "xml",
+      "expansion": "com.tegmentum.ducklink.xml"
     },
     {
       "name": "pinyin",
@@ -4259,7 +4505,9 @@
       "crates": [
         "pinyin"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "pinyin",
+      "expansion": "com.tegmentum.ducklink.pinyin"
     },
     {
       "name": "sqlformat",
@@ -4286,7 +4534,9 @@
       "crates": [
         "sqlformat"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "sqlformat",
+      "expansion": "com.tegmentum.ducklink.sqlformat"
     },
     {
       "name": "bencode",
@@ -4313,7 +4563,9 @@
       "crates": [
         "serde_bencode"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "bencode",
+      "expansion": "com.tegmentum.ducklink.bencode"
     },
     {
       "name": "maidenhead",
@@ -4339,7 +4591,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "maidenhead",
+      "expansion": "com.tegmentum.ducklink.maidenhead"
     },
     {
       "name": "base45",
@@ -4366,7 +4620,9 @@
       "crates": [
         "base45"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "base45",
+      "expansion": "com.tegmentum.ducklink.base45"
     },
     {
       "name": "numfmt",
@@ -4391,7 +4647,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "numfmt",
+      "expansion": "com.tegmentum.ducklink.numfmt"
     },
     {
       "name": "mailto",
@@ -4419,7 +4677,9 @@
       "crates": [
         "percent-encoding"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "mailto",
+      "expansion": "com.tegmentum.ducklink.mailto"
     },
     {
       "name": "hexdump",
@@ -4444,7 +4704,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "hexdump",
+      "expansion": "com.tegmentum.ducklink.hexdump"
     },
     {
       "name": "secp256k1",
@@ -4472,7 +4734,9 @@
       "crates": [
         "k256"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "secp256k1",
+      "expansion": "com.tegmentum.ducklink.secp256k1"
     },
     {
       "name": "bibtex",
@@ -4500,7 +4764,9 @@
       "crates": [
         "biblatex"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "bibtex",
+      "expansion": "com.tegmentum.ducklink.bibtex"
     },
     {
       "name": "useragent",
@@ -4530,7 +4796,9 @@
       "crates": [
         "woothee"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "useragent",
+      "expansion": "com.tegmentum.ducklink.useragent"
     },
     {
       "name": "ical",
@@ -4559,7 +4827,9 @@
         "ical",
         "serde_json"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "ical",
+      "expansion": "com.tegmentum.ducklink.ical"
     },
     {
       "name": "tdigest",
@@ -4589,7 +4859,9 @@
         "tdigest",
         "bincode"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "tdigest",
+      "expansion": "com.tegmentum.ducklink.tdigest"
     },
     {
       "name": "urlpattern",
@@ -4616,7 +4888,9 @@
       "crates": [
         "urlpattern"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "urlpattern",
+      "expansion": "com.tegmentum.ducklink.urlpattern"
     },
     {
       "name": "celestial",
@@ -4644,7 +4918,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "celestial",
+      "expansion": "com.tegmentum.ducklink.celestial"
     },
     {
       "name": "textlines",
@@ -4668,7 +4944,9 @@
         "table"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "textlines",
+      "expansion": "com.tegmentum.ducklink.textlines"
     },
     {
       "name": "netquack",
@@ -4697,7 +4975,9 @@
       "crates": [
         "psl"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "netquack",
+      "expansion": "com.tegmentum.ducklink.netquack"
     },
     {
       "name": "openprompt",
@@ -4726,7 +5006,9 @@
         "rustls",
         "serde_json"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "openprompt",
+      "expansion": "com.tegmentum.ducklink.openprompt"
     },
     {
       "name": "dbf",
@@ -4752,7 +5034,9 @@
       "crates": [
         "dbase"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "dbf",
+      "expansion": "com.tegmentum.ducklink.dbf"
     },
     {
       "name": "shapefile",
@@ -4778,7 +5062,9 @@
       "crates": [
         "shapefile"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "shapefile",
+      "expansion": "com.tegmentum.ducklink.shapefile"
     },
     {
       "name": "fit",
@@ -4804,7 +5090,9 @@
       "crates": [
         "fitparser"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "fit",
+      "expansion": "com.tegmentum.ducklink.fit"
     },
     {
       "name": "warc",
@@ -4830,7 +5118,9 @@
       "crates": [
         "warc"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "warc",
+      "expansion": "com.tegmentum.ducklink.warc"
     },
     {
       "name": "html",
@@ -4858,7 +5148,9 @@
       "crates": [
         "scraper"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "html",
+      "expansion": "com.tegmentum.ducklink.html"
     },
     {
       "name": "vcard",
@@ -4887,7 +5179,9 @@
         "ical",
         "serde_json"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "vcard",
+      "expansion": "com.tegmentum.ducklink.vcard"
     },
     {
       "name": "ini",
@@ -4916,7 +5210,9 @@
         "rust-ini",
         "serde_json"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "ini",
+      "expansion": "com.tegmentum.ducklink.ini"
     },
     {
       "name": "plist",
@@ -4943,7 +5239,9 @@
       "crates": [
         "plist"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "plist",
+      "expansion": "com.tegmentum.ducklink.plist"
     },
     {
       "name": "dotenv",
@@ -4969,7 +5267,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "dotenv",
+      "expansion": "com.tegmentum.ducklink.dotenv"
     },
     {
       "name": "hocon",
@@ -4996,7 +5296,9 @@
       "crates": [
         "hocon"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "hocon",
+      "expansion": "com.tegmentum.ducklink.hocon"
     },
     {
       "name": "uuid7",
@@ -5024,7 +5326,9 @@
       "crates": [
         "uuid"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "uuid7",
+      "expansion": "com.tegmentum.ducklink.uuid7"
     },
     {
       "name": "textdiff",
@@ -5052,7 +5356,9 @@
       "crates": [
         "similar"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "textdiff",
+      "expansion": "com.tegmentum.ducklink.textdiff"
     },
     {
       "name": "polyline",
@@ -5079,7 +5385,9 @@
       "crates": [
         "polyline"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "polyline",
+      "expansion": "com.tegmentum.ducklink.polyline"
     },
     {
       "name": "json_schema",
@@ -5106,7 +5414,9 @@
       "crates": [
         "jsonschema"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "json_schema",
+      "expansion": "com.tegmentum.ducklink.json_schema"
     },
     {
       "name": "stochastic",
@@ -5138,7 +5448,9 @@
       "crates": [
         "statrs"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "stochastic",
+      "expansion": "com.tegmentum.ducklink.stochastic"
     },
     {
       "name": "ion",
@@ -5166,7 +5478,9 @@
       "crates": [
         "ion-rs"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "ion",
+      "expansion": "com.tegmentum.ducklink.ion"
     },
     {
       "name": "textplot",
@@ -5194,7 +5508,9 @@
       "crates": [
         "qrcode"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "textplot",
+      "expansion": "com.tegmentum.ducklink.textplot"
     },
     {
       "name": "marisa",
@@ -5222,7 +5538,9 @@
       "crates": [
         "fst"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "marisa",
+      "expansion": "com.tegmentum.ducklink.marisa"
     },
     {
       "name": "frequentitems",
@@ -5247,7 +5565,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "frequentitems",
+      "expansion": "com.tegmentum.ducklink.frequentitems"
     },
     {
       "name": "sqlitewasm",
@@ -5274,7 +5594,9 @@
       "crates": [
         "rusqlite"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "sqlitewasm",
+      "expansion": "com.tegmentum.ducklink.sqlitewasm"
     },
     {
       "name": "jsonfns",
@@ -5372,7 +5694,9 @@
       "crates": [
         "calamine"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "excelfns",
+      "expansion": "com.tegmentum.ducklink.excelfns"
     },
     {
       "name": "avrofns",
@@ -5401,7 +5725,9 @@
       "crates": [
         "apache-avro"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "avrofns",
+      "expansion": "com.tegmentum.ducklink.avrofns"
     },
     {
       "name": "spatialfns",
@@ -5474,7 +5800,9 @@
       "crates": [
         "rust-stemmers"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "ftsfns",
+      "expansion": "com.tegmentum.ducklink.ftsfns"
     },
     {
       "name": "icufns",
@@ -5502,7 +5830,9 @@
       "crates": [
         "icu_collator"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "icufns",
+      "expansion": "com.tegmentum.ducklink.icufns"
     },
     {
       "name": "vssfns",
@@ -5528,7 +5858,9 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "vssfns",
+      "expansion": "com.tegmentum.ducklink.vssfns"
     },
     {
       "name": "rtreefns",
@@ -5557,7 +5889,9 @@
       "crates": [
         "rstar"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "rtreefns",
+      "expansion": "com.tegmentum.ducklink.rtreefns"
     },
     {
       "name": "hnswfns",
@@ -5584,7 +5918,9 @@
       "crates": [
         "instant-distance"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "hnswfns",
+      "expansion": "com.tegmentum.ducklink.hnswfns"
     },
     {
       "name": "geomtype",
@@ -5613,7 +5949,9 @@
         "geo",
         "wkt"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "geomtype",
+      "expansion": "com.tegmentum.ducklink.geomtype"
     },
     {
       "name": "spatialproj",
@@ -5640,7 +5978,9 @@
         "geo",
         "wkt"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "spatialproj",
+      "expansion": "com.tegmentum.ducklink.spatialproj"
     },
     {
       "name": "tpchgen",
@@ -5675,7 +6015,9 @@
       "crates": [
         "tpchgen"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "tpchgen",
+      "expansion": "com.tegmentum.ducklink.tpchgen"
     },
     {
       "name": "tpcdsgen",
@@ -5700,7 +6042,9 @@
         "table"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "tpcdsgen",
+      "expansion": "com.tegmentum.ducklink.tpcdsgen"
     },
     {
       "name": "deltascan",
@@ -5727,7 +6071,9 @@
       "crates": [
         "serde_json"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "deltascan",
+      "expansion": "com.tegmentum.ducklink.deltascan"
     },
     {
       "name": "icebergscan",
@@ -5755,7 +6101,9 @@
       "crates": [
         "serde_json"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "icebergscan",
+      "expansion": "com.tegmentum.ducklink.icebergscan"
     },
     {
       "name": "autocomplete",
@@ -5779,7 +6127,9 @@
         "table"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "prefix": "autocomplete",
+      "expansion": "com.tegmentum.ducklink.autocomplete"
     },
     {
       "name": "statsduck",
