@@ -1,0 +1,20 @@
+-- s3fs needs live S3 (and, for private buckets, AWS credentials). It cannot run
+-- in the offline sandbox; the SigV4 signing + s3:// URL parsing are covered by
+-- the native unit tests (`cargo test --release`). To run the live read path:
+--
+--   1. Grant network to s3fs:   export DUCKLINK_NETWORK_GRANT=s3fs
+--   2. For a PRIVATE bucket, set AWS creds in the env (SigV4 auth):
+--        export AWS_ACCESS_KEY_ID=...
+--        export AWS_SECRET_ACCESS_KEY=...
+--        export AWS_SESSION_TOKEN=...        # only if using temporary creds
+--        export AWS_REGION=us-east-1         # or AWS_DEFAULT_REGION
+--      For a PUBLIC bucket, leave creds unset -> anonymous mode (no auth header).
+--   3. Then:
+--
+-- LOAD s3fs;
+-- -- public-bucket (anonymous) read:
+-- SELECT count(*) FROM read_parquet('s3://my-public-bucket/data/part-0.parquet');
+-- -- private-bucket (SigV4-signed) read:
+-- SELECT * FROM read_csv('s3://my-private-bucket/path/to/object.csv') LIMIT 10;
+LOAD s3fs;
+SELECT count(*) FROM read_parquet('s3://my-public-bucket/data/part-0.parquet');

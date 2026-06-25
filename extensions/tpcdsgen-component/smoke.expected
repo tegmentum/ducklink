@@ -1,0 +1,13 @@
+# tpcds_income_band(): 20 fixed bands; band 1 = (0,10000), band 20 = (190001,200000).
+band_rows
+20
+ib_income_band_sk,ib_lower_bound,ib_upper_bound
+1,0,10000
+20,190001,200000
+# tpcds_date_dim_sample(): 366-row year-2000 slice; d_date_sk = Julian Day Number.
+date_rows
+366
+d_date_sk,d_date,d_year,d_moy,d_dom
+2451545,2000-01-01,2000,1,1
+2451604,2000-02-29,2000,2,29
+2451910,2000-12-31,2000,12,31

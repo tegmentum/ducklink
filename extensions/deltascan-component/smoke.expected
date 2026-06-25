@@ -1,0 +1,16 @@
+# delta_log_info: one row per action (ordered by action). The add carries
+# path + size; protocol/metaData have NULL path/size. version 0 (single commit).
+version,action,path,size
+0,add,part-0001.parquet,1234
+0,metaData,NULL,NULL
+0,protocol,NULL,NULL
+# delta_schema: the metaData schemaString parsed into columns a(integer), b(string).
+column_name,column_type
+a,integer
+b,string
+# garbage log -> 0 rows (never a panic)
+bad_rows
+0
+# empty log -> 0 schema rows
+empty_schema
+0

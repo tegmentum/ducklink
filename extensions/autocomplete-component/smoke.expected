@@ -1,0 +1,15 @@
+# 'SEL' -> the single keyword 'SELECT'
+suggestion,kind
+SELECT,keyword
+# last-token semantics: final token 'GR' -> 'GROUP BY'
+suggestion
+GROUP BY
+# 'IN' prefixes IN, INNER JOIN, INSERT, INTERSECT, INTO
+in_matches
+5
+# no-match prefix -> 0 rows (wired, never panics)
+no_match
+0
+# NULL argument -> 0 rows
+null_rows
+0

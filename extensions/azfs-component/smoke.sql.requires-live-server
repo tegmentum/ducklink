@@ -1,0 +1,25 @@
+-- azfs needs a LIVE Azure Blob Storage account; CANNOT be tested in the sandbox.
+--
+-- az:// -> HTTPS mapping performed by the component:
+--   az://<container>/<blob>
+--     -> https://<account>.blob.core.windows.net/<container>/<blob>
+--
+-- Auth is resolved from the environment (export BEFORE launching the host):
+--   PRIMARY  (SAS token, no signing):
+--     export AZURE_STORAGE_ACCOUNT=myaccount
+--     export AZURE_STORAGE_SAS_TOKEN='sv=2022-11-02&ss=b&srt=co&sp=r&sig=...'
+--   OR Shared Key (HMAC-SHA256 Authorization header):
+--     export AZURE_STORAGE_ACCOUNT=myaccount
+--     export AZURE_STORAGE_KEY='<base64 account key>'
+--   OR a connection string (covers either of the above):
+--     export AZURE_STORAGE_CONNECTION_STRING='DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=...;EndpointSuffix=core.windows.net'
+--
+-- Network must be granted to the extension (per-extension network grant), the
+-- same as webfs/httpclient.
+--
+LOAD azfs;
+-- Marker scalar proves the extension loaded and registered the files backend.
+SELECT azfs_version();
+-- Live read (UNTESTED here — requires a real account + a readable blob):
+SELECT * FROM read_csv('az://mycontainer/path/to/data.csv');
+SELECT count(*) FROM read_parquet('az://mycontainer/data/part-0.parquet');

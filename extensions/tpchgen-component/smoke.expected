@@ -1,0 +1,28 @@
+# tpchgen smoke expectations -- all rows are deterministic.
+# Fixed reference tables (REGION=5, NATION=25) and linearly-scaled counts.
+region_rows
+5
+r_name
+AFRICA
+nation_rows
+25
+n_name,n_regionkey
+ALGERIA,0
+customer_rows
+1500
+supplier_rows
+100
+part_rows
+2000
+lineitem_nonempty
+true
+null_sf_rows
+0
+zero_sf_rows
+0
+q1_has_lineitem
+true
+q0_is_null
+true
+q23_is_null
+true

@@ -1,0 +1,35 @@
+package duckdb:extension;
+
+use runtime;
+use callback-dispatch;
+use config;
+use logging;
+use catalog;
+use files;
+use guest;
+use storage;
+use storage-dispatch;
+
+world duckdb-extension {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  export guest;
+  export callback-dispatch;
+}
+
+// Storage-capable world targeted by this scanner: additionally imports the
+// storage registration surface and exports the storage-dispatch callbacks.
+world duckdb-extension-storage {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import storage;
+  export guest;
+  export callback-dispatch;
+  export storage-dispatch;
+}

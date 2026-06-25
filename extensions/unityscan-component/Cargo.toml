@@ -1,0 +1,38 @@
+[package]
+name = "unityscan-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Unity Catalog (Databricks UC / open `unitycatalog`) REST-backed catalog for
+DuckDB over wasi:sockets. ATTACH a UC endpoint (TYPE unity); the component
+enumerates schemas/tables/columns via the UC REST API
+(/api/2.1/unity-catalog/...) over HTTPS (rustls), serving them through the
+storage (ATTACH / pushdown-scan) WIT interface. The catalog ENUMERATION is the
+deliverable; the data scan composes with s3fs/azfs + delta/parquet readers via a
+table's storage_location. Needs the network capability grant.
+"""
+license = "MIT"
+publish = false
+
+[lib]
+name = "unityscan"
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12"] }
+rustls-rustcrypto = "0.0.2-alpha"
+webpki-roots = "0.26"
+serde_json = "1"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension-storage"
+
+# Standalone manifest: kept OUT of the root workspace (which doesn't list this
+# component) without editing the root Cargo.toml.
+[workspace]

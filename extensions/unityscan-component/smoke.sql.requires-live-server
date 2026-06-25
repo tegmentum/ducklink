@@ -1,0 +1,34 @@
+-- unityscan storage backend smoke test (Unity Catalog over REST).
+--
+-- REQUIRES a live Unity Catalog server (the open `unitycatalog` reference
+-- server, or a Databricks UC workspace) reachable over HTTP(S), AND the network
+-- grant. Run with:
+--   DUCKLINK_NETWORK_GRANT=unityscan
+--
+-- The DSN is the UC endpoint plus `;`-separated keys:
+--   token=<personal-access-token>   (Bearer; omit for an open unauthenticated UC)
+--   catalog=<catalog_name>          (defaults to `main`)
+--
+-- This is NOT part of smoke.py --all (it needs the external UC server + grant),
+-- so it is intentionally NOT registered in registry/index.json.
+--
+-- Type `unityscan` (alias of `unity`) routes ATTACH straight to this wasm
+-- component; `unity` is also registered in case the lean core lacks the native
+-- unity_catalog StorageExtension.
+LOAD unityscan;
+
+-- Open the UC catalog. The component GETs /schemas + /tables over the UC REST
+-- API (/api/2.1/unity-catalog/...) with the Bearer token.
+ATTACH 'https://my-workspace.cloud.databricks.com;token=dapiXXXXXXXX;catalog=main' AS uc (TYPE unityscan);
+
+-- Catalog ENUMERATION (the real deliverable): the schema/table/column metadata
+-- comes back from the UC REST API. Tables appear as `schema.table`.
+SHOW ALL TABLES;          -- lists uc.<schema>.<table> from /schemas + /tables
+DESCRIBE uc."default.trips";   -- columns + types from the table's columns[]
+
+-- DATA SCAN (documented composition, NOT performed by this component):
+-- a UC table points to a storage_location (s3://… / az://… delta or parquet).
+-- A full `SELECT *` would feed that location to the s3fs/azfs file systems plus
+-- the delta/parquet readers. This component returns ZERO rows for the scan; the
+-- metadata above is the solid surface.
+SELECT * FROM uc."default.trips" LIMIT 5;   -- returns 0 rows (see note above)

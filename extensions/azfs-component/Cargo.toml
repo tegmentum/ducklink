@@ -1,0 +1,41 @@
+[package]
+name = "azfs-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+azfs files backend: an az:// (Azure Blob) FileSystem on the existing files
+capability (the webfs pattern). Maps az://container/blob -> an HTTPS GET to
+https://<account>.blob.core.windows.net/<container>/<blob>, authenticated with a
+SAS token (query append) or a Shared Key Authorization header (HMAC-SHA256 over
+the canonicalized request). Fetched over wasi:sockets with pure-Rust TLS.
+"""
+license = "MIT"
+publish = false
+
+# Detached from the parent workspace (which lists members explicitly and must
+# not be edited). Built standalone via `cargo component build` in this dir.
+[workspace]
+
+[lib]
+name = "azfs"
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+# TLS for https:// blob endpoints (same pure-Rust stack as httpclient-component).
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12"] }
+rustls-rustcrypto = "0.0.2-alpha"
+webpki-roots = "0.26"
+# Shared Key signing: HMAC-SHA256 over the canonicalized request + base64 of the
+# account key / signature.
+hmac = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension-files"

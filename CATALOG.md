@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**172 component extensions** · **444 SQL functions** · 6 expose aggregates · 3 require network.
+**177 component extensions** · **461 SQL functions** · 6 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -95,10 +95,11 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **yaml** | `yaml_to_json`, `json_to_yaml` | serde_yaml, serde_json |  |
 | **z85** | `z85_encode`, `z85_decode` | z85 |  |
 
-## Text & NLP (54)
+## Text & NLP (55)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
+| **autocomplete** | `sql_complete` | hand-rolled |  |
 | **bbcode** | `bbcode_to_html` | hand-rolled |  |
 | **braille** | `to_braille` | hand-rolled |  |
 | **cardtype** | `card_brand` | hand-rolled |  |
@@ -185,6 +186,18 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **tdigest** | `tdigest`, `tdigest_quantile`, `tdigest_count` | tdigest, bincode | aggregate |
 | **vssfns** | `vec_l1_distance`, `vec_linf_distance`, `vec_normalize` | hand-rolled |  |
 
+## Import Export (7)
+
+| Extension | Functions | Backed by | Notes |
+|---|---|---|---|
+| **avrofns** | `avro_schema`, `read_avro`, `avro_record_count` | apache-avro |  |
+| **deltascan** | `delta_log_info`, `delta_schema` | serde_json |  |
+| **excelfns** | `xlsx_sheets`, `read_xlsx`, `xlsx_cell` | calamine |  |
+| **icebergscan** | `iceberg_metadata`, `iceberg_schema`, `iceberg_snapshots` | serde_json |  |
+| **sqlitewasm** | `sqlite_blob_scan` | rusqlite |  |
+| **tpcdsgen** | `tpcds_income_band`, `tpcds_date_dim_sample` | hand-rolled |  |
+| **tpchgen** | `tpch_region`, `tpch_nation`, `tpch_supplier`, `tpch_customer`, `tpch_part`, `tpch_partsupp`, `tpch_orders`, `tpch_lineitem`, `tpch_query` | tpchgen |  |
+
 ## Networking (6)
 
 | Extension | Functions | Backed by | Notes |
@@ -224,14 +237,6 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **parsertools** | `sql_tables`, `sql_is_valid`, `sql_statement_type` | sqlparser |  |
 | **prql** | `prql_to_sql`, `prql_is_valid` | prqlc |  |
 | **rhai** | `rhai_eval`, `rhai_eval_int`, `rhai_eval_double` | rhai |  |
-
-## Import Export (3)
-
-| Extension | Functions | Backed by | Notes |
-|---|---|---|---|
-| **avrofns** | `avro_schema`, `read_avro`, `avro_record_count` | apache-avro |  |
-| **excelfns** | `xlsx_sheets`, `read_xlsx`, `xlsx_cell` | calamine |  |
-| **sqlitewasm** | `sqlite_blob_scan` | rusqlite |  |
 
 ## Network (2)
 

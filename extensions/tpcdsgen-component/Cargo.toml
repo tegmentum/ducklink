@@ -1,0 +1,28 @@
+[package]
+name = "tpcdsgen-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Generate TPC-DS benchmark reference data as DuckDB table functions:
+tpcds_income_band() -> the 20 fixed income bands;
+tpcds_date_dim_sample() -> a deterministic 366-row sample of date_dim (year
+2000), with d_date_sk as the Julian Day Number. Hand-rolled fixed/arithmetic
+dimension tables -- not full dsdgen parity (the C dsdgen 24 tables / 99 queries
+are out of scope).
+"""
+license = "MIT"
+publish = false
+
+[lib]
+name = "tpcdsgen"
+crate-type = ["cdylib"]
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

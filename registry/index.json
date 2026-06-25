@@ -5573,6 +5573,145 @@
         "wkt"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "tpchgen",
+      "version": "0.1.0",
+      "description": "TPC-H benchmark data + query text (componentizes official tpch; tpchgen crate): tpch_region/nation (fixed) + tpch_supplier/customer/part/partsupp/orders/lineitem(sf) generators + tpch_query(n) -> the 22 query texts.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "import-export"
+      ],
+      "source": "extensions/tpchgen-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/tpchgen.wasm",
+      "exports": [
+        "tpch_region",
+        "tpch_nation",
+        "tpch_supplier",
+        "tpch_customer",
+        "tpch_part",
+        "tpch_partsupp",
+        "tpch_orders",
+        "tpch_lineitem",
+        "tpch_query"
+      ],
+      "requires": [
+        "table",
+        "scalar"
+      ],
+      "crates": [
+        "tpchgen"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "tpcdsgen",
+      "version": "0.1.0",
+      "description": "TPC-DS reference data (componentizes official tpcds; hand-rolled): tpcds_income_band (20 fixed bands) + tpcds_date_dim_sample (arithmetic date_dim). Full dsdgen parity needs the C generator.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "import-export"
+      ],
+      "source": "extensions/tpcdsgen-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/tpcdsgen.wasm",
+      "exports": [
+        "tpcds_income_band",
+        "tpcds_date_dim_sample"
+      ],
+      "requires": [
+        "table"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "deltascan",
+      "version": "0.1.0",
+      "description": "Delta Lake metadata reader (componentizes official delta): delta_log_info(log_json) -> the _delta_log actions, delta_schema(log_json) -> columns. Full delta_scan composes the add-file list with read_parquet (needs host file access).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "import-export"
+      ],
+      "source": "extensions/deltascan-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/deltascan.wasm",
+      "exports": [
+        "delta_log_info",
+        "delta_schema"
+      ],
+      "requires": [
+        "table"
+      ],
+      "crates": [
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "icebergscan",
+      "version": "0.1.0",
+      "description": "Apache Iceberg metadata reader (componentizes official iceberg): iceberg_metadata/iceberg_schema/iceberg_snapshots over metadata.json. Full read composes manifests via avrofns + read_parquet (needs host file access).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "import-export"
+      ],
+      "source": "extensions/icebergscan-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/icebergscan.wasm",
+      "exports": [
+        "iceberg_metadata",
+        "iceberg_schema",
+        "iceberg_snapshots"
+      ],
+      "requires": [
+        "table"
+      ],
+      "crates": [
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "autocomplete",
+      "version": "0.1.0",
+      "description": "SQL keyword autocompletion (componentizes official autocomplete): sql_complete(partial) -> last-token-prefix keyword matches. Catalog-name + context-aware completion needs a new query host import (core-bound).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/autocomplete-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/autocomplete.wasm",
+      "exports": [
+        "sql_complete"
+      ],
+      "requires": [
+        "table"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "dotcmds": [

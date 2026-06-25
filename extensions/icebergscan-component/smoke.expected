@@ -1,0 +1,16 @@
+# Current schema: 2 fields (id long required, data string optional).
+field_id,name,type,required
+1,id,long,true
+2,data,string,false
+# The single snapshot.
+snapshot_id,sequence_number,timestamp_ms,manifest_list
+3055729675574597004,1,1602638573874,s3://bucket/db/t/metadata/snap-1.avro
+# Top-level format-version scalar.
+format_version
+2
+# Invalid JSON -> 0 rows.
+bad_rows
+0
+# NULL input -> 0 rows.
+null_rows
+0

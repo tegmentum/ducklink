@@ -1,0 +1,35 @@
+package duckdb:extension;
+
+use runtime;
+use callback-dispatch;
+use config;
+use logging;
+use catalog;
+use files;
+use files-reg;
+use file-dispatch;
+use guest;
+
+world duckdb-extension {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  export guest;
+  export callback-dispatch;
+}
+
+// httpfs M2 files-capable world targeted by webfs: additionally imports the
+// files-reg registration surface and exports the file-dispatch callbacks.
+world duckdb-extension-files {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import files-reg;
+  export guest;
+  export callback-dispatch;
+  export file-dispatch;
+}

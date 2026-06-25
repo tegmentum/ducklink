@@ -188,6 +188,11 @@ members = [
     "extensions/icufns-component",
     "extensions/vssfns-component",
     "extensions/rtreefns-component",
+    "extensions/tpchgen-component",
+    "extensions/tpcdsgen-component",
+    "extensions/deltascan-component",
+    "extensions/icebergscan-component",
+    "extensions/autocomplete-component",
 ]
 
 resolver = "2"
