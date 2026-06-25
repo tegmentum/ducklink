@@ -223,6 +223,15 @@ independent wasm component. That completeness is the deliverable.
   Both are larger design changes than the append-a-case pattern; deferred pending
   a decision. (Components can already return nested data as text/JSON + an
   explicit `::INTEGER[]` cast today, with zero new surface.)
-- **GDAL/PROJ + R-tree spatial** -- engineering on proven capabilities (in progress).
-- **vss-style hnsw_index_scan TableFunction rewrite** -- the native-ordering
-  optimizer rewrite vs the proven reroute (in progress).
+- **Spatial R-tree — DONE** (rtreefns): backs CREATE INDEX ... USING wasm_rtree on
+  the EXISTING index capability with ZERO core change — index-search's float-list
+  query carries a bbox instead of a point vector. Proves the index keystone is
+  GENERAL (one WIT serves HNSW point-kNN + R-tree bbox-intersection). GDAL/PROJ
+  ST_Transform (more C-libs-in-wasm) remains an optional engineering add.
+- **vss-style hnsw_index_scan TableFunction rewrite — DONE**: the optimizer now
+  swaps the seq_scan GET to a real wasm_hnsw_index_scan TableFunction (rowid-fetch
+  via DataTable::Fetch, distance-ordered) and drops the TOP_N. EXPLAIN shows
+  WASM_HNSW_INDEX_SCAN (no rowid filter). Replaces the M2b reroute.
+
+**All deferred items resolved.** Remaining open design questions (not bugs):
+nested types (flattened-encoding vs resource redesign) and GDAL/PROJ ST_Transform.
