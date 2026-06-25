@@ -5461,6 +5461,91 @@
       ],
       "crates": [],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "rtreefns",
+      "version": "0.1.0",
+      "description": "Spatial R-tree index on the custom-index capability (rstar): CREATE INDEX ... USING wasm_rtree over a FLOAT[4] bbox column; rtree_search(index, bbox_json, limit) -> intersecting rowids; bbox4(wkt) -> bbox JSON. Proves the index capability is general (same WIT serves HNSW point-kNN and R-tree bbox-intersection).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/rtreefns-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/rtreefns.wasm",
+      "exports": [
+        "rtree_search",
+        "bbox4"
+      ],
+      "requires": [
+        "index",
+        "table",
+        "scalar"
+      ],
+      "crates": [
+        "rstar"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "hnswfns",
+      "version": "0.1.0",
+      "description": "HNSW vector index on the custom-index capability (instant-distance): CREATE INDEX ... USING wasm_hnsw over a FLOAT[N] column; the query planner auto-rewrites ORDER BY array_distance(col,q) LIMIT k to use it; hnsw_search(index, query, k) explicit kNN.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "math"
+      ],
+      "source": "extensions/hnswfns-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/hnswfns.wasm",
+      "exports": [
+        "hnsw_search"
+      ],
+      "requires": [
+        "index",
+        "table"
+      ],
+      "crates": [
+        "instant-distance"
+      ],
+      "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "geomtype",
+      "version": "0.1.0",
+      "description": "Custom GEOMETRY logical type via register-logical-type + casts: a geom2 type (WKB/BLOB physical) with VARCHAR<->geom2 WKT casts and geom_area/geom_astext typed scalars (geo+wkt). Demonstrates the custom-type + cast capability.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/geomtype-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/geomtype.wasm",
+      "exports": [
+        "geom_area",
+        "geom_astext"
+      ],
+      "requires": [
+        "scalar",
+        "cast"
+      ],
+      "crates": [
+        "geo",
+        "wkt"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "dotcmds": [

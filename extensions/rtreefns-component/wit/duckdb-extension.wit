@@ -1,0 +1,37 @@
+package duckdb:extension;
+
+use runtime;
+use callback-dispatch;
+use config;
+use logging;
+use catalog;
+use files;
+use guest;
+use index;
+use index-dispatch;
+
+world duckdb-extension {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  export guest;
+  export callback-dispatch;
+}
+
+// Index-capable world targeted by this custom-index backend: additionally
+// imports the index registration surface and exports the index-dispatch
+// callbacks (create/append/build/search/drop). The table capability for
+// hnsw_search rides on the existing runtime import + callback-dispatch export.
+world duckdb-extension-index {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import index;
+  export guest;
+  export callback-dispatch;
+  export index-dispatch;
+}

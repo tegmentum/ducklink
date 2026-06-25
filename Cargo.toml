@@ -186,6 +186,7 @@ members = [
     "extensions/ftsfns-component",
     "extensions/icufns-component",
     "extensions/vssfns-component",
+    "extensions/rtreefns-component",
 ]
 
 resolver = "2"

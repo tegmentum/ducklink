@@ -1,0 +1,14 @@
+# rtreefns custom spatial R-tree index (Item 3 / deferred spatial keystone).
+# The rtree_search intersection result must be rowids 0 and 2 -- rows 1
+# ([0,0,1,1]) and 3 ([0.5,0.5,2,2]) intersect [0,0,1.5,1.5]; rows 2 ([5,5,6,6])
+# and 4 ([10,10,11,11]) do not and are excluded. bbox4 of the polygon is
+# [0,0,2,3]. Proves the SAME index WIT serves HNSW + R-tree, zero core change.
+Count
+Count
+4
+Count
+rowid
+0
+2
+bb
+"[0,0,2,3]"

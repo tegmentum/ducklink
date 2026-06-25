@@ -30,7 +30,7 @@ for e in exts:
 # (mysqlwasm/postgreswasm/webfs) are intentionally NOT registered -- their smoke
 # needs a live external server, so they ship a `smoke.sql.requires-live-server`
 # marker instead of a smoke.sql and are excluded from the catalog and `--all`.
-registered = {e["name"] for e in exts} | {"sample_extension"}
+registered = {e["name"] for e in exts} | {"sample_extension", "sample-extension", "typetest"}
 def is_live_server_backend(name):
     return (ROOT / "extensions" / f"{name}-component" / "smoke.sql.requires-live-server").exists()
 for wasm in sorted(art_dir.glob("*.wasm")):
