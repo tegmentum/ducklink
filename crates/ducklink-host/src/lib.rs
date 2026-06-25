@@ -4948,6 +4948,9 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "embedded sqlite_scanner: the lean default core embeds no officials \
+                (ships sqlite as the sqlitewasm component); run on a fat core with \
+                `cargo test -- --ignored` or EMBED_EXTENSIONS=sqlite_scanner"]
     fn sqlite_scanner_embedded_attach_and_query() -> Result<()> {
         // Exercise the embedded sqlite_scanner end to end: ATTACH an in-memory
         // SQLite database (sqlite_scanner's sqlite3 calls resolve to the shared
@@ -4982,6 +4985,9 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "embedded delta extension: the lean default core embeds no officials \
+                (ships delta metadata as the deltascan component); run on a fat core \
+                with `cargo test -- --ignored` or EMBED_EXTENSIONS=delta"]
     fn delta_scan_embedded_local_table() -> Result<()> {
         // Exercise the embedded delta extension (duckdb-delta @ 45c40878 +
         // delta-kernel-rs v0.21.0 sync engine) end to end: copy a local Delta
