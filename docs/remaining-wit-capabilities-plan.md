@@ -201,3 +201,28 @@ aggregate, cast, macro, **collation**, pragma + **spi.run-sql**, catalog (ATTACH
 files (virtual FileSystem), and **index** capabilities, over a **rich type
 system** — enough for *any* DuckDB extension to ship as a portable, version-
 independent wasm component. That completeness is the deliverable.
+
+---
+
+## Deferred-items outcomes (post-completion)
+
+- **decimal/interval/uuid + builtin GEOMETRY arm — DONE** (second type contract
+  bump; full-catalog rebuild; smoke 171/171). Real C codes INTERVAL=15/DECIMAL=19/
+  UUID=27; DECIMAL special-cased to width-38/int128; UUID sign-bit flip.
+- **Nested list/struct — INFEASIBLE as by-value duckvalue (hard finding).** WIT
+  PROHIBITS recursive data types: adding `list(list<duckvalue>)` /
+  `struct(record{value: duckvalue})` to the duckvalue variant fails the wit-parser
+  cycle check (`type duckvalue depends on itself`) on every form tried (direct,
+  list-wrapped, alias-indirected). Only WIT `resource` handles may recurse, but
+  that's a host-owned-handle model incompatible with the frozen by-value contract
+  (`resultset = list<list<duckvalue>>`). Nested types are therefore feasible ONLY
+  via (1) a NON-RECURSIVE flattened encoding -- a `nested(type-expr-string,
+  value-text/json)` case the core reconstructs into a real LIST/STRUCT vector
+  (the type string is parsed via CAST(NULL AS <expr>); the value via DuckDB's
+  native list/struct text cast) -- or (2) a resource-handle value-model redesign.
+  Both are larger design changes than the append-a-case pattern; deferred pending
+  a decision. (Components can already return nested data as text/JSON + an
+  explicit `::INTEGER[]` cast today, with zero new surface.)
+- **GDAL/PROJ + R-tree spatial** -- engineering on proven capabilities (in progress).
+- **vss-style hnsw_index_scan TableFunction rewrite** -- the native-ordering
+  optimizer rewrite vs the proven reroute (in progress).
