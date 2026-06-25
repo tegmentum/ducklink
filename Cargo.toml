@@ -197,6 +197,7 @@ members = [
     "extensions/deltascan-component",
     "extensions/icebergscan-component",
     "extensions/autocomplete-component",
+    "extensions/statsduck-component",
 ]
 
 resolver = "2"

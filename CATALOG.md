@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**177 component extensions** · **461 SQL functions** · 6 expose aggregates · 3 require network.
+**180 component extensions** · **484 SQL functions** · 6 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -95,7 +95,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **yaml** | `yaml_to_json`, `json_to_yaml` | serde_yaml, serde_json |  |
 | **z85** | `z85_encode`, `z85_decode` | z85 |  |
 
-## Text & NLP (55)
+## Text & NLP (57)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -134,6 +134,8 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **phonetic** | `soundex`, `metaphone` | rphonetic |  |
 | **phonetic2** | `nysiis`, `refined_soundex`, `double_metaphone` | rphonetic |  |
 | **piglatin** | `to_pig_latin` | hand-rolled |  |
+| **pintest_a** | `pin_probe` | hand-rolled |  |
+| **pintest_b** | `pin_probe` | hand-rolled |  |
 | **pinyin** | `to_pinyin`, `to_pinyin_plain`, `to_pinyin_initials` | pinyin |  |
 | **pluralize** | `pluralize`, `singularize` | pluralizer |  |
 | **rapidfuzz** | `fuzz_ratio`, `damerau_levenshtein`, `indel`, `osa` | rapidfuzz |  |
@@ -173,7 +175,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **totp** | `totp` | hmac, sha1, base32 |  |
 | **vigenere** | `vigenere_encrypt`, `vigenere_decrypt` | hand-rolled |  |
 
-## Math (8)
+## Math (9)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -182,6 +184,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **frequentitems** | `top_k`, `top_k_value` | hand-rolled |  |
 | **hashfuncs** | `xxh32`, `xxh64`, `xxh3`, `murmur3` | twox-hash, murmur3 |  |
 | **hnswfns** | `hnsw_search` | instant-distance |  |
+| **statsduck** | `ttest_1samp`, `ttest_2samp`, `ttest_paired`, `mann_whitney_u`, `wilcoxon_signed_rank`, `sign_test_1samp`, `sign_test_paired`, `pearson_test`, `spearman_test`, `anova_oneway`, `chisq_goodness_of_fit`, `chisq_independence`, `jarque_bera`, `ks_test_2samp`, `adjust_p`, `t_cdf`, `chisq_cdf`, `f_cdf`, `gamma_cdf`, `weibull_cdf`, `lognormal_cdf` | statrs, serde_json |  |
 | **stochastic** | `normal_cdf`, `normal_pdf`, `normal_quantile`, `binomial_pmf`, `poisson_pmf`, `exponential_cdf`, `beta_cdf` | statrs |  |
 | **tdigest** | `tdigest`, `tdigest_quantile`, `tdigest_count` | tdigest, bincode | aggregate |
 | **vssfns** | `vec_l1_distance`, `vec_linf_distance`, `vec_normalize` | hand-rolled |  |

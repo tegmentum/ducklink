@@ -1958,7 +1958,7 @@
     {
       "name": "dms",
       "version": "0.1.0",
-      "description": "Geographic coordinate conversion (hand-rolled): dms_to_decimal(deg,min,sec) and decimal_to_dms(decimal) -> D\u00b0M'S\". Sign-aware.",
+      "description": "Geographic coordinate conversion (hand-rolled): dms_to_decimal(deg,min,sec) and decimal_to_dms(decimal) -> D°M'S\". Sign-aware.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -2620,7 +2620,7 @@
     {
       "name": "money",
       "version": "0.1.0",
-      "description": "Currency amount formatting (iso_currency): format_money(amount, code) -> '$1,234.50' / '\u00a51,000', using the currency symbol + minor-unit count, thousands-grouped. Unknown -> NULL.",
+      "description": "Currency amount formatting (iso_currency): format_money(amount, code) -> '$1,234.50' / '¥1,000', using the currency symbol + minor-unit count, thousands-grouped. Unknown -> NULL.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -2717,7 +2717,7 @@
     {
       "name": "transliterate",
       "version": "0.1.0",
-      "description": "Unicode -> ASCII transliteration (deunicode): deunicode(text), e.g. '\u00c6neid caf\u00e9' -> 'AEneid cafe'. NULL -> NULL.",
+      "description": "Unicode -> ASCII transliteration (deunicode): deunicode(text), e.g. 'Æneid café' -> 'AEneid cafe'. NULL -> NULL.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -5780,6 +5780,55 @@
       ],
       "crates": [],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "statsduck",
+      "version": "0.1.0",
+      "description": "Statistical hypothesis tests + distributions (componentizes KoliStat/the-stats-duck): ttest_1samp/2samp/paired, mann_whitney_u, wilcoxon_signed_rank, sign_test, pearson/spearman_test, anova_oneway, chisq_goodness_of_fit/independence, jarque_bera, ks_test_2samp, adjust_p (bonferroni/holm/BH/BY), + t/chisq/f/gamma/weibull/lognormal CDFs. Samples in as JSON arrays; {statistic,p_value,...} out as JSON. statrs for the p-value CDFs.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "math"
+      ],
+      "source": "extensions/statsduck-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/statsduck.wasm",
+      "exports": [
+        "ttest_1samp",
+        "ttest_2samp",
+        "ttest_paired",
+        "mann_whitney_u",
+        "wilcoxon_signed_rank",
+        "sign_test_1samp",
+        "sign_test_paired",
+        "pearson_test",
+        "spearman_test",
+        "anova_oneway",
+        "chisq_goodness_of_fit",
+        "chisq_independence",
+        "jarque_bera",
+        "ks_test_2samp",
+        "adjust_p",
+        "t_cdf",
+        "chisq_cdf",
+        "f_cdf",
+        "gamma_cdf",
+        "weibull_cdf",
+        "lognormal_cdf"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "statrs",
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "statsduck",
+      "expansion": "com.tegmentum.ducklink.stats"
     }
   ],
   "dotcmds": [
