@@ -911,7 +911,7 @@ impl dotcmd_bindings::duckdb::dotcmd::spi::Host for DotcmdState {
         let handle = self
             .current_connection
             .lock()
-            .expect("current connection mutex poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .clone()
             .ok_or_else(|| "spi: no active database connection".to_string())?;
 
@@ -933,7 +933,7 @@ impl dotcmd_bindings::duckdb::dotcmd::spi::Host for DotcmdState {
                 .expect("extension manager mutex poisoned");
             manager.take_prefix_table_sql()
         };
-        let mut core = self.core.lock().expect("core mutex poisoned");
+        let mut core = self.core.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(flush_sql) = flush_sql {
             if let Err(trap) =
                 core.with_database(|guest, store| guest.call_execute(store, handle.clone(), &flush_sql))
@@ -963,7 +963,7 @@ impl DotcmdState {
     /// re-registrations of the pinned owners), then triggers a core pending pull
     /// via `LOAD <a-loaded-extension>` so the staged re-registrations land.
     fn apply_prefix_pins(&mut self, handle: ResourceAny) -> Result<String, String> {
-        let mut core = self.core.lock().expect("core mutex poisoned");
+        let mut core = self.core.lock().unwrap_or_else(|e| e.into_inner());
         // Read the pin table from the live connection.
         let read = core
             .with_database(|guest, store| {
@@ -1275,7 +1275,7 @@ fn cli_command_infos(
     store: &StoreContextMut<'_, HostState>,
 ) -> Vec<duckdb_cli_bindings::duckdb::cli::dotcmd_host::CommandInfo> {
     let registry = store.data().dotcmd_registry.clone();
-    let registry = registry.lock().expect("dotcmd registry mutex poisoned");
+    let registry = registry.lock().unwrap_or_else(|e| e.into_inner());
     registry
         .list_commands()
         .into_iter()
@@ -2061,7 +2061,7 @@ impl ExtensionManager {
             let registry = self
                 .callback_registry
                 .lock()
-                .expect("callback registry mutex poisoned");
+                .unwrap_or_else(|e| e.into_inner());
             match registry.get(handle) {
                 Some(entry) if entry.kind == CallbackKind::Scalar => entry,
                 Some(entry) => {
@@ -2255,7 +2255,7 @@ impl ExtensionManager {
         let registry = self
             .callback_registry
             .lock()
-            .expect("callback registry mutex poisoned");
+            .unwrap_or_else(|e| e.into_inner());
         registry.get(handle).filter(|entry| entry.kind == kind)
     }
 
@@ -2289,19 +2289,18 @@ impl ExtensionManager {
         let callback_registry = self.callback_registry.clone();
         let current_connection = self.current_connection.clone();
         let catalog_snapshot = self.catalog_snapshot.clone();
-        // v1.1: a loaded extension may use the live-query import; enable the
-        // CLI-boundary catalog snapshot refresh so catalog completion has data
-        // even when called from inside a query (re-entrancy fallback).
-        self.catalog_snapshot
-            .lock()
-            .expect("catalog snapshot mutex poisoned")
-            .enabled = true;
         let extension_name = sanitized.clone();
         eprintln!(
             "[extension-manager] attempting to load '{sanitized}' from {}",
             artifact_path.display()
         );
-        let handle = thread::spawn(move || -> wasmtime::Result<ExtensionInstance> {
+        // The thread returns the loaded instance AND whether this component
+        // imports the live-query capability. Only a query-importing component
+        // makes the per-`execute` catalog-snapshot refresh worthwhile; for the
+        // 99% of loads that don't (every non-autocomplete extension), the
+        // snapshot stays disabled so plain queries pay nothing (see
+        // `refresh_catalog_snapshot`'s `enabled` short-circuit).
+        let handle = thread::spawn(move || -> wasmtime::Result<(ExtensionInstance, bool)> {
             // Outbound network is a GRANTED capability for extension components,
             // off by default and opt-in via `DUCKLINK_NETWORK_GRANT`. This mirrors
             // how DuckDB function capabilities are declared-then-granted (the
@@ -2331,6 +2330,10 @@ impl ExtensionManager {
                     artifact_path.display()
                 ))
             })?;
+            // Detect whether this component imports the live-query capability
+            // (`duckdb:extension/query`) BEFORE instantiating; only those (e.g.
+            // autocomplete) need the per-`execute` catalog-snapshot refresh.
+            let imports_query = component_imports_query(&engine, &component);
             // The instantiate -> run load() orchestration is the direction-agnostic
             // loader, shared from ducklink-runtime. The host supplies the wasi
             // context (it owns the network-grant policy above) and CoreServices
@@ -2347,11 +2350,12 @@ impl ExtensionManager {
                 callback_registry,
                 extension_name.clone(),
             )
+            .map(|instance| (instance, imports_query))
         });
 
-        let instance = match handle.join() {
+        let (instance, imports_query) = match handle.join() {
             Ok(result) => match result {
-                Ok(instance) => instance,
+                Ok(pair) => pair,
                 Err(err) => {
                     eprintln!("extension instantiation for {sanitized} failed: {err}");
                     return Err(err);
@@ -2363,6 +2367,21 @@ impl ExtensionManager {
                 )))
             }
         };
+        // PERF GATE: enable the CLI-boundary catalog-snapshot refresh ONLY when a
+        // query-importing component is loaded (the re-entrancy fallback that lets
+        // catalog completion answer from inside a query). Loads that don't import
+        // `query` leave the snapshot disabled, so plain queries skip the refresh.
+        if imports_query {
+            eprintln!(
+                "[extension-manager] '{loaded_name}' imports the live-query capability; \
+                 enabling catalog-snapshot refresh",
+                loaded_name = sanitized
+            );
+            self.catalog_snapshot
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .enabled = true;
+        }
         let loaded_name = sanitized.clone();
         self.extensions.insert(sanitized, instance);
         // v1.1: collation/pragma defs taken inside the `instance` borrow below,
@@ -2582,24 +2601,26 @@ impl HostState {
             "SELECT DISTINCT column_name FROM duckdb_columns()",
         ];
         {
+            // Poison-tolerant: a snapshot refresh must never abort the query that
+            // just completed, so recover the guard rather than panicking.
             let snap = self
                 .catalog_snapshot
                 .lock()
-                .expect("catalog snapshot mutex poisoned");
+                .unwrap_or_else(|e| e.into_inner());
             if !snap.enabled {
                 return;
             }
         }
         for sql in CATALOG_QUERIES {
             match run_query_on_core(
-                self.core.lock().expect("core mutex poisoned"),
+                self.core.lock().unwrap_or_else(|e| e.into_inner()),
                 &self.current_connection,
                 sql,
             ) {
                 Ok(rows) => {
                     self.catalog_snapshot
                         .lock()
-                        .expect("catalog snapshot mutex poisoned")
+                        .unwrap_or_else(|e| e.into_inner())
                         .rows
                         .insert((*sql).to_string(), rows);
                 }
@@ -2631,7 +2652,7 @@ impl HostState {
         let handle = match self
             .current_connection
             .lock()
-            .expect("current connection mutex poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .clone()
         {
             Some(h) => h,
@@ -2667,7 +2688,7 @@ impl HostState {
     where
         F: FnOnce(&mut CoreExecution) -> R,
     {
-        let mut core = self.core.lock().expect("core mutex poisoned");
+        let mut core = self.core.lock().unwrap_or_else(|e| e.into_inner());
         f(&mut core)
     }
 
@@ -2813,15 +2834,25 @@ impl cli_db::HostResultStream for HostState {
         &mut self,
         rep: Resource<cli_db::ResultStream>,
     ) -> wasmtime::component::__internal::Vec<cli_db::Columndef> {
-        let entry = self
-            .streams
-            .get(&rep.rep())
-            .unwrap_or_else(|| panic!("unknown stream handle {}", rep.rep()));
-        let columns = self
-            .with_core(|core| {
-                core.with_stream(|guest, store| guest.call_schema(store, entry.handle.clone()))
-            })
-            .expect("failed to fetch schema");
+        // `schema` returns a plain Vec (no error channel), so a bad/closed
+        // handle or a core trap degrades to an empty schema rather than
+        // aborting the host from inside this trait impl.
+        let handle = match self.streams.get(&rep.rep()) {
+            Some(entry) => entry.handle.clone(),
+            None => {
+                eprintln!("[host] schema() for unknown stream handle {}", rep.rep());
+                return Vec::new().into();
+            }
+        };
+        let columns = match self
+            .with_core(|core| core.with_stream(|guest, store| guest.call_schema(store, handle)))
+        {
+            Ok(columns) => columns,
+            Err(err) => {
+                eprintln!("[host] schema() failed to fetch stream schema: {err}");
+                return Vec::new().into();
+            }
+        };
         columns
             .into_iter()
             .map(convert_core_columndef)
@@ -2868,7 +2899,9 @@ impl cli_db::HostResultStream for HostState {
         if let Err(err) =
             self.with_core(|core| core.with_stream(|guest, store| guest.call_close(store, handle)))
         {
-            panic!("failed to close result stream: {err}");
+            // `close` has no error channel; a trap here must not abort the host
+            // from inside this trait impl. Log and mark the stream closed anyway.
+            eprintln!("[host] close() failed to close result stream: {err}");
         }
         if let Some(entry) = self.streams.get_mut(&rep.rep()) {
             entry.closed = true;
@@ -3005,7 +3038,7 @@ impl cli_db::Host for HostState {
                 *self
                     .current_connection
                     .lock()
-                    .expect("current connection mutex poisoned") = Some(handle.clone());
+                    .unwrap_or_else(|e| e.into_inner()) = Some(handle.clone());
                 self.connections.insert(
                     id,
                     ConnectionEntry {
@@ -3045,7 +3078,7 @@ impl cli_db::Host for HostState {
                 *self
                     .current_connection
                     .lock()
-                    .expect("current connection mutex poisoned") = Some(handle.clone());
+                    .unwrap_or_else(|e| e.into_inner()) = Some(handle.clone());
                 self.connections.insert(
                     id,
                     ConnectionEntry {
@@ -3830,7 +3863,7 @@ impl CoreServices {
     where
         F: FnOnce(&mut CoreExecution) -> R,
     {
-        let mut core = self.core.lock().expect("core mutex poisoned");
+        let mut core = self.core.lock().unwrap_or_else(|e| e.into_inner());
         f(&mut core)
     }
 }
@@ -3979,7 +4012,7 @@ impl ExtensionServices for CoreServices {
                 return self
                     .catalog_snapshot
                     .lock()
-                    .expect("catalog snapshot mutex poisoned")
+                    .unwrap_or_else(|e| e.into_inner())
                     .rows
                     .get(sql)
                     .cloned()
@@ -3996,7 +4029,7 @@ impl ExtensionServices for CoreServices {
         let rows = run_query_on_core(core, &self.current_connection, sql)?;
         self.catalog_snapshot
             .lock()
-            .expect("catalog snapshot mutex poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .rows
             .insert(sql.to_string(), rows.clone());
         Ok(rows)
@@ -4006,6 +4039,24 @@ impl ExtensionServices for CoreServices {
 /// Run `sql` on `current_connection` using the already-locked `core` executor,
 /// returning rows of stringified cells (NULL -> ""). Factored out so both the
 /// idle `query` path and the CLI-boundary refresh share one implementation.
+/// True when `component` imports the `duckdb:extension/query` interface — i.e.
+/// it can run live catalog SELECTs (autocomplete's catalog completion). Used to
+/// gate the per-`execute` catalog-snapshot refresh so non-query extensions don't
+/// pay for it. Best-effort: any import name in the `duckdb:extension` namespace
+/// whose interface is `query` (with or without a `@version` suffix) counts.
+fn component_imports_query(engine: &Engine, component: &Component) -> bool {
+    component
+        .component_type()
+        .imports(engine)
+        .any(|(name, _)| {
+            // Instance import names look like `duckdb:extension/query` or
+            // `duckdb:extension/query@1.1.0`.
+            let iface = name.rsplit('/').next().unwrap_or(name);
+            let iface = iface.split('@').next().unwrap_or(iface);
+            name.starts_with("duckdb:extension/") && iface == "query"
+        })
+}
+
 fn run_query_on_core(
     mut core: std::sync::MutexGuard<'_, CoreExecution>,
     current_connection: &Arc<Mutex<Option<ResourceAny>>>,
@@ -4013,7 +4064,7 @@ fn run_query_on_core(
 ) -> Result<Vec<Vec<String>>, String> {
     let handle = current_connection
         .lock()
-        .expect("current connection mutex poisoned")
+        .unwrap_or_else(|e| e.into_inner())
         .clone()
         .ok_or_else(|| "query: no active database connection".to_string())?;
     let result = core
@@ -4719,7 +4770,7 @@ impl CliHarness {
             "invoke",
             |store: StoreContextMut<'_, HostState>, (name, args): (String, String)| {
                 let registry = store.data().dotcmd_registry.clone();
-                let mut registry = registry.lock().expect("dotcmd registry mutex poisoned");
+                let mut registry = registry.lock().unwrap_or_else(|e| e.into_inner());
                 let result = match registry.invoke(&name, &args) {
                     None => Ok(None),
                     Some(Ok((text, deltas))) => Ok(Some(make_cli_outcome(text, deltas))),
@@ -4867,7 +4918,7 @@ pub fn run_cli_with_stdio(
         "invoke",
         |store: StoreContextMut<'_, HostState>, (name, args): (String, String)| {
             let registry = store.data().dotcmd_registry.clone();
-            let mut registry = registry.lock().expect("dotcmd registry mutex poisoned");
+            let mut registry = registry.lock().unwrap_or_else(|e| e.into_inner());
             let result = match registry.invoke(&name, &args) {
                 None => Ok(None),
                 Some(Ok((text, deltas))) => Ok(Some(make_cli_outcome(text, deltas))),
@@ -6423,6 +6474,172 @@ mod tests {
             _handler: extension_files::CopyHandler,
         ) -> Result<u32, String> {
             Ok(0)
+        }
+    }
+
+    // ----------------------------------------------------------------------
+    // Pure converter unit tests (no engine / no .wasm artifact). These cover
+    // the neutral<->core / core<->cli / core<->extension value+type converters
+    // on the dispatch hot path, including the rich (int8..timestamptz,
+    // decimal/interval/uuid) and Complex escape-hatch arms.
+    // ----------------------------------------------------------------------
+
+    /// Every neutral logicaltype, including the rich set + a Complex expr.
+    fn all_neutral_logicaltypes() -> Vec<reg::LogicalType> {
+        use reg::LogicalType as L;
+        vec![
+            L::Boolean,
+            L::Int64,
+            L::Uint64,
+            L::Float64,
+            L::Text,
+            L::Blob,
+            L::Int32,
+            L::Timestamp,
+            L::Int8,
+            L::Int16,
+            L::Uint8,
+            L::Uint16,
+            L::Uint32,
+            L::Float32,
+            L::Date,
+            L::Time,
+            L::Timestamptz,
+            L::Decimal,
+            L::Interval,
+            L::Uuid,
+            L::Complex("LIST(INTEGER)".to_string()),
+        ]
+    }
+
+    #[test]
+    fn neutral_logicaltype_to_core_covers_every_arm() {
+        // Every arm converts without panicking; the Complex arm carries its
+        // owned type-expr through to the core variant.
+        for ty in all_neutral_logicaltypes() {
+            let is_complex = matches!(ty, reg::LogicalType::Complex(_));
+            let core = neutral_logicaltype_to_core(ty);
+            if is_complex {
+                assert!(matches!(
+                    core,
+                    core_runtime_exports::Logicaltype::Complex(ref e) if e == "LIST(INTEGER)"
+                ));
+            }
+        }
+    }
+
+    /// Construct a representative core duckvalue per arm (rich set included).
+    fn all_core_duckvalues() -> Vec<core_types::Duckvalue> {
+        use core_types::Duckvalue as C;
+        vec![
+            C::Null,
+            C::Boolean(true),
+            C::Int64(-5),
+            C::Uint64(5),
+            C::Float64(1.25),
+            C::Text("t".into()),
+            C::Blob(vec![9, 8, 7]),
+            C::Int32(-3),
+            C::Timestamp(11),
+            C::Int8(-1),
+            C::Int16(-2),
+            C::Uint8(1),
+            C::Uint16(2),
+            C::Uint32(3),
+            C::Float32(0.5),
+            C::Date(100),
+            C::Time(200),
+            C::Timestamptz(300),
+            C::Decimal(core_types::Decimalvalue {
+                lower: 77,
+                upper: 0,
+                width: 6,
+                scale: 3,
+            }),
+            C::Interval(core_types::Intervalvalue {
+                months: 1,
+                days: 2,
+                micros: 3,
+            }),
+            C::Uuid(core_types::Uuidvalue { hi: 10, lo: 20 }),
+            C::Complex(core_types::Complexvalue {
+                type_expr: "STRUCT(a INT)".into(),
+                json: "{\"a\":1}".into(),
+            }),
+        ]
+    }
+
+    #[test]
+    fn core_cli_duckvalue_round_trips_every_arm() {
+        // core -> cli -> core is lossless for every arm including the rich ones.
+        for v in all_core_duckvalues() {
+            let cli = convert_core_duckvalue(v.clone());
+            let back = convert_cli_duckvalue(cli);
+            // Compare via debug-format (the generated types don't derive PartialEq
+            // uniformly, but their Debug is structural and stable).
+            assert_eq!(format!("{v:?}"), format!("{back:?}"));
+        }
+    }
+
+    #[test]
+    fn core_extension_duckvalue_round_trips_every_arm() {
+        // core -> extension -> core is lossless for every arm.
+        for v in all_core_duckvalues() {
+            let ext = convert_core_duckvalue_to_extension(v.clone());
+            let back = convert_extension_duckvalue_to_core(ext);
+            assert_eq!(format!("{v:?}"), format!("{back:?}"));
+        }
+    }
+
+    #[test]
+    fn core_storage_duckvalue_converts_every_arm() {
+        // core -> storage scan value: every arm converts without panic; spot
+        // check the rich arms preserve their payload.
+        for v in all_core_duckvalues() {
+            let s = convert_core_duckvalue_to_storage(v.clone());
+            match (&v, &s) {
+                (
+                    core_types::Duckvalue::Decimal(d),
+                    storage_scan::Duckvalue::Decimal(sd),
+                ) => {
+                    assert_eq!((d.lower, d.width, d.scale), (sd.lower, sd.width, sd.scale));
+                }
+                (
+                    core_types::Duckvalue::Complex(c),
+                    storage_scan::Duckvalue::Complex(sc),
+                ) => {
+                    assert_eq!(c.type_expr, sc.type_expr);
+                    assert_eq!(c.json, sc.json);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    #[test]
+    fn neutral_funcflags_to_core_maps_each_bit() {
+        let none = neutral_funcflags_to_core(reg::FuncFlags::default());
+        assert_eq!(none, core_types::Funcflags::empty());
+        let all = neutral_funcflags_to_core(reg::FuncFlags {
+            deterministic: true,
+            commutative: true,
+            stateless: true,
+            side_effecting: true,
+            deprecated: true,
+        });
+        assert!(all.contains(core_types::Funcflags::DETERMINISTIC));
+        assert!(all.contains(core_types::Funcflags::COMMUTATIVE));
+        assert!(all.contains(core_types::Funcflags::STATELESS));
+        assert!(all.contains(core_types::Funcflags::SIDEEFFECTING));
+        assert!(all.contains(core_types::Funcflags::DEPRECATED));
+    }
+
+    #[test]
+    fn describe_core_duckvalue_is_total_and_nonempty() {
+        // The dispatch-path describe helper must handle every arm (a component
+        // returning any variant) without panicking and yield a label.
+        for v in all_core_duckvalues() {
+            assert!(!describe_core_duckvalue(&v).is_empty());
         }
     }
 }

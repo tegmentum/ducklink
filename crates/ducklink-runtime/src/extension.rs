@@ -268,7 +268,7 @@ impl ExtensionStoreState {
         let mut registry = self
             .callback_registry
             .lock()
-            .expect("callback registry mutex poisoned");
+            .unwrap_or_else(|e| e.into_inner());
         registry.allocate(&self.extension_name, kind, dispatcher_handle)
     }
 
@@ -276,7 +276,7 @@ impl ExtensionStoreState {
         let mut registry = self
             .callback_registry
             .lock()
-            .expect("callback registry mutex poisoned");
+            .unwrap_or_else(|e| e.into_inner());
         registry.remove(handle);
     }
 
@@ -565,7 +565,7 @@ impl extension_runtime::HostScalarRegistry for ExtensionStoreState {
             let registry = self
                 .callback_registry
                 .lock()
-                .expect("callback registry mutex poisoned");
+                .unwrap_or_else(|e| e.into_inner());
             match registry.get(callback.rep()) {
                 Some(entry) if entry.kind == CallbackKind::Scalar => {}
                 Some(_) => {
@@ -636,7 +636,7 @@ impl extension_runtime::HostTableRegistry for ExtensionStoreState {
             let registry = self
                 .callback_registry
                 .lock()
-                .expect("callback registry mutex poisoned");
+                .unwrap_or_else(|e| e.into_inner());
             match registry.get(callback.rep()) {
                 Some(entry) if entry.kind == CallbackKind::Table => {}
                 Some(_) => {
@@ -713,7 +713,7 @@ impl extension_runtime::HostAggregateRegistry for ExtensionStoreState {
             let registry = self
                 .callback_registry
                 .lock()
-                .expect("callback registry mutex poisoned");
+                .unwrap_or_else(|e| e.into_inner());
             match registry.get(callback.rep()) {
                 Some(entry) if entry.kind == CallbackKind::Aggregate => {}
                 Some(_) => {
@@ -794,7 +794,7 @@ impl extension_runtime::HostPragmaRegistry for ExtensionStoreState {
             let registry = self
                 .callback_registry
                 .lock()
-                .expect("callback registry mutex poisoned");
+                .unwrap_or_else(|e| e.into_inner());
             match registry.get(callback.rep()) {
                 Some(entry) if entry.kind == CallbackKind::Pragma => {}
                 Some(_) => {
@@ -1971,6 +1971,471 @@ impl ExtensionInstance {
             .call_file_close(store.as_context_mut(), handle, file)
             .map_err(map_extension_trap)?
             .map_err(extension_types::Duckerror::Io)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests: the pure capture conversions + the capture-into-pending logic.
+//
+// These exercise the trust-boundary converters (a component-supplied WIT value
+// turned into a neutral `reg::*`) and the storage/index world -> base-world
+// converters WITHOUT needing wasmtime to instantiate a component. The Host
+// trait impls that capture registrations DO need an `ExtensionStoreState`, which
+// we build with a no-op services sink and an empty wasi context.
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A no-op `ExtensionServices` sink: every config read is unavailable, logs
+    /// are dropped. Lets us build an `ExtensionStoreState` to test the capture
+    /// paths without a live database.
+    struct NoopServices;
+    impl ExtensionServices for NoopServices {
+        fn provider_version(&mut self) -> Result<String, ConfigError> {
+            Ok("test".to_string())
+        }
+        fn list_keys(&mut self, _prefix: Option<&str>) -> Result<Vec<String>, ConfigError> {
+            Ok(Vec::new())
+        }
+        fn get_string(&mut self, _path: &str) -> Result<Option<String>, ConfigError> {
+            Ok(None)
+        }
+        fn get_bool(&mut self, _path: &str) -> Result<Option<bool>, ConfigError> {
+            Ok(None)
+        }
+        fn get_i64(&mut self, _path: &str) -> Result<Option<i64>, ConfigError> {
+            Ok(None)
+        }
+        fn get_u64(&mut self, _path: &str) -> Result<Option<u64>, ConfigError> {
+            Ok(None)
+        }
+        fn get_f64(&mut self, _path: &str) -> Result<Option<f64>, ConfigError> {
+            Ok(None)
+        }
+        fn get_bytes(&mut self, _path: &str) -> Result<Option<Vec<u8>>, ConfigError> {
+            Ok(None)
+        }
+        fn get_string_list(&mut self, _path: &str) -> Result<Option<Vec<String>>, ConfigError> {
+            Ok(None)
+        }
+        fn log(&mut self, _level: LogLevel, _message: &str, _target: Option<&str>) {}
+        fn log_fields(&mut self, _level: LogLevel, _message: &str, _fields: &[LogField]) {}
+    }
+
+    fn test_state() -> ExtensionStoreState {
+        let wasi = wasmtime_wasi::WasiCtxBuilder::new().build();
+        ExtensionStoreState::new(
+            wasi,
+            Box::new(NoopServices),
+            Arc::new(Mutex::new(CallbackRegistry::default())),
+            "testext".to_string(),
+        )
+    }
+
+    /// Every base-world logicaltype, including the rich set, for round-tripping.
+    fn all_ext_logicaltypes() -> Vec<extension_runtime::Logicaltype> {
+        use extension_runtime::Logicaltype as L;
+        vec![
+            L::Boolean,
+            L::Int64,
+            L::Uint64,
+            L::Float64,
+            L::Text,
+            L::Blob,
+            L::Int32,
+            L::Timestamp,
+            L::Int8,
+            L::Int16,
+            L::Uint8,
+            L::Uint16,
+            L::Uint32,
+            L::Float32,
+            L::Date,
+            L::Time,
+            L::Timestamptz,
+            L::Decimal,
+            L::Interval,
+            L::Uuid,
+            L::Complex("STRUCT(a INTEGER, b VARCHAR)".to_string()),
+        ]
+    }
+
+    #[test]
+    fn convert_logicaltype_covers_every_arm_incl_rich_and_complex() {
+        use extension_runtime::Logicaltype as L;
+        assert_eq!(
+            convert_extension_logicaltype(L::Boolean),
+            reg::LogicalType::Boolean
+        );
+        assert_eq!(convert_extension_logicaltype(L::Int8), reg::LogicalType::Int8);
+        assert_eq!(
+            convert_extension_logicaltype(L::Uint32),
+            reg::LogicalType::Uint32
+        );
+        assert_eq!(
+            convert_extension_logicaltype(L::Timestamptz),
+            reg::LogicalType::Timestamptz
+        );
+        assert_eq!(convert_extension_logicaltype(L::Uuid), reg::LogicalType::Uuid);
+        // The escape-hatch Complex arm carries its owned type-expr through.
+        let cx = convert_extension_logicaltype(L::Complex("INTEGER[]".to_string()));
+        assert_eq!(cx, reg::LogicalType::Complex("INTEGER[]".to_string()));
+        assert_eq!(cx.describe(), "INTEGER[]");
+        // Every arm converts without panicking and yields a non-empty label.
+        for ty in all_ext_logicaltypes() {
+            assert!(!convert_extension_logicaltype(ty).describe().is_empty());
+        }
+    }
+
+    #[test]
+    fn convert_funcargs_preserves_names_and_types() {
+        use extension_runtime::Logicaltype as L;
+        let args = vec![
+            extension_runtime::Funcarg {
+                name: Some("x".to_string()),
+                logical: L::Int64,
+            },
+            extension_runtime::Funcarg {
+                name: None,
+                logical: L::Text,
+            },
+        ];
+        let out = convert_extension_funcargs(args);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].name.as_deref(), Some("x"));
+        assert_eq!(out[0].logical, reg::LogicalType::Int64);
+        assert_eq!(out[1].name, None);
+        assert_eq!(out[1].logical, reg::LogicalType::Text);
+    }
+
+    #[test]
+    fn convert_columndefs_preserves_names_and_types() {
+        use extension_runtime::Logicaltype as L;
+        let cols = vec![
+            extension_runtime::Columndef {
+                name: "id".to_string(),
+                logical: L::Int32,
+            },
+            extension_runtime::Columndef {
+                name: "label".to_string(),
+                logical: L::Complex("VARCHAR[]".to_string()),
+            },
+        ];
+        let out = convert_extension_columndefs(cols);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].name, "id");
+        assert_eq!(out[0].logical, reg::LogicalType::Int32);
+        assert_eq!(
+            out[1].logical,
+            reg::LogicalType::Complex("VARCHAR[]".to_string())
+        );
+    }
+
+    #[test]
+    fn convert_funcflags_maps_each_bit() {
+        let none = convert_extension_funcflags(extension_types::Funcflags::empty());
+        assert_eq!(none, reg::FuncFlags::default());
+        let all = convert_extension_funcflags(
+            extension_types::Funcflags::DETERMINISTIC
+                | extension_types::Funcflags::COMMUTATIVE
+                | extension_types::Funcflags::STATELESS
+                | extension_types::Funcflags::SIDEEFFECTING
+                | extension_types::Funcflags::DEPRECATED,
+        );
+        assert!(all.deterministic && all.commutative && all.stateless);
+        assert!(all.side_effecting && all.deprecated);
+        let det = convert_extension_funcflags(extension_types::Funcflags::DETERMINISTIC);
+        assert!(det.deterministic);
+        assert!(!det.commutative && !det.stateless && !det.side_effecting && !det.deprecated);
+    }
+
+    #[test]
+    fn storage_duckvalue_converts_every_arm_incl_rich() {
+        use storage_types::Duckvalue as S;
+        let samples = vec![
+            S::Null,
+            S::Boolean(true),
+            S::Int64(-9),
+            S::Uint64(9),
+            S::Float64(1.5),
+            S::Text("hi".to_string()),
+            S::Blob(vec![1, 2, 3]),
+            S::Int32(-3),
+            S::Timestamp(100),
+            S::Int8(-1),
+            S::Int16(-2),
+            S::Uint8(1),
+            S::Uint16(2),
+            S::Uint32(3),
+            S::Float32(0.25),
+            S::Date(42),
+            S::Time(7),
+            S::Timestamptz(8),
+            S::Decimal(storage_types::Decimalvalue {
+                lower: 123,
+                upper: 0,
+                width: 5,
+                scale: 2,
+            }),
+            S::Interval(storage_types::Intervalvalue {
+                months: 1,
+                days: 2,
+                micros: 3,
+            }),
+            S::Uuid(storage_types::Uuidvalue { hi: 1, lo: 2 }),
+            S::Complex(storage_types::Complexvalue {
+                type_expr: "INTEGER[]".to_string(),
+                json: "[1,2]".to_string(),
+            }),
+        ];
+        for s in samples {
+            let ext = storage_duckvalue_to_ext(s);
+            match ext {
+                extension_types::Duckvalue::Decimal(ref d) => {
+                    assert_eq!((d.lower, d.width, d.scale), (123, 5, 2));
+                }
+                extension_types::Duckvalue::Complex(ref c) => {
+                    assert_eq!(c.type_expr, "INTEGER[]");
+                }
+                _ => {}
+            }
+        }
+    }
+
+    #[test]
+    fn storage_logicaltype_and_columndef_convert_every_arm() {
+        use storage_types::Logicaltype as S;
+        for ty in [
+            S::Boolean,
+            S::Int64,
+            S::Uint64,
+            S::Float64,
+            S::Text,
+            S::Blob,
+            S::Int32,
+            S::Timestamp,
+            S::Int8,
+            S::Int16,
+            S::Uint8,
+            S::Uint16,
+            S::Uint32,
+            S::Float32,
+            S::Date,
+            S::Time,
+            S::Timestamptz,
+            S::Decimal,
+            S::Interval,
+            S::Uuid,
+        ] {
+            let _ = storage_logicaltype_to_ext(ty);
+        }
+        let cx = storage_logicaltype_to_ext(S::Complex("STRUCT(a INT)".to_string()));
+        assert!(matches!(cx, extension_types::Logicaltype::Complex(ref e) if e == "STRUCT(a INT)"));
+        let col = storage_columndef_to_ext(storage_types::Columndef {
+            name: "c".to_string(),
+            logical: S::Int64,
+        });
+        assert_eq!(col.name, "c");
+    }
+
+    #[test]
+    fn storage_and_index_duckerror_map_every_arm() {
+        for e in [
+            storage_types::Duckerror::Invalidargument("a".into()),
+            storage_types::Duckerror::Unsupported("b".into()),
+            storage_types::Duckerror::Invalidstate("c".into()),
+            storage_types::Duckerror::Io("d".into()),
+            storage_types::Duckerror::Internal("e".into()),
+        ] {
+            let _ = storage_duckerror_to_ext(e);
+        }
+        for e in [
+            index_types::Duckerror::Invalidargument("a".into()),
+            index_types::Duckerror::Unsupported("b".into()),
+            index_types::Duckerror::Invalidstate("c".into()),
+            index_types::Duckerror::Io("d".into()),
+            index_types::Duckerror::Internal("e".into()),
+        ] {
+            let _ = index_duckerror_to_ext(e);
+        }
+    }
+
+    #[test]
+    fn configerror_and_loglevel_converters_cover_arms() {
+        for e in [
+            ConfigError::InvalidKey("k".into()),
+            ConfigError::TypeMismatch("t".into()),
+            ConfigError::Unavailable("u".into()),
+            ConfigError::InternalConfig("i".into()),
+        ] {
+            let _ = neutral_configerror_to_ext(e);
+        }
+        for l in [
+            extension_logging::Loglevel::Trace,
+            extension_logging::Loglevel::Debug,
+            extension_logging::Loglevel::Info,
+            extension_logging::Loglevel::Warn,
+            extension_logging::Loglevel::Error,
+        ] {
+            let _ = ext_loglevel_to_neutral(l);
+        }
+    }
+
+    // --- capture-into-pending logic (Host trait impls) ---
+
+    #[test]
+    fn register_collation_captures_into_pending_and_is_drained() {
+        let mut state = test_state();
+        // A malformed/empty name must still be captured (never panic); the core
+        // is responsible for rejecting it later.
+        extension_collation::Host::register_collation(
+            &mut state,
+            String::new(),
+            "transform".to_string(),
+            true,
+        )
+        .expect("register_collation should not error");
+        extension_collation::Host::register_collation(
+            &mut state,
+            "icu_en".to_string(),
+            "icu_sort".to_string(),
+            false,
+        )
+        .expect("register_collation should not error");
+        let drained = state.take_pending_collations();
+        assert_eq!(drained.len(), 2);
+        assert_eq!(drained[0].name, "");
+        assert_eq!(drained[1].name, "icu_en");
+        assert_eq!(drained[1].transform_scalar, "icu_sort");
+        // Draining again yields nothing (mem::take semantics).
+        assert!(state.take_pending_collations().is_empty());
+    }
+
+    #[test]
+    fn register_index_type_captures_into_pending() {
+        let mut state = test_state();
+        extension_index::Host::register_index_type(&mut state, "wasm_hnsw".to_string())
+            .expect("register_index_type should not error");
+        let drained = state.take_pending_indexes();
+        assert_eq!(drained.len(), 1);
+        assert_eq!(drained[0].type_name, "wasm_hnsw");
+        assert_eq!(drained[0].extension, "testext");
+    }
+
+    #[test]
+    fn register_storage_and_files_capture_into_pending() {
+        let mut state = test_state();
+        extension_storage::Host::register_storage(&mut state, "sqlitewasm".to_string(), 7, None)
+            .expect("register_storage should not error");
+        let storages = state.take_pending_storages();
+        assert_eq!(storages.len(), 1);
+        assert_eq!(storages[0].type_name, "sqlitewasm");
+        assert_eq!(storages[0].callback_handle, 7);
+
+        extension_files_reg::Host::register_files(&mut state, 9)
+            .expect("register_files should not error");
+        let files = state.take_pending_files();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].callback_handle, 9);
+    }
+
+    #[test]
+    fn register_logical_type_and_macro_capture_into_pending() {
+        let mut state = test_state();
+        extension_catalog::Host::register_logical_type(
+            &mut state,
+            extension_catalog::LogicalType {
+                name: "myint".to_string(),
+                physical: "INTEGER".to_string(),
+            },
+        )
+        .expect("register_logical_type should not error");
+        extension_catalog::Host::register_macro(
+            &mut state,
+            extension_catalog::MacroDef {
+                schema: "main".to_string(),
+                name: "addone".to_string(),
+                parameters: vec!["x".to_string()].into(),
+                definition_sql: "x + 1".to_string(),
+            },
+        )
+        .expect("register_macro should not error");
+        let drained = state.drain_pending();
+        assert_eq!(drained.logical_types.len(), 1);
+        assert_eq!(drained.logical_types[0].name, "myint");
+        assert_eq!(drained.macros.len(), 1);
+        assert_eq!(drained.macros[0].name, "addone");
+        assert_eq!(drained.macros[0].parameters, vec!["x".to_string()]);
+    }
+
+    #[test]
+    fn register_copy_handler_is_rejected_not_panicked() {
+        let mut state = test_state();
+        let res = extension_files::Host::register_copy_handler(
+            &mut state,
+            extension_files::CopyHandler {
+                extension: "parquet".to_string(),
+                function: 0,
+            },
+        );
+        // Unsupported -> Err, never a panic.
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn replacement_scan_unknown_table_handle_errors_not_panics() {
+        let mut state = test_state();
+        // No table function was ever registered, so handle 999 is unknown: the
+        // capture must return Err, not panic.
+        let res = extension_files::Host::register_replacement_scan(
+            &mut state,
+            extension_files::ReplacementScan {
+                table_function: 999,
+                extensions: vec!["csv".to_string()].into(),
+                mode: extension_files::DetectionMode::ExtensionOnly,
+            },
+        );
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn register_pragma_with_unknown_callback_handle_errors_not_panics() {
+        let mut state = test_state();
+        // A pragma callback handle that was never registered in the callback
+        // registry -> Err, not a panic.
+        let bogus: Resource<extension_runtime::PragmaCallback> = Resource::new_own(424242);
+        let registry: Resource<extension_runtime::PragmaRegistry> = Resource::new_own(1);
+        let res = extension_runtime::HostPragmaRegistry::register_call(
+            &mut state,
+            registry,
+            "my_pragma".to_string(),
+            Vec::new().into(),
+            extension_runtime::Logicaltype::Text,
+            bogus,
+            None,
+        );
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn drain_pending_is_empty_on_fresh_state() {
+        let mut state = test_state();
+        let drained = state.drain_pending();
+        assert!(drained.scalars.is_empty());
+        assert!(drained.tables.is_empty());
+        assert!(drained.aggregates.is_empty());
+        assert!(drained.macros.is_empty());
+        assert!(drained.logical_types.is_empty());
+    }
+
+    #[test]
+    fn summarize_registration_names_truncates_with_more() {
+        let names = ["a", "b", "c", "d", "e"];
+        let s = summarize_registration_names(&names, |n| n);
+        assert!(s.contains('a'));
+        assert!(s.contains("+2 more"));
+        assert_eq!(summarize_registration_names::<&str, _>(&[], |n| n), "none");
     }
 }
 
