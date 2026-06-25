@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**171 component extensions** · **443 SQL functions** · 6 expose aggregates · 3 require network.
+**172 component extensions** · **444 SQL functions** · 6 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -18,7 +18,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 - **Static embed (opt-in):** `ducklink compose --embed <name>` bakes an extension into the core at build time. Wired today for `isin` (`embed-isin` core feature); `ducklink compose --list` shows what's embeddable. Most extensions stay runtime-loaded by design.
 - **Network grant:** net extensions are denied by default; opt in with `--grant-network all` (or a name allowlist), equivalently the `DUCKLINK_NETWORK_GRANT` env var.
 
-## Data types & encoding (71)
+## Data types & encoding (72)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -81,6 +81,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **semver** | `semver_valid`, `semver_major`, `semver_minor`, `semver_patch`, `semver_compare` | semver |  |
 | **shapefile** | `read_shp` | shapefile |  |
 | **spatialfns** | `ST_Point`, `ST_GeomFromText`, `ST_AsText`, `ST_X`, `ST_Y`, `ST_Distance`, `ST_Area`, `ST_Length`, `ST_Centroid`, `ST_Contains`, `ST_Within`, `ST_Intersects`, `ST_Envelope`, `ST_AsGeoJSON` | geo, wkt, geojson |  |
+| **spatialproj** | `ST_Transform` | geo, wkt |  |
 | **timezone** | `tz_valid`, `tz_offset_seconds`, `tz_abbreviation` | chrono-tz, chrono |  |
 | **toml** | `toml_to_json`, `json_to_toml` | toml, serde_json |  |
 | **tsid** | `tsid_encode`, `tsid_decode`, `tsid_timestamp`, `tsid_from_timestamp` | hand-rolled |  |

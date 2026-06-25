@@ -47,6 +47,7 @@ members = [
     "extensions/color-component",
     "extensions/iso-component",
     "extensions/geohash-component",
+    "extensions/spatialproj-component",
     "extensions/typetest-component",
     "extensions/currency-component",
     "extensions/hmac-component",

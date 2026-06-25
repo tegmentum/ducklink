@@ -5546,6 +5546,33 @@
         "wkt"
       ],
       "min_duckdb_version": "1.0.0"
+    },
+    {
+      "name": "spatialproj",
+      "version": "0.1.0",
+      "description": "Coordinate reprojection via INTER-COMPONENT COMPOSITION: a thin duckdb:extension that imports gdal:core/srs, composed (wac) with the prebuilt gdal-wasm component (GDAL/PROJ, embedded proj.db). ST_Transform(wkt, from_srid, to_srid) -> reprojected WKT. Proves an extension can depend on another wasm component.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/spatialproj-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/spatialproj.wasm",
+      "exports": [
+        "ST_Transform"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "geo",
+        "wkt"
+      ],
+      "min_duckdb_version": "1.0.0"
     }
   ],
   "dotcmds": [

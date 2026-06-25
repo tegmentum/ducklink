@@ -1,0 +1,1193 @@
+package gdal:core@0.1.0;
+
+interface types {
+    /// Error codes for GDAL operations
+    enum error-code {
+        /// No error
+        none,
+        /// Application-defined error
+        app-defined,
+        /// Out of memory
+        out-of-memory,
+        /// File I/O error
+        file-io,
+        /// Open failed
+        open-failed,
+        /// Illegal argument
+        illegal-arg,
+        /// Not supported
+        not-supported,
+        /// Assertion failed
+        assertion-failed,
+        /// No write access
+        no-write-access,
+        /// Unsupported feature
+        unsupported-operation,
+        /// Object null
+        object-null,
+    }
+
+    /// Data types for raster bands
+    enum data-type {
+        unknown,
+        byte,
+        int16,
+        int32,
+        int64,
+        uint16,
+        uint32,
+        uint64,
+        float32,
+        float64,
+        complex-int16,
+        complex-int32,
+        complex-float32,
+        complex-float64,
+    }
+
+    /// Access modes for datasets
+    enum access-mode {
+        read-only,
+        read-write,
+    }
+
+    /// Geometry types for vector data
+    enum geometry-type {
+        unknown,
+        point,
+        linestring,
+        polygon,
+        multi-point,
+        multi-linestring,
+        multi-polygon,
+        geometry-collection,
+        none,
+        linear-ring,
+        point-z,
+        linestring-z,
+        polygon-z,
+        multi-point-z,
+        multi-linestring-z,
+        multi-polygon-z,
+        geometry-collection-z,
+        point-m,
+        linestring-m,
+        polygon-m,
+        multi-point-m,
+        multi-linestring-m,
+        multi-polygon-m,
+        geometry-collection-m,
+        point-zm,
+        linestring-zm,
+        polygon-zm,
+        multi-point-zm,
+        multi-linestring-zm,
+        multi-polygon-zm,
+        geometry-collection-zm,
+    }
+
+    /// Field types for vector attributes
+    enum field-type {
+        integer,
+        integer64,
+        real,
+        text,
+        binary,
+        date,
+        time,
+        datetime,
+        integer-list,
+        integer64-list,
+        real-list,
+        text-list,
+    }
+
+    /// Geographic bounding box
+    record envelope {
+        min-x: f64,
+        max-x: f64,
+        min-y: f64,
+        max-y: f64,
+    }
+
+    /// Georeferencing transform (affine transformation)
+    /// [0] = top left x
+    /// [1] = w-e pixel resolution
+    /// [2] = rotation, 0 if north up
+    /// [3] = top left y
+    /// [4] = rotation, 0 if north up
+    /// [5] = n-s pixel resolution (negative value)
+    type geotransform = tuple<f64, f64, f64, f64, f64, f64>;
+
+    /// Color entry (RGBA)
+    record color-entry {
+        c1: u16,
+        c2: u16,
+        c3: u16,
+        c4: u16,
+    }
+
+    /// Color interpretation
+    enum color-interp {
+        undefined,
+        gray-index,
+        palette-index,
+        red,
+        green,
+        blue,
+        alpha,
+        hue,
+        saturation,
+        lightness,
+        cyan,
+        magenta,
+        yellow,
+        black,
+    }
+
+    /// Ground control point
+    record gcp {
+        id: string,
+        info: string,
+        pixel: f64,
+        line: f64,
+        x: f64,
+        y: f64,
+        z: f64,
+    }
+
+    /// Resampling methods for warp/translate
+    enum resample-method {
+        nearest,
+        bilinear,
+        cubic,
+        cubic-spline,
+        lanczos,
+        average,
+        mode,
+    }
+
+    /// DEM processing modes
+    enum dem-mode {
+        hillshade,
+        slope,
+        aspect,
+        color-relief,
+        tri,
+        tpi,
+        roughness,
+    }
+
+    /// Resampling algorithms for RasterIO
+    enum rasterio-resample {
+        nearest-neighbour,
+        bilinear,
+        cubic,
+        cubic-spline,
+        lanczos,
+        average,
+        mode,
+        gauss,
+        rms,
+    }
+
+    /// Read/write window specification
+    record raster-window {
+        x-off: u32,
+        y-off: u32,
+        x-size: u32,
+        y-size: u32,
+    }
+
+    /// Buffer specification for RasterIO
+    record buffer-spec {
+        width: u32,
+        height: u32,
+        data-type: data-type,
+    }
+
+    /// Histogram result
+    record histogram {
+        min: f64,
+        max: f64,
+        buckets: list<u64>,
+    }
+
+    /// File stat information for VFS
+    record file-stat {
+        size: u64,
+        mtime: u64,
+        is-directory: bool,
+    }
+
+    /// Driver metadata
+    record driver-info {
+        short-name: string,
+        long-name: string,
+        help-topic: option<string>,
+        mime-type: option<string>,
+        extensions: list<string>,
+        creation-datatypes: list<string>,
+        is-raster: bool,
+        is-vector: bool,
+    }
+
+    /// RAT field types
+    enum rat-field-type {
+        integer,
+        real,
+        text,
+    }
+
+    /// RAT field usage
+    enum rat-field-usage {
+        generic,
+        pixel-count,
+        name,
+        min,
+        max,
+        min-max,
+        red,
+        green,
+        blue,
+        alpha,
+        red-min,
+        green-min,
+        blue-min,
+        alpha-min,
+        red-max,
+        green-max,
+        blue-max,
+        alpha-max,
+    }
+
+    /// RAT table type
+    enum rat-table-type {
+        thematic,
+        athematic,
+    }
+
+    /// Grid interpolation algorithms
+    enum grid-algorithm {
+        inverse-distance,
+        inverse-distance-nearest,
+        moving-average,
+        nearest-neighbor,
+        linear,
+    }
+
+    /// Grid options
+    record grid-options {
+        algorithm: grid-algorithm,
+        power: option<f64>,
+        smoothing: option<f64>,
+        radius1: option<f64>,
+        radius2: option<f64>,
+        angle: option<f64>,
+        max-points: option<u32>,
+        min-points: option<u32>,
+        no-data: option<f64>,
+    }
+
+    /// VRT creation options
+    record vrt-options {
+        resolution: option<string>,
+        x-res: option<f64>,
+        y-res: option<f64>,
+        separate: option<bool>,
+        band-list: option<list<u32>>,
+        add-alpha: option<bool>,
+        src-nodata: option<f64>,
+        vrt-nodata: option<f64>,
+    }
+
+    // Phase 37: Enum Name Functions
+
+    /// Get human-readable name for a data type
+    get-data-type-name: func(dt: data-type) -> string;
+
+    /// Get data type from name string
+    get-data-type-by-name: func(name: string) -> option<data-type>;
+
+    /// Get size in bytes for a data type
+    get-data-type-size: func(dt: data-type) -> u32;
+
+    /// Get size in bits for a data type
+    get-data-type-size-bits: func(dt: data-type) -> u32;
+
+    /// Check if data type is complex (has imaginary component)
+    data-type-is-complex: func(dt: data-type) -> bool;
+
+    /// Check if data type is floating point
+    data-type-is-floating: func(dt: data-type) -> bool;
+
+    /// Check if data type is signed integer
+    data-type-is-signed: func(dt: data-type) -> bool;
+
+    /// Get human-readable name for color interpretation
+    get-color-interp-name: func(interp: color-interp) -> string;
+
+    /// Get color interpretation from name string
+    get-color-interp-by-name: func(name: string) -> option<color-interp>;
+
+    /// Get human-readable name for geometry type
+    get-geometry-type-name: func(geom-type: geometry-type) -> string;
+
+    /// Get geometry type from name string
+    get-geometry-type-by-name: func(name: string) -> option<geometry-type>;
+
+    /// Check if geometry type has Z coordinate
+    geometry-type-has-z: func(geom-type: geometry-type) -> bool;
+
+    /// Check if geometry type has M coordinate
+    geometry-type-has-m: func(geom-type: geometry-type) -> bool;
+
+    /// Get base 2D geometry type (strip Z/M)
+    geometry-type-flatten: func(geom-type: geometry-type) -> geometry-type;
+
+    /// Get human-readable name for field type
+    get-field-type-name: func(field-type: field-type) -> string;
+
+    /// Get field type from name string
+    get-field-type-by-name: func(name: string) -> option<field-type>;
+}
+
+/// Raster data operations
+
+interface raster {
+    use types.{error-code, data-type, access-mode, geotransform, color-entry, color-interp, gcp, rasterio-resample, raster-window, buffer-spec, histogram, rat-field-type, rat-field-usage, rat-table-type};
+
+    /// Opaque handle to a raster dataset
+    resource dataset {
+        /// Open a raster dataset
+        constructor(path: string, mode: access-mode);
+
+        /// Get raster X size (width in pixels)
+        raster-x-size: func() -> u32;
+
+        /// Get raster Y size (height in pixels)
+        raster-y-size: func() -> u32;
+
+        /// Get number of raster bands
+        raster-count: func() -> u32;
+
+        /// Get the geotransform
+        get-geotransform: func() -> result<geotransform, error-code>;
+
+        /// Set the geotransform
+        set-geotransform: func(transform: geotransform) -> result<_, error-code>;
+
+        /// Get projection as WKT string
+        get-projection: func() -> string;
+
+        /// Set projection from WKT string
+        set-projection: func(wkt: string) -> result<_, error-code>;
+
+        /// Get a raster band (1-indexed)
+        get-band: func(band-number: u32) -> result<band, error-code>;
+
+        /// Get metadata item
+        get-metadata-item: func(name: string, domain: option<string>) -> option<string>;
+
+        /// Set metadata item
+        set-metadata-item: func(name: string, value: string, domain: option<string>) -> result<_, error-code>;
+
+        /// Flush cache to disk
+        flush-cache: func() -> result<_, error-code>;
+
+        /// Get GCP count
+        get-gcp-count: func() -> u32;
+
+        /// Get all GCPs
+        get-gcps: func() -> list<gcp>;
+
+        /// Set GCPs with projection
+        set-gcps: func(gcps: list<gcp>, projection: string) -> result<_, error-code>;
+
+        /// Get GCP projection
+        get-gcp-projection: func() -> string;
+
+        /// Build overviews (pyramids)
+        build-overviews: func(
+            resample: string,
+            levels: list<u32>,
+            bands: option<list<u32>>
+        ) -> result<_, error-code>;
+
+        /// Multi-band read with resampling
+        dataset-raster-io-read: func(
+            window: raster-window,
+            buffer: buffer-spec,
+            bands: list<u32>,
+            resample: option<rasterio-resample>
+        ) -> result<list<u8>, error-code>;
+
+        /// Multi-band write
+        dataset-raster-io-write: func(
+            window: raster-window,
+            buffer: buffer-spec,
+            bands: list<u32>,
+            data: list<u8>
+        ) -> result<_, error-code>;
+
+        /// Create a dataset-level mask band
+        create-dataset-mask-band: func(mask-flags: u32) -> result<_, error-code>;
+
+        /// Get list of files forming the dataset
+        get-file-list: func() -> list<string>;
+
+        /// Add a band to the dataset
+        add-band: func(data-type: data-type, options: list<string>) -> result<band, error-code>;
+
+        /// Get driver short name
+        get-driver-name: func() -> string;
+
+        /// Get dataset description
+        get-description: func() -> option<string>;
+
+        /// Set dataset description
+        set-description: func(desc: string) -> result<_, error-code>;
+
+        /// Get all metadata for a domain
+        get-metadata: func(domain: option<string>) -> list<tuple<string, string>>;
+
+        /// Set all metadata for a domain
+        set-metadata: func(metadata: list<tuple<string, string>>, domain: option<string>) -> result<_, error-code>;
+
+        /// Get list of all metadata domains available on this dataset
+        get-metadata-domain-list: func() -> list<string>;
+    }
+
+    /// Opaque handle to a raster band
+    resource band {
+        /// Get band data type
+        get-data-type: func() -> data-type;
+
+        /// Get band X size
+        get-x-size: func() -> u32;
+
+        /// Get band Y size
+        get-y-size: func() -> u32;
+
+        /// Get no-data value
+        get-no-data-value: func() -> option<f64>;
+
+        /// Set no-data value
+        set-no-data-value: func(value: f64) -> result<_, error-code>;
+
+        /// Set no-data value as 64-bit integer
+        set-no-data-value-as-int64: func(value: s64) -> result<_, error-code>;
+
+        /// Set no-data value as 64-bit unsigned integer
+        set-no-data-value-as-uint64: func(value: u64) -> result<_, error-code>;
+
+        /// Delete/clear no-data value
+        delete-no-data-value: func() -> result<_, error-code>;
+
+        /// Read a block of raster data as bytes
+        read-block: func(
+            x-off: u32,
+            y-off: u32,
+            x-size: u32,
+            y-size: u32
+        ) -> result<list<u8>, error-code>;
+
+        /// Write a block of raster data
+        write-block: func(
+            x-off: u32,
+            y-off: u32,
+            x-size: u32,
+            y-size: u32,
+            data: list<u8>
+        ) -> result<_, error-code>;
+
+        /// Get statistics (min, max, mean, stddev)
+        get-statistics: func(approx-ok: bool, force: bool) -> result<tuple<f64, f64, f64, f64>, error-code>;
+
+        /// Compute statistics
+        compute-statistics: func(approx-ok: bool) -> result<tuple<f64, f64, f64, f64>, error-code>;
+
+        /// Get color interpretation
+        get-color-interp: func() -> color-interp;
+
+        /// Set color interpretation
+        set-color-interp: func(interp: color-interp) -> result<_, error-code>;
+
+        /// Get color table entry count
+        get-color-table-count: func() -> u32;
+
+        /// Get color table entry
+        get-color-entry: func(index: u32) -> option<color-entry>;
+
+        /// Set color table from entries
+        set-color-table: func(entries: list<color-entry>) -> result<_, error-code>;
+
+        /// Get unit type string
+        get-unit-type: func() -> option<string>;
+
+        /// Set unit type
+        set-unit-type: func(unit: string) -> result<_, error-code>;
+
+        /// Get scale factor
+        get-scale: func() -> option<f64>;
+
+        /// Set scale factor
+        set-scale: func(scale: f64) -> result<_, error-code>;
+
+        /// Get offset value
+        get-offset: func() -> option<f64>;
+
+        /// Set offset value
+        set-offset: func(offset: f64) -> result<_, error-code>;
+
+        /// Get number of overviews
+        get-overview-count: func() -> u32;
+
+        /// Get overview band at index
+        get-overview: func(index: u32) -> result<band, error-code>;
+
+        /// Get the most appropriate overview for a given sample count
+        get-sample-overview: func(desired-samples: u32) -> result<band, error-code>;
+
+        /// Read raster data with resampling (flexible windowed read)
+        raster-io-read: func(
+            window: raster-window,
+            buffer: buffer-spec,
+            resample: option<rasterio-resample>
+        ) -> result<list<u8>, error-code>;
+
+        /// Write raster data (flexible windowed write)
+        raster-io-write: func(
+            window: raster-window,
+            buffer: buffer-spec,
+            data: list<u8>
+        ) -> result<_, error-code>;
+
+        /// Compute histogram with specified parameters
+        get-histogram: func(
+            min: f64,
+            max: f64,
+            buckets: u32,
+            include-out-of-range: bool,
+            approx-ok: bool
+        ) -> result<list<u64>, error-code>;
+
+        /// Get default/cached histogram
+        get-default-histogram: func(force: bool) -> result<histogram, error-code>;
+
+        /// Set default histogram
+        set-default-histogram: func(hist: histogram) -> result<_, error-code>;
+
+        /// Get mask band for this raster band
+        get-mask-band: func() -> result<band, error-code>;
+
+        /// Get mask flags (bitfield)
+        get-mask-flags: func() -> u32;
+
+        /// Create a mask band
+        create-mask-band: func(mask-flags: u32) -> result<_, error-code>;
+
+        /// Get block size (x, y)
+        get-block-size: func() -> tuple<u32, u32>;
+
+        /// Get actual block size for a given block index
+        get-actual-block-size: func(x-block: u32, y-block: u32) -> result<tuple<u32, u32>, error-code>;
+
+        /// Read a native block of data
+        read-native-block: func(x-block: u32, y-block: u32) -> result<list<u8>, error-code>;
+
+        /// Write a native block of data
+        write-native-block: func(x-block: u32, y-block: u32, data: list<u8>) -> result<_, error-code>;
+
+        /// Advise the driver about upcoming read access
+        advise-read: func(
+            x-off: u32, y-off: u32,
+            x-size: u32, y-size: u32,
+            buf-x-size: u32, buf-y-size: u32,
+            data-type: data-type
+        ) -> result<_, error-code>;
+
+        /// Get category names for classified raster
+        get-category-names: func() -> option<list<string>>;
+
+        /// Set category names for classified raster
+        set-category-names: func(names: list<string>) -> result<_, error-code>;
+
+        /// Flush band cache to disk
+        flush-band-cache: func() -> result<_, error-code>;
+
+        /// Get minimum value
+        get-minimum: func() -> option<f64>;
+
+        /// Get maximum value
+        get-maximum: func() -> option<f64>;
+
+        /// Check if band has arbitrary overviews
+        has-arbitrary-overviews: func() -> bool;
+
+        /// Get band metadata
+        get-band-metadata: func(domain: option<string>) -> list<tuple<string, string>>;
+
+        /// Set band metadata
+        set-band-metadata: func(metadata: list<tuple<string, string>>, domain: option<string>) -> result<_, error-code>;
+
+        /// Get band metadata item
+        get-band-metadata-item: func(name: string, domain: option<string>) -> option<string>;
+
+        /// Set band metadata item
+        set-band-metadata-item: func(name: string, value: string, domain: option<string>) -> result<_, error-code>;
+
+        /// Get band description
+        get-description: func() -> option<string>;
+
+        /// Set band description
+        set-description: func(desc: string) -> result<_, error-code>;
+
+        /// Get raster attribute table
+        get-default-rat: func() -> option<raster-attribute-table>;
+
+        /// Set default raster attribute table
+        set-default-rat: func(rat: borrow<raster-attribute-table>) -> result<_, error-code>;
+
+        /// Get list of all metadata domains available on this band
+        get-metadata-domain-list: func() -> list<string>;
+    }
+
+    /// Raster Attribute Table resource
+    resource raster-attribute-table {
+        /// Create a new RAT
+        constructor();
+
+        /// Get number of columns
+        get-column-count: func() -> u32;
+
+        /// Get number of rows
+        get-row-count: func() -> u32;
+
+        /// Create a new column
+        create-column: func(name: string, field-type: rat-field-type, usage: rat-field-usage) -> result<_, error-code>;
+
+        /// Get column name
+        get-column-name: func(col: u32) -> option<string>;
+
+        /// Get column type
+        get-column-type: func(col: u32) -> option<rat-field-type>;
+
+        /// Get column usage
+        get-column-usage: func(col: u32) -> option<rat-field-usage>;
+
+        /// Get column index by usage
+        get-column-of-usage: func(usage: rat-field-usage) -> option<u32>;
+
+        /// Set row count
+        set-row-count: func(count: u32) -> result<_, error-code>;
+
+        /// Get value as string
+        get-value-as-string: func(row: u32, col: u32) -> option<string>;
+
+        /// Get value as integer
+        get-value-as-int: func(row: u32, col: u32) -> option<s32>;
+
+        /// Get value as double
+        get-value-as-double: func(row: u32, col: u32) -> option<f64>;
+
+        /// Set value from string
+        set-value-as-string: func(row: u32, col: u32, value: string) -> result<_, error-code>;
+
+        /// Set value from integer
+        set-value-as-int: func(row: u32, col: u32, value: s32) -> result<_, error-code>;
+
+        /// Set value from double
+        set-value-as-double: func(row: u32, col: u32, value: f64) -> result<_, error-code>;
+
+        /// Get linear binning parameters
+        get-linear-binning: func() -> option<tuple<f64, f64>>;
+
+        /// Set linear binning parameters
+        set-linear-binning: func(row0-min: f64, bin-size: f64) -> result<_, error-code>;
+
+        /// Get table type
+        get-table-type: func() -> rat-table-type;
+
+        /// Set table type
+        set-table-type: func(table-type: rat-table-type) -> result<_, error-code>;
+
+        /// Get row index for a pixel value
+        get-row-of-value: func(value: f64) -> option<u32>;
+
+        /// Clone the RAT
+        clone-rat: func() -> raster-attribute-table;
+
+        // Phase 38: RAT Bulk Operations
+
+        /// Read multiple integer values from a column
+        values-io-as-integer: func(
+            field-index: u32,
+            start-row: u32,
+            count: u32
+        ) -> result<list<s32>, error-code>;
+
+        /// Write multiple integer values to a column
+        set-values-as-integer: func(
+            field-index: u32,
+            start-row: u32,
+            values: list<s32>
+        ) -> result<_, error-code>;
+
+        /// Read multiple double values from a column
+        values-io-as-double: func(
+            field-index: u32,
+            start-row: u32,
+            count: u32
+        ) -> result<list<f64>, error-code>;
+
+        /// Write multiple double values to a column
+        set-values-as-double: func(
+            field-index: u32,
+            start-row: u32,
+            values: list<f64>
+        ) -> result<_, error-code>;
+
+        /// Read multiple string values from a column
+        values-io-as-string: func(
+            field-index: u32,
+            start-row: u32,
+            count: u32
+        ) -> result<list<string>, error-code>;
+
+        /// Write multiple string values to a column
+        set-values-as-strings: func(
+            field-index: u32,
+            start-row: u32,
+            values: list<string>
+        ) -> result<_, error-code>;
+
+        /// Convert RAT to color table (returns list of color entries)
+        to-color-table: func() -> result<list<color-entry>, error-code>;
+
+        /// Serialize RAT to JSON
+        to-json: func() -> result<string, error-code>;
+    }
+
+    // Phase 39: Color Table Utilities
+
+    /// Palette interpretation type
+    enum palette-interp {
+        gray,
+        rgb,
+        cmyk,
+        hls,
+    }
+
+    /// Color table resource for managing palettes
+    resource color-table {
+        /// Create a new color table with specified palette interpretation
+        constructor(interp: palette-interp);
+
+        /// Get palette interpretation type
+        get-palette-interpretation: func() -> palette-interp;
+
+        /// Get number of color entries
+        get-color-entry-count: func() -> u32;
+
+        /// Get a color entry at index
+        get-color-entry: func(index: u32) -> option<color-entry>;
+
+        /// Get color entry as RGB (converted if necessary)
+        get-color-entry-as-rgb: func(index: u32) -> option<color-entry>;
+
+        /// Set a color entry at index
+        set-color-entry: func(index: u32, entry: color-entry);
+
+        /// Create a color ramp between two indices
+        create-color-ramp: func(start-index: u32, start-color: color-entry, end-index: u32, end-color: color-entry);
+
+        /// Clone the color table
+        clone: func() -> color-table;
+
+        /// Get all entries as a list
+        get-all-entries: func() -> list<color-entry>;
+
+        /// Set multiple entries starting at index
+        set-entries: func(start-index: u32, entries: list<color-entry>);
+    }
+
+    /// Create a new raster dataset
+    create: func(
+        driver-name: string,
+        path: string,
+        x-size: u32,
+        y-size: u32,
+        bands: u32,
+        data-type: data-type,
+        options: list<string>
+    ) -> result<dataset, error-code>;
+
+    /// Open an existing raster dataset
+    open: func(path: string, mode: access-mode) -> result<dataset, error-code>;
+
+    // Phase 45: Dataset Sharing Options
+
+    /// Open dataset with sharing (multiple handles to same dataset)
+    open-shared: func(path: string, read-only: bool) -> result<dataset, error-code>;
+
+    /// Get list of available raster drivers
+    get-driver-names: func() -> list<string>;
+
+    // Phase 30: Dataset Management
+
+    /// Create a copy of a dataset
+    create-copy: func(
+        driver-name: string,
+        dst-path: string,
+        src: borrow<dataset>,
+        strict: bool,
+        options: list<string>
+    ) -> result<dataset, error-code>;
+
+    /// Delete a dataset
+    delete-dataset: func(driver-name: string, path: string) -> result<_, error-code>;
+
+    /// Rename a dataset
+    rename-dataset: func(driver-name: string, new-name: string, old-name: string) -> result<_, error-code>;
+
+    /// Copy dataset files
+    copy-dataset-files: func(driver-name: string, new-name: string, old-name: string) -> result<_, error-code>;
+
+    /// Identify which driver can open a file
+    identify-driver: func(path: string) -> option<string>;
+
+    /// Open flags for open-ex
+    flags open-flag {
+        readonly,
+        update,
+        raster,
+        vector,
+        gnm,
+        multidim-raster,
+        shared,
+        verbose-error,
+    }
+
+    /// Open a dataset with extended options
+    open-ex: func(
+        path: string,
+        open-flags: u32,
+        allowed-drivers: option<list<string>>,
+        open-options: option<list<string>>,
+        sibling-files: option<list<string>>
+    ) -> result<dataset, error-code>;
+}
+
+/// Vector data operations
+
+interface srs {
+    use types.{error-code, gcp};
+    use raster.{dataset};
+
+    /// Opaque handle to a spatial reference system
+    resource spatial-ref {
+        /// Create from EPSG code
+        from-epsg: static func(code: u32) -> result<spatial-ref, error-code>;
+
+        /// Create from WKT string
+        from-wkt: static func(wkt: string) -> result<spatial-ref, error-code>;
+
+        /// Create from PROJ string
+        from-proj: static func(proj: string) -> result<spatial-ref, error-code>;
+
+        /// Create from ESRI WKT string
+        from-esri: static func(wkt: string) -> result<spatial-ref, error-code>;
+
+        /// Export to WKT
+        to-wkt: func() -> result<string, error-code>;
+
+        /// Export to pretty-formatted WKT
+        to-pretty-wkt: func() -> result<string, error-code>;
+
+        /// Export to PROJ string
+        to-proj: func() -> result<string, error-code>;
+
+        /// Check if geographic (lat/lon)
+        is-geographic: func() -> bool;
+
+        /// Check if projected
+        is-projected: func() -> bool;
+
+        /// Check if compound CRS
+        is-compound: func() -> bool;
+
+        /// Check if geocentric CRS
+        is-geocentric: func() -> bool;
+
+        /// Check if local CRS
+        is-local: func() -> bool;
+
+        /// Check if vertical CRS
+        is-vertical: func() -> bool;
+
+        /// Check if derived geographic CRS
+        is-derived-geographic: func() -> bool;
+
+        /// Get authority name and code
+        get-authority: func() -> option<tuple<string, u32>>;
+
+        /// Check if same as another SRS
+        is-same: func(other: borrow<spatial-ref>) -> bool;
+
+        /// Check if same geographic CS
+        is-same-geog-cs: func(other: borrow<spatial-ref>) -> bool;
+
+        /// Get linear units (returns name and meters conversion)
+        get-linear-units: func() -> tuple<string, f64>;
+
+        /// Get angular units (returns name and radians conversion)
+        get-angular-units: func() -> tuple<string, f64>;
+
+        /// Get semi-major axis
+        get-semi-major: func() -> f64;
+
+        /// Get semi-minor axis
+        get-semi-minor: func() -> f64;
+
+        /// Get inverse flattening
+        get-inv-flattening: func() -> f64;
+
+        /// Set axis mapping strategy
+        set-axis-mapping-strategy: func(strategy: u32);
+
+        /// Get UTM zone (zone number and is-north flag)
+        get-utm-zone: func() -> option<tuple<u32, bool>>;
+
+        /// Set UTM projection
+        set-utm: func(zone: u32, north: bool) -> result<_, error-code>;
+
+        /// Set well-known geographic CS by name
+        set-well-known-geog-cs: func(name: string) -> result<_, error-code>;
+
+        /// Validate the SRS
+        validate: func() -> result<_, error-code>;
+
+        /// Fixup the SRS for common issues
+        fixup: func() -> result<_, error-code>;
+
+        /// Morph to ESRI dialect
+        morph-to-esri: func() -> result<_, error-code>;
+
+        /// Morph from ESRI dialect
+        morph-from-esri: func() -> result<_, error-code>;
+
+        /// Get prime meridian (name and offset in degrees)
+        get-prime-meridian: func() -> tuple<string, f64>;
+
+        /// Clone the SRS
+        clone-srs: func() -> spatial-ref;
+
+        // Phase 22: Extended Import/Export
+
+        /// Create from user input (auto-detect format)
+        from-user-input: static func(input: string) -> result<spatial-ref, error-code>;
+
+        /// Export to PROJJSON
+        to-proj-json: func() -> result<string, error-code>;
+
+        /// Export to XML
+        to-xml: func() -> result<string, error-code>;
+
+        /// Strip vertical component from compound CRS
+        strip-vertical: func() -> result<_, error-code>;
+
+        // NOTE: promote-to-3d / demote-to-2d intentionally omitted here. The
+        // upstream gdal.wit names them with a digit-leading label segment, which
+        // cargo-component's WIT parser rejects. spatialproj does not call them,
+        // so dropping them from this import is harmless: gdal's full srs export
+        // still satisfies this (smaller) imported interface.
+
+        /// Set TOWGS84 parameters
+        set-towgs84: func(dx: f64, dy: f64, dz: f64, rx: f64, ry: f64, rz: f64, scale: f64) -> result<_, error-code>;
+
+        /// Get TOWGS84 parameters (returns list of 7 values)
+        get-towgs84: func() -> result<list<f64>, error-code>;
+
+        // Phase 23: Projection Setters
+
+        /// Set State Plane projection
+        set-state-plane: func(zone: u32, nad83: bool) -> result<_, error-code>;
+
+        /// Set Transverse Mercator projection
+        set-tm: func(center-lat: f64, center-lon: f64, scale: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set Lambert Conformal Conic (2SP)
+        set-lcc: func(std-parallel1: f64, std-parallel2: f64, center-lat: f64, center-lon: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set Lambert Conformal Conic (1SP)
+        set-lcc1sp: func(center-lat: f64, center-lon: f64, scale: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set Mercator projection
+        set-mercator: func(center-lat: f64, center-lon: f64, scale: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set Mercator 2SP projection
+        set-mercator2sp: func(std-parallel1: f64, center-lat: f64, center-lon: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set Albers Conic Equal Area
+        set-acea: func(std-parallel1: f64, std-parallel2: f64, center-lat: f64, center-lon: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set Azimuthal Equidistant
+        set-ae: func(center-lat: f64, center-lon: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set Lambert Azimuthal Equal Area
+        set-laea: func(center-lat: f64, center-lon: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set Polar Stereographic
+        set-ps: func(center-lat: f64, center-lon: f64, scale: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set Stereographic
+        set-stereographic: func(center-lat: f64, center-lon: f64, scale: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set Orthographic
+        set-orthographic: func(center-lat: f64, center-lon: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set Gnomonic
+        set-gnomonic: func(center-lat: f64, center-lon: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set Equirectangular
+        set-equirectangular: func(center-lat: f64, center-lon: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set Sinusoidal
+        set-sinusoidal: func(center-lon: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set Mollweide
+        set-mollweide: func(center-lon: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set Robinson
+        set-robinson: func(center-lon: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Set GEOS (Geostationary Satellite)
+        set-geos: func(center-lon: f64, satellite-height: f64, false-easting: f64, false-northing: f64) -> result<_, error-code>;
+
+        /// Get projection parameter value
+        get-proj-parm: func(name: string, default-val: f64) -> f64;
+
+        /// Set projection parameter value
+        set-proj-parm: func(name: string, value: f64) -> result<_, error-code>;
+
+        /// Auto-identify EPSG code
+        auto-identify-epsg: func() -> result<_, error-code>;
+
+        /// Find matching SRS entries (returns list of authority:code pairs with confidence)
+        find-matches: func() -> result<list<tuple<string, u32>>, error-code>;
+
+        // Phase 41: Extended Axis Information
+
+        /// Get axis name and orientation for a target (GEOGCS, PROJCS, etc.)
+        get-axis: func(target-key: string, axis-index: u32) -> result<tuple<string, axis-orientation>, error-code>;
+
+        /// Get number of axes for a target
+        get-axes-count: func(target-key: string) -> u32;
+
+        /// Get axis mapping strategy
+        get-axis-mapping-strategy: func() -> axis-mapping-strategy;
+
+        /// Get data axis to CRS axis mapping
+        get-data-axis-to-crs-axis-mapping: func() -> list<s32>;
+
+        /// Set data axis to CRS axis mapping
+        set-data-axis-to-crs-axis-mapping: func(mapping: list<s32>) -> result<_, error-code>;
+    }
+
+    /// Axis orientation type
+    enum axis-orientation {
+        other,
+        east,
+        west,
+        north,
+        south,
+        up,
+        down,
+    }
+
+    /// Axis mapping strategy
+    enum axis-mapping-strategy {
+        traditional-gis-order,
+        authority-compliant,
+    }
+
+    /// Options for coordinate transformation
+    record transform-options {
+        /// Area of interest (min-x, min-y, max-x, max-y)
+        area-of-interest: option<tuple<f64, f64, f64, f64>>,
+        /// Explicit coordinate operation (PROJ pipeline)
+        coordinate-operation: option<string>,
+        /// Allow ballpark transformations
+        allow-ballpark: option<bool>,
+    }
+
+    /// Coordinate transformer
+    resource transform {
+        /// Create a transform between two SRS
+        constructor(source: borrow<spatial-ref>, target: borrow<spatial-ref>);
+
+        /// Create a transform with options
+        create-ex: static func(source: borrow<spatial-ref>, target: borrow<spatial-ref>, options: transform-options) -> result<transform, error-code>;
+
+        /// Transform a single point (x, y, z)
+        transform-point: func(x: f64, y: f64, z: f64) -> result<tuple<f64, f64, f64>, error-code>;
+
+        /// Transform multiple points
+        transform-points: func(coords: list<tuple<f64, f64, f64>>) -> result<list<tuple<f64, f64, f64>>, error-code>;
+
+        /// Transform multiple points with time dimension and success flags
+        /// Returns (transformed coords, success flags per point)
+        transform-points-ex: func(
+            x: list<f64>,
+            y: list<f64>,
+            z: option<list<f64>>,
+            t: option<list<f64>>
+        ) -> result<tuple<list<f64>, list<f64>, option<list<f64>>, list<bool>>, error-code>;
+
+        /// Get the inverse transformation
+        get-inverse: func() -> result<transform, error-code>;
+    }
+
+    /// General image-projection transformer for GCPs and polynomial transforms
+    resource gen-img-proj-transformer {
+        /// Create from source/destination datasets and WKT strings
+        create: static func(
+            src-dataset: option<borrow<dataset>>,
+            src-wkt: option<string>,
+            dst-dataset: option<borrow<dataset>>,
+            dst-wkt: option<string>,
+            gcp-use-ok: bool,
+            gcp-error-threshold: f64,
+            order: u32
+        ) -> result<gen-img-proj-transformer, error-code>;
+
+        /// Create from GCPs
+        create-from-gcps: static func(
+            gcps: list<gcp>,
+            order: u32,
+            reversed: bool
+        ) -> result<gen-img-proj-transformer, error-code>;
+
+        /// Transform points (dst-to-src determines direction)
+        transform: func(
+            dst-to-src: bool,
+            points: list<tuple<f64, f64, f64>>
+        ) -> result<list<tuple<f64, f64, f64>>, error-code>;
+    }
+
+    /// Thin Plate Spline transformer for GCPs
+    resource tps-transformer {
+        /// Create from GCPs
+        create: static func(
+            gcps: list<gcp>,
+            reversed: bool
+        ) -> result<tps-transformer, error-code>;
+
+        /// Transform points
+        transform: func(
+            dst-to-src: bool,
+            points: list<tuple<f64, f64, f64>>
+        ) -> result<list<tuple<f64, f64, f64>>, error-code>;
+    }
+}

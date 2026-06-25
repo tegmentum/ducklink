@@ -1,0 +1,28 @@
+package duckdb:extension;
+
+use runtime;
+use callback-dispatch;
+use config;
+use logging;
+use catalog;
+use files;
+use guest;
+
+// spatialproj: a duckdb:extension component that ALSO imports another wasm
+// component's interface (gdal:core/srs), satisfied at composition time by the
+// prebuilt gdal.component.wasm. This proves inter-component composition: a
+// duckdb extension that depends on GDAL's coordinate-transformation API without
+// rebundling GDAL.
+world spatialproj {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+
+  // The composed dependency: GDAL's spatial-reference + coordinate-transform.
+  import gdal:core/srs@0.1.0;
+
+  export guest;
+  export callback-dispatch;
+}
