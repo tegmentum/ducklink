@@ -1,0 +1,15 @@
+# geomtype smoke: a coherent custom logical type `geom2` (BLOB-physical, WKB)
+# with VARCHAR<->geom2 casts (WKT<->WKB) and typed scalars over it.
+# CREATE TABLE emits a "Count" header; INSERT emits "Count" + a "1" rows-affected.
+Count
+Count
+1
+# SELECT shape::VARCHAR, geom_area(shape): WKT round-trips via both casts, area=4.
+wkt,area
+"POLYGON((0 0,0 2,2 2,2 0,0 0))",4
+# SELECT geom_astext(shape): typed scalar decodes the WKB to WKT.
+astext
+"POLYGON((0 0,0 2,2 2,2 0,0 0))"
+# SELECT ('POINT(3 7)'::geom2)::VARCHAR: point round-trips through WKB.
+pt
+POINT(3 7)

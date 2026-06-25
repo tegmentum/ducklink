@@ -182,6 +182,7 @@ members = [
     "extensions/inetfns-component",    "extensions/excelfns-component",
     "extensions/avrofns-component",
     "extensions/spatialfns-component",
+    "extensions/geomtype-component",
     "extensions/ftsfns-component",
     "extensions/icufns-component",
     "extensions/vssfns-component",
