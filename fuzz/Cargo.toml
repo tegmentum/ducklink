@@ -1,0 +1,74 @@
+# Fuzzing harness for the highest-risk adversarial-input parsers in ducklink.
+#
+# These targets compile the components' PURE PARSE LOGIC natively (the wire
+# parsers and binary decoders are wit-free std/Rust) and drive it with libfuzzer
+# bytes. The contract under test: NEVER PANIC on any input. A panic in a parser
+# or in the native FFI bridge can abort the host.
+#
+# Standalone workspace: kept OUT of the root workspace (and out of the
+# components' standalone workspaces) so `cargo fuzz` builds only this crate.
+[package]
+name = "ducklink-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+# MySQL wire parser deps (mysql.rs is wit-free: std + sha1).
+sha1 = "0.10"
+# Postgres wire parser deps (postgres.rs is wit-free: std + md5).
+md5 = "0.7"
+# geomtype WKB codec deps (wkb.rs is wit-free: geo + byteorder).
+geo = "0.29"
+byteorder = "1"
+# bencode decoder dep.
+serde_bencode = "0.2"
+
+[[bin]]
+name = "mysql_parse"
+path = "fuzz_targets/mysql_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "postgres_parse"
+path = "fuzz_targets/postgres_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "wkb_decode"
+path = "fuzz_targets/wkb_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "hex_decode"
+path = "fuzz_targets/hex_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "bencode_decode"
+path = "fuzz_targets/bencode_decode.rs"
+test = false
+doc = false
+bench = false
+
+# Release profile with debug assertions on so arithmetic-overflow + other
+# debug-only panics are caught during fuzzing.
+[profile.release]
+debug = 1
+debug-assertions = true
+overflow-checks = true
