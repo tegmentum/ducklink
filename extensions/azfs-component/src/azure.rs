@@ -59,6 +59,11 @@ pub struct Credentials {
     pub account_key: Option<String>,
     /// Optional explicit blob endpoint suffix (defaults to BLOB_SUFFIX).
     pub endpoint_suffix: Option<String>,
+    /// Optional explicit blob endpoint URL (e.g. http://127.0.0.1:10000/
+    /// devstoreaccount1 for Azurite, or any path-style blob endpoint). When set,
+    /// azfs uses PATH-STYLE against this endpoint instead of the
+    /// `<account>.blob.core.windows.net` virtual-hosted HTTPS default.
+    pub blob_endpoint: Option<String>,
 }
 
 impl Credentials {
@@ -75,6 +80,9 @@ impl Credentials {
         }
         if self.endpoint_suffix.is_none() {
             self.endpoint_suffix = other.endpoint_suffix;
+        }
+        if self.blob_endpoint.is_none() {
+            self.blob_endpoint = other.blob_endpoint;
         }
     }
 }
@@ -99,6 +107,7 @@ pub fn parse_connection_string(cs: &str) -> Credentials {
             "accountkey" => creds.account_key = Some(v.to_string()),
             "sharedaccesssignature" => creds.sas_token = Some(v.to_string()),
             "endpointsuffix" => creds.endpoint_suffix = Some(v.to_string()),
+            "blobendpoint" => creds.blob_endpoint = Some(v.to_string()),
             _ => {}
         }
     }
@@ -129,6 +138,7 @@ where
         account_key: getenv("AZURE_STORAGE_KEY").filter(|s| !s.trim().is_empty()),
         endpoint_suffix: getenv("AZURE_STORAGE_ENDPOINT_SUFFIX")
             .filter(|s| !s.trim().is_empty()),
+        blob_endpoint: getenv("AZURE_STORAGE_BLOB_ENDPOINT").filter(|s| !s.trim().is_empty()),
     };
     creds.fill_from(env_creds);
     creds
@@ -137,13 +147,35 @@ where
 /// The host + path components for a blob, given creds + parsed az path.
 /// Returns (host, "/container/blob").
 pub fn blob_host_and_path(creds: &Credentials, p: &AzPath) -> Result<(String, String), String> {
+    let path = format!("/{}/{}", p.container, p.blob);
+    // Path-style endpoint override (Azurite / any S3-compatible-ish blob endpoint):
+    // host = the endpoint authority (host[:port]); `path` stays /container/blob so
+    // the SharedKey canonical resource (/<account><path>) is still correct, while
+    // azure_get builds the actual account-prefixed request URL from blob_endpoint.
+    if let Some(ep) = creds.blob_endpoint.as_deref() {
+        let ep = ep.trim().trim_end_matches('/');
+        let authority = ep
+            .strip_prefix("https://")
+            .or_else(|| ep.strip_prefix("http://"))
+            .unwrap_or(ep);
+        let host = authority.split('/').next().unwrap_or(authority).to_string();
+        // Path-style canonicalized resource: Azurite/the emulator computes canon
+        // as "/<account>" + the URL AbsolutePath, and for path-style that path
+        // ALREADY includes the account (/<account>/<container>/<blob>) -- so the
+        // signed `path` must carry the account too (sign_shared_key prepends
+        // /<account>, yielding the account twice, matching the emulator).
+        if let Some(account) = creds.account.as_deref() {
+            let acct_path = format!("/{account}/{}/{}", p.container, p.blob);
+            return Ok((host, acct_path));
+        }
+        return Ok((host, path));
+    }
     let account = creds
         .account
         .as_deref()
         .ok_or_else(|| "azfs: no storage account (set AZURE_STORAGE_ACCOUNT or a connection string)".to_string())?;
     let suffix = creds.endpoint_suffix.as_deref().unwrap_or(BLOB_SUFFIX);
     let host = format!("{account}.{suffix}");
-    let path = format!("/{}/{}", p.container, p.blob);
     Ok((host, path))
 }
 
