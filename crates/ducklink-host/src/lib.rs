@@ -963,7 +963,49 @@ fn spi_value_text(v: &core_types::Duckvalue) -> String {
         core_types::Duckvalue::Date(days) => days.to_string(),
         core_types::Duckvalue::Time(micros) => micros.to_string(),
         core_types::Duckvalue::Timestamptz(micros) => micros.to_string(),
+        core_types::Duckvalue::Decimal(d) => format_decimal(d.lower, d.upper, d.width, d.scale),
+        core_types::Duckvalue::Interval(iv) => {
+            format!("{} months {} days {} us", iv.months, iv.days, iv.micros)
+        }
+        core_types::Duckvalue::Uuid(u) => format_uuid(u.hi, u.lo),
     }
+}
+
+/// Render a HUGEINT-backed DECIMAL: unscaled int128 = (upper<<64 | lower),
+/// inserting the decimal point `scale` digits from the right.
+pub(crate) fn format_decimal(lower: u64, upper: u64, _width: u8, scale: u8) -> String {
+    let raw = (((upper as u128) << 64) | lower as u128) as i128;
+    let neg = raw < 0;
+    let mut digits = raw.unsigned_abs().to_string();
+    let scale = scale as usize;
+    let s = if scale == 0 {
+        digits
+    } else {
+        while digits.len() <= scale {
+            digits.insert(0, '0');
+        }
+        let point = digits.len() - scale;
+        format!("{}.{}", &digits[..point], &digits[point..])
+    };
+    if neg {
+        format!("-{s}")
+    } else {
+        s
+    }
+}
+
+/// Render a 128-bit UUID (hi/lo halves) as the canonical 8-4-4-4-12 hex form.
+pub(crate) fn format_uuid(hi: u64, lo: u64) -> String {
+    let v = ((hi as u128) << 64) | lo as u128;
+    let h = format!("{v:032x}");
+    format!(
+        "{}-{}-{}-{}-{}",
+        &h[0..8],
+        &h[8..12],
+        &h[12..16],
+        &h[16..20],
+        &h[20..32]
+    )
 }
 
 /// A loaded pluggable dot-command component (its own wasmtime store + instance).
@@ -2823,6 +2865,9 @@ fn neutral_logicaltype_to_core(ty: reg::LogicalType) -> core_runtime_exports::Lo
         reg::LogicalType::Date => core_runtime_exports::Logicaltype::Date,
         reg::LogicalType::Time => core_runtime_exports::Logicaltype::Time,
         reg::LogicalType::Timestamptz => core_runtime_exports::Logicaltype::Timestamptz,
+        reg::LogicalType::Decimal => core_runtime_exports::Logicaltype::Decimal,
+        reg::LogicalType::Interval => core_runtime_exports::Logicaltype::Interval,
+        reg::LogicalType::Uuid => core_runtime_exports::Logicaltype::Uuid,
     }
 }
 
@@ -2898,6 +2943,22 @@ fn convert_core_duckvalue(value: core_types::Duckvalue) -> cli_types::Duckvalue 
         core_types::Duckvalue::Date(v) => cli_types::Duckvalue::Date(v),
         core_types::Duckvalue::Time(v) => cli_types::Duckvalue::Time(v),
         core_types::Duckvalue::Timestamptz(v) => cli_types::Duckvalue::Timestamptz(v),
+        core_types::Duckvalue::Decimal(d) => cli_types::Duckvalue::Decimal(cli_types::Decimalvalue {
+            lower: d.lower,
+            upper: d.upper,
+            width: d.width,
+            scale: d.scale,
+        }),
+        core_types::Duckvalue::Interval(iv) => {
+            cli_types::Duckvalue::Interval(cli_types::Intervalvalue {
+                months: iv.months,
+                days: iv.days,
+                micros: iv.micros,
+            })
+        }
+        core_types::Duckvalue::Uuid(u) => {
+            cli_types::Duckvalue::Uuid(cli_types::Uuidvalue { hi: u.hi, lo: u.lo })
+        }
     }
 }
 
@@ -2921,6 +2982,24 @@ fn convert_cli_duckvalue(value: cli_types::Duckvalue) -> core_types::Duckvalue {
         cli_types::Duckvalue::Date(v) => core_types::Duckvalue::Date(v),
         cli_types::Duckvalue::Time(v) => core_types::Duckvalue::Time(v),
         cli_types::Duckvalue::Timestamptz(v) => core_types::Duckvalue::Timestamptz(v),
+        cli_types::Duckvalue::Decimal(d) => {
+            core_types::Duckvalue::Decimal(core_types::Decimalvalue {
+                lower: d.lower,
+                upper: d.upper,
+                width: d.width,
+                scale: d.scale,
+            })
+        }
+        cli_types::Duckvalue::Interval(iv) => {
+            core_types::Duckvalue::Interval(core_types::Intervalvalue {
+                months: iv.months,
+                days: iv.days,
+                micros: iv.micros,
+            })
+        }
+        cli_types::Duckvalue::Uuid(u) => {
+            core_types::Duckvalue::Uuid(core_types::Uuidvalue { hi: u.hi, lo: u.lo })
+        }
     }
 }
 
@@ -2959,6 +3038,9 @@ fn convert_core_logicaltype(ty: core_types::Logicaltype) -> cli_types::Logicalty
         core_types::Logicaltype::Date => cli_types::Logicaltype::Date,
         core_types::Logicaltype::Time => cli_types::Logicaltype::Time,
         core_types::Logicaltype::Timestamptz => cli_types::Logicaltype::Timestamptz,
+        core_types::Logicaltype::Decimal => cli_types::Logicaltype::Decimal,
+        core_types::Logicaltype::Interval => cli_types::Logicaltype::Interval,
+        core_types::Logicaltype::Uuid => cli_types::Logicaltype::Uuid,
     }
 }
 
@@ -3502,6 +3584,24 @@ fn convert_core_duckvalue_to_extension(value: core_types::Duckvalue) -> extensio
         core_types::Duckvalue::Date(v) => extension_types::Duckvalue::Date(v),
         core_types::Duckvalue::Time(v) => extension_types::Duckvalue::Time(v),
         core_types::Duckvalue::Timestamptz(v) => extension_types::Duckvalue::Timestamptz(v),
+        core_types::Duckvalue::Decimal(d) => {
+            extension_types::Duckvalue::Decimal(extension_types::Decimalvalue {
+                lower: d.lower,
+                upper: d.upper,
+                width: d.width,
+                scale: d.scale,
+            })
+        }
+        core_types::Duckvalue::Interval(iv) => {
+            extension_types::Duckvalue::Interval(extension_types::Intervalvalue {
+                months: iv.months,
+                days: iv.days,
+                micros: iv.micros,
+            })
+        }
+        core_types::Duckvalue::Uuid(u) => {
+            extension_types::Duckvalue::Uuid(extension_types::Uuidvalue { hi: u.hi, lo: u.lo })
+        }
     }
 }
 
@@ -3525,6 +3625,24 @@ fn convert_extension_duckvalue_to_core(value: extension_types::Duckvalue) -> cor
         extension_types::Duckvalue::Date(v) => core_types::Duckvalue::Date(v),
         extension_types::Duckvalue::Time(v) => core_types::Duckvalue::Time(v),
         extension_types::Duckvalue::Timestamptz(v) => core_types::Duckvalue::Timestamptz(v),
+        extension_types::Duckvalue::Decimal(d) => {
+            core_types::Duckvalue::Decimal(core_types::Decimalvalue {
+                lower: d.lower,
+                upper: d.upper,
+                width: d.width,
+                scale: d.scale,
+            })
+        }
+        extension_types::Duckvalue::Interval(iv) => {
+            core_types::Duckvalue::Interval(core_types::Intervalvalue {
+                months: iv.months,
+                days: iv.days,
+                micros: iv.micros,
+            })
+        }
+        extension_types::Duckvalue::Uuid(u) => {
+            core_types::Duckvalue::Uuid(core_types::Uuidvalue { hi: u.hi, lo: u.lo })
+        }
     }
 }
 
@@ -3609,6 +3727,9 @@ fn convert_extension_logicaltype_to_core(
         extension_types::Logicaltype::Date => core_types::Logicaltype::Date,
         extension_types::Logicaltype::Time => core_types::Logicaltype::Time,
         extension_types::Logicaltype::Timestamptz => core_types::Logicaltype::Timestamptz,
+        extension_types::Logicaltype::Decimal => core_types::Logicaltype::Decimal,
+        extension_types::Logicaltype::Interval => core_types::Logicaltype::Interval,
+        extension_types::Logicaltype::Uuid => core_types::Logicaltype::Uuid,
     }
 }
 
@@ -3654,6 +3775,24 @@ fn convert_core_duckvalue_to_storage(value: core_types::Duckvalue) -> storage_sc
         core_types::Duckvalue::Date(v) => storage_scan::Duckvalue::Date(v),
         core_types::Duckvalue::Time(v) => storage_scan::Duckvalue::Time(v),
         core_types::Duckvalue::Timestamptz(v) => storage_scan::Duckvalue::Timestamptz(v),
+        core_types::Duckvalue::Decimal(d) => {
+            storage_scan::Duckvalue::Decimal(storage_scan::Decimalvalue {
+                lower: d.lower,
+                upper: d.upper,
+                width: d.width,
+                scale: d.scale,
+            })
+        }
+        core_types::Duckvalue::Interval(iv) => {
+            storage_scan::Duckvalue::Interval(storage_scan::Intervalvalue {
+                months: iv.months,
+                days: iv.days,
+                micros: iv.micros,
+            })
+        }
+        core_types::Duckvalue::Uuid(u) => {
+            storage_scan::Duckvalue::Uuid(storage_scan::Uuidvalue { hi: u.hi, lo: u.lo })
+        }
     }
 }
 
@@ -3697,6 +3836,11 @@ fn describe_core_duckvalue(value: &core_types::Duckvalue) -> String {
         core_types::Duckvalue::Date(v) => v.to_string(),
         core_types::Duckvalue::Time(v) => v.to_string(),
         core_types::Duckvalue::Timestamptz(v) => v.to_string(),
+        core_types::Duckvalue::Decimal(d) => format_decimal(d.lower, d.upper, d.width, d.scale),
+        core_types::Duckvalue::Interval(iv) => {
+            format!("{}mon {}d {}us", iv.months, iv.days, iv.micros)
+        }
+        core_types::Duckvalue::Uuid(u) => format_uuid(u.hi, u.lo),
     }
 }
 

@@ -781,7 +781,76 @@ fn format_duckvalue(value: duckdb::Duckvalue) -> String {
         duckdb::Duckvalue::Timestamptz(micros) => {
             format!("{}+00", format_timestamp_micros(micros))
         }
+        duckdb::Duckvalue::Decimal(d) => format_decimal_value(d.lower, d.upper, d.scale),
+        duckdb::Duckvalue::Interval(iv) => format_interval(iv.months, iv.days, iv.micros),
+        duckdb::Duckvalue::Uuid(u) => format_uuid_value(u.hi, u.lo),
     }
+}
+
+/// Render a HUGEINT-backed DECIMAL: unscaled int128 = (upper<<64 | lower) with
+/// the decimal point inserted `scale` digits from the right.
+fn format_decimal_value(lower: u64, upper: u64, scale: u8) -> String {
+    let raw = (((upper as u128) << 64) | lower as u128) as i128;
+    let neg = raw < 0;
+    let mut digits = raw.unsigned_abs().to_string();
+    let scale = scale as usize;
+    let body = if scale == 0 {
+        digits
+    } else {
+        while digits.len() <= scale {
+            digits.insert(0, '0');
+        }
+        let point = digits.len() - scale;
+        format!("{}.{}", &digits[..point], &digits[point..])
+    };
+    if neg {
+        format!("-{body}")
+    } else {
+        body
+    }
+}
+
+/// Render a DuckDB INTERVAL roughly the way DuckDB's VARCHAR cast does.
+fn format_interval(months: i32, days: i32, micros: i64) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if months != 0 {
+        let years = months / 12;
+        let mons = months % 12;
+        if years != 0 {
+            parts.push(format!("{years} year{}", if years.abs() == 1 { "" } else { "s" }));
+        }
+        if mons != 0 {
+            parts.push(format!("{mons} month{}", if mons.abs() == 1 { "" } else { "s" }));
+        }
+    }
+    if days != 0 {
+        parts.push(format!("{days} day{}", if days.abs() == 1 { "" } else { "s" }));
+    }
+    if micros != 0 || parts.is_empty() {
+        let secs = micros.div_euclid(1_000_000);
+        let frac = micros.rem_euclid(1_000_000);
+        let (hh, mm, ss) = (secs / 3_600, (secs % 3_600) / 60, secs % 60);
+        if frac == 0 {
+            parts.push(format!("{hh:02}:{mm:02}:{ss:02}"));
+        } else {
+            parts.push(format!("{hh:02}:{mm:02}:{ss:02}.{frac:06}"));
+        }
+    }
+    parts.join(" ")
+}
+
+/// Render a 128-bit UUID (hi/lo halves) in canonical 8-4-4-4-12 hex form.
+fn format_uuid_value(hi: u64, lo: u64) -> String {
+    let v = ((hi as u128) << 64) | lo as u128;
+    let h = format!("{v:032x}");
+    format!(
+        "{}-{}-{}-{}-{}",
+        &h[0..8],
+        &h[8..12],
+        &h[12..16],
+        &h[16..20],
+        &h[20..32]
+    )
 }
 
 /// Render a DuckDB DATE (days since 1970-01-01) as `YYYY-MM-DD`.

@@ -1169,6 +1169,9 @@ fn convert_extension_logicaltype(ty: extension_runtime::Logicaltype) -> reg::Log
         extension_runtime::Logicaltype::Date => reg::LogicalType::Date,
         extension_runtime::Logicaltype::Time => reg::LogicalType::Time,
         extension_runtime::Logicaltype::Timestamptz => reg::LogicalType::Timestamptz,
+        extension_runtime::Logicaltype::Decimal => reg::LogicalType::Decimal,
+        extension_runtime::Logicaltype::Interval => reg::LogicalType::Interval,
+        extension_runtime::Logicaltype::Uuid => reg::LogicalType::Uuid,
     }
 }
 
@@ -1366,8 +1369,11 @@ mod storage_types {
 pub mod storage_scan {
     pub use crate::duckdb_extension_storage_bindings::duckdb::extension::storage::*;
     // The scan-filter `value` field is the storage world's own `types.duckvalue`;
-    // re-export it so the host can construct scan requests.
-    pub use crate::duckdb_extension_storage_bindings::duckdb::extension::types::Duckvalue;
+    // re-export it (and the composite record types it carries) so the host can
+    // construct scan requests.
+    pub use crate::duckdb_extension_storage_bindings::duckdb::extension::types::{
+        Decimalvalue, Duckvalue, Intervalvalue, Uuidvalue,
+    };
 }
 
 fn storage_duckvalue_to_ext(value: storage_types::Duckvalue) -> extension_types::Duckvalue {
@@ -1390,6 +1396,24 @@ fn storage_duckvalue_to_ext(value: storage_types::Duckvalue) -> extension_types:
         storage_types::Duckvalue::Date(v) => extension_types::Duckvalue::Date(v),
         storage_types::Duckvalue::Time(v) => extension_types::Duckvalue::Time(v),
         storage_types::Duckvalue::Timestamptz(v) => extension_types::Duckvalue::Timestamptz(v),
+        storage_types::Duckvalue::Decimal(d) => {
+            extension_types::Duckvalue::Decimal(extension_types::Decimalvalue {
+                lower: d.lower,
+                upper: d.upper,
+                width: d.width,
+                scale: d.scale,
+            })
+        }
+        storage_types::Duckvalue::Interval(iv) => {
+            extension_types::Duckvalue::Interval(extension_types::Intervalvalue {
+                months: iv.months,
+                days: iv.days,
+                micros: iv.micros,
+            })
+        }
+        storage_types::Duckvalue::Uuid(u) => {
+            extension_types::Duckvalue::Uuid(extension_types::Uuidvalue { hi: u.hi, lo: u.lo })
+        }
     }
 }
 
@@ -1422,6 +1446,9 @@ fn storage_logicaltype_to_ext(ty: storage_types::Logicaltype) -> extension_types
         storage_types::Logicaltype::Date => extension_types::Logicaltype::Date,
         storage_types::Logicaltype::Time => extension_types::Logicaltype::Time,
         storage_types::Logicaltype::Timestamptz => extension_types::Logicaltype::Timestamptz,
+        storage_types::Logicaltype::Decimal => extension_types::Logicaltype::Decimal,
+        storage_types::Logicaltype::Interval => extension_types::Logicaltype::Interval,
+        storage_types::Logicaltype::Uuid => extension_types::Logicaltype::Uuid,
     }
 }
 

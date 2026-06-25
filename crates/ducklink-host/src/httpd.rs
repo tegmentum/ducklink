@@ -877,6 +877,13 @@ fn dv_to_body_bytes(v: core_types::Duckvalue) -> Vec<u8> {
         core_types::Duckvalue::Date(days) => days.to_string().into_bytes(),
         core_types::Duckvalue::Time(micros) => micros.to_string().into_bytes(),
         core_types::Duckvalue::Timestamptz(micros) => micros.to_string().into_bytes(),
+        core_types::Duckvalue::Decimal(d) => {
+            crate::format_decimal(d.lower, d.upper, d.width, d.scale).into_bytes()
+        }
+        core_types::Duckvalue::Interval(iv) => {
+            format!("{}mon {}d {}us", iv.months, iv.days, iv.micros).into_bytes()
+        }
+        core_types::Duckvalue::Uuid(u) => crate::format_uuid(u.hi, u.lo).into_bytes(),
     }
 }
 

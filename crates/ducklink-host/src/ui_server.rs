@@ -364,6 +364,14 @@ pub(crate) fn json_value(out: &mut String, val: &core_types::Duckvalue) {
         core_types::Duckvalue::Date(v) => out.push_str(&v.to_string()),
         core_types::Duckvalue::Time(v) => out.push_str(&v.to_string()),
         core_types::Duckvalue::Timestamptz(v) => out.push_str(&v.to_string()),
+        core_types::Duckvalue::Decimal(d) => {
+            out.push_str(&crate::format_decimal(d.lower, d.upper, d.width, d.scale))
+        }
+        core_types::Duckvalue::Interval(iv) => json_string(
+            out,
+            &format!("{}mon {}d {}us", iv.months, iv.days, iv.micros),
+        ),
+        core_types::Duckvalue::Uuid(u) => json_string(out, &crate::format_uuid(u.hi, u.lo)),
     }
 }
 

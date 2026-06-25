@@ -366,6 +366,23 @@ impl callback_dispatch::Guest for Extension {
                     ))
                 }
             },
+            // Builtin geometry (delivered as a Blob thanks to the core's
+            // GEOMETRY -> Blob arm) -> geom2: decode + re-encode the WKB.
+            (CastDir::GeomToGeom, types::Duckvalue::Blob(b)) => match wkb::decode(&b) {
+                Some(g) => match wkb::encode(&g) {
+                    Some(out) => types::Duckvalue::Blob(out.into()),
+                    None => {
+                        return Err(types::Duckerror::Invalidargument(
+                            "could not re-encode geometry WKB".into(),
+                        ))
+                    }
+                },
+                None => {
+                    return Err(types::Duckerror::Invalidargument(
+                        "invalid builtin-geometry WKB blob".into(),
+                    ))
+                }
+            },
             // NULL passes through unchanged.
             (_, types::Duckvalue::Null) => types::Duckvalue::Null,
             (_, other) => {
@@ -428,6 +445,26 @@ fn register_type_and_casts() -> Result<(), types::Duckerror> {
     .map_err(|e| {
         types::Duckerror::Internal(std::format!("register {TYPE_NAME}->VARCHAR: {e}").into())
     })?;
+
+    // 2c. The BUILTIN `geometry` -> geom2 cast. This proves the core's
+    //     DUCKDB_TYPE_GEOMETRY -> Blob arm: a builtin-`geometry` value (WKB
+    //     string_t blob, physical id 40) is delivered to our cast callback AS A
+    //     BLOB, which we re-encode into geom2's identical WKB. So a builtin
+    //     geometry value becomes readable by a component cast. Registration is
+    //     best-effort (skip if the builtin type is unavailable in the lean core).
+    let h_builtin = next_handle();
+    cast_handlers()
+        .lock()
+        .unwrap()
+        .insert(h_builtin, CastDir::GeomToGeom);
+    let _ = catalog::register_cast(
+        &catalog::CastSpec {
+            from: "geometry".into(),
+            to: TYPE_NAME.into(),
+            kind: catalog::CastKind::Explicit,
+        },
+        runtime::CastCallback::new(h_builtin),
+    );
 
     Ok(())
 }
@@ -492,6 +529,10 @@ enum Scalar {
 enum CastDir {
     TextToGeom,
     GeomToText,
+    // Builtin `geometry` (WKB blob, physical id 40) -> geom2 (WKB blob). Proves
+    // the core's GEOMETRY -> Blob arm: the value arrives as a Blob and we decode
+    // + re-encode it, confirming a geometry value is readable as a blob.
+    GeomToGeom,
 }
 
 /// The custom logical-type name. `geometry` is a builtin in DuckDB v1.5.x, so we

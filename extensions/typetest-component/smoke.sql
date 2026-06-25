@@ -13,3 +13,8 @@ SELECT typeof(tt_time()) AS t, tt_time() AS v;
 -- lean build, which returns empty for TZ; cast to VARCHAR to render the value
 -- deterministically (typeof still proves the column type).
 SELECT typeof(tt_timestamptz()) AS t, CAST(tt_timestamptz() AS VARCHAR) AS v;
+-- DECIMAL / INTERVAL / UUID (Item-1 deferred scalar types). Render the value
+-- via an explicit VARCHAR cast for deterministic output across the value API.
+SELECT typeof(tt_decimal()) AS t, CAST(tt_decimal() AS VARCHAR) AS v;
+SELECT typeof(tt_interval()) AS t, CAST(tt_interval() AS VARCHAR) AS v;
+SELECT typeof(tt_uuid()) AS t, CAST(tt_uuid() AS VARCHAR) AS v;

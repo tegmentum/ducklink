@@ -8,6 +8,44 @@ interface types {
     float64,
     text,
     blob,
+    int32,
+    timestamp,
+    int8,
+    int16,
+    uint8,
+    uint16,
+    uint32,
+    float32,
+    date,
+    time,
+    timestamptz,
+    decimal,
+    interval,
+    uuid,
+  }
+
+  // DuckDB DECIMAL is a HUGEINT-backed scaled integer:
+  //   value = ((upper as i128) << 64 | lower as i128), interpreted with
+  //   `width` total digits and `scale` fractional digits.
+  record decimalvalue {
+    lower: u64,
+    upper: u64,
+    width: u8,
+    scale: u8,
+  }
+
+  // DuckDB INTERVAL: months + days + microseconds components.
+  record intervalvalue {
+    months: s32,
+    days: s32,
+    micros: s64,
+  }
+
+  // 128-bit UUID. hi/lo are the logical big-endian halves of the UUID value
+  // (NOT the sign-flipped physical hugeint storage DuckDB uses internally).
+  record uuidvalue {
+    hi: u64,
+    lo: u64,
   }
 
   record funcarg {
@@ -47,6 +85,20 @@ interface types {
     float64(f64),
     text(string),
     blob(list<u8>),
+    int32(s32),
+    timestamp(s64),
+    int8(s8),
+    int16(s16),
+    uint8(u8),
+    uint16(u16),
+    uint32(u32),
+    float32(f32),
+    date(s32),
+    time(s64),
+    timestamptz(s64),
+    decimal(decimalvalue),
+    interval(intervalvalue),
+    uuid(uuidvalue),
   }
 
   type resultset = list<list<duckvalue>>;

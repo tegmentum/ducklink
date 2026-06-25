@@ -130,6 +130,9 @@ pub mod reg {
         Date,
         Time,
         Timestamptz,
+        Decimal,
+        Interval,
+        Uuid,
     }
 
     impl LogicalType {
@@ -152,6 +155,9 @@ pub mod reg {
                 LogicalType::Date => "DATE",
                 LogicalType::Time => "TIME",
                 LogicalType::Timestamptz => "TIMESTAMPTZ",
+                LogicalType::Decimal => "DECIMAL",
+                LogicalType::Interval => "INTERVAL",
+                LogicalType::Uuid => "UUID",
             }
         }
     }
@@ -247,6 +253,25 @@ pub mod reg {
         Time(i64),
         /// Microseconds since 1970-01-01 UTC (DuckDB's TIMESTAMP_TZ representation).
         Timestamptz(i64),
+        /// HUGEINT-backed scaled decimal: value = (upper<<64 | lower), with
+        /// `width` total digits and `scale` fractional digits.
+        Decimal {
+            lower: u64,
+            upper: u64,
+            width: u8,
+            scale: u8,
+        },
+        /// INTERVAL: months + days + microseconds.
+        Interval {
+            months: i32,
+            days: i32,
+            micros: i64,
+        },
+        /// 128-bit UUID logical value, split into hi/lo halves.
+        Uuid {
+            hi: u64,
+            lo: u64,
+        },
     }
 
     /// A scalar function registered by an extension.

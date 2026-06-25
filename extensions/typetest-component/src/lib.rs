@@ -80,6 +80,24 @@ impl callback_dispatch::Guest for Extension {
             // 12:34:56.789000 since midnight, in microseconds.
             T::Time => types::Duckvalue::Time(45_296_789_000),
             T::Timestamptz => types::Duckvalue::Timestamptz(FIXED_TS_MICROS),
+            // DECIMAL(38,4) = 12345.6789 -> unscaled int128 123_456_789.
+            T::Decimal => types::Duckvalue::Decimal(types::Decimalvalue {
+                lower: 123_456_789,
+                upper: 0,
+                width: 38,
+                scale: 4,
+            }),
+            // INTERVAL '1 month 2 days 3 seconds'.
+            T::Interval => types::Duckvalue::Interval(types::Intervalvalue {
+                months: 1,
+                days: 2,
+                micros: 3_000_000,
+            }),
+            // UUID 12345678-1234-5678-1234-567812345678.
+            T::Uuid => types::Duckvalue::Uuid(types::Uuidvalue {
+                hi: 0x1234_5678_1234_5678,
+                lo: 0x1234_5678_1234_5678,
+            }),
         })
     }
     fn call_table(
@@ -158,6 +176,9 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         ("tt_date", T::Date, types::Logicaltype::Date, "returns 2021-01-01 as DATE"),
         ("tt_time", T::Time, types::Logicaltype::Time, "returns 12:34:56.789 as TIME"),
         ("tt_timestamptz", T::Timestamptz, types::Logicaltype::Timestamptz, "returns 2021-01-01 as TIMESTAMP_TZ"),
+        ("tt_decimal", T::Decimal, types::Logicaltype::Decimal, "returns 12345.6789 as DECIMAL"),
+        ("tt_interval", T::Interval, types::Logicaltype::Interval, "returns 1 month 2 days 3s as INTERVAL"),
+        ("tt_uuid", T::Uuid, types::Logicaltype::Uuid, "returns a fixed UUID"),
     ];
     for (name, tag, ty, desc) in extras.iter().copied() {
         let h = NEXT.fetch_add(1, Ordering::Relaxed);
@@ -190,6 +211,9 @@ enum T {
     Date,
     Time,
     Timestamptz,
+    Decimal,
+    Interval,
+    Uuid,
 }
 static NEXT: AtomicU32 = AtomicU32::new(1);
 static HANDLERS: OnceLock<Mutex<HashMap<u32, T>>> = OnceLock::new();

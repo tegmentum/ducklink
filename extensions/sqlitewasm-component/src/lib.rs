@@ -528,6 +528,15 @@ fn bind_value(
         types::Duckvalue::Time(t) => Value::Integer(*t),
         types::Duckvalue::Timestamp(t) => Value::Integer(*t),
         types::Duckvalue::Timestamptz(t) => Value::Integer(*t),
+        // DECIMAL/INTERVAL/UUID have no native SQLite scalar; bind a faithful
+        // text rendering (UUID hex, the decimal's raw int128, interval micros).
+        types::Duckvalue::Decimal(d) => {
+            Value::Integer((((d.upper as u128) << 64) | d.lower as u128) as i64)
+        }
+        types::Duckvalue::Interval(iv) => Value::Integer(iv.micros),
+        types::Duckvalue::Uuid(u) => {
+            Value::Text(format!("{:016x}{:016x}", u.hi, u.lo))
+        }
     };
     stmt.raw_bind_parameter(idx, val).map_err(map_sqlite_err)
 }
