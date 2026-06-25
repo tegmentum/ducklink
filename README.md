@@ -11,6 +11,10 @@ This repository contains a pair of WebAssembly components that wrap the DuckDB C
 
 Both components are intended to run in preview2-capable runtimes such as `wasmtime 16.0+`.
 
+> **Documentation:** a Docusaurus site organizing these docs lives in
+> [`website/`](website/). Build it with `cd website && npm install && npm run build`,
+> or run it locally with `cd website && npm start`.
+
 ## Extension catalog
 
 The repo also ships **111 component extensions** (254 SQL functions) — Rust
