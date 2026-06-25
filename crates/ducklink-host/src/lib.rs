@@ -96,6 +96,7 @@ use ducklink_runtime::{
 use wasmtime::component::{Component, Linker, Resource, ResourceAny, ResourceTable};
 use wasmtime::{AsContextMut, Config, Engine, Store, StoreContextMut};
 
+mod delta_rewrite;
 mod prefix;
 mod ui_server;
 pub use ui_server::{serve_ui, UiMode};
@@ -2566,6 +2567,9 @@ pub struct HostState {
     /// `query` import can answer duckdb_tables()/duckdb_columns() even when called
     /// from inside a query.
     catalog_snapshot: Arc<Mutex<CatalogSnapshot>>,
+    /// host->guest preopen mapping, used by the `delta_scan('dir')` SQL rewrite
+    /// to read a Delta table's `_delta_log` off the real host filesystem.
+    preopens: Vec<(PathBuf, String)>,
 }
 
 impl WasiView for HostState {
@@ -3127,6 +3131,12 @@ impl cli_db::Host for HostState {
             .connections
             .get(&conn.rep())
             .ok_or_else(|| cli_types::Duckerror::Internal("unknown connection".into()))?;
+        // One-query `delta_scan('dir')`: the wasm core can't take a subquery-
+        // valued table-fn arg, so the host reads the table's _delta_log off the
+        // real filesystem, resolves the active files (add minus remove), and
+        // rewrites the call to a read_parquet([...]) the core can scan. No-op
+        // when the SQL has no rewritable delta_scan call.
+        let sql = delta_rewrite::rewrite_delta_scan(&sql, &self.preopens);
         let result = self
             .with_core(|core| {
                 core.with_database(|guest, store| {
@@ -4745,6 +4755,7 @@ impl CliHarness {
             pending_appender_drops: Vec::new(),
             did_autoload: false,
             catalog_snapshot,
+            preopens: owned_preopens.clone(),
         };
         let mut store = Store::new(&engine, host_state);
 
@@ -4844,9 +4855,14 @@ pub fn run_cli_with_stdio(
     preopens: &[(&Path, &str)],
 ) -> Result<Result<(), ()>> {
     let engine = build_engine()?;
+    let owned_preopens = resolve_preopens_with_default(preopens)?;
+    let preopen_refs: Vec<(&Path, &str)> = owned_preopens
+        .iter()
+        .map(|(host, guest)| (host.as_path(), guest.as_str()))
+        .collect();
     let args_vec: Vec<String> = args.iter().map(|s| s.as_ref().to_owned()).collect();
-    let cli_wasi = build_wasi_ctx_inherit(&args_vec, preopens)?;
-    let core_wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], preopens)?;
+    let cli_wasi = build_wasi_ctx_inherit(&args_vec, &preopen_refs)?;
+    let core_wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &preopen_refs)?;
 
     let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
     let core_exec = instantiate_core(
@@ -4896,6 +4912,7 @@ pub fn run_cli_with_stdio(
         pending_appender_drops: Vec::new(),
         did_autoload: false,
         catalog_snapshot,
+        preopens: owned_preopens.clone(),
     };
     let mut store = Store::new(&engine, host_state);
 
