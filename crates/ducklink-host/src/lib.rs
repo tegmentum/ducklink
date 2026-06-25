@@ -96,6 +96,7 @@ use ducklink_runtime::{
 use wasmtime::component::{Component, Linker, Resource, ResourceAny, ResourceTable};
 use wasmtime::{AsContextMut, Config, Engine, Store, StoreContextMut};
 
+mod prefix;
 mod ui_server;
 pub use ui_server::{serve_ui, UiMode};
 mod handler;
@@ -889,6 +890,9 @@ struct DotcmdState {
     /// The core (for spi SQL execution) and the CLI's live connection handle.
     core: Arc<Mutex<CoreExecution>>,
     current_connection: Arc<Mutex<Option<ResourceAny>>>,
+    /// PLAN-prefixes: lets `spi.query` flush staged __ducklink_prefix* rows onto
+    /// the live connection before each dotcmd query (so `.prefix` sees them).
+    extension_manager: Arc<Mutex<ExtensionManager>>,
 }
 impl WasiView for DotcmdState {
     fn ctx(&mut self) -> WasiCtxView<'_> {
@@ -910,7 +914,24 @@ impl dotcmd_bindings::duckdb::dotcmd::spi::Host for DotcmdState {
             .expect("current connection mutex poisoned")
             .clone()
             .ok_or_else(|| "spi: no active database connection".to_string())?;
+        // PLAN-prefixes: flush any staged __ducklink_prefix* rows onto the live
+        // connection (ensures the tables exist + are populated before .prefix
+        // reads them). Cheap + idempotent: only does work when rows are pending.
+        let flush_sql = {
+            let mut manager = self
+                .extension_manager
+                .lock()
+                .expect("extension manager mutex poisoned");
+            manager.take_prefix_table_sql()
+        };
         let mut core = self.core.lock().expect("core mutex poisoned");
+        if let Some(flush_sql) = flush_sql {
+            if let Err(trap) =
+                core.with_database(|guest, store| guest.call_execute(store, handle.clone(), &flush_sql))
+            {
+                eprintln!("[prefix] WARNING: failed to flush prefix tables: {trap}");
+            }
+        }
         let result = core
             .with_database(|guest, store| guest.call_execute(store, handle, &sql))
             .map_err(|trap| format!("spi query trapped: {trap}"))?;
@@ -1040,6 +1061,7 @@ impl DotcmdRegistry {
         dir: &Path,
         core: Arc<Mutex<CoreExecution>>,
         current_connection: Arc<Mutex<Option<ResourceAny>>>,
+        extension_manager: Arc<Mutex<ExtensionManager>>,
     ) -> Self {
         let mut components = Vec::new();
         let mut by_name = HashMap::new();
@@ -1053,7 +1075,13 @@ impl DotcmdRegistry {
             .collect();
         paths.sort();
         for path in paths {
-            match Self::load_one(engine, &path, core.clone(), current_connection.clone()) {
+            match Self::load_one(
+                engine,
+                &path,
+                core.clone(),
+                current_connection.clone(),
+                extension_manager.clone(),
+            ) {
                 Ok((inst, specs)) => {
                     let idx = components.len();
                     let names: Vec<String> = specs.iter().map(|(n, ..)| n.clone()).collect();
@@ -1082,6 +1110,7 @@ impl DotcmdRegistry {
         path: &Path,
         core: Arc<Mutex<CoreExecution>>,
         current_connection: Arc<Mutex<Option<ResourceAny>>>,
+        extension_manager: Arc<Mutex<ExtensionManager>>,
     ) -> wasmtime::Result<(DotcmdInstance, Vec<(String, u64, String, String)>)> {
         let component = load_component(engine, path)?;
         let mut linker = Linker::<DotcmdState>::new(engine);
@@ -1098,6 +1127,7 @@ impl DotcmdRegistry {
                 table: ResourceTable::new(),
                 core,
                 current_connection,
+                extension_manager,
             },
         );
         let bindings = dotcmd_bindings::Dotcmd::instantiate(&mut store, &component, &linker)?;
@@ -1219,10 +1249,25 @@ struct ExtensionManager {
     // component returns a SQL script the core runs). Keyed by pragma name ->
     // (extension, callback-handle).
     pragmas: HashMap<String, (String, u32)>,
+    // Function prefixes (PLAN-prefixes): the registry/index.json name ->
+    // {prefix, expansion} map loaded at host start, used to namespace every
+    // scalar/table/aggregate registration as `prefix__name`.
+    prefix_registry: prefix::PrefixRegistry,
+    // Cross-component bare-name collision tracker; drives the load-time warning.
+    prefix_collisions: prefix::CollisionTracker,
+    // The function rows recorded into __ducklink_prefix_function so far this
+    // session, so the host only emits each INSERT once:
+    // (expansion, function_name, shape, n_args).
+    prefix_recorded: std::collections::HashSet<(String, String, &'static str, i32)>,
+    // Staged prefix rows awaiting a flush to the live connection (built during
+    // the pure registration drain; written by `flush_prefix_tables`).
+    pending_prefix_rows: Vec<prefix::PrefixRow>,
 }
 
 impl ExtensionManager {
     fn new(engine: Engine) -> Self {
+        let index_path = workspace_root().join("registry/index.json");
+        let prefix_registry = prefix::PrefixRegistry::load_from_index(&index_path);
         Self {
             engine,
             core: None,
@@ -1233,7 +1278,131 @@ impl ExtensionManager {
             files_backend: None,
             collations: HashMap::new(),
             pragmas: HashMap::new(),
+            prefix_registry,
+            prefix_collisions: prefix::CollisionTracker::default(),
+            prefix_recorded: std::collections::HashSet::new(),
+            pending_prefix_rows: Vec::new(),
         }
+    }
+
+    /// PLAN-prefixes core: for every scalar/table/aggregate registration, also
+    /// emit a duplicate under the qualified name `{prefix}__{name}` (same
+    /// callback handle, same args/returns/options) so the function is callable
+    /// both ways. Bare names keep DuckDB's last-registered-wins behavior; the
+    /// qualified form is always unique. Warns on cross-component bare-name
+    /// collisions and stages the __ducklink_prefix* rows for a later flush.
+    fn apply_function_prefixes(&mut self, data: &mut PendingRegistrationsData) {
+        use prefix::Shape;
+
+        // SCALARS
+        let mut qualified_scalars: Vec<reg::ScalarReg> = Vec::new();
+        for entry in &data.scalars {
+            let n_args = entry.arguments.len() as i32;
+            let info = self.prefix_registry.resolve(&entry.extension);
+            self.note_prefix_registration(
+                &entry.extension,
+                &entry.name,
+                Shape::Scalar,
+                n_args,
+                &info,
+            );
+            if let Some(qname) = prefix::qualified_name(&info.prefix, &entry.name) {
+                let mut dup = entry.clone();
+                dup.name = qname;
+                qualified_scalars.push(dup);
+            }
+        }
+        data.scalars.extend(qualified_scalars);
+
+        // TABLES
+        let mut qualified_tables: Vec<reg::TableReg> = Vec::new();
+        for entry in &data.tables {
+            let n_args = entry.arguments.len() as i32;
+            let info = self.prefix_registry.resolve(&entry.extension);
+            self.note_prefix_registration(
+                &entry.extension,
+                &entry.name,
+                Shape::Table,
+                n_args,
+                &info,
+            );
+            if let Some(qname) = prefix::qualified_name(&info.prefix, &entry.name) {
+                let mut dup = entry.clone();
+                dup.name = qname;
+                qualified_tables.push(dup);
+            }
+        }
+        data.tables.extend(qualified_tables);
+
+        // AGGREGATES
+        let mut qualified_aggregates: Vec<reg::AggregateReg> = Vec::new();
+        for entry in &data.aggregates {
+            let n_args = entry.arguments.len() as i32;
+            let info = self.prefix_registry.resolve(&entry.extension);
+            self.note_prefix_registration(
+                &entry.extension,
+                &entry.name,
+                Shape::Aggregate,
+                n_args,
+                &info,
+            );
+            if let Some(qname) = prefix::qualified_name(&info.prefix, &entry.name) {
+                let mut dup = entry.clone();
+                dup.name = qname;
+                qualified_aggregates.push(dup);
+            }
+        }
+        data.aggregates.extend(qualified_aggregates);
+    }
+
+    /// Record one registration into the collision tracker (warning on a
+    /// cross-component bare-name clash) and stage its __ducklink_prefix* rows.
+    fn note_prefix_registration(
+        &mut self,
+        extension: &str,
+        bare_name: &str,
+        shape: prefix::Shape,
+        n_args: i32,
+        info: &prefix::PrefixInfo,
+    ) {
+        let report = self.prefix_collisions.record(
+            extension,
+            &info.expansion,
+            info,
+            bare_name,
+            shape,
+            n_args,
+        );
+        if report.is_collision {
+            eprintln!("{}", prefix::format_collision_warning(&report));
+        }
+        let dedup_key = (
+            info.expansion.clone(),
+            bare_name.to_string(),
+            shape.as_str(),
+            n_args,
+        );
+        if self.prefix_recorded.insert(dedup_key) {
+            self.pending_prefix_rows.push(prefix::PrefixRow {
+                prefix: info.prefix.clone(),
+                expansion: info.expansion.clone(),
+                extension: extension.to_string(),
+                function_name: bare_name.to_string(),
+                shape: shape.as_str(),
+                n_args,
+            });
+        }
+    }
+
+    /// Drain the staged __ducklink_prefix* rows as the SQL needed to upsert
+    /// them. The caller runs this against the live connection (a safe point,
+    /// outside the core's registration hook). Empty when nothing is pending.
+    fn take_prefix_table_sql(&mut self) -> Option<String> {
+        if self.pending_prefix_rows.is_empty() {
+            return None;
+        }
+        let rows = std::mem::take(&mut self.pending_prefix_rows);
+        Some(prefix::build_prefix_table_sql(&rows))
     }
 
     /// Item 2: the collations components have declared (via `register-collation`),
@@ -1923,6 +2092,12 @@ impl ExtensionManager {
                 (storage.extension.clone(), storage.callback_handle),
             );
         }
+        // PLAN-prefixes: namespace every scalar/table/aggregate registration as
+        // `prefix__name` (additive — bare name keeps working), warn on
+        // cross-component bare-name collisions, and stage the per-db
+        // __ducklink_prefix_function rows. Pure (no SQL / no core re-entry); the
+        // staged rows are flushed lazily on the live connection.
+        self.apply_function_prefixes(&mut aggregated);
         let scalar_names =
             summarize_registration_names(&aggregated.scalars, |entry| entry.name.as_str());
         let table_names =
@@ -3943,6 +4118,7 @@ impl CliHarness {
             &dotcmd_root(),
             core.clone(),
             current_connection.clone(),
+            extension_manager.clone(),
         )));
         let host_state = HostState {
             table: ResourceTable::new(),
@@ -4084,6 +4260,7 @@ pub fn run_cli_with_stdio(
         &dotcmd_root(),
         core.clone(),
         current_connection.clone(),
+        extension_manager.clone(),
     )));
     let host_state = HostState {
         table: ResourceTable::new(),
@@ -4937,6 +5114,46 @@ mod tests {
             has_cell(&stdout, "answer") && has_cell(&stdout, "42"),
             "expected scalar callback output, got:\n{}",
             stdout
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn cli_function_prefix_qualified_form_works() -> Result<()> {
+        // PLAN-prefixes killer demo (host smoke): a component scalar is callable
+        // BOTH as bare `name(...)` and as `prefix__name(...)`. sample_extension
+        // has no registry prefix/expansion, so the host's deprecation fallback
+        // gives it prefix=`sample_extension`; both forms must return 42.
+        ensure_sample_extension_artifact()?;
+
+        let args = [
+            "duckdb-cli",
+            ":memory:",
+            "--load-extension",
+            "sample_extension",
+            "-c",
+            "select sample_plus_one(41) as bare, \
+                    sample_extension__sample_plus_one(41) as qualified;",
+        ];
+
+        let mut harness = CliHarness::new(&args, &[])?;
+        let status = harness.run()?;
+        assert!(
+            status.is_ok(),
+            "CLI reported failure invoking the qualified form: {:?}",
+            harness.stderr().ok()
+        );
+
+        let stdout = harness.stdout()?;
+        assert!(
+            has_cell(&stdout, "bare") && has_cell(&stdout, "qualified"),
+            "expected both bare + qualified columns, got:\n{stdout}"
+        );
+        // Both columns hold 42 (the qualified form shares the same callback).
+        assert!(
+            stdout.matches("42").count() >= 2,
+            "expected the qualified form to also return 42, got:\n{stdout}"
         );
 
         Ok(())

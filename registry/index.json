@@ -1958,7 +1958,7 @@
     {
       "name": "dms",
       "version": "0.1.0",
-      "description": "Geographic coordinate conversion (hand-rolled): dms_to_decimal(deg,min,sec) and decimal_to_dms(decimal) -> D°M'S\". Sign-aware.",
+      "description": "Geographic coordinate conversion (hand-rolled): dms_to_decimal(deg,min,sec) and decimal_to_dms(decimal) -> D\u00b0M'S\". Sign-aware.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -2620,7 +2620,7 @@
     {
       "name": "money",
       "version": "0.1.0",
-      "description": "Currency amount formatting (iso_currency): format_money(amount, code) -> '$1,234.50' / '¥1,000', using the currency symbol + minor-unit count, thousands-grouped. Unknown -> NULL.",
+      "description": "Currency amount formatting (iso_currency): format_money(amount, code) -> '$1,234.50' / '\u00a51,000', using the currency symbol + minor-unit count, thousands-grouped. Unknown -> NULL.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -2717,7 +2717,7 @@
     {
       "name": "transliterate",
       "version": "0.1.0",
-      "description": "Unicode -> ASCII transliteration (deunicode): deunicode(text), e.g. 'Æneid café' -> 'AEneid cafe'. NULL -> NULL.",
+      "description": "Unicode -> ASCII transliteration (deunicode): deunicode(text), e.g. '\u00c6neid caf\u00e9' -> 'AEneid cafe'. NULL -> NULL.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -5216,6 +5216,8 @@
     },
     {
       "name": "jsonfns",
+      "prefix": "jsonfns",
+      "expansion": "com.tegmentum.ducklink.json",
       "version": "0.1.0",
       "description": "Official `json` extension scalar surface as a loadable component (serde_json + serde_json_path), so json can be de-embedded from the lean core: json_valid/json_extract/json_extract_string/json_array_length/json_type/json_keys/json_contains/json_quote/to_json. Auto-loaded by default on the lean core.",
       "license": "MIT",
@@ -5251,6 +5253,8 @@
     },
     {
       "name": "inetfns",
+      "prefix": "inetfns",
+      "expansion": "com.tegmentum.ducklink.inet",
       "version": "0.1.0",
       "description": "Official `inet` extension functions as a loadable component (ipnetwork + std::net): host/family/netmask/network/broadcast/inet_contains. Replaces embedded inet on the lean core.",
       "license": "MIT",
@@ -5339,6 +5343,8 @@
     },
     {
       "name": "spatialfns",
+      "prefix": "spatialfns",
+      "expansion": "com.tegmentum.ducklink.spatial",
       "version": "0.1.0",
       "description": "Subset of the official spatial extension's ST_* functions as a loadable component (geo+wkt+geojson; WKT text I/O): ST_Point/GeomFromText/AsText/X/Y/Distance/Area/Length/Centroid/Contains/Within/Intersects/Envelope/AsGeoJSON. Not full parity (no GEOMETRY type / GDAL-PROJ / R-tree index).",
       "license": "MIT",

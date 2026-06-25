@@ -12,6 +12,7 @@ members = [
     "extensions/greet-dotcmd",
     "extensions/core-dotcmd",
     "extensions/bundle-dotcmd",
+    "extensions/prefix-dotcmd",
     "extensions/duckdb-utils-schema",
     "extensions/duckdb-utils-data",
     "extensions/duckdb-utils-fts",

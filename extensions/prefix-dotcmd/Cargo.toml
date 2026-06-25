@@ -1,0 +1,21 @@
+[package]
+name = "prefix-dotcmd"
+version = "0.1.0"
+edition = "2021"
+description = "Function-prefix dot command (.prefix): list/inspect/manage SPARQL-style prefix__name namespacing for component functions (PLAN-prefixes)"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+
+[package.metadata.component]
+package = "duckdb:dotcmd"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:dotcmd/dotcmd"

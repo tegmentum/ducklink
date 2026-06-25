@@ -47,13 +47,14 @@ loader-stub:
 	cargo component build -p ducklink-loader --target $(WASI_TARGET) --release
 
 dotcmds:
-	cargo component build -p greet-dotcmd -p core-dotcmd -p bundle-dotcmd \
+	cargo component build -p greet-dotcmd -p core-dotcmd -p bundle-dotcmd -p prefix-dotcmd \
 	  -p duckdb-utils-schema -p duckdb-utils-data -p duckdb-utils-fts -p duckdb-utils-maint \
 	  --target $(WASI_TARGET) --release
 	mkdir -p artifacts/dotcmds
 	cp target/$(WASI_TARGET)/release/greet_dotcmd.wasm artifacts/dotcmds/greet.wasm
 	cp target/$(WASI_TARGET)/release/core_dotcmd.wasm artifacts/dotcmds/core.wasm
 	cp target/$(WASI_TARGET)/release/bundle_dotcmd.wasm artifacts/dotcmds/bundle.wasm
+	cp target/$(WASI_TARGET)/release/prefix_dotcmd.wasm artifacts/dotcmds/prefix.wasm
 	cp target/$(WASI_TARGET)/release/duckdb_utils_schema.wasm artifacts/dotcmds/duckdb-utils-schema.wasm
 	cp target/$(WASI_TARGET)/release/duckdb_utils_data.wasm artifacts/dotcmds/duckdb-utils-data.wasm
 	cp target/$(WASI_TARGET)/release/duckdb_utils_fts.wasm artifacts/dotcmds/duckdb-utils-fts.wasm
