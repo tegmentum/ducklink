@@ -1,0 +1,68 @@
+# Build the Docusaurus site (website/) and deploy it to GitHub Pages.
+#
+# Uses the modern GitHub Pages-via-Actions flow (no gh-pages branch push): build
+# the static site, upload it as a Pages artifact, then deploy. The site is the
+# project page https://tegmentum.github.io/ducklink/ (url + baseUrl in
+# website/docusaurus.config.js).
+#
+# One-time setup in the repo: Settings -> Pages -> "Build and deployment" ->
+# Source = "GitHub Actions".
+name: deploy-docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-docs.yml'
+  workflow_dispatch:
+
+# Least-privilege tokens the Pages deploy needs.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one in-flight Pages deploy; don't cancel a running one mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build site
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

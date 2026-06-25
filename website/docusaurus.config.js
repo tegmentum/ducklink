@@ -29,6 +29,10 @@ const config = {
   // GitHub pages deployment config.
   organizationName: 'tegmentum',
   projectName: 'ducklink',
+  deploymentBranch: 'gh-pages',
+  // GitHub Pages serves project sites without normalizing trailing slashes;
+  // false avoids redirect/404 quirks on the hosted site.
+  trailingSlash: false,
 
   // A stray cross-link shouldn't fail the build.
   onBrokenLinks: 'warn',
