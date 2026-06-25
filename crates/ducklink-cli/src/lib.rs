@@ -766,5 +766,72 @@ fn format_duckvalue(value: duckdb::Duckvalue) -> String {
             }
             out
         }
+        duckdb::Duckvalue::Int32(value) => value.to_string(),
+        duckdb::Duckvalue::Timestamp(micros) => format_timestamp_micros(micros),
+        duckdb::Duckvalue::Int8(value) => value.to_string(),
+        duckdb::Duckvalue::Int16(value) => value.to_string(),
+        duckdb::Duckvalue::Uint8(value) => value.to_string(),
+        duckdb::Duckvalue::Uint16(value) => value.to_string(),
+        duckdb::Duckvalue::Uint32(value) => value.to_string(),
+        duckdb::Duckvalue::Float32(value) => value.to_string(),
+        duckdb::Duckvalue::Date(days) => format_date_days(days),
+        duckdb::Duckvalue::Time(micros) => format_time_micros(micros),
+        // TIMESTAMP_TZ renders as the UTC wall-clock plus a +00 zone suffix
+        // (the session default), matching DuckDB's own VARCHAR cast.
+        duckdb::Duckvalue::Timestamptz(micros) => {
+            format!("{}+00", format_timestamp_micros(micros))
+        }
+    }
+}
+
+/// Render a DuckDB DATE (days since 1970-01-01) as `YYYY-MM-DD`.
+fn format_date_days(days: i32) -> String {
+    // Civil-from-days (Howard Hinnant's algorithm).
+    let z = days as i64 + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if m <= 2 { y + 1 } else { y };
+    format!("{year:04}-{m:02}-{d:02}")
+}
+
+/// Render a DuckDB TIME (microseconds since midnight) as `HH:MM:SS[.ffffff]`.
+fn format_time_micros(micros: i64) -> String {
+    let (secs, frac_us) = (micros.div_euclid(1_000_000), micros.rem_euclid(1_000_000));
+    let (hh, mm, ss) = (secs / 3_600, (secs % 3_600) / 60, secs % 60);
+    if frac_us == 0 {
+        format!("{hh:02}:{mm:02}:{ss:02}")
+    } else {
+        format!("{hh:02}:{mm:02}:{ss:02}.{frac_us:06}")
+    }
+}
+
+/// Render a DuckDB TIMESTAMP (microseconds since 1970-01-01 UTC) as
+/// `YYYY-MM-DD HH:MM:SS[.ffffff]`, matching DuckDB's own VARCHAR cast.
+fn format_timestamp_micros(micros: i64) -> String {
+    let (secs, frac_us) = (micros.div_euclid(1_000_000), micros.rem_euclid(1_000_000));
+    // Civil-from-days (Howard Hinnant's algorithm).
+    let days = secs.div_euclid(86_400);
+    let tod = secs.rem_euclid(86_400);
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if m <= 2 { y + 1 } else { y };
+    let (hh, mm, ss) = (tod / 3_600, (tod % 3_600) / 60, tod % 60);
+    if frac_us == 0 {
+        format!("{year:04}-{m:02}-{d:02} {hh:02}:{mm:02}:{ss:02}")
+    } else {
+        format!("{year:04}-{m:02}-{d:02} {hh:02}:{mm:02}:{ss:02}.{frac_us:06}")
     }
 }

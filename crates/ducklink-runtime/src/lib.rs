@@ -105,6 +105,17 @@ pub mod reg {
         Float64,
         Text,
         Blob,
+        Int32,
+        Timestamp,
+        Int8,
+        Int16,
+        Uint8,
+        Uint16,
+        Uint32,
+        Float32,
+        Date,
+        Time,
+        Timestamptz,
     }
 
     impl LogicalType {
@@ -116,6 +127,17 @@ pub mod reg {
                 LogicalType::Float64 => "FLOAT64",
                 LogicalType::Text => "TEXT",
                 LogicalType::Blob => "BLOB",
+                LogicalType::Int32 => "INT32",
+                LogicalType::Timestamp => "TIMESTAMP",
+                LogicalType::Int8 => "INT8",
+                LogicalType::Int16 => "INT16",
+                LogicalType::Uint8 => "UINT8",
+                LogicalType::Uint16 => "UINT16",
+                LogicalType::Uint32 => "UINT32",
+                LogicalType::Float32 => "FLOAT32",
+                LogicalType::Date => "DATE",
+                LogicalType::Time => "TIME",
+                LogicalType::Timestamptz => "TIMESTAMPTZ",
             }
         }
     }
@@ -196,6 +218,21 @@ pub mod reg {
         Float64(f64),
         Text(String),
         Blob(Vec<u8>),
+        Int32(i32),
+        /// Microseconds since 1970-01-01 (DuckDB's TIMESTAMP representation).
+        Timestamp(i64),
+        Int8(i8),
+        Int16(i16),
+        Uint8(u8),
+        Uint16(u16),
+        Uint32(u32),
+        Float32(f32),
+        /// Days since 1970-01-01 (DuckDB's DATE representation).
+        Date(i32),
+        /// Microseconds since midnight (DuckDB's TIME representation).
+        Time(i64),
+        /// Microseconds since 1970-01-01 UTC (DuckDB's TIMESTAMP_TZ representation).
+        Timestamptz(i64),
     }
 
     /// A scalar function registered by an extension.

@@ -866,6 +866,17 @@ fn dv_to_body_bytes(v: core_types::Duckvalue) -> Vec<u8> {
         core_types::Duckvalue::Float64(f) => f.to_string().into_bytes(),
         core_types::Duckvalue::Text(s) => s.into_bytes(),
         core_types::Duckvalue::Blob(b) => b,
+        core_types::Duckvalue::Int32(i) => i.to_string().into_bytes(),
+        core_types::Duckvalue::Timestamp(micros) => micros.to_string().into_bytes(),
+        core_types::Duckvalue::Int8(i) => i.to_string().into_bytes(),
+        core_types::Duckvalue::Int16(i) => i.to_string().into_bytes(),
+        core_types::Duckvalue::Uint8(i) => i.to_string().into_bytes(),
+        core_types::Duckvalue::Uint16(i) => i.to_string().into_bytes(),
+        core_types::Duckvalue::Uint32(i) => i.to_string().into_bytes(),
+        core_types::Duckvalue::Float32(v) => v.to_string().into_bytes(),
+        core_types::Duckvalue::Date(days) => days.to_string().into_bytes(),
+        core_types::Duckvalue::Time(micros) => micros.to_string().into_bytes(),
+        core_types::Duckvalue::Timestamptz(micros) => micros.to_string().into_bytes(),
     }
 }
 

@@ -815,6 +815,17 @@ fn spi_value_text(v: &core_types::Duckvalue) -> String {
         core_types::Duckvalue::Float64(f) => f.to_string(),
         core_types::Duckvalue::Text(s) => s.clone(),
         core_types::Duckvalue::Blob(b) => format!("<blob {} bytes>", b.len()),
+        core_types::Duckvalue::Int32(n) => n.to_string(),
+        core_types::Duckvalue::Timestamp(micros) => micros.to_string(),
+        core_types::Duckvalue::Int8(n) => n.to_string(),
+        core_types::Duckvalue::Int16(n) => n.to_string(),
+        core_types::Duckvalue::Uint8(n) => n.to_string(),
+        core_types::Duckvalue::Uint16(n) => n.to_string(),
+        core_types::Duckvalue::Uint32(n) => n.to_string(),
+        core_types::Duckvalue::Float32(v) => v.to_string(),
+        core_types::Duckvalue::Date(days) => days.to_string(),
+        core_types::Duckvalue::Time(micros) => micros.to_string(),
+        core_types::Duckvalue::Timestamptz(micros) => micros.to_string(),
     }
 }
 
@@ -2489,6 +2500,17 @@ fn neutral_logicaltype_to_core(ty: reg::LogicalType) -> core_runtime_exports::Lo
         reg::LogicalType::Float64 => core_runtime_exports::Logicaltype::Float64,
         reg::LogicalType::Text => core_runtime_exports::Logicaltype::Text,
         reg::LogicalType::Blob => core_runtime_exports::Logicaltype::Blob,
+        reg::LogicalType::Int32 => core_runtime_exports::Logicaltype::Int32,
+        reg::LogicalType::Timestamp => core_runtime_exports::Logicaltype::Timestamp,
+        reg::LogicalType::Int8 => core_runtime_exports::Logicaltype::Int8,
+        reg::LogicalType::Int16 => core_runtime_exports::Logicaltype::Int16,
+        reg::LogicalType::Uint8 => core_runtime_exports::Logicaltype::Uint8,
+        reg::LogicalType::Uint16 => core_runtime_exports::Logicaltype::Uint16,
+        reg::LogicalType::Uint32 => core_runtime_exports::Logicaltype::Uint32,
+        reg::LogicalType::Float32 => core_runtime_exports::Logicaltype::Float32,
+        reg::LogicalType::Date => core_runtime_exports::Logicaltype::Date,
+        reg::LogicalType::Time => core_runtime_exports::Logicaltype::Time,
+        reg::LogicalType::Timestamptz => core_runtime_exports::Logicaltype::Timestamptz,
     }
 }
 
@@ -2553,6 +2575,17 @@ fn convert_core_duckvalue(value: core_types::Duckvalue) -> cli_types::Duckvalue 
         core_types::Duckvalue::Float64(v) => cli_types::Duckvalue::Float64(v),
         core_types::Duckvalue::Text(v) => cli_types::Duckvalue::Text(v.into()),
         core_types::Duckvalue::Blob(v) => cli_types::Duckvalue::Blob(v.into()),
+        core_types::Duckvalue::Int32(v) => cli_types::Duckvalue::Int32(v),
+        core_types::Duckvalue::Timestamp(v) => cli_types::Duckvalue::Timestamp(v),
+        core_types::Duckvalue::Int8(v) => cli_types::Duckvalue::Int8(v),
+        core_types::Duckvalue::Int16(v) => cli_types::Duckvalue::Int16(v),
+        core_types::Duckvalue::Uint8(v) => cli_types::Duckvalue::Uint8(v),
+        core_types::Duckvalue::Uint16(v) => cli_types::Duckvalue::Uint16(v),
+        core_types::Duckvalue::Uint32(v) => cli_types::Duckvalue::Uint32(v),
+        core_types::Duckvalue::Float32(v) => cli_types::Duckvalue::Float32(v),
+        core_types::Duckvalue::Date(v) => cli_types::Duckvalue::Date(v),
+        core_types::Duckvalue::Time(v) => cli_types::Duckvalue::Time(v),
+        core_types::Duckvalue::Timestamptz(v) => cli_types::Duckvalue::Timestamptz(v),
     }
 }
 
@@ -2565,6 +2598,17 @@ fn convert_cli_duckvalue(value: cli_types::Duckvalue) -> core_types::Duckvalue {
         cli_types::Duckvalue::Float64(v) => core_types::Duckvalue::Float64(v),
         cli_types::Duckvalue::Text(v) => core_types::Duckvalue::Text(v.into()),
         cli_types::Duckvalue::Blob(v) => core_types::Duckvalue::Blob(v.into()),
+        cli_types::Duckvalue::Int32(v) => core_types::Duckvalue::Int32(v),
+        cli_types::Duckvalue::Timestamp(v) => core_types::Duckvalue::Timestamp(v),
+        cli_types::Duckvalue::Int8(v) => core_types::Duckvalue::Int8(v),
+        cli_types::Duckvalue::Int16(v) => core_types::Duckvalue::Int16(v),
+        cli_types::Duckvalue::Uint8(v) => core_types::Duckvalue::Uint8(v),
+        cli_types::Duckvalue::Uint16(v) => core_types::Duckvalue::Uint16(v),
+        cli_types::Duckvalue::Uint32(v) => core_types::Duckvalue::Uint32(v),
+        cli_types::Duckvalue::Float32(v) => core_types::Duckvalue::Float32(v),
+        cli_types::Duckvalue::Date(v) => core_types::Duckvalue::Date(v),
+        cli_types::Duckvalue::Time(v) => core_types::Duckvalue::Time(v),
+        cli_types::Duckvalue::Timestamptz(v) => core_types::Duckvalue::Timestamptz(v),
     }
 }
 
@@ -2592,6 +2636,17 @@ fn convert_core_logicaltype(ty: core_types::Logicaltype) -> cli_types::Logicalty
         core_types::Logicaltype::Float64 => cli_types::Logicaltype::Float64,
         core_types::Logicaltype::Text => cli_types::Logicaltype::Text,
         core_types::Logicaltype::Blob => cli_types::Logicaltype::Blob,
+        core_types::Logicaltype::Int32 => cli_types::Logicaltype::Int32,
+        core_types::Logicaltype::Timestamp => cli_types::Logicaltype::Timestamp,
+        core_types::Logicaltype::Int8 => cli_types::Logicaltype::Int8,
+        core_types::Logicaltype::Int16 => cli_types::Logicaltype::Int16,
+        core_types::Logicaltype::Uint8 => cli_types::Logicaltype::Uint8,
+        core_types::Logicaltype::Uint16 => cli_types::Logicaltype::Uint16,
+        core_types::Logicaltype::Uint32 => cli_types::Logicaltype::Uint32,
+        core_types::Logicaltype::Float32 => cli_types::Logicaltype::Float32,
+        core_types::Logicaltype::Date => cli_types::Logicaltype::Date,
+        core_types::Logicaltype::Time => cli_types::Logicaltype::Time,
+        core_types::Logicaltype::Timestamptz => cli_types::Logicaltype::Timestamptz,
     }
 }
 
@@ -3112,6 +3167,17 @@ fn convert_core_duckvalue_to_extension(value: core_types::Duckvalue) -> extensio
         core_types::Duckvalue::Float64(v) => extension_types::Duckvalue::Float64(v),
         core_types::Duckvalue::Text(v) => extension_types::Duckvalue::Text(v),
         core_types::Duckvalue::Blob(v) => extension_types::Duckvalue::Blob(v),
+        core_types::Duckvalue::Int32(v) => extension_types::Duckvalue::Int32(v),
+        core_types::Duckvalue::Timestamp(v) => extension_types::Duckvalue::Timestamp(v),
+        core_types::Duckvalue::Int8(v) => extension_types::Duckvalue::Int8(v),
+        core_types::Duckvalue::Int16(v) => extension_types::Duckvalue::Int16(v),
+        core_types::Duckvalue::Uint8(v) => extension_types::Duckvalue::Uint8(v),
+        core_types::Duckvalue::Uint16(v) => extension_types::Duckvalue::Uint16(v),
+        core_types::Duckvalue::Uint32(v) => extension_types::Duckvalue::Uint32(v),
+        core_types::Duckvalue::Float32(v) => extension_types::Duckvalue::Float32(v),
+        core_types::Duckvalue::Date(v) => extension_types::Duckvalue::Date(v),
+        core_types::Duckvalue::Time(v) => extension_types::Duckvalue::Time(v),
+        core_types::Duckvalue::Timestamptz(v) => extension_types::Duckvalue::Timestamptz(v),
     }
 }
 
@@ -3124,6 +3190,17 @@ fn convert_extension_duckvalue_to_core(value: extension_types::Duckvalue) -> cor
         extension_types::Duckvalue::Float64(v) => core_types::Duckvalue::Float64(v),
         extension_types::Duckvalue::Text(v) => core_types::Duckvalue::Text(v),
         extension_types::Duckvalue::Blob(v) => core_types::Duckvalue::Blob(v),
+        extension_types::Duckvalue::Int32(v) => core_types::Duckvalue::Int32(v),
+        extension_types::Duckvalue::Timestamp(v) => core_types::Duckvalue::Timestamp(v),
+        extension_types::Duckvalue::Int8(v) => core_types::Duckvalue::Int8(v),
+        extension_types::Duckvalue::Int16(v) => core_types::Duckvalue::Int16(v),
+        extension_types::Duckvalue::Uint8(v) => core_types::Duckvalue::Uint8(v),
+        extension_types::Duckvalue::Uint16(v) => core_types::Duckvalue::Uint16(v),
+        extension_types::Duckvalue::Uint32(v) => core_types::Duckvalue::Uint32(v),
+        extension_types::Duckvalue::Float32(v) => core_types::Duckvalue::Float32(v),
+        extension_types::Duckvalue::Date(v) => core_types::Duckvalue::Date(v),
+        extension_types::Duckvalue::Time(v) => core_types::Duckvalue::Time(v),
+        extension_types::Duckvalue::Timestamptz(v) => core_types::Duckvalue::Timestamptz(v),
     }
 }
 
@@ -3197,6 +3274,17 @@ fn convert_extension_logicaltype_to_core(
         extension_types::Logicaltype::Float64 => core_types::Logicaltype::Float64,
         extension_types::Logicaltype::Text => core_types::Logicaltype::Text,
         extension_types::Logicaltype::Blob => core_types::Logicaltype::Blob,
+        extension_types::Logicaltype::Int32 => core_types::Logicaltype::Int32,
+        extension_types::Logicaltype::Timestamp => core_types::Logicaltype::Timestamp,
+        extension_types::Logicaltype::Int8 => core_types::Logicaltype::Int8,
+        extension_types::Logicaltype::Int16 => core_types::Logicaltype::Int16,
+        extension_types::Logicaltype::Uint8 => core_types::Logicaltype::Uint8,
+        extension_types::Logicaltype::Uint16 => core_types::Logicaltype::Uint16,
+        extension_types::Logicaltype::Uint32 => core_types::Logicaltype::Uint32,
+        extension_types::Logicaltype::Float32 => core_types::Logicaltype::Float32,
+        extension_types::Logicaltype::Date => core_types::Logicaltype::Date,
+        extension_types::Logicaltype::Time => core_types::Logicaltype::Time,
+        extension_types::Logicaltype::Timestamptz => core_types::Logicaltype::Timestamptz,
     }
 }
 
@@ -3231,6 +3319,17 @@ fn convert_core_duckvalue_to_storage(value: core_types::Duckvalue) -> storage_sc
         core_types::Duckvalue::Float64(v) => storage_scan::Duckvalue::Float64(v),
         core_types::Duckvalue::Text(v) => storage_scan::Duckvalue::Text(v),
         core_types::Duckvalue::Blob(v) => storage_scan::Duckvalue::Blob(v),
+        core_types::Duckvalue::Int32(v) => storage_scan::Duckvalue::Int32(v),
+        core_types::Duckvalue::Timestamp(v) => storage_scan::Duckvalue::Timestamp(v),
+        core_types::Duckvalue::Int8(v) => storage_scan::Duckvalue::Int8(v),
+        core_types::Duckvalue::Int16(v) => storage_scan::Duckvalue::Int16(v),
+        core_types::Duckvalue::Uint8(v) => storage_scan::Duckvalue::Uint8(v),
+        core_types::Duckvalue::Uint16(v) => storage_scan::Duckvalue::Uint16(v),
+        core_types::Duckvalue::Uint32(v) => storage_scan::Duckvalue::Uint32(v),
+        core_types::Duckvalue::Float32(v) => storage_scan::Duckvalue::Float32(v),
+        core_types::Duckvalue::Date(v) => storage_scan::Duckvalue::Date(v),
+        core_types::Duckvalue::Time(v) => storage_scan::Duckvalue::Time(v),
+        core_types::Duckvalue::Timestamptz(v) => storage_scan::Duckvalue::Timestamptz(v),
     }
 }
 
@@ -3263,6 +3362,17 @@ fn describe_core_duckvalue(value: &core_types::Duckvalue) -> String {
         core_types::Duckvalue::Float64(v) => v.to_string(),
         core_types::Duckvalue::Text(v) => format!("{v:?}"),
         core_types::Duckvalue::Blob(v) => format!("<blob {} bytes>", v.len()),
+        core_types::Duckvalue::Int32(v) => v.to_string(),
+        core_types::Duckvalue::Timestamp(v) => v.to_string(),
+        core_types::Duckvalue::Int8(v) => v.to_string(),
+        core_types::Duckvalue::Int16(v) => v.to_string(),
+        core_types::Duckvalue::Uint8(v) => v.to_string(),
+        core_types::Duckvalue::Uint16(v) => v.to_string(),
+        core_types::Duckvalue::Uint32(v) => v.to_string(),
+        core_types::Duckvalue::Float32(v) => v.to_string(),
+        core_types::Duckvalue::Date(v) => v.to_string(),
+        core_types::Duckvalue::Time(v) => v.to_string(),
+        core_types::Duckvalue::Timestamptz(v) => v.to_string(),
     }
 }
 

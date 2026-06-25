@@ -517,6 +517,17 @@ fn bind_value(
         types::Duckvalue::Float64(f) => Value::Real(*f),
         types::Duckvalue::Text(s) => Value::Text(s.to_string()),
         types::Duckvalue::Blob(b) => Value::Blob(b.to_vec()),
+        types::Duckvalue::Int8(i) => Value::Integer(*i as i64),
+        types::Duckvalue::Int16(i) => Value::Integer(*i as i64),
+        types::Duckvalue::Int32(i) => Value::Integer(*i as i64),
+        types::Duckvalue::Uint8(u) => Value::Integer(*u as i64),
+        types::Duckvalue::Uint16(u) => Value::Integer(*u as i64),
+        types::Duckvalue::Uint32(u) => Value::Integer(*u as i64),
+        types::Duckvalue::Float32(f) => Value::Real(*f as f64),
+        types::Duckvalue::Date(d) => Value::Integer(*d as i64),
+        types::Duckvalue::Time(t) => Value::Integer(*t),
+        types::Duckvalue::Timestamp(t) => Value::Integer(*t),
+        types::Duckvalue::Timestamptz(t) => Value::Integer(*t),
     };
     stmt.raw_bind_parameter(idx, val).map_err(map_sqlite_err)
 }

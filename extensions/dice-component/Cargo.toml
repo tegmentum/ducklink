@@ -14,7 +14,7 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-rand = "*"
+rand = "0.8"
 
 [package.metadata.component]
 package = "duckdb:extension"

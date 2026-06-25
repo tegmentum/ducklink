@@ -353,6 +353,17 @@ pub(crate) fn json_value(out: &mut String, val: &core_types::Duckvalue) {
         }
         core_types::Duckvalue::Text(s) => json_string(out, s),
         core_types::Duckvalue::Blob(b) => json_string(out, &format!("\\x{} bytes", b.len())),
+        core_types::Duckvalue::Int32(v) => out.push_str(&v.to_string()),
+        core_types::Duckvalue::Timestamp(v) => out.push_str(&v.to_string()),
+        core_types::Duckvalue::Int8(v) => out.push_str(&v.to_string()),
+        core_types::Duckvalue::Int16(v) => out.push_str(&v.to_string()),
+        core_types::Duckvalue::Uint8(v) => out.push_str(&v.to_string()),
+        core_types::Duckvalue::Uint16(v) => out.push_str(&v.to_string()),
+        core_types::Duckvalue::Uint32(v) => out.push_str(&v.to_string()),
+        core_types::Duckvalue::Float32(v) => out.push_str(&v.to_string()),
+        core_types::Duckvalue::Date(v) => out.push_str(&v.to_string()),
+        core_types::Duckvalue::Time(v) => out.push_str(&v.to_string()),
+        core_types::Duckvalue::Timestamptz(v) => out.push_str(&v.to_string()),
     }
 }
 

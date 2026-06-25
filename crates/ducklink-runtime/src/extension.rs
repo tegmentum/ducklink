@@ -1028,6 +1028,17 @@ fn convert_extension_logicaltype(ty: extension_runtime::Logicaltype) -> reg::Log
         extension_runtime::Logicaltype::Float64 => reg::LogicalType::Float64,
         extension_runtime::Logicaltype::Text => reg::LogicalType::Text,
         extension_runtime::Logicaltype::Blob => reg::LogicalType::Blob,
+        extension_runtime::Logicaltype::Int32 => reg::LogicalType::Int32,
+        extension_runtime::Logicaltype::Timestamp => reg::LogicalType::Timestamp,
+        extension_runtime::Logicaltype::Int8 => reg::LogicalType::Int8,
+        extension_runtime::Logicaltype::Int16 => reg::LogicalType::Int16,
+        extension_runtime::Logicaltype::Uint8 => reg::LogicalType::Uint8,
+        extension_runtime::Logicaltype::Uint16 => reg::LogicalType::Uint16,
+        extension_runtime::Logicaltype::Uint32 => reg::LogicalType::Uint32,
+        extension_runtime::Logicaltype::Float32 => reg::LogicalType::Float32,
+        extension_runtime::Logicaltype::Date => reg::LogicalType::Date,
+        extension_runtime::Logicaltype::Time => reg::LogicalType::Time,
+        extension_runtime::Logicaltype::Timestamptz => reg::LogicalType::Timestamptz,
     }
 }
 
@@ -1235,6 +1246,17 @@ fn storage_duckvalue_to_ext(value: storage_types::Duckvalue) -> extension_types:
         storage_types::Duckvalue::Float64(v) => extension_types::Duckvalue::Float64(v),
         storage_types::Duckvalue::Text(v) => extension_types::Duckvalue::Text(v),
         storage_types::Duckvalue::Blob(v) => extension_types::Duckvalue::Blob(v),
+        storage_types::Duckvalue::Int32(v) => extension_types::Duckvalue::Int32(v),
+        storage_types::Duckvalue::Timestamp(v) => extension_types::Duckvalue::Timestamp(v),
+        storage_types::Duckvalue::Int8(v) => extension_types::Duckvalue::Int8(v),
+        storage_types::Duckvalue::Int16(v) => extension_types::Duckvalue::Int16(v),
+        storage_types::Duckvalue::Uint8(v) => extension_types::Duckvalue::Uint8(v),
+        storage_types::Duckvalue::Uint16(v) => extension_types::Duckvalue::Uint16(v),
+        storage_types::Duckvalue::Uint32(v) => extension_types::Duckvalue::Uint32(v),
+        storage_types::Duckvalue::Float32(v) => extension_types::Duckvalue::Float32(v),
+        storage_types::Duckvalue::Date(v) => extension_types::Duckvalue::Date(v),
+        storage_types::Duckvalue::Time(v) => extension_types::Duckvalue::Time(v),
+        storage_types::Duckvalue::Timestamptz(v) => extension_types::Duckvalue::Timestamptz(v),
     }
 }
 
@@ -1256,6 +1278,17 @@ fn storage_logicaltype_to_ext(ty: storage_types::Logicaltype) -> extension_types
         storage_types::Logicaltype::Float64 => extension_types::Logicaltype::Float64,
         storage_types::Logicaltype::Text => extension_types::Logicaltype::Text,
         storage_types::Logicaltype::Blob => extension_types::Logicaltype::Blob,
+        storage_types::Logicaltype::Int32 => extension_types::Logicaltype::Int32,
+        storage_types::Logicaltype::Timestamp => extension_types::Logicaltype::Timestamp,
+        storage_types::Logicaltype::Int8 => extension_types::Logicaltype::Int8,
+        storage_types::Logicaltype::Int16 => extension_types::Logicaltype::Int16,
+        storage_types::Logicaltype::Uint8 => extension_types::Logicaltype::Uint8,
+        storage_types::Logicaltype::Uint16 => extension_types::Logicaltype::Uint16,
+        storage_types::Logicaltype::Uint32 => extension_types::Logicaltype::Uint32,
+        storage_types::Logicaltype::Float32 => extension_types::Logicaltype::Float32,
+        storage_types::Logicaltype::Date => extension_types::Logicaltype::Date,
+        storage_types::Logicaltype::Time => extension_types::Logicaltype::Time,
+        storage_types::Logicaltype::Timestamptz => extension_types::Logicaltype::Timestamptz,
     }
 }
 
