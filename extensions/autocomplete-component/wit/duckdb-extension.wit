@@ -6,6 +6,7 @@ use config;
 use logging;
 use catalog;
 use files;
+use query;
 use guest;
 
 world duckdb-extension {
@@ -14,6 +15,10 @@ world duckdb-extension {
   import logging;
   import catalog;
   import files;
+  // v1.1: the live-query host import for catalog-name completion (table/column
+  // suggestions). The host always PROVIDES it; importing it is what makes
+  // sql_complete able to read the live catalog.
+  import query;
   export guest;
   export callback-dispatch;
 }

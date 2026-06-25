@@ -1,15 +1,21 @@
-# 'SEL' -> the single keyword 'SELECT'
+# 'WH' -> keywords WHEN, WHERE (no built-in catalog column starts with 'wh')
 suggestion,kind
-SELECT,keyword
-# last-token semantics: final token 'GR' -> 'GROUP BY'
-suggestion
-GROUP BY
-# 'IN' prefixes IN, INNER JOIN, INSERT, INTERSECT, INTO
-in_matches
-5
+WHEN,keyword
+WHERE,keyword
+# last-token semantics: final token 'GR' -> 'GROUP BY' (keyword)
+suggestion,kind
+GROUP BY,keyword
 # no-match prefix -> 0 rows (wired, never panics)
 no_match
 0
 # NULL argument -> 0 rows
 null_rows
 0
+# CREATE TABLE zzz_widgets(...) -> emits a Count header in csv mode
+Count
+# v1.1: 'zzz_w' completes the live TABLE name zzz_widgets (kind='table')
+suggestion,kind
+zzz_widgets,table
+# v1.1: 'zzz_g' completes the live COLUMN name zzz_gizmo_id (kind='column')
+suggestion,kind
+zzz_gizmo_id,column

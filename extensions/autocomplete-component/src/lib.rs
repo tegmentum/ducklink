@@ -3,22 +3,30 @@
 //!
 //!   sql_complete(partial VARCHAR) -> table(
 //!       suggestion VARCHAR,   -- a completion for the last token of `partial`
-//!       kind       VARCHAR)   -- always 'keyword' here
+//!       kind       VARCHAR)   -- 'keyword' | 'table' | 'column'
 //!
 //! It takes the LAST whitespace-delimited token of `partial` and returns every
-//! bundled SQL keyword that has that token as a case-insensitive prefix, in
-//! sorted order, kind='keyword'. An empty/whitespace-only last token returns the
-//! full keyword list. NULL or a missing argument -> zero rows (never a panic).
+//! bundled SQL keyword that has that token as a case-insensitive prefix
+//! (kind='keyword'), PLUS -- best-effort -- live catalog table names
+//! (kind='table') and column names (kind='column') that share the prefix. An
+//! empty/whitespace-only last token returns the full keyword list. NULL or a
+//! missing argument -> zero rows (never a panic).
 //!
-//! SCOPE / honesty: this is keyword + last-token-prefix completion only. The
-//! official extension also completes catalog names (tables/columns) and is
-//! context-aware (it knows a table name is expected after FROM, a column after
-//! SELECT, etc.). Both of those need DuckDB's parser/catalog: the former wants a
-//! live-connection query import (e.g. `SELECT table_name FROM duckdb_tables()`),
-//! the latter wants parser state. Neither is reachable from this component's WIT
-//! world -- the runtime/catalog imports only register functions/types/casts/
-//! macros; there is no live-query / spi import here -- so catalog-name and
-//! context-aware completion are intentionally out of scope and remain core-bound.
+//! v1.1 CATALOG COMPLETION: catalog names come from the host's `query` import,
+//! which runs `SELECT table_name FROM duckdb_tables()` /
+//! `SELECT DISTINCT column_name FROM duckdb_columns()` on the live connection.
+//! RE-ENTRANCY: `sql_complete` is a TABLE FUNCTION, so it runs INSIDE the query
+//! engine; the host's single core executor is already locked + the core wasm
+//! store is mid-call, so a live SELECT cannot re-enter it. The host detects this
+//! (a `try_lock` that would block) and returns Err, so in that context catalog
+//! completion degrades cleanly to keyword-only. Where the import IS reachable
+//! (the core idle), the SELECTs run and table/column names are returned. Any
+//! failure (busy core / SQL error / unavailable import / no rows) silently yields
+//! the keyword matches alone -- never a panic.
+//!
+//! SCOPE / honesty: still NOT context-aware (it doesn't know a table name is
+//! expected after FROM vs a column after SELECT -- that needs parser state); it
+//! offers keyword + table + column suggestions for the same last-token prefix.
 use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicU32, Ordering},
@@ -30,7 +38,7 @@ use wit_bindgen::rt::vec::Vec;
 
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension" });
 
-use duckdb::extension::{runtime, types};
+use duckdb::extension::{query, runtime, types};
 use exports::duckdb::extension::{callback_dispatch, guest};
 
 mod core {
@@ -118,6 +126,25 @@ mod core {
             .copied()
             .collect()
     }
+
+    /// Catalog-name completion: from a list of names (table or column names
+    /// returned by the live `query` import), keep those that have the last token
+    /// of `partial` as a case-insensitive prefix, sorted + deduplicated. An empty
+    /// last token (trailing space / empty input) matches everything. Pure so it
+    /// is unit-testable without the WIT host import.
+    pub fn complete_names(
+        partial: &str,
+        names: std::vec::Vec<std::string::String>,
+    ) -> std::vec::Vec<std::string::String> {
+        let token = last_token(partial).to_ascii_lowercase();
+        let mut matched: std::vec::Vec<std::string::String> = names
+            .into_iter()
+            .filter(|name| name.to_ascii_lowercase().starts_with(&token))
+            .collect();
+        matched.sort();
+        matched.dedup();
+        matched
+    }
 }
 
 struct Extension;
@@ -178,7 +205,8 @@ impl callback_dispatch::Guest for Extension {
             }
         };
 
-        let rows: std::vec::Vec<std::vec::Vec<types::Duckvalue>> = core::complete(&partial)
+        // 1) Keyword matches (always; bundled, never depends on the host).
+        let mut rows: std::vec::Vec<std::vec::Vec<types::Duckvalue>> = core::complete(&partial)
             .into_iter()
             .map(|kw| {
                 vec![
@@ -187,6 +215,25 @@ impl callback_dispatch::Guest for Extension {
                 ]
             })
             .collect();
+
+        // 2) Catalog matches (BEST-EFFORT). Ask the host's live-query import for
+        // table + column names and prefix-match the last token. Any failure --
+        // the import is unavailable, the core is busy (re-entrancy: sql_complete
+        // runs INSIDE a query, so the host returns Err), a SQL error, or no rows
+        // -- silently yields no catalog suggestions, leaving the keyword matches.
+        // Never panics.
+        for (sql, kind) in [
+            ("SELECT table_name FROM duckdb_tables()", "table"),
+            ("SELECT DISTINCT column_name FROM duckdb_columns()", "column"),
+        ] {
+            for name in catalog_names(sql, &partial) {
+                rows.push(vec![
+                    types::Duckvalue::Text(name.into()),
+                    types::Duckvalue::Text(kind.into()),
+                ]);
+            }
+        }
+
         Ok(rows.into())
     }
 
@@ -211,6 +258,27 @@ impl callback_dispatch::Guest for Extension {
 }
 
 export!(Extension);
+
+/// BEST-EFFORT catalog completion. Runs `sql` through the host's live-query
+/// import, takes the first cell of each returned row as a name, and prefix-
+/// matches the last token of `partial` against them (case-insensitive, sorted,
+/// deduped). Returns an empty list on ANY failure -- the host returns Err when
+/// the core is busy (sql_complete runs inside a query, so the live SELECT cannot
+/// re-enter), when the query errors, or when the import is unavailable -- so the
+/// caller silently degrades to keyword-only completion. Never panics.
+fn catalog_names(sql: &str, partial: &str) -> std::vec::Vec<std::string::String> {
+    match query::query(sql) {
+        Ok(table) => {
+            let names: std::vec::Vec<std::string::String> = table
+                .into_iter()
+                .filter_map(|row| row.into_iter().next())
+                .filter(|name| !name.is_empty())
+                .collect();
+            core::complete_names(partial, names)
+        }
+        Err(_) => std::vec::Vec::new(),
+    }
+}
 
 fn register_sql_complete() -> Result<(), types::Duckerror> {
     let cap = runtime::get_capability(types::Capabilitykind::Table)
@@ -239,8 +307,10 @@ fn register_sql_complete() -> Result<(), types::Duckerror> {
     ];
     let opts = runtime::Extopts {
         description: Some(
-            "Suggest SQL keyword completions for the last token of a partial \
-             query: sql_complete(partial) -> (suggestion, kind='keyword')"
+            "Suggest completions for the last token of a partial query: SQL \
+             keywords (kind='keyword') plus best-effort live catalog table \
+             (kind='table') and column (kind='column') names: \
+             sql_complete(partial) -> (suggestion, kind)"
                 .into(),
         ),
         tags: vec!["autocomplete".into(), "sql".into()],
@@ -305,6 +375,44 @@ mod tests {
         // trailing space -> empty last token -> the whole keyword list.
         assert_eq!(core::complete("SELECT * FROM t ").len(), core::KEYWORDS.len());
         assert_eq!(core::complete("").len(), core::KEYWORDS.len());
+    }
+
+    #[test]
+    fn complete_names_prefix_matches_case_insensitively() {
+        let names = vec![
+            "my_orders".to_string(),
+            "my_customers".to_string(),
+            "products".to_string(),
+        ];
+        // last token 'my_' -> the two my_* tables, sorted.
+        assert_eq!(
+            core::complete_names("SELECT * FROM my_", names),
+            vec!["my_customers".to_string(), "my_orders".to_string()]
+        );
+    }
+
+    #[test]
+    fn complete_names_dedups_and_is_case_insensitive() {
+        // duckdb_columns() can return the same column name across tables; dedup.
+        let names = vec![
+            "order_id".to_string(),
+            "order_id".to_string(),
+            "order_total".to_string(),
+            "name".to_string(),
+        ];
+        assert_eq!(
+            core::complete_names("SELECT ORDER", names),
+            vec!["order_id".to_string(), "order_total".to_string()]
+        );
+    }
+
+    #[test]
+    fn complete_names_empty_token_returns_all_sorted() {
+        let names = vec!["b".to_string(), "a".to_string()];
+        assert_eq!(
+            core::complete_names("SELECT * FROM ", names),
+            vec!["a".to_string(), "b".to_string()]
+        );
     }
 
     #[test]

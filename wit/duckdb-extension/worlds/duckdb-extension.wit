@@ -9,6 +9,7 @@ use files;
 use guest;
 use storage;
 use storage-dispatch;
+use query;
 
 world duckdb-extension {
   import runtime;
@@ -16,6 +17,24 @@ world duckdb-extension {
   import logging;
   import catalog;
   import files;
+  export guest;
+  export callback-dispatch;
+}
+
+// v1.1 query-capable world: a superset that additionally imports the live-query
+// host import (`query`), for catalog-name completion. Only components that read
+// the live catalog (e.g. autocomplete) target this world; the base
+// `duckdb-extension` world is unchanged, so every existing component's frozen
+// WIT copy keeps linking identically. The host PROVIDES `query` in the extension
+// linker unconditionally, so a component importing it instantiates against the
+// host either way.
+world duckdb-extension-query {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import query;
   export guest;
   export callback-dispatch;
 }

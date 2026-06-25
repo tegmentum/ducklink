@@ -6108,7 +6108,7 @@
     {
       "name": "autocomplete",
       "version": "0.1.0",
-      "description": "SQL keyword autocompletion (componentizes official autocomplete): sql_complete(partial) -> last-token-prefix keyword matches. Catalog-name + context-aware completion needs a new query host import (core-bound).",
+      "description": "SQL autocompletion (componentizes official autocomplete): sql_complete(partial) -> last-token-prefix matches over SQL keywords PLUS live catalog table + column names (via a new query host import; served from a host-side catalog snapshot to avoid table-function re-entrancy). kind = keyword|table|column.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -6124,6 +6124,7 @@
         "sql_complete"
       ],
       "requires": [
+        "query",
         "table"
       ],
       "crates": [],

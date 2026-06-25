@@ -13,6 +13,7 @@ use duckdb:extension/index-dispatch;
 use duckdb:extension/collation;
 use duckdb:extension/files-reg;
 use duckdb:extension/file-dispatch;
+use duckdb:extension/query;
 use duckdb:extension/guest;
 
 // Base extension world: every loadable extension exports these. storage-dispatch
@@ -32,6 +33,11 @@ world duckdb-extension {
   import duckdb:extension/index;
   import duckdb:extension/collation;
   import duckdb:extension/files-reg;
+  // v1.1 live-query host import (catalog completion). The host always PROVIDES it
+  // in the extension linker; query-capable components (autocomplete) import it,
+  // others don't. Listed here so the host bindings generate the `query::Host`
+  // trait + `add_to_linker`.
+  import duckdb:extension/query;
   export duckdb:extension/guest;
   export callback-dispatch;
 }

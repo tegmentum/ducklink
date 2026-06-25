@@ -8404,6 +8404,148 @@ pub mod duckdb {
                 }
             }
         }
+        /// A minimal live-query host import (v1.1 catalog completion). A component that
+        /// needs to read the live database catalog (e.g. autocomplete, to suggest table
+        /// and column names) calls `query` with a read-only SELECT; the host runs it and
+        /// returns the result as rows of text cells (every cell stringified; NULL -> the
+        /// empty string).
+        ///
+        /// Kept as a SEPARATE interface (additive, like `collation` / `storage` /
+        /// `files-reg`) so the 180+ existing components' frozen WIT copies stay
+        /// structurally unchanged. Only query-capable components (autocomplete) import it,
+        /// via the host adding it to the extension linker.
+        ///
+        /// RE-ENTRANCY: this is BEST-EFFORT. A table/scalar callback runs INSIDE the core
+        /// query engine; the host's single core executor is already locked + the core wasm
+        /// store is mid-call, so a live SELECT cannot re-enter it. In that case the host
+        /// returns an error and the caller must fall back (e.g. keyword-only completion).
+        /// Outside an executing query (the core idle) the SELECT runs and returns rows.
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod query {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            #[allow(unused_unsafe, clippy::all)]
+            /// Run `sql` (intended: a read-only SELECT) on the live database. On success,
+            /// returns the result rows, each a list of text cells (NULL rendered as ""). On
+            /// failure -- a SQL error, OR the core being busy (re-entrancy) -- returns the
+            /// error message as a string. Callers MUST treat the error case as "no rows"
+            /// and degrade gracefully (never trap).
+            pub fn query(
+                sql: &str,
+            ) -> Result<_rt::Vec<_rt::Vec<_rt::String>>, _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let vec0 = sql;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "duckdb:extension/query")]
+                    unsafe extern "C" {
+                        #[link_name = "query"]
+                        fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import2(_: *mut u8, _: usize, _: *mut u8) {
+                        unreachable!()
+                    }
+                    unsafe { wit_import2(ptr0.cast_mut(), len0, ptr1) };
+                    let l3 = i32::from(*ptr1.add(0).cast::<u8>());
+                    let result16 = match l3 {
+                        0 => {
+                            let e = {
+                                let l4 = *ptr1
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l5 = *ptr1
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let base12 = l4;
+                                let len12 = l5;
+                                let mut result12 = _rt::Vec::with_capacity(len12);
+                                for i in 0..len12 {
+                                    let base = base12
+                                        .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                                    let e12 = {
+                                        let l6 = *base.add(0).cast::<*mut u8>();
+                                        let l7 = *base
+                                            .add(::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let base11 = l6;
+                                        let len11 = l7;
+                                        let mut result11 = _rt::Vec::with_capacity(len11);
+                                        for i in 0..len11 {
+                                            let base = base11
+                                                .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                                            let e11 = {
+                                                let l8 = *base.add(0).cast::<*mut u8>();
+                                                let l9 = *base
+                                                    .add(::core::mem::size_of::<*const u8>())
+                                                    .cast::<usize>();
+                                                let len10 = l9;
+                                                let bytes10 = _rt::Vec::from_raw_parts(
+                                                    l8.cast(),
+                                                    len10,
+                                                    len10,
+                                                );
+                                                _rt::string_lift(bytes10)
+                                            };
+                                            result11.push(e11);
+                                        }
+                                        _rt::cabi_dealloc(
+                                            base11,
+                                            len11 * (2 * ::core::mem::size_of::<*const u8>()),
+                                            ::core::mem::size_of::<*const u8>(),
+                                        );
+                                        result11
+                                    };
+                                    result12.push(e12);
+                                }
+                                _rt::cabi_dealloc(
+                                    base12,
+                                    len12 * (2 * ::core::mem::size_of::<*const u8>()),
+                                    ::core::mem::size_of::<*const u8>(),
+                                );
+                                result12
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l13 = *ptr1
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l14 = *ptr1
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len15 = l14;
+                                let bytes15 = _rt::Vec::from_raw_parts(
+                                    l13.cast(),
+                                    len15,
+                                    len15,
+                                );
+                                _rt::string_lift(bytes15)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result16
+                }
+            }
+        }
     }
 }
 #[rustfmt::skip]
@@ -13053,8 +13195,8 @@ pub(crate) use __export_duckdb_extension_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 5216] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xd9'\x01A\x02\x01A\x20\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 5278] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\x97(\x01A\x02\x01A\"\
 \x01B.\x01q\x15\x07boolean\0\0\x05int64\0\0\x06uint64\0\0\x07float64\0\0\x04text\
 \0\0\x04blob\0\0\x05int32\0\0\x09timestamp\0\0\x04int8\0\0\x05int16\0\0\x05uint8\
 \0\0\x06uint16\0\0\x06uint32\0\0\x07float32\0\0\x04date\0\0\x04time\0\0\x0btimes\
@@ -13153,24 +13295,26 @@ y\x04\0\x15table-function-handle\x03\0\0\x01y\x04\0\x14copy-function-handle\x03\
 lacement-scan\x03\0\x0b\x01r\x02\x09extensions\x08function\x03\x04\0\x0ccopy-han\
 dler\x03\0\x0d\x01j\x01\x05\x01s\x01@\x01\x04scan\x0c\0\x0f\x04\0\x19register-re\
 placement-scan\x01\x10\x01j\x01\x07\x01s\x01@\x01\x07handler\x0e\0\x11\x04\0\x15\
-register-copy-handler\x01\x12\x03\0\x16duckdb:extension/files\x05\x14\x02\x03\0\0\
-\x0aloadresult\x01B\x0d\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\0\0\x02\x03\x02\
-\x01\x15\x04\0\x0aloadresult\x03\0\x02\x01j\x01\x03\x01\x01\x01@\0\0\x04\x04\0\x04\
-load\x01\x05\x01ps\x01j\x01\x7f\x01\x01\x01@\x01\x04keys\x06\0\x07\x04\0\x0breco\
-nfigure\x01\x08\x01@\0\0\x07\x04\0\x08shutdown\x01\x09\x04\0\x16duckdb:extension\
-/guest\x05\x16\x01B\x1c\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\0\0\x02\x03\x02\
-\x01\x03\x04\0\x09duckvalue\x03\0\x02\x02\x03\x02\x01\x07\x04\0\x0ainvokeinfo\x03\
-\0\x04\x02\x03\x02\x01\x09\x04\0\x09resultset\x03\0\x06\x02\x03\x02\x01\x0a\x04\0\
-\x08rowbatch\x03\0\x08\x01p\x03\x01j\x01\x03\x01\x01\x01@\x03\x06handley\x04args\
-\x0a\x03ctx\x05\0\x0b\x04\0\x0bcall-scalar\x01\x0c\x01j\x01\x0a\x01\x01\x01@\x03\
-\x06handley\x04rows\x09\x03ctx\x05\0\x0d\x04\0\x11call-scalar-batch\x01\x0e\x01j\
-\x01\x07\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x0f\x04\0\x0acall-table\x01\x10\
-\x01@\x02\x06handley\x04rows\x09\0\x0b\x04\0\x0ecall-aggregate\x01\x11\x01k\x03\x01\
-j\x01\x12\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x13\x04\0\x0bcall-pragma\x01\
-\x14\x01@\x02\x06handley\x05value\x03\0\x0b\x04\0\x09call-cast\x01\x15\x04\0\"du\
-ckdb:extension/callback-dispatch\x05\x17\x04\0!duckdb:extension/duckdb-extension\
-\x04\0\x0b\x16\x01\0\x10duckdb-extension\x03\0\0\0G\x09producers\x01\x0cprocesse\
-d-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
+register-copy-handler\x01\x12\x03\0\x16duckdb:extension/files\x05\x14\x01B\x05\x01\
+ps\x01p\0\x01j\x01\x01\x01s\x01@\x01\x03sqls\0\x02\x04\0\x05query\x01\x03\x03\0\x16\
+duckdb:extension/query\x05\x15\x02\x03\0\0\x0aloadresult\x01B\x0d\x02\x03\x02\x01\
+\x02\x04\0\x09duckerror\x03\0\0\x02\x03\x02\x01\x16\x04\0\x0aloadresult\x03\0\x02\
+\x01j\x01\x03\x01\x01\x01@\0\0\x04\x04\0\x04load\x01\x05\x01ps\x01j\x01\x7f\x01\x01\
+\x01@\x01\x04keys\x06\0\x07\x04\0\x0breconfigure\x01\x08\x01@\0\0\x07\x04\0\x08s\
+hutdown\x01\x09\x04\0\x16duckdb:extension/guest\x05\x17\x01B\x1c\x02\x03\x02\x01\
+\x02\x04\0\x09duckerror\x03\0\0\x02\x03\x02\x01\x03\x04\0\x09duckvalue\x03\0\x02\
+\x02\x03\x02\x01\x07\x04\0\x0ainvokeinfo\x03\0\x04\x02\x03\x02\x01\x09\x04\0\x09\
+resultset\x03\0\x06\x02\x03\x02\x01\x0a\x04\0\x08rowbatch\x03\0\x08\x01p\x03\x01\
+j\x01\x03\x01\x01\x01@\x03\x06handley\x04args\x0a\x03ctx\x05\0\x0b\x04\0\x0bcall\
+-scalar\x01\x0c\x01j\x01\x0a\x01\x01\x01@\x03\x06handley\x04rows\x09\x03ctx\x05\0\
+\x0d\x04\0\x11call-scalar-batch\x01\x0e\x01j\x01\x07\x01\x01\x01@\x02\x06handley\
+\x04args\x0a\0\x0f\x04\0\x0acall-table\x01\x10\x01@\x02\x06handley\x04rows\x09\0\
+\x0b\x04\0\x0ecall-aggregate\x01\x11\x01k\x03\x01j\x01\x12\x01\x01\x01@\x02\x06h\
+andley\x04args\x0a\0\x13\x04\0\x0bcall-pragma\x01\x14\x01@\x02\x06handley\x05val\
+ue\x03\0\x0b\x04\0\x09call-cast\x01\x15\x04\0\"duckdb:extension/callback-dispatc\
+h\x05\x18\x04\0!duckdb:extension/duckdb-extension\x04\0\x0b\x16\x01\0\x10duckdb-\
+extension\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.\
+227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

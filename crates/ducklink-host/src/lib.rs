@@ -1363,6 +1363,13 @@ struct ExtensionManager {
     // is automatic — the wrapper macro shadows any later bare-scalar
     // re-registration — so no mid-drain honor pass is needed.
     pin_cache: HashMap<(String, prefix::Shape, i32), String>,
+    // v1.1 live-query host import: the CLI's live connection, shared so a
+    // query-capable component's `query` import (catalog completion) runs on the
+    // same connection the user is on. Cloned into each component's CoreServices.
+    current_connection: Arc<Mutex<Option<ResourceAny>>>,
+    // v1.1 live-query host import: the re-entrancy fallback catalog snapshot,
+    // shared with each component's CoreServices + refreshed at CLI boundaries.
+    catalog_snapshot: Arc<Mutex<CatalogSnapshot>>,
 }
 
 impl ExtensionManager {
@@ -1385,6 +1392,8 @@ impl ExtensionManager {
             pending_prefix_rows: Vec::new(),
             prefix_retained: prefix::RetainedDefs::default(),
             pin_cache: HashMap::new(),
+            current_connection: Arc::new(Mutex::new(None)),
+            catalog_snapshot: Arc::new(Mutex::new(CatalogSnapshot::default())),
         }
     }
 
@@ -2028,6 +2037,20 @@ impl ExtensionManager {
         self.core = Some(core);
     }
 
+    /// v1.1 live-query host import: share the CLI's live connection so a
+    /// query-capable component's `query` import runs catalog SELECTs on the same
+    /// connection the user is on.
+    fn attach_current_connection(&mut self, conn: Arc<Mutex<Option<ResourceAny>>>) {
+        self.current_connection = conn;
+    }
+
+    /// v1.1 live-query host import: the shared catalog snapshot, so the CLI
+    /// (`HostState`) refreshes the same snapshot each component's CoreServices
+    /// reads when the core is busy.
+    fn catalog_snapshot(&self) -> Arc<Mutex<CatalogSnapshot>> {
+        self.catalog_snapshot.clone()
+    }
+
     fn dispatch_scalar(
         &mut self,
         handle: u32,
@@ -2264,6 +2287,15 @@ impl ExtensionManager {
         let engine = self.engine.clone();
         let artifact_path = artifact.clone();
         let callback_registry = self.callback_registry.clone();
+        let current_connection = self.current_connection.clone();
+        let catalog_snapshot = self.catalog_snapshot.clone();
+        // v1.1: a loaded extension may use the live-query import; enable the
+        // CLI-boundary catalog snapshot refresh so catalog completion has data
+        // even when called from inside a query (re-entrancy fallback).
+        self.catalog_snapshot
+            .lock()
+            .expect("catalog snapshot mutex poisoned")
+            .enabled = true;
         let extension_name = sanitized.clone();
         eprintln!(
             "[extension-manager] attempting to load '{sanitized}' from {}",
@@ -2307,7 +2339,11 @@ impl ExtensionManager {
                 &engine,
                 &component,
                 wasi,
-                Box::new(CoreServices { core }),
+                Box::new(CoreServices {
+                    core,
+                    current_connection,
+                    catalog_snapshot,
+                }),
                 callback_registry,
                 extension_name.clone(),
             )
@@ -2506,6 +2542,11 @@ pub struct HostState {
     /// One-shot guard: the DUCKLINK_AUTOLOAD extensions are loaded once, right
     /// after the first connection opens (the database now exists).
     did_autoload: bool,
+    /// v1.1 live-query host import: the re-entrancy fallback catalog snapshot,
+    /// refreshed after each `execute` (core idle) so a query-capable component's
+    /// `query` import can answer duckdb_tables()/duckdb_columns() even when called
+    /// from inside a query.
+    catalog_snapshot: Arc<Mutex<CatalogSnapshot>>,
 }
 
 impl WasiView for HostState {
@@ -2526,6 +2567,45 @@ impl HostState {
         let id = self.next_resource_id;
         self.next_resource_id = self.next_resource_id.wrapping_add(1).max(1);
         id
+    }
+
+    /// v1.1 live-query re-entrancy fallback: while a query-capable extension is
+    /// loaded, re-run the catalog SELECTs a completer asks for (table + column
+    /// names) on the now-idle core and cache the rows. Cheap + best-effort: any
+    /// error just leaves the previous snapshot in place. Called after each CLI
+    /// `execute`, so the snapshot reflects the catalog as of the statement that
+    /// just completed -- which is exactly what a subsequent `sql_complete(...)`
+    /// (running INSIDE its own query, when the core is busy) needs.
+    fn refresh_catalog_snapshot(&self) {
+        const CATALOG_QUERIES: &[&str] = &[
+            "SELECT table_name FROM duckdb_tables()",
+            "SELECT DISTINCT column_name FROM duckdb_columns()",
+        ];
+        {
+            let snap = self
+                .catalog_snapshot
+                .lock()
+                .expect("catalog snapshot mutex poisoned");
+            if !snap.enabled {
+                return;
+            }
+        }
+        for sql in CATALOG_QUERIES {
+            match run_query_on_core(
+                self.core.lock().expect("core mutex poisoned"),
+                &self.current_connection,
+                sql,
+            ) {
+                Ok(rows) => {
+                    self.catalog_snapshot
+                        .lock()
+                        .expect("catalog snapshot mutex poisoned")
+                        .rows
+                        .insert((*sql).to_string(), rows);
+                }
+                Err(_) => { /* keep the previous snapshot for this SQL */ }
+            }
+        }
     }
 
     /// Load the components named in DUCKLINK_AUTOLOAD (comma/space separated)
@@ -3021,6 +3101,10 @@ impl cli_db::Host for HostState {
                 })
             })
             .map_err(convert_trap_to_duckerror)?;
+        // v1.1: the core is idle again here -> refresh the catalog snapshot so a
+        // query-capable component's `query` import (which runs INSIDE a later
+        // query, when the core is busy) can still answer catalog SELECTs.
+        self.refresh_catalog_snapshot();
         match result {
             Ok(value) => Ok(convert_core_query_result(value)),
             Err(err) => Err(convert_core_duckerror(err)),
@@ -3713,8 +3797,32 @@ fn log_pending_aggregate_conversion(entry: &PendingAggregate) {
 // The Direction-1 service sink: routes a loaded component's config/logging
 // requests (expressed via ducklink-runtime's neutral types) to the wasm DuckDB
 // core's config/logging guest interfaces.
+/// v1.1 live-query host import: a host-side cache of recent catalog query results
+/// (keyed by the SELECT text), refreshed at CLI statement boundaries when the
+/// core is idle. It exists to solve the table-function RE-ENTRANCY wall: a
+/// catalog component (autocomplete) calls `query` from INSIDE a running query, so
+/// the live core executor is locked + the core wasm store is mid-call and cannot
+/// be re-entered. The snapshot lets `query` still answer
+/// `duckdb_tables()`/`duckdb_columns()` with the names captured just before the
+/// completing query started (exactly what an editor autocomplete needs). Shared
+/// between the CLI (`HostState`, which refreshes it after each `execute`) and
+/// every component's `CoreServices` (which reads it when the core is busy).
+#[derive(Default)]
+struct CatalogSnapshot {
+    rows: HashMap<String, Vec<Vec<String>>>,
+    // Whether a query-capable extension is loaded; the CLI only pays for the
+    // catalog refresh once one is (autocomplete sets this on load).
+    enabled: bool,
+}
+
 struct CoreServices {
     core: Arc<Mutex<CoreExecution>>,
+    // v1.1 live-query host import: the CLI's live connection, used by `query` to
+    // run catalog SELECTs (e.g. autocomplete's table/column completion).
+    current_connection: Arc<Mutex<Option<ResourceAny>>>,
+    // v1.1 live-query host import: the re-entrancy fallback snapshot (see
+    // CatalogSnapshot). Served when the core is busy (the table-function case).
+    catalog_snapshot: Arc<Mutex<CatalogSnapshot>>,
 }
 
 impl CoreServices {
@@ -3846,6 +3954,78 @@ impl ExtensionServices for CoreServices {
         if let Err(err) = result {
             eprintln!("[duckdb-extension:{level:?}] {message} (core log_fields failed: {err})");
         }
+    }
+
+    // v1.1 live-query host import (catalog completion). Runs `sql` on the CLI's
+    // live connection and returns rows of text cells (NULL -> "").
+    //
+    // RE-ENTRANCY GUARD: a table/scalar callback runs INSIDE the core query
+    // engine, which means the single shared `core` mutex is ALREADY held by the
+    // outer `call_execute` on the same thread AND the core wasm store is mid-call.
+    // Re-entering would self-deadlock (the std Mutex is non-reentrant) and, even
+    // past the lock, violate wasmtime store re-entrancy. So we `try_lock` the core
+    // mutex: if it is contended we are nested in a query -> return Err and let the
+    // caller (e.g. sql_complete) fall back to keyword-only completion. When the
+    // core is idle (the import is reachable in non-table-fn contexts) the SELECT
+    // runs and returns rows.
+    fn query(&mut self, sql: &str) -> Result<Vec<Vec<String>>, String> {
+        let core = match self.core.try_lock() {
+            Ok(core) => core,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                // BUSY (the table-function case): the live core executor is locked
+                // by the query that called us, so we cannot run a live SELECT.
+                // Fall back to the catalog snapshot captured at the last CLI
+                // statement boundary. A miss returns Err -> keyword-only.
+                return self
+                    .catalog_snapshot
+                    .lock()
+                    .expect("catalog snapshot mutex poisoned")
+                    .rows
+                    .get(sql)
+                    .cloned()
+                    .ok_or_else(|| {
+                        "query: core busy and no catalog snapshot for this SQL".to_string()
+                    });
+            }
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                return Err("query: core mutex poisoned".to_string())
+            }
+        };
+
+        // IDLE: run live + refresh the snapshot entry so a later busy call hits.
+        let rows = run_query_on_core(core, &self.current_connection, sql)?;
+        self.catalog_snapshot
+            .lock()
+            .expect("catalog snapshot mutex poisoned")
+            .rows
+            .insert(sql.to_string(), rows.clone());
+        Ok(rows)
+    }
+}
+
+/// Run `sql` on `current_connection` using the already-locked `core` executor,
+/// returning rows of stringified cells (NULL -> ""). Factored out so both the
+/// idle `query` path and the CLI-boundary refresh share one implementation.
+fn run_query_on_core(
+    mut core: std::sync::MutexGuard<'_, CoreExecution>,
+    current_connection: &Arc<Mutex<Option<ResourceAny>>>,
+    sql: &str,
+) -> Result<Vec<Vec<String>>, String> {
+    let handle = current_connection
+        .lock()
+        .expect("current connection mutex poisoned")
+        .clone()
+        .ok_or_else(|| "query: no active database connection".to_string())?;
+    let result = core
+        .with_database(|guest, store| guest.call_execute(store, handle, sql))
+        .map_err(|trap| format!("query trapped: {trap}"))?;
+    match result {
+        Ok(qr) => Ok(qr
+            .rows
+            .iter()
+            .map(|row| row.iter().map(spi_value_text).collect())
+            .collect()),
+        Err(err) => Err(core_duckerror_message(err)),
     }
 }
 
@@ -4481,6 +4661,14 @@ impl CliHarness {
             manager.attach_core(core.clone());
         }
         let current_connection = Arc::new(Mutex::new(None));
+        let catalog_snapshot;
+        {
+            let mut manager = extension_manager
+                .lock()
+                .expect("extension manager mutex poisoned");
+            manager.attach_current_connection(current_connection.clone());
+            catalog_snapshot = manager.catalog_snapshot();
+        }
         let dotcmd_registry = Arc::new(Mutex::new(DotcmdRegistry::load(
             &engine,
             &dotcmd_root(),
@@ -4505,6 +4693,7 @@ impl CliHarness {
             pending_prepared_drops: Vec::new(),
             pending_appender_drops: Vec::new(),
             did_autoload: false,
+            catalog_snapshot,
         };
         let mut store = Store::new(&engine, host_state);
 
@@ -4623,6 +4812,14 @@ pub fn run_cli_with_stdio(
         manager.attach_core(core.clone());
     }
     let current_connection = Arc::new(Mutex::new(None));
+    let catalog_snapshot;
+    {
+        let mut manager = extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager.attach_current_connection(current_connection.clone());
+        catalog_snapshot = manager.catalog_snapshot();
+    }
     let dotcmd_registry = Arc::new(Mutex::new(DotcmdRegistry::load(
         &engine,
         &dotcmd_root(),
@@ -4646,7 +4843,8 @@ pub fn run_cli_with_stdio(
         pending_stream_drops: Vec::new(),
         pending_prepared_drops: Vec::new(),
         pending_appender_drops: Vec::new(),
-            did_autoload: false,
+        did_autoload: false,
+        catalog_snapshot,
     };
     let mut store = Store::new(&engine, host_state);
 

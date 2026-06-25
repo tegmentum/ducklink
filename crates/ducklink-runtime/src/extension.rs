@@ -21,8 +21,8 @@ use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 use crate::duckdb_extension_bindings::duckdb::extension::{
     catalog as extension_catalog, config as extension_config, files as extension_files,
     collation as extension_collation, files_reg as extension_files_reg, index as extension_index,
-    logging as extension_logging, runtime as extension_runtime, storage as extension_storage,
-    types as extension_types,
+    logging as extension_logging, query as extension_query, runtime as extension_runtime,
+    storage as extension_storage, types as extension_types,
 };
 use crate::duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
 use crate::reg;
@@ -79,6 +79,17 @@ pub trait ExtensionServices: Send {
     fn get_string_list(&mut self, path: &str) -> Result<Option<Vec<String>>, ConfigError>;
     fn log(&mut self, level: LogLevel, message: &str, target: Option<&str>);
     fn log_fields(&mut self, level: LogLevel, message: &str, fields: &[LogField]);
+
+    /// v1.1 live-query host import (catalog completion). Run `sql` (a read-only
+    /// SELECT) on the live database and return the rows as text cells (every cell
+    /// stringified; NULL -> ""). BEST-EFFORT: if the core is busy (the call
+    /// arrives from inside a query callback, so the executor is already locked /
+    /// mid-call) or the SQL fails, return Err(message) and the caller degrades.
+    /// The default impl reports unavailability, so directions that don't wire a
+    /// live connection (e.g. tests) still compile.
+    fn query(&mut self, _sql: &str) -> Result<Vec<Vec<String>>, String> {
+        Err("live query not available in this host".to_string())
+    }
 }
 
 fn neutral_configerror_to_ext(err: ConfigError) -> extension_types::Configerror {
@@ -1137,6 +1148,25 @@ impl extension_collation::Host for ExtensionStoreState {
     }
 }
 
+// v1.1: the `query` interface lets a component run a read-only SELECT against the
+// live database (catalog completion). The host satisfies the import here by
+// forwarding to the direction-specific `ExtensionServices::query` sink. The call
+// is BEST-EFFORT: a re-entrant call (from inside a query callback) or a SQL error
+// returns Err, which the component treats as "no rows".
+impl extension_query::Host for ExtensionStoreState {
+    fn query(&mut self, sql: String) -> Result<BindgenVec<BindgenVec<String>>, String> {
+        let rows = self.services.query(&sql)?;
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(Into::into)
+                    .collect::<BindgenVec<String>>()
+            })
+            .collect())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Capture conversions (extension WIT -> neutral reg::*) + logging helpers
 // ---------------------------------------------------------------------------
@@ -1963,6 +1993,7 @@ pub fn add_extension_interfaces_to_linker(
     extension_index::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_collation::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_files_reg::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    extension_query::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     Ok(())
 }
 

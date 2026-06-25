@@ -5,9 +5,11 @@ edition = "2021"
 description = """
 SQL auto-completion as a DuckDB table function: sql_complete(partial VARCHAR) ->
 table(suggestion VARCHAR, kind VARCHAR). Prefix-matches the last token of the
-partial query against a bundled SQL keyword list (kind='keyword'). Catalog-name
-completion (table/column) is out of scope -- it needs a live-connection query
-import this component type does not have. Pure Rust, never panics.
+partial query against a bundled SQL keyword list (kind='keyword') and -- v1.1 --
+against live catalog table names (kind='table') and column names (kind='column')
+read through the host `query` import. Catalog completion is best-effort: a table
+function runs inside the query engine, so the host serves it from a catalog
+snapshot when the live core is busy (re-entrancy). Pure Rust, never panics.
 """
 license = "MIT"
 publish = false
