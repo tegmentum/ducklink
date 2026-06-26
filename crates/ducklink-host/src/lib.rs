@@ -96,6 +96,15 @@ use ducklink_runtime::{
 use wasmtime::component::{Component, Linker, Resource, ResourceAny, ResourceTable};
 use wasmtime::{AsContextMut, Config, Engine, Store, StoreContextMut};
 
+mod compose_dynlink;
+pub use compose_dynlink::ProviderRegistry;
+/// Test/embedder support surface for the `compose:dynlink/linker` host
+/// import: the `DynState` store state, the `imports_linker` gate, and the
+/// `add_to_linker` wiring. Used by the integration test that drives the
+/// framework's dlopen guest through ducklink-host's wasmtime.
+pub mod compose_dynlink_test_support {
+    pub use crate::compose_dynlink::{add_to_linker, imports_linker, DynState};
+}
 mod delta_rewrite;
 mod prefix;
 mod ui_server;
@@ -894,6 +903,11 @@ struct DotcmdState {
     /// PLAN-prefixes: lets `spi.query` flush staged __ducklink_prefix* rows onto
     /// the live connection before each dotcmd query (so `.prefix` sees them).
     extension_manager: Arc<Mutex<ExtensionManager>>,
+    /// compose:dynlink/linker bridge state. A `DynLinkBridge` is present
+    /// ONLY when this dot-command component imports `compose:dynlink/linker`
+    /// (the `imports_linker` gate in `load_one`); components that don't
+    /// import it carry `None` and pay nothing.
+    dynlink: Option<compose_dynlink::DynLinkBridge>,
 }
 impl WasiView for DotcmdState {
     fn ctx(&mut self) -> WasiCtxView<'_> {
@@ -902,6 +916,27 @@ impl WasiView for DotcmdState {
 }
 impl wasmtime::component::HasData for DotcmdState {
     type Data<'a> = &'a mut DotcmdState;
+}
+impl DotcmdState {
+    /// Expose the dynlink bridge for the linker Host trait impl. Only ever
+    /// reached after the `imports_linker` gate set `dynlink = Some(..)`, so
+    /// a guest that imports the linker always has a bridge.
+    fn dynlink_bridge(&mut self) -> &mut compose_dynlink::DynLinkBridge {
+        self.dynlink
+            .as_mut()
+            .expect("compose:dynlink/linker invoked on a dot command that did not import it")
+    }
+}
+// Generate the compose:dynlink/linker Host + HostInstance trait impls for
+// DotcmdState, delegating to its bridge (one shared implementation).
+crate::impl_compose_dynlink_host!(DotcmdState, dynlink_bridge);
+
+/// Process-global shared provider registry for the dot-command dlopen path.
+/// Built once against the host engine; a pylon-shaped provider registered
+/// here is instantiated once and shared across every dot-command guest.
+fn dotcmd_provider_registry(engine: &Engine) -> &'static ProviderRegistry {
+    static REG: OnceLock<ProviderRegistry> = OnceLock::new();
+    REG.get_or_init(|| ProviderRegistry::new(engine.clone()))
 }
 
 /// `duckdb:dotcmd/spi` — run SQL on the CLI's live connection, returned as
@@ -1210,6 +1245,26 @@ impl DotcmdRegistry {
             &mut linker,
             |s| s,
         )?;
+        // compose:dynlink/linker: conditionally satisfy a guest-driven
+        // dlopen import. ONLY components that actually import the linker get
+        // the host import + a bridge — every other dot command is unaffected
+        // and pays nothing (the gate mirrors the framework's `imports_linker`).
+        let imports_dynlink = compose_dynlink::imports_linker(engine, &component);
+        let dynlink = if imports_dynlink {
+            eprintln!(
+                "[dotcmd] '{}' imports compose:dynlink/linker; wiring the shared-provider bridge",
+                path.display()
+            );
+            compose_dynlink::add_to_linker::<DotcmdState>(&mut linker)
+                .map_err(|e| wasmtime::Error::msg(e.to_string()))?;
+            // A per-loader provider registry: empty until a provider is
+            // registered (`ExtensionManager::register_dynlink_provider`).
+            Some(compose_dynlink::DynLinkBridge::new(
+                dotcmd_provider_registry(engine).clone(),
+            ))
+        } else {
+            None
+        };
         let wasi = WasiCtxBuilder::new().inherit_stdio().build();
         let mut store = Store::new(
             engine,
@@ -1219,6 +1274,7 @@ impl DotcmdRegistry {
                 core,
                 current_connection,
                 extension_manager,
+                dynlink,
             },
         );
         let bindings = dotcmd_bindings::Dotcmd::instantiate(&mut store, &component, &linker)?;

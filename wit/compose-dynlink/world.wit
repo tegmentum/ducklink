@@ -1,0 +1,27 @@
+package compose:dynlink@0.1.0;
+
+/// A guest that dynamically links (dlopens) other components at runtime.
+///
+/// The native host implements `linker` on top of its embedded wasm
+/// engine, exactly as `compose:host` implements its surface. Everything
+/// else the guest needs comes through standard WASI.
+world dynlink-guest {
+  import linker;
+}
+
+/// A component that can be dynamically loaded by others.
+///
+/// Such a component exports the uniform message endpoint and is
+/// addressed by content digest (or registry id). It may itself import
+/// `linker` to load further components.
+world dynlink-provider {
+  export endpoint;
+}
+
+/// A consumer component whose single `endpoint` import is satisfied at
+/// exec time by a host-resolved provider (flavor A: late-bound plan
+/// imports). The host implements `endpoint` by forwarding to the bound
+/// provider, which it runs in a separate store.
+world endpoint-consumer {
+  import endpoint;
+}
