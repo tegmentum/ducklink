@@ -96,6 +96,18 @@ use ducklink_runtime::{
 use wasmtime::component::{Component, Linker, Resource, ResourceAny, ResourceTable};
 use wasmtime::{AsContextMut, Config, Engine, Store, StoreContextMut};
 
+/// The `compose:dynlink/linker` host implementation now lives in
+/// `ducklink-runtime` (so the extension load path can wire it); re-exported
+/// here under the original path so the dotcmd path + tests are unchanged.
+use ducklink_runtime::compose_dynlink;
+pub use ducklink_runtime::compose_dynlink::{ProviderPreopen, ProviderRegistry};
+/// Test/embedder support surface for the `compose:dynlink/linker` host
+/// import: the `DynState` store state, the `imports_linker` gate, and the
+/// `add_to_linker` wiring. Used by the integration test that drives the
+/// framework's dlopen guest through ducklink-host's wasmtime.
+pub mod compose_dynlink_test_support {
+    pub use ducklink_runtime::compose_dynlink::{add_to_linker, imports_linker, DynState};
+}
 mod delta_rewrite;
 mod prefix;
 mod ui_server;
@@ -894,6 +906,11 @@ struct DotcmdState {
     /// PLAN-prefixes: lets `spi.query` flush staged __ducklink_prefix* rows onto
     /// the live connection before each dotcmd query (so `.prefix` sees them).
     extension_manager: Arc<Mutex<ExtensionManager>>,
+    /// compose:dynlink/linker bridge state. A `DynLinkBridge` is present
+    /// ONLY when this dot-command component imports `compose:dynlink/linker`
+    /// (the `imports_linker` gate in `load_one`); components that don't
+    /// import it carry `None` and pay nothing.
+    dynlink: Option<compose_dynlink::DynLinkBridge>,
 }
 impl WasiView for DotcmdState {
     fn ctx(&mut self) -> WasiCtxView<'_> {
@@ -902,6 +919,103 @@ impl WasiView for DotcmdState {
 }
 impl wasmtime::component::HasData for DotcmdState {
     type Data<'a> = &'a mut DotcmdState;
+}
+impl DotcmdState {
+    /// Expose the dynlink bridge for the linker Host trait impl. Only ever
+    /// reached after the `imports_linker` gate set `dynlink = Some(..)`, so
+    /// a guest that imports the linker always has a bridge.
+    fn dynlink_bridge(&mut self) -> &mut compose_dynlink::DynLinkBridge {
+        self.dynlink
+            .as_mut()
+            .expect("compose:dynlink/linker invoked on a dot command that did not import it")
+    }
+}
+// Generate the compose:dynlink/linker Host + HostInstance trait impls for
+// DotcmdState, delegating to its bridge (one shared implementation).
+ducklink_runtime::impl_compose_dynlink_host!(DotcmdState, dynlink_bridge);
+
+/// Process-global shared provider registry for the dot-command dlopen path.
+/// Built once against the host engine; a pylon-shaped provider registered
+/// here is instantiated once and shared across every dot-command guest.
+fn dotcmd_provider_registry(engine: &Engine) -> &'static ProviderRegistry {
+    dynlink_provider_registry(engine)
+}
+
+/// THE process-global shared `compose:dynlink` provider registry, used by
+/// BOTH the dot-command path and the extension load path (so one resident
+/// provider — e.g. the warmed ~38 MB pylon — serves every guest, across both
+/// flavors). Built once against the host engine and populated from
+/// `DUCKLINK_PROVIDERS` (see [`register_env_providers`]) on first use.
+fn dynlink_provider_registry(engine: &Engine) -> &'static ProviderRegistry {
+    static REG: OnceLock<ProviderRegistry> = OnceLock::new();
+    REG.get_or_init(|| {
+        let registry = ProviderRegistry::new(engine.clone());
+        register_env_providers(&registry);
+        registry
+    })
+}
+
+/// Register `compose:dynlink` providers declared in the `DUCKLINK_PROVIDERS`
+/// environment variable into `registry`. This mirrors `DUCKLINK_AUTOLOAD`'s
+/// env-list config style.
+///
+/// Format (comma-separated entries; preopens are `;`-separated `guest=host`
+/// pairs after a `:`):
+///
+/// ```text
+/// DUCKLINK_PROVIDERS=pylon=/abs/pylon-endpoint-numpy.component.wasm:/lib=/abs/cpython/Lib;/app=/abs/pylib
+/// ```
+///
+/// Each entry is `id=wasm-path[:preopens]`. A pylon provider needs
+/// `/lib` (the CPython `Lib` dir incl. bundled numpy) and `/app` (the
+/// dispatcher `pylib` dir) preopened into its OWN store. A provider with no
+/// preopens (e.g. an echo provider) is written as just `id=path`.
+///
+/// Registration only COMPILES the provider; the resident instance is
+/// materialized lazily on first resolve and then shared.
+fn register_env_providers(registry: &ProviderRegistry) {
+    let spec = match std::env::var("DUCKLINK_PROVIDERS") {
+        Ok(s) if !s.trim().is_empty() => s,
+        _ => return,
+    };
+    for entry in spec.split(',').map(str::trim).filter(|e| !e.is_empty()) {
+        // Split id=path[:preopens]. The id/path boundary is the FIRST '='; the
+        // path/preopens boundary is the FIRST ':' AFTER the path start (paths
+        // are absolute on this platform so the leading '/' is unambiguous).
+        let (id, rest) = match entry.split_once('=') {
+            Some(p) => p,
+            None => {
+                eprintln!("[compose-dynlink] DUCKLINK_PROVIDERS: skipping malformed entry '{entry}' (expected id=path)");
+                continue;
+            }
+        };
+        let (path, preopen_spec) = match rest.split_once(":/") {
+            Some((p, rest)) => (p, Some(format!("/{rest}"))),
+            None => (rest, None),
+        };
+        let mut preopens = Vec::new();
+        if let Some(po_spec) = preopen_spec {
+            for pair in po_spec.split(';').map(str::trim).filter(|p| !p.is_empty()) {
+                match pair.split_once('=') {
+                    Some((guest, host)) => {
+                        preopens.push(ProviderPreopen::new(host.trim(), guest.trim()))
+                    }
+                    None => eprintln!(
+                        "[compose-dynlink] DUCKLINK_PROVIDERS: provider '{id}': skipping malformed preopen '{pair}' (expected guest=host)"
+                    ),
+                }
+            }
+        }
+        match registry.register_provider_with_preopens(id, path.trim(), preopens.clone()) {
+            Ok(()) => eprintln!(
+                "[compose-dynlink] registered provider '{id}' from {} ({} preopen{})",
+                path.trim(),
+                preopens.len(),
+                if preopens.len() == 1 { "" } else { "s" }
+            ),
+            Err(e) => eprintln!("[compose-dynlink] failed to register provider '{id}': {e}"),
+        }
+    }
 }
 
 /// `duckdb:dotcmd/spi` — run SQL on the CLI's live connection, returned as
@@ -1203,13 +1317,33 @@ impl DotcmdRegistry {
         current_connection: Arc<Mutex<Option<ResourceAny>>>,
         extension_manager: Arc<Mutex<ExtensionManager>>,
     ) -> wasmtime::Result<(DotcmdInstance, Vec<(String, u64, String, String)>)> {
-        let component = load_component(engine, path)?;
+        let component = load_component(engine, path).map_err(wasmtime::Error::msg)?;
         let mut linker = Linker::<DotcmdState>::new(engine);
         p2::add_to_linker_sync(&mut linker)?;
         dotcmd_bindings::duckdb::dotcmd::spi::add_to_linker::<DotcmdState, DotcmdState>(
             &mut linker,
             |s| s,
         )?;
+        // compose:dynlink/linker: conditionally satisfy a guest-driven
+        // dlopen import. ONLY components that actually import the linker get
+        // the host import + a bridge — every other dot command is unaffected
+        // and pays nothing (the gate mirrors the framework's `imports_linker`).
+        let imports_dynlink = compose_dynlink::imports_linker(engine, &component);
+        let dynlink = if imports_dynlink {
+            eprintln!(
+                "[dotcmd] '{}' imports compose:dynlink/linker; wiring the shared-provider bridge",
+                path.display()
+            );
+            compose_dynlink::add_to_linker::<DotcmdState>(&mut linker)
+                .map_err(|e| wasmtime::Error::msg(e.to_string()))?;
+            // A per-loader provider registry: empty until a provider is
+            // registered (`ExtensionManager::register_dynlink_provider`).
+            Some(compose_dynlink::DynLinkBridge::new(
+                dotcmd_provider_registry(engine).clone(),
+            ))
+        } else {
+            None
+        };
         let wasi = WasiCtxBuilder::new().inherit_stdio().build();
         let mut store = Store::new(
             engine,
@@ -1219,6 +1353,7 @@ impl DotcmdRegistry {
                 core,
                 current_connection,
                 extension_manager,
+                dynlink,
             },
         );
         let bindings = dotcmd_bindings::Dotcmd::instantiate(&mut store, &component, &linker)?;
@@ -2291,9 +2426,21 @@ impl ExtensionManager {
         let current_connection = self.current_connection.clone();
         let catalog_snapshot = self.catalog_snapshot.clone();
         let extension_name = sanitized.clone();
+        // The shared compose:dynlink provider registry (populated from
+        // DUCKLINK_PROVIDERS). Cloned into the load thread; the bridge is built
+        // there. A component that imports compose:dynlink/linker (e.g.
+        // mlkmeans) resolves the one resident pylon through it; every other
+        // extension ignores it (the imports_linker gate in load_component).
+        let dynlink_registry = dynlink_provider_registry(&engine).clone();
+        // Log the human version AND the authoritative content-addressed contract
+        // identity (the witcanon digest, short hex). The digest is what
+        // catalog-verify enforces; the version is the runtime-observable proxy.
+        let contract_digest = ducklink_runtime::contract_digest();
         eprintln!(
-            "[extension-manager] attempting to load '{sanitized}' from {}",
-            artifact_path.display()
+            "[extension-manager] attempting to load '{sanitized}' from {} (host duckdb:extension contract {} digest {})",
+            artifact_path.display(),
+            ducklink_runtime::ducklink_contract_version(),
+            &contract_digest[..contract_digest.len().min(12)]
         );
         // The thread returns the loaded instance AND whether this component
         // imports the live-query capability. Only a query-importing component
@@ -2339,7 +2486,7 @@ impl ExtensionManager {
             // loader, shared from ducklink-runtime. The host supplies the wasi
             // context (it owns the network-grant policy above) and CoreServices
             // (config/logging routed to DuckDB-compiled-to-wasm).
-            ducklink_runtime::load_component(
+            ducklink_runtime::load_component_with_dynlink(
                 &engine,
                 &component,
                 wasi,
@@ -2350,6 +2497,7 @@ impl ExtensionManager {
                 }),
                 callback_registry,
                 extension_name.clone(),
+                Some(dynlink_registry),
             )
             .map(|instance| (instance, imports_query))
         });
@@ -4170,10 +4318,12 @@ fn load_component(engine: &Engine, path: &Path) -> Result<Component> {
         // a compatible engine; deserialize checks version/config and errors on
         // mismatch (it does not execute the contents).
         unsafe { Component::deserialize_file(engine, path) }
-            .with_context(|| format!("failed to deserialize precompiled {}", path.display()))
+            .map_err(|e| e.context(format!("failed to deserialize precompiled {}", path.display())))
+            .map_err(Into::into)
     } else {
         Component::from_file(engine, path)
-            .with_context(|| format!("failed to load {}", path.display()))
+            .map_err(|e| e.context(format!("failed to load {}", path.display())))
+            .map_err(Into::into)
     }
 }
 
@@ -4187,7 +4337,7 @@ pub fn precompile_component_to_file(in_path: &Path, out_path: &Path) -> Result<(
         std::fs::read(in_path).with_context(|| format!("read {}", in_path.display()))?;
     let precompiled = engine
         .precompile_component(&bytes)
-        .with_context(|| format!("precompile {}", in_path.display()))?;
+        .map_err(|e| e.context(format!("precompile {}", in_path.display())))?;
     std::fs::write(out_path, &precompiled)
         .with_context(|| format!("write {}", out_path.display()))?;
     Ok(())
@@ -4212,7 +4362,7 @@ fn build_engine() -> Result<Engine> {
         }
         Err(err) => eprintln!("warning: wasmtime compile cache unavailable: {err}"),
     }
-    Engine::new(&config).context("failed to create Wasmtime engine")
+    Engine::new(&config).map_err(|e| e.context("failed to create Wasmtime engine").into())
 }
 
 fn build_wasi_ctx_with_pipes(
@@ -4235,12 +4385,12 @@ fn build_wasi_ctx_with_pipes(
     for (host, guest) in preopens {
         builder
             .preopened_dir(host, guest, DirPerms::all(), FilePerms::all())
-            .with_context(|| {
-                format!(
+            .map_err(|e| {
+                e.context(format!(
                     "failed to preopen directory {} as {}",
                     host.display(),
                     guest
-                )
+                ))
             })?;
     }
     Ok(builder.build())
@@ -4258,12 +4408,12 @@ fn build_wasi_ctx_inherit(args: &[String], preopens: &[(&Path, &str)]) -> Result
     for (host, guest) in preopens {
         builder
             .preopened_dir(host, guest, DirPerms::all(), FilePerms::all())
-            .with_context(|| {
-                format!(
+            .map_err(|e| {
+                e.context(format!(
                     "failed to preopen directory {} as {}",
                     host.display(),
                     guest
-                )
+                ))
             })?;
     }
     Ok(builder.build())
@@ -4818,7 +4968,7 @@ impl CliHarness {
         self.store
             .data_mut()
             .preload_extension(name)
-            .with_context(|| format!("failed to preload extension {name}"))?;
+            .map_err(|e| e.context(format!("failed to preload extension {name}")))?;
         Ok(())
     }
 
@@ -4960,7 +5110,7 @@ pub fn run_cli_with_stdio(
     let cli_pre = duckdb_cli_bindings::DuckdbCliPre::new(instance_pre)?;
     let cli = cli_pre.instantiate(store.as_context_mut())?;
 
-    cli.wasi_cli_run().call_run(store.as_context_mut())
+    Ok(cli.wasi_cli_run().call_run(store.as_context_mut())?)
 }
 
 #[cfg(test)]

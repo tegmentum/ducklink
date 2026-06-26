@@ -1,0 +1,11 @@
+# Dev/CI dependencies for ducklink's tooling (the thin tooling/*.py delegators).
+#
+# The shared, DB-agnostic catalog tooling engine lives in tegmentum/datalink and
+# is consumed via pip-from-git (the `tooling/` subdirectory is the package root).
+# datalink is PUBLIC, so no token is needed.
+#
+#   pip install -r requirements-dev.txt
+#
+# For local development against a sibling checkout, install it editable instead:
+#   pip install -e ../datalink/tooling
+datalink-tooling @ git+https://github.com/tegmentum/datalink.git#subdirectory=tooling

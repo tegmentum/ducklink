@@ -1,0 +1,13 @@
+-- mlkmeans extension smoke. ml_kmeans(x, y, k) computes k-means centroids via
+-- Python/numpy on the single resident, shared compose:dynlink pylon provider.
+--
+-- The COMPUTE requires the pylon provider registered at runtime, e.g.:
+--   DUCKLINK_PROVIDERS=pylon=/abs/pylon-endpoint-numpy.component.wasm:/lib=/abs/cpython/Lib;/app=/abs/pylib
+--   SELECT ml_kmeans(x, y, 2) FROM (VALUES (0.0,0.0),(0.1,0.0),(5.0,5.0),(5.1,5.0)) t(x,y);
+--   -> "[[0.05,0.0],[5.05,5.0]]"   (centroids near (0.05,0) and (5.05,5))
+-- That provider-backed path is covered by the pylon use-case test, not the
+-- standalone catalog smoke (which has no provider configured).
+--
+-- The standalone smoke verifies the component LOADs and registers the aggregate
+-- (resolve/compute happens only at call time, which needs the provider).
+SELECT count(*) AS registered FROM duckdb_functions() WHERE function_name = 'ml_kmeans';

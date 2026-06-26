@@ -632,7 +632,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]scalar-callback"]
                             fn drop(_: u32);
@@ -669,7 +669,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]table-callback"]
                             fn drop(_: u32);
@@ -706,7 +706,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]aggregate-callback"]
                             fn drop(_: u32);
@@ -743,7 +743,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]pragma-callback"]
                             fn drop(_: u32);
@@ -780,7 +780,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]cast-callback"]
                             fn drop(_: u32);
@@ -817,7 +817,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]scalar-registry"]
                             fn drop(_: u32);
@@ -854,7 +854,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]table-registry"]
                             fn drop(_: u32);
@@ -891,7 +891,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]aggregate-registry"]
                             fn drop(_: u32);
@@ -928,7 +928,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]pragma-registry"]
                             fn drop(_: u32);
@@ -965,7 +965,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]macro-registry"]
                             fn drop(_: u32);
@@ -1010,7 +1010,7 @@ pub mod duckdb {
                 pub fn new(handle: u32) -> Self {
                     unsafe {
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[constructor]scalar-callback"]
                             fn wit_import0(_: i32) -> i32;
@@ -1218,7 +1218,7 @@ pub mod duckdb {
                         };
                         let ptr12 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]scalar-callback.call"]
                             fn wit_import13(
@@ -1588,7 +1588,7 @@ pub mod duckdb {
                 pub fn new(handle: u32) -> Self {
                     unsafe {
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[constructor]table-callback"]
                             fn wit_import0(_: i32) -> i32;
@@ -1785,7 +1785,7 @@ pub mod duckdb {
                         }
                         let ptr10 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]table-callback.call"]
                             fn wit_import11(_: i32, _: *mut u8, _: usize, _: *mut u8);
@@ -2177,7 +2177,7 @@ pub mod duckdb {
                 pub fn new(handle: u32) -> Self {
                     unsafe {
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[constructor]aggregate-callback"]
                             fn wit_import0(_: i32) -> i32;
@@ -2405,7 +2405,7 @@ pub mod duckdb {
                         }
                         let ptr11 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]aggregate-callback.call"]
                             fn wit_import12(_: i32, _: *mut u8, _: usize, _: *mut u8);
@@ -2758,7 +2758,7 @@ pub mod duckdb {
                 pub fn new(handle: u32) -> Self {
                     unsafe {
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[constructor]pragma-callback"]
                             fn wit_import0(_: i32) -> i32;
@@ -2957,7 +2957,7 @@ pub mod duckdb {
                         }
                         let ptr10 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]pragma-callback.call"]
                             fn wit_import11(_: i32, _: *mut u8, _: usize, _: *mut u8);
@@ -3315,7 +3315,7 @@ pub mod duckdb {
                 pub fn new(handle: u32) -> Self {
                     unsafe {
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[constructor]cast-callback"]
                             fn wit_import0(_: i32) -> i32;
@@ -3622,7 +3622,7 @@ pub mod duckdb {
                         };
                         let ptr10 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]cast-callback.call"]
                             fn wit_import11(
@@ -4273,7 +4273,7 @@ pub mod duckdb {
                         };
                         let ptr16 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]scalar-registry.register"]
                             fn wit_import17(
@@ -4867,7 +4867,7 @@ pub mod duckdb {
                         };
                         let ptr17 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]table-registry.register"]
                             fn wit_import18(
@@ -5350,7 +5350,7 @@ pub mod duckdb {
                         };
                         let ptr16 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]aggregate-registry.register"]
                             fn wit_import17(
@@ -5824,7 +5824,7 @@ pub mod duckdb {
                         };
                         let ptr15 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]pragma-registry.register-call"]
                             fn wit_import16(
@@ -6137,7 +6137,7 @@ pub mod duckdb {
                         };
                         let ptr10 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]macro-registry.register-scalar"]
                             fn wit_import11(
@@ -6330,7 +6330,7 @@ pub mod duckdb {
                     let mut ret_area = RetArea([::core::mem::MaybeUninit::uninit(); 12]);
                     let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/runtime")]
+                    #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-capability"]
                         fn wit_import1(_: i32, _: *mut u8);
@@ -6409,7 +6409,7 @@ pub mod duckdb {
                     );
                     let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/runtime")]
+                    #[link(wasm_import_module = "duckdb:extension/runtime@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "list-capabilities"]
                         fn wit_import1(_: *mut u8);
@@ -6465,7 +6465,7 @@ pub mod duckdb {
                     );
                     let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config")]
+                    #[link(wasm_import_module = "duckdb:extension/config@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "provider-version"]
                         fn wit_import1(_: *mut u8);
@@ -6510,7 +6510,7 @@ pub mod duckdb {
                     };
                     let ptr2 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config")]
+                    #[link(wasm_import_module = "duckdb:extension/config@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "list-keys"]
                         fn wit_import3(_: i32, _: *mut u8, _: usize, _: *mut u8);
@@ -6574,7 +6574,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config")]
+                    #[link(wasm_import_module = "duckdb:extension/config@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-string"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -6725,7 +6725,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config")]
+                    #[link(wasm_import_module = "duckdb:extension/config@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-bool"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -6868,7 +6868,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config")]
+                    #[link(wasm_import_module = "duckdb:extension/config@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-i64"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -7003,7 +7003,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config")]
+                    #[link(wasm_import_module = "duckdb:extension/config@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-u64"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -7138,7 +7138,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config")]
+                    #[link(wasm_import_module = "duckdb:extension/config@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-f64"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -7274,7 +7274,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config")]
+                    #[link(wasm_import_module = "duckdb:extension/config@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-bytes"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -7422,7 +7422,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config")]
+                    #[link(wasm_import_module = "duckdb:extension/config@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-string-list"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -7599,7 +7599,7 @@ pub mod duckdb {
                         None => (0i32, ::core::ptr::null_mut(), 0usize),
                     };
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/logging")]
+                    #[link(wasm_import_module = "duckdb:extension/logging@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "log"]
                         fn wit_import3(
@@ -7686,7 +7686,7 @@ pub mod duckdb {
                         }
                     }
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/logging")]
+                    #[link(wasm_import_module = "duckdb:extension/logging@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "log-fields"]
                         fn wit_import5(
@@ -7850,7 +7850,7 @@ pub mod duckdb {
                     let len2 = vec2.len();
                     let ptr3 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/catalog")]
+                    #[link(wasm_import_module = "duckdb:extension/catalog@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "register-logical-type"]
                         fn wit_import4(
@@ -7936,7 +7936,7 @@ pub mod duckdb {
                     let len2 = vec2.len();
                     let ptr3 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/catalog")]
+                    #[link(wasm_import_module = "duckdb:extension/catalog@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "register-cast"]
                         fn wit_import4(
@@ -8061,7 +8061,7 @@ pub mod duckdb {
                     let len5 = vec5.len();
                     let ptr6 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/catalog")]
+                    #[link(wasm_import_module = "duckdb:extension/catalog@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "register-macro"]
                         fn wit_import7(
@@ -8269,7 +8269,7 @@ pub mod duckdb {
                     }
                     let ptr3 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/files")]
+                    #[link(wasm_import_module = "duckdb:extension/files@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "register-replacement-scan"]
                         fn wit_import4(_: *mut u8, _: usize, _: i32, _: i32, _: *mut u8);
@@ -8352,7 +8352,7 @@ pub mod duckdb {
                     let len1 = vec1.len();
                     let ptr2 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/files")]
+                    #[link(wasm_import_module = "duckdb:extension/files@2.0.0")]
                     unsafe extern "C" {
                         #[link_name = "register-copy-handler"]
                         fn wit_import3(_: *mut u8, _: usize, _: i32, _: *mut u8);
@@ -23554,33 +23554,34 @@ pub mod exports {
                     fn shutdown() -> Result<bool, Duckerror>;
                 }
                 #[doc(hidden)]
-                macro_rules! __export_duckdb_extension_guest_cabi {
+                macro_rules! __export_duckdb_extension_guest_2_0_0_cabi {
                     ($ty:ident with_types_in $($path_to_types:tt)*) => {
                         const _ : () = { #[unsafe (export_name =
-                        "duckdb:extension/guest#load")] unsafe extern "C" fn
+                        "duckdb:extension/guest@2.0.0#load")] unsafe extern "C" fn
                         export_load() -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_load_cabi::<$ty > () } } #[unsafe (export_name =
-                        "cabi_post_duckdb:extension/guest#load")] unsafe extern "C" fn
-                        _post_return_load(arg0 : * mut u8,) { unsafe {
+                        "cabi_post_duckdb:extension/guest@2.0.0#load")] unsafe extern "C"
+                        fn _post_return_load(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_load::<$ty > (arg0) } }
-                        #[unsafe (export_name = "duckdb:extension/guest#reconfigure")]
-                        unsafe extern "C" fn export_reconfigure(arg0 : * mut u8, arg1 :
-                        usize,) -> * mut u8 { unsafe { $($path_to_types)*::
-                        _export_reconfigure_cabi::<$ty > (arg0, arg1) } } #[unsafe
-                        (export_name = "cabi_post_duckdb:extension/guest#reconfigure")]
-                        unsafe extern "C" fn _post_return_reconfigure(arg0 : * mut u8,) {
-                        unsafe { $($path_to_types)*:: __post_return_reconfigure::<$ty >
-                        (arg0) } } #[unsafe (export_name =
-                        "duckdb:extension/guest#shutdown")] unsafe extern "C" fn
+                        #[unsafe (export_name =
+                        "duckdb:extension/guest@2.0.0#reconfigure")] unsafe extern "C" fn
+                        export_reconfigure(arg0 : * mut u8, arg1 : usize,) -> * mut u8 {
+                        unsafe { $($path_to_types)*:: _export_reconfigure_cabi::<$ty >
+                        (arg0, arg1) } } #[unsafe (export_name =
+                        "cabi_post_duckdb:extension/guest@2.0.0#reconfigure")] unsafe
+                        extern "C" fn _post_return_reconfigure(arg0 : * mut u8,) { unsafe
+                        { $($path_to_types)*:: __post_return_reconfigure::<$ty > (arg0) }
+                        } #[unsafe (export_name =
+                        "duckdb:extension/guest@2.0.0#shutdown")] unsafe extern "C" fn
                         export_shutdown() -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_shutdown_cabi::<$ty > () } } #[unsafe (export_name =
-                        "cabi_post_duckdb:extension/guest#shutdown")] unsafe extern "C"
-                        fn _post_return_shutdown(arg0 : * mut u8,) { unsafe {
+                        "cabi_post_duckdb:extension/guest@2.0.0#shutdown")] unsafe extern
+                        "C" fn _post_return_shutdown(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_shutdown::<$ty > (arg0) } } };
                     };
                 }
                 #[doc(hidden)]
-                pub(crate) use __export_duckdb_extension_guest_cabi;
+                pub(crate) use __export_duckdb_extension_guest_2_0_0_cabi;
                 #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
                 #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
                 struct _RetArea(
@@ -27232,69 +27233,71 @@ pub mod exports {
                     ) -> Result<Duckvalue, Duckerror>;
                 }
                 #[doc(hidden)]
-                macro_rules! __export_duckdb_extension_callback_dispatch_cabi {
+                macro_rules! __export_duckdb_extension_callback_dispatch_2_0_0_cabi {
                     ($ty:ident with_types_in $($path_to_types:tt)*) => {
                         const _ : () = { #[unsafe (export_name =
-                        "duckdb:extension/callback-dispatch#call-scalar")] unsafe extern
-                        "C" fn export_call_scalar(arg0 : i32, arg1 : * mut u8, arg2 :
-                        usize, arg3 : i32, arg4 : i64, arg5 : i32,) -> * mut u8 { unsafe
-                        { $($path_to_types)*:: _export_call_scalar_cabi::<$ty > (arg0,
-                        arg1, arg2, arg3, arg4, arg5) } } #[unsafe (export_name =
-                        "cabi_post_duckdb:extension/callback-dispatch#call-scalar")]
+                        "duckdb:extension/callback-dispatch@2.0.0#call-scalar")] unsafe
+                        extern "C" fn export_call_scalar(arg0 : i32, arg1 : * mut u8,
+                        arg2 : usize, arg3 : i32, arg4 : i64, arg5 : i32,) -> * mut u8 {
+                        unsafe { $($path_to_types)*:: _export_call_scalar_cabi::<$ty >
+                        (arg0, arg1, arg2, arg3, arg4, arg5) } } #[unsafe (export_name =
+                        "cabi_post_duckdb:extension/callback-dispatch@2.0.0#call-scalar")]
                         unsafe extern "C" fn _post_return_call_scalar(arg0 : * mut u8,) {
                         unsafe { $($path_to_types)*:: __post_return_call_scalar::<$ty >
                         (arg0) } } #[unsafe (export_name =
-                        "duckdb:extension/callback-dispatch#call-scalar-batch")] unsafe
-                        extern "C" fn export_call_scalar_batch(arg0 : i32, arg1 : * mut
-                        u8, arg2 : usize, arg3 : i32, arg4 : i64, arg5 : i32,) -> * mut
-                        u8 { unsafe { $($path_to_types)*::
+                        "duckdb:extension/callback-dispatch@2.0.0#call-scalar-batch")]
+                        unsafe extern "C" fn export_call_scalar_batch(arg0 : i32, arg1 :
+                        * mut u8, arg2 : usize, arg3 : i32, arg4 : i64, arg5 : i32,) -> *
+                        mut u8 { unsafe { $($path_to_types)*::
                         _export_call_scalar_batch_cabi::<$ty > (arg0, arg1, arg2, arg3,
                         arg4, arg5) } } #[unsafe (export_name =
-                        "cabi_post_duckdb:extension/callback-dispatch#call-scalar-batch")]
+                        "cabi_post_duckdb:extension/callback-dispatch@2.0.0#call-scalar-batch")]
                         unsafe extern "C" fn _post_return_call_scalar_batch(arg0 : * mut
                         u8,) { unsafe { $($path_to_types)*::
                         __post_return_call_scalar_batch::<$ty > (arg0) } } #[unsafe
-                        (export_name = "duckdb:extension/callback-dispatch#call-table")]
-                        unsafe extern "C" fn export_call_table(arg0 : i32, arg1 : * mut
-                        u8, arg2 : usize,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        (export_name =
+                        "duckdb:extension/callback-dispatch@2.0.0#call-table")] unsafe
+                        extern "C" fn export_call_table(arg0 : i32, arg1 : * mut u8, arg2
+                        : usize,) -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_call_table_cabi::<$ty > (arg0, arg1, arg2) } } #[unsafe
                         (export_name =
-                        "cabi_post_duckdb:extension/callback-dispatch#call-table")]
+                        "cabi_post_duckdb:extension/callback-dispatch@2.0.0#call-table")]
                         unsafe extern "C" fn _post_return_call_table(arg0 : * mut u8,) {
                         unsafe { $($path_to_types)*:: __post_return_call_table::<$ty >
                         (arg0) } } #[unsafe (export_name =
-                        "duckdb:extension/callback-dispatch#call-aggregate")] unsafe
-                        extern "C" fn export_call_aggregate(arg0 : i32, arg1 : * mut u8,
-                        arg2 : usize,) -> * mut u8 { unsafe { $($path_to_types)*::
-                        _export_call_aggregate_cabi::<$ty > (arg0, arg1, arg2) } }
-                        #[unsafe (export_name =
-                        "cabi_post_duckdb:extension/callback-dispatch#call-aggregate")]
+                        "duckdb:extension/callback-dispatch@2.0.0#call-aggregate")]
+                        unsafe extern "C" fn export_call_aggregate(arg0 : i32, arg1 : *
+                        mut u8, arg2 : usize,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_call_aggregate_cabi::<$ty > (arg0,
+                        arg1, arg2) } } #[unsafe (export_name =
+                        "cabi_post_duckdb:extension/callback-dispatch@2.0.0#call-aggregate")]
                         unsafe extern "C" fn _post_return_call_aggregate(arg0 : * mut
                         u8,) { unsafe { $($path_to_types)*::
                         __post_return_call_aggregate::<$ty > (arg0) } } #[unsafe
-                        (export_name = "duckdb:extension/callback-dispatch#call-pragma")]
-                        unsafe extern "C" fn export_call_pragma(arg0 : i32, arg1 : * mut
-                        u8, arg2 : usize,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        (export_name =
+                        "duckdb:extension/callback-dispatch@2.0.0#call-pragma")] unsafe
+                        extern "C" fn export_call_pragma(arg0 : i32, arg1 : * mut u8,
+                        arg2 : usize,) -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_call_pragma_cabi::<$ty > (arg0, arg1, arg2) } } #[unsafe
                         (export_name =
-                        "cabi_post_duckdb:extension/callback-dispatch#call-pragma")]
+                        "cabi_post_duckdb:extension/callback-dispatch@2.0.0#call-pragma")]
                         unsafe extern "C" fn _post_return_call_pragma(arg0 : * mut u8,) {
                         unsafe { $($path_to_types)*:: __post_return_call_pragma::<$ty >
                         (arg0) } } #[unsafe (export_name =
-                        "duckdb:extension/callback-dispatch#call-cast")] unsafe extern
-                        "C" fn export_call_cast(arg0 : i32, arg1 : i32, arg2 :
+                        "duckdb:extension/callback-dispatch@2.0.0#call-cast")] unsafe
+                        extern "C" fn export_call_cast(arg0 : i32, arg1 : i32, arg2 :
                         ::core::mem::MaybeUninit::< u64 >, arg3 : i64, arg4 :
                         ::core::mem::MaybeUninit::< u64 >, arg5 : usize,) -> * mut u8 {
                         unsafe { $($path_to_types)*:: _export_call_cast_cabi::<$ty >
                         (arg0, arg1, arg2, arg3, arg4, arg5) } } #[unsafe (export_name =
-                        "cabi_post_duckdb:extension/callback-dispatch#call-cast")] unsafe
-                        extern "C" fn _post_return_call_cast(arg0 : * mut u8,) { unsafe {
-                        $($path_to_types)*:: __post_return_call_cast::<$ty > (arg0) } }
-                        };
+                        "cabi_post_duckdb:extension/callback-dispatch@2.0.0#call-cast")]
+                        unsafe extern "C" fn _post_return_call_cast(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_call_cast::<$ty >
+                        (arg0) } } };
                     };
                 }
                 #[doc(hidden)]
-                pub(crate) use __export_duckdb_extension_callback_dispatch_cabi;
+                pub(crate) use __export_duckdb_extension_callback_dispatch_2_0_0_cabi;
                 #[repr(align(8))]
                 struct _RetArea(
                     [::core::mem::MaybeUninit<
@@ -27567,10 +27570,10 @@ macro_rules! __export_spatialproj_impl {
     };
     ($ty:ident with_types_in $($path_to_types_root:tt)*) => {
         $($path_to_types_root)*::
-        exports::duckdb::extension::guest::__export_duckdb_extension_guest_cabi!($ty
+        exports::duckdb::extension::guest::__export_duckdb_extension_guest_2_0_0_cabi!($ty
         with_types_in $($path_to_types_root)*:: exports::duckdb::extension::guest);
         $($path_to_types_root)*::
-        exports::duckdb::extension::callback_dispatch::__export_duckdb_extension_callback_dispatch_cabi!($ty
+        exports::duckdb::extension::callback_dispatch::__export_duckdb_extension_callback_dispatch_2_0_0_cabi!($ty
         with_types_in $($path_to_types_root)*::
         exports::duckdb::extension::callback_dispatch);
     };
@@ -27579,12 +27582,12 @@ macro_rules! __export_spatialproj_impl {
 pub(crate) use __export_spatialproj_impl as export;
 #[cfg(target_arch = "wasm32")]
 #[unsafe(
-    link_section = "component-type:wit-bindgen:0.41.0:duckdb:extension:spatialproj:encoded world"
+    link_section = "component-type:wit-bindgen:0.41.0:duckdb:extension@2.0.0:spatialproj:encoded world"
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 21549] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xaa\xa7\x01\x01A\x02\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 21603] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xe0\xa7\x01\x01A\x02\
 \x01A5\x01B.\x01q\x15\x07boolean\0\0\x05int64\0\0\x06uint64\0\0\x07float64\0\0\x04\
 text\0\0\x04blob\0\0\x05int32\0\0\x09timestamp\0\0\x04int8\0\0\x05int16\0\0\x05u\
 int8\0\0\x06uint16\0\0\x06uint32\0\0\x07float32\0\0\x04date\0\0\x04time\0\0\x0bt\
@@ -27612,38 +27615,38 @@ configerror\x03\0#\x01m\x05\x05trace\x05debug\x04info\x04warn\x05error\x04\0\x08
 loglevel\x03\0%\x01r\x02\x03keys\x05values\x04\0\x08logfield\x03\0'\x01m\x07\x06\
 scalar\x05table\x09aggregate\x06pragma\x05macro\x07catalog\x0bfile-format\x04\0\x0e\
 capabilitykind\x03\0)\x01p*\x01r\x03\x04names\x07version\x0a\x08requires+\x04\0\x0a\
-loadresult\x03\0,\x03\0\x16duckdb:extension/types\x05\0\x02\x03\0\0\x0ecapabilit\
-ykind\x02\x03\0\0\x09duckerror\x02\x03\0\0\x09duckvalue\x02\x03\0\0\x07extopts\x02\
-\x03\0\0\x07funcarg\x02\x03\0\0\x08funcopts\x02\x03\0\0\x0ainvokeinfo\x02\x03\0\0\
-\x0blogicaltype\x02\x03\0\0\x09resultset\x02\x03\0\0\x08rowbatch\x02\x03\0\0\x09\
-columndef\x01Bf\x02\x03\x02\x01\x01\x04\0\x0ecapabilitykind\x03\0\0\x02\x03\x02\x01\
-\x02\x04\0\x09duckerror\x03\0\x02\x02\x03\x02\x01\x03\x04\0\x09duckvalue\x03\0\x04\
-\x02\x03\x02\x01\x04\x04\0\x07extopts\x03\0\x06\x02\x03\x02\x01\x05\x04\0\x07fun\
-carg\x03\0\x08\x02\x03\x02\x01\x06\x04\0\x08funcopts\x03\0\x0a\x02\x03\x02\x01\x07\
-\x04\0\x0ainvokeinfo\x03\0\x0c\x02\x03\x02\x01\x08\x04\0\x0blogicaltype\x03\0\x0e\
-\x02\x03\x02\x01\x09\x04\0\x09resultset\x03\0\x10\x02\x03\x02\x01\x0a\x04\0\x08r\
-owbatch\x03\0\x12\x02\x03\x02\x01\x0b\x04\0\x09columndef\x03\0\x14\x04\0\x0fscal\
-ar-callback\x03\x01\x04\0\x0etable-callback\x03\x01\x04\0\x12aggregate-callback\x03\
-\x01\x04\0\x0fpragma-callback\x03\x01\x04\0\x0dcast-callback\x03\x01\x04\0\x0fsc\
-alar-registry\x03\x01\x04\0\x0etable-registry\x03\x01\x04\0\x12aggregate-registr\
-y\x03\x01\x04\0\x0fpragma-registry\x03\x01\x04\0\x0emacro-registry\x03\x01\x01i\x1b\
-\x01i\x1c\x01i\x1d\x01i\x1e\x01i\x1f\x01q\x05\x06scalar\x01\x20\0\x05table\x01!\0\
-\x09aggregate\x01\"\0\x06pragma\x01#\0\x05macro\x01$\0\x04\0\x0acapability\x03\0\
-%\x01i\x16\x01@\x01\x06handley\0'\x04\0\x1c[constructor]scalar-callback\x01(\x01\
-h\x16\x01p\x05\x01j\x01\x05\x01\x03\x01@\x03\x04self)\x04args*\x03ctx\x0d\0+\x04\
-\0\x1c[method]scalar-callback.call\x01,\x01i\x17\x01@\x01\x06handley\0-\x04\0\x1b\
-[constructor]table-callback\x01.\x01h\x17\x01j\x01\x11\x01\x03\x01@\x02\x04self/\
-\x04args*\00\x04\0\x1b[method]table-callback.call\x011\x01i\x18\x01@\x01\x06hand\
-ley\02\x04\0\x1f[constructor]aggregate-callback\x013\x01h\x18\x01@\x02\x04self4\x04\
-rows\x13\0+\x04\0\x1f[method]aggregate-callback.call\x015\x01i\x19\x01@\x01\x06h\
-andley\06\x04\0\x1c[constructor]pragma-callback\x017\x01h\x19\x01k\x05\x01j\x019\
-\x01\x03\x01@\x02\x04self8\x04args*\0:\x04\0\x1c[method]pragma-callback.call\x01\
-;\x01i\x1a\x01@\x01\x06handley\0<\x04\0\x1a[constructor]cast-callback\x01=\x01h\x1a\
-\x01@\x02\x04self>\x05value\x05\0+\x04\0\x1a[method]cast-callback.call\x01?\x01h\
-\x1b\x01p\x09\x01k\x0b\x01j\x01y\x01\x03\x01@\x06\x04self\xc0\0\x04names\x09argu\
-ments\xc1\0\x07returns\x0f\x08callback'\x07options\xc2\0\0\xc3\0\x04\0\x20[metho\
-d]scalar-registry.register\x01D\x01h\x1c\x01p\x15\x01k\x07\x01@\x06\x04self\xc5\0\
-\x04names\x09arguments\xc1\0\x07columns\xc6\0\x08callback-\x07options\xc7\0\0\xc3\
+loadresult\x03\0,\x03\0\x1cduckdb:extension/types@2.0.0\x05\0\x02\x03\0\0\x0ecap\
+abilitykind\x02\x03\0\0\x09duckerror\x02\x03\0\0\x09duckvalue\x02\x03\0\0\x07ext\
+opts\x02\x03\0\0\x07funcarg\x02\x03\0\0\x08funcopts\x02\x03\0\0\x0ainvokeinfo\x02\
+\x03\0\0\x0blogicaltype\x02\x03\0\0\x09resultset\x02\x03\0\0\x08rowbatch\x02\x03\
+\0\0\x09columndef\x01Bf\x02\x03\x02\x01\x01\x04\0\x0ecapabilitykind\x03\0\0\x02\x03\
+\x02\x01\x02\x04\0\x09duckerror\x03\0\x02\x02\x03\x02\x01\x03\x04\0\x09duckvalue\
+\x03\0\x04\x02\x03\x02\x01\x04\x04\0\x07extopts\x03\0\x06\x02\x03\x02\x01\x05\x04\
+\0\x07funcarg\x03\0\x08\x02\x03\x02\x01\x06\x04\0\x08funcopts\x03\0\x0a\x02\x03\x02\
+\x01\x07\x04\0\x0ainvokeinfo\x03\0\x0c\x02\x03\x02\x01\x08\x04\0\x0blogicaltype\x03\
+\0\x0e\x02\x03\x02\x01\x09\x04\0\x09resultset\x03\0\x10\x02\x03\x02\x01\x0a\x04\0\
+\x08rowbatch\x03\0\x12\x02\x03\x02\x01\x0b\x04\0\x09columndef\x03\0\x14\x04\0\x0f\
+scalar-callback\x03\x01\x04\0\x0etable-callback\x03\x01\x04\0\x12aggregate-callb\
+ack\x03\x01\x04\0\x0fpragma-callback\x03\x01\x04\0\x0dcast-callback\x03\x01\x04\0\
+\x0fscalar-registry\x03\x01\x04\0\x0etable-registry\x03\x01\x04\0\x12aggregate-r\
+egistry\x03\x01\x04\0\x0fpragma-registry\x03\x01\x04\0\x0emacro-registry\x03\x01\
+\x01i\x1b\x01i\x1c\x01i\x1d\x01i\x1e\x01i\x1f\x01q\x05\x06scalar\x01\x20\0\x05ta\
+ble\x01!\0\x09aggregate\x01\"\0\x06pragma\x01#\0\x05macro\x01$\0\x04\0\x0acapabi\
+lity\x03\0%\x01i\x16\x01@\x01\x06handley\0'\x04\0\x1c[constructor]scalar-callbac\
+k\x01(\x01h\x16\x01p\x05\x01j\x01\x05\x01\x03\x01@\x03\x04self)\x04args*\x03ctx\x0d\
+\0+\x04\0\x1c[method]scalar-callback.call\x01,\x01i\x17\x01@\x01\x06handley\0-\x04\
+\0\x1b[constructor]table-callback\x01.\x01h\x17\x01j\x01\x11\x01\x03\x01@\x02\x04\
+self/\x04args*\00\x04\0\x1b[method]table-callback.call\x011\x01i\x18\x01@\x01\x06\
+handley\02\x04\0\x1f[constructor]aggregate-callback\x013\x01h\x18\x01@\x02\x04se\
+lf4\x04rows\x13\0+\x04\0\x1f[method]aggregate-callback.call\x015\x01i\x19\x01@\x01\
+\x06handley\06\x04\0\x1c[constructor]pragma-callback\x017\x01h\x19\x01k\x05\x01j\
+\x019\x01\x03\x01@\x02\x04self8\x04args*\0:\x04\0\x1c[method]pragma-callback.cal\
+l\x01;\x01i\x1a\x01@\x01\x06handley\0<\x04\0\x1a[constructor]cast-callback\x01=\x01\
+h\x1a\x01@\x02\x04self>\x05value\x05\0+\x04\0\x1a[method]cast-callback.call\x01?\
+\x01h\x1b\x01p\x09\x01k\x0b\x01j\x01y\x01\x03\x01@\x06\x04self\xc0\0\x04names\x09\
+arguments\xc1\0\x07returns\x0f\x08callback'\x07options\xc2\0\0\xc3\0\x04\0\x20[m\
+ethod]scalar-registry.register\x01D\x01h\x1c\x01p\x15\x01k\x07\x01@\x06\x04self\xc5\
+\0\x04names\x09arguments\xc1\0\x07columns\xc6\0\x08callback-\x07options\xc7\0\0\xc3\
 \0\x04\0\x1f[method]table-registry.register\x01H\x01h\x1d\x01@\x06\x04self\xc9\0\
 \x04names\x09arguments\xc1\0\x07returns\x0f\x08callback2\x07options\xc2\0\0\xc3\0\
 \x04\0#[method]aggregate-registry.register\x01J\x01h\x1e\x01@\x06\x04self\xcb\0\x04\
@@ -27652,364 +27655,365 @@ names\x09arguments\xc1\0\x07returns\x0f\x08callback6\x07options\xc7\0\0\xc3\0\x0
 \x01@\x05\x04self\xcd\0\x04names\x0aparameters\xce\0\x08body-sqls\x07options\xc7\
 \0\0\xcf\0\x04\0&[method]macro-registry.register-scalar\x01P\x01k&\x01@\x01\x04k\
 ind\x01\0\xd1\0\x04\0\x0eget-capability\x01R\x01p\x01\x01@\0\0\xd3\0\x04\0\x11li\
-st-capabilities\x01T\x03\0\x18duckdb:extension/runtime\x05\x0c\x02\x03\0\0\x0bco\
-nfigerror\x01B$\x02\x03\x02\x01\x0d\x04\0\x0bconfigerror\x03\0\0\x01@\0\0s\x04\0\
-\x10provider-version\x01\x02\x01ks\x01ps\x01@\x01\x06prefix\x03\0\x04\x04\0\x09l\
-ist-keys\x01\x05\x01j\x01\x03\x01\x01\x01@\x01\x04paths\0\x06\x04\0\x0aget-strin\
-g\x01\x07\x01k\x7f\x01j\x01\x08\x01\x01\x01@\x01\x04paths\0\x09\x04\0\x08get-boo\
-l\x01\x0a\x01kx\x01j\x01\x0b\x01\x01\x01@\x01\x04paths\0\x0c\x04\0\x07get-i64\x01\
-\x0d\x01kw\x01j\x01\x0e\x01\x01\x01@\x01\x04paths\0\x0f\x04\0\x07get-u64\x01\x10\
-\x01ku\x01j\x01\x11\x01\x01\x01@\x01\x04paths\0\x12\x04\0\x07get-f64\x01\x13\x01\
-p}\x01k\x14\x01j\x01\x15\x01\x01\x01@\x01\x04paths\0\x16\x04\0\x09get-bytes\x01\x17\
-\x01k\x04\x01j\x01\x18\x01\x01\x01@\x01\x04paths\0\x19\x04\0\x0fget-string-list\x01\
-\x1a\x03\0\x17duckdb:extension/config\x05\x0e\x02\x03\0\0\x08logfield\x02\x03\0\0\
-\x08loglevel\x01B\x0a\x02\x03\x02\x01\x0f\x04\0\x08logfield\x03\0\0\x02\x03\x02\x01\
-\x10\x04\0\x08loglevel\x03\0\x02\x01ks\x01@\x03\x05level\x03\x07messages\x06targ\
-et\x04\x01\0\x04\0\x03log\x01\x05\x01p\x01\x01@\x03\x05level\x03\x07messages\x06\
-fields\x06\x01\0\x04\0\x0alog-fields\x01\x07\x03\0\x18duckdb:extension/logging\x05\
-\x11\x02\x03\0\x01\x0dcast-callback\x01B\x16\x02\x03\x02\x01\x12\x04\0\x0dcast-c\
-allback\x03\0\0\x01r\x02\x04names\x08physicals\x04\0\x0clogical-type\x03\0\x02\x01\
-y\x04\0\x13logical-type-handle\x03\0\x04\x01m\x03\x08implicit\x0aassignment\x08e\
-xplicit\x04\0\x09cast-kind\x03\0\x06\x01r\x03\x04froms\x02tos\x04kind\x07\x04\0\x09\
-cast-spec\x03\0\x08\x01ps\x01r\x04\x06schemas\x04names\x0aparameters\x0a\x0edefi\
-nition-sqls\x04\0\x09macro-def\x03\0\x0b\x01j\x01\x05\x01s\x01@\x01\x02ty\x03\0\x0d\
-\x04\0\x15register-logical-type\x01\x0e\x01i\x01\x01j\0\x01s\x01@\x02\x04spec\x09\
-\x08callback\x0f\0\x10\x04\0\x0dregister-cast\x01\x11\x01@\x01\x03def\x0c\0\x10\x04\
-\0\x0eregister-macro\x01\x12\x03\0\x18duckdb:extension/catalog\x05\x13\x01B\x15\x01\
-y\x04\0\x15table-function-handle\x03\0\0\x01y\x04\0\x14copy-function-handle\x03\0\
-\x02\x01y\x04\0\x13replacement-scan-id\x03\0\x04\x01y\x04\0\x0fcopy-handler-id\x03\
-\0\x06\x01m\x02\x0eextension-only\x09signature\x04\0\x0edetection-mode\x03\0\x08\
-\x01ps\x01r\x03\x0aextensions\x0a\x0etable-function\x01\x04mode\x09\x04\0\x10rep\
-lacement-scan\x03\0\x0b\x01r\x02\x09extensions\x08function\x03\x04\0\x0ccopy-han\
-dler\x03\0\x0d\x01j\x01\x05\x01s\x01@\x01\x04scan\x0c\0\x0f\x04\0\x19register-re\
-placement-scan\x01\x10\x01j\x01\x07\x01s\x01@\x01\x07handler\x0e\0\x11\x04\0\x15\
-register-copy-handler\x01\x12\x03\0\x16duckdb:extension/files\x05\x14\x01BX\x01m\
-\x0b\x04none\x0bapp-defined\x0dout-of-memory\x07file-io\x0bopen-failed\x0billega\
-l-arg\x0dnot-supported\x10assertion-failed\x0fno-write-access\x15unsupported-ope\
-ration\x0bobject-null\x04\0\x0aerror-code\x03\0\0\x01m\x0e\x07unknown\x04byte\x05\
-int16\x05int32\x05int64\x06uint16\x06uint32\x06uint64\x07float32\x07float64\x0dc\
-omplex-int16\x0dcomplex-int32\x0fcomplex-float32\x0fcomplex-float64\x04\0\x09dat\
-a-type\x03\0\x02\x01m\x02\x09read-only\x0aread-write\x04\0\x0baccess-mode\x03\0\x04\
-\x01m\x1f\x07unknown\x05point\x0alinestring\x07polygon\x0bmulti-point\x10multi-l\
-inestring\x0dmulti-polygon\x13geometry-collection\x04none\x0blinear-ring\x07poin\
-t-z\x0clinestring-z\x09polygon-z\x0dmulti-point-z\x12multi-linestring-z\x0fmulti\
--polygon-z\x15geometry-collection-z\x07point-m\x0clinestring-m\x09polygon-m\x0dm\
-ulti-point-m\x12multi-linestring-m\x0fmulti-polygon-m\x15geometry-collection-m\x08\
-point-zm\x0dlinestring-zm\x0apolygon-zm\x0emulti-point-zm\x13multi-linestring-zm\
-\x10multi-polygon-zm\x16geometry-collection-zm\x04\0\x0dgeometry-type\x03\0\x06\x01\
-m\x0c\x07integer\x09integer64\x04real\x04text\x06binary\x04date\x04time\x08datet\
-ime\x0cinteger-list\x0einteger64-list\x09real-list\x09text-list\x04\0\x0afield-t\
-ype\x03\0\x08\x01r\x04\x05min-xu\x05max-xu\x05min-yu\x05max-yu\x04\0\x08envelope\
-\x03\0\x0a\x01o\x06uuuuuu\x04\0\x0cgeotransform\x03\0\x0c\x01r\x04\x02c1{\x02c2{\
-\x02c3{\x02c4{\x04\0\x0bcolor-entry\x03\0\x0e\x01m\x0e\x09undefined\x0agray-inde\
-x\x0dpalette-index\x03red\x05green\x04blue\x05alpha\x03hue\x0asaturation\x09ligh\
-tness\x04cyan\x07magenta\x06yellow\x05black\x04\0\x0ccolor-interp\x03\0\x10\x01r\
-\x07\x02ids\x04infos\x05pixelu\x04lineu\x01xu\x01yu\x01zu\x04\0\x03gcp\x03\0\x12\
-\x01m\x07\x07nearest\x08bilinear\x05cubic\x0ccubic-spline\x07lanczos\x07average\x04\
-mode\x04\0\x0fresample-method\x03\0\x14\x01m\x07\x09hillshade\x05slope\x06aspect\
-\x0ccolor-relief\x03tri\x03tpi\x09roughness\x04\0\x08dem-mode\x03\0\x16\x01m\x09\
-\x11nearest-neighbour\x08bilinear\x05cubic\x0ccubic-spline\x07lanczos\x07average\
-\x04mode\x05gauss\x03rms\x04\0\x11rasterio-resample\x03\0\x18\x01r\x04\x05x-offy\
-\x05y-offy\x06x-sizey\x06y-sizey\x04\0\x0draster-window\x03\0\x1a\x01r\x03\x05wi\
-dthy\x06heighty\x09data-type\x03\x04\0\x0bbuffer-spec\x03\0\x1c\x01pw\x01r\x03\x03\
-minu\x03maxu\x07buckets\x1e\x04\0\x09histogram\x03\0\x1f\x01r\x03\x04sizew\x05mt\
-imew\x0cis-directory\x7f\x04\0\x09file-stat\x03\0!\x01ks\x01ps\x01r\x08\x0ashort\
--names\x09long-names\x0ahelp-topic#\x09mime-type#\x0aextensions$\x12creation-dat\
-atypes$\x09is-raster\x7f\x09is-vector\x7f\x04\0\x0bdriver-info\x03\0%\x01m\x03\x07\
-integer\x04real\x04text\x04\0\x0erat-field-type\x03\0'\x01m\x12\x07generic\x0bpi\
-xel-count\x04name\x03min\x03max\x07min-max\x03red\x05green\x04blue\x05alpha\x07r\
-ed-min\x09green-min\x08blue-min\x09alpha-min\x07red-max\x09green-max\x08blue-max\
-\x09alpha-max\x04\0\x0frat-field-usage\x03\0)\x01m\x02\x08thematic\x09athematic\x04\
-\0\x0erat-table-type\x03\0+\x01m\x05\x10inverse-distance\x18inverse-distance-nea\
-rest\x0emoving-average\x10nearest-neighbor\x06linear\x04\0\x0egrid-algorithm\x03\
-\0-\x01ku\x01ky\x01r\x09\x09algorithm.\x05power/\x09smoothing/\x07radius1/\x07ra\
-dius2/\x05angle/\x0amax-points0\x0amin-points0\x07no-data/\x04\0\x0cgrid-options\
-\x03\01\x01k\x7f\x01py\x01k4\x01r\x08\x0aresolution#\x05x-res/\x05y-res/\x08sepa\
-rate3\x09band-list5\x09add-alpha3\x0asrc-nodata/\x0avrt-nodata/\x04\0\x0bvrt-opt\
-ions\x03\06\x01@\x01\x02dt\x03\0s\x04\0\x12get-data-type-name\x018\x01k\x03\x01@\
-\x01\x04names\09\x04\0\x15get-data-type-by-name\x01:\x01@\x01\x02dt\x03\0y\x04\0\
-\x12get-data-type-size\x01;\x04\0\x17get-data-type-size-bits\x01;\x01@\x01\x02dt\
-\x03\0\x7f\x04\0\x14data-type-is-complex\x01<\x04\0\x15data-type-is-floating\x01\
-<\x04\0\x13data-type-is-signed\x01<\x01@\x01\x06interp\x11\0s\x04\0\x15get-color\
--interp-name\x01=\x01k\x11\x01@\x01\x04names\0>\x04\0\x18get-color-interp-by-nam\
-e\x01?\x01@\x01\x09geom-type\x07\0s\x04\0\x16get-geometry-type-name\x01@\x01k\x07\
-\x01@\x01\x04names\0\xc1\0\x04\0\x19get-geometry-type-by-name\x01B\x01@\x01\x09g\
-eom-type\x07\0\x7f\x04\0\x13geometry-type-has-z\x01C\x04\0\x13geometry-type-has-\
-m\x01C\x01@\x01\x09geom-type\x07\0\x07\x04\0\x15geometry-type-flatten\x01D\x01@\x01\
-\x0afield-type\x09\0s\x04\0\x13get-field-type-name\x01E\x01k\x09\x01@\x01\x04nam\
-es\0\xc6\0\x04\0\x16get-field-type-by-name\x01G\x03\0\x15gdal:core/types@0.1.0\x05\
-\x15\x02\x03\0\x06\x0aerror-code\x02\x03\0\x06\x09data-type\x02\x03\0\x06\x0bacc\
-ess-mode\x02\x03\0\x06\x0cgeotransform\x02\x03\0\x06\x0bcolor-entry\x02\x03\0\x06\
-\x0ccolor-interp\x02\x03\0\x06\x03gcp\x02\x03\0\x06\x11rasterio-resample\x02\x03\
-\0\x06\x0draster-window\x02\x03\0\x06\x0bbuffer-spec\x02\x03\0\x06\x09histogram\x02\
-\x03\0\x06\x0erat-field-type\x02\x03\0\x06\x0frat-field-usage\x02\x03\0\x06\x0er\
-at-table-type\x01B\xc6\x02\x02\x03\x02\x01\x16\x04\0\x0aerror-code\x03\0\0\x02\x03\
-\x02\x01\x17\x04\0\x09data-type\x03\0\x02\x02\x03\x02\x01\x18\x04\0\x0baccess-mo\
-de\x03\0\x04\x02\x03\x02\x01\x19\x04\0\x0cgeotransform\x03\0\x06\x02\x03\x02\x01\
-\x1a\x04\0\x0bcolor-entry\x03\0\x08\x02\x03\x02\x01\x1b\x04\0\x0ccolor-interp\x03\
-\0\x0a\x02\x03\x02\x01\x1c\x04\0\x03gcp\x03\0\x0c\x02\x03\x02\x01\x1d\x04\0\x11r\
-asterio-resample\x03\0\x0e\x02\x03\x02\x01\x1e\x04\0\x0draster-window\x03\0\x10\x02\
-\x03\x02\x01\x1f\x04\0\x0bbuffer-spec\x03\0\x12\x02\x03\x02\x01\x20\x04\0\x09his\
-togram\x03\0\x14\x02\x03\x02\x01!\x04\0\x0erat-field-type\x03\0\x16\x02\x03\x02\x01\
-\"\x04\0\x0frat-field-usage\x03\0\x18\x02\x03\x02\x01#\x04\0\x0erat-table-type\x03\
-\0\x1a\x04\0\x07dataset\x03\x01\x04\0\x04band\x03\x01\x04\0\x16raster-attribute-\
-table\x03\x01\x01m\x04\x04gray\x03rgb\x04cmyk\x03hls\x04\0\x0epalette-interp\x03\
-\0\x1f\x04\0\x0bcolor-table\x03\x01\x01n\x08\x08readonly\x06update\x06raster\x06\
-vector\x03gnm\x0fmultidim-raster\x06shared\x0dverbose-error\x04\0\x09open-flag\x03\
-\0\"\x01i\x1c\x01@\x02\x04paths\x04mode\x05\0$\x04\0\x14[constructor]dataset\x01\
-%\x01h\x1c\x01@\x01\x04self&\0y\x04\0\x1d[method]dataset.raster-x-size\x01'\x04\0\
-\x1d[method]dataset.raster-y-size\x01'\x04\0\x1c[method]dataset.raster-count\x01\
-'\x01j\x01\x07\x01\x01\x01@\x01\x04self&\0(\x04\0\x20[method]dataset.get-geotran\
-sform\x01)\x01j\0\x01\x01\x01@\x02\x04self&\x09transform\x07\0*\x04\0\x20[method\
-]dataset.set-geotransform\x01+\x01@\x01\x04self&\0s\x04\0\x1e[method]dataset.get\
--projection\x01,\x01@\x02\x04self&\x03wkts\0*\x04\0\x1e[method]dataset.set-proje\
-ction\x01-\x01i\x1d\x01j\x01.\x01\x01\x01@\x02\x04self&\x0bband-numbery\0/\x04\0\
-\x18[method]dataset.get-band\x010\x01ks\x01@\x03\x04self&\x04names\x06domain1\01\
-\x04\0![method]dataset.get-metadata-item\x012\x01@\x04\x04self&\x04names\x05valu\
-es\x06domain1\0*\x04\0![method]dataset.set-metadata-item\x013\x01@\x01\x04self&\0\
-*\x04\0\x1b[method]dataset.flush-cache\x014\x04\0\x1d[method]dataset.get-gcp-cou\
-nt\x01'\x01p\x0d\x01@\x01\x04self&\05\x04\0\x18[method]dataset.get-gcps\x016\x01\
-@\x03\x04self&\x04gcps5\x0aprojections\0*\x04\0\x18[method]dataset.set-gcps\x017\
-\x04\0\"[method]dataset.get-gcp-projection\x01,\x01py\x01k8\x01@\x04\x04self&\x08\
-resamples\x06levels8\x05bands9\0*\x04\0\x1f[method]dataset.build-overviews\x01:\x01\
-k\x0f\x01p}\x01j\x01<\x01\x01\x01@\x05\x04self&\x06window\x11\x06buffer\x13\x05b\
-ands8\x08resample;\0=\x04\0&[method]dataset.dataset-raster-io-read\x01>\x01@\x05\
-\x04self&\x06window\x11\x06buffer\x13\x05bands8\x04data<\0*\x04\0'[method]datase\
-t.dataset-raster-io-write\x01?\x01@\x02\x04self&\x0amask-flagsy\0*\x04\0([method\
-]dataset.create-dataset-mask-band\x01@\x01ps\x01@\x01\x04self&\0\xc1\0\x04\0\x1d\
-[method]dataset.get-file-list\x01B\x01@\x03\x04self&\x09data-type\x03\x07options\
-\xc1\0\0/\x04\0\x18[method]dataset.add-band\x01C\x04\0\x1f[method]dataset.get-dr\
-iver-name\x01,\x01@\x01\x04self&\01\x04\0\x1f[method]dataset.get-description\x01\
-D\x01@\x02\x04self&\x04descs\0*\x04\0\x1f[method]dataset.set-description\x01E\x01\
-o\x02ss\x01p\xc6\0\x01@\x02\x04self&\x06domain1\0\xc7\0\x04\0\x1c[method]dataset\
-.get-metadata\x01H\x01@\x03\x04self&\x08metadata\xc7\0\x06domain1\0*\x04\0\x1c[m\
-ethod]dataset.set-metadata\x01I\x04\0([method]dataset.get-metadata-domain-list\x01\
-B\x01h\x1d\x01@\x01\x04self\xca\0\0\x03\x04\0\x1a[method]band.get-data-type\x01K\
-\x01@\x01\x04self\xca\0\0y\x04\0\x17[method]band.get-x-size\x01L\x04\0\x17[metho\
-d]band.get-y-size\x01L\x01ku\x01@\x01\x04self\xca\0\0\xcd\0\x04\0\x1e[method]ban\
-d.get-no-data-value\x01N\x01@\x02\x04self\xca\0\x05valueu\0*\x04\0\x1e[method]ba\
-nd.set-no-data-value\x01O\x01@\x02\x04self\xca\0\x05valuex\0*\x04\0'[method]band\
-.set-no-data-value-as-int64\x01P\x01@\x02\x04self\xca\0\x05valuew\0*\x04\0([meth\
-od]band.set-no-data-value-as-uint64\x01Q\x01@\x01\x04self\xca\0\0*\x04\0![method\
-]band.delete-no-data-value\x01R\x01@\x05\x04self\xca\0\x05x-offy\x05y-offy\x06x-\
-sizey\x06y-sizey\0=\x04\0\x17[method]band.read-block\x01S\x01@\x06\x04self\xca\0\
-\x05x-offy\x05y-offy\x06x-sizey\x06y-sizey\x04data<\0*\x04\0\x18[method]band.wri\
-te-block\x01T\x01o\x04uuuu\x01j\x01\xd5\0\x01\x01\x01@\x03\x04self\xca\0\x09appr\
-ox-ok\x7f\x05force\x7f\0\xd6\0\x04\0\x1b[method]band.get-statistics\x01W\x01@\x02\
-\x04self\xca\0\x09approx-ok\x7f\0\xd6\0\x04\0\x1f[method]band.compute-statistics\
-\x01X\x01@\x01\x04self\xca\0\0\x0b\x04\0\x1d[method]band.get-color-interp\x01Y\x01\
-@\x02\x04self\xca\0\x06interp\x0b\0*\x04\0\x1d[method]band.set-color-interp\x01Z\
-\x04\0\"[method]band.get-color-table-count\x01L\x01k\x09\x01@\x02\x04self\xca\0\x05\
-indexy\0\xdb\0\x04\0\x1c[method]band.get-color-entry\x01\\\x01p\x09\x01@\x02\x04\
-self\xca\0\x07entries\xdd\0\0*\x04\0\x1c[method]band.set-color-table\x01^\x01@\x01\
-\x04self\xca\0\01\x04\0\x1a[method]band.get-unit-type\x01_\x01@\x02\x04self\xca\0\
-\x04units\0*\x04\0\x1a[method]band.set-unit-type\x01`\x04\0\x16[method]band.get-\
-scale\x01N\x01@\x02\x04self\xca\0\x05scaleu\0*\x04\0\x16[method]band.set-scale\x01\
-a\x04\0\x17[method]band.get-offset\x01N\x01@\x02\x04self\xca\0\x06offsetu\0*\x04\
-\0\x17[method]band.set-offset\x01b\x04\0\x1f[method]band.get-overview-count\x01L\
-\x01@\x02\x04self\xca\0\x05indexy\0/\x04\0\x19[method]band.get-overview\x01c\x01\
-@\x02\x04self\xca\0\x0fdesired-samplesy\0/\x04\0\x20[method]band.get-sample-over\
-view\x01d\x01@\x04\x04self\xca\0\x06window\x11\x06buffer\x13\x08resample;\0=\x04\
-\0\x1b[method]band.raster-io-read\x01e\x01@\x04\x04self\xca\0\x06window\x11\x06b\
-uffer\x13\x04data<\0*\x04\0\x1c[method]band.raster-io-write\x01f\x01pw\x01j\x01\xe7\
-\0\x01\x01\x01@\x06\x04self\xca\0\x03minu\x03maxu\x07bucketsy\x14include-out-of-\
-range\x7f\x09approx-ok\x7f\0\xe8\0\x04\0\x1a[method]band.get-histogram\x01i\x01j\
-\x01\x15\x01\x01\x01@\x02\x04self\xca\0\x05force\x7f\0\xea\0\x04\0\"[method]band\
-.get-default-histogram\x01k\x01@\x02\x04self\xca\0\x04hist\x15\0*\x04\0\"[method\
-]band.set-default-histogram\x01l\x01@\x01\x04self\xca\0\0/\x04\0\x1a[method]band\
-.get-mask-band\x01m\x04\0\x1b[method]band.get-mask-flags\x01L\x01@\x02\x04self\xca\
-\0\x0amask-flagsy\0*\x04\0\x1d[method]band.create-mask-band\x01n\x01o\x02yy\x01@\
-\x01\x04self\xca\0\0\xef\0\x04\0\x1b[method]band.get-block-size\x01p\x01j\x01\xef\
-\0\x01\x01\x01@\x03\x04self\xca\0\x07x-blocky\x07y-blocky\0\xf1\0\x04\0\"[method\
-]band.get-actual-block-size\x01r\x01@\x03\x04self\xca\0\x07x-blocky\x07y-blocky\0\
-=\x04\0\x1e[method]band.read-native-block\x01s\x01@\x04\x04self\xca\0\x07x-block\
-y\x07y-blocky\x04data<\0*\x04\0\x1f[method]band.write-native-block\x01t\x01@\x08\
-\x04self\xca\0\x05x-offy\x05y-offy\x06x-sizey\x06y-sizey\x0abuf-x-sizey\x0abuf-y\
--sizey\x09data-type\x03\0*\x04\0\x18[method]band.advise-read\x01u\x01k\xc1\0\x01\
-@\x01\x04self\xca\0\0\xf6\0\x04\0\x1f[method]band.get-category-names\x01w\x01@\x02\
-\x04self\xca\0\x05names\xc1\0\0*\x04\0\x1f[method]band.set-category-names\x01x\x04\
-\0\x1d[method]band.flush-band-cache\x01R\x04\0\x18[method]band.get-minimum\x01N\x04\
-\0\x18[method]band.get-maximum\x01N\x01@\x01\x04self\xca\0\0\x7f\x04\0$[method]b\
-and.has-arbitrary-overviews\x01y\x01@\x02\x04self\xca\0\x06domain1\0\xc7\0\x04\0\
-\x1e[method]band.get-band-metadata\x01z\x01@\x03\x04self\xca\0\x08metadata\xc7\0\
-\x06domain1\0*\x04\0\x1e[method]band.set-band-metadata\x01{\x01@\x03\x04self\xca\
-\0\x04names\x06domain1\01\x04\0#[method]band.get-band-metadata-item\x01|\x01@\x04\
-\x04self\xca\0\x04names\x05values\x06domain1\0*\x04\0#[method]band.set-band-meta\
-data-item\x01}\x04\0\x1c[method]band.get-description\x01_\x01@\x02\x04self\xca\0\
-\x04descs\0*\x04\0\x1c[method]band.set-description\x01~\x01i\x1e\x01k\xff\0\x01@\
-\x01\x04self\xca\0\0\x80\x01\x04\0\x1c[method]band.get-default-rat\x01\x81\x01\x01\
-h\x1e\x01@\x02\x04self\xca\0\x03rat\x82\x01\0*\x04\0\x1c[method]band.set-default\
--rat\x01\x83\x01\x01@\x01\x04self\xca\0\0\xc1\0\x04\0%[method]band.get-metadata-\
-domain-list\x01\x84\x01\x01@\0\0\xff\0\x04\0#[constructor]raster-attribute-table\
-\x01\x85\x01\x01@\x01\x04self\x82\x01\0y\x04\0/[method]raster-attribute-table.ge\
-t-column-count\x01\x86\x01\x04\0,[method]raster-attribute-table.get-row-count\x01\
-\x86\x01\x01@\x04\x04self\x82\x01\x04names\x0afield-type\x17\x05usage\x19\0*\x04\
-\0,[method]raster-attribute-table.create-column\x01\x87\x01\x01@\x02\x04self\x82\
-\x01\x03coly\01\x04\0.[method]raster-attribute-table.get-column-name\x01\x88\x01\
-\x01k\x17\x01@\x02\x04self\x82\x01\x03coly\0\x89\x01\x04\0.[method]raster-attrib\
-ute-table.get-column-type\x01\x8a\x01\x01k\x19\x01@\x02\x04self\x82\x01\x03coly\0\
-\x8b\x01\x04\0/[method]raster-attribute-table.get-column-usage\x01\x8c\x01\x01ky\
-\x01@\x02\x04self\x82\x01\x05usage\x19\0\x8d\x01\x04\02[method]raster-attribute-\
-table.get-column-of-usage\x01\x8e\x01\x01@\x02\x04self\x82\x01\x05county\0*\x04\0\
-,[method]raster-attribute-table.set-row-count\x01\x8f\x01\x01@\x03\x04self\x82\x01\
-\x03rowy\x03coly\01\x04\02[method]raster-attribute-table.get-value-as-string\x01\
-\x90\x01\x01kz\x01@\x03\x04self\x82\x01\x03rowy\x03coly\0\x91\x01\x04\0/[method]\
-raster-attribute-table.get-value-as-int\x01\x92\x01\x01@\x03\x04self\x82\x01\x03\
-rowy\x03coly\0\xcd\0\x04\02[method]raster-attribute-table.get-value-as-double\x01\
-\x93\x01\x01@\x04\x04self\x82\x01\x03rowy\x03coly\x05values\0*\x04\02[method]ras\
-ter-attribute-table.set-value-as-string\x01\x94\x01\x01@\x04\x04self\x82\x01\x03\
-rowy\x03coly\x05valuez\0*\x04\0/[method]raster-attribute-table.set-value-as-int\x01\
-\x95\x01\x01@\x04\x04self\x82\x01\x03rowy\x03coly\x05valueu\0*\x04\02[method]ras\
-ter-attribute-table.set-value-as-double\x01\x96\x01\x01o\x02uu\x01k\x97\x01\x01@\
-\x01\x04self\x82\x01\0\x98\x01\x04\01[method]raster-attribute-table.get-linear-b\
-inning\x01\x99\x01\x01@\x03\x04self\x82\x01\x08row0-minu\x08bin-sizeu\0*\x04\01[\
-method]raster-attribute-table.set-linear-binning\x01\x9a\x01\x01@\x01\x04self\x82\
-\x01\0\x1b\x04\0-[method]raster-attribute-table.get-table-type\x01\x9b\x01\x01@\x02\
-\x04self\x82\x01\x0atable-type\x1b\0*\x04\0-[method]raster-attribute-table.set-t\
-able-type\x01\x9c\x01\x01@\x02\x04self\x82\x01\x05valueu\0\x8d\x01\x04\0/[method\
-]raster-attribute-table.get-row-of-value\x01\x9d\x01\x01@\x01\x04self\x82\x01\0\xff\
-\0\x04\0([method]raster-attribute-table.clone-rat\x01\x9e\x01\x01pz\x01j\x01\x9f\
-\x01\x01\x01\x01@\x04\x04self\x82\x01\x0bfield-indexy\x09start-rowy\x05county\0\xa0\
-\x01\x04\03[method]raster-attribute-table.values-io-as-integer\x01\xa1\x01\x01@\x04\
-\x04self\x82\x01\x0bfield-indexy\x09start-rowy\x06values\x9f\x01\0*\x04\04[metho\
-d]raster-attribute-table.set-values-as-integer\x01\xa2\x01\x01pu\x01j\x01\xa3\x01\
-\x01\x01\x01@\x04\x04self\x82\x01\x0bfield-indexy\x09start-rowy\x05county\0\xa4\x01\
-\x04\02[method]raster-attribute-table.values-io-as-double\x01\xa5\x01\x01@\x04\x04\
-self\x82\x01\x0bfield-indexy\x09start-rowy\x06values\xa3\x01\0*\x04\03[method]ra\
-ster-attribute-table.set-values-as-double\x01\xa6\x01\x01j\x01\xc1\0\x01\x01\x01\
-@\x04\x04self\x82\x01\x0bfield-indexy\x09start-rowy\x05county\0\xa7\x01\x04\02[m\
-ethod]raster-attribute-table.values-io-as-string\x01\xa8\x01\x01@\x04\x04self\x82\
-\x01\x0bfield-indexy\x09start-rowy\x06values\xc1\0\0*\x04\04[method]raster-attri\
-bute-table.set-values-as-strings\x01\xa9\x01\x01j\x01\xdd\0\x01\x01\x01@\x01\x04\
-self\x82\x01\0\xaa\x01\x04\0-[method]raster-attribute-table.to-color-table\x01\xab\
-\x01\x01j\x01s\x01\x01\x01@\x01\x04self\x82\x01\0\xac\x01\x04\0&[method]raster-a\
-ttribute-table.to-json\x01\xad\x01\x01i!\x01@\x01\x06interp\x20\0\xae\x01\x04\0\x18\
-[constructor]color-table\x01\xaf\x01\x01h!\x01@\x01\x04self\xb0\x01\0\x20\x04\0.\
-[method]color-table.get-palette-interpretation\x01\xb1\x01\x01@\x01\x04self\xb0\x01\
-\0y\x04\0)[method]color-table.get-color-entry-count\x01\xb2\x01\x01@\x02\x04self\
-\xb0\x01\x05indexy\0\xdb\0\x04\0#[method]color-table.get-color-entry\x01\xb3\x01\
-\x04\0*[method]color-table.get-color-entry-as-rgb\x01\xb3\x01\x01@\x03\x04self\xb0\
-\x01\x05indexy\x05entry\x09\x01\0\x04\0#[method]color-table.set-color-entry\x01\xb4\
-\x01\x01@\x05\x04self\xb0\x01\x0bstart-indexy\x0bstart-color\x09\x09end-indexy\x09\
-end-color\x09\x01\0\x04\0%[method]color-table.create-color-ramp\x01\xb5\x01\x01@\
-\x01\x04self\xb0\x01\0\xae\x01\x04\0\x19[method]color-table.clone\x01\xb6\x01\x01\
-@\x01\x04self\xb0\x01\0\xdd\0\x04\0#[method]color-table.get-all-entries\x01\xb7\x01\
-\x01@\x03\x04self\xb0\x01\x0bstart-indexy\x07entries\xdd\0\x01\0\x04\0\x1f[metho\
-d]color-table.set-entries\x01\xb8\x01\x01j\x01$\x01\x01\x01@\x07\x0bdriver-names\
-\x04paths\x06x-sizey\x06y-sizey\x05bandsy\x09data-type\x03\x07options\xc1\0\0\xb9\
-\x01\x04\0\x06create\x01\xba\x01\x01@\x02\x04paths\x04mode\x05\0\xb9\x01\x04\0\x04\
-open\x01\xbb\x01\x01@\x02\x04paths\x09read-only\x7f\0\xb9\x01\x04\0\x0bopen-shar\
-ed\x01\xbc\x01\x01@\0\0\xc1\0\x04\0\x10get-driver-names\x01\xbd\x01\x01@\x05\x0b\
-driver-names\x08dst-paths\x03src&\x06strict\x7f\x07options\xc1\0\0\xb9\x01\x04\0\
-\x0bcreate-copy\x01\xbe\x01\x01@\x02\x0bdriver-names\x04paths\0*\x04\0\x0edelete\
--dataset\x01\xbf\x01\x01@\x03\x0bdriver-names\x08new-names\x08old-names\0*\x04\0\
-\x0erename-dataset\x01\xc0\x01\x04\0\x12copy-dataset-files\x01\xc0\x01\x01@\x01\x04\
-paths\01\x04\0\x0fidentify-driver\x01\xc1\x01\x01@\x05\x04paths\x0aopen-flagsy\x0f\
-allowed-drivers\xf6\0\x0copen-options\xf6\0\x0dsibling-files\xf6\0\0\xb9\x01\x04\
-\0\x07open-ex\x01\xc2\x01\x03\0\x16gdal:core/raster@0.1.0\x05$\x02\x03\0\x07\x07\
-dataset\x01B\xb1\x01\x02\x03\x02\x01\x16\x04\0\x0aerror-code\x03\0\0\x02\x03\x02\
-\x01\x1c\x04\0\x03gcp\x03\0\x02\x02\x03\x02\x01%\x04\0\x07dataset\x03\0\x04\x04\0\
-\x0bspatial-ref\x03\x01\x01m\x07\x05other\x04east\x04west\x05north\x05south\x02u\
-p\x04down\x04\0\x10axis-orientation\x03\0\x07\x01m\x02\x15traditional-gis-order\x13\
-authority-compliant\x04\0\x15axis-mapping-strategy\x03\0\x09\x01o\x04uuuu\x01k\x0b\
-\x01ks\x01k\x7f\x01r\x03\x10area-of-interest\x0c\x14coordinate-operation\x0d\x0e\
-allow-ballpark\x0e\x04\0\x11transform-options\x03\0\x0f\x04\0\x09transform\x03\x01\
-\x04\0\x18gen-img-proj-transformer\x03\x01\x04\0\x0ftps-transformer\x03\x01\x01i\
-\x06\x01j\x01\x14\x01\x01\x01@\x01\x04codey\0\x15\x04\0\x1d[static]spatial-ref.f\
-rom-epsg\x01\x16\x01@\x01\x03wkts\0\x15\x04\0\x1c[static]spatial-ref.from-wkt\x01\
-\x17\x01@\x01\x04projs\0\x15\x04\0\x1d[static]spatial-ref.from-proj\x01\x18\x04\0\
-\x1d[static]spatial-ref.from-esri\x01\x17\x01h\x06\x01j\x01s\x01\x01\x01@\x01\x04\
-self\x19\0\x1a\x04\0\x1a[method]spatial-ref.to-wkt\x01\x1b\x04\0![method]spatial\
--ref.to-pretty-wkt\x01\x1b\x04\0\x1b[method]spatial-ref.to-proj\x01\x1b\x01@\x01\
-\x04self\x19\0\x7f\x04\0![method]spatial-ref.is-geographic\x01\x1c\x04\0\x20[met\
-hod]spatial-ref.is-projected\x01\x1c\x04\0\x1f[method]spatial-ref.is-compound\x01\
-\x1c\x04\0![method]spatial-ref.is-geocentric\x01\x1c\x04\0\x1c[method]spatial-re\
-f.is-local\x01\x1c\x04\0\x1f[method]spatial-ref.is-vertical\x01\x1c\x04\0)[metho\
-d]spatial-ref.is-derived-geographic\x01\x1c\x01o\x02sy\x01k\x1d\x01@\x01\x04self\
-\x19\0\x1e\x04\0![method]spatial-ref.get-authority\x01\x1f\x01@\x02\x04self\x19\x05\
-other\x19\0\x7f\x04\0\x1b[method]spatial-ref.is-same\x01\x20\x04\0#[method]spati\
-al-ref.is-same-geog-cs\x01\x20\x01o\x02su\x01@\x01\x04self\x19\0!\x04\0$[method]\
-spatial-ref.get-linear-units\x01\"\x04\0%[method]spatial-ref.get-angular-units\x01\
-\"\x01@\x01\x04self\x19\0u\x04\0\"[method]spatial-ref.get-semi-major\x01#\x04\0\"\
-[method]spatial-ref.get-semi-minor\x01#\x04\0&[method]spatial-ref.get-inv-flatte\
-ning\x01#\x01@\x02\x04self\x19\x08strategyy\x01\0\x04\0-[method]spatial-ref.set-\
-axis-mapping-strategy\x01$\x01o\x02y\x7f\x01k%\x01@\x01\x04self\x19\0&\x04\0\x20\
-[method]spatial-ref.get-utm-zone\x01'\x01j\0\x01\x01\x01@\x03\x04self\x19\x04zon\
-ey\x05north\x7f\0(\x04\0\x1b[method]spatial-ref.set-utm\x01)\x01@\x02\x04self\x19\
-\x04names\0(\x04\0*[method]spatial-ref.set-well-known-geog-cs\x01*\x01@\x01\x04s\
-elf\x19\0(\x04\0\x1c[method]spatial-ref.validate\x01+\x04\0\x19[method]spatial-r\
-ef.fixup\x01+\x04\0![method]spatial-ref.morph-to-esri\x01+\x04\0#[method]spatial\
--ref.morph-from-esri\x01+\x04\0&[method]spatial-ref.get-prime-meridian\x01\"\x01\
-@\x01\x04self\x19\0\x14\x04\0\x1d[method]spatial-ref.clone-srs\x01,\x01@\x01\x05\
-inputs\0\x15\x04\0#[static]spatial-ref.from-user-input\x01-\x04\0\x20[method]spa\
-tial-ref.to-proj-json\x01\x1b\x04\0\x1a[method]spatial-ref.to-xml\x01\x1b\x04\0\"\
-[method]spatial-ref.strip-vertical\x01+\x01@\x08\x04self\x19\x02dxu\x02dyu\x02dz\
-u\x02rxu\x02ryu\x02rzu\x05scaleu\0(\x04\0\x1f[method]spatial-ref.set-towgs84\x01\
-.\x01pu\x01j\x01/\x01\x01\x01@\x01\x04self\x19\00\x04\0\x1f[method]spatial-ref.g\
-et-towgs84\x011\x01@\x03\x04self\x19\x04zoney\x05nad83\x7f\0(\x04\0#[method]spat\
-ial-ref.set-state-plane\x012\x01@\x06\x04self\x19\x0acenter-latu\x0acenter-lonu\x05\
-scaleu\x0dfalse-eastingu\x0efalse-northingu\0(\x04\0\x1a[method]spatial-ref.set-\
-tm\x013\x01@\x07\x04self\x19\x0dstd-parallel1u\x0dstd-parallel2u\x0acenter-latu\x0a\
-center-lonu\x0dfalse-eastingu\x0efalse-northingu\0(\x04\0\x1b[method]spatial-ref\
-.set-lcc\x014\x04\0\x1e[method]spatial-ref.set-lcc1sp\x013\x04\0\x20[method]spat\
-ial-ref.set-mercator\x013\x01@\x06\x04self\x19\x0dstd-parallel1u\x0acenter-latu\x0a\
-center-lonu\x0dfalse-eastingu\x0efalse-northingu\0(\x04\0#[method]spatial-ref.se\
-t-mercator2sp\x015\x04\0\x1c[method]spatial-ref.set-acea\x014\x01@\x05\x04self\x19\
-\x0acenter-latu\x0acenter-lonu\x0dfalse-eastingu\x0efalse-northingu\0(\x04\0\x1a\
-[method]spatial-ref.set-ae\x016\x04\0\x1c[method]spatial-ref.set-laea\x016\x04\0\
-\x1a[method]spatial-ref.set-ps\x013\x04\0%[method]spatial-ref.set-stereographic\x01\
-3\x04\0$[method]spatial-ref.set-orthographic\x016\x04\0\x20[method]spatial-ref.s\
-et-gnomonic\x016\x04\0'[method]spatial-ref.set-equirectangular\x016\x01@\x04\x04\
-self\x19\x0acenter-lonu\x0dfalse-eastingu\x0efalse-northingu\0(\x04\0\"[method]s\
-patial-ref.set-sinusoidal\x017\x04\0![method]spatial-ref.set-mollweide\x017\x04\0\
-\x20[method]spatial-ref.set-robinson\x017\x01@\x05\x04self\x19\x0acenter-lonu\x10\
-satellite-heightu\x0dfalse-eastingu\x0efalse-northingu\0(\x04\0\x1c[method]spati\
-al-ref.set-geos\x018\x01@\x03\x04self\x19\x04names\x0bdefault-valu\0u\x04\0![met\
-hod]spatial-ref.get-proj-parm\x019\x01@\x03\x04self\x19\x04names\x05valueu\0(\x04\
-\0![method]spatial-ref.set-proj-parm\x01:\x04\0&[method]spatial-ref.auto-identif\
-y-epsg\x01+\x01p\x1d\x01j\x01;\x01\x01\x01@\x01\x04self\x19\0<\x04\0\x20[method]\
-spatial-ref.find-matches\x01=\x01o\x02s\x08\x01j\x01>\x01\x01\x01@\x03\x04self\x19\
-\x0atarget-keys\x0aaxis-indexy\0?\x04\0\x1c[method]spatial-ref.get-axis\x01@\x01\
-@\x02\x04self\x19\x0atarget-keys\0y\x04\0\"[method]spatial-ref.get-axes-count\x01\
-A\x01@\x01\x04self\x19\0\x0a\x04\0-[method]spatial-ref.get-axis-mapping-strategy\
-\x01B\x01pz\x01@\x01\x04self\x19\0\xc3\0\x04\05[method]spatial-ref.get-data-axis\
--to-crs-axis-mapping\x01D\x01@\x02\x04self\x19\x07mapping\xc3\0\0(\x04\05[method\
-]spatial-ref.set-data-axis-to-crs-axis-mapping\x01E\x01i\x11\x01@\x02\x06source\x19\
-\x06target\x19\0\xc6\0\x04\0\x16[constructor]transform\x01G\x01j\x01\xc6\0\x01\x01\
-\x01@\x03\x06source\x19\x06target\x19\x07options\x10\0\xc8\0\x04\0\x1b[static]tr\
-ansform.create-ex\x01I\x01h\x11\x01o\x03uuu\x01j\x01\xcb\0\x01\x01\x01@\x04\x04s\
-elf\xca\0\x01xu\x01yu\x01zu\0\xcc\0\x04\0![method]transform.transform-point\x01M\
-\x01p\xcb\0\x01j\x01\xce\0\x01\x01\x01@\x02\x04self\xca\0\x06coords\xce\0\0\xcf\0\
-\x04\0\"[method]transform.transform-points\x01P\x01k/\x01p\x7f\x01o\x04//\xd1\0\xd2\
-\0\x01j\x01\xd3\0\x01\x01\x01@\x05\x04self\xca\0\x01x/\x01y/\x01z\xd1\0\x01t\xd1\
-\0\0\xd4\0\x04\0%[method]transform.transform-points-ex\x01U\x01@\x01\x04self\xca\
-\0\0\xc8\0\x04\0\x1d[method]transform.get-inverse\x01V\x01h\x05\x01k\xd7\0\x01i\x12\
-\x01j\x01\xd9\0\x01\x01\x01@\x07\x0bsrc-dataset\xd8\0\x07src-wkt\x0d\x0bdst-data\
-set\xd8\0\x07dst-wkt\x0d\x0agcp-use-ok\x7f\x13gcp-error-thresholdu\x05ordery\0\xda\
-\0\x04\0'[static]gen-img-proj-transformer.create\x01[\x01p\x03\x01@\x03\x04gcps\xdc\
-\0\x05ordery\x08reversed\x7f\0\xda\0\x04\01[static]gen-img-proj-transformer.crea\
-te-from-gcps\x01]\x01h\x12\x01@\x03\x04self\xde\0\x0adst-to-src\x7f\x06points\xce\
-\0\0\xcf\0\x04\0*[method]gen-img-proj-transformer.transform\x01_\x01i\x13\x01j\x01\
-\xe0\0\x01\x01\x01@\x02\x04gcps\xdc\0\x08reversed\x7f\0\xe1\0\x04\0\x1e[static]t\
-ps-transformer.create\x01b\x01h\x13\x01@\x03\x04self\xe3\0\x0adst-to-src\x7f\x06\
-points\xce\0\0\xcf\0\x04\0![method]tps-transformer.transform\x01d\x03\0\x13gdal:\
-core/srs@0.1.0\x05&\x02\x03\0\0\x0aloadresult\x01B\x0d\x02\x03\x02\x01\x02\x04\0\
-\x09duckerror\x03\0\0\x02\x03\x02\x01'\x04\0\x0aloadresult\x03\0\x02\x01j\x01\x03\
-\x01\x01\x01@\0\0\x04\x04\0\x04load\x01\x05\x01ps\x01j\x01\x7f\x01\x01\x01@\x01\x04\
-keys\x06\0\x07\x04\0\x0breconfigure\x01\x08\x01@\0\0\x07\x04\0\x08shutdown\x01\x09\
-\x04\0\x16duckdb:extension/guest\x05(\x01B\x1c\x02\x03\x02\x01\x02\x04\0\x09duck\
-error\x03\0\0\x02\x03\x02\x01\x03\x04\0\x09duckvalue\x03\0\x02\x02\x03\x02\x01\x07\
-\x04\0\x0ainvokeinfo\x03\0\x04\x02\x03\x02\x01\x09\x04\0\x09resultset\x03\0\x06\x02\
-\x03\x02\x01\x0a\x04\0\x08rowbatch\x03\0\x08\x01p\x03\x01j\x01\x03\x01\x01\x01@\x03\
-\x06handley\x04args\x0a\x03ctx\x05\0\x0b\x04\0\x0bcall-scalar\x01\x0c\x01j\x01\x0a\
-\x01\x01\x01@\x03\x06handley\x04rows\x09\x03ctx\x05\0\x0d\x04\0\x11call-scalar-b\
-atch\x01\x0e\x01j\x01\x07\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x0f\x04\0\x0a\
-call-table\x01\x10\x01@\x02\x06handley\x04rows\x09\0\x0b\x04\0\x0ecall-aggregate\
-\x01\x11\x01k\x03\x01j\x01\x12\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x13\x04\
-\0\x0bcall-pragma\x01\x14\x01@\x02\x06handley\x05value\x03\0\x0b\x04\0\x09call-c\
-ast\x01\x15\x04\0\"duckdb:extension/callback-dispatch\x05)\x04\0\x1cduckdb:exten\
-sion/spatialproj\x04\0\x0b\x11\x01\0\x0bspatialproj\x03\0\0\0G\x09producers\x01\x0c\
-processed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
+st-capabilities\x01T\x03\0\x1educkdb:extension/runtime@2.0.0\x05\x0c\x02\x03\0\0\
+\x0bconfigerror\x01B$\x02\x03\x02\x01\x0d\x04\0\x0bconfigerror\x03\0\0\x01@\0\0s\
+\x04\0\x10provider-version\x01\x02\x01ks\x01ps\x01@\x01\x06prefix\x03\0\x04\x04\0\
+\x09list-keys\x01\x05\x01j\x01\x03\x01\x01\x01@\x01\x04paths\0\x06\x04\0\x0aget-\
+string\x01\x07\x01k\x7f\x01j\x01\x08\x01\x01\x01@\x01\x04paths\0\x09\x04\0\x08ge\
+t-bool\x01\x0a\x01kx\x01j\x01\x0b\x01\x01\x01@\x01\x04paths\0\x0c\x04\0\x07get-i\
+64\x01\x0d\x01kw\x01j\x01\x0e\x01\x01\x01@\x01\x04paths\0\x0f\x04\0\x07get-u64\x01\
+\x10\x01ku\x01j\x01\x11\x01\x01\x01@\x01\x04paths\0\x12\x04\0\x07get-f64\x01\x13\
+\x01p}\x01k\x14\x01j\x01\x15\x01\x01\x01@\x01\x04paths\0\x16\x04\0\x09get-bytes\x01\
+\x17\x01k\x04\x01j\x01\x18\x01\x01\x01@\x01\x04paths\0\x19\x04\0\x0fget-string-l\
+ist\x01\x1a\x03\0\x1dduckdb:extension/config@2.0.0\x05\x0e\x02\x03\0\0\x08logfie\
+ld\x02\x03\0\0\x08loglevel\x01B\x0a\x02\x03\x02\x01\x0f\x04\0\x08logfield\x03\0\0\
+\x02\x03\x02\x01\x10\x04\0\x08loglevel\x03\0\x02\x01ks\x01@\x03\x05level\x03\x07\
+messages\x06target\x04\x01\0\x04\0\x03log\x01\x05\x01p\x01\x01@\x03\x05level\x03\
+\x07messages\x06fields\x06\x01\0\x04\0\x0alog-fields\x01\x07\x03\0\x1educkdb:ext\
+ension/logging@2.0.0\x05\x11\x02\x03\0\x01\x0dcast-callback\x01B\x16\x02\x03\x02\
+\x01\x12\x04\0\x0dcast-callback\x03\0\0\x01r\x02\x04names\x08physicals\x04\0\x0c\
+logical-type\x03\0\x02\x01y\x04\0\x13logical-type-handle\x03\0\x04\x01m\x03\x08i\
+mplicit\x0aassignment\x08explicit\x04\0\x09cast-kind\x03\0\x06\x01r\x03\x04froms\
+\x02tos\x04kind\x07\x04\0\x09cast-spec\x03\0\x08\x01ps\x01r\x04\x06schemas\x04na\
+mes\x0aparameters\x0a\x0edefinition-sqls\x04\0\x09macro-def\x03\0\x0b\x01j\x01\x05\
+\x01s\x01@\x01\x02ty\x03\0\x0d\x04\0\x15register-logical-type\x01\x0e\x01i\x01\x01\
+j\0\x01s\x01@\x02\x04spec\x09\x08callback\x0f\0\x10\x04\0\x0dregister-cast\x01\x11\
+\x01@\x01\x03def\x0c\0\x10\x04\0\x0eregister-macro\x01\x12\x03\0\x1educkdb:exten\
+sion/catalog@2.0.0\x05\x13\x01B\x15\x01y\x04\0\x15table-function-handle\x03\0\0\x01\
+y\x04\0\x14copy-function-handle\x03\0\x02\x01y\x04\0\x13replacement-scan-id\x03\0\
+\x04\x01y\x04\0\x0fcopy-handler-id\x03\0\x06\x01m\x02\x0eextension-only\x09signa\
+ture\x04\0\x0edetection-mode\x03\0\x08\x01ps\x01r\x03\x0aextensions\x0a\x0etable\
+-function\x01\x04mode\x09\x04\0\x10replacement-scan\x03\0\x0b\x01r\x02\x09extens\
+ions\x08function\x03\x04\0\x0ccopy-handler\x03\0\x0d\x01j\x01\x05\x01s\x01@\x01\x04\
+scan\x0c\0\x0f\x04\0\x19register-replacement-scan\x01\x10\x01j\x01\x07\x01s\x01@\
+\x01\x07handler\x0e\0\x11\x04\0\x15register-copy-handler\x01\x12\x03\0\x1cduckdb\
+:extension/files@2.0.0\x05\x14\x01BX\x01m\x0b\x04none\x0bapp-defined\x0dout-of-m\
+emory\x07file-io\x0bopen-failed\x0billegal-arg\x0dnot-supported\x10assertion-fai\
+led\x0fno-write-access\x15unsupported-operation\x0bobject-null\x04\0\x0aerror-co\
+de\x03\0\0\x01m\x0e\x07unknown\x04byte\x05int16\x05int32\x05int64\x06uint16\x06u\
+int32\x06uint64\x07float32\x07float64\x0dcomplex-int16\x0dcomplex-int32\x0fcompl\
+ex-float32\x0fcomplex-float64\x04\0\x09data-type\x03\0\x02\x01m\x02\x09read-only\
+\x0aread-write\x04\0\x0baccess-mode\x03\0\x04\x01m\x1f\x07unknown\x05point\x0ali\
+nestring\x07polygon\x0bmulti-point\x10multi-linestring\x0dmulti-polygon\x13geome\
+try-collection\x04none\x0blinear-ring\x07point-z\x0clinestring-z\x09polygon-z\x0d\
+multi-point-z\x12multi-linestring-z\x0fmulti-polygon-z\x15geometry-collection-z\x07\
+point-m\x0clinestring-m\x09polygon-m\x0dmulti-point-m\x12multi-linestring-m\x0fm\
+ulti-polygon-m\x15geometry-collection-m\x08point-zm\x0dlinestring-zm\x0apolygon-\
+zm\x0emulti-point-zm\x13multi-linestring-zm\x10multi-polygon-zm\x16geometry-coll\
+ection-zm\x04\0\x0dgeometry-type\x03\0\x06\x01m\x0c\x07integer\x09integer64\x04r\
+eal\x04text\x06binary\x04date\x04time\x08datetime\x0cinteger-list\x0einteger64-l\
+ist\x09real-list\x09text-list\x04\0\x0afield-type\x03\0\x08\x01r\x04\x05min-xu\x05\
+max-xu\x05min-yu\x05max-yu\x04\0\x08envelope\x03\0\x0a\x01o\x06uuuuuu\x04\0\x0cg\
+eotransform\x03\0\x0c\x01r\x04\x02c1{\x02c2{\x02c3{\x02c4{\x04\0\x0bcolor-entry\x03\
+\0\x0e\x01m\x0e\x09undefined\x0agray-index\x0dpalette-index\x03red\x05green\x04b\
+lue\x05alpha\x03hue\x0asaturation\x09lightness\x04cyan\x07magenta\x06yellow\x05b\
+lack\x04\0\x0ccolor-interp\x03\0\x10\x01r\x07\x02ids\x04infos\x05pixelu\x04lineu\
+\x01xu\x01yu\x01zu\x04\0\x03gcp\x03\0\x12\x01m\x07\x07nearest\x08bilinear\x05cub\
+ic\x0ccubic-spline\x07lanczos\x07average\x04mode\x04\0\x0fresample-method\x03\0\x14\
+\x01m\x07\x09hillshade\x05slope\x06aspect\x0ccolor-relief\x03tri\x03tpi\x09rough\
+ness\x04\0\x08dem-mode\x03\0\x16\x01m\x09\x11nearest-neighbour\x08bilinear\x05cu\
+bic\x0ccubic-spline\x07lanczos\x07average\x04mode\x05gauss\x03rms\x04\0\x11raste\
+rio-resample\x03\0\x18\x01r\x04\x05x-offy\x05y-offy\x06x-sizey\x06y-sizey\x04\0\x0d\
+raster-window\x03\0\x1a\x01r\x03\x05widthy\x06heighty\x09data-type\x03\x04\0\x0b\
+buffer-spec\x03\0\x1c\x01pw\x01r\x03\x03minu\x03maxu\x07buckets\x1e\x04\0\x09his\
+togram\x03\0\x1f\x01r\x03\x04sizew\x05mtimew\x0cis-directory\x7f\x04\0\x09file-s\
+tat\x03\0!\x01ks\x01ps\x01r\x08\x0ashort-names\x09long-names\x0ahelp-topic#\x09m\
+ime-type#\x0aextensions$\x12creation-datatypes$\x09is-raster\x7f\x09is-vector\x7f\
+\x04\0\x0bdriver-info\x03\0%\x01m\x03\x07integer\x04real\x04text\x04\0\x0erat-fi\
+eld-type\x03\0'\x01m\x12\x07generic\x0bpixel-count\x04name\x03min\x03max\x07min-\
+max\x03red\x05green\x04blue\x05alpha\x07red-min\x09green-min\x08blue-min\x09alph\
+a-min\x07red-max\x09green-max\x08blue-max\x09alpha-max\x04\0\x0frat-field-usage\x03\
+\0)\x01m\x02\x08thematic\x09athematic\x04\0\x0erat-table-type\x03\0+\x01m\x05\x10\
+inverse-distance\x18inverse-distance-nearest\x0emoving-average\x10nearest-neighb\
+or\x06linear\x04\0\x0egrid-algorithm\x03\0-\x01ku\x01ky\x01r\x09\x09algorithm.\x05\
+power/\x09smoothing/\x07radius1/\x07radius2/\x05angle/\x0amax-points0\x0amin-poi\
+nts0\x07no-data/\x04\0\x0cgrid-options\x03\01\x01k\x7f\x01py\x01k4\x01r\x08\x0ar\
+esolution#\x05x-res/\x05y-res/\x08separate3\x09band-list5\x09add-alpha3\x0asrc-n\
+odata/\x0avrt-nodata/\x04\0\x0bvrt-options\x03\06\x01@\x01\x02dt\x03\0s\x04\0\x12\
+get-data-type-name\x018\x01k\x03\x01@\x01\x04names\09\x04\0\x15get-data-type-by-\
+name\x01:\x01@\x01\x02dt\x03\0y\x04\0\x12get-data-type-size\x01;\x04\0\x17get-da\
+ta-type-size-bits\x01;\x01@\x01\x02dt\x03\0\x7f\x04\0\x14data-type-is-complex\x01\
+<\x04\0\x15data-type-is-floating\x01<\x04\0\x13data-type-is-signed\x01<\x01@\x01\
+\x06interp\x11\0s\x04\0\x15get-color-interp-name\x01=\x01k\x11\x01@\x01\x04names\
+\0>\x04\0\x18get-color-interp-by-name\x01?\x01@\x01\x09geom-type\x07\0s\x04\0\x16\
+get-geometry-type-name\x01@\x01k\x07\x01@\x01\x04names\0\xc1\0\x04\0\x19get-geom\
+etry-type-by-name\x01B\x01@\x01\x09geom-type\x07\0\x7f\x04\0\x13geometry-type-ha\
+s-z\x01C\x04\0\x13geometry-type-has-m\x01C\x01@\x01\x09geom-type\x07\0\x07\x04\0\
+\x15geometry-type-flatten\x01D\x01@\x01\x0afield-type\x09\0s\x04\0\x13get-field-\
+type-name\x01E\x01k\x09\x01@\x01\x04names\0\xc6\0\x04\0\x16get-field-type-by-nam\
+e\x01G\x03\0\x15gdal:core/types@0.1.0\x05\x15\x02\x03\0\x06\x0aerror-code\x02\x03\
+\0\x06\x09data-type\x02\x03\0\x06\x0baccess-mode\x02\x03\0\x06\x0cgeotransform\x02\
+\x03\0\x06\x0bcolor-entry\x02\x03\0\x06\x0ccolor-interp\x02\x03\0\x06\x03gcp\x02\
+\x03\0\x06\x11rasterio-resample\x02\x03\0\x06\x0draster-window\x02\x03\0\x06\x0b\
+buffer-spec\x02\x03\0\x06\x09histogram\x02\x03\0\x06\x0erat-field-type\x02\x03\0\
+\x06\x0frat-field-usage\x02\x03\0\x06\x0erat-table-type\x01B\xc6\x02\x02\x03\x02\
+\x01\x16\x04\0\x0aerror-code\x03\0\0\x02\x03\x02\x01\x17\x04\0\x09data-type\x03\0\
+\x02\x02\x03\x02\x01\x18\x04\0\x0baccess-mode\x03\0\x04\x02\x03\x02\x01\x19\x04\0\
+\x0cgeotransform\x03\0\x06\x02\x03\x02\x01\x1a\x04\0\x0bcolor-entry\x03\0\x08\x02\
+\x03\x02\x01\x1b\x04\0\x0ccolor-interp\x03\0\x0a\x02\x03\x02\x01\x1c\x04\0\x03gc\
+p\x03\0\x0c\x02\x03\x02\x01\x1d\x04\0\x11rasterio-resample\x03\0\x0e\x02\x03\x02\
+\x01\x1e\x04\0\x0draster-window\x03\0\x10\x02\x03\x02\x01\x1f\x04\0\x0bbuffer-sp\
+ec\x03\0\x12\x02\x03\x02\x01\x20\x04\0\x09histogram\x03\0\x14\x02\x03\x02\x01!\x04\
+\0\x0erat-field-type\x03\0\x16\x02\x03\x02\x01\"\x04\0\x0frat-field-usage\x03\0\x18\
+\x02\x03\x02\x01#\x04\0\x0erat-table-type\x03\0\x1a\x04\0\x07dataset\x03\x01\x04\
+\0\x04band\x03\x01\x04\0\x16raster-attribute-table\x03\x01\x01m\x04\x04gray\x03r\
+gb\x04cmyk\x03hls\x04\0\x0epalette-interp\x03\0\x1f\x04\0\x0bcolor-table\x03\x01\
+\x01n\x08\x08readonly\x06update\x06raster\x06vector\x03gnm\x0fmultidim-raster\x06\
+shared\x0dverbose-error\x04\0\x09open-flag\x03\0\"\x01i\x1c\x01@\x02\x04paths\x04\
+mode\x05\0$\x04\0\x14[constructor]dataset\x01%\x01h\x1c\x01@\x01\x04self&\0y\x04\
+\0\x1d[method]dataset.raster-x-size\x01'\x04\0\x1d[method]dataset.raster-y-size\x01\
+'\x04\0\x1c[method]dataset.raster-count\x01'\x01j\x01\x07\x01\x01\x01@\x01\x04se\
+lf&\0(\x04\0\x20[method]dataset.get-geotransform\x01)\x01j\0\x01\x01\x01@\x02\x04\
+self&\x09transform\x07\0*\x04\0\x20[method]dataset.set-geotransform\x01+\x01@\x01\
+\x04self&\0s\x04\0\x1e[method]dataset.get-projection\x01,\x01@\x02\x04self&\x03w\
+kts\0*\x04\0\x1e[method]dataset.set-projection\x01-\x01i\x1d\x01j\x01.\x01\x01\x01\
+@\x02\x04self&\x0bband-numbery\0/\x04\0\x18[method]dataset.get-band\x010\x01ks\x01\
+@\x03\x04self&\x04names\x06domain1\01\x04\0![method]dataset.get-metadata-item\x01\
+2\x01@\x04\x04self&\x04names\x05values\x06domain1\0*\x04\0![method]dataset.set-m\
+etadata-item\x013\x01@\x01\x04self&\0*\x04\0\x1b[method]dataset.flush-cache\x014\
+\x04\0\x1d[method]dataset.get-gcp-count\x01'\x01p\x0d\x01@\x01\x04self&\05\x04\0\
+\x18[method]dataset.get-gcps\x016\x01@\x03\x04self&\x04gcps5\x0aprojections\0*\x04\
+\0\x18[method]dataset.set-gcps\x017\x04\0\"[method]dataset.get-gcp-projection\x01\
+,\x01py\x01k8\x01@\x04\x04self&\x08resamples\x06levels8\x05bands9\0*\x04\0\x1f[m\
+ethod]dataset.build-overviews\x01:\x01k\x0f\x01p}\x01j\x01<\x01\x01\x01@\x05\x04\
+self&\x06window\x11\x06buffer\x13\x05bands8\x08resample;\0=\x04\0&[method]datase\
+t.dataset-raster-io-read\x01>\x01@\x05\x04self&\x06window\x11\x06buffer\x13\x05b\
+ands8\x04data<\0*\x04\0'[method]dataset.dataset-raster-io-write\x01?\x01@\x02\x04\
+self&\x0amask-flagsy\0*\x04\0([method]dataset.create-dataset-mask-band\x01@\x01p\
+s\x01@\x01\x04self&\0\xc1\0\x04\0\x1d[method]dataset.get-file-list\x01B\x01@\x03\
+\x04self&\x09data-type\x03\x07options\xc1\0\0/\x04\0\x18[method]dataset.add-band\
+\x01C\x04\0\x1f[method]dataset.get-driver-name\x01,\x01@\x01\x04self&\01\x04\0\x1f\
+[method]dataset.get-description\x01D\x01@\x02\x04self&\x04descs\0*\x04\0\x1f[met\
+hod]dataset.set-description\x01E\x01o\x02ss\x01p\xc6\0\x01@\x02\x04self&\x06doma\
+in1\0\xc7\0\x04\0\x1c[method]dataset.get-metadata\x01H\x01@\x03\x04self&\x08meta\
+data\xc7\0\x06domain1\0*\x04\0\x1c[method]dataset.set-metadata\x01I\x04\0([metho\
+d]dataset.get-metadata-domain-list\x01B\x01h\x1d\x01@\x01\x04self\xca\0\0\x03\x04\
+\0\x1a[method]band.get-data-type\x01K\x01@\x01\x04self\xca\0\0y\x04\0\x17[method\
+]band.get-x-size\x01L\x04\0\x17[method]band.get-y-size\x01L\x01ku\x01@\x01\x04se\
+lf\xca\0\0\xcd\0\x04\0\x1e[method]band.get-no-data-value\x01N\x01@\x02\x04self\xca\
+\0\x05valueu\0*\x04\0\x1e[method]band.set-no-data-value\x01O\x01@\x02\x04self\xca\
+\0\x05valuex\0*\x04\0'[method]band.set-no-data-value-as-int64\x01P\x01@\x02\x04s\
+elf\xca\0\x05valuew\0*\x04\0([method]band.set-no-data-value-as-uint64\x01Q\x01@\x01\
+\x04self\xca\0\0*\x04\0![method]band.delete-no-data-value\x01R\x01@\x05\x04self\xca\
+\0\x05x-offy\x05y-offy\x06x-sizey\x06y-sizey\0=\x04\0\x17[method]band.read-block\
+\x01S\x01@\x06\x04self\xca\0\x05x-offy\x05y-offy\x06x-sizey\x06y-sizey\x04data<\0\
+*\x04\0\x18[method]band.write-block\x01T\x01o\x04uuuu\x01j\x01\xd5\0\x01\x01\x01\
+@\x03\x04self\xca\0\x09approx-ok\x7f\x05force\x7f\0\xd6\0\x04\0\x1b[method]band.\
+get-statistics\x01W\x01@\x02\x04self\xca\0\x09approx-ok\x7f\0\xd6\0\x04\0\x1f[me\
+thod]band.compute-statistics\x01X\x01@\x01\x04self\xca\0\0\x0b\x04\0\x1d[method]\
+band.get-color-interp\x01Y\x01@\x02\x04self\xca\0\x06interp\x0b\0*\x04\0\x1d[met\
+hod]band.set-color-interp\x01Z\x04\0\"[method]band.get-color-table-count\x01L\x01\
+k\x09\x01@\x02\x04self\xca\0\x05indexy\0\xdb\0\x04\0\x1c[method]band.get-color-e\
+ntry\x01\\\x01p\x09\x01@\x02\x04self\xca\0\x07entries\xdd\0\0*\x04\0\x1c[method]\
+band.set-color-table\x01^\x01@\x01\x04self\xca\0\01\x04\0\x1a[method]band.get-un\
+it-type\x01_\x01@\x02\x04self\xca\0\x04units\0*\x04\0\x1a[method]band.set-unit-t\
+ype\x01`\x04\0\x16[method]band.get-scale\x01N\x01@\x02\x04self\xca\0\x05scaleu\0\
+*\x04\0\x16[method]band.set-scale\x01a\x04\0\x17[method]band.get-offset\x01N\x01\
+@\x02\x04self\xca\0\x06offsetu\0*\x04\0\x17[method]band.set-offset\x01b\x04\0\x1f\
+[method]band.get-overview-count\x01L\x01@\x02\x04self\xca\0\x05indexy\0/\x04\0\x19\
+[method]band.get-overview\x01c\x01@\x02\x04self\xca\0\x0fdesired-samplesy\0/\x04\
+\0\x20[method]band.get-sample-overview\x01d\x01@\x04\x04self\xca\0\x06window\x11\
+\x06buffer\x13\x08resample;\0=\x04\0\x1b[method]band.raster-io-read\x01e\x01@\x04\
+\x04self\xca\0\x06window\x11\x06buffer\x13\x04data<\0*\x04\0\x1c[method]band.ras\
+ter-io-write\x01f\x01pw\x01j\x01\xe7\0\x01\x01\x01@\x06\x04self\xca\0\x03minu\x03\
+maxu\x07bucketsy\x14include-out-of-range\x7f\x09approx-ok\x7f\0\xe8\0\x04\0\x1a[\
+method]band.get-histogram\x01i\x01j\x01\x15\x01\x01\x01@\x02\x04self\xca\0\x05fo\
+rce\x7f\0\xea\0\x04\0\"[method]band.get-default-histogram\x01k\x01@\x02\x04self\xca\
+\0\x04hist\x15\0*\x04\0\"[method]band.set-default-histogram\x01l\x01@\x01\x04sel\
+f\xca\0\0/\x04\0\x1a[method]band.get-mask-band\x01m\x04\0\x1b[method]band.get-ma\
+sk-flags\x01L\x01@\x02\x04self\xca\0\x0amask-flagsy\0*\x04\0\x1d[method]band.cre\
+ate-mask-band\x01n\x01o\x02yy\x01@\x01\x04self\xca\0\0\xef\0\x04\0\x1b[method]ba\
+nd.get-block-size\x01p\x01j\x01\xef\0\x01\x01\x01@\x03\x04self\xca\0\x07x-blocky\
+\x07y-blocky\0\xf1\0\x04\0\"[method]band.get-actual-block-size\x01r\x01@\x03\x04\
+self\xca\0\x07x-blocky\x07y-blocky\0=\x04\0\x1e[method]band.read-native-block\x01\
+s\x01@\x04\x04self\xca\0\x07x-blocky\x07y-blocky\x04data<\0*\x04\0\x1f[method]ba\
+nd.write-native-block\x01t\x01@\x08\x04self\xca\0\x05x-offy\x05y-offy\x06x-sizey\
+\x06y-sizey\x0abuf-x-sizey\x0abuf-y-sizey\x09data-type\x03\0*\x04\0\x18[method]b\
+and.advise-read\x01u\x01k\xc1\0\x01@\x01\x04self\xca\0\0\xf6\0\x04\0\x1f[method]\
+band.get-category-names\x01w\x01@\x02\x04self\xca\0\x05names\xc1\0\0*\x04\0\x1f[\
+method]band.set-category-names\x01x\x04\0\x1d[method]band.flush-band-cache\x01R\x04\
+\0\x18[method]band.get-minimum\x01N\x04\0\x18[method]band.get-maximum\x01N\x01@\x01\
+\x04self\xca\0\0\x7f\x04\0$[method]band.has-arbitrary-overviews\x01y\x01@\x02\x04\
+self\xca\0\x06domain1\0\xc7\0\x04\0\x1e[method]band.get-band-metadata\x01z\x01@\x03\
+\x04self\xca\0\x08metadata\xc7\0\x06domain1\0*\x04\0\x1e[method]band.set-band-me\
+tadata\x01{\x01@\x03\x04self\xca\0\x04names\x06domain1\01\x04\0#[method]band.get\
+-band-metadata-item\x01|\x01@\x04\x04self\xca\0\x04names\x05values\x06domain1\0*\
+\x04\0#[method]band.set-band-metadata-item\x01}\x04\0\x1c[method]band.get-descri\
+ption\x01_\x01@\x02\x04self\xca\0\x04descs\0*\x04\0\x1c[method]band.set-descript\
+ion\x01~\x01i\x1e\x01k\xff\0\x01@\x01\x04self\xca\0\0\x80\x01\x04\0\x1c[method]b\
+and.get-default-rat\x01\x81\x01\x01h\x1e\x01@\x02\x04self\xca\0\x03rat\x82\x01\0\
+*\x04\0\x1c[method]band.set-default-rat\x01\x83\x01\x01@\x01\x04self\xca\0\0\xc1\
+\0\x04\0%[method]band.get-metadata-domain-list\x01\x84\x01\x01@\0\0\xff\0\x04\0#\
+[constructor]raster-attribute-table\x01\x85\x01\x01@\x01\x04self\x82\x01\0y\x04\0\
+/[method]raster-attribute-table.get-column-count\x01\x86\x01\x04\0,[method]raste\
+r-attribute-table.get-row-count\x01\x86\x01\x01@\x04\x04self\x82\x01\x04names\x0a\
+field-type\x17\x05usage\x19\0*\x04\0,[method]raster-attribute-table.create-colum\
+n\x01\x87\x01\x01@\x02\x04self\x82\x01\x03coly\01\x04\0.[method]raster-attribute\
+-table.get-column-name\x01\x88\x01\x01k\x17\x01@\x02\x04self\x82\x01\x03coly\0\x89\
+\x01\x04\0.[method]raster-attribute-table.get-column-type\x01\x8a\x01\x01k\x19\x01\
+@\x02\x04self\x82\x01\x03coly\0\x8b\x01\x04\0/[method]raster-attribute-table.get\
+-column-usage\x01\x8c\x01\x01ky\x01@\x02\x04self\x82\x01\x05usage\x19\0\x8d\x01\x04\
+\02[method]raster-attribute-table.get-column-of-usage\x01\x8e\x01\x01@\x02\x04se\
+lf\x82\x01\x05county\0*\x04\0,[method]raster-attribute-table.set-row-count\x01\x8f\
+\x01\x01@\x03\x04self\x82\x01\x03rowy\x03coly\01\x04\02[method]raster-attribute-\
+table.get-value-as-string\x01\x90\x01\x01kz\x01@\x03\x04self\x82\x01\x03rowy\x03\
+coly\0\x91\x01\x04\0/[method]raster-attribute-table.get-value-as-int\x01\x92\x01\
+\x01@\x03\x04self\x82\x01\x03rowy\x03coly\0\xcd\0\x04\02[method]raster-attribute\
+-table.get-value-as-double\x01\x93\x01\x01@\x04\x04self\x82\x01\x03rowy\x03coly\x05\
+values\0*\x04\02[method]raster-attribute-table.set-value-as-string\x01\x94\x01\x01\
+@\x04\x04self\x82\x01\x03rowy\x03coly\x05valuez\0*\x04\0/[method]raster-attribut\
+e-table.set-value-as-int\x01\x95\x01\x01@\x04\x04self\x82\x01\x03rowy\x03coly\x05\
+valueu\0*\x04\02[method]raster-attribute-table.set-value-as-double\x01\x96\x01\x01\
+o\x02uu\x01k\x97\x01\x01@\x01\x04self\x82\x01\0\x98\x01\x04\01[method]raster-att\
+ribute-table.get-linear-binning\x01\x99\x01\x01@\x03\x04self\x82\x01\x08row0-min\
+u\x08bin-sizeu\0*\x04\01[method]raster-attribute-table.set-linear-binning\x01\x9a\
+\x01\x01@\x01\x04self\x82\x01\0\x1b\x04\0-[method]raster-attribute-table.get-tab\
+le-type\x01\x9b\x01\x01@\x02\x04self\x82\x01\x0atable-type\x1b\0*\x04\0-[method]\
+raster-attribute-table.set-table-type\x01\x9c\x01\x01@\x02\x04self\x82\x01\x05va\
+lueu\0\x8d\x01\x04\0/[method]raster-attribute-table.get-row-of-value\x01\x9d\x01\
+\x01@\x01\x04self\x82\x01\0\xff\0\x04\0([method]raster-attribute-table.clone-rat\
+\x01\x9e\x01\x01pz\x01j\x01\x9f\x01\x01\x01\x01@\x04\x04self\x82\x01\x0bfield-in\
+dexy\x09start-rowy\x05county\0\xa0\x01\x04\03[method]raster-attribute-table.valu\
+es-io-as-integer\x01\xa1\x01\x01@\x04\x04self\x82\x01\x0bfield-indexy\x09start-r\
+owy\x06values\x9f\x01\0*\x04\04[method]raster-attribute-table.set-values-as-inte\
+ger\x01\xa2\x01\x01pu\x01j\x01\xa3\x01\x01\x01\x01@\x04\x04self\x82\x01\x0bfield\
+-indexy\x09start-rowy\x05county\0\xa4\x01\x04\02[method]raster-attribute-table.v\
+alues-io-as-double\x01\xa5\x01\x01@\x04\x04self\x82\x01\x0bfield-indexy\x09start\
+-rowy\x06values\xa3\x01\0*\x04\03[method]raster-attribute-table.set-values-as-do\
+uble\x01\xa6\x01\x01j\x01\xc1\0\x01\x01\x01@\x04\x04self\x82\x01\x0bfield-indexy\
+\x09start-rowy\x05county\0\xa7\x01\x04\02[method]raster-attribute-table.values-i\
+o-as-string\x01\xa8\x01\x01@\x04\x04self\x82\x01\x0bfield-indexy\x09start-rowy\x06\
+values\xc1\0\0*\x04\04[method]raster-attribute-table.set-values-as-strings\x01\xa9\
+\x01\x01j\x01\xdd\0\x01\x01\x01@\x01\x04self\x82\x01\0\xaa\x01\x04\0-[method]ras\
+ter-attribute-table.to-color-table\x01\xab\x01\x01j\x01s\x01\x01\x01@\x01\x04sel\
+f\x82\x01\0\xac\x01\x04\0&[method]raster-attribute-table.to-json\x01\xad\x01\x01\
+i!\x01@\x01\x06interp\x20\0\xae\x01\x04\0\x18[constructor]color-table\x01\xaf\x01\
+\x01h!\x01@\x01\x04self\xb0\x01\0\x20\x04\0.[method]color-table.get-palette-inte\
+rpretation\x01\xb1\x01\x01@\x01\x04self\xb0\x01\0y\x04\0)[method]color-table.get\
+-color-entry-count\x01\xb2\x01\x01@\x02\x04self\xb0\x01\x05indexy\0\xdb\0\x04\0#\
+[method]color-table.get-color-entry\x01\xb3\x01\x04\0*[method]color-table.get-co\
+lor-entry-as-rgb\x01\xb3\x01\x01@\x03\x04self\xb0\x01\x05indexy\x05entry\x09\x01\
+\0\x04\0#[method]color-table.set-color-entry\x01\xb4\x01\x01@\x05\x04self\xb0\x01\
+\x0bstart-indexy\x0bstart-color\x09\x09end-indexy\x09end-color\x09\x01\0\x04\0%[\
+method]color-table.create-color-ramp\x01\xb5\x01\x01@\x01\x04self\xb0\x01\0\xae\x01\
+\x04\0\x19[method]color-table.clone\x01\xb6\x01\x01@\x01\x04self\xb0\x01\0\xdd\0\
+\x04\0#[method]color-table.get-all-entries\x01\xb7\x01\x01@\x03\x04self\xb0\x01\x0b\
+start-indexy\x07entries\xdd\0\x01\0\x04\0\x1f[method]color-table.set-entries\x01\
+\xb8\x01\x01j\x01$\x01\x01\x01@\x07\x0bdriver-names\x04paths\x06x-sizey\x06y-siz\
+ey\x05bandsy\x09data-type\x03\x07options\xc1\0\0\xb9\x01\x04\0\x06create\x01\xba\
+\x01\x01@\x02\x04paths\x04mode\x05\0\xb9\x01\x04\0\x04open\x01\xbb\x01\x01@\x02\x04\
+paths\x09read-only\x7f\0\xb9\x01\x04\0\x0bopen-shared\x01\xbc\x01\x01@\0\0\xc1\0\
+\x04\0\x10get-driver-names\x01\xbd\x01\x01@\x05\x0bdriver-names\x08dst-paths\x03\
+src&\x06strict\x7f\x07options\xc1\0\0\xb9\x01\x04\0\x0bcreate-copy\x01\xbe\x01\x01\
+@\x02\x0bdriver-names\x04paths\0*\x04\0\x0edelete-dataset\x01\xbf\x01\x01@\x03\x0b\
+driver-names\x08new-names\x08old-names\0*\x04\0\x0erename-dataset\x01\xc0\x01\x04\
+\0\x12copy-dataset-files\x01\xc0\x01\x01@\x01\x04paths\01\x04\0\x0fidentify-driv\
+er\x01\xc1\x01\x01@\x05\x04paths\x0aopen-flagsy\x0fallowed-drivers\xf6\0\x0copen\
+-options\xf6\0\x0dsibling-files\xf6\0\0\xb9\x01\x04\0\x07open-ex\x01\xc2\x01\x03\
+\0\x16gdal:core/raster@0.1.0\x05$\x02\x03\0\x07\x07dataset\x01B\xb1\x01\x02\x03\x02\
+\x01\x16\x04\0\x0aerror-code\x03\0\0\x02\x03\x02\x01\x1c\x04\0\x03gcp\x03\0\x02\x02\
+\x03\x02\x01%\x04\0\x07dataset\x03\0\x04\x04\0\x0bspatial-ref\x03\x01\x01m\x07\x05\
+other\x04east\x04west\x05north\x05south\x02up\x04down\x04\0\x10axis-orientation\x03\
+\0\x07\x01m\x02\x15traditional-gis-order\x13authority-compliant\x04\0\x15axis-ma\
+pping-strategy\x03\0\x09\x01o\x04uuuu\x01k\x0b\x01ks\x01k\x7f\x01r\x03\x10area-o\
+f-interest\x0c\x14coordinate-operation\x0d\x0eallow-ballpark\x0e\x04\0\x11transf\
+orm-options\x03\0\x0f\x04\0\x09transform\x03\x01\x04\0\x18gen-img-proj-transform\
+er\x03\x01\x04\0\x0ftps-transformer\x03\x01\x01i\x06\x01j\x01\x14\x01\x01\x01@\x01\
+\x04codey\0\x15\x04\0\x1d[static]spatial-ref.from-epsg\x01\x16\x01@\x01\x03wkts\0\
+\x15\x04\0\x1c[static]spatial-ref.from-wkt\x01\x17\x01@\x01\x04projs\0\x15\x04\0\
+\x1d[static]spatial-ref.from-proj\x01\x18\x04\0\x1d[static]spatial-ref.from-esri\
+\x01\x17\x01h\x06\x01j\x01s\x01\x01\x01@\x01\x04self\x19\0\x1a\x04\0\x1a[method]\
+spatial-ref.to-wkt\x01\x1b\x04\0![method]spatial-ref.to-pretty-wkt\x01\x1b\x04\0\
+\x1b[method]spatial-ref.to-proj\x01\x1b\x01@\x01\x04self\x19\0\x7f\x04\0![method\
+]spatial-ref.is-geographic\x01\x1c\x04\0\x20[method]spatial-ref.is-projected\x01\
+\x1c\x04\0\x1f[method]spatial-ref.is-compound\x01\x1c\x04\0![method]spatial-ref.\
+is-geocentric\x01\x1c\x04\0\x1c[method]spatial-ref.is-local\x01\x1c\x04\0\x1f[me\
+thod]spatial-ref.is-vertical\x01\x1c\x04\0)[method]spatial-ref.is-derived-geogra\
+phic\x01\x1c\x01o\x02sy\x01k\x1d\x01@\x01\x04self\x19\0\x1e\x04\0![method]spatia\
+l-ref.get-authority\x01\x1f\x01@\x02\x04self\x19\x05other\x19\0\x7f\x04\0\x1b[me\
+thod]spatial-ref.is-same\x01\x20\x04\0#[method]spatial-ref.is-same-geog-cs\x01\x20\
+\x01o\x02su\x01@\x01\x04self\x19\0!\x04\0$[method]spatial-ref.get-linear-units\x01\
+\"\x04\0%[method]spatial-ref.get-angular-units\x01\"\x01@\x01\x04self\x19\0u\x04\
+\0\"[method]spatial-ref.get-semi-major\x01#\x04\0\"[method]spatial-ref.get-semi-\
+minor\x01#\x04\0&[method]spatial-ref.get-inv-flattening\x01#\x01@\x02\x04self\x19\
+\x08strategyy\x01\0\x04\0-[method]spatial-ref.set-axis-mapping-strategy\x01$\x01\
+o\x02y\x7f\x01k%\x01@\x01\x04self\x19\0&\x04\0\x20[method]spatial-ref.get-utm-zo\
+ne\x01'\x01j\0\x01\x01\x01@\x03\x04self\x19\x04zoney\x05north\x7f\0(\x04\0\x1b[m\
+ethod]spatial-ref.set-utm\x01)\x01@\x02\x04self\x19\x04names\0(\x04\0*[method]sp\
+atial-ref.set-well-known-geog-cs\x01*\x01@\x01\x04self\x19\0(\x04\0\x1c[method]s\
+patial-ref.validate\x01+\x04\0\x19[method]spatial-ref.fixup\x01+\x04\0![method]s\
+patial-ref.morph-to-esri\x01+\x04\0#[method]spatial-ref.morph-from-esri\x01+\x04\
+\0&[method]spatial-ref.get-prime-meridian\x01\"\x01@\x01\x04self\x19\0\x14\x04\0\
+\x1d[method]spatial-ref.clone-srs\x01,\x01@\x01\x05inputs\0\x15\x04\0#[static]sp\
+atial-ref.from-user-input\x01-\x04\0\x20[method]spatial-ref.to-proj-json\x01\x1b\
+\x04\0\x1a[method]spatial-ref.to-xml\x01\x1b\x04\0\"[method]spatial-ref.strip-ve\
+rtical\x01+\x01@\x08\x04self\x19\x02dxu\x02dyu\x02dzu\x02rxu\x02ryu\x02rzu\x05sc\
+aleu\0(\x04\0\x1f[method]spatial-ref.set-towgs84\x01.\x01pu\x01j\x01/\x01\x01\x01\
+@\x01\x04self\x19\00\x04\0\x1f[method]spatial-ref.get-towgs84\x011\x01@\x03\x04s\
+elf\x19\x04zoney\x05nad83\x7f\0(\x04\0#[method]spatial-ref.set-state-plane\x012\x01\
+@\x06\x04self\x19\x0acenter-latu\x0acenter-lonu\x05scaleu\x0dfalse-eastingu\x0ef\
+alse-northingu\0(\x04\0\x1a[method]spatial-ref.set-tm\x013\x01@\x07\x04self\x19\x0d\
+std-parallel1u\x0dstd-parallel2u\x0acenter-latu\x0acenter-lonu\x0dfalse-eastingu\
+\x0efalse-northingu\0(\x04\0\x1b[method]spatial-ref.set-lcc\x014\x04\0\x1e[metho\
+d]spatial-ref.set-lcc1sp\x013\x04\0\x20[method]spatial-ref.set-mercator\x013\x01\
+@\x06\x04self\x19\x0dstd-parallel1u\x0acenter-latu\x0acenter-lonu\x0dfalse-easti\
+ngu\x0efalse-northingu\0(\x04\0#[method]spatial-ref.set-mercator2sp\x015\x04\0\x1c\
+[method]spatial-ref.set-acea\x014\x01@\x05\x04self\x19\x0acenter-latu\x0acenter-\
+lonu\x0dfalse-eastingu\x0efalse-northingu\0(\x04\0\x1a[method]spatial-ref.set-ae\
+\x016\x04\0\x1c[method]spatial-ref.set-laea\x016\x04\0\x1a[method]spatial-ref.se\
+t-ps\x013\x04\0%[method]spatial-ref.set-stereographic\x013\x04\0$[method]spatial\
+-ref.set-orthographic\x016\x04\0\x20[method]spatial-ref.set-gnomonic\x016\x04\0'\
+[method]spatial-ref.set-equirectangular\x016\x01@\x04\x04self\x19\x0acenter-lonu\
+\x0dfalse-eastingu\x0efalse-northingu\0(\x04\0\"[method]spatial-ref.set-sinusoid\
+al\x017\x04\0![method]spatial-ref.set-mollweide\x017\x04\0\x20[method]spatial-re\
+f.set-robinson\x017\x01@\x05\x04self\x19\x0acenter-lonu\x10satellite-heightu\x0d\
+false-eastingu\x0efalse-northingu\0(\x04\0\x1c[method]spatial-ref.set-geos\x018\x01\
+@\x03\x04self\x19\x04names\x0bdefault-valu\0u\x04\0![method]spatial-ref.get-proj\
+-parm\x019\x01@\x03\x04self\x19\x04names\x05valueu\0(\x04\0![method]spatial-ref.\
+set-proj-parm\x01:\x04\0&[method]spatial-ref.auto-identify-epsg\x01+\x01p\x1d\x01\
+j\x01;\x01\x01\x01@\x01\x04self\x19\0<\x04\0\x20[method]spatial-ref.find-matches\
+\x01=\x01o\x02s\x08\x01j\x01>\x01\x01\x01@\x03\x04self\x19\x0atarget-keys\x0aaxi\
+s-indexy\0?\x04\0\x1c[method]spatial-ref.get-axis\x01@\x01@\x02\x04self\x19\x0at\
+arget-keys\0y\x04\0\"[method]spatial-ref.get-axes-count\x01A\x01@\x01\x04self\x19\
+\0\x0a\x04\0-[method]spatial-ref.get-axis-mapping-strategy\x01B\x01pz\x01@\x01\x04\
+self\x19\0\xc3\0\x04\05[method]spatial-ref.get-data-axis-to-crs-axis-mapping\x01\
+D\x01@\x02\x04self\x19\x07mapping\xc3\0\0(\x04\05[method]spatial-ref.set-data-ax\
+is-to-crs-axis-mapping\x01E\x01i\x11\x01@\x02\x06source\x19\x06target\x19\0\xc6\0\
+\x04\0\x16[constructor]transform\x01G\x01j\x01\xc6\0\x01\x01\x01@\x03\x06source\x19\
+\x06target\x19\x07options\x10\0\xc8\0\x04\0\x1b[static]transform.create-ex\x01I\x01\
+h\x11\x01o\x03uuu\x01j\x01\xcb\0\x01\x01\x01@\x04\x04self\xca\0\x01xu\x01yu\x01z\
+u\0\xcc\0\x04\0![method]transform.transform-point\x01M\x01p\xcb\0\x01j\x01\xce\0\
+\x01\x01\x01@\x02\x04self\xca\0\x06coords\xce\0\0\xcf\0\x04\0\"[method]transform\
+.transform-points\x01P\x01k/\x01p\x7f\x01o\x04//\xd1\0\xd2\0\x01j\x01\xd3\0\x01\x01\
+\x01@\x05\x04self\xca\0\x01x/\x01y/\x01z\xd1\0\x01t\xd1\0\0\xd4\0\x04\0%[method]\
+transform.transform-points-ex\x01U\x01@\x01\x04self\xca\0\0\xc8\0\x04\0\x1d[meth\
+od]transform.get-inverse\x01V\x01h\x05\x01k\xd7\0\x01i\x12\x01j\x01\xd9\0\x01\x01\
+\x01@\x07\x0bsrc-dataset\xd8\0\x07src-wkt\x0d\x0bdst-dataset\xd8\0\x07dst-wkt\x0d\
+\x0agcp-use-ok\x7f\x13gcp-error-thresholdu\x05ordery\0\xda\0\x04\0'[static]gen-i\
+mg-proj-transformer.create\x01[\x01p\x03\x01@\x03\x04gcps\xdc\0\x05ordery\x08rev\
+ersed\x7f\0\xda\0\x04\01[static]gen-img-proj-transformer.create-from-gcps\x01]\x01\
+h\x12\x01@\x03\x04self\xde\0\x0adst-to-src\x7f\x06points\xce\0\0\xcf\0\x04\0*[me\
+thod]gen-img-proj-transformer.transform\x01_\x01i\x13\x01j\x01\xe0\0\x01\x01\x01\
+@\x02\x04gcps\xdc\0\x08reversed\x7f\0\xe1\0\x04\0\x1e[static]tps-transformer.cre\
+ate\x01b\x01h\x13\x01@\x03\x04self\xe3\0\x0adst-to-src\x7f\x06points\xce\0\0\xcf\
+\0\x04\0![method]tps-transformer.transform\x01d\x03\0\x13gdal:core/srs@0.1.0\x05\
+&\x02\x03\0\0\x0aloadresult\x01B\x0d\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\0\
+\0\x02\x03\x02\x01'\x04\0\x0aloadresult\x03\0\x02\x01j\x01\x03\x01\x01\x01@\0\0\x04\
+\x04\0\x04load\x01\x05\x01ps\x01j\x01\x7f\x01\x01\x01@\x01\x04keys\x06\0\x07\x04\
+\0\x0breconfigure\x01\x08\x01@\0\0\x07\x04\0\x08shutdown\x01\x09\x04\0\x1cduckdb\
+:extension/guest@2.0.0\x05(\x01B\x1c\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\0\
+\0\x02\x03\x02\x01\x03\x04\0\x09duckvalue\x03\0\x02\x02\x03\x02\x01\x07\x04\0\x0a\
+invokeinfo\x03\0\x04\x02\x03\x02\x01\x09\x04\0\x09resultset\x03\0\x06\x02\x03\x02\
+\x01\x0a\x04\0\x08rowbatch\x03\0\x08\x01p\x03\x01j\x01\x03\x01\x01\x01@\x03\x06h\
+andley\x04args\x0a\x03ctx\x05\0\x0b\x04\0\x0bcall-scalar\x01\x0c\x01j\x01\x0a\x01\
+\x01\x01@\x03\x06handley\x04rows\x09\x03ctx\x05\0\x0d\x04\0\x11call-scalar-batch\
+\x01\x0e\x01j\x01\x07\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x0f\x04\0\x0acal\
+l-table\x01\x10\x01@\x02\x06handley\x04rows\x09\0\x0b\x04\0\x0ecall-aggregate\x01\
+\x11\x01k\x03\x01j\x01\x12\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x13\x04\0\x0b\
+call-pragma\x01\x14\x01@\x02\x06handley\x05value\x03\0\x0b\x04\0\x09call-cast\x01\
+\x15\x04\0(duckdb:extension/callback-dispatch@2.0.0\x05)\x04\0\"duckdb:extension\
+/spatialproj@2.0.0\x04\0\x0b\x11\x01\0\x0bspatialproj\x03\0\0\0G\x09producers\x01\
+\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

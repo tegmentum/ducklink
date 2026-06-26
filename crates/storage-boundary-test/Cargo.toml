@@ -11,12 +11,13 @@ the component's native logic). Imports are satisfied with trapping stubs.
 """
 
 [dependencies]
-# Same wasmtime rev as crates/ducklink-runtime, with component-model.
-wasmtime = { git = "https://github.com/bytecodealliance/wasmtime", rev = "1ec866079720e573fc2aa06947c84f6132010993", features = ["component-model"] }
+# Same wasmtime version as crates/ducklink-runtime (crates.io 45.0.1), with
+# component-model.
+wasmtime = { version = "46.0.1", features = ["component-model"] }
 # The sqlite component is a wasip2 component (built with std + rusqlite), so it
 # imports the wasi:cli/filesystem/io interfaces. Satisfy them with a real (but
-# unused) WASI ctx — same rev as wasmtime.
-wasmtime-wasi = { git = "https://github.com/bytecodealliance/wasmtime", rev = "1ec866079720e573fc2aa06947c84f6132010993" }
+# unused) WASI ctx — same version as wasmtime.
+wasmtime-wasi = "46.0.1"
 anyhow = "1"
 
 [dev-dependencies]

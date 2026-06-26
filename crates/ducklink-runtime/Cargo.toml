@@ -7,11 +7,23 @@ license = "MIT"
 publish = false
 
 [dependencies]
-# The wasm engine. Pinned to the same rev the host uses so the generated
-# `duckdb:extension` bindings are ABI-identical across both directions.
-wasmtime = { git = "https://github.com/bytecodealliance/wasmtime", rev = "1ec866079720e573fc2aa06947c84f6132010993", features = ["component-model", "cache"] }
+# The wasm engine. crates.io 45.0.1 so the generated `duckdb:extension`
+# bindings are ABI-identical across both directions, and so this matches the
+# sqlink host + the webassembly-component-orchestration framework (which is on
+# 45.0.1), letting ducklink later reuse the framework's compose:dynlink host.
+wasmtime = { version = "46.0.1", features = ["component-model", "cache"] }
 # The extension store-state holds a WasiCtx and implements WasiView (components
-# target wasip2). Pinned to the same rev as wasmtime.
-wasmtime-wasi = { git = "https://github.com/bytecodealliance/wasmtime", rev = "1ec866079720e573fc2aa06947c84f6132010993" }
+# target wasip2). Same version as wasmtime.
+wasmtime-wasi = "46.0.1"
+# The witcanon contract-digest scheme: sha256("witcanon:1" || canonical WIT
+# bytes), byte-identical to compose-core::blobs::compute_wit_digest in
+# ~/git/webassembly-component-orchestration so digests interoperate. build.rs
+# computes the digest at build time; the lib just embeds + serves the const.
+hex = "0.4"
+
+[build-dependencies]
+# Same witcanon scheme, used in build.rs to hash the canonical WIT into a const.
+sha2 = "0.10"
+hex = "0.4"
 
 [lib]

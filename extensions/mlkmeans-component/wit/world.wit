@@ -1,0 +1,35 @@
+package duckdb:extension@2.0.0;
+
+use runtime;
+use callback-dispatch;
+use config;
+use logging;
+use catalog;
+use files;
+use guest;
+
+// mlkmeans: a duckdb:extension component that ALSO imports the
+// `compose:dynlink/linker` host capability. It registers an aggregate
+// `ml_kmeans(x, y, k) -> VARCHAR` whose finalize resolves the shared,
+// resident `pylon` provider and invokes its `kmeans` method (numpy
+// k-means over the accumulated points), returning the centroids as JSON.
+//
+// This proves the payoff of the compose:dynlink + pylon arc: one warmed
+// ~38 MB pylon provider serving DuckDB ML functions. Adding more ML
+// functions (linreg, ...) reduces to a Python method in the provider
+// plus a thin ducklink aggregate here — all sharing the one pylon.
+world mlkmeans {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+
+  // The shared-provider bridge: host-resolved, host-owned. Satisfied at
+  // exec time by ducklink-host's compose:dynlink/linker implementation,
+  // which forwards invoke() bytes to the resident pylon provider.
+  import compose:dynlink/linker@0.1.0;
+
+  export guest;
+  export callback-dispatch;
+}

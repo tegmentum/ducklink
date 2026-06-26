@@ -19,12 +19,126 @@
 //! seam.
 use std::collections::HashMap;
 
+use wasmtime::component::Component;
+use wasmtime::Engine;
+
+/// The AUTHORITATIVE, content-addressed `duckdb:extension` contract identity: a
+/// **witcanon digest** — `sha256("witcanon:1" || canonical-WIT-bytes)` (hex),
+/// the scheme from `compose-core::blobs::compute_wit_digest` in the
+/// webassembly-component-orchestration framework (SPEC §4.1) — computed at build
+/// time over the canonical `wit/duckdb-extension/*.wit` bytes (see `build.rs`).
+///
+/// This is the SOURCE OF TRUTH for the contract: a contract is identified by a
+/// hash of its actual shape, not a hand-maintained version string. It changes iff
+/// the WIT changes, interoperates with the framework's blob identity, and is what
+/// `tooling/{gen,verify}-catalog.py` record + enforce per registry entry.
+///
+/// The runtime cannot recompute a *loaded* component's WIT digest (it can only
+/// introspect the imported package @MAJOR — see [`component_contract_major`]), so
+/// the runtime guard ([`check_component_contract`]) is the runtime-observable
+/// PROXY for this identity; the digest is enforced at catalog-verify time.
+include!(concat!(env!("OUT_DIR"), "/contract_digest.rs"));
+
+/// The witcanon digest (hex) of the current canonical `duckdb:extension` WIT —
+/// the authoritative content-addressed contract identity. Equals the value
+/// `tooling/{gen,verify}-catalog.py` compute + record per registry entry.
+pub fn contract_digest() -> &'static str {
+    CONTRACT_DIGEST
+}
+
+/// The MAJOR version of the `duckdb:extension` WIT contract this host speaks.
+///
+/// This is the runtime-observable PROXY for the content-addressed contract
+/// identity ([`CONTRACT_DIGEST`]): the host can only introspect a *loaded*
+/// component's imported `duckdb:extension` package @MAJOR at runtime — it cannot
+/// recompute the loaded component's WIT digest. Bump this when the canonical WIT
+/// package id moves to a new major (e.g. `duckdb:extension@3.0.0`); the loader
+/// guard ([`check_component_contract`]) rejects any component whose imported
+/// package has a different major (or no version at all -- a legacy, pre-versioning
+/// v1 component), so a mismatched component never instantiates and silently
+/// marshals corrupted values. The AUTHORITATIVE check is the digest, enforced at
+/// catalog-verify; this @MAJOR check is its runtime proxy.
+pub const CONTRACT_MAJOR: u64 = 2;
+
+/// Full contract version string the host advertises (observability only; the
+/// guard compares the MAJOR via [`CONTRACT_MAJOR`], and the authoritative
+/// identity is the content-addressed [`CONTRACT_DIGEST`]).
+pub const CONTRACT_VERSION: &str = "2.0.0";
+
+/// The host's `duckdb:extension` contract version, for logging / a built-in.
+/// This is the human-readable version; the authoritative content-addressed
+/// identity is [`contract_digest`].
+pub fn ducklink_contract_version() -> &'static str {
+    CONTRACT_VERSION
+}
+
+/// The `duckdb:extension` contract major a component targets, read from its
+/// imported package ids. Returns:
+///   - `Some(major)` if it imports `duckdb:extension/...@MAJOR.minor.patch`
+///   - `None` if it imports the package UNVERSIONED (legacy pre-versioning v1)
+///
+/// A component that imports nothing from `duckdb:extension` returns `None` too,
+/// but in practice every loadable extension imports at least `runtime`/`types`.
+pub fn component_contract_major(engine: &Engine, component: &Component) -> Option<u64> {
+    for (name, _) in component.component_type().imports(engine) {
+        // Import instance names look like `duckdb:extension/runtime@2.0.0` or,
+        // for a legacy component, `duckdb:extension/runtime` (no version).
+        let pkg = name.split('/').next().unwrap_or(name);
+        if pkg.starts_with("duckdb:extension") {
+            return match name.rsplit_once('@') {
+                Some((_, ver)) => ver
+                    .split('.')
+                    .next()
+                    .and_then(|m| m.parse::<u64>().ok()),
+                None => None, // unversioned -> legacy v1
+            };
+        }
+    }
+    None
+}
+
+/// Loader pre-check: reject a component whose `duckdb:extension` contract major
+/// differs from this host's [`CONTRACT_MAJOR`] (or is unversioned/legacy) with a
+/// clear, actionable error BEFORE instantiation. Wasmtime would itself reject a
+/// truly mismatched component at instantiate time, but with a cryptic
+/// type-mismatch trap; this gives the friendly message and explicitly catches the
+/// unversioned-legacy case (which can silently marshal corrupted values because
+/// the rich-types bump shifted enum discriminants).
+pub fn check_component_contract(
+    engine: &Engine,
+    component: &Component,
+    extension_name: &str,
+) -> wasmtime::Result<()> {
+    match component_contract_major(engine, component) {
+        Some(major) if major == CONTRACT_MAJOR => Ok(()),
+        Some(major) => Err(wasmtime::Error::msg(format!(
+            "component '{extension_name}' targets duckdb:extension contract {major}.x \
+             but this ducklink speaks contract {CONTRACT_MAJOR}.x; rebuild the component \
+             against the current WIT (or use the matching ducklink version)"
+        ))),
+        None => Err(wasmtime::Error::msg(format!(
+            "component '{extension_name}' targets an UNVERSIONED duckdb:extension contract \
+             (legacy v1) but this ducklink speaks contract {CONTRACT_MAJOR}.x; rebuild the \
+             component against the current WIT (or use the matching ducklink version)"
+        ))),
+    }
+}
+
+/// Native (wasmtime) host implementation of `compose:dynlink/linker` — the
+/// resident, shared-provider "dlopen for components" bridge. Used by the
+/// extension load path (so an `ml_kmeans`-style aggregate can reach the one
+/// warmed pylon provider) and re-exported to `ducklink-host` for the dotcmd
+/// path and the native proof tests.
+pub mod compose_dynlink;
+pub use compose_dynlink::{ProviderPreopen, ProviderRegistry};
+
 pub mod extension;
 pub use extension::{
     add_extension_interfaces_to_linker, describe_runtime_logicaltype, load_component,
-    summarize_extopts, summarize_funcopts, summarize_registration_names, summarize_runtime_columns,
-    summarize_runtime_funcargs, ConfigError, ExtensionInstance, ExtensionServices,
-    ExtensionStoreState, LogField, LogLevel, PendingRegistrationsData,
+    load_component_with_dynlink, summarize_extopts, summarize_funcopts,
+    summarize_registration_names, summarize_runtime_columns, summarize_runtime_funcargs,
+    ConfigError, ExtensionInstance, ExtensionServices, ExtensionStoreState, LogField, LogLevel,
+    PendingRegistrationsData,
 };
 
 /// The generated wasmtime bindings for the `duckdb:extension-host` world — the

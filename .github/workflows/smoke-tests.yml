@@ -39,6 +39,12 @@ jobs:
         with:
           targets: wasm32-wasip2
 
+      # The tooling delegators (tooling/smoke.py, tooling/verify-catalog.py) import
+      # the shared datalink_tooling engine. datalink is PUBLIC, so no token needed.
+      - name: Install the shared datalink tooling
+        working-directory: ducklink
+        run: pip install -r requirements-dev.txt
+
       - name: Install component tooling
         run: |
           set -euo pipefail
