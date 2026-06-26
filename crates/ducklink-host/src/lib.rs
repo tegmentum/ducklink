@@ -2292,8 +2292,9 @@ impl ExtensionManager {
         let catalog_snapshot = self.catalog_snapshot.clone();
         let extension_name = sanitized.clone();
         eprintln!(
-            "[extension-manager] attempting to load '{sanitized}' from {}",
-            artifact_path.display()
+            "[extension-manager] attempting to load '{sanitized}' from {} (host duckdb:extension contract {})",
+            artifact_path.display(),
+            ducklink_runtime::ducklink_contract_version()
         );
         // The thread returns the loaded instance AND whether this component
         // imports the live-query capability. Only a query-importing component

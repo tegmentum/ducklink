@@ -2479,6 +2479,11 @@ pub fn load_component(
     callback_registry: Arc<Mutex<CallbackRegistry>>,
     extension_name: String,
 ) -> wasmtime::Result<ExtensionInstance> {
+    // Contract guard: reject a component whose duckdb:extension contract major
+    // differs from this host's (or is unversioned/legacy) BEFORE instantiating,
+    // so a mismatched component never silently marshals corrupted values.
+    crate::check_component_contract(engine, component, &extension_name)?;
+
     let mut store = Store::new(
         engine,
         ExtensionStoreState::new(wasi, services, callback_registry, extension_name.clone()),

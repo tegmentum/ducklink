@@ -19,6 +19,80 @@
 //! seam.
 use std::collections::HashMap;
 
+use wasmtime::component::Component;
+use wasmtime::Engine;
+
+/// The MAJOR version of the `duckdb:extension` WIT contract this host speaks.
+///
+/// THE single edit point for a contract bump on the host side: bump this when the
+/// canonical WIT package id moves to a new major (e.g. `duckdb:extension@3.0.0`).
+/// The loader guard ([`check_component_contract`]) rejects any component whose
+/// imported `duckdb:extension` package has a different major (or no version at
+/// all -- a legacy, pre-versioning v1 component), so a mismatched component never
+/// instantiates and silently marshals corrupted values.
+pub const CONTRACT_MAJOR: u64 = 2;
+
+/// Full contract version string the host advertises (observability only; the
+/// guard compares the MAJOR via [`CONTRACT_MAJOR`]).
+pub const CONTRACT_VERSION: &str = "2.0.0";
+
+/// The host's `duckdb:extension` contract version, for logging / a built-in.
+pub fn ducklink_contract_version() -> &'static str {
+    CONTRACT_VERSION
+}
+
+/// The `duckdb:extension` contract major a component targets, read from its
+/// imported package ids. Returns:
+///   - `Some(major)` if it imports `duckdb:extension/...@MAJOR.minor.patch`
+///   - `None` if it imports the package UNVERSIONED (legacy pre-versioning v1)
+///
+/// A component that imports nothing from `duckdb:extension` returns `None` too,
+/// but in practice every loadable extension imports at least `runtime`/`types`.
+pub fn component_contract_major(engine: &Engine, component: &Component) -> Option<u64> {
+    for (name, _) in component.component_type().imports(engine) {
+        // Import instance names look like `duckdb:extension/runtime@2.0.0` or,
+        // for a legacy component, `duckdb:extension/runtime` (no version).
+        let pkg = name.split('/').next().unwrap_or(name);
+        if pkg.starts_with("duckdb:extension") {
+            return match name.rsplit_once('@') {
+                Some((_, ver)) => ver
+                    .split('.')
+                    .next()
+                    .and_then(|m| m.parse::<u64>().ok()),
+                None => None, // unversioned -> legacy v1
+            };
+        }
+    }
+    None
+}
+
+/// Loader pre-check: reject a component whose `duckdb:extension` contract major
+/// differs from this host's [`CONTRACT_MAJOR`] (or is unversioned/legacy) with a
+/// clear, actionable error BEFORE instantiation. Wasmtime would itself reject a
+/// truly mismatched component at instantiate time, but with a cryptic
+/// type-mismatch trap; this gives the friendly message and explicitly catches the
+/// unversioned-legacy case (which can silently marshal corrupted values because
+/// the rich-types bump shifted enum discriminants).
+pub fn check_component_contract(
+    engine: &Engine,
+    component: &Component,
+    extension_name: &str,
+) -> wasmtime::Result<()> {
+    match component_contract_major(engine, component) {
+        Some(major) if major == CONTRACT_MAJOR => Ok(()),
+        Some(major) => Err(wasmtime::Error::msg(format!(
+            "component '{extension_name}' targets duckdb:extension contract {major}.x \
+             but this ducklink speaks contract {CONTRACT_MAJOR}.x; rebuild the component \
+             against the current WIT (or use the matching ducklink version)"
+        ))),
+        None => Err(wasmtime::Error::msg(format!(
+            "component '{extension_name}' targets an UNVERSIONED duckdb:extension contract \
+             (legacy v1) but this ducklink speaks contract {CONTRACT_MAJOR}.x; rebuild the \
+             component against the current WIT (or use the matching ducklink version)"
+        ))),
+    }
+}
+
 pub mod extension;
 pub use extension::{
     add_extension_interfaces_to_linker, describe_runtime_logicaltype, load_component,
