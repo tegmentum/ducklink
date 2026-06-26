@@ -253,6 +253,63 @@ can `LOAD` without `-unsigned`. See
 `PLAN-duckdb-extensions.md` in this repo for the signing toolchain —
 that step belongs to ducklink, not the bridges.
 
+### 4.5 Spatial indexing
+
+DuckDB's loadable C extension API has no hook to register a custom
+index access method (that lives in DuckDB's internal C++ registry,
+which only version-locked C++ extensions reach). So `CREATE INDEX …
+USING rtree` is **not** available through the bridge. Three portable
+options cover the real use cases instead:
+
+**1. Range / bounding-box pruning — clustering one-liner (no extra
+objects, persists in the DB file).** PostGIS already ships
+`st_geohash`, a locality-preserving curve where lexicographic order
+≈ spatial proximity. Cluster the table by it and DuckDB's automatic
+min/max row-group zonemaps prune the scan — measured ~4–5× on 100M
+rows:
+
+```sql
+-- cluster once (load time, or periodically after heavy inserts):
+CREATE TABLE parcels AS
+  SELECT *, st_geohash(geom) AS gh FROM source ORDER BY gh;
+
+-- range query: the geohash-prefix bracket prunes row groups via the
+-- zonemap; ST_Within does the exact filter on the survivors.
+SELECT * FROM parcels
+  WHERE gh >= st_geohash(:query_min_corner)
+    AND gh <= st_geohash(:query_max_corner)
+    AND ST_Within(geom, :query_box);
+```
+
+This is coarser than a tree (the curve bracket over-covers the box —
+the `ST_Within` is what makes it exact) and degrades as you insert
+until re-clustered, but it needs no new functions and the
+acceleration is DuckDB's own.
+
+**2. KNN / within-distance — the real shim R-tree, via build +
+query functions.** The bridge exposes the shim's actual spatial
+index (STRtree / R-tree) as a build aggregate plus query table
+functions. The handle is session-scoped; DuckDB rejects a subquery
+as a table-function argument, so pass it through a variable:
+
+```sql
+SET VARIABLE h = (SELECT postgis_spatial_index_build(id, ST_AsBinary(geom)) FROM t);
+-- bounding-box, k-nearest, and within-distance queries return item ids:
+SELECT q.item_id FROM postgis_spatial_index_query_envelope(getvariable('h'), :minx,:miny,:maxx,:maxy) q;
+SELECT q.item_id FROM postgis_spatial_index_query_knn(getvariable('h'), :query_wkb, :k) q;
+SELECT q.item_id FROM postgis_spatial_index_within_distance(getvariable('h'), :query_wkb, :dist) q;
+```
+
+(MobilityDB exposes the same surface as `mobilitydb_spatial_index_*`,
+backed by its STRtree.) These are generated from the shim's
+`spatial_indexes` interface metadata, so any future shim that
+publishes a spatial index gets the same surface automatically.
+
+**3. Transparent `CREATE INDEX USING` — not portable.** It would
+require shipping a separate, version-locked C++ DuckDB extension
+that registers an index type delegating to the shim. Out of scope
+for the stable-ABI bridge; use options 1–2.
+
 ---
 
 ## 5. The SQL preprocessor (optional but recommended)
