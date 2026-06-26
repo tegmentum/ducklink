@@ -20,6 +20,11 @@ wasmtime-wasi = "46.0.1"
 # ~/git/webassembly-component-orchestration so digests interoperate. build.rs
 # computes the digest at build time; the lib just embeds + serves the const.
 hex = "0.4"
+# The shared runtime contract-version load guard, lifted from this crate's
+# former inline `component_contract_major`/`check_component_contract` so the
+# same guard backs both the ducklink and sqlink hosts (datalink is public).
+# The witcanon CONTRACT_DIGEST (above) stays per-repo; this is the @MAJOR proxy.
+datalink-contract = { git = "https://github.com/tegmentum/datalink.git" }
 
 [build-dependencies]
 # Same witcanon scheme, used in build.rs to hash the canonical WIT into a const.

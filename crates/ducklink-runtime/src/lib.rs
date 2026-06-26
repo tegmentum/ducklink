@@ -72,29 +72,20 @@ pub fn ducklink_contract_version() -> &'static str {
     CONTRACT_VERSION
 }
 
+/// The `duckdb:extension` WIT package name introspected by the runtime contract
+/// guard. The shared [`datalink_contract`] guard is generic over the package
+/// name (it also serves sqlink's `sqlink:wasm`), so we pin ducklink's here.
+const CONTRACT_PACKAGE: &str = "duckdb:extension";
+
 /// The `duckdb:extension` contract major a component targets, read from its
 /// imported package ids. Returns:
 ///   - `Some(major)` if it imports `duckdb:extension/...@MAJOR.minor.patch`
 ///   - `None` if it imports the package UNVERSIONED (legacy pre-versioning v1)
 ///
-/// A component that imports nothing from `duckdb:extension` returns `None` too,
-/// but in practice every loadable extension imports at least `runtime`/`types`.
+/// Thin wrapper over the shared [`datalink_contract::component_contract_major`]
+/// pinned to this host's [`CONTRACT_PACKAGE`].
 pub fn component_contract_major(engine: &Engine, component: &Component) -> Option<u64> {
-    for (name, _) in component.component_type().imports(engine) {
-        // Import instance names look like `duckdb:extension/runtime@2.0.0` or,
-        // for a legacy component, `duckdb:extension/runtime` (no version).
-        let pkg = name.split('/').next().unwrap_or(name);
-        if pkg.starts_with("duckdb:extension") {
-            return match name.rsplit_once('@') {
-                Some((_, ver)) => ver
-                    .split('.')
-                    .next()
-                    .and_then(|m| m.parse::<u64>().ok()),
-                None => None, // unversioned -> legacy v1
-            };
-        }
-    }
-    None
+    datalink_contract::component_contract_major(engine, component, CONTRACT_PACKAGE)
 }
 
 /// Loader pre-check: reject a component whose `duckdb:extension` contract major
@@ -104,23 +95,70 @@ pub fn component_contract_major(engine: &Engine, component: &Component) -> Optio
 /// type-mismatch trap; this gives the friendly message and explicitly catches the
 /// unversioned-legacy case (which can silently marshal corrupted values because
 /// the rich-types bump shifted enum discriminants).
+///
+/// The implementation is delegated to the shared [`datalink_contract`] crate
+/// (also consumed by the sqlink host); only the package + host major are
+/// ducklink-specific.
 pub fn check_component_contract(
     engine: &Engine,
     component: &Component,
     extension_name: &str,
 ) -> wasmtime::Result<()> {
-    match component_contract_major(engine, component) {
-        Some(major) if major == CONTRACT_MAJOR => Ok(()),
-        Some(major) => Err(wasmtime::Error::msg(format!(
-            "component '{extension_name}' targets duckdb:extension contract {major}.x \
-             but this ducklink speaks contract {CONTRACT_MAJOR}.x; rebuild the component \
-             against the current WIT (or use the matching ducklink version)"
-        ))),
-        None => Err(wasmtime::Error::msg(format!(
-            "component '{extension_name}' targets an UNVERSIONED duckdb:extension contract \
-             (legacy v1) but this ducklink speaks contract {CONTRACT_MAJOR}.x; rebuild the \
-             component against the current WIT (or use the matching ducklink version)"
-        ))),
+    let major = component_contract_major(engine, component);
+    datalink_contract::check_component_contract(
+        major,
+        CONTRACT_MAJOR,
+        CONTRACT_PACKAGE,
+        extension_name,
+    )
+    // datalink-contract returns anyhow::Result; map its error into the
+    // wasmtime::Error this host's loader expects (the message is preserved).
+    .map_err(|e| wasmtime::Error::msg(e.to_string()))
+}
+
+#[cfg(test)]
+mod contract_guard_tests {
+    use super::CONTRACT_MAJOR;
+
+    // The component-introspection half (`component_contract_major`) needs a real
+    // loaded Component; the smoke suite exercises it end-to-end by loading the
+    // shipped @2 components. Here we pin the host-major decision the delegated
+    // shared guard makes for ducklink's CONTRACT_MAJOR, so a major bump that
+    // forgets to rebuild components stays caught.
+    #[test]
+    fn matching_major_loads_mismatch_and_unversioned_rejected() {
+        // A @2 component matches this host -> Ok.
+        assert!(datalink_contract::check_component_contract(
+            Some(CONTRACT_MAJOR),
+            CONTRACT_MAJOR,
+            super::CONTRACT_PACKAGE,
+            "ext",
+        )
+        .is_ok());
+
+        // A @1 component is rejected with the friendly, actionable message.
+        let mismatch = datalink_contract::check_component_contract(
+            Some(1),
+            CONTRACT_MAJOR,
+            super::CONTRACT_PACKAGE,
+            "ext",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(mismatch.contains("duckdb:extension contract 1.x"));
+        assert!(mismatch.contains("ext"));
+
+        // An unversioned/legacy component is rejected as such.
+        let legacy = datalink_contract::check_component_contract(
+            None,
+            CONTRACT_MAJOR,
+            super::CONTRACT_PACKAGE,
+            "ext",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(legacy.contains("UNVERSIONED"));
+        assert!(legacy.contains("duckdb:extension"));
     }
 }
 
