@@ -147,7 +147,7 @@
       "source": "builtin",
       "status": "working",
       "artifact": "artifacts/extensions/sample_extension.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "sample_plus_one",
         "sample_emit_sequence",
@@ -166,7 +166,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "sample_extension",
-      "expansion": "com.tegmentum.ducklink.sample_extension"
+      "expansion": "com.tegmentum.ducklink.sample_extension",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "isin",
@@ -191,7 +192,7 @@
       "source": "extensions/isin-component",
       "status": "working",
       "artifact": "artifacts/extensions/isin.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "isin_validate",
         "isin_check_digit",
@@ -204,7 +205,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "isin",
-      "expansion": "com.tegmentum.ducklink.isin"
+      "expansion": "com.tegmentum.ducklink.isin",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "baseN",
@@ -228,7 +230,7 @@
       "source": "extensions/baseN-component",
       "status": "working",
       "artifact": "artifacts/extensions/baseN.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "base32_encode",
         "base32_decode",
@@ -244,7 +246,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "baseN",
-      "expansion": "com.tegmentum.ducklink.baseN"
+      "expansion": "com.tegmentum.ducklink.baseN",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "luhn",
@@ -267,7 +270,7 @@
       "source": "extensions/luhn-component",
       "status": "working",
       "artifact": "artifacts/extensions/luhn.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "luhn_validate",
         "luhn_check_digit"
@@ -278,7 +281,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "luhn",
-      "expansion": "com.tegmentum.ducklink.luhn"
+      "expansion": "com.tegmentum.ducklink.luhn",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "iban",
@@ -303,7 +307,7 @@
       "source": "extensions/iban-component",
       "status": "working",
       "artifact": "artifacts/extensions/iban.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "iban_validate",
         "iban_country",
@@ -315,7 +319,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "iban",
-      "expansion": "com.tegmentum.ducklink.iban"
+      "expansion": "com.tegmentum.ducklink.iban",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "ean",
@@ -339,7 +344,7 @@
       "source": "extensions/ean-component",
       "status": "working",
       "artifact": "artifacts/extensions/ean.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "ean_validate",
         "ean_check_digit"
@@ -350,7 +355,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "ean",
-      "expansion": "com.tegmentum.ducklink.ean"
+      "expansion": "com.tegmentum.ducklink.ean",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "aba",
@@ -373,7 +379,7 @@
       "source": "extensions/aba-component",
       "status": "working",
       "artifact": "artifacts/extensions/aba.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "aba_validate"
       ],
@@ -383,7 +389,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "aba",
-      "expansion": "com.tegmentum.ducklink.aba"
+      "expansion": "com.tegmentum.ducklink.aba",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "creditcard",
@@ -406,7 +413,7 @@
       "source": "extensions/creditcard-component",
       "status": "working",
       "artifact": "artifacts/extensions/creditcard.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "cc_validate",
         "cc_network"
@@ -417,7 +424,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "creditcard",
-      "expansion": "com.tegmentum.ducklink.creditcard"
+      "expansion": "com.tegmentum.ducklink.creditcard",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "uuidx",
@@ -445,7 +453,7 @@
       "repository": "https://github.com/tegmentum/ducklink",
       "source": "extensions/uuidx-component",
       "artifact": "artifacts/extensions/uuidx.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "keywords": [
         "uuid",
         "v7",
@@ -453,7 +461,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "uuidx",
-      "expansion": "com.tegmentum.ducklink.uuidx"
+      "expansion": "com.tegmentum.ducklink.uuidx",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "crypto",
@@ -487,7 +496,7 @@
       "repository": "https://github.com/tegmentum/ducklink",
       "source": "extensions/crypto-component",
       "artifact": "artifacts/extensions/crypto.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "keywords": [
         "crypto",
         "hash",
@@ -497,7 +506,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "crypto",
-      "expansion": "com.tegmentum.ducklink.crypto"
+      "expansion": "com.tegmentum.ducklink.crypto",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "markdown",
@@ -520,7 +530,7 @@
       "source": "extensions/markdown-component",
       "status": "working",
       "artifact": "artifacts/extensions/markdown.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "md_to_html",
         "md_to_text"
@@ -533,7 +543,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "markdown",
-      "expansion": "com.tegmentum.ducklink.markdown"
+      "expansion": "com.tegmentum.ducklink.markdown",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "hashfuncs",
@@ -557,7 +568,7 @@
       "source": "extensions/hashfuncs-component",
       "status": "working",
       "artifact": "artifacts/extensions/hashfuncs.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "xxh32",
         "xxh64",
@@ -573,7 +584,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "hashfuncs",
-      "expansion": "com.tegmentum.ducklink.hashfuncs"
+      "expansion": "com.tegmentum.ducklink.hashfuncs",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "rapidfuzz",
@@ -596,7 +608,7 @@
       "source": "extensions/rapidfuzz-component",
       "status": "working",
       "artifact": "artifacts/extensions/rapidfuzz.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "fuzz_ratio",
         "damerau_levenshtein",
@@ -611,7 +623,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "rapidfuzz",
-      "expansion": "com.tegmentum.ducklink.rapidfuzz"
+      "expansion": "com.tegmentum.ducklink.rapidfuzz",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "casing",
@@ -635,7 +648,7 @@
       "source": "extensions/casing-component",
       "status": "working",
       "artifact": "artifacts/extensions/casing.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "to_snake_case",
         "to_camel_case",
@@ -652,7 +665,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "casing",
-      "expansion": "com.tegmentum.ducklink.casing"
+      "expansion": "com.tegmentum.ducklink.casing",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "csscolor",
@@ -675,7 +689,7 @@
       "source": "extensions/csscolor-component",
       "status": "working",
       "artifact": "artifacts/extensions/csscolor.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "css_to_hex",
         "css_to_rgb",
@@ -689,7 +703,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "csscolor",
-      "expansion": "com.tegmentum.ducklink.csscolor"
+      "expansion": "com.tegmentum.ducklink.csscolor",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "url",
@@ -711,7 +726,7 @@
       "source": "extensions/url-component",
       "status": "working",
       "artifact": "artifacts/extensions/url.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "url_scheme",
         "url_host",
@@ -727,7 +742,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "url",
-      "expansion": "com.tegmentum.ducklink.url"
+      "expansion": "com.tegmentum.ducklink.url",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "email",
@@ -749,7 +765,7 @@
       "source": "extensions/email-component",
       "status": "working",
       "artifact": "artifacts/extensions/email.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "email_validate",
         "email_domain",
@@ -763,7 +779,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "email",
-      "expansion": "com.tegmentum.ducklink.email"
+      "expansion": "com.tegmentum.ducklink.email",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "semver",
@@ -785,7 +802,7 @@
       "source": "extensions/semver-component",
       "status": "working",
       "artifact": "artifacts/extensions/semver.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "semver_valid",
         "semver_major",
@@ -801,7 +818,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "semver",
-      "expansion": "com.tegmentum.ducklink.semver"
+      "expansion": "com.tegmentum.ducklink.semver",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "slug",
@@ -823,7 +841,7 @@
       "source": "extensions/slug-component",
       "status": "working",
       "artifact": "artifacts/extensions/slug.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "slugify"
       ],
@@ -835,7 +853,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "slug",
-      "expansion": "com.tegmentum.ducklink.slug"
+      "expansion": "com.tegmentum.ducklink.slug",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "escape",
@@ -858,7 +877,7 @@
       "source": "extensions/escape-component",
       "status": "working",
       "artifact": "artifacts/extensions/escape.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "html_escape",
         "html_unescape",
@@ -874,7 +893,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "escape",
-      "expansion": "com.tegmentum.ducklink.escape"
+      "expansion": "com.tegmentum.ducklink.escape",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "natsort",
@@ -896,7 +916,7 @@
       "source": "extensions/natsort-component",
       "status": "working",
       "artifact": "artifacts/extensions/natsort.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "natsort_compare"
       ],
@@ -908,7 +928,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "natsort",
-      "expansion": "com.tegmentum.ducklink.natsort"
+      "expansion": "com.tegmentum.ducklink.natsort",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "roman",
@@ -930,7 +951,7 @@
       "source": "extensions/roman-component",
       "status": "working",
       "artifact": "artifacts/extensions/roman.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "to_roman",
         "from_roman"
@@ -943,7 +964,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "roman",
-      "expansion": "com.tegmentum.ducklink.roman"
+      "expansion": "com.tegmentum.ducklink.roman",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "humansize",
@@ -965,7 +987,7 @@
       "source": "extensions/humansize-component",
       "status": "working",
       "artifact": "artifacts/extensions/humansize.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "humansize",
         "humansize_binary"
@@ -978,7 +1000,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "humansize",
-      "expansion": "com.tegmentum.ducklink.humansize"
+      "expansion": "com.tegmentum.ducklink.humansize",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "ids",
@@ -1001,7 +1024,7 @@
       "source": "extensions/ids-component",
       "status": "working",
       "artifact": "artifacts/extensions/ids.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "ulid",
         "nanoid",
@@ -1016,7 +1039,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "ids",
-      "expansion": "com.tegmentum.ducklink.ids"
+      "expansion": "com.tegmentum.ducklink.ids",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "idna",
@@ -1039,7 +1063,7 @@
       "source": "extensions/idna-component",
       "status": "working",
       "artifact": "artifacts/extensions/idna.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "idna_to_ascii",
         "idna_to_unicode"
@@ -1052,7 +1076,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "idna",
-      "expansion": "com.tegmentum.ducklink.idna"
+      "expansion": "com.tegmentum.ducklink.idna",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "mac",
@@ -1075,7 +1100,7 @@
       "source": "extensions/mac-component",
       "status": "working",
       "artifact": "artifacts/extensions/mac.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "mac_valid",
         "mac_normalize"
@@ -1088,7 +1113,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "mac",
-      "expansion": "com.tegmentum.ducklink.mac"
+      "expansion": "com.tegmentum.ducklink.mac",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "isbn",
@@ -1111,7 +1137,7 @@
       "source": "extensions/isbn-component",
       "status": "working",
       "artifact": "artifacts/extensions/isbn.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "isbn_valid",
         "isbn_normalize"
@@ -1122,7 +1148,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "isbn",
-      "expansion": "com.tegmentum.ducklink.isbn"
+      "expansion": "com.tegmentum.ducklink.isbn",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "humantime",
@@ -1145,7 +1172,7 @@
       "source": "extensions/humantime-component",
       "status": "working",
       "artifact": "artifacts/extensions/humantime.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "humantime_parse",
         "humantime_format"
@@ -1158,7 +1185,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "humantime",
-      "expansion": "com.tegmentum.ducklink.humantime"
+      "expansion": "com.tegmentum.ducklink.humantime",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "iso",
@@ -1181,7 +1209,7 @@
       "source": "extensions/iso-component",
       "status": "working",
       "artifact": "artifacts/extensions/iso.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "iso_country_name",
         "iso_country_alpha3",
@@ -1195,7 +1223,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "iso",
-      "expansion": "com.tegmentum.ducklink.iso"
+      "expansion": "com.tegmentum.ducklink.iso",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "morse",
@@ -1218,7 +1247,7 @@
       "source": "extensions/morse-component",
       "status": "working",
       "artifact": "artifacts/extensions/morse.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "morse_encode",
         "morse_decode"
@@ -1229,7 +1258,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "morse",
-      "expansion": "com.tegmentum.ducklink.morse"
+      "expansion": "com.tegmentum.ducklink.morse",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "color",
@@ -1252,7 +1282,7 @@
       "source": "extensions/color-component",
       "status": "working",
       "artifact": "artifacts/extensions/color.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "color_luminance",
         "color_contrast"
@@ -1265,7 +1295,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "color",
-      "expansion": "com.tegmentum.ducklink.color"
+      "expansion": "com.tegmentum.ducklink.color",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "geohash",
@@ -1288,7 +1319,7 @@
       "source": "extensions/geohash-component",
       "status": "working",
       "artifact": "artifacts/extensions/geohash.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "geohash_encode",
         "geohash_decode_lat",
@@ -1302,7 +1333,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "geohash",
-      "expansion": "com.tegmentum.ducklink.geohash"
+      "expansion": "com.tegmentum.ducklink.geohash",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "parsertools",
@@ -1325,7 +1357,7 @@
       "source": "extensions/parsertools-component",
       "status": "working",
       "artifact": "artifacts/extensions/parsertools.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "sql_tables",
         "sql_is_valid",
@@ -1339,7 +1371,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "parsertools",
-      "expansion": "com.tegmentum.ducklink.parsertools"
+      "expansion": "com.tegmentum.ducklink.parsertools",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "currency",
@@ -1362,7 +1395,7 @@
       "source": "extensions/currency-component",
       "status": "working",
       "artifact": "artifacts/extensions/currency.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "currency_name",
         "currency_symbol",
@@ -1377,7 +1410,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "currency",
-      "expansion": "com.tegmentum.ducklink.currency"
+      "expansion": "com.tegmentum.ducklink.currency",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "hmac",
@@ -1400,7 +1434,7 @@
       "source": "extensions/hmac-component",
       "status": "working",
       "artifact": "artifacts/extensions/hmac.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "hmac_sha256",
         "hmac_sha512"
@@ -1414,7 +1448,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "hmac",
-      "expansion": "com.tegmentum.ducklink.hmac"
+      "expansion": "com.tegmentum.ducklink.hmac",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "phonetic",
@@ -1437,7 +1472,7 @@
       "source": "extensions/phonetic-component",
       "status": "working",
       "artifact": "artifacts/extensions/phonetic.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "soundex",
         "metaphone"
@@ -1450,7 +1485,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "phonetic",
-      "expansion": "com.tegmentum.ducklink.phonetic"
+      "expansion": "com.tegmentum.ducklink.phonetic",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "jwt",
@@ -1473,7 +1509,7 @@
       "source": "extensions/jwt-component",
       "status": "working",
       "artifact": "artifacts/extensions/jwt.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "jwt_header",
         "jwt_payload"
@@ -1486,7 +1522,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "jwt",
-      "expansion": "com.tegmentum.ducklink.jwt"
+      "expansion": "com.tegmentum.ducklink.jwt",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "totp",
@@ -1509,7 +1546,7 @@
       "source": "extensions/totp-component",
       "status": "working",
       "artifact": "artifacts/extensions/totp.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "totp"
       ],
@@ -1523,7 +1560,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "totp",
-      "expansion": "com.tegmentum.ducklink.totp"
+      "expansion": "com.tegmentum.ducklink.totp",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "baseconv",
@@ -1546,7 +1584,7 @@
       "source": "extensions/baseconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/baseconv.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "from_base"
       ],
@@ -1556,7 +1594,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "baseconv",
-      "expansion": "com.tegmentum.ducklink.baseconv"
+      "expansion": "com.tegmentum.ducklink.baseconv",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "emoji",
@@ -1579,7 +1618,7 @@
       "source": "extensions/emoji-component",
       "status": "working",
       "artifact": "artifacts/extensions/emoji.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "emoji_name",
         "emoji_shortcode",
@@ -1593,7 +1632,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "emoji",
-      "expansion": "com.tegmentum.ducklink.emoji"
+      "expansion": "com.tegmentum.ducklink.emoji",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "whatlang",
@@ -1616,7 +1656,7 @@
       "source": "extensions/whatlang-component",
       "status": "working",
       "artifact": "artifacts/extensions/whatlang.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "detect_language",
         "detect_language_name",
@@ -1630,7 +1670,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "whatlang",
-      "expansion": "com.tegmentum.ducklink.whatlang"
+      "expansion": "com.tegmentum.ducklink.whatlang",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "ipaddr",
@@ -1653,7 +1694,7 @@
       "source": "extensions/ipaddr-component",
       "status": "working",
       "artifact": "artifacts/extensions/ipaddr.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "ip_valid",
         "ip_version",
@@ -1665,7 +1706,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "ipaddr",
-      "expansion": "com.tegmentum.ducklink.ipaddr"
+      "expansion": "com.tegmentum.ducklink.ipaddr",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "mime",
@@ -1688,7 +1730,7 @@
       "source": "extensions/mime-component",
       "status": "working",
       "artifact": "artifacts/extensions/mime.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "mime_type",
         "mime_from_ext"
@@ -1701,7 +1743,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "mime",
-      "expansion": "com.tegmentum.ducklink.mime"
+      "expansion": "com.tegmentum.ducklink.mime",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "pluralize",
@@ -1724,7 +1767,7 @@
       "source": "extensions/pluralize-component",
       "status": "working",
       "artifact": "artifacts/extensions/pluralize.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "pluralize",
         "singularize"
@@ -1737,7 +1780,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "pluralize",
-      "expansion": "com.tegmentum.ducklink.pluralize"
+      "expansion": "com.tegmentum.ducklink.pluralize",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "haversine",
@@ -1760,7 +1804,7 @@
       "source": "extensions/haversine-component",
       "status": "working",
       "artifact": "artifacts/extensions/haversine.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "haversine_km",
         "haversine_mi"
@@ -1771,7 +1815,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "haversine",
-      "expansion": "com.tegmentum.ducklink.haversine"
+      "expansion": "com.tegmentum.ducklink.haversine",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "numwords",
@@ -1794,7 +1839,7 @@
       "source": "extensions/numwords-component",
       "status": "working",
       "artifact": "artifacts/extensions/numwords.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "num_to_words",
         "num_to_ordinal_words"
@@ -1807,7 +1852,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "numwords",
-      "expansion": "com.tegmentum.ducklink.numwords"
+      "expansion": "com.tegmentum.ducklink.numwords",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "ordinal",
@@ -1830,7 +1876,7 @@
       "source": "extensions/ordinal-component",
       "status": "working",
       "artifact": "artifacts/extensions/ordinal.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "ordinal"
       ],
@@ -1840,7 +1886,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "ordinal",
-      "expansion": "com.tegmentum.ducklink.ordinal"
+      "expansion": "com.tegmentum.ducklink.ordinal",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "nato",
@@ -1863,7 +1910,7 @@
       "source": "extensions/nato-component",
       "status": "working",
       "artifact": "artifacts/extensions/nato.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "nato"
       ],
@@ -1873,7 +1920,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "nato",
-      "expansion": "com.tegmentum.ducklink.nato"
+      "expansion": "com.tegmentum.ducklink.nato",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "ascii85",
@@ -1895,7 +1943,7 @@
       "source": "extensions/ascii85-component",
       "status": "working",
       "artifact": "artifacts/extensions/ascii85.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "ascii85_encode",
         "ascii85_decode"
@@ -1908,7 +1956,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "ascii85",
-      "expansion": "com.tegmentum.ducklink.ascii85"
+      "expansion": "com.tegmentum.ducklink.ascii85",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "quotedprintable",
@@ -1931,7 +1980,7 @@
       "source": "extensions/quotedprintable-component",
       "status": "working",
       "artifact": "artifacts/extensions/quotedprintable.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "qp_encode",
         "qp_decode"
@@ -1944,7 +1993,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "quotedprintable",
-      "expansion": "com.tegmentum.ducklink.quotedprintable"
+      "expansion": "com.tegmentum.ducklink.quotedprintable",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "unitconv",
@@ -1968,7 +2018,7 @@
       "source": "extensions/unitconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/unitconv.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "unit_convert"
       ],
@@ -1978,7 +2028,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "unitconv",
-      "expansion": "com.tegmentum.ducklink.unitconv"
+      "expansion": "com.tegmentum.ducklink.unitconv",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "wordwrap",
@@ -2001,7 +2052,7 @@
       "source": "extensions/wordwrap-component",
       "status": "working",
       "artifact": "artifacts/extensions/wordwrap.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "word_wrap"
       ],
@@ -2013,7 +2064,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "wordwrap",
-      "expansion": "com.tegmentum.ducklink.wordwrap"
+      "expansion": "com.tegmentum.ducklink.wordwrap",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "timezone",
@@ -2036,7 +2088,7 @@
       "source": "extensions/timezone-component",
       "status": "working",
       "artifact": "artifacts/extensions/timezone.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "tz_valid",
         "tz_offset_seconds",
@@ -2051,7 +2103,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "timezone",
-      "expansion": "com.tegmentum.ducklink.timezone"
+      "expansion": "com.tegmentum.ducklink.timezone",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "rot13",
@@ -2074,7 +2127,7 @@
       "source": "extensions/rot13-component",
       "status": "working",
       "artifact": "artifacts/extensions/rot13.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "rot13",
         "caesar"
@@ -2085,7 +2138,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "rot13",
-      "expansion": "com.tegmentum.ducklink.rot13"
+      "expansion": "com.tegmentum.ducklink.rot13",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "leetspeak",
@@ -2108,7 +2162,7 @@
       "source": "extensions/leetspeak-component",
       "status": "working",
       "artifact": "artifacts/extensions/leetspeak.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "to_leet"
       ],
@@ -2118,7 +2172,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "leetspeak",
-      "expansion": "com.tegmentum.ducklink.leetspeak"
+      "expansion": "com.tegmentum.ducklink.leetspeak",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "dms",
@@ -2141,7 +2196,7 @@
       "source": "extensions/dms-component",
       "status": "working",
       "artifact": "artifacts/extensions/dms.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "dms_to_decimal",
         "decimal_to_dms"
@@ -2152,7 +2207,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "dms",
-      "expansion": "com.tegmentum.ducklink.dms"
+      "expansion": "com.tegmentum.ducklink.dms",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "cbor",
@@ -2175,7 +2231,7 @@
       "source": "extensions/cbor-component",
       "status": "working",
       "artifact": "artifacts/extensions/cbor.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "cbor_from_json",
         "cbor_to_json"
@@ -2190,7 +2246,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "cbor",
-      "expansion": "com.tegmentum.ducklink.cbor"
+      "expansion": "com.tegmentum.ducklink.cbor",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "msgpack",
@@ -2213,7 +2270,7 @@
       "source": "extensions/msgpack-component",
       "status": "working",
       "artifact": "artifacts/extensions/msgpack.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "msgpack_from_json",
         "msgpack_to_json"
@@ -2228,7 +2285,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "msgpack",
-      "expansion": "com.tegmentum.ducklink.msgpack"
+      "expansion": "com.tegmentum.ducklink.msgpack",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "elements",
@@ -2251,7 +2309,7 @@
       "source": "extensions/elements-component",
       "status": "working",
       "artifact": "artifacts/extensions/elements.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "element_name",
         "element_number",
@@ -2265,7 +2323,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "elements",
-      "expansion": "com.tegmentum.ducklink.elements"
+      "expansion": "com.tegmentum.ducklink.elements",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "vigenere",
@@ -2288,7 +2347,7 @@
       "source": "extensions/vigenere-component",
       "status": "working",
       "artifact": "artifacts/extensions/vigenere.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "vigenere_encrypt",
         "vigenere_decrypt"
@@ -2299,7 +2358,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "vigenere",
-      "expansion": "com.tegmentum.ducklink.vigenere"
+      "expansion": "com.tegmentum.ducklink.vigenere",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "petname",
@@ -2322,7 +2382,7 @@
       "source": "extensions/petname-component",
       "status": "working",
       "artifact": "artifacts/extensions/petname.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "petname"
       ],
@@ -2334,7 +2394,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "petname",
-      "expansion": "com.tegmentum.ducklink.petname"
+      "expansion": "com.tegmentum.ducklink.petname",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "base58check",
@@ -2357,7 +2418,7 @@
       "source": "extensions/base58check-component",
       "status": "working",
       "artifact": "artifacts/extensions/base58check.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "base58check_encode",
         "base58check_decode"
@@ -2370,7 +2431,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "base58check",
-      "expansion": "com.tegmentum.ducklink.base58check"
+      "expansion": "com.tegmentum.ducklink.base58check",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "checksums",
@@ -2393,7 +2455,7 @@
       "source": "extensions/checksums-component",
       "status": "working",
       "artifact": "artifacts/extensions/checksums.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "crc16",
         "adler32",
@@ -2409,7 +2471,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "checksums",
-      "expansion": "com.tegmentum.ducklink.checksums"
+      "expansion": "com.tegmentum.ducklink.checksums",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "siphash",
@@ -2432,7 +2495,7 @@
       "source": "extensions/siphash-component",
       "status": "working",
       "artifact": "artifacts/extensions/siphash.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "siphash"
       ],
@@ -2444,7 +2507,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "siphash",
-      "expansion": "com.tegmentum.ducklink.siphash"
+      "expansion": "com.tegmentum.ducklink.siphash",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "tiktoken",
@@ -2468,7 +2532,7 @@
       "source": "extensions/tiktoken-component",
       "status": "working",
       "artifact": "artifacts/extensions/tiktoken.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "tiktoken_count",
         "tiktoken_encode",
@@ -2482,7 +2546,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "tiktoken",
-      "expansion": "com.tegmentum.ducklink.tiktoken"
+      "expansion": "com.tegmentum.ducklink.tiktoken",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "bech32",
@@ -2505,7 +2570,7 @@
       "source": "extensions/bech32-component",
       "status": "working",
       "artifact": "artifacts/extensions/bech32.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "bech32_encode",
         "bech32_hrp",
@@ -2520,7 +2585,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "bech32",
-      "expansion": "com.tegmentum.ducklink.bech32"
+      "expansion": "com.tegmentum.ducklink.bech32",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "uuid5",
@@ -2543,7 +2609,7 @@
       "source": "extensions/uuid5-component",
       "status": "working",
       "artifact": "artifacts/extensions/uuid5.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "uuid_v5",
         "uuid_v3"
@@ -2556,7 +2622,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "uuid5",
-      "expansion": "com.tegmentum.ducklink.uuid5"
+      "expansion": "com.tegmentum.ducklink.uuid5",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "gravatar",
@@ -2579,7 +2646,7 @@
       "source": "extensions/gravatar-component",
       "status": "working",
       "artifact": "artifacts/extensions/gravatar.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "gravatar_hash",
         "gravatar_url"
@@ -2592,7 +2659,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "gravatar",
-      "expansion": "com.tegmentum.ducklink.gravatar"
+      "expansion": "com.tegmentum.ducklink.gravatar",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "html2text",
@@ -2615,7 +2683,7 @@
       "source": "extensions/html2text-component",
       "status": "working",
       "artifact": "artifacts/extensions/html2text.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "html_to_text"
       ],
@@ -2627,7 +2695,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "html2text",
-      "expansion": "com.tegmentum.ducklink.html2text"
+      "expansion": "com.tegmentum.ducklink.html2text",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "textstat",
@@ -2650,7 +2719,7 @@
       "source": "extensions/textstat-component",
       "status": "working",
       "artifact": "artifacts/extensions/textstat.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "word_count",
         "sentence_count",
@@ -2664,7 +2733,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "textstat",
-      "expansion": "com.tegmentum.ducklink.textstat"
+      "expansion": "com.tegmentum.ducklink.textstat",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "hashids",
@@ -2687,7 +2757,7 @@
       "source": "extensions/hashids-component",
       "status": "working",
       "artifact": "artifacts/extensions/hashids.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "hashids_encode",
         "hashids_decode"
@@ -2700,7 +2770,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "hashids",
-      "expansion": "com.tegmentum.ducklink.hashids"
+      "expansion": "com.tegmentum.ducklink.hashids",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "checkdigit",
@@ -2723,7 +2794,7 @@
       "source": "extensions/checkdigit-component",
       "status": "working",
       "artifact": "artifacts/extensions/checkdigit.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "verhoeff_validate",
         "verhoeff_append",
@@ -2736,7 +2807,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "checkdigit",
-      "expansion": "com.tegmentum.ducklink.checkdigit"
+      "expansion": "com.tegmentum.ducklink.checkdigit",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "dice",
@@ -2759,7 +2831,7 @@
       "source": "extensions/dice-component",
       "status": "working",
       "artifact": "artifacts/extensions/dice.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "dice_roll",
         "dice_min",
@@ -2773,7 +2845,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "dice",
-      "expansion": "com.tegmentum.ducklink.dice"
+      "expansion": "com.tegmentum.ducklink.dice",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "graycode",
@@ -2796,7 +2869,7 @@
       "source": "extensions/graycode-component",
       "status": "working",
       "artifact": "artifacts/extensions/graycode.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "gray_encode",
         "gray_decode"
@@ -2807,7 +2880,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "graycode",
-      "expansion": "com.tegmentum.ducklink.graycode"
+      "expansion": "com.tegmentum.ducklink.graycode",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "cardtype",
@@ -2830,7 +2904,7 @@
       "source": "extensions/cardtype-component",
       "status": "working",
       "artifact": "artifacts/extensions/cardtype.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "card_brand"
       ],
@@ -2840,7 +2914,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "cardtype",
-      "expansion": "com.tegmentum.ducklink.cardtype"
+      "expansion": "com.tegmentum.ducklink.cardtype",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "money",
@@ -2863,7 +2938,7 @@
       "source": "extensions/money-component",
       "status": "working",
       "artifact": "artifacts/extensions/money.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "format_money"
       ],
@@ -2875,7 +2950,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "money",
-      "expansion": "com.tegmentum.ducklink.money"
+      "expansion": "com.tegmentum.ducklink.money",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "ngrams",
@@ -2898,7 +2974,7 @@
       "source": "extensions/ngrams-component",
       "status": "working",
       "artifact": "artifacts/extensions/ngrams.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "char_ngrams",
         "word_ngrams"
@@ -2911,7 +2987,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "ngrams",
-      "expansion": "com.tegmentum.ducklink.ngrams"
+      "expansion": "com.tegmentum.ducklink.ngrams",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "stem",
@@ -2934,7 +3011,7 @@
       "source": "extensions/stem-component",
       "status": "working",
       "artifact": "artifacts/extensions/stem.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "stem"
       ],
@@ -2946,7 +3023,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "stem",
-      "expansion": "com.tegmentum.ducklink.stem"
+      "expansion": "com.tegmentum.ducklink.stem",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "transliterate",
@@ -2969,7 +3047,7 @@
       "source": "extensions/transliterate-component",
       "status": "working",
       "artifact": "artifacts/extensions/transliterate.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "deunicode"
       ],
@@ -2981,7 +3059,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "transliterate",
-      "expansion": "com.tegmentum.ducklink.transliterate"
+      "expansion": "com.tegmentum.ducklink.transliterate",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "pluscode",
@@ -3004,7 +3083,7 @@
       "source": "extensions/pluscode-component",
       "status": "working",
       "artifact": "artifacts/extensions/pluscode.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "pluscode_encode",
         "pluscode_valid",
@@ -3020,7 +3099,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "pluscode",
-      "expansion": "com.tegmentum.ducklink.pluscode"
+      "expansion": "com.tegmentum.ducklink.pluscode",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "rot47",
@@ -3043,7 +3123,7 @@
       "source": "extensions/rot47-component",
       "status": "working",
       "artifact": "artifacts/extensions/rot47.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "rot47"
       ],
@@ -3053,7 +3133,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "rot47",
-      "expansion": "com.tegmentum.ducklink.rot47"
+      "expansion": "com.tegmentum.ducklink.rot47",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "stopwords",
@@ -3076,7 +3157,7 @@
       "source": "extensions/stopwords-component",
       "status": "working",
       "artifact": "artifacts/extensions/stopwords.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "is_stopword",
         "remove_stopwords"
@@ -3089,7 +3170,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "stopwords",
-      "expansion": "com.tegmentum.ducklink.stopwords"
+      "expansion": "com.tegmentum.ducklink.stopwords",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "isbnconv",
@@ -3112,7 +3194,7 @@
       "source": "extensions/isbnconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/isbnconv.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "isbn10_to_13",
         "isbn13_to_10"
@@ -3123,7 +3205,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "isbnconv",
-      "expansion": "com.tegmentum.ducklink.isbnconv"
+      "expansion": "com.tegmentum.ducklink.isbnconv",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "passgen",
@@ -3146,7 +3229,7 @@
       "source": "extensions/passgen-component",
       "status": "working",
       "artifact": "artifacts/extensions/passgen.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "gen_password",
         "gen_password_alnum"
@@ -3159,7 +3242,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "passgen",
-      "expansion": "com.tegmentum.ducklink.passgen"
+      "expansion": "com.tegmentum.ducklink.passgen",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "braille",
@@ -3182,7 +3266,7 @@
       "source": "extensions/braille-component",
       "status": "working",
       "artifact": "artifacts/extensions/braille.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "to_braille"
       ],
@@ -3192,7 +3276,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "braille",
-      "expansion": "com.tegmentum.ducklink.braille"
+      "expansion": "com.tegmentum.ducklink.braille",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "toml",
@@ -3215,7 +3300,7 @@
       "source": "extensions/toml-component",
       "status": "working",
       "artifact": "artifacts/extensions/toml.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "toml_to_json",
         "json_to_toml"
@@ -3229,7 +3314,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "toml",
-      "expansion": "com.tegmentum.ducklink.toml"
+      "expansion": "com.tegmentum.ducklink.toml",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "yaml",
@@ -3252,7 +3338,7 @@
       "source": "extensions/yaml-component",
       "status": "working",
       "artifact": "artifacts/extensions/yaml.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "yaml_to_json",
         "json_to_yaml"
@@ -3266,7 +3352,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "yaml",
-      "expansion": "com.tegmentum.ducklink.yaml"
+      "expansion": "com.tegmentum.ducklink.yaml",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "unicodenorm",
@@ -3289,7 +3376,7 @@
       "source": "extensions/unicodenorm-component",
       "status": "working",
       "artifact": "artifacts/extensions/unicodenorm.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "nfc",
         "nfd",
@@ -3304,7 +3391,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "unicodenorm",
-      "expansion": "com.tegmentum.ducklink.unicodenorm"
+      "expansion": "com.tegmentum.ducklink.unicodenorm",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "unicodewidth",
@@ -3327,7 +3415,7 @@
       "source": "extensions/unicodewidth-component",
       "status": "working",
       "artifact": "artifacts/extensions/unicodewidth.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "grapheme_count",
         "display_width"
@@ -3341,7 +3429,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "unicodewidth",
-      "expansion": "com.tegmentum.ducklink.unicodewidth"
+      "expansion": "com.tegmentum.ducklink.unicodewidth",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "colorconv",
@@ -3364,7 +3453,7 @@
       "source": "extensions/colorconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/colorconv.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "hex_to_hsl",
         "hex_to_hsv",
@@ -3376,7 +3465,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "colorconv",
-      "expansion": "com.tegmentum.ducklink.colorconv"
+      "expansion": "com.tegmentum.ducklink.colorconv",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "jsonschema",
@@ -3398,7 +3488,7 @@
       "source": "extensions/jsonschema-component",
       "status": "working",
       "artifact": "artifacts/extensions/jsonschema.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "json_schema_valid"
       ],
@@ -3411,7 +3501,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "jsonschema",
-      "expansion": "com.tegmentum.ducklink.jsonschema"
+      "expansion": "com.tegmentum.ducklink.jsonschema",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "simhash",
@@ -3434,7 +3525,7 @@
       "source": "extensions/simhash-component",
       "status": "working",
       "artifact": "artifacts/extensions/simhash.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "simhash",
         "simhash_distance"
@@ -3445,7 +3536,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "simhash",
-      "expansion": "com.tegmentum.ducklink.simhash"
+      "expansion": "com.tegmentum.ducklink.simhash",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "idextra",
@@ -3468,7 +3560,7 @@
       "source": "extensions/idextra-component",
       "status": "working",
       "artifact": "artifacts/extensions/idextra.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "ksuid",
         "cuid2"
@@ -3482,7 +3574,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "idextra",
-      "expansion": "com.tegmentum.ducklink.idextra"
+      "expansion": "com.tegmentum.ducklink.idextra",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "phonetic2",
@@ -3505,7 +3598,7 @@
       "source": "extensions/phonetic2-component",
       "status": "working",
       "artifact": "artifacts/extensions/phonetic2.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "nysiis",
         "refined_soundex",
@@ -3519,7 +3612,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "phonetic2",
-      "expansion": "com.tegmentum.ducklink.phonetic2"
+      "expansion": "com.tegmentum.ducklink.phonetic2",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "z85",
@@ -3542,7 +3636,7 @@
       "source": "extensions/z85-component",
       "status": "working",
       "artifact": "artifacts/extensions/z85.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "z85_encode",
         "z85_decode"
@@ -3555,7 +3649,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "z85",
-      "expansion": "com.tegmentum.ducklink.z85"
+      "expansion": "com.tegmentum.ducklink.z85",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "initials",
@@ -3578,7 +3673,7 @@
       "source": "extensions/initials-component",
       "status": "working",
       "artifact": "artifacts/extensions/initials.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "initials",
         "initials_dotted"
@@ -3589,7 +3684,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "initials",
-      "expansion": "com.tegmentum.ducklink.initials"
+      "expansion": "com.tegmentum.ducklink.initials",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "luhngen",
@@ -3612,7 +3708,7 @@
       "source": "extensions/luhngen-component",
       "status": "working",
       "artifact": "artifacts/extensions/luhngen.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "luhn_check_digit",
         "luhn_append"
@@ -3623,7 +3719,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "luhngen",
-      "expansion": "com.tegmentum.ducklink.luhngen"
+      "expansion": "com.tegmentum.ducklink.luhngen",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "pintest_a",
@@ -3647,7 +3744,7 @@
       "source": "extensions/pintest-a-component",
       "status": "working",
       "artifact": "artifacts/extensions/pintest_a.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "pin_probe"
       ],
@@ -3655,7 +3752,8 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "pintest_b",
@@ -3679,7 +3777,7 @@
       "source": "extensions/pintest-b-component",
       "status": "working",
       "artifact": "artifacts/extensions/pintest_b.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "pin_probe"
       ],
@@ -3687,7 +3785,8 @@
         "scalar"
       ],
       "crates": [],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "atbash",
@@ -3710,7 +3809,7 @@
       "source": "extensions/atbash-component",
       "status": "working",
       "artifact": "artifacts/extensions/atbash.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "atbash"
       ],
@@ -3720,7 +3819,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "atbash",
-      "expansion": "com.tegmentum.ducklink.atbash"
+      "expansion": "com.tegmentum.ducklink.atbash",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "piglatin",
@@ -3743,7 +3843,7 @@
       "source": "extensions/piglatin-component",
       "status": "working",
       "artifact": "artifacts/extensions/piglatin.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "to_pig_latin"
       ],
@@ -3753,7 +3853,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "piglatin",
-      "expansion": "com.tegmentum.ducklink.piglatin"
+      "expansion": "com.tegmentum.ducklink.piglatin",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "rle",
@@ -3776,7 +3877,7 @@
       "source": "extensions/rle-component",
       "status": "working",
       "artifact": "artifacts/extensions/rle.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "rle_encode",
         "rle_decode"
@@ -3787,7 +3888,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "rle",
-      "expansion": "com.tegmentum.ducklink.rle"
+      "expansion": "com.tegmentum.ducklink.rle",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "bbcode",
@@ -3810,7 +3912,7 @@
       "source": "extensions/bbcode-component",
       "status": "working",
       "artifact": "artifacts/extensions/bbcode.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "bbcode_to_html"
       ],
@@ -3820,7 +3922,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "bbcode",
-      "expansion": "com.tegmentum.ducklink.bbcode"
+      "expansion": "com.tegmentum.ducklink.bbcode",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "phonenumber",
@@ -3843,7 +3946,7 @@
       "source": "extensions/phonenumber-component",
       "status": "working",
       "artifact": "artifacts/extensions/phonenumber.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "phone_valid",
         "phone_format",
@@ -3857,7 +3960,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "phonenumber",
-      "expansion": "com.tegmentum.ducklink.phonenumber"
+      "expansion": "com.tegmentum.ducklink.phonenumber",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "pwstrength",
@@ -3880,7 +3984,7 @@
       "source": "extensions/pwstrength-component",
       "status": "working",
       "artifact": "artifacts/extensions/pwstrength.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "password_score",
         "password_strength"
@@ -3893,7 +3997,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "pwstrength",
-      "expansion": "com.tegmentum.ducklink.pwstrength"
+      "expansion": "com.tegmentum.ducklink.pwstrength",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "qrcode",
@@ -3916,7 +4021,7 @@
       "source": "extensions/qrcode-component",
       "status": "working",
       "artifact": "artifacts/extensions/qrcode.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "qr_svg"
       ],
@@ -3928,7 +4033,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "qrcode",
-      "expansion": "com.tegmentum.ducklink.qrcode"
+      "expansion": "com.tegmentum.ducklink.qrcode",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "aggstat",
@@ -3951,7 +4057,7 @@
       "source": "extensions/aggstat-component",
       "status": "working",
       "artifact": "artifacts/extensions/aggstat.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "harmonic_mean"
       ],
@@ -3961,7 +4067,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "aggstat",
-      "expansion": "com.tegmentum.ducklink.aggstat"
+      "expansion": "com.tegmentum.ducklink.aggstat",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "bloom",
@@ -3984,7 +4091,7 @@
       "source": "extensions/bloom-component",
       "status": "working",
       "artifact": "artifacts/extensions/bloom.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "bloom_filter",
         "bloom_contains"
@@ -3996,7 +4103,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "bloom",
-      "expansion": "com.tegmentum.ducklink.bloom"
+      "expansion": "com.tegmentum.ducklink.bloom",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "minhash",
@@ -4019,7 +4127,7 @@
       "source": "extensions/minhash-component",
       "status": "working",
       "artifact": "artifacts/extensions/minhash.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "minhash",
         "minhash_similarity"
@@ -4031,7 +4139,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "minhash",
-      "expansion": "com.tegmentum.ducklink.minhash"
+      "expansion": "com.tegmentum.ducklink.minhash",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "countmin",
@@ -4054,7 +4163,7 @@
       "source": "extensions/countmin-component",
       "status": "working",
       "artifact": "artifacts/extensions/countmin.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "count_min",
         "cms_estimate"
@@ -4066,7 +4175,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "countmin",
-      "expansion": "com.tegmentum.ducklink.countmin"
+      "expansion": "com.tegmentum.ducklink.countmin",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "dns",
@@ -4089,7 +4199,7 @@
       "source": "extensions/dns-component",
       "status": "working",
       "artifact": "artifacts/extensions/dns.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "dns_lookup",
         "dns_resolve_all"
@@ -4101,7 +4211,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "dns",
-      "expansion": "com.tegmentum.ducklink.dns"
+      "expansion": "com.tegmentum.ducklink.dns",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "httpclient",
@@ -4124,7 +4235,7 @@
       "source": "extensions/httpclient-component",
       "status": "working",
       "artifact": "artifacts/extensions/httpclient.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "http_get",
         "http_status",
@@ -4141,7 +4252,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "httpclient",
-      "expansion": "com.tegmentum.ducklink.httpclient"
+      "expansion": "com.tegmentum.ducklink.httpclient",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "lorem",
@@ -4164,7 +4276,7 @@
       "source": "extensions/lorem-component",
       "status": "working",
       "artifact": "artifacts/extensions/lorem.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "lorem_words",
         "lorem_title"
@@ -4177,7 +4289,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "lorem",
-      "expansion": "com.tegmentum.ducklink.lorem"
+      "expansion": "com.tegmentum.ducklink.lorem",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "faker",
@@ -4200,7 +4313,7 @@
       "source": "extensions/faker-component",
       "status": "working",
       "artifact": "artifacts/extensions/faker.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "fake_name",
         "fake_email",
@@ -4216,7 +4329,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "faker",
-      "expansion": "com.tegmentum.ducklink.faker"
+      "expansion": "com.tegmentum.ducklink.faker",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "passphrase",
@@ -4239,7 +4353,7 @@
       "source": "extensions/passphrase-component",
       "status": "working",
       "artifact": "artifacts/extensions/passphrase.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "passphrase"
       ],
@@ -4251,7 +4365,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "passphrase",
-      "expansion": "com.tegmentum.ducklink.passphrase"
+      "expansion": "com.tegmentum.ducklink.passphrase",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "h3",
@@ -4274,7 +4389,7 @@
       "source": "extensions/h3-component",
       "status": "working",
       "artifact": "artifacts/extensions/h3.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "h3_latlng_to_cell",
         "h3_cell_to_lat",
@@ -4291,7 +4406,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "h3",
-      "expansion": "com.tegmentum.ducklink.h3"
+      "expansion": "com.tegmentum.ducklink.h3",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "lindel",
@@ -4314,7 +4430,7 @@
       "source": "extensions/lindel-component",
       "status": "working",
       "artifact": "artifacts/extensions/lindel.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "morton_encode",
         "morton_decode_x",
@@ -4329,7 +4445,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "lindel",
-      "expansion": "com.tegmentum.ducklink.lindel"
+      "expansion": "com.tegmentum.ducklink.lindel",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "magic",
@@ -4352,7 +4469,7 @@
       "source": "extensions/magic-component",
       "status": "working",
       "artifact": "artifacts/extensions/magic.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "magic_mime",
         "magic_extension",
@@ -4367,7 +4484,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "magic",
-      "expansion": "com.tegmentum.ducklink.magic"
+      "expansion": "com.tegmentum.ducklink.magic",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "tsid",
@@ -4390,7 +4508,7 @@
       "source": "extensions/tsid-component",
       "status": "working",
       "artifact": "artifacts/extensions/tsid.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "tsid_encode",
         "tsid_decode",
@@ -4403,7 +4521,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "tsid",
-      "expansion": "com.tegmentum.ducklink.tsid"
+      "expansion": "com.tegmentum.ducklink.tsid",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "rhai",
@@ -4426,7 +4545,7 @@
       "source": "extensions/rhai-component",
       "status": "working",
       "artifact": "artifacts/extensions/rhai.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "rhai_eval",
         "rhai_eval_int",
@@ -4440,7 +4559,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "rhai",
-      "expansion": "com.tegmentum.ducklink.rhai"
+      "expansion": "com.tegmentum.ducklink.rhai",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "bitfilters",
@@ -4463,7 +4583,7 @@
       "source": "extensions/bitfilters-component",
       "status": "working",
       "artifact": "artifacts/extensions/bitfilters.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "xor_filter",
         "xor_filter_contains"
@@ -4478,7 +4598,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "bitfilters",
-      "expansion": "com.tegmentum.ducklink.bitfilters"
+      "expansion": "com.tegmentum.ducklink.bitfilters",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "prql",
@@ -4495,7 +4616,7 @@
       "source": "extensions/prql-component",
       "status": "working",
       "artifact": "artifacts/extensions/prql.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "prql_to_sql",
         "prql_is_valid"
@@ -4508,7 +4629,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "prql",
-      "expansion": "com.tegmentum.ducklink.prql"
+      "expansion": "com.tegmentum.ducklink.prql",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "jaq",
@@ -4525,7 +4647,7 @@
       "source": "extensions/jaq-component",
       "status": "working",
       "artifact": "artifacts/extensions/jaq.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "jq",
         "jq_first"
@@ -4540,7 +4662,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "jaq",
-      "expansion": "com.tegmentum.ducklink.jaq"
+      "expansion": "com.tegmentum.ducklink.jaq",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "cron",
@@ -4557,7 +4680,7 @@
       "source": "extensions/cron-component",
       "status": "working",
       "artifact": "artifacts/extensions/cron.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "cron_is_valid",
         "cron_next",
@@ -4571,7 +4694,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "cron",
-      "expansion": "com.tegmentum.ducklink.cron"
+      "expansion": "com.tegmentum.ducklink.cron",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "xml",
@@ -4588,7 +4712,7 @@
       "source": "extensions/xml-component",
       "status": "working",
       "artifact": "artifacts/extensions/xml.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "xml_valid",
         "xml_extract",
@@ -4602,7 +4726,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "xml",
-      "expansion": "com.tegmentum.ducklink.xml"
+      "expansion": "com.tegmentum.ducklink.xml",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "pinyin",
@@ -4619,7 +4744,7 @@
       "source": "extensions/pinyin-component",
       "status": "working",
       "artifact": "artifacts/extensions/pinyin.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "to_pinyin",
         "to_pinyin_plain",
@@ -4633,7 +4758,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "pinyin",
-      "expansion": "com.tegmentum.ducklink.pinyin"
+      "expansion": "com.tegmentum.ducklink.pinyin",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "sqlformat",
@@ -4650,7 +4776,7 @@
       "source": "extensions/sqlformat-component",
       "status": "working",
       "artifact": "artifacts/extensions/sqlformat.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "sql_format",
         "sql_format_compact"
@@ -4663,7 +4789,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "sqlformat",
-      "expansion": "com.tegmentum.ducklink.sqlformat"
+      "expansion": "com.tegmentum.ducklink.sqlformat",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "bencode",
@@ -4680,7 +4807,7 @@
       "source": "extensions/bencode-component",
       "status": "working",
       "artifact": "artifacts/extensions/bencode.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "bencode_to_json",
         "bencode_is_valid"
@@ -4693,7 +4820,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "bencode",
-      "expansion": "com.tegmentum.ducklink.bencode"
+      "expansion": "com.tegmentum.ducklink.bencode",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "maidenhead",
@@ -4710,7 +4838,7 @@
       "source": "extensions/maidenhead-component",
       "status": "working",
       "artifact": "artifacts/extensions/maidenhead.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "to_maidenhead",
         "maidenhead_lat",
@@ -4722,7 +4850,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "maidenhead",
-      "expansion": "com.tegmentum.ducklink.maidenhead"
+      "expansion": "com.tegmentum.ducklink.maidenhead",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "base45",
@@ -4739,7 +4868,7 @@
       "source": "extensions/base45-component",
       "status": "working",
       "artifact": "artifacts/extensions/base45.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "base45_encode",
         "base45_decode"
@@ -4752,7 +4881,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "base45",
-      "expansion": "com.tegmentum.ducklink.base45"
+      "expansion": "com.tegmentum.ducklink.base45",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "numfmt",
@@ -4769,7 +4899,7 @@
       "source": "extensions/numfmt-component",
       "status": "working",
       "artifact": "artifacts/extensions/numfmt.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "num_group",
         "num_si"
@@ -4780,7 +4910,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "numfmt",
-      "expansion": "com.tegmentum.ducklink.numfmt"
+      "expansion": "com.tegmentum.ducklink.numfmt",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "mailto",
@@ -4797,7 +4928,7 @@
       "source": "extensions/mailto-component",
       "status": "working",
       "artifact": "artifacts/extensions/mailto.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "mailto_to",
         "mailto_field",
@@ -4811,7 +4942,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "mailto",
-      "expansion": "com.tegmentum.ducklink.mailto"
+      "expansion": "com.tegmentum.ducklink.mailto",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "hexdump",
@@ -4828,7 +4960,7 @@
       "source": "extensions/hexdump-component",
       "status": "working",
       "artifact": "artifacts/extensions/hexdump.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "hexdump",
         "hex_pretty"
@@ -4839,7 +4971,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "hexdump",
-      "expansion": "com.tegmentum.ducklink.hexdump"
+      "expansion": "com.tegmentum.ducklink.hexdump",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "secp256k1",
@@ -4856,7 +4989,7 @@
       "source": "extensions/secp256k1-component",
       "status": "working",
       "artifact": "artifacts/extensions/secp256k1.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "secp256k1_pubkey",
         "secp256k1_sign",
@@ -4870,7 +5003,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "secp256k1",
-      "expansion": "com.tegmentum.ducklink.secp256k1"
+      "expansion": "com.tegmentum.ducklink.secp256k1",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "bibtex",
@@ -4887,7 +5021,7 @@
       "source": "extensions/bibtex-component",
       "status": "working",
       "artifact": "artifacts/extensions/bibtex.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "bibtex_count",
         "bibtex_to_json",
@@ -4901,7 +5035,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "bibtex",
-      "expansion": "com.tegmentum.ducklink.bibtex"
+      "expansion": "com.tegmentum.ducklink.bibtex",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "useragent",
@@ -4918,7 +5053,7 @@
       "source": "extensions/useragent-component",
       "status": "working",
       "artifact": "artifacts/extensions/useragent.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "ua_browser",
         "ua_browser_version",
@@ -4934,7 +5069,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "useragent",
-      "expansion": "com.tegmentum.ducklink.useragent"
+      "expansion": "com.tegmentum.ducklink.useragent",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "ical",
@@ -4951,7 +5087,7 @@
       "source": "extensions/ical-component",
       "status": "working",
       "artifact": "artifacts/extensions/ical.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "ical_event_count",
         "ical_to_json",
@@ -4966,7 +5102,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "ical",
-      "expansion": "com.tegmentum.ducklink.ical"
+      "expansion": "com.tegmentum.ducklink.ical",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "tdigest",
@@ -4983,7 +5120,7 @@
       "source": "extensions/tdigest-component",
       "status": "working",
       "artifact": "artifacts/extensions/tdigest.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "tdigest",
         "tdigest_quantile",
@@ -4999,7 +5136,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "tdigest",
-      "expansion": "com.tegmentum.ducklink.tdigest"
+      "expansion": "com.tegmentum.ducklink.tdigest",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "urlpattern",
@@ -5016,7 +5154,7 @@
       "source": "extensions/urlpattern-component",
       "status": "working",
       "artifact": "artifacts/extensions/urlpattern.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "url_pattern_test",
         "url_pattern_match"
@@ -5029,7 +5167,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "urlpattern",
-      "expansion": "com.tegmentum.ducklink.urlpattern"
+      "expansion": "com.tegmentum.ducklink.urlpattern",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "celestial",
@@ -5046,7 +5185,7 @@
       "source": "extensions/celestial-component",
       "status": "working",
       "artifact": "artifacts/extensions/celestial.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "equatorial_to_galactic_l",
         "equatorial_to_galactic_b",
@@ -5060,7 +5199,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "celestial",
-      "expansion": "com.tegmentum.ducklink.celestial"
+      "expansion": "com.tegmentum.ducklink.celestial",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "textlines",
@@ -5077,7 +5217,7 @@
       "source": "extensions/textlines-component",
       "status": "working",
       "artifact": "artifacts/extensions/textlines.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "split_lines"
       ],
@@ -5087,7 +5227,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "textlines",
-      "expansion": "com.tegmentum.ducklink.textlines"
+      "expansion": "com.tegmentum.ducklink.textlines",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "netquack",
@@ -5104,7 +5245,7 @@
       "source": "extensions/netquack-component",
       "status": "working",
       "artifact": "artifacts/extensions/netquack.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "registrable_domain",
         "public_suffix",
@@ -5119,7 +5260,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "netquack",
-      "expansion": "com.tegmentum.ducklink.netquack"
+      "expansion": "com.tegmentum.ducklink.netquack",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "openprompt",
@@ -5136,7 +5278,7 @@
       "source": "extensions/openprompt-component",
       "status": "working",
       "artifact": "artifacts/extensions/openprompt.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "prompt",
         "prompt_model"
@@ -5151,7 +5293,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "openprompt",
-      "expansion": "com.tegmentum.ducklink.openprompt"
+      "expansion": "com.tegmentum.ducklink.openprompt",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "dbf",
@@ -5168,7 +5311,7 @@
       "source": "extensions/dbf-component",
       "status": "working",
       "artifact": "artifacts/extensions/dbf.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "read_dbf"
       ],
@@ -5180,7 +5323,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "dbf",
-      "expansion": "com.tegmentum.ducklink.dbf"
+      "expansion": "com.tegmentum.ducklink.dbf",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "shapefile",
@@ -5197,7 +5341,7 @@
       "source": "extensions/shapefile-component",
       "status": "working",
       "artifact": "artifacts/extensions/shapefile.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "read_shp"
       ],
@@ -5209,7 +5353,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "shapefile",
-      "expansion": "com.tegmentum.ducklink.shapefile"
+      "expansion": "com.tegmentum.ducklink.shapefile",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "fit",
@@ -5226,7 +5371,7 @@
       "source": "extensions/fit-component",
       "status": "working",
       "artifact": "artifacts/extensions/fit.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "read_fit"
       ],
@@ -5238,7 +5383,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "fit",
-      "expansion": "com.tegmentum.ducklink.fit"
+      "expansion": "com.tegmentum.ducklink.fit",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "warc",
@@ -5255,7 +5401,7 @@
       "source": "extensions/warc-component",
       "status": "working",
       "artifact": "artifacts/extensions/warc.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "read_warc"
       ],
@@ -5267,7 +5413,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "warc",
-      "expansion": "com.tegmentum.ducklink.warc"
+      "expansion": "com.tegmentum.ducklink.warc",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "html",
@@ -5284,7 +5431,7 @@
       "source": "extensions/html-component",
       "status": "working",
       "artifact": "artifacts/extensions/html.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "html_extract",
         "html_extract_all",
@@ -5298,7 +5445,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "html",
-      "expansion": "com.tegmentum.ducklink.html"
+      "expansion": "com.tegmentum.ducklink.html",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "vcard",
@@ -5315,7 +5463,7 @@
       "source": "extensions/vcard-component",
       "status": "working",
       "artifact": "artifacts/extensions/vcard.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "vcard_count",
         "vcard_to_json",
@@ -5330,7 +5478,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "vcard",
-      "expansion": "com.tegmentum.ducklink.vcard"
+      "expansion": "com.tegmentum.ducklink.vcard",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "ini",
@@ -5347,7 +5496,7 @@
       "source": "extensions/ini-component",
       "status": "working",
       "artifact": "artifacts/extensions/ini.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "ini_to_json",
         "ini_get",
@@ -5362,7 +5511,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "ini",
-      "expansion": "com.tegmentum.ducklink.ini"
+      "expansion": "com.tegmentum.ducklink.ini",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "plist",
@@ -5379,7 +5529,7 @@
       "source": "extensions/plist-component",
       "status": "working",
       "artifact": "artifacts/extensions/plist.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "plist_to_json",
         "plist_get"
@@ -5392,7 +5542,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "plist",
-      "expansion": "com.tegmentum.ducklink.plist"
+      "expansion": "com.tegmentum.ducklink.plist",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "dotenv",
@@ -5409,7 +5560,7 @@
       "source": "extensions/dotenv-component",
       "status": "working",
       "artifact": "artifacts/extensions/dotenv.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "dotenv_to_json",
         "dotenv_get",
@@ -5421,7 +5572,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "dotenv",
-      "expansion": "com.tegmentum.ducklink.dotenv"
+      "expansion": "com.tegmentum.ducklink.dotenv",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "hocon",
@@ -5438,7 +5590,7 @@
       "source": "extensions/hocon-component",
       "status": "working",
       "artifact": "artifacts/extensions/hocon.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "hocon_to_json",
         "hocon_get"
@@ -5451,7 +5603,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "hocon",
-      "expansion": "com.tegmentum.ducklink.hocon"
+      "expansion": "com.tegmentum.ducklink.hocon",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "uuid7",
@@ -5468,7 +5621,7 @@
       "source": "extensions/uuid7-component",
       "status": "working",
       "artifact": "artifacts/extensions/uuid7.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "uuid7_build",
         "uuid7_timestamp",
@@ -5482,7 +5635,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "uuid7",
-      "expansion": "com.tegmentum.ducklink.uuid7"
+      "expansion": "com.tegmentum.ducklink.uuid7",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "textdiff",
@@ -5499,7 +5653,7 @@
       "source": "extensions/textdiff-component",
       "status": "working",
       "artifact": "artifacts/extensions/textdiff.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "text_diff",
         "diff_ratio",
@@ -5513,7 +5667,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "textdiff",
-      "expansion": "com.tegmentum.ducklink.textdiff"
+      "expansion": "com.tegmentum.ducklink.textdiff",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "polyline",
@@ -5530,7 +5685,7 @@
       "source": "extensions/polyline-component",
       "status": "working",
       "artifact": "artifacts/extensions/polyline.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "polyline_encode",
         "polyline_decode"
@@ -5543,7 +5698,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "polyline",
-      "expansion": "com.tegmentum.ducklink.polyline"
+      "expansion": "com.tegmentum.ducklink.polyline",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "json_schema",
@@ -5560,7 +5716,7 @@
       "source": "extensions/json_schema-component",
       "status": "working",
       "artifact": "artifacts/extensions/json_schema.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "json_schema_valid",
         "json_schema_errors"
@@ -5573,7 +5729,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "json_schema",
-      "expansion": "com.tegmentum.ducklink.json_schema"
+      "expansion": "com.tegmentum.ducklink.json_schema",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "stochastic",
@@ -5590,7 +5747,7 @@
       "source": "extensions/stochastic-component",
       "status": "working",
       "artifact": "artifacts/extensions/stochastic.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "normal_cdf",
         "normal_pdf",
@@ -5608,7 +5765,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "stochastic",
-      "expansion": "com.tegmentum.ducklink.stochastic"
+      "expansion": "com.tegmentum.ducklink.stochastic",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "ion",
@@ -5625,7 +5783,7 @@
       "source": "extensions/ion-component",
       "status": "working",
       "artifact": "artifacts/extensions/ion.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "ion_to_json",
         "ion_from_json",
@@ -5639,7 +5797,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "ion",
-      "expansion": "com.tegmentum.ducklink.ion"
+      "expansion": "com.tegmentum.ducklink.ion",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "textplot",
@@ -5656,7 +5815,7 @@
       "source": "extensions/textplot-component",
       "status": "working",
       "artifact": "artifacts/extensions/textplot.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "plot_sparkline",
         "plot_bars",
@@ -5670,7 +5829,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "textplot",
-      "expansion": "com.tegmentum.ducklink.textplot"
+      "expansion": "com.tegmentum.ducklink.textplot",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "marisa",
@@ -5687,7 +5847,7 @@
       "source": "extensions/marisa-component",
       "status": "working",
       "artifact": "artifacts/extensions/marisa.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "fst_contains",
         "fst_prefix",
@@ -5701,7 +5861,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "marisa",
-      "expansion": "com.tegmentum.ducklink.marisa"
+      "expansion": "com.tegmentum.ducklink.marisa",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "frequentitems",
@@ -5718,7 +5879,7 @@
       "source": "extensions/frequentitems-component",
       "status": "working",
       "artifact": "artifacts/extensions/frequentitems.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "top_k",
         "top_k_value"
@@ -5729,7 +5890,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "frequentitems",
-      "expansion": "com.tegmentum.ducklink.frequentitems"
+      "expansion": "com.tegmentum.ducklink.frequentitems",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "sqlitewasm",
@@ -5746,7 +5908,7 @@
       "source": "extensions/sqlitewasm-component",
       "status": "working",
       "artifact": "artifacts/extensions/sqlitewasm.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "sqlite_blob_scan"
       ],
@@ -5759,7 +5921,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "sqlitewasm",
-      "expansion": "com.tegmentum.ducklink.sqlitewasm"
+      "expansion": "com.tegmentum.ducklink.sqlitewasm",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "jsonfns",
@@ -5778,7 +5941,7 @@
       "source": "extensions/jsonfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/jsonfns.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "json_valid",
         "json_extract",
@@ -5797,7 +5960,8 @@
         "serde_json",
         "serde_json_path"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "inetfns",
@@ -5816,7 +5980,7 @@
       "source": "extensions/inetfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/inetfns.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "host",
         "family",
@@ -5831,7 +5995,8 @@
       "crates": [
         "ipnetwork"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "excelfns",
@@ -5848,7 +6013,7 @@
       "source": "extensions/excelfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/excelfns.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "xlsx_sheets",
         "read_xlsx",
@@ -5862,7 +6027,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "excelfns",
-      "expansion": "com.tegmentum.ducklink.excelfns"
+      "expansion": "com.tegmentum.ducklink.excelfns",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "avrofns",
@@ -5879,7 +6045,7 @@
       "source": "extensions/avrofns-component",
       "status": "working",
       "artifact": "artifacts/extensions/avrofns.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "avro_schema",
         "read_avro",
@@ -5894,7 +6060,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "avrofns",
-      "expansion": "com.tegmentum.ducklink.avrofns"
+      "expansion": "com.tegmentum.ducklink.avrofns",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "spatialfns",
@@ -5913,7 +6080,7 @@
       "source": "extensions/spatialfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/spatialfns.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "ST_Point",
         "ST_GeomFromText",
@@ -5938,7 +6105,8 @@
         "wkt",
         "geojson"
       ],
-      "min_duckdb_version": "1.0.0"
+      "min_duckdb_version": "1.0.0",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "ftsfns",
@@ -5955,7 +6123,7 @@
       "source": "extensions/ftsfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/ftsfns.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "fts_tokenize",
         "fts_stem",
@@ -5971,7 +6139,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "ftsfns",
-      "expansion": "com.tegmentum.ducklink.ftsfns"
+      "expansion": "com.tegmentum.ducklink.ftsfns",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "icufns",
@@ -5988,7 +6157,7 @@
       "source": "extensions/icufns-component",
       "status": "working",
       "artifact": "artifacts/extensions/icufns.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "icu_sort_key",
         "icu_compare",
@@ -6002,7 +6171,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "icufns",
-      "expansion": "com.tegmentum.ducklink.icufns"
+      "expansion": "com.tegmentum.ducklink.icufns",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "vssfns",
@@ -6019,7 +6189,7 @@
       "source": "extensions/vssfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/vssfns.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "vec_l1_distance",
         "vec_linf_distance",
@@ -6031,7 +6201,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "vssfns",
-      "expansion": "com.tegmentum.ducklink.vssfns"
+      "expansion": "com.tegmentum.ducklink.vssfns",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "rtreefns",
@@ -6048,7 +6219,7 @@
       "source": "extensions/rtreefns-component",
       "status": "working",
       "artifact": "artifacts/extensions/rtreefns.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "rtree_search",
         "bbox4"
@@ -6063,7 +6234,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "rtreefns",
-      "expansion": "com.tegmentum.ducklink.rtreefns"
+      "expansion": "com.tegmentum.ducklink.rtreefns",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "hnswfns",
@@ -6080,7 +6252,7 @@
       "source": "extensions/hnswfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/hnswfns.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "hnsw_search"
       ],
@@ -6093,7 +6265,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "hnswfns",
-      "expansion": "com.tegmentum.ducklink.hnswfns"
+      "expansion": "com.tegmentum.ducklink.hnswfns",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "geomtype",
@@ -6110,7 +6283,7 @@
       "source": "extensions/geomtype-component",
       "status": "working",
       "artifact": "artifacts/extensions/geomtype.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "geom_area",
         "geom_astext"
@@ -6125,7 +6298,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "geomtype",
-      "expansion": "com.tegmentum.ducklink.geomtype"
+      "expansion": "com.tegmentum.ducklink.geomtype",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "spatialproj",
@@ -6142,7 +6316,7 @@
       "source": "extensions/spatialproj-component",
       "status": "working",
       "artifact": "artifacts/extensions/spatialproj.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "ST_Transform"
       ],
@@ -6155,7 +6329,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "spatialproj",
-      "expansion": "com.tegmentum.ducklink.spatialproj"
+      "expansion": "com.tegmentum.ducklink.spatialproj",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "tpchgen",
@@ -6172,7 +6347,7 @@
       "source": "extensions/tpchgen-component",
       "status": "working",
       "artifact": "artifacts/extensions/tpchgen.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "tpch_region",
         "tpch_nation",
@@ -6193,7 +6368,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "tpchgen",
-      "expansion": "com.tegmentum.ducklink.tpchgen"
+      "expansion": "com.tegmentum.ducklink.tpchgen",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "tpcdsgen",
@@ -6210,7 +6386,7 @@
       "source": "extensions/tpcdsgen-component",
       "status": "working",
       "artifact": "artifacts/extensions/tpcdsgen.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "tpcds_income_band",
         "tpcds_date_dim_sample"
@@ -6221,7 +6397,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "tpcdsgen",
-      "expansion": "com.tegmentum.ducklink.tpcdsgen"
+      "expansion": "com.tegmentum.ducklink.tpcdsgen",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "deltascan",
@@ -6238,7 +6415,7 @@
       "source": "extensions/deltascan-component",
       "status": "working",
       "artifact": "artifacts/extensions/deltascan.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "delta_log_info",
         "delta_schema"
@@ -6251,7 +6428,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "deltascan",
-      "expansion": "com.tegmentum.ducklink.deltascan"
+      "expansion": "com.tegmentum.ducklink.deltascan",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "icebergscan",
@@ -6268,7 +6446,7 @@
       "source": "extensions/icebergscan-component",
       "status": "working",
       "artifact": "artifacts/extensions/icebergscan.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "iceberg_metadata",
         "iceberg_schema",
@@ -6282,7 +6460,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "icebergscan",
-      "expansion": "com.tegmentum.ducklink.icebergscan"
+      "expansion": "com.tegmentum.ducklink.icebergscan",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "autocomplete",
@@ -6299,7 +6478,7 @@
       "source": "extensions/autocomplete-component",
       "status": "working",
       "artifact": "artifacts/extensions/autocomplete.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "sql_complete"
       ],
@@ -6310,7 +6489,8 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "prefix": "autocomplete",
-      "expansion": "com.tegmentum.ducklink.autocomplete"
+      "expansion": "com.tegmentum.ducklink.autocomplete",
+      "wit_contract_version": "2.0.0"
     },
     {
       "name": "statsduck",
@@ -6327,7 +6507,7 @@
       "source": "extensions/statsduck-component",
       "status": "working",
       "artifact": "artifacts/extensions/statsduck.wasm",
-      "wit_contract": "2.0.0",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
       "exports": [
         "adjust_p",
         "anderson_darling",
@@ -6370,7 +6550,8 @@
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "statsduck",
-      "expansion": "com.tegmentum.ducklink.stats"
+      "expansion": "com.tegmentum.ducklink.stats",
+      "wit_contract_version": "2.0.0"
     }
   ],
   "dotcmds": [

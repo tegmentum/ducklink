@@ -22,21 +22,52 @@ use std::collections::HashMap;
 use wasmtime::component::Component;
 use wasmtime::Engine;
 
+/// The AUTHORITATIVE, content-addressed `duckdb:extension` contract identity: a
+/// **witcanon digest** — `sha256("witcanon:1" || canonical-WIT-bytes)` (hex),
+/// the scheme from `compose-core::blobs::compute_wit_digest` in the
+/// webassembly-component-orchestration framework (SPEC §4.1) — computed at build
+/// time over the canonical `wit/duckdb-extension/*.wit` bytes (see `build.rs`).
+///
+/// This is the SOURCE OF TRUTH for the contract: a contract is identified by a
+/// hash of its actual shape, not a hand-maintained version string. It changes iff
+/// the WIT changes, interoperates with the framework's blob identity, and is what
+/// `tooling/{gen,verify}-catalog.py` record + enforce per registry entry.
+///
+/// The runtime cannot recompute a *loaded* component's WIT digest (it can only
+/// introspect the imported package @MAJOR — see [`component_contract_major`]), so
+/// the runtime guard ([`check_component_contract`]) is the runtime-observable
+/// PROXY for this identity; the digest is enforced at catalog-verify time.
+include!(concat!(env!("OUT_DIR"), "/contract_digest.rs"));
+
+/// The witcanon digest (hex) of the current canonical `duckdb:extension` WIT —
+/// the authoritative content-addressed contract identity. Equals the value
+/// `tooling/{gen,verify}-catalog.py` compute + record per registry entry.
+pub fn contract_digest() -> &'static str {
+    CONTRACT_DIGEST
+}
+
 /// The MAJOR version of the `duckdb:extension` WIT contract this host speaks.
 ///
-/// THE single edit point for a contract bump on the host side: bump this when the
-/// canonical WIT package id moves to a new major (e.g. `duckdb:extension@3.0.0`).
-/// The loader guard ([`check_component_contract`]) rejects any component whose
-/// imported `duckdb:extension` package has a different major (or no version at
-/// all -- a legacy, pre-versioning v1 component), so a mismatched component never
-/// instantiates and silently marshals corrupted values.
+/// This is the runtime-observable PROXY for the content-addressed contract
+/// identity ([`CONTRACT_DIGEST`]): the host can only introspect a *loaded*
+/// component's imported `duckdb:extension` package @MAJOR at runtime — it cannot
+/// recompute the loaded component's WIT digest. Bump this when the canonical WIT
+/// package id moves to a new major (e.g. `duckdb:extension@3.0.0`); the loader
+/// guard ([`check_component_contract`]) rejects any component whose imported
+/// package has a different major (or no version at all -- a legacy, pre-versioning
+/// v1 component), so a mismatched component never instantiates and silently
+/// marshals corrupted values. The AUTHORITATIVE check is the digest, enforced at
+/// catalog-verify; this @MAJOR check is its runtime proxy.
 pub const CONTRACT_MAJOR: u64 = 2;
 
 /// Full contract version string the host advertises (observability only; the
-/// guard compares the MAJOR via [`CONTRACT_MAJOR`]).
+/// guard compares the MAJOR via [`CONTRACT_MAJOR`], and the authoritative
+/// identity is the content-addressed [`CONTRACT_DIGEST`]).
 pub const CONTRACT_VERSION: &str = "2.0.0";
 
 /// The host's `duckdb:extension` contract version, for logging / a built-in.
+/// This is the human-readable version; the authoritative content-addressed
+/// identity is [`contract_digest`].
 pub fn ducklink_contract_version() -> &'static str {
     CONTRACT_VERSION
 }

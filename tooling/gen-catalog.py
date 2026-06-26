@@ -1,8 +1,32 @@
 #!/usr/bin/env python3
 """Generate CATALOG.md — a human-readable index of every component extension —
-from registry/index.json. Run after adding extensions: python3 tooling/gen-catalog.py"""
-import json, pathlib, datetime
+from registry/index.json, AND stamp every entry's content-addressed contract
+identity (the witcanon digest of the canonical duckdb:extension WIT) into the
+registry. Run after adding extensions OR after a WIT change (re-propagate first):
+  python3 tooling/gen-catalog.py"""
+import json, hashlib, pathlib, datetime
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+# Human-readable contract version (the runtime-observable proxy major). Mirrors
+# CONTRACT_VERSION in tooling/propagate-wit.py and crates/ducklink-runtime.
+CONTRACT_VERSION = "2.0.0"
+
+
+def contract_digest() -> str:
+    """The AUTHORITATIVE content-addressed `duckdb:extension` contract identity:
+    a witcanon digest — sha256("witcanon:1" || canonical WIT bytes), hex — over
+    the canonical wit/duckdb-extension/*.wit files, read in sorted-by-filename
+    order and concatenated.
+
+    Byte-identical to compose-core::blobs::compute_wit_digest in
+    ~/git/webassembly-component-orchestration (SPEC §4.1) and to the digest the
+    runtime embeds at build time (crates/ducklink-runtime/build.rs), so the value
+    interoperates and equals what the runtime serves via contract_digest()."""
+    wit_dir = ROOT / "wit" / "duckdb-extension"
+    buf = b"".join(p.read_bytes() for p in sorted(wit_dir.glob("*.wit")))
+    return hashlib.sha256(b"witcanon:1" + buf).hexdigest()
+
+
 def names(coll):
     if isinstance(coll, dict): return sorted(coll.keys())
     out=[]
@@ -11,6 +35,27 @@ def names(coll):
     return out
 
 reg = json.load(open(ROOT / "registry" / "index.json"))
+
+# Stamp the content-addressed contract identity into every entry. The witcanon
+# DIGEST is the authoritative `wit_contract`; the human version is kept alongside
+# as `wit_contract_version`. All entries share one contract, so all get the same
+# digest. Rewrite registry/index.json only if anything changed (keep 2-space
+# indent + trailing newline to match the existing file's formatting).
+DIGEST = contract_digest()
+reg_changed = False
+for e in reg["extensions"]:
+    if e.get("wit_contract") != DIGEST:
+        e["wit_contract"] = DIGEST
+        reg_changed = True
+    if e.get("wit_contract_version") != CONTRACT_VERSION:
+        e["wit_contract_version"] = CONTRACT_VERSION
+        reg_changed = True
+if reg_changed:
+    with open(ROOT / "registry" / "index.json", "w") as fh:
+        json.dump(reg, fh, indent=2)
+        fh.write("\n")
+    print(f"stamped contract digest {DIGEST[:12]}… into registry/index.json")
+
 exts = [e for e in reg["extensions"] if e["name"] != "sample_extension"]
 
 # group by category (an extension may list several; use the first as primary)

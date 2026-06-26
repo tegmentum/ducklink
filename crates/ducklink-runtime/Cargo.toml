@@ -15,5 +15,15 @@ wasmtime = { version = "46.0.1", features = ["component-model", "cache"] }
 # The extension store-state holds a WasiCtx and implements WasiView (components
 # target wasip2). Same version as wasmtime.
 wasmtime-wasi = "46.0.1"
+# The witcanon contract-digest scheme: sha256("witcanon:1" || canonical WIT
+# bytes), byte-identical to compose-core::blobs::compute_wit_digest in
+# ~/git/webassembly-component-orchestration so digests interoperate. build.rs
+# computes the digest at build time; the lib just embeds + serves the const.
+hex = "0.4"
+
+[build-dependencies]
+# Same witcanon scheme, used in build.rs to hash the canonical WIT into a const.
+sha2 = "0.10"
+hex = "0.4"
 
 [lib]

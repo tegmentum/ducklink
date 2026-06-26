@@ -2347,10 +2347,15 @@ impl ExtensionManager {
         let current_connection = self.current_connection.clone();
         let catalog_snapshot = self.catalog_snapshot.clone();
         let extension_name = sanitized.clone();
+        // Log the human version AND the authoritative content-addressed contract
+        // identity (the witcanon digest, short hex). The digest is what
+        // catalog-verify enforces; the version is the runtime-observable proxy.
+        let contract_digest = ducklink_runtime::contract_digest();
         eprintln!(
-            "[extension-manager] attempting to load '{sanitized}' from {} (host duckdb:extension contract {})",
+            "[extension-manager] attempting to load '{sanitized}' from {} (host duckdb:extension contract {} digest {})",
             artifact_path.display(),
-            ducklink_runtime::ducklink_contract_version()
+            ducklink_runtime::ducklink_contract_version(),
+            &contract_digest[..contract_digest.len().min(12)]
         );
         // The thread returns the loaded instance AND whether this component
         // imports the live-query capability. Only a query-importing component
