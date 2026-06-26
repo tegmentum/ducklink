@@ -147,6 +147,7 @@
       "source": "builtin",
       "status": "working",
       "artifact": "artifacts/extensions/sample_extension.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "sample_plus_one",
         "sample_emit_sequence",
@@ -190,6 +191,7 @@
       "source": "extensions/isin-component",
       "status": "working",
       "artifact": "artifacts/extensions/isin.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "isin_validate",
         "isin_check_digit",
@@ -226,6 +228,7 @@
       "source": "extensions/baseN-component",
       "status": "working",
       "artifact": "artifacts/extensions/baseN.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "base32_encode",
         "base32_decode",
@@ -264,6 +267,7 @@
       "source": "extensions/luhn-component",
       "status": "working",
       "artifact": "artifacts/extensions/luhn.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "luhn_validate",
         "luhn_check_digit"
@@ -299,6 +303,7 @@
       "source": "extensions/iban-component",
       "status": "working",
       "artifact": "artifacts/extensions/iban.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "iban_validate",
         "iban_country",
@@ -334,6 +339,7 @@
       "source": "extensions/ean-component",
       "status": "working",
       "artifact": "artifacts/extensions/ean.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "ean_validate",
         "ean_check_digit"
@@ -367,6 +373,7 @@
       "source": "extensions/aba-component",
       "status": "working",
       "artifact": "artifacts/extensions/aba.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "aba_validate"
       ],
@@ -399,6 +406,7 @@
       "source": "extensions/creditcard-component",
       "status": "working",
       "artifact": "artifacts/extensions/creditcard.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "cc_validate",
         "cc_network"
@@ -437,6 +445,7 @@
       "repository": "https://github.com/tegmentum/ducklink",
       "source": "extensions/uuidx-component",
       "artifact": "artifacts/extensions/uuidx.wasm",
+      "wit_contract": "2.0.0",
       "keywords": [
         "uuid",
         "v7",
@@ -478,6 +487,7 @@
       "repository": "https://github.com/tegmentum/ducklink",
       "source": "extensions/crypto-component",
       "artifact": "artifacts/extensions/crypto.wasm",
+      "wit_contract": "2.0.0",
       "keywords": [
         "crypto",
         "hash",
@@ -510,6 +520,7 @@
       "source": "extensions/markdown-component",
       "status": "working",
       "artifact": "artifacts/extensions/markdown.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "md_to_html",
         "md_to_text"
@@ -546,6 +557,7 @@
       "source": "extensions/hashfuncs-component",
       "status": "working",
       "artifact": "artifacts/extensions/hashfuncs.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "xxh32",
         "xxh64",
@@ -584,6 +596,7 @@
       "source": "extensions/rapidfuzz-component",
       "status": "working",
       "artifact": "artifacts/extensions/rapidfuzz.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "fuzz_ratio",
         "damerau_levenshtein",
@@ -622,6 +635,7 @@
       "source": "extensions/casing-component",
       "status": "working",
       "artifact": "artifacts/extensions/casing.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "to_snake_case",
         "to_camel_case",
@@ -661,6 +675,7 @@
       "source": "extensions/csscolor-component",
       "status": "working",
       "artifact": "artifacts/extensions/csscolor.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "css_to_hex",
         "css_to_rgb",
@@ -696,6 +711,7 @@
       "source": "extensions/url-component",
       "status": "working",
       "artifact": "artifacts/extensions/url.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "url_scheme",
         "url_host",
@@ -733,6 +749,7 @@
       "source": "extensions/email-component",
       "status": "working",
       "artifact": "artifacts/extensions/email.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "email_validate",
         "email_domain",
@@ -768,6 +785,7 @@
       "source": "extensions/semver-component",
       "status": "working",
       "artifact": "artifacts/extensions/semver.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "semver_valid",
         "semver_major",
@@ -805,6 +823,7 @@
       "source": "extensions/slug-component",
       "status": "working",
       "artifact": "artifacts/extensions/slug.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "slugify"
       ],
@@ -839,6 +858,7 @@
       "source": "extensions/escape-component",
       "status": "working",
       "artifact": "artifacts/extensions/escape.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "html_escape",
         "html_unescape",
@@ -876,6 +896,7 @@
       "source": "extensions/natsort-component",
       "status": "working",
       "artifact": "artifacts/extensions/natsort.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "natsort_compare"
       ],
@@ -909,6 +930,7 @@
       "source": "extensions/roman-component",
       "status": "working",
       "artifact": "artifacts/extensions/roman.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "to_roman",
         "from_roman"
@@ -943,6 +965,7 @@
       "source": "extensions/humansize-component",
       "status": "working",
       "artifact": "artifacts/extensions/humansize.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "humansize",
         "humansize_binary"
@@ -978,6 +1001,7 @@
       "source": "extensions/ids-component",
       "status": "working",
       "artifact": "artifacts/extensions/ids.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "ulid",
         "nanoid",
@@ -1015,6 +1039,7 @@
       "source": "extensions/idna-component",
       "status": "working",
       "artifact": "artifacts/extensions/idna.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "idna_to_ascii",
         "idna_to_unicode"
@@ -1050,6 +1075,7 @@
       "source": "extensions/mac-component",
       "status": "working",
       "artifact": "artifacts/extensions/mac.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "mac_valid",
         "mac_normalize"
@@ -1085,6 +1111,7 @@
       "source": "extensions/isbn-component",
       "status": "working",
       "artifact": "artifacts/extensions/isbn.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "isbn_valid",
         "isbn_normalize"
@@ -1118,6 +1145,7 @@
       "source": "extensions/humantime-component",
       "status": "working",
       "artifact": "artifacts/extensions/humantime.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "humantime_parse",
         "humantime_format"
@@ -1153,6 +1181,7 @@
       "source": "extensions/iso-component",
       "status": "working",
       "artifact": "artifacts/extensions/iso.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "iso_country_name",
         "iso_country_alpha3",
@@ -1189,6 +1218,7 @@
       "source": "extensions/morse-component",
       "status": "working",
       "artifact": "artifacts/extensions/morse.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "morse_encode",
         "morse_decode"
@@ -1222,6 +1252,7 @@
       "source": "extensions/color-component",
       "status": "working",
       "artifact": "artifacts/extensions/color.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "color_luminance",
         "color_contrast"
@@ -1257,6 +1288,7 @@
       "source": "extensions/geohash-component",
       "status": "working",
       "artifact": "artifacts/extensions/geohash.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "geohash_encode",
         "geohash_decode_lat",
@@ -1293,6 +1325,7 @@
       "source": "extensions/parsertools-component",
       "status": "working",
       "artifact": "artifacts/extensions/parsertools.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "sql_tables",
         "sql_is_valid",
@@ -1329,6 +1362,7 @@
       "source": "extensions/currency-component",
       "status": "working",
       "artifact": "artifacts/extensions/currency.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "currency_name",
         "currency_symbol",
@@ -1366,6 +1400,7 @@
       "source": "extensions/hmac-component",
       "status": "working",
       "artifact": "artifacts/extensions/hmac.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "hmac_sha256",
         "hmac_sha512"
@@ -1402,6 +1437,7 @@
       "source": "extensions/phonetic-component",
       "status": "working",
       "artifact": "artifacts/extensions/phonetic.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "soundex",
         "metaphone"
@@ -1437,6 +1473,7 @@
       "source": "extensions/jwt-component",
       "status": "working",
       "artifact": "artifacts/extensions/jwt.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "jwt_header",
         "jwt_payload"
@@ -1472,6 +1509,7 @@
       "source": "extensions/totp-component",
       "status": "working",
       "artifact": "artifacts/extensions/totp.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "totp"
       ],
@@ -1508,6 +1546,7 @@
       "source": "extensions/baseconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/baseconv.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "from_base"
       ],
@@ -1540,6 +1579,7 @@
       "source": "extensions/emoji-component",
       "status": "working",
       "artifact": "artifacts/extensions/emoji.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "emoji_name",
         "emoji_shortcode",
@@ -1576,6 +1616,7 @@
       "source": "extensions/whatlang-component",
       "status": "working",
       "artifact": "artifacts/extensions/whatlang.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "detect_language",
         "detect_language_name",
@@ -1612,6 +1653,7 @@
       "source": "extensions/ipaddr-component",
       "status": "working",
       "artifact": "artifacts/extensions/ipaddr.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "ip_valid",
         "ip_version",
@@ -1646,6 +1688,7 @@
       "source": "extensions/mime-component",
       "status": "working",
       "artifact": "artifacts/extensions/mime.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "mime_type",
         "mime_from_ext"
@@ -1681,6 +1724,7 @@
       "source": "extensions/pluralize-component",
       "status": "working",
       "artifact": "artifacts/extensions/pluralize.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "pluralize",
         "singularize"
@@ -1716,6 +1760,7 @@
       "source": "extensions/haversine-component",
       "status": "working",
       "artifact": "artifacts/extensions/haversine.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "haversine_km",
         "haversine_mi"
@@ -1749,6 +1794,7 @@
       "source": "extensions/numwords-component",
       "status": "working",
       "artifact": "artifacts/extensions/numwords.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "num_to_words",
         "num_to_ordinal_words"
@@ -1784,6 +1830,7 @@
       "source": "extensions/ordinal-component",
       "status": "working",
       "artifact": "artifacts/extensions/ordinal.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "ordinal"
       ],
@@ -1816,6 +1863,7 @@
       "source": "extensions/nato-component",
       "status": "working",
       "artifact": "artifacts/extensions/nato.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "nato"
       ],
@@ -1847,6 +1895,7 @@
       "source": "extensions/ascii85-component",
       "status": "working",
       "artifact": "artifacts/extensions/ascii85.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "ascii85_encode",
         "ascii85_decode"
@@ -1882,6 +1931,7 @@
       "source": "extensions/quotedprintable-component",
       "status": "working",
       "artifact": "artifacts/extensions/quotedprintable.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "qp_encode",
         "qp_decode"
@@ -1918,6 +1968,7 @@
       "source": "extensions/unitconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/unitconv.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "unit_convert"
       ],
@@ -1950,6 +2001,7 @@
       "source": "extensions/wordwrap-component",
       "status": "working",
       "artifact": "artifacts/extensions/wordwrap.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "word_wrap"
       ],
@@ -1984,6 +2036,7 @@
       "source": "extensions/timezone-component",
       "status": "working",
       "artifact": "artifacts/extensions/timezone.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "tz_valid",
         "tz_offset_seconds",
@@ -2021,6 +2074,7 @@
       "source": "extensions/rot13-component",
       "status": "working",
       "artifact": "artifacts/extensions/rot13.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "rot13",
         "caesar"
@@ -2054,6 +2108,7 @@
       "source": "extensions/leetspeak-component",
       "status": "working",
       "artifact": "artifacts/extensions/leetspeak.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "to_leet"
       ],
@@ -2068,7 +2123,7 @@
     {
       "name": "dms",
       "version": "0.1.0",
-      "description": "Geographic coordinate conversion (hand-rolled): dms_to_decimal(deg,min,sec) and decimal_to_dms(decimal) -> D°M'S\". Sign-aware.",
+      "description": "Geographic coordinate conversion (hand-rolled): dms_to_decimal(deg,min,sec) and decimal_to_dms(decimal) -> D\u00b0M'S\". Sign-aware.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -2086,6 +2141,7 @@
       "source": "extensions/dms-component",
       "status": "working",
       "artifact": "artifacts/extensions/dms.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "dms_to_decimal",
         "decimal_to_dms"
@@ -2119,6 +2175,7 @@
       "source": "extensions/cbor-component",
       "status": "working",
       "artifact": "artifacts/extensions/cbor.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "cbor_from_json",
         "cbor_to_json"
@@ -2156,6 +2213,7 @@
       "source": "extensions/msgpack-component",
       "status": "working",
       "artifact": "artifacts/extensions/msgpack.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "msgpack_from_json",
         "msgpack_to_json"
@@ -2193,6 +2251,7 @@
       "source": "extensions/elements-component",
       "status": "working",
       "artifact": "artifacts/extensions/elements.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "element_name",
         "element_number",
@@ -2229,6 +2288,7 @@
       "source": "extensions/vigenere-component",
       "status": "working",
       "artifact": "artifacts/extensions/vigenere.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "vigenere_encrypt",
         "vigenere_decrypt"
@@ -2262,6 +2322,7 @@
       "source": "extensions/petname-component",
       "status": "working",
       "artifact": "artifacts/extensions/petname.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "petname"
       ],
@@ -2296,6 +2357,7 @@
       "source": "extensions/base58check-component",
       "status": "working",
       "artifact": "artifacts/extensions/base58check.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "base58check_encode",
         "base58check_decode"
@@ -2331,6 +2393,7 @@
       "source": "extensions/checksums-component",
       "status": "working",
       "artifact": "artifacts/extensions/checksums.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "crc16",
         "adler32",
@@ -2369,6 +2432,7 @@
       "source": "extensions/siphash-component",
       "status": "working",
       "artifact": "artifacts/extensions/siphash.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "siphash"
       ],
@@ -2404,6 +2468,7 @@
       "source": "extensions/tiktoken-component",
       "status": "working",
       "artifact": "artifacts/extensions/tiktoken.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "tiktoken_count",
         "tiktoken_encode",
@@ -2440,6 +2505,7 @@
       "source": "extensions/bech32-component",
       "status": "working",
       "artifact": "artifacts/extensions/bech32.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "bech32_encode",
         "bech32_hrp",
@@ -2477,6 +2543,7 @@
       "source": "extensions/uuid5-component",
       "status": "working",
       "artifact": "artifacts/extensions/uuid5.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "uuid_v5",
         "uuid_v3"
@@ -2512,6 +2579,7 @@
       "source": "extensions/gravatar-component",
       "status": "working",
       "artifact": "artifacts/extensions/gravatar.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "gravatar_hash",
         "gravatar_url"
@@ -2547,6 +2615,7 @@
       "source": "extensions/html2text-component",
       "status": "working",
       "artifact": "artifacts/extensions/html2text.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "html_to_text"
       ],
@@ -2581,6 +2650,7 @@
       "source": "extensions/textstat-component",
       "status": "working",
       "artifact": "artifacts/extensions/textstat.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "word_count",
         "sentence_count",
@@ -2617,6 +2687,7 @@
       "source": "extensions/hashids-component",
       "status": "working",
       "artifact": "artifacts/extensions/hashids.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "hashids_encode",
         "hashids_decode"
@@ -2652,6 +2723,7 @@
       "source": "extensions/checkdigit-component",
       "status": "working",
       "artifact": "artifacts/extensions/checkdigit.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "verhoeff_validate",
         "verhoeff_append",
@@ -2687,6 +2759,7 @@
       "source": "extensions/dice-component",
       "status": "working",
       "artifact": "artifacts/extensions/dice.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "dice_roll",
         "dice_min",
@@ -2723,6 +2796,7 @@
       "source": "extensions/graycode-component",
       "status": "working",
       "artifact": "artifacts/extensions/graycode.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "gray_encode",
         "gray_decode"
@@ -2756,6 +2830,7 @@
       "source": "extensions/cardtype-component",
       "status": "working",
       "artifact": "artifacts/extensions/cardtype.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "card_brand"
       ],
@@ -2770,7 +2845,7 @@
     {
       "name": "money",
       "version": "0.1.0",
-      "description": "Currency amount formatting (iso_currency): format_money(amount, code) -> '$1,234.50' / '¥1,000', using the currency symbol + minor-unit count, thousands-grouped. Unknown -> NULL.",
+      "description": "Currency amount formatting (iso_currency): format_money(amount, code) -> '$1,234.50' / '\u00a51,000', using the currency symbol + minor-unit count, thousands-grouped. Unknown -> NULL.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -2788,6 +2863,7 @@
       "source": "extensions/money-component",
       "status": "working",
       "artifact": "artifacts/extensions/money.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "format_money"
       ],
@@ -2822,6 +2898,7 @@
       "source": "extensions/ngrams-component",
       "status": "working",
       "artifact": "artifacts/extensions/ngrams.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "char_ngrams",
         "word_ngrams"
@@ -2857,6 +2934,7 @@
       "source": "extensions/stem-component",
       "status": "working",
       "artifact": "artifacts/extensions/stem.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "stem"
       ],
@@ -2873,7 +2951,7 @@
     {
       "name": "transliterate",
       "version": "0.1.0",
-      "description": "Unicode -> ASCII transliteration (deunicode): deunicode(text), e.g. 'Æneid café' -> 'AEneid cafe'. NULL -> NULL.",
+      "description": "Unicode -> ASCII transliteration (deunicode): deunicode(text), e.g. '\u00c6neid caf\u00e9' -> 'AEneid cafe'. NULL -> NULL.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -2891,6 +2969,7 @@
       "source": "extensions/transliterate-component",
       "status": "working",
       "artifact": "artifacts/extensions/transliterate.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "deunicode"
       ],
@@ -2925,6 +3004,7 @@
       "source": "extensions/pluscode-component",
       "status": "working",
       "artifact": "artifacts/extensions/pluscode.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "pluscode_encode",
         "pluscode_valid",
@@ -2963,6 +3043,7 @@
       "source": "extensions/rot47-component",
       "status": "working",
       "artifact": "artifacts/extensions/rot47.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "rot47"
       ],
@@ -2995,6 +3076,7 @@
       "source": "extensions/stopwords-component",
       "status": "working",
       "artifact": "artifacts/extensions/stopwords.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "is_stopword",
         "remove_stopwords"
@@ -3030,6 +3112,7 @@
       "source": "extensions/isbnconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/isbnconv.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "isbn10_to_13",
         "isbn13_to_10"
@@ -3063,6 +3146,7 @@
       "source": "extensions/passgen-component",
       "status": "working",
       "artifact": "artifacts/extensions/passgen.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "gen_password",
         "gen_password_alnum"
@@ -3098,6 +3182,7 @@
       "source": "extensions/braille-component",
       "status": "working",
       "artifact": "artifacts/extensions/braille.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "to_braille"
       ],
@@ -3130,6 +3215,7 @@
       "source": "extensions/toml-component",
       "status": "working",
       "artifact": "artifacts/extensions/toml.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "toml_to_json",
         "json_to_toml"
@@ -3166,6 +3252,7 @@
       "source": "extensions/yaml-component",
       "status": "working",
       "artifact": "artifacts/extensions/yaml.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "yaml_to_json",
         "json_to_yaml"
@@ -3202,6 +3289,7 @@
       "source": "extensions/unicodenorm-component",
       "status": "working",
       "artifact": "artifacts/extensions/unicodenorm.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "nfc",
         "nfd",
@@ -3239,6 +3327,7 @@
       "source": "extensions/unicodewidth-component",
       "status": "working",
       "artifact": "artifacts/extensions/unicodewidth.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "grapheme_count",
         "display_width"
@@ -3275,6 +3364,7 @@
       "source": "extensions/colorconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/colorconv.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "hex_to_hsl",
         "hex_to_hsv",
@@ -3308,6 +3398,7 @@
       "source": "extensions/jsonschema-component",
       "status": "working",
       "artifact": "artifacts/extensions/jsonschema.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "json_schema_valid"
       ],
@@ -3343,6 +3434,7 @@
       "source": "extensions/simhash-component",
       "status": "working",
       "artifact": "artifacts/extensions/simhash.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "simhash",
         "simhash_distance"
@@ -3376,6 +3468,7 @@
       "source": "extensions/idextra-component",
       "status": "working",
       "artifact": "artifacts/extensions/idextra.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "ksuid",
         "cuid2"
@@ -3412,6 +3505,7 @@
       "source": "extensions/phonetic2-component",
       "status": "working",
       "artifact": "artifacts/extensions/phonetic2.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "nysiis",
         "refined_soundex",
@@ -3448,6 +3542,7 @@
       "source": "extensions/z85-component",
       "status": "working",
       "artifact": "artifacts/extensions/z85.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "z85_encode",
         "z85_decode"
@@ -3483,6 +3578,7 @@
       "source": "extensions/initials-component",
       "status": "working",
       "artifact": "artifacts/extensions/initials.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "initials",
         "initials_dotted"
@@ -3516,6 +3612,7 @@
       "source": "extensions/luhngen-component",
       "status": "working",
       "artifact": "artifacts/extensions/luhngen.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "luhn_check_digit",
         "luhn_append"
@@ -3550,6 +3647,7 @@
       "source": "extensions/pintest-a-component",
       "status": "working",
       "artifact": "artifacts/extensions/pintest_a.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "pin_probe"
       ],
@@ -3581,6 +3679,7 @@
       "source": "extensions/pintest-b-component",
       "status": "working",
       "artifact": "artifacts/extensions/pintest_b.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "pin_probe"
       ],
@@ -3611,6 +3710,7 @@
       "source": "extensions/atbash-component",
       "status": "working",
       "artifact": "artifacts/extensions/atbash.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "atbash"
       ],
@@ -3643,6 +3743,7 @@
       "source": "extensions/piglatin-component",
       "status": "working",
       "artifact": "artifacts/extensions/piglatin.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "to_pig_latin"
       ],
@@ -3675,6 +3776,7 @@
       "source": "extensions/rle-component",
       "status": "working",
       "artifact": "artifacts/extensions/rle.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "rle_encode",
         "rle_decode"
@@ -3708,6 +3810,7 @@
       "source": "extensions/bbcode-component",
       "status": "working",
       "artifact": "artifacts/extensions/bbcode.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "bbcode_to_html"
       ],
@@ -3740,6 +3843,7 @@
       "source": "extensions/phonenumber-component",
       "status": "working",
       "artifact": "artifacts/extensions/phonenumber.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "phone_valid",
         "phone_format",
@@ -3776,6 +3880,7 @@
       "source": "extensions/pwstrength-component",
       "status": "working",
       "artifact": "artifacts/extensions/pwstrength.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "password_score",
         "password_strength"
@@ -3811,6 +3916,7 @@
       "source": "extensions/qrcode-component",
       "status": "working",
       "artifact": "artifacts/extensions/qrcode.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "qr_svg"
       ],
@@ -3845,6 +3951,7 @@
       "source": "extensions/aggstat-component",
       "status": "working",
       "artifact": "artifacts/extensions/aggstat.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "harmonic_mean"
       ],
@@ -3877,6 +3984,7 @@
       "source": "extensions/bloom-component",
       "status": "working",
       "artifact": "artifacts/extensions/bloom.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "bloom_filter",
         "bloom_contains"
@@ -3911,6 +4019,7 @@
       "source": "extensions/minhash-component",
       "status": "working",
       "artifact": "artifacts/extensions/minhash.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "minhash",
         "minhash_similarity"
@@ -3945,6 +4054,7 @@
       "source": "extensions/countmin-component",
       "status": "working",
       "artifact": "artifacts/extensions/countmin.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "count_min",
         "cms_estimate"
@@ -3979,6 +4089,7 @@
       "source": "extensions/dns-component",
       "status": "working",
       "artifact": "artifacts/extensions/dns.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "dns_lookup",
         "dns_resolve_all"
@@ -4013,6 +4124,7 @@
       "source": "extensions/httpclient-component",
       "status": "working",
       "artifact": "artifacts/extensions/httpclient.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "http_get",
         "http_status",
@@ -4052,6 +4164,7 @@
       "source": "extensions/lorem-component",
       "status": "working",
       "artifact": "artifacts/extensions/lorem.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "lorem_words",
         "lorem_title"
@@ -4087,6 +4200,7 @@
       "source": "extensions/faker-component",
       "status": "working",
       "artifact": "artifacts/extensions/faker.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "fake_name",
         "fake_email",
@@ -4125,6 +4239,7 @@
       "source": "extensions/passphrase-component",
       "status": "working",
       "artifact": "artifacts/extensions/passphrase.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "passphrase"
       ],
@@ -4159,6 +4274,7 @@
       "source": "extensions/h3-component",
       "status": "working",
       "artifact": "artifacts/extensions/h3.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "h3_latlng_to_cell",
         "h3_cell_to_lat",
@@ -4198,6 +4314,7 @@
       "source": "extensions/lindel-component",
       "status": "working",
       "artifact": "artifacts/extensions/lindel.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "morton_encode",
         "morton_decode_x",
@@ -4235,6 +4352,7 @@
       "source": "extensions/magic-component",
       "status": "working",
       "artifact": "artifacts/extensions/magic.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "magic_mime",
         "magic_extension",
@@ -4272,6 +4390,7 @@
       "source": "extensions/tsid-component",
       "status": "working",
       "artifact": "artifacts/extensions/tsid.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "tsid_encode",
         "tsid_decode",
@@ -4307,6 +4426,7 @@
       "source": "extensions/rhai-component",
       "status": "working",
       "artifact": "artifacts/extensions/rhai.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "rhai_eval",
         "rhai_eval_int",
@@ -4343,6 +4463,7 @@
       "source": "extensions/bitfilters-component",
       "status": "working",
       "artifact": "artifacts/extensions/bitfilters.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "xor_filter",
         "xor_filter_contains"
@@ -4374,6 +4495,7 @@
       "source": "extensions/prql-component",
       "status": "working",
       "artifact": "artifacts/extensions/prql.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "prql_to_sql",
         "prql_is_valid"
@@ -4403,6 +4525,7 @@
       "source": "extensions/jaq-component",
       "status": "working",
       "artifact": "artifacts/extensions/jaq.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "jq",
         "jq_first"
@@ -4434,6 +4557,7 @@
       "source": "extensions/cron-component",
       "status": "working",
       "artifact": "artifacts/extensions/cron.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "cron_is_valid",
         "cron_next",
@@ -4464,6 +4588,7 @@
       "source": "extensions/xml-component",
       "status": "working",
       "artifact": "artifacts/extensions/xml.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "xml_valid",
         "xml_extract",
@@ -4494,6 +4619,7 @@
       "source": "extensions/pinyin-component",
       "status": "working",
       "artifact": "artifacts/extensions/pinyin.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "to_pinyin",
         "to_pinyin_plain",
@@ -4524,6 +4650,7 @@
       "source": "extensions/sqlformat-component",
       "status": "working",
       "artifact": "artifacts/extensions/sqlformat.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "sql_format",
         "sql_format_compact"
@@ -4553,6 +4680,7 @@
       "source": "extensions/bencode-component",
       "status": "working",
       "artifact": "artifacts/extensions/bencode.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "bencode_to_json",
         "bencode_is_valid"
@@ -4582,6 +4710,7 @@
       "source": "extensions/maidenhead-component",
       "status": "working",
       "artifact": "artifacts/extensions/maidenhead.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "to_maidenhead",
         "maidenhead_lat",
@@ -4610,6 +4739,7 @@
       "source": "extensions/base45-component",
       "status": "working",
       "artifact": "artifacts/extensions/base45.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "base45_encode",
         "base45_decode"
@@ -4639,6 +4769,7 @@
       "source": "extensions/numfmt-component",
       "status": "working",
       "artifact": "artifacts/extensions/numfmt.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "num_group",
         "num_si"
@@ -4666,6 +4797,7 @@
       "source": "extensions/mailto-component",
       "status": "working",
       "artifact": "artifacts/extensions/mailto.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "mailto_to",
         "mailto_field",
@@ -4696,6 +4828,7 @@
       "source": "extensions/hexdump-component",
       "status": "working",
       "artifact": "artifacts/extensions/hexdump.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "hexdump",
         "hex_pretty"
@@ -4723,6 +4856,7 @@
       "source": "extensions/secp256k1-component",
       "status": "working",
       "artifact": "artifacts/extensions/secp256k1.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "secp256k1_pubkey",
         "secp256k1_sign",
@@ -4753,6 +4887,7 @@
       "source": "extensions/bibtex-component",
       "status": "working",
       "artifact": "artifacts/extensions/bibtex.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "bibtex_count",
         "bibtex_to_json",
@@ -4783,6 +4918,7 @@
       "source": "extensions/useragent-component",
       "status": "working",
       "artifact": "artifacts/extensions/useragent.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "ua_browser",
         "ua_browser_version",
@@ -4815,6 +4951,7 @@
       "source": "extensions/ical-component",
       "status": "working",
       "artifact": "artifacts/extensions/ical.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "ical_event_count",
         "ical_to_json",
@@ -4846,6 +4983,7 @@
       "source": "extensions/tdigest-component",
       "status": "working",
       "artifact": "artifacts/extensions/tdigest.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "tdigest",
         "tdigest_quantile",
@@ -4878,6 +5016,7 @@
       "source": "extensions/urlpattern-component",
       "status": "working",
       "artifact": "artifacts/extensions/urlpattern.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "url_pattern_test",
         "url_pattern_match"
@@ -4907,6 +5046,7 @@
       "source": "extensions/celestial-component",
       "status": "working",
       "artifact": "artifacts/extensions/celestial.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "equatorial_to_galactic_l",
         "equatorial_to_galactic_b",
@@ -4937,6 +5077,7 @@
       "source": "extensions/textlines-component",
       "status": "working",
       "artifact": "artifacts/extensions/textlines.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "split_lines"
       ],
@@ -4963,6 +5104,7 @@
       "source": "extensions/netquack-component",
       "status": "working",
       "artifact": "artifacts/extensions/netquack.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "registrable_domain",
         "public_suffix",
@@ -4994,6 +5136,7 @@
       "source": "extensions/openprompt-component",
       "status": "working",
       "artifact": "artifacts/extensions/openprompt.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "prompt",
         "prompt_model"
@@ -5025,6 +5168,7 @@
       "source": "extensions/dbf-component",
       "status": "working",
       "artifact": "artifacts/extensions/dbf.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "read_dbf"
       ],
@@ -5053,6 +5197,7 @@
       "source": "extensions/shapefile-component",
       "status": "working",
       "artifact": "artifacts/extensions/shapefile.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "read_shp"
       ],
@@ -5081,6 +5226,7 @@
       "source": "extensions/fit-component",
       "status": "working",
       "artifact": "artifacts/extensions/fit.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "read_fit"
       ],
@@ -5109,6 +5255,7 @@
       "source": "extensions/warc-component",
       "status": "working",
       "artifact": "artifacts/extensions/warc.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "read_warc"
       ],
@@ -5137,6 +5284,7 @@
       "source": "extensions/html-component",
       "status": "working",
       "artifact": "artifacts/extensions/html.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "html_extract",
         "html_extract_all",
@@ -5167,6 +5315,7 @@
       "source": "extensions/vcard-component",
       "status": "working",
       "artifact": "artifacts/extensions/vcard.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "vcard_count",
         "vcard_to_json",
@@ -5198,6 +5347,7 @@
       "source": "extensions/ini-component",
       "status": "working",
       "artifact": "artifacts/extensions/ini.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "ini_to_json",
         "ini_get",
@@ -5229,6 +5379,7 @@
       "source": "extensions/plist-component",
       "status": "working",
       "artifact": "artifacts/extensions/plist.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "plist_to_json",
         "plist_get"
@@ -5258,6 +5409,7 @@
       "source": "extensions/dotenv-component",
       "status": "working",
       "artifact": "artifacts/extensions/dotenv.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "dotenv_to_json",
         "dotenv_get",
@@ -5286,6 +5438,7 @@
       "source": "extensions/hocon-component",
       "status": "working",
       "artifact": "artifacts/extensions/hocon.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "hocon_to_json",
         "hocon_get"
@@ -5315,6 +5468,7 @@
       "source": "extensions/uuid7-component",
       "status": "working",
       "artifact": "artifacts/extensions/uuid7.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "uuid7_build",
         "uuid7_timestamp",
@@ -5345,6 +5499,7 @@
       "source": "extensions/textdiff-component",
       "status": "working",
       "artifact": "artifacts/extensions/textdiff.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "text_diff",
         "diff_ratio",
@@ -5375,6 +5530,7 @@
       "source": "extensions/polyline-component",
       "status": "working",
       "artifact": "artifacts/extensions/polyline.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "polyline_encode",
         "polyline_decode"
@@ -5404,6 +5560,7 @@
       "source": "extensions/json_schema-component",
       "status": "working",
       "artifact": "artifacts/extensions/json_schema.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "json_schema_valid",
         "json_schema_errors"
@@ -5433,6 +5590,7 @@
       "source": "extensions/stochastic-component",
       "status": "working",
       "artifact": "artifacts/extensions/stochastic.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "normal_cdf",
         "normal_pdf",
@@ -5467,6 +5625,7 @@
       "source": "extensions/ion-component",
       "status": "working",
       "artifact": "artifacts/extensions/ion.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "ion_to_json",
         "ion_from_json",
@@ -5497,6 +5656,7 @@
       "source": "extensions/textplot-component",
       "status": "working",
       "artifact": "artifacts/extensions/textplot.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "plot_sparkline",
         "plot_bars",
@@ -5527,6 +5687,7 @@
       "source": "extensions/marisa-component",
       "status": "working",
       "artifact": "artifacts/extensions/marisa.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "fst_contains",
         "fst_prefix",
@@ -5557,6 +5718,7 @@
       "source": "extensions/frequentitems-component",
       "status": "working",
       "artifact": "artifacts/extensions/frequentitems.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "top_k",
         "top_k_value"
@@ -5584,6 +5746,7 @@
       "source": "extensions/sqlitewasm-component",
       "status": "working",
       "artifact": "artifacts/extensions/sqlitewasm.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "sqlite_blob_scan"
       ],
@@ -5615,6 +5778,7 @@
       "source": "extensions/jsonfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/jsonfns.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "json_valid",
         "json_extract",
@@ -5652,6 +5816,7 @@
       "source": "extensions/inetfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/inetfns.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "host",
         "family",
@@ -5683,6 +5848,7 @@
       "source": "extensions/excelfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/excelfns.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "xlsx_sheets",
         "read_xlsx",
@@ -5713,6 +5879,7 @@
       "source": "extensions/avrofns-component",
       "status": "working",
       "artifact": "artifacts/extensions/avrofns.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "avro_schema",
         "read_avro",
@@ -5746,6 +5913,7 @@
       "source": "extensions/spatialfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/spatialfns.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "ST_Point",
         "ST_GeomFromText",
@@ -5787,6 +5955,7 @@
       "source": "extensions/ftsfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/ftsfns.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "fts_tokenize",
         "fts_stem",
@@ -5819,6 +5988,7 @@
       "source": "extensions/icufns-component",
       "status": "working",
       "artifact": "artifacts/extensions/icufns.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "icu_sort_key",
         "icu_compare",
@@ -5849,6 +6019,7 @@
       "source": "extensions/vssfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/vssfns.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "vec_l1_distance",
         "vec_linf_distance",
@@ -5877,6 +6048,7 @@
       "source": "extensions/rtreefns-component",
       "status": "working",
       "artifact": "artifacts/extensions/rtreefns.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "rtree_search",
         "bbox4"
@@ -5908,6 +6080,7 @@
       "source": "extensions/hnswfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/hnswfns.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "hnsw_search"
       ],
@@ -5937,6 +6110,7 @@
       "source": "extensions/geomtype-component",
       "status": "working",
       "artifact": "artifacts/extensions/geomtype.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "geom_area",
         "geom_astext"
@@ -5968,6 +6142,7 @@
       "source": "extensions/spatialproj-component",
       "status": "working",
       "artifact": "artifacts/extensions/spatialproj.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "ST_Transform"
       ],
@@ -5997,6 +6172,7 @@
       "source": "extensions/tpchgen-component",
       "status": "working",
       "artifact": "artifacts/extensions/tpchgen.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "tpch_region",
         "tpch_nation",
@@ -6034,6 +6210,7 @@
       "source": "extensions/tpcdsgen-component",
       "status": "working",
       "artifact": "artifacts/extensions/tpcdsgen.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "tpcds_income_band",
         "tpcds_date_dim_sample"
@@ -6061,6 +6238,7 @@
       "source": "extensions/deltascan-component",
       "status": "working",
       "artifact": "artifacts/extensions/deltascan.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "delta_log_info",
         "delta_schema"
@@ -6090,6 +6268,7 @@
       "source": "extensions/icebergscan-component",
       "status": "working",
       "artifact": "artifacts/extensions/icebergscan.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "iceberg_metadata",
         "iceberg_schema",
@@ -6120,6 +6299,7 @@
       "source": "extensions/autocomplete-component",
       "status": "working",
       "artifact": "artifacts/extensions/autocomplete.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "sql_complete"
       ],
@@ -6147,6 +6327,7 @@
       "source": "extensions/statsduck-component",
       "status": "working",
       "artifact": "artifacts/extensions/statsduck.wasm",
+      "wit_contract": "2.0.0",
       "exports": [
         "adjust_p",
         "anderson_darling",
