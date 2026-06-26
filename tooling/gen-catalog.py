@@ -27,6 +27,21 @@ def contract_digest() -> str:
     return hashlib.sha256(b"witcanon:1" + buf).hexdigest()
 
 
+def content_digest(wasm_path: pathlib.Path) -> str:
+    """The content-addressed identity of a component's OWN .wasm bytes: a plain
+    sha256 of the file, hex. This is the framework's blob identity --
+    `compose-core::blobs::compute_digest(bytes) = sha256(bytes)` in
+    ~/git/webassembly-component-orchestration -- reimplemented here as trivial
+    Python tooling (no Rust dep). It is interoperable with the framework's blob
+    store / trust model, so a future Phase-2 PlanV1 can reference each component
+    by this `content_digest` exactly as the framework references blobs.
+
+    Distinct from contract_digest(): contract_digest is the CONTRACT-shape
+    identity (witcanon over the WIT, reproducible, always enforced); this is the
+    CONTENT identity of the actual binary (re-stamped by gen-catalog on deploy)."""
+    return hashlib.sha256(wasm_path.read_bytes()).hexdigest()
+
+
 def names(coll):
     if isinstance(coll, dict): return sorted(coll.keys())
     out=[]
@@ -42,6 +57,7 @@ reg = json.load(open(ROOT / "registry" / "index.json"))
 # digest. Rewrite registry/index.json only if anything changed (keep 2-space
 # indent + trailing newline to match the existing file's formatting).
 DIGEST = contract_digest()
+ART_DIR = ROOT / "artifacts" / "extensions"
 reg_changed = False
 for e in reg["extensions"]:
     if e.get("wit_contract") != DIGEST:
@@ -50,11 +66,23 @@ for e in reg["extensions"]:
     if e.get("wit_contract_version") != CONTRACT_VERSION:
         e["wit_contract_version"] = CONTRACT_VERSION
         reg_changed = True
+    # Stamp the CONTENT identity (sha256 of the .wasm, the framework
+    # compute_digest scheme) when the artifact is built. Artifacts are gitignored
+    # / built locally, so tolerate a missing one exactly like verify-catalog does:
+    # leave content_digest absent (don't drop an existing one) if it isn't present.
+    art = ART_DIR / f"{e['name']}.wasm"
+    if art.exists():
+        cd = content_digest(art)
+        if e.get("content_digest") != cd:
+            e["content_digest"] = cd
+            reg_changed = True
 if reg_changed:
     with open(ROOT / "registry" / "index.json", "w") as fh:
         json.dump(reg, fh, indent=2)
         fh.write("\n")
-    print(f"stamped contract digest {DIGEST[:12]}… into registry/index.json")
+    stamped = sum(1 for e in reg["extensions"] if e.get("content_digest"))
+    print(f"stamped contract digest {DIGEST[:12]}… + {stamped} content_digest(s) "
+          f"into registry/index.json")
 
 exts = [e for e in reg["extensions"] if e["name"] != "sample_extension"]
 

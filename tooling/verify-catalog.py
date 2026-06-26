@@ -9,6 +9,17 @@ import json, hashlib, pathlib, re, subprocess, sys
 # registry<->source<->workspace<->prefix consistency can be validated WITHOUT the
 # wasm toolchain -- the self-contained subset CI (ci.yml) runs in `act`.
 NO_ARTIFACTS = "--no-artifacts" in sys.argv
+# --verify-content (alias --strict): also enforce each entry's `content_digest`
+# (the sha256 of its OWN .wasm bytes) against the deployed artifact. OPT-IN, not
+# default: the wasm builds are byte-reproducible within a FIXED toolchain but NOT
+# across rustc / cargo-component versions (the deployed artifacts were stamped on
+# a different toolchain than a typical contributor's), so a normal rebuild on a
+# different toolchain would otherwise flip the bytes and fail verify / force a
+# gen-catalog re-stamp. The witcanon CONTRACT digest (shape-based, truly
+# reproducible) stays the DEFAULT-enforced identity; the CONTENT digest is the
+# byte identity, re-stamped by gen-catalog on deploy and enforced here in
+# release/CI (where the canonical artifacts are deployed) via this flag.
+VERIFY_CONTENT = "--verify-content" in sys.argv or "--strict" in sys.argv
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # The duckdb:extension WIT contract this catalog targets. The AUTHORITATIVE
@@ -32,6 +43,18 @@ def contract_digest() -> str:
     wit_dir = ROOT / "wit" / "duckdb-extension"
     buf = b"".join(p.read_bytes() for p in sorted(wit_dir.glob("*.wit")))
     return hashlib.sha256(b"witcanon:1" + buf).hexdigest()
+
+
+def content_digest(wasm_path) -> str:
+    """The content-addressed identity of a component's OWN .wasm bytes: a plain
+    sha256 of the file, hex -- the framework's blob identity,
+    `compose-core::blobs::compute_digest(bytes) = sha256(bytes)` in
+    ~/git/webassembly-component-orchestration, reimplemented as Python tooling
+    (no Rust dep). Interoperable with the framework's blob store, so a future
+    Phase-2 PlanV1 can reference each component by this digest. gen-catalog.py
+    stamps it; this check (under --verify-content) re-derives it from the
+    deployed artifact and enforces equality."""
+    return hashlib.sha256(pathlib.Path(wasm_path).read_bytes()).hexdigest()
 
 
 # Computed once from the CURRENT canonical WIT; every entry must match it.
@@ -110,6 +133,27 @@ for e in exts:
     if not NO_ARTIFACTS:
         art = art_dir / f"{n}.wasm"
         if art.exists():
+            # OPT-IN content-digest enforcement (--verify-content / --strict): the
+            # registry's `content_digest` (sha256 of the .wasm, the framework
+            # compute_digest scheme) MUST equal the digest of the deployed
+            # artifact. Default mode skips this -- see VERIFY_CONTENT above for why
+            # (byte-reproducible per-toolchain, not across toolchains). Release/CI
+            # runs with the flag against the canonical deployed artifacts.
+            if VERIFY_CONTENT:
+                cd = e.get("content_digest")
+                if not cd:
+                    issues.append(
+                        f"{n}: missing `content_digest` (run gen-catalog.py with the "
+                        f"artifact present to stamp it)"
+                    )
+                else:
+                    actual_cd = content_digest(art)
+                    if actual_cd != cd:
+                        issues.append(
+                            f"{n}: content_digest {cd[:12]}… != deployed artifact "
+                            f"sha256 {actual_cd[:12]}… (rerun gen-catalog.py to "
+                            f"re-stamp the deployed .wasm)"
+                        )
             actual = component_contract(art)
             if actual is None:
                 pass  # no duckdb:extension import or wasm-tools missing; nothing to assert
