@@ -167,6 +167,11 @@ mod contract_guard_tests {
 /// extension load path (so an `ml_kmeans`-style aggregate can reach the one
 /// warmed pylon provider) and re-exported to `ducklink-host` for the dotcmd
 /// path and the native proof tests.
+/// Re-export the shared dynlink crate so the `impl_compose_dynlink_host!`
+/// macro can reach `$crate::datalink_dynlink::impl_datalink_dynlink_host!`
+/// from consumer crates.
+pub use datalink_dynlink;
+
 pub mod compose_dynlink;
 pub use compose_dynlink::{ProviderPreopen, ProviderRegistry};
 

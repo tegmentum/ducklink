@@ -1338,7 +1338,7 @@ impl DotcmdRegistry {
                 .map_err(|e| wasmtime::Error::msg(e.to_string()))?;
             // A per-loader provider registry: empty until a provider is
             // registered (`ExtensionManager::register_dynlink_provider`).
-            Some(compose_dynlink::DynLinkBridge::new(
+            Some(compose_dynlink::new_resident(
                 dotcmd_provider_registry(engine).clone(),
             ))
         } else {

@@ -2558,7 +2558,7 @@ pub fn load_component_with_dynlink(
             );
             crate::compose_dynlink::add_to_linker::<ExtensionStoreState>(&mut linker)
                 .map_err(|e| wasmtime::Error::msg(e.to_string()))?;
-            Some(crate::compose_dynlink::DynLinkBridge::new(registry))
+            Some(crate::compose_dynlink::new_resident(registry))
         }
         _ => None,
     };

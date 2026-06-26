@@ -25,6 +25,11 @@ hex = "0.4"
 # same guard backs both the ducklink and sqlink hosts (datalink is public).
 # The witcanon CONTRACT_DIGEST (above) stays per-repo; this is the @MAJOR proxy.
 datalink-contract = { git = "https://github.com/tegmentum/datalink.git" }
+# The shared store-generic compose:dynlink/linker host machinery + the
+# ResidentBackend (instantiate-once-and-reuse provider lifecycle). ducklink's
+# compose_dynlink module is now a thin adapter over this; the resolve/invoke
+# bridge + bindings live here, shared with the other wasm-component hosts.
+datalink-dynlink = { git = "https://github.com/tegmentum/datalink.git" }
 
 [build-dependencies]
 # Same witcanon scheme, used in build.rs to hash the canonical WIT into a const.
