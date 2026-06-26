@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{AsContextMut, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
@@ -63,7 +63,7 @@ impl HandlerRegistry {
     /// Compile + register a handler component under `name`.
     pub fn register(&mut self, name: &str, path: &Path) -> Result<()> {
         let component = Component::from_file(&self.engine, path)
-            .with_context(|| format!("load handler component {}", path.display()))?;
+            .map_err(|e| e.context(format!("load handler component {}", path.display())))?;
         self.handlers.insert(name.to_string(), component);
         Ok(())
     }

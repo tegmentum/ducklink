@@ -1203,7 +1203,7 @@ impl DotcmdRegistry {
         current_connection: Arc<Mutex<Option<ResourceAny>>>,
         extension_manager: Arc<Mutex<ExtensionManager>>,
     ) -> wasmtime::Result<(DotcmdInstance, Vec<(String, u64, String, String)>)> {
-        let component = load_component(engine, path)?;
+        let component = load_component(engine, path).map_err(wasmtime::Error::msg)?;
         let mut linker = Linker::<DotcmdState>::new(engine);
         p2::add_to_linker_sync(&mut linker)?;
         dotcmd_bindings::duckdb::dotcmd::spi::add_to_linker::<DotcmdState, DotcmdState>(
@@ -4171,10 +4171,12 @@ fn load_component(engine: &Engine, path: &Path) -> Result<Component> {
         // a compatible engine; deserialize checks version/config and errors on
         // mismatch (it does not execute the contents).
         unsafe { Component::deserialize_file(engine, path) }
-            .with_context(|| format!("failed to deserialize precompiled {}", path.display()))
+            .map_err(|e| e.context(format!("failed to deserialize precompiled {}", path.display())))
+            .map_err(Into::into)
     } else {
         Component::from_file(engine, path)
-            .with_context(|| format!("failed to load {}", path.display()))
+            .map_err(|e| e.context(format!("failed to load {}", path.display())))
+            .map_err(Into::into)
     }
 }
 
@@ -4188,7 +4190,7 @@ pub fn precompile_component_to_file(in_path: &Path, out_path: &Path) -> Result<(
         std::fs::read(in_path).with_context(|| format!("read {}", in_path.display()))?;
     let precompiled = engine
         .precompile_component(&bytes)
-        .with_context(|| format!("precompile {}", in_path.display()))?;
+        .map_err(|e| e.context(format!("precompile {}", in_path.display())))?;
     std::fs::write(out_path, &precompiled)
         .with_context(|| format!("write {}", out_path.display()))?;
     Ok(())
@@ -4213,7 +4215,7 @@ fn build_engine() -> Result<Engine> {
         }
         Err(err) => eprintln!("warning: wasmtime compile cache unavailable: {err}"),
     }
-    Engine::new(&config).context("failed to create Wasmtime engine")
+    Engine::new(&config).map_err(|e| e.context("failed to create Wasmtime engine").into())
 }
 
 fn build_wasi_ctx_with_pipes(
@@ -4236,12 +4238,12 @@ fn build_wasi_ctx_with_pipes(
     for (host, guest) in preopens {
         builder
             .preopened_dir(host, guest, DirPerms::all(), FilePerms::all())
-            .with_context(|| {
-                format!(
+            .map_err(|e| {
+                e.context(format!(
                     "failed to preopen directory {} as {}",
                     host.display(),
                     guest
-                )
+                ))
             })?;
     }
     Ok(builder.build())
@@ -4259,12 +4261,12 @@ fn build_wasi_ctx_inherit(args: &[String], preopens: &[(&Path, &str)]) -> Result
     for (host, guest) in preopens {
         builder
             .preopened_dir(host, guest, DirPerms::all(), FilePerms::all())
-            .with_context(|| {
-                format!(
+            .map_err(|e| {
+                e.context(format!(
                     "failed to preopen directory {} as {}",
                     host.display(),
                     guest
-                )
+                ))
             })?;
     }
     Ok(builder.build())
@@ -4819,7 +4821,7 @@ impl CliHarness {
         self.store
             .data_mut()
             .preload_extension(name)
-            .with_context(|| format!("failed to preload extension {name}"))?;
+            .map_err(|e| e.context(format!("failed to preload extension {name}")))?;
         Ok(())
     }
 
@@ -4961,7 +4963,7 @@ pub fn run_cli_with_stdio(
     let cli_pre = duckdb_cli_bindings::DuckdbCliPre::new(instance_pre)?;
     let cli = cli_pre.instantiate(store.as_context_mut())?;
 
-    cli.wasi_cli_run().call_run(store.as_context_mut())
+    Ok(cli.wasi_cli_run().call_run(store.as_context_mut())?)
 }
 
 #[cfg(test)]
