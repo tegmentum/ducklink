@@ -5,6 +5,6 @@
     { "name": "gdal", "embeds": ["PROJ", "proj.db"], "provides": ["gdal:core/srs"] }
   ],
   "output": "artifacts/extensions/spatialproj.wasm",
-  "output_hash": "25f254c9e62063ecf6b3f3a9786b0eaff71eebecbb3d68693d21c6acbb5b3e30",
-  "built_at": 1782396000
+  "output_hash": "da0b7de885adea5c4c139f6c2c409263149f30a092e0b3fea41b69da02996e0d",
+  "built_at": 1782443385
 }
