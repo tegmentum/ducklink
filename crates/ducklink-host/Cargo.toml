@@ -30,6 +30,16 @@ serde_json = "1"
 compose-core = { git = "https://github.com/tegmentum/webassembly-component-orchestration.git", branch = "main" }
 # Home-dir resolution for the per-machine HMAC key + FsBlobStore cache root.
 dirs = "5"
+# Shared, db-agnostic crates (also consumed by the sqlink host). datalink is
+# PUBLIC. These are HOST-only deps; ducklink-runtime (the vendored extension
+# runtime) is untouched, so no extension re-vendor is implied.
+#   - datalink-policy: canonical capability-grant types. The coarse
+#     DUCKLINK_NETWORK_GRANT env is compiled into a canonical Policy via an
+#     adapter (allow-all / deny-all / per-name); behavior is unchanged.
+#   - datalink-prefix: the prefix__name resolution algorithm + the
+#     collision/pin model behind a PrefixStore trait, backed in-memory here.
+datalink-policy = { git = "https://github.com/tegmentum/datalink.git" }
+datalink-prefix = { git = "https://github.com/tegmentum/datalink.git" }
 
 [dev-dependencies]
 tempfile = "3"

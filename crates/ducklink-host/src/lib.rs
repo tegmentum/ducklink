@@ -868,31 +868,60 @@ struct AppenderEntry {
 // crate (imported at the top of this file).
 
 
-/// Best-effort network capability policy for extension components, read from the
-/// `DUCKLINK_NETWORK_GRANT` environment variable:
-///   - unset / empty / "none"  -> deny every extension (default; secure)
-///   - "all" / "*"             -> grant every extension
+/// Compile the coarse `DUCKLINK_NETWORK_GRANT` environment variable into a
+/// canonical [`datalink_policy::Policy`] for one extension:
+///   - unset / empty / "none"  -> `Policy::deny_all()`  (default; secure)
+///   - "all" / "*"             -> `Policy::allow_all()`  (grant every extension)
 ///   - otherwise               -> a comma/space-separated allowlist of names
-///                                (e.g. "dns,http")
+///                                (e.g. "dns,http"): a listed extension gets
+///                                `allow_all`, others `deny_all`.
+///
+/// This is the coarse-vs-fine ADAPTER: ducklink's single per-extension switch
+/// is expressed against the same `Policy` type model sqlink uses per
+/// capability/host-pattern, giving ducklink a path to per-extension policy
+/// later with no behavior change today. Enforcement is unchanged — see
+/// [`network_grant_allows`].
+fn network_grant_policy(extension: &str) -> datalink_policy::Policy {
+    network_grant_policy_for(std::env::var("DUCKLINK_NETWORK_GRANT").ok().as_deref(), extension)
+}
+
+/// Pure adapter: map a `DUCKLINK_NETWORK_GRANT` value (or `None` when unset)
+/// for `extension` to a canonical [`Policy`](datalink_policy::Policy). Split
+/// out from the env read so it is deterministically testable.
+fn network_grant_policy_for(grant: Option<&str>, extension: &str) -> datalink_policy::Policy {
+    use datalink_policy::Policy;
+    match grant {
+        Some(v) => {
+            let v = v.trim();
+            if v.is_empty() || v.eq_ignore_ascii_case("none") {
+                return Policy::deny_all();
+            }
+            if v == "*" || v.eq_ignore_ascii_case("all") {
+                return Policy::allow_all();
+            }
+            let listed = v
+                .split([',', ' '])
+                .map(str::trim)
+                .any(|name| !name.is_empty() && name.eq_ignore_ascii_case(extension));
+            if listed {
+                Policy::allow_all()
+            } else {
+                Policy::deny_all()
+            }
+        }
+        None => Policy::deny_all(),
+    }
+}
+
+/// Best-effort network capability for an extension component: a thin check
+/// against the canonical [`Policy`](datalink_policy::Policy) the
+/// [`network_grant_policy`] adapter builds from `DUCKLINK_NETWORK_GRANT`.
+/// True iff the policy grants the `Http` capability (network on).
 ///
 /// Enforcement is the WasiCtx network grant: a denied extension's wasi:sockets
 /// calls fail, so it cannot reach the network even though it may still try.
 fn network_grant_allows(extension: &str) -> bool {
-    match std::env::var("DUCKLINK_NETWORK_GRANT") {
-        Ok(v) => {
-            let v = v.trim();
-            if v.is_empty() || v.eq_ignore_ascii_case("none") {
-                return false;
-            }
-            if v == "*" || v.eq_ignore_ascii_case("all") {
-                return true;
-            }
-            v.split([',', ' '])
-                .map(str::trim)
-                .any(|name| !name.is_empty() && name.eq_ignore_ascii_case(extension))
-        }
-        Err(_) => false,
-    }
+    network_grant_policy(extension).is_granted(datalink_policy::Capability::Http)
 }
 
 /// Store data for a dot-command component: just wasi (the component imports it
@@ -5288,6 +5317,25 @@ pub fn run_cli_with_stdio(
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn network_grant_adapter_preserves_behavior() {
+        use datalink_policy::Capability;
+        let granted = |g: Option<&str>, ext: &str| {
+            network_grant_policy_for(g, ext).is_granted(Capability::Http)
+        };
+        // unset / none / empty -> deny every extension.
+        assert!(!granted(None, "dns"));
+        assert!(!granted(Some("none"), "dns"));
+        assert!(!granted(Some(""), "dns"));
+        // all / * -> grant every extension.
+        assert!(granted(Some("all"), "dns"));
+        assert!(granted(Some("*"), "anything"));
+        // allowlist gates by name (case-insensitive); others denied.
+        assert!(granted(Some("dns,http"), "http"));
+        assert!(granted(Some("dns, http"), "DNS"));
+        assert!(!granted(Some("dns,http"), "azure"));
+    }
 
     /// True if any rendered table row contains `value` as a `|`-delimited cell,
     /// ignoring the column-width padding the CLI applies to each cell.

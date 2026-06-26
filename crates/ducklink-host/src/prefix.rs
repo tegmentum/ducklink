@@ -18,6 +18,13 @@ use std::path::Path;
 
 use ducklink_runtime::reg;
 
+// The db-agnostic resolution primitives + the collision/pin MODEL live in the
+// shared `datalink-prefix` crate (sqlink consumes the same crate over its
+// SQLite-backed store). ducklink's in-memory backing of that model is
+// `datalink_prefix::InMemoryPrefixStore`, re-exported here; the registry +
+// shape-aware collision/pin features below layer on top of it.
+pub use datalink_prefix::{InMemoryPrefixStore, PrefixStore};
+
 /// The prefix + expansion an extension uses to namespace its functions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PrefixInfo {
@@ -82,17 +89,22 @@ impl PrefixRegistry {
                 is_fallback: false,
             };
         }
+        // Deprecation fallback via the shared resolver: prefix = sanitized
+        // extension name, expansion = `ducklink-internal://<extension>`.
+        let (prefix, expansion, _) =
+            datalink_prefix::resolve_prefix(extension, None, None, "ducklink-internal")
+                .into_parts();
         if self.warned_fallback.borrow_mut().insert(extension.to_string()) {
             eprintln!(
                 "[prefix] WARNING: extension '{extension}' has no prefix/expansion in \
-                 registry/index.json; using deprecation fallback prefix='{extension}', \
-                 expansion='ducklink-internal://{extension}'. This becomes a hard error \
+                 registry/index.json; using deprecation fallback prefix='{prefix}', \
+                 expansion='{expansion}'. This becomes a hard error \
                  after ducklink v1.1 — add `prefix` and `expansion` to its registry entry."
             );
         }
         PrefixInfo {
-            prefix: sanitize_name(extension),
-            expansion: format!("ducklink-internal://{extension}"),
+            prefix,
+            expansion,
             is_fallback: true,
         }
     }
@@ -104,49 +116,25 @@ impl PrefixRegistry {
 ///     double-prefixing `jsonfns__json_valid` into `jsonfns__jsonfns__…`),
 ///   * the prefix is empty after sanitization.
 pub fn qualified_name(prefix: &str, bare_name: &str) -> Option<String> {
-    let prefix = sanitize_prefix(prefix)?;
-    if bare_name.contains("__") {
-        return None;
-    }
-    Some(format!("{prefix}__{bare_name}"))
+    // Shared: validates the prefix and skips already-`__`-qualified names.
+    datalink_prefix::qualified_name(prefix, bare_name)
 }
 
 /// A prefix must be a valid unquoted DuckDB identifier head:
 /// `[A-Za-z_][A-Za-z0-9_]*`. Returns the prefix unchanged when valid, else
 /// `None`. (Hyphens in extension names like `iban-component` are NOT valid; the
 /// caller uses `sanitize_name` for the fallback so they become `iban_component`.)
+/// Thin alias over the shared `datalink_prefix::validate_identifier`.
 pub fn sanitize_prefix(prefix: &str) -> Option<String> {
-    let mut chars = prefix.chars();
-    match chars.next() {
-        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
-        _ => return None,
-    }
-    if prefix.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-        Some(prefix.to_string())
-    } else {
-        None
-    }
+    datalink_prefix::validate_identifier(prefix)
 }
 
 /// Coerce an arbitrary extension name into a valid identifier prefix by
 /// replacing every disallowed character with `_` (and prefixing `_` if it would
-/// start with a digit). Used for the deprecation fallback only.
+/// start with a digit). Used for the deprecation fallback only. Thin alias over
+/// the shared `datalink_prefix::sanitize_to_identifier`.
 pub fn sanitize_name(raw: &str) -> String {
-    let mut out = String::with_capacity(raw.len());
-    for (i, ch) in raw.chars().enumerate() {
-        if ch.is_ascii_alphanumeric() || ch == '_' {
-            out.push(ch);
-        } else {
-            out.push('_');
-        }
-        if i == 0 && out.starts_with(|c: char| c.is_ascii_digit()) {
-            out.insert(0, '_');
-        }
-    }
-    if out.is_empty() {
-        out.push('_');
-    }
-    out
+    datalink_prefix::sanitize_to_identifier(raw)
 }
 
 /// The shape (kind) of a function registration, used as a collision key
@@ -674,6 +662,20 @@ mod tests {
         let r2 = t.record("other", "com.x.other", &b, "icu_en", Shape::Collation, 0);
         assert!(r2.is_collision);
         assert_eq!(format_collision_warning(&r2).contains("collation/0-arg"), true);
+    }
+
+    #[test]
+    fn in_memory_prefix_store_backs_shared_model() {
+        // ducklink's in-memory backing of the shared PrefixStore model:
+        // numbered-alias prefix collision fallback + the shared
+        // should_register_bare pin precedence.
+        let mut store = InMemoryPrefixStore::new();
+        assert_eq!(store.record_prefix("foaf", "exp-a", 1).unwrap(), "foaf");
+        assert_eq!(store.record_prefix("foaf", "exp-b", 2).unwrap(), "foaf2");
+        assert!(store.should_register_bare("concat", 2, "any").unwrap());
+        store.pin("concat", 2, "exp-a", 3).unwrap();
+        assert!(store.should_register_bare("concat", 2, "exp-a").unwrap());
+        assert!(!store.should_register_bare("concat", 2, "exp-b").unwrap());
     }
 
     #[test]
