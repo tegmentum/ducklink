@@ -27,6 +27,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # The tooling delegators (tooling/verify-catalog.py etc.) import the shared
+      # datalink_tooling engine. datalink is PUBLIC, so no token is needed.
+      - name: Install the shared datalink tooling
+        run: pip install -r requirements-dev.txt
+
       # registry<->source<->workspace<->prefix consistency, minus the built-.wasm
       # artifact-presence + orphan checks (the artifacts are gitignored / absent
       # in a fresh checkout). This still enforces: every entry has a source crate,

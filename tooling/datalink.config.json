@@ -1,0 +1,83 @@
+{
+  "$comment": "Per-repo datalink tooling config for ducklink (DuckDB -> wasm, duckdb:extension components, imperative load() ABI). Drives the shared datalink_tooling engine (the thin tooling/*.py delegators pass this config). repo_root is omitted so it auto-resolves to this file's grandparent (the ducklink repo root).",
+  "db_name": "duckdb",
+  "registration_abi": "imperative",
+  "wit": {
+    "package": "duckdb:extension",
+    "world": "duckdb:extension/duckdb-extension",
+    "source_dir": "extensions/sample-extension-component/wit"
+  },
+  "scaffold": {
+    "extensions_dir": "extensions",
+    "package_suffix": "-component",
+    "name_pattern": "^[a-zA-Z][a-zA-Z0-9-]*$",
+    "templates_dir": "tooling/templates",
+    "worlds": {
+      "default": ["lib.rs.tmpl", "scalar functions"]
+    },
+    "lib_template_vars": ["NAME", "NAME_UNDERSCORE", "DESCRIPTION_SHORT"],
+    "register_workspace_member": true,
+    "build_check": {
+      "argv": ["cargo", "check", "-p", "{PKG}", "--target", "{TARGET}", "--release"],
+      "cwd": "repo_root",
+      "target": "wasm32-wasip2"
+    }
+  },
+  "smoke": {
+    "argv": ["{HOST_BIN}", "--extensions-dir", "{EXTENSIONS_DIR}", "--", "{DB}", "--load-extension", "{NAME}"],
+    "host_bin": "target/release/ducklink",
+    "required_artifacts": [
+      "target/wasm32-wasip2/release/ducklink_core.wasm",
+      "target/wasm32-wasip2/release/ducklink_cli.wasm"
+    ],
+    "extensions_dir": "artifacts/extensions",
+    "package_suffix": "-component",
+    "db": ":memory:",
+    "prompt_pattern": "^(D>\\s*|\\.\\.\\.>\\s*)+",
+    "sql_preamble": ".mode csv\n",
+    "null_token": "NULL",
+    "banner_prefixes": [],
+    "panic_markers": [
+      "panicked",
+      "failed to preload extension",
+      "no artifact found",
+      "extension instantiation",
+      "Catalog Error",
+      "Binder Error",
+      "Parser Error",
+      "did not find function",
+      "Function with name"
+    ],
+    "comment_prefix": "--",
+    "env": { "DUCKLINK_NETWORK_GRANT": "{NAME}" },
+    "supports_build": true,
+    "build_argv": ["cargo", "component", "build", "-p", "{PKG}", "--target", "{TARGET}", "--release"],
+    "build_target": "wasm32-wasip2",
+    "build_output": "{TARGET_DIR}/{UNDERSCORE}_component.wasm",
+    "all_null_min_rows": 4
+  },
+  "feedback": {
+    "lessons_doc": "tooling/lessons-learned.md"
+  },
+  "compat_registry": {
+    "path": "tooling/compat-registry.json"
+  },
+  "registry": {
+    "index_path": "registry/index.json",
+    "entries_key": "extensions"
+  },
+  "identity": {
+    "$comment": "ducklink's Phase-1 values. wit_source_dir is the CANONICAL duckdb:extension contract dir (16 *.wit files; deps.toml excluded by the glob) -- NOT the per-crate propagated copy in wit.source_dir. witcanon_digest over these == 90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23.",
+    "wit_source_dir": "wit/duckdb-extension",
+    "contract_package": "duckdb:extension",
+    "contract_major": "2",
+    "contract_version": "2.0.0",
+    "artifacts_dir": "artifacts/extensions",
+    "wasm_tools_bin": "wasm-tools",
+    "exclude": ["sample_extension"]
+  },
+  "type_map": {
+    "$comment": "DEFERRED (Tier 2): DuckDB rich logical types. Placeholder where ValueModel-aware tooling will branch; the current Tier-1 engine does not consume it.",
+    "kind": "rich-logical-types"
+  }
+}
