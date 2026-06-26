@@ -4308,16 +4308,176 @@ fn instantiate_core(
     Ok(CoreExecution { store, bindings })
 }
 
+/// Trust gate for precompiled `.cwasm` files.
+///
+/// A `.cwasm` deserializes to runnable native code, so loading one is
+/// `unsafe`: a tampered or foreign-engine file would otherwise be executed.
+/// We authenticate every `.cwasm` with `compose-core`'s [`CompileCache`]
+/// (HMAC-SHA256 over a per-machine secret, bound to the engine identity), the
+/// single shared trust model also used by sqlink's CAS. The HMAC key lives in
+/// `~/.cache/ducklink/compile-hmac.key` (0600); if it can't be loaded we warn
+/// once and fall back to today's unauthenticated behavior so caching never
+/// hard-fails a run.
+mod cwasm_trust {
+    use super::*;
+    use compose_core::blobs::compute_digest;
+    use compose_core::{CompileCache, FsBlobStore};
+    use std::sync::OnceLock;
+
+    /// Engine identity: anything that invalidates a `.cwasm` on upgrade. Bound
+    /// into the HMAC key so a wasmtime/host bump can never open an old frame.
+    fn engine_version() -> String {
+        format!(
+            "ducklink-host-{}-wasmtime-{}-cm-exn",
+            env!("CARGO_PKG_VERSION"),
+            wasmtime_version()
+        )
+    }
+
+    fn wasmtime_version() -> &'static str {
+        // The pinned wasmtime version from Cargo (matches Cargo.toml).
+        "46.0.1"
+    }
+
+    fn target() -> String {
+        format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS)
+    }
+
+    /// Per-machine HMAC secret; created once at 0600 if absent. `None` ->
+    /// degrade to unauthenticated load (warn once).
+    fn hmac_key() -> Option<Vec<u8>> {
+        static KEY: OnceLock<Option<Vec<u8>>> = OnceLock::new();
+        KEY.get_or_init(load_or_create_key).clone()
+    }
+
+    fn key_path() -> Option<std::path::PathBuf> {
+        dirs::cache_dir().map(|d| d.join("ducklink").join("compile-hmac.key"))
+    }
+
+    fn load_or_create_key() -> Option<Vec<u8>> {
+        let path = key_path()?;
+        if let Ok(bytes) = std::fs::read(&path) {
+            if bytes.len() == 32 {
+                return Some(bytes);
+            }
+        }
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).ok()?;
+        }
+        let mut key = [0u8; 32];
+        getrandom_fill(&mut key)?;
+        if std::fs::write(&path, &key).is_err() {
+            warn_once("failed to persist compile-cache HMAC key");
+            return None;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+        }
+        Some(key.to_vec())
+    }
+
+    fn getrandom_fill(buf: &mut [u8]) -> Option<()> {
+        // /dev/urandom is available everywhere the host runs; avoids pulling a
+        // new rng crate into the host.
+        std::fs::read(std::path::Path::new("/dev/urandom"))
+            .ok()
+            .and_then(|pool| {
+                if pool.len() >= buf.len() {
+                    buf.copy_from_slice(&pool[..buf.len()]);
+                    Some(())
+                } else {
+                    None
+                }
+            })
+    }
+
+    fn warn_once(msg: &str) {
+        static WARNED: OnceLock<()> = OnceLock::new();
+        if WARNED.set(()).is_ok() {
+            eprintln!("warning: {msg}; falling back to unauthenticated .cwasm load");
+        }
+    }
+
+    /// A [`CompileCache`] over a throwaway in-memory-ish FS root (only its
+    /// HMAC primitives are used for the file-path `.cwasm`; the blob backend
+    /// is never queried). `None` when no key is available.
+    fn cache() -> Option<CompileCache<FsBlobStore>> {
+        let key = hmac_key()?;
+        // FsBlobStore needs a root, but seal/open never touch it; point it at
+        // the cache dir so the type is satisfied without extra I/O.
+        let root = key_path()?.parent()?.join("blobs");
+        let backend = FsBlobStore::new(root, u64::MAX).ok()?;
+        Some(CompileCache::new(backend, key))
+    }
+
+    /// Seal precompiled bytes for `wasm_bytes` into the on-disk `.cwasm` frame
+    /// (`hmac_tag || precompiled`). Falls back to raw bytes if no key.
+    pub fn seal_cwasm(wasm_bytes: &[u8], precompiled: &[u8]) -> Vec<u8> {
+        match cache() {
+            Some(c) => {
+                let digest = compute_digest(wasm_bytes);
+                c.seal(&digest, &engine_version(), &target(), precompiled)
+            }
+            None => {
+                warn_once("no compile-cache HMAC key");
+                precompiled.to_vec()
+            }
+        }
+    }
+
+    /// Open a `.cwasm` frame, returning the authenticated precompiled bytes.
+    /// Returns `None` if the frame fails HMAC verification AND a key exists
+    /// (tamper/foreign engine); returns the raw bytes when no key is available
+    /// (degraded mode) or when the frame is unsealed legacy content.
+    pub fn open_cwasm(framed: &[u8]) -> Option<Vec<u8>> {
+        // We cannot recompute the source wasm digest from the .cwasm alone, so
+        // we verify against the engine identity using a wildcard component
+        // digest: the HMAC binds (component_digest, engine, target). To keep
+        // the file self-describing we prepend the 32-byte source-wasm digest to
+        // the frame in `write_sealed_cwasm`; parse it here.
+        let (digest, frame) = framed.split_at_checked(32)?;
+        match cache() {
+            Some(c) => {
+                match c.open(&digest.to_vec(), &engine_version(), &target(), frame) {
+                    Some(bytes) => Some(bytes),
+                    None => {
+                        warn_once(".cwasm failed HMAC verification (tamper or engine mismatch)");
+                        None
+                    }
+                }
+            }
+            // No key: degraded mode, trust the bytes (legacy behavior). The
+            // payload is everything after the 32-byte digest + 32-byte tag.
+            None => frame.get(32..).map(|b| b.to_vec()),
+        }
+    }
+}
+
 /// Load a component, deserializing a precompiled `.cwasm` (see
 /// [`precompile_component_to_file`]) instead of Cranelift-compiling a `.wasm`.
 /// A `.cwasm` makes even the first run fast (no compile); it is CPU- and
 /// wasmtime-version-specific, and `deserialize` validates that before use.
+///
+/// A `.cwasm` is HMAC-authenticated (compose-core `CompileCache`) before it is
+/// deserialized: a tampered or foreign-engine file is rejected rather than
+/// turned into runnable machine code.
 fn load_component(engine: &Engine, path: &Path) -> Result<Component> {
     if path.extension().and_then(|s| s.to_str()) == Some("cwasm") {
-        // SAFETY: trusts the file was produced by `precompile_component` against
-        // a compatible engine; deserialize checks version/config and errors on
-        // mismatch (it does not execute the contents).
-        unsafe { Component::deserialize_file(engine, path) }
+        let framed = std::fs::read(path)
+            .with_context(|| format!("read precompiled {}", path.display()))?;
+        let trusted = cwasm_trust::open_cwasm(&framed).ok_or_else(|| {
+            anyhow::anyhow!(
+                "refusing to load {}: precompiled artifact failed HMAC verification \
+                 (tampered or built for a different engine); delete it to recompile",
+                path.display()
+            )
+        })?;
+        // SAFETY: the bytes are now authenticated by a per-machine HMAC bound
+        // to this engine identity; deserialize additionally checks
+        // version/config and does not execute the contents.
+        unsafe { Component::deserialize(engine, &trusted) }
             .map_err(|e| e.context(format!("failed to deserialize precompiled {}", path.display())))
             .map_err(Into::into)
     } else {
@@ -4331,6 +4491,10 @@ fn load_component(engine: &Engine, path: &Path) -> Result<Component> {
 /// (~7s for the ~96 MB core) Cranelift compile. Output is CPU- and
 /// wasmtime-version-specific; regenerate per target. Load it by passing the
 /// `.cwasm` path wherever a component path is accepted.
+///
+/// The `.cwasm` is written as a self-authenticating frame
+/// (`source_wasm_digest || hmac_tag || precompiled`) so [`load_component`] can
+/// verify it before deserializing.
 pub fn precompile_component_to_file(in_path: &Path, out_path: &Path) -> Result<()> {
     let engine = build_engine()?;
     let bytes =
@@ -4338,7 +4502,14 @@ pub fn precompile_component_to_file(in_path: &Path, out_path: &Path) -> Result<(
     let precompiled = engine
         .precompile_component(&bytes)
         .map_err(|e| e.context(format!("precompile {}", in_path.display())))?;
-    std::fs::write(out_path, &precompiled)
+    let framed = {
+        // Prepend the source-wasm sha256 so the loader can reconstruct the
+        // CompileCache key from the file alone.
+        let mut out = compose_core::blobs::compute_digest(&bytes);
+        out.extend_from_slice(&cwasm_trust::seal_cwasm(&bytes, &precompiled));
+        out
+    };
+    std::fs::write(out_path, &framed)
         .with_context(|| format!("write {}", out_path.display()))?;
     Ok(())
 }

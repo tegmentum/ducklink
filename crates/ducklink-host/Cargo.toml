@@ -23,6 +23,13 @@ rustls-pemfile = "2"
 rcgen = "0.13"
 # Parse the structured `{status, body, ctype}` response a wasm handler returns.
 serde_json = "1"
+# Shared content-addressed-storage core: the BlobBackend trait + the
+# trust-gated CompileCache. Used here to HMAC-authenticate the precompiled
+# `.cwasm` (a `.cwasm` deserializes to runnable machine code, so it must be
+# trusted). compose-core is wasmtime-free and sqlite-free.
+compose-core = { git = "https://github.com/tegmentum/webassembly-component-orchestration.git", branch = "main" }
+# Home-dir resolution for the per-machine HMAC key + FsBlobStore cache root.
+dirs = "5"
 
 [dev-dependencies]
 tempfile = "3"
