@@ -5140,6 +5140,39 @@
       "wit_contract_version": "2.0.0"
     },
     {
+      "name": "mlkmeans",
+      "version": "0.1.0",
+      "description": "ml_kmeans(x, y, k) aggregate: k-means centroids (JSON) computed by Python/numpy on the single resident, shared compose:dynlink pylon provider (mlkmeans).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "categories": [
+        "math"
+      ],
+      "source": "extensions/mlkmeans-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/mlkmeans.wasm",
+      "wit_contract": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
+      "exports": [
+        "ml_kmeans"
+      ],
+      "requires": [
+        "aggregate",
+        "compose-dynlink"
+      ],
+      "crates": [
+        "rmp-serde",
+        "serde",
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "mlkmeans",
+      "expansion": "com.tegmentum.ducklink.mlkmeans",
+      "wit_contract_version": "2.0.0"
+    },
+    {
       "name": "urlpattern",
       "version": "0.1.0",
       "description": "WHATWG URLPattern matching: url_pattern_test(pattern, url) -> boolean, url_pattern_match -> json named groups (urlpattern).",

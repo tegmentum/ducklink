@@ -1,0 +1,23 @@
+package compose:dynlink@0.1.0;
+
+/// Runtime / dynamic component linking ("dlopen for components").
+///
+/// A guest imports this interface to resolve and instantiate another
+/// component at exec time, then call into it through an opaque,
+/// host-owned handle. The mlkmeans aggregate uses it to reach the one
+/// resident, shared pylon provider that computes k-means via numpy.
+interface linker {
+  use sys:compose/types@1.0.0.{error, digest};
+
+  /// An instantiated provider component, owned by the host.
+  resource instance {
+    /// Send a message to the provider's `endpoint.handle` export.
+    invoke: func(method: string, payload: list<u8>) -> result<list<u8>, error>;
+  }
+
+  /// Resolve and instantiate a component by content digest.
+  resolve-by-digest: func(d: digest) -> result<instance, error>;
+
+  /// Resolve and instantiate a component by registry id.
+  resolve-by-id: func(id: string) -> result<instance, error>;
+}

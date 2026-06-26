@@ -1,0 +1,19 @@
+package duckdb:extension@2.0.0;
+
+use types;
+
+interface callback-dispatch {
+  use types.{duckerror, duckvalue, invokeinfo, resultset, rowbatch};
+
+  call-scalar: func(handle: u32, args: list<duckvalue>, ctx: invokeinfo) -> result<duckvalue, duckerror>;
+  // Batched scalar dispatch: one call per DataChunk (<= 2048 rows) instead of
+  // one per row, amortizing the WIT boundary crossing. `rows` is the chunk's
+  // arguments (one inner list per row); `ctx.rowindex` is the first row's index
+  // (the i-th row is ctx.rowindex + i). Returns one result value per row, in
+  // order. Semantically identical to calling call-scalar per row.
+  call-scalar-batch: func(handle: u32, rows: rowbatch, ctx: invokeinfo) -> result<list<duckvalue>, duckerror>;
+  call-table: func(handle: u32, args: list<duckvalue>) -> result<resultset, duckerror>;
+  call-aggregate: func(handle: u32, rows: rowbatch) -> result<duckvalue, duckerror>;
+  call-pragma: func(handle: u32, args: list<duckvalue>) -> result<option<duckvalue>, duckerror>;
+  call-cast: func(handle: u32, value: duckvalue) -> result<duckvalue, duckerror>;
+}

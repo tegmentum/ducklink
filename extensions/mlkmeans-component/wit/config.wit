@@ -1,0 +1,17 @@
+package duckdb:extension@2.0.0;
+
+use types;
+
+interface config {
+  use types.{configerror};
+
+  provider-version: func() -> string;
+  list-keys: func(prefix: option<string>) -> list<string>;
+  get-string: func(path: string) -> result<option<string>, configerror>;
+  get-bool: func(path: string) -> result<option<bool>, configerror>;
+  get-i64: func(path: string) -> result<option<s64>, configerror>;
+  get-u64: func(path: string) -> result<option<u64>, configerror>;
+  get-f64: func(path: string) -> result<option<f64>, configerror>;
+  get-bytes: func(path: string) -> result<option<list<u8>>, configerror>;
+  get-string-list: func(path: string) -> result<option<list<string>>, configerror>;
+}

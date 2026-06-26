@@ -1,0 +1,10 @@
+package duckdb:extension@2.0.0;
+
+use types;
+
+interface logging {
+  use types.{logfield, loglevel};
+
+  log: func(level: loglevel, message: string, target: option<string>);
+  log-fields: func(level: loglevel, message: string, fields: list<logfield>);
+}

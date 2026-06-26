@@ -96,14 +96,17 @@ use ducklink_runtime::{
 use wasmtime::component::{Component, Linker, Resource, ResourceAny, ResourceTable};
 use wasmtime::{AsContextMut, Config, Engine, Store, StoreContextMut};
 
-mod compose_dynlink;
-pub use compose_dynlink::ProviderRegistry;
+/// The `compose:dynlink/linker` host implementation now lives in
+/// `ducklink-runtime` (so the extension load path can wire it); re-exported
+/// here under the original path so the dotcmd path + tests are unchanged.
+use ducklink_runtime::compose_dynlink;
+pub use ducklink_runtime::compose_dynlink::{ProviderPreopen, ProviderRegistry};
 /// Test/embedder support surface for the `compose:dynlink/linker` host
 /// import: the `DynState` store state, the `imports_linker` gate, and the
 /// `add_to_linker` wiring. Used by the integration test that drives the
 /// framework's dlopen guest through ducklink-host's wasmtime.
 pub mod compose_dynlink_test_support {
-    pub use crate::compose_dynlink::{add_to_linker, imports_linker, DynState};
+    pub use ducklink_runtime::compose_dynlink::{add_to_linker, imports_linker, DynState};
 }
 mod delta_rewrite;
 mod prefix;
@@ -929,14 +932,90 @@ impl DotcmdState {
 }
 // Generate the compose:dynlink/linker Host + HostInstance trait impls for
 // DotcmdState, delegating to its bridge (one shared implementation).
-crate::impl_compose_dynlink_host!(DotcmdState, dynlink_bridge);
+ducklink_runtime::impl_compose_dynlink_host!(DotcmdState, dynlink_bridge);
 
 /// Process-global shared provider registry for the dot-command dlopen path.
 /// Built once against the host engine; a pylon-shaped provider registered
 /// here is instantiated once and shared across every dot-command guest.
 fn dotcmd_provider_registry(engine: &Engine) -> &'static ProviderRegistry {
+    dynlink_provider_registry(engine)
+}
+
+/// THE process-global shared `compose:dynlink` provider registry, used by
+/// BOTH the dot-command path and the extension load path (so one resident
+/// provider — e.g. the warmed ~38 MB pylon — serves every guest, across both
+/// flavors). Built once against the host engine and populated from
+/// `DUCKLINK_PROVIDERS` (see [`register_env_providers`]) on first use.
+fn dynlink_provider_registry(engine: &Engine) -> &'static ProviderRegistry {
     static REG: OnceLock<ProviderRegistry> = OnceLock::new();
-    REG.get_or_init(|| ProviderRegistry::new(engine.clone()))
+    REG.get_or_init(|| {
+        let registry = ProviderRegistry::new(engine.clone());
+        register_env_providers(&registry);
+        registry
+    })
+}
+
+/// Register `compose:dynlink` providers declared in the `DUCKLINK_PROVIDERS`
+/// environment variable into `registry`. This mirrors `DUCKLINK_AUTOLOAD`'s
+/// env-list config style.
+///
+/// Format (comma-separated entries; preopens are `;`-separated `guest=host`
+/// pairs after a `:`):
+///
+/// ```text
+/// DUCKLINK_PROVIDERS=pylon=/abs/pylon-endpoint-numpy.component.wasm:/lib=/abs/cpython/Lib;/app=/abs/pylib
+/// ```
+///
+/// Each entry is `id=wasm-path[:preopens]`. A pylon provider needs
+/// `/lib` (the CPython `Lib` dir incl. bundled numpy) and `/app` (the
+/// dispatcher `pylib` dir) preopened into its OWN store. A provider with no
+/// preopens (e.g. an echo provider) is written as just `id=path`.
+///
+/// Registration only COMPILES the provider; the resident instance is
+/// materialized lazily on first resolve and then shared.
+fn register_env_providers(registry: &ProviderRegistry) {
+    let spec = match std::env::var("DUCKLINK_PROVIDERS") {
+        Ok(s) if !s.trim().is_empty() => s,
+        _ => return,
+    };
+    for entry in spec.split(',').map(str::trim).filter(|e| !e.is_empty()) {
+        // Split id=path[:preopens]. The id/path boundary is the FIRST '='; the
+        // path/preopens boundary is the FIRST ':' AFTER the path start (paths
+        // are absolute on this platform so the leading '/' is unambiguous).
+        let (id, rest) = match entry.split_once('=') {
+            Some(p) => p,
+            None => {
+                eprintln!("[compose-dynlink] DUCKLINK_PROVIDERS: skipping malformed entry '{entry}' (expected id=path)");
+                continue;
+            }
+        };
+        let (path, preopen_spec) = match rest.split_once(":/") {
+            Some((p, rest)) => (p, Some(format!("/{rest}"))),
+            None => (rest, None),
+        };
+        let mut preopens = Vec::new();
+        if let Some(po_spec) = preopen_spec {
+            for pair in po_spec.split(';').map(str::trim).filter(|p| !p.is_empty()) {
+                match pair.split_once('=') {
+                    Some((guest, host)) => {
+                        preopens.push(ProviderPreopen::new(host.trim(), guest.trim()))
+                    }
+                    None => eprintln!(
+                        "[compose-dynlink] DUCKLINK_PROVIDERS: provider '{id}': skipping malformed preopen '{pair}' (expected guest=host)"
+                    ),
+                }
+            }
+        }
+        match registry.register_provider_with_preopens(id, path.trim(), preopens.clone()) {
+            Ok(()) => eprintln!(
+                "[compose-dynlink] registered provider '{id}' from {} ({} preopen{})",
+                path.trim(),
+                preopens.len(),
+                if preopens.len() == 1 { "" } else { "s" }
+            ),
+            Err(e) => eprintln!("[compose-dynlink] failed to register provider '{id}': {e}"),
+        }
+    }
 }
 
 /// `duckdb:dotcmd/spi` — run SQL on the CLI's live connection, returned as
@@ -2347,6 +2426,12 @@ impl ExtensionManager {
         let current_connection = self.current_connection.clone();
         let catalog_snapshot = self.catalog_snapshot.clone();
         let extension_name = sanitized.clone();
+        // The shared compose:dynlink provider registry (populated from
+        // DUCKLINK_PROVIDERS). Cloned into the load thread; the bridge is built
+        // there. A component that imports compose:dynlink/linker (e.g.
+        // mlkmeans) resolves the one resident pylon through it; every other
+        // extension ignores it (the imports_linker gate in load_component).
+        let dynlink_registry = dynlink_provider_registry(&engine).clone();
         // Log the human version AND the authoritative content-addressed contract
         // identity (the witcanon digest, short hex). The digest is what
         // catalog-verify enforces; the version is the runtime-observable proxy.
@@ -2401,7 +2486,7 @@ impl ExtensionManager {
             // loader, shared from ducklink-runtime. The host supplies the wasi
             // context (it owns the network-grant policy above) and CoreServices
             // (config/logging routed to DuckDB-compiled-to-wasm).
-            ducklink_runtime::load_component(
+            ducklink_runtime::load_component_with_dynlink(
                 &engine,
                 &component,
                 wasi,
@@ -2412,6 +2497,7 @@ impl ExtensionManager {
                 }),
                 callback_registry,
                 extension_name.clone(),
+                Some(dynlink_registry),
             )
             .map(|instance| (instance, imports_query))
         });

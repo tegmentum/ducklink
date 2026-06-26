@@ -1,0 +1,32 @@
+[package]
+name = "mlkmeans-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+ml_kmeans(x, y, k) aggregate computed by Python/numpy on a single resident,
+shared compose:dynlink pylon provider (the warmed ~38 MB pylon serving DuckDB
+ML functions)
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+rmp-serde = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "mlkmeans"
+
+[package.metadata.component.target.dependencies]
+"compose:dynlink" = { path = "wit/deps/compose-dynlink.wit" }
+"sys:compose" = { path = "wit/deps/sys-compose.wit" }

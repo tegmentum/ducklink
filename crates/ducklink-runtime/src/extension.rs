@@ -223,6 +223,11 @@ pub struct ExtensionStoreState {
     table_handle_names: HashMap<u32, String>,
     callback_registry: Arc<Mutex<CallbackRegistry>>,
     extension_name: String,
+    /// `Some(..)` only for a component that imports `compose:dynlink/linker`
+    /// (the gate is in `load_component`); every other extension is unaffected
+    /// and pays nothing. The bridge resolves/invokes the shared, resident
+    /// provider (e.g. the one warmed ~38 MB pylon) on the guest's behalf.
+    dynlink: Option<crate::compose_dynlink::DynLinkBridge>,
 }
 
 impl ExtensionStoreState {
@@ -231,6 +236,18 @@ impl ExtensionStoreState {
         services: Box<dyn ExtensionServices>,
         callback_registry: Arc<Mutex<CallbackRegistry>>,
         extension_name: String,
+    ) -> Self {
+        Self::with_dynlink(wasi, services, callback_registry, extension_name, None)
+    }
+
+    /// Like [`new`](Self::new) but also carries an optional
+    /// `compose:dynlink/linker` bridge (for a component that imports it).
+    pub fn with_dynlink(
+        wasi: WasiCtx,
+        services: Box<dyn ExtensionServices>,
+        callback_registry: Arc<Mutex<CallbackRegistry>>,
+        extension_name: String,
+        dynlink: Option<crate::compose_dynlink::DynLinkBridge>,
     ) -> Self {
         Self {
             table: ResourceTable::new(),
@@ -255,7 +272,17 @@ impl ExtensionStoreState {
             table_handle_names: HashMap::new(),
             callback_registry,
             extension_name,
+            dynlink,
         }
+    }
+
+    /// Accessor for the dynlink bridge, used by `impl_compose_dynlink_host!`.
+    /// Reached only after the `imports_linker` gate set `dynlink = Some(..)`,
+    /// so the `expect` never fires for a component wired through that gate.
+    fn dynlink_bridge(&mut self) -> &mut crate::compose_dynlink::DynLinkBridge {
+        self.dynlink
+            .as_mut()
+            .expect("dynlink bridge present only when the component imports compose:dynlink/linker")
     }
 
     fn alloc_resource_id(&mut self) -> u32 {
@@ -387,6 +414,12 @@ impl WasiView for ExtensionStoreState {
 impl wasmtime::component::HasData for ExtensionStoreState {
     type Data<'a> = &'a mut ExtensionStoreState;
 }
+
+// Satisfy a guest's `compose:dynlink/linker` import by delegating to the ONE
+// bridge implementation (resolve/invoke against the shared, resident provider
+// registry). Only components that actually import the linker get the host
+// import added (the `imports_linker` gate in `load_component`).
+crate::impl_compose_dynlink_host!(ExtensionStoreState, dynlink_bridge);
 
 fn unsupported_runtime_error() -> extension_types::Duckerror {
     extension_types::Duckerror::Unsupported(
@@ -2479,17 +2512,67 @@ pub fn load_component(
     callback_registry: Arc<Mutex<CallbackRegistry>>,
     extension_name: String,
 ) -> wasmtime::Result<ExtensionInstance> {
+    load_component_with_dynlink(
+        engine,
+        component,
+        wasi,
+        services,
+        callback_registry,
+        extension_name,
+        None,
+    )
+}
+
+/// Like [`load_component`] but also wires `compose:dynlink/linker` for a
+/// component that imports it: the host import is added to the guest linker
+/// (gated on `imports_linker`) and a [`DynLinkBridge`](crate::compose_dynlink::DynLinkBridge)
+/// over the supplied shared provider `registry` is moved into the store
+/// state. This is how an `ml_kmeans`-style aggregate reaches the one resident,
+/// shared pylon provider. A component that does NOT import the linker (every
+/// other extension) is unaffected even if a registry is supplied.
+pub fn load_component_with_dynlink(
+    engine: &Engine,
+    component: &Component,
+    wasi: WasiCtx,
+    services: Box<dyn ExtensionServices>,
+    callback_registry: Arc<Mutex<CallbackRegistry>>,
+    extension_name: String,
+    dynlink_registry: Option<crate::compose_dynlink::ProviderRegistry>,
+) -> wasmtime::Result<ExtensionInstance> {
     // Contract guard: reject a component whose duckdb:extension contract major
     // differs from this host's (or is unversioned/legacy) BEFORE instantiating,
     // so a mismatched component never silently marshals corrupted values.
     crate::check_component_contract(engine, component, &extension_name)?;
 
-    let mut store = Store::new(
-        engine,
-        ExtensionStoreState::new(wasi, services, callback_registry, extension_name.clone()),
-    );
     let mut linker = Linker::<ExtensionStoreState>::new(engine);
     add_extension_interfaces_to_linker(&mut linker)?;
+
+    // compose:dynlink/linker: conditionally satisfy a guest-driven provider
+    // import. ONLY a component that actually imports the linker gets the host
+    // import + a bridge; every other extension pays nothing (the gate mirrors
+    // the framework's `imports_linker`).
+    let dynlink = match dynlink_registry {
+        Some(registry) if crate::compose_dynlink::imports_linker(engine, component) => {
+            eprintln!(
+                "[extension-runtime:{extension_name}] imports compose:dynlink/linker; wiring the shared-provider bridge"
+            );
+            crate::compose_dynlink::add_to_linker::<ExtensionStoreState>(&mut linker)
+                .map_err(|e| wasmtime::Error::msg(e.to_string()))?;
+            Some(crate::compose_dynlink::DynLinkBridge::new(registry))
+        }
+        _ => None,
+    };
+
+    let mut store = Store::new(
+        engine,
+        ExtensionStoreState::with_dynlink(
+            wasi,
+            services,
+            callback_registry,
+            extension_name.clone(),
+            dynlink,
+        ),
+    );
 
     // Instantiate via the linker to obtain the raw component instance, then build
     // the typed base-world bindings from it. Retaining the raw instance lets a

@@ -34,7 +34,31 @@ use std::sync::{Arc, Mutex};
 
 use wasmtime::component::{Component, Linker, Resource, ResourceTable};
 use wasmtime::{Engine, Store};
-use wasmtime_wasi::{ResourceTable as WasiResourceTable, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
+use wasmtime_wasi::{
+    DirPerms, FilePerms, ResourceTable as WasiResourceTable, WasiCtx, WasiCtxBuilder, WasiCtxView,
+    WasiView,
+};
+
+/// A directory to preopen into a provider's OWN store, mounted at `guest`
+/// (e.g. `/lib`) from the host path `host`. A pylon-shaped provider needs
+/// its CPython `Lib` (with bundled numpy) and its dispatcher `pylib` dir
+/// preopened so the resident interpreter can import them.
+#[derive(Clone, Debug)]
+pub struct ProviderPreopen {
+    /// Host filesystem path to expose.
+    pub host: PathBuf,
+    /// Guest mount point (e.g. "/lib" or "/app").
+    pub guest: String,
+}
+
+impl ProviderPreopen {
+    pub fn new(host: impl Into<PathBuf>, guest: impl Into<String>) -> Self {
+        Self {
+            host: host.into(),
+            guest: guest.into(),
+        }
+    }
+}
 
 /// Bindgen for the guest-facing `compose:dynlink/linker` import. We only
 /// need the host (import) side: the `linker` interface + the `instance`
@@ -103,6 +127,10 @@ struct ProviderEntry {
     /// resolves and invokes (the shared model).
     resident: Option<ResidentProvider>,
     path: PathBuf,
+    /// Directories to preopen into the provider's OWN store when it is
+    /// materialized. Empty for a plain provider (the echo proof); a pylon
+    /// provider carries `/lib` (CPython Lib + numpy) and `/app` (dispatcher).
+    preopens: Vec<ProviderPreopen>,
     /// Number of live `instance` handles outstanding for this id. Bumped
     /// on resolve, decremented on handle drop — used to assert/log the
     /// shared-copy property (N handles, 1 resident).
@@ -138,6 +166,20 @@ impl ProviderRegistry {
     /// Register a `dynlink-provider`-world wasm component under `id`,
     /// compiling it now (instantiation is deferred to first resolve).
     pub fn register_provider(&self, id: impl Into<String>, path: impl Into<PathBuf>) -> Result<(), String> {
+        self.register_provider_with_preopens(id, path, Vec::new())
+    }
+
+    /// Register a `dynlink-provider`-world wasm component under `id`,
+    /// with directories preopened into its OWN store on materialization.
+    /// A pylon provider passes its `/lib` (CPython Lib incl. numpy) and
+    /// `/app` (dispatcher pylib) here so the resident interpreter can
+    /// import them; a plain provider passes an empty list.
+    pub fn register_provider_with_preopens(
+        &self,
+        id: impl Into<String>,
+        path: impl Into<PathBuf>,
+        preopens: Vec<ProviderPreopen>,
+    ) -> Result<(), String> {
         let id = id.into();
         let path = path.into();
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
@@ -150,6 +192,7 @@ impl ProviderRegistry {
                 component,
                 resident: None,
                 path,
+                preopens,
                 handle_count: 0,
             },
         );
@@ -269,8 +312,29 @@ fn materialize_resident(registry: &ProviderRegistry, id: &str) -> Result<(), Err
         let mut linker: Linker<ProviderState> = Linker::new(engine);
         wasmtime_wasi::p2::add_to_linker_sync(&mut linker)
             .map_err(|e| err(ErrorCode::EmitLinkError, format!("provider wasi linker: {e}")))?;
+        // Build the provider's OWN WASI ctx, preopening any registered dirs
+        // (a pylon needs /lib = CPython Lib+numpy and /app = dispatcher) so
+        // the resident interpreter can import them. inherit_stdio surfaces
+        // the provider's init markers (e.g. "[pylon-endpoint] initializing
+        // CPython interpreter (once)") to the host stderr.
+        let mut builder = WasiCtxBuilder::new();
+        builder.inherit_stdio();
+        for po in &entry.preopens {
+            builder
+                .preopened_dir(&po.host, &po.guest, DirPerms::all(), FilePerms::all())
+                .map_err(|e| {
+                    err(
+                        ErrorCode::InvalidInput,
+                        format!(
+                            "provider '{id}': preopen {} -> {}: {e}",
+                            po.host.display(),
+                            po.guest
+                        ),
+                    )
+                })?;
+        }
         let state = ProviderState {
-            wasi: WasiCtxBuilder::new().inherit_stdio().build(),
+            wasi: builder.build(),
             table: WasiResourceTable::new(),
         };
         let mut store = Store::new(engine, state);
@@ -465,7 +529,7 @@ pub fn imports_linker(engine: &Engine, component: &Component) -> bool {
 /// `impl_compose_dynlink_host!`). WASI must be added separately by the
 /// caller. Used by both the standalone `DynState` path (the test) and the
 /// dot-command `DotcmdState` load path.
-pub fn add_to_linker<T>(linker: &mut Linker<T>) -> anyhow::Result<()>
+pub fn add_to_linker<T>(linker: &mut Linker<T>) -> wasmtime::Result<()>
 where
     T: bindings::compose::dynlink::linker::Host
         + bindings::compose::dynlink::linker::HostInstance
@@ -473,5 +537,5 @@ where
         + 'static,
 {
     bindings::DynlinkGuest::add_to_linker::<_, HasSelf<T>>(linker, |s| s)
-        .map_err(|e| anyhow::anyhow!("add compose:dynlink/linker to linker: {e:?}"))
+        .map_err(|e| wasmtime::Error::msg(format!("add compose:dynlink/linker to linker: {e:?}")))
 }

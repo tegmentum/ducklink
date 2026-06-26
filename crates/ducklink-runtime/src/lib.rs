@@ -124,12 +124,21 @@ pub fn check_component_contract(
     }
 }
 
+/// Native (wasmtime) host implementation of `compose:dynlink/linker` — the
+/// resident, shared-provider "dlopen for components" bridge. Used by the
+/// extension load path (so an `ml_kmeans`-style aggregate can reach the one
+/// warmed pylon provider) and re-exported to `ducklink-host` for the dotcmd
+/// path and the native proof tests.
+pub mod compose_dynlink;
+pub use compose_dynlink::{ProviderPreopen, ProviderRegistry};
+
 pub mod extension;
 pub use extension::{
     add_extension_interfaces_to_linker, describe_runtime_logicaltype, load_component,
-    summarize_extopts, summarize_funcopts, summarize_registration_names, summarize_runtime_columns,
-    summarize_runtime_funcargs, ConfigError, ExtensionInstance, ExtensionServices,
-    ExtensionStoreState, LogField, LogLevel, PendingRegistrationsData,
+    load_component_with_dynlink, summarize_extopts, summarize_funcopts,
+    summarize_registration_names, summarize_runtime_columns, summarize_runtime_funcargs,
+    ConfigError, ExtensionInstance, ExtensionServices, ExtensionStoreState, LogField, LogLevel,
+    PendingRegistrationsData,
 };
 
 /// The generated wasmtime bindings for the `duckdb:extension-host` world — the

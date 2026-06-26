@@ -2,14 +2,14 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**180 component extensions** · **494 SQL functions** · 6 expose aggregates · 3 require network.
+**181 component extensions** · **495 SQL functions** · 7 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
 ## Capabilities
 
 - **Scalars** — the default; pure per-row functions.
-- **Aggregates** — `aggstat`, `bloom`, `minhash`, `countmin`, `bitfilters`, `tdigest` use the whole-batch `call_aggregate` path.
+- **Aggregates** — `aggstat`, `bloom`, `minhash`, `countmin`, `bitfilters`, `tdigest`, `mlkmeans` use the whole-batch `call_aggregate` path.
 - **Network** — `dns`, `httpclient`, `openprompt` need an outbound-network grant (`DUCKLINK_NETWORK_GRANT`), off by default.
 
 ## Loading & embedding
@@ -175,7 +175,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **totp** | `totp` | hmac, sha1, base32 |  |
 | **vigenere** | `vigenere_encrypt`, `vigenere_decrypt` | hand-rolled |  |
 
-## Math (9)
+## Math (10)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -184,6 +184,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **frequentitems** | `top_k`, `top_k_value` | hand-rolled |  |
 | **hashfuncs** | `xxh32`, `xxh64`, `xxh3`, `murmur3` | twox-hash, murmur3 |  |
 | **hnswfns** | `hnsw_search` | instant-distance |  |
+| **mlkmeans** | `ml_kmeans` | rmp-serde, serde, serde_json | aggregate |
 | **statsduck** | `adjust_p`, `anderson_darling`, `anova_oneway`, `bin_edges`, `chisq_cdf`, `chisq_goodness_of_fit`, `chisq_independence`, `corr_matrix`, `f_cdf`, `gamma_cdf`, `jarque_bera`, `kendall_test`, `ks_test_1samp`, `ks_test_2samp`, `lm`, `lm_summary`, `lognormal_cdf`, `mann_whitney_u`, `pearson_test`, `poibin_cdf`, `shapiro_wilk`, `sign_test_1samp`, `sign_test_paired`, `spearman_test`, `t_cdf`, `table_one`, `ttest_1samp`, `ttest_2samp`, `ttest_paired`, `weibull_cdf`, `wilcoxon_signed_rank` | statrs, serde_json |  |
 | **stochastic** | `normal_cdf`, `normal_pdf`, `normal_quantile`, `binomial_pmf`, `poisson_pmf`, `exponential_cdf`, `beta_cdf` | statrs |  |
 | **tdigest** | `tdigest`, `tdigest_quantile`, `tdigest_count` | tdigest, bincode | aggregate |

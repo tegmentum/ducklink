@@ -1,0 +1,32 @@
+package duckdb:extension@2.0.0;
+
+interface files {
+  type table-function-handle = u32;
+  type copy-function-handle = u32;
+
+  type replacement-scan-id = u32;
+  type copy-handler-id = u32;
+
+  enum detection-mode {
+    extension-only,
+    signature,
+  }
+
+  record replacement-scan {
+    /// File extensions that should trigger this scan (e.g. "json", "jsonl").
+    extensions: list<string>,
+    /// Handle returned from runtime::register_table.
+    table-function: table-function-handle,
+    mode: detection-mode,
+  }
+
+  record copy-handler {
+    /// File extension this copy handler supports.
+    extension: string,
+    /// Handle returned from runtime::register_table or similar.
+    function: copy-function-handle,
+  }
+
+  register-replacement-scan: func(scan: replacement-scan) -> result<replacement-scan-id, string>;
+  register-copy-handler: func(handler: copy-handler) -> result<copy-handler-id, string>;
+}

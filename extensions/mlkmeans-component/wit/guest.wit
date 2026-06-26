@@ -1,0 +1,11 @@
+package duckdb:extension@2.0.0;
+
+use types;
+
+interface guest {
+  use types.{duckerror, loadresult};
+
+  load: func() -> result<loadresult, duckerror>;
+  reconfigure: func(keys: list<string>) -> result<bool, duckerror>;
+  shutdown: func() -> result<bool, duckerror>;
+}

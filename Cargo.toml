@@ -150,6 +150,7 @@ members = [
     "extensions/useragent-component",
     "extensions/ical-component",
     "extensions/tdigest-component",
+    "extensions/mlkmeans-component",
     "extensions/urlpattern-component",
     "extensions/bencode-component",
     "extensions/maidenhead-component",
