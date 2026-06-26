@@ -56,11 +56,30 @@ and generic; the ML lives in Python on pylon.
 
 **Recommendation:** validate the **wac** mechanic first (it's the cheapest proof
 that many importers can share one `py-worker`), then land **host-mediated** sharing
-as the production model — the ducklink runtime holds one pylon `py-worker` and
-provides `tegmentum:py-offload/offload` as a host import to each loaded ML
-component, exactly as it already provides the storage/files/query host imports.
-Both satisfy "one copy of pylon for multiple functions"; host-mediated fits the
-dynamic catalog.
+as the production model. Both satisfy "one copy of pylon for multiple functions";
+host-mediated fits the dynamic catalog.
+
+### Host-mediated sharing via `compose:dynlink` (the production layer)
+
+Realize host-mediated sharing on the **`sys:compose@1.0.0` orchestration
+framework** (`~/git/webassembly-component-orchestration`), specifically
+`compose:dynlink@0.1.0` — a dependency-injection layer for Wasm components
+("Guice for Wasm") that **sqlink's host already runs on**
+(`sqlink/host/src/compose_provider.rs`). The mapping is exact:
+
+- **pylon = a `dynlink-provider`** — it provides the `tegmentum:py-offload/offload`
+  endpoint.
+- **each ML function component = a `dynlink-guest`** — it imports `compose:dynlink/
+  linker` to resolve and call the shared provider.
+- The ducklink host holds **one** resident pylon provider and serves every guest —
+  one copy, dynamically shared, with the framework's deterministic planning +
+  attestation.
+
+This replaces bespoke host wiring with a real, conformance-tested substrate and
+**unifies ducklink with sqlink** on one composition layer. Cost: it's an
+integration of ducklink's loading/injection path (currently bespoke in
+`ducklink-host`) onto `compose:dynlink` — mirror sqlink's `compose_provider.rs`.
+The **wac de-risk does not need it**; introduce `compose:dynlink` at Phase 1.
 
 ## The ducklink function surface (reuse the build/query shape)
 
@@ -138,10 +157,11 @@ surface is **numpy-backed ML**, not `import sklearn`:
 - **Phase 0 — de-risk (now, independent).** Prove one `py-worker` shared by ≥2
   importing components via `wac plug`; measure the size win (1×38 MB vs N×38 MB).
   Confirm `msgpack` round-trips numpy arrays end to end.
-- **Phase 1 — host-mediated `py-offload`.** Add `tegmentum:py-offload/offload` as
-  a ducklink host import backed by one resident pylon `py-worker` (mirror the
-  storage/files/query host-import wiring). One pylon, injected into every loaded
-  ML component.
+- **Phase 1 — host-mediated `py-offload` via `compose:dynlink`.** Wire ducklink's
+  host onto `compose:dynlink@0.1.0` (mirror sqlink's `compose_provider.rs`): pylon
+  becomes a `dynlink-provider` for `tegmentum:py-offload/offload`, each ML function
+  a `dynlink-guest`, the host serving one resident pylon to all. One pylon,
+  injected into every loaded ML component, on the shared orchestration substrate.
 - **Phase 2 — the function pack.** `ducklink_ml` Python module (fit/predict for
   kmeans, linreg, logreg, pca, standardize, metrics) + the thin ducklink
   components (fit-aggregate + predict-scalar/table-fn) generated from a small
