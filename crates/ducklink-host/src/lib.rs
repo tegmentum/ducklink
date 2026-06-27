@@ -1609,6 +1609,28 @@ impl ExtensionManager {
         }
     }
 
+    /// The canonical conformance `suite_digest` the resolver HOLDS for this
+    /// extension at its live contract — the content digest of the on-disk
+    /// conformance suite (`<source>/conformance.sql` + `conformance.expected`),
+    /// computed via the shared scheme in `resolver::compute_suite_digest`. The
+    /// suite file is the source of truth, so a tampered/stale provider record
+    /// (whose `suite_digest` no longer matches the file) is caught by the gate.
+    ///
+    /// Returns `None` when the extension has no conformance suite yet (the long
+    /// tail not promoted): the resolver then falls back to reference-by-construction
+    /// for that extension (see `resolver::conformance_ok`).
+    fn canonical_suite_digest(&self, name: &str) -> Option<String> {
+        let exts = self.registry_index.get("extensions")?.as_array()?;
+        let entry = exts
+            .iter()
+            .find(|e| e.get("name").and_then(|v| v.as_str()) == Some(name))?;
+        let source = entry.get("source").and_then(|v| v.as_str())?;
+        let dir = workspace_root().join(source);
+        let sql = std::fs::read_to_string(dir.join("conformance.sql")).ok()?;
+        let expected = std::fs::read_to_string(dir.join("conformance.expected")).ok()?;
+        Some(resolver::compute_suite_digest(&sql, &expected))
+    }
+
     /// Multi-provider resolution for a logical extension: read its manifest entry
     /// (providers[] or backward-compat single-artifact) and run the resolver
     /// candidate pipeline (conformance gate -> available -> trusted -> !excluded
@@ -1629,7 +1651,8 @@ impl ExtensionManager {
             }
         };
         let env = resolver::Env::default();
-        match resolver::resolve(&entry, &env, &self.resolver_policy, None) {
+        let canonical = self.canonical_suite_digest(name);
+        match resolver::resolve(&entry, &env, &self.resolver_policy, canonical.as_deref()) {
             Ok(res) => {
                 let reasoning = resolver::render_reasoning(&res.reasoning);
                 eprintln!(
@@ -1680,7 +1703,8 @@ impl ExtensionManager {
             None => format!("'{name}': no manifest entry (backward-compat filename load)"),
             Some(entry) => {
                 let env = resolver::Env::default();
-                match resolver::resolve(&entry, &env, &self.resolver_policy, None) {
+                let canonical = self.canonical_suite_digest(name);
+                match resolver::resolve(&entry, &env, &self.resolver_policy, canonical.as_deref()) {
                     Ok(res) => format!(
                         "'{name}': chosen '{}' [{}] at contract {}; {}",
                         res.chosen_id,

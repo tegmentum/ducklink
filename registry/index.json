@@ -408,7 +408,7 @@
           "content_digest": "366cdfd56dee914e74148455b1e74eabb55cac5918489cd372e80766c2fc74f4",
           "conformance": {
             "suite": "aba@2",
-            "suite_digest": "canonical-aba-suite",
+            "suite_digest": "e2833ab9fdc2e3b09994610b006002a54c0e37ce82f0964bee33e3fd17328dcc",
             "at": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
             "passed": true
           }
@@ -428,7 +428,7 @@
           },
           "conformance": {
             "suite": "aba@2",
-            "suite_digest": "canonical-aba-suite",
+            "suite_digest": "e2833ab9fdc2e3b09994610b006002a54c0e37ce82f0964bee33e3fd17328dcc",
             "at": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
             "passed": true
           }
@@ -2042,7 +2042,23 @@
       "prefix": "ascii85",
       "expansion": "com.tegmentum.ducklink.ascii85",
       "wit_contract_version": "2.0.0",
-      "content_digest": "99455929d6e6976985a5e0610daded6c31cc4a7d46b60fb49b6d35bd97464f9c"
+      "content_digest": "99455929d6e6976985a5e0610daded6c31cc4a7d46b60fb49b6d35bd97464f9c",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@2.0.0",
+          "artifact": "artifacts/extensions/ascii85.wasm",
+          "content_digest": "99455929d6e6976985a5e0610daded6c31cc4a7d46b60fb49b6d35bd97464f9c",
+          "conformance": {
+            "suite": "ascii85@2",
+            "suite_digest": "df35bc9afa52d8b746e0023d5077fad6823719269b03e3320b9cc3c776703420",
+            "at": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
+            "passed": true
+          }
+        }
+      ]
     },
     {
       "name": "quotedprintable",
@@ -3956,7 +3972,23 @@
       "prefix": "atbash",
       "expansion": "com.tegmentum.ducklink.atbash",
       "wit_contract_version": "2.0.0",
-      "content_digest": "3635a936bb7ee35823c3ad12052300dc5df4f0c5defb1679dae946629681a013"
+      "content_digest": "3635a936bb7ee35823c3ad12052300dc5df4f0c5defb1679dae946629681a013",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@2.0.0",
+          "artifact": "artifacts/extensions/atbash.wasm",
+          "content_digest": "3635a936bb7ee35823c3ad12052300dc5df4f0c5defb1679dae946629681a013",
+          "conformance": {
+            "suite": "atbash@2",
+            "suite_digest": "618f290b2e4031a00c48453fbfbff5c9128d05f124adbfe12e71eb813493e719",
+            "at": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
+            "passed": true
+          }
+        }
+      ]
     },
     {
       "name": "piglatin",
@@ -5048,7 +5080,23 @@
       "prefix": "base45",
       "expansion": "com.tegmentum.ducklink.base45",
       "wit_contract_version": "2.0.0",
-      "content_digest": "7ae274f95e74e026285b0cfec3814a5b2e575b06bf76953f695c1d58384eedf2"
+      "content_digest": "7ae274f95e74e026285b0cfec3814a5b2e575b06bf76953f695c1d58384eedf2",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@2.0.0",
+          "artifact": "artifacts/extensions/base45.wasm",
+          "content_digest": "7ae274f95e74e026285b0cfec3814a5b2e575b06bf76953f695c1d58384eedf2",
+          "conformance": {
+            "suite": "base45@2",
+            "suite_digest": "e57aa548585622a8e25905b4c4ca03f1f27d95cda9e07ea49f2746a719b00a7b",
+            "at": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
+            "passed": true
+          }
+        }
+      ]
     },
     {
       "name": "numfmt",

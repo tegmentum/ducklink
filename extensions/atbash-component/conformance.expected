@@ -1,0 +1,13 @@
+# Conformance expected output for extensions/atbash-component/conformance.sql.
+# `.mode csv` emits a header line (the AS alias) then the value, per SELECT.
+# Wildcards (shared with smoke): exact | `~~` skip | `?` any-non-empty.
+basic
+zyx
+mixed
+"Svool, Dliow!"
+selfinverse
+roundtrip
+empty_len
+0
+null_in
+NULL

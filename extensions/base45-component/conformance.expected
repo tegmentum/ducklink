@@ -1,0 +1,18 @@
+# Conformance expected output for extensions/base45-component/conformance.sql.
+# `.mode csv` emits a header line (the AS alias) then the value, per SELECT.
+# BLOBs are rendered via lower(hex(...)) so values are deterministic.
+# Wildcards (shared with smoke): exact | `~~` skip | `?` any-non-empty.
+enc
+BB8
+dec_hex
+4142
+roundtrip_hex
+48656c6c6f2121
+empty_len
+0
+invalid_decode
+NULL
+null_enc
+NULL
+null_dec
+NULL

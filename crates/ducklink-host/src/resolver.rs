@@ -131,7 +131,9 @@ pub struct ResolvePolicy {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Outcome {
-    Chosen,
+    /// Chosen; carries the conformance certification note (how the gate
+    /// certified it) for observability.
+    Chosen(String),
     Rejected(String),
 }
 
@@ -178,7 +180,7 @@ pub fn render_reasoning(reasoning: &[CandidateOutcome]) -> String {
     reasoning
         .iter()
         .map(|c| match &c.outcome {
-            Outcome::Chosen => format!("{} [{}] = CHOSEN", c.id, c.kind),
+            Outcome::Chosen(note) => format!("{} [{}] = CHOSEN ({})", c.id, c.kind, note),
             Outcome::Rejected(why) => format!("{} [{}] = rejected ({})", c.id, c.kind, why),
         })
         .collect::<Vec<_>>()
@@ -202,45 +204,149 @@ fn precedence_rank(kind: &ProviderKind) -> u8 {
 
 /// The conformance HARD GATE. A provider is certified iff:
 ///   passed && contract_digest == wit_contract && suite_digest == canonical.
-/// A reference wasm provider is certified-by-construction (the baseline WIT *is*
-/// the contract that defines the semantics).
 ///
-/// `canonical_suite_digest` is the suite the resolver holds for (ext, contract);
-/// `None` means no suite is registered yet, so the suite_digest sub-check is
-/// scaffolded (skipped) — the gate still enforces passed + contract match.
+/// `canonical_suite_digest` is the suite the resolver HOLDS for (ext, contract)
+/// — the content digest of the on-disk conformance suite file, computed by the
+/// host via [`compute_suite_digest`]. It drives two modes:
+///
+/// * `Some(canon)` — a conformance suite is registered for this extension, so
+///   the gate is REAL and UNIFORM: EVERY provider (including the `reference`
+///   wasm baseline) MUST carry a record with `passed`, `contract_digest ==
+///   wit_contract`, AND `suite_digest == canon`. A missing record, a record at
+///   the wrong contract, or a stale/forged `suite_digest` is uncertified — a
+///   tampered suite cannot false-certify a provider. The reference provider is
+///   certified by passing its own suite (it carries a real record too), not by
+///   construction; the digest check is uniform across kinds.
+///
+/// * `None` — no suite is registered yet for this extension (the long tail that
+///   has not been promoted to a conformance suite). The `suite_digest` sub-check
+///   has nothing to verify against, so it falls back to: a `reference` wasm
+///   provider is certified by construction (the baseline WIT *is* the contract),
+///   and a non-reference provider still needs `passed && contract` match. This
+///   keeps every un-promoted extension loadable while the suite-backed gate is
+///   strict wherever a suite exists.
 fn conformance_ok(
     p: &ProviderDescriptor,
     wit_contract: &str,
     canonical_suite_digest: Option<&str>,
-) -> Result<(), String> {
-    if p.reference && matches!(p.kind, ProviderKind::Wasm { .. }) {
-        return Ok(());
-    }
-    match &p.conformance {
-        None => Err("uncertified: no conformance record".to_string()),
-        Some(c) => {
-            if !c.passed {
-                return Err("uncertified: conformance.passed=false".to_string());
-            }
-            if c.contract_digest != wit_contract {
-                return Err(format!(
-                    "uncertified: certified at contract {} != live {}",
-                    short(&c.contract_digest),
-                    short(wit_contract)
-                ));
-            }
-            if let Some(canon) = canonical_suite_digest {
+) -> Result<String, String> {
+    match canonical_suite_digest {
+        // REAL gate: a suite is registered -> every provider must pin it.
+        Some(canon) => match &p.conformance {
+            None => Err("uncertified: no conformance record (suite registered)".to_string()),
+            Some(c) => {
+                if !c.passed {
+                    return Err("uncertified: conformance.passed=false".to_string());
+                }
+                if c.contract_digest != wit_contract {
+                    return Err(format!(
+                        "uncertified: certified at contract {} != live {}",
+                        short(&c.contract_digest),
+                        short(wit_contract)
+                    ));
+                }
                 if c.suite_digest != canon {
                     return Err(format!(
-                        "uncertified: suite_digest {} != canonical {}",
+                        "uncertified: suite_digest {} doesn't match canonical {}",
                         short(&c.suite_digest),
                         short(canon)
                     ));
                 }
+                Ok(format!(
+                    "conformance verified: suite '{}' digest {} == canonical, passed at contract {}",
+                    c.suite,
+                    short(&c.suite_digest),
+                    short(wit_contract)
+                ))
             }
-            Ok(())
+        },
+        // No suite registered: reference wasm is certified by construction; a
+        // non-reference provider still needs passed + contract match.
+        None => {
+            if p.reference && matches!(p.kind, ProviderKind::Wasm { .. }) {
+                return Ok(format!(
+                    "conformance by construction (reference baseline; no suite registered) at contract {}",
+                    short(wit_contract)
+                ));
+            }
+            match &p.conformance {
+                None => Err("uncertified: no conformance record".to_string()),
+                Some(c) => {
+                    if !c.passed {
+                        return Err("uncertified: conformance.passed=false".to_string());
+                    }
+                    if c.contract_digest != wit_contract {
+                        return Err(format!(
+                            "uncertified: certified at contract {} != live {}",
+                            short(&c.contract_digest),
+                            short(wit_contract)
+                        ));
+                    }
+                    Ok(format!(
+                        "conformance record passed at contract {} (no canonical suite to pin)",
+                        short(wit_contract)
+                    ))
+                }
+            }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Conformance suite content digest (the canonical `suite_digest`)
+// ---------------------------------------------------------------------------
+
+/// Compute the canonical `suite_digest` of a conformance suite — the content
+/// digest the resolver holds for `(extension, wit_contract)` and that every
+/// provider's `conformance.suite_digest` must equal.
+///
+/// Scheme (reuses the project content-digest scheme, `compose-core`
+/// `compute_digest` = sha256, hex): the digest is taken over a CANONICALIZED
+/// rendering of the suite so cosmetic edits (comments, blank lines, trailing
+/// whitespace) don't churn it but any change to an executable query or an
+/// expected value does:
+///
+/// ```text
+/// sha256( b"duckdb:conformance-suite:1\n"
+///         || normalize_sql(conformance.sql)
+///         || b"\n\x1e\n"
+///         || normalize_expected(conformance.expected) )
+/// ```
+///
+/// `tooling/conformance.py` computes byte-identical digests (the runner emits
+/// the records this verifies). Keep the two in lockstep.
+pub fn compute_suite_digest(sql: &str, expected: &str) -> String {
+    let mut canon: Vec<u8> = Vec::new();
+    canon.extend_from_slice(b"duckdb:conformance-suite:1\n");
+    canon.extend_from_slice(normalize_suite_sql(sql).as_bytes());
+    canon.extend_from_slice(b"\n\x1e\n");
+    canon.extend_from_slice(normalize_suite_expected(expected).as_bytes());
+    let digest = compose_core::blobs::compute_digest(&canon);
+    digest.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Canonical SQL: drop blank lines and `--` comment lines, rstrip the rest.
+fn normalize_suite_sql(sql: &str) -> String {
+    sql.lines()
+        .map(str::trim_end)
+        .filter(|l| !l.trim().is_empty())
+        .filter(|l| !l.trim_start().starts_with("--"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Canonical expected: drop blank lines and `#`/`# ` comment lines, rstrip.
+fn normalize_suite_expected(expected: &str) -> String {
+    expected
+        .lines()
+        .map(str::trim_end)
+        .filter(|l| !l.trim().is_empty())
+        .filter(|l| {
+            let ls = l.trim_start();
+            !(ls == "#" || ls.starts_with("# "))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn substrate_available(kind: &ProviderKind, env: &Env) -> Result<(), String> {
@@ -286,15 +392,18 @@ pub fn resolve(
     canonical_suite_digest: Option<&str>,
 ) -> Result<Resolution, ResolveError> {
     let mut reasoning: Vec<CandidateOutcome> = Vec::new();
-    let mut admitted: Vec<&ProviderDescriptor> = Vec::new();
+    let mut admitted: Vec<(&ProviderDescriptor, String)> = Vec::new();
 
     for p in &entry.providers {
         let kind = p.kind.tag();
         // 1. conformance HARD GATE
-        if let Err(why) = conformance_ok(p, &entry.wit_contract, canonical_suite_digest) {
-            reasoning.push(reject(&p.id, kind, why));
-            continue;
-        }
+        let cert_note = match conformance_ok(p, &entry.wit_contract, canonical_suite_digest) {
+            Ok(note) => note,
+            Err(why) => {
+                reasoning.push(reject(&p.id, kind, why));
+                continue;
+            }
+        };
         // 2. substrate available
         if let Err(why) = substrate_available(&p.kind, env) {
             reasoning.push(reject(&p.id, kind, why));
@@ -321,25 +430,25 @@ pub fn resolve(
                 continue;
             }
         }
-        admitted.push(p);
+        admitted.push((p, cert_note));
     }
 
     // 6. order by precedence (stable; manifest order breaks ties)
-    admitted.sort_by_key(|p| precedence_rank(&p.kind));
+    admitted.sort_by_key(|(p, _)| precedence_rank(&p.kind));
 
     match admitted.first() {
-        Some(chosen) => {
+        Some((chosen, cert_note)) => {
             // Record the chosen + keep the losers' reasons already collected.
             reasoning.insert(
                 0,
                 CandidateOutcome {
                     id: chosen.id.clone(),
                     kind: chosen.kind.tag(),
-                    outcome: Outcome::Chosen,
+                    outcome: Outcome::Chosen(cert_note.clone()),
                 },
             );
             // Any other admitted providers lost on precedence.
-            for other in admitted.iter().skip(1) {
+            for (other, _) in admitted.iter().skip(1) {
                 reasoning.push(reject(
                     &other.id,
                     other.kind.tag(),
@@ -566,7 +675,7 @@ mod tests {
             .expect("resolves");
         assert_eq!(r.chosen_id, "wasm-component");
         assert_eq!(r.chosen_kind, "wasm");
-        assert!(matches!(r.reasoning[0].outcome, Outcome::Chosen));
+        assert!(matches!(r.reasoning[0].outcome, Outcome::Chosen(_)));
     }
 
     #[test]
@@ -651,6 +760,81 @@ mod tests {
         assert_eq!(e.providers[0].id, "wasm-component");
         assert!(e.providers[0].reference);
         assert_eq!(e.wit_contract, "90fdc46a585c");
+    }
+
+    // --- the REAL gate (a canonical suite_digest is held) ------------------
+
+    const CANON: &str = "canonical-suite-digest-abc123";
+
+    fn wasm_ref_with_record(id: &str, suite_digest: &str) -> ProviderDescriptor {
+        let mut p = wasm_ref(id);
+        p.conformance = Some(Conformance {
+            suite: "aba@2".into(),
+            suite_digest: suite_digest.into(),
+            contract_digest: "90fdc46a585c".into(),
+            passed: true,
+        });
+        p
+    }
+
+    #[test]
+    fn real_gate_reference_with_matching_record_is_chosen() {
+        // Suite registered (canonical Some): the reference provider is NOT a free
+        // pass — it must carry a real record whose suite_digest == canonical.
+        let r = resolve(
+            &entry(vec![wasm_ref_with_record("wasm-component", CANON)]),
+            &Env::default(),
+            &ResolvePolicy::default(),
+            Some(CANON),
+        )
+        .expect("certified reference resolves");
+        assert_eq!(r.chosen_id, "wasm-component");
+        assert!(matches!(r.reasoning[0].outcome, Outcome::Chosen(_)));
+    }
+
+    #[test]
+    fn real_gate_reference_without_record_is_rejected() {
+        // With a suite registered, a reference provider that carries NO record is
+        // uncertified (no certification by construction once a suite exists).
+        let err = resolve(
+            &entry(vec![wasm_ref("wasm-component")]), // conformance: None
+            &Env::default(),
+            &ResolvePolicy::default(),
+            Some(CANON),
+        )
+        .unwrap_err();
+        assert!(render_reasoning(&err.reasoning).contains("no conformance record (suite registered)"));
+    }
+
+    #[test]
+    fn real_gate_tampered_suite_digest_is_rejected() {
+        // A record whose suite_digest != canonical (stale/forged) cannot
+        // false-certify the provider.
+        let err = resolve(
+            &entry(vec![wasm_ref_with_record("wasm-component", "TAMPERED")]),
+            &Env::default(),
+            &ResolvePolicy::default(),
+            Some(CANON),
+        )
+        .unwrap_err();
+        assert!(render_reasoning(&err.reasoning).contains("doesn't match canonical"));
+    }
+
+    #[test]
+    fn suite_digest_is_deterministic_and_content_sensitive() {
+        let sql = "-- a comment\nSELECT f('x') AS a;\n\nSELECT f(NULL) AS b;\n";
+        let exp = "# banner\na\ntrue\nb\nNULL\n";
+        let d1 = compute_suite_digest(sql, exp);
+        // Cosmetic edits (extra comment, blank lines, trailing ws) don't change it.
+        let sql2 = "SELECT f('x') AS a;   \n-- different comment\nSELECT f(NULL) AS b;";
+        let exp2 = "# different banner\n\na\ntrue\nb\nNULL";
+        assert_eq!(d1, compute_suite_digest(sql2, exp2));
+        // A changed expected value DOES change it.
+        let d3 = compute_suite_digest(sql, "# banner\na\nfalse\nb\nNULL\n");
+        assert_ne!(d1, d3);
+        // 64 hex chars (sha256).
+        assert_eq!(d1.len(), 64);
+        assert!(d1.chars().all(|c| c.is_ascii_hexdigit()));
     }
 
     #[test]
