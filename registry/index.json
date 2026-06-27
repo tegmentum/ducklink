@@ -168,7 +168,7 @@
       "prefix": "sample_extension",
       "expansion": "com.tegmentum.ducklink.sample_extension",
       "wit_contract_version": "2.2.0",
-      "content_digest": "8c9d37a9b6d76f0db704cdf05eacce87ba999bae9307548ed5a75d7ee957d274"
+      "content_digest": "b5355ee6bc40bdb24db426b00ff1a176f706140c3028a34900467dc395bdc777"
     },
     {
       "name": "isin",
@@ -208,7 +208,7 @@
       "prefix": "isin",
       "expansion": "com.tegmentum.ducklink.isin",
       "wit_contract_version": "2.2.0",
-      "content_digest": "1786fe77aa09eaa08a1200df484025e0a4c16263e1d034b457285cbac9042cd0"
+      "content_digest": "8a19cf2308e31d07c74e3b88443dba3d8aacd151f9c60d8c670ebd9c1f8ffde7"
     },
     {
       "name": "baseN",
@@ -352,7 +352,9 @@
       "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
       "exports": [
         "ean_validate",
-        "ean_check_digit"
+        "ean_check_digit",
+        "ean_gs1_prefix",
+        "upca_to_ean13"
       ],
       "requires": [
         "scalar"
@@ -362,7 +364,7 @@
       "prefix": "ean",
       "expansion": "com.tegmentum.ducklink.ean",
       "wit_contract_version": "2.2.0",
-      "content_digest": "5e2eaafae921f842d31235b86d91a08e587c27ecf2011af52d8e82b73ab70040"
+      "content_digest": "fa5b8c6d5f978a9f29ad593fe89b5dfbed401bb2a12f24c209abfdd0ad424dcc"
     },
     {
       "name": "aba",
@@ -459,7 +461,12 @@
       "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
       "exports": [
         "cc_validate",
-        "cc_network"
+        "cc_network",
+        "cc_type",
+        "cc_mask",
+        "cc_last4",
+        "cc_bin",
+        "cc_normalize"
       ],
       "requires": [
         "scalar"
@@ -469,7 +476,7 @@
       "prefix": "creditcard",
       "expansion": "com.tegmentum.ducklink.creditcard",
       "wit_contract_version": "2.2.0",
-      "content_digest": "7fe4e39d419ac086c317db19d918fc3f6c9ec26d6fe81355ea511499d9ba0901"
+      "content_digest": "d0a2144663e4b1bcd23cea3f91d6a113f3a46e71923204d49202916fb432ecef"
     },
     {
       "name": "uuidx",
@@ -873,7 +880,7 @@
       "prefix": "semver",
       "expansion": "com.tegmentum.ducklink.semver",
       "wit_contract_version": "2.2.0",
-      "content_digest": "a4cfd2146a6a8dc488a6c96825962698369ad7ec1037da5995c4714a5ad95108"
+      "content_digest": "621954f9e889c4f7c357468d600240c79ce89460730b2a25e47e5abfa04a74f1"
     },
     {
       "name": "slug",
@@ -986,7 +993,7 @@
       "prefix": "natsort",
       "expansion": "com.tegmentum.ducklink.natsort",
       "wit_contract_version": "2.2.0",
-      "content_digest": "e8e1814cc7e8d29d68e710391c37826467810e3fc0abafff3580f94ca4be05d6"
+      "content_digest": "746724ea3ffb411e8db8a4a5a4f351cefb5711451db1fde31263c002b7022215"
     },
     {
       "name": "roman",
@@ -1011,7 +1018,10 @@
       "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
       "exports": [
         "to_roman",
-        "from_roman"
+        "from_roman",
+        "roman_encode",
+        "roman_decode",
+        "roman_validate"
       ],
       "requires": [
         "scalar"
@@ -1023,7 +1033,7 @@
       "prefix": "roman",
       "expansion": "com.tegmentum.ducklink.roman",
       "wit_contract_version": "2.2.0",
-      "content_digest": "65d66c9e52968fe5ba2f817ecd18436f355237cdc99482636a8fed3913c97290"
+      "content_digest": "da384461f8b06e6b2be13438f089e5271be7100925e38a4f017c3ad4421a1700"
     },
     {
       "name": "humansize",
@@ -1060,7 +1070,7 @@
       "prefix": "humansize",
       "expansion": "com.tegmentum.ducklink.humansize",
       "wit_contract_version": "2.2.0",
-      "content_digest": "77f17b697471b98cb168c28e27af5d8a59e4edaaf3fd68bcc6a8f60fa3eb6628"
+      "content_digest": "afd055ac674dd5417d4c1a4254ac2e25314413e005a1581e19ce1f5a923c57c0"
     },
     {
       "name": "ids",
@@ -1325,7 +1335,7 @@
       "prefix": "morse",
       "expansion": "com.tegmentum.ducklink.morse",
       "wit_contract_version": "2.2.0",
-      "content_digest": "118e7763f98801b529777a8fc20af11dee6930015f4934790610943d870024fc"
+      "content_digest": "5b3dc6e5f1becfde518a5ecbca6f218df328b33467ee84a695558700f5e2fc07"
     },
     {
       "name": "color",

@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**181 component extensions** · **495 SQL functions** · 7 expose aggregates · 3 require network.
+**181 component extensions** · **505 SQL functions** · 7 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -76,7 +76,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **qrcode** | `qr_svg` | qrcode |  |
 | **quotedprintable** | `qp_encode`, `qp_decode` | quoted_printable |  |
 | **rle** | `rle_encode`, `rle_decode` | hand-rolled |  |
-| **roman** | `to_roman`, `from_roman` | roman |  |
+| **roman** | `to_roman`, `from_roman`, `roman_encode`, `roman_decode`, `roman_validate` | roman |  |
 | **rtreefns** | `rtree_search`, `bbox4` | rstar |  |
 | **semver** | `semver_valid`, `semver_major`, `semver_minor`, `semver_patch`, `semver_compare` | semver |  |
 | **shapefile** | `read_shp` | shapefile |  |
@@ -218,8 +218,8 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
 | **aba** | `aba_validate` | hand-rolled |  |
-| **creditcard** | `cc_validate`, `cc_network` | hand-rolled |  |
-| **ean** | `ean_validate`, `ean_check_digit` | hand-rolled |  |
+| **creditcard** | `cc_validate`, `cc_network`, `cc_type`, `cc_mask`, `cc_last4`, `cc_bin`, `cc_normalize` | hand-rolled |  |
+| **ean** | `ean_validate`, `ean_check_digit`, `ean_gs1_prefix`, `upca_to_ean13` | hand-rolled |  |
 | **iban** | `iban_validate`, `iban_country`, `iban_bban` | hand-rolled |  |
 | **isin** | `isin_validate`, `isin_check_digit`, `isin_country`, `isin_nsin` | hand-rolled |  |
 | **luhn** | `luhn_validate`, `luhn_check_digit` | hand-rolled |  |
