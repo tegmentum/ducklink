@@ -110,7 +110,10 @@ pub mod compose_dynlink_test_support {
 }
 mod delta_rewrite;
 mod prefix;
-mod resolver;
+pub mod resolver;
+
+/// `ducklink extension <subcommand>` (alias `ext`) — extension-management CLI UX.
+pub mod extcli;
 mod ui_server;
 
 /// Sentinel callback handles for the resolver observability scalars
@@ -4826,7 +4829,10 @@ fn build_wasi_ctx_inherit(args: &[String], preopens: &[(&Path, &str)]) -> Result
     Ok(builder.build())
 }
 
-fn workspace_root() -> PathBuf {
+/// The repository root the host was built from (compile-time `CARGO_MANIFEST_DIR`).
+/// Used to locate the bundled `registry/index.json` + `artifacts/extensions/`
+/// when nothing more specific (cwd / env override) applies.
+pub fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("tests directory")

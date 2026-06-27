@@ -12,6 +12,15 @@ use ducklink_host::{
 #[command(
     name = "ducklink",
     about = "Host runner for the DuckDB WebAssembly CLI component",
+    after_help = "SUBCOMMANDS (run `ducklink <cmd> --help`):\n  \
+        extension, ext   Manage extensions (list/search/info/install/uninstall)\n  \
+        compose          Build a custom core with extensions embedded\n  \
+        run-tool         Run a wasi:cli/run tool component through the runtime\n  \
+        ui               Serve the DuckDB UI\n  \
+        quack-serve      Act as a quack RPC server\n  \
+        serve            HTTP/HTTPS SQL server (routes table)\n  \
+        backup, restore  duckstream snapshot replication to S3\n  \
+        precompile       AOT-compile a component to .cwasm",
     trailing_var_arg = true,
     arg_required_else_help = true
 )]
@@ -407,6 +416,18 @@ fn main() -> Result<()> {
         argv.extend(shell_args);
         let status = run_shell_with_stdio(Path::new(&tool), &artifacts, &argv, &preopens)?;
         std::process::exit(if status.is_ok() { 0 } else { 1 });
+    }
+
+    // `ducklink extension <subcommand>` (alias `ducklink ext`)
+    // Ergonomic extension management over the multi-provider catalog + the
+    // resolver + the transparent-LOAD install flow:
+    //   list [--available|--installed] / search <q> / info <name> /
+    //   install <name> / uninstall <name>
+    // Reuses the catalog reader + the resolver candidate pipeline + the
+    // ducklink-install flow (it does NOT reimplement resolution). Handled before
+    // clap (which uses trailing_var_arg).
+    if matches!(raw.get(1).map(String::as_str), Some("extension") | Some("ext")) {
+        return ducklink_host::extcli::run(&raw[2..]);
     }
 
     // `ducklink compose --list`

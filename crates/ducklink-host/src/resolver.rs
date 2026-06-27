@@ -487,6 +487,11 @@ fn short(digest: &str) -> String {
     digest.chars().take(12).collect()
 }
 
+/// Public 12-char digest shortener (for the `ducklink ext` CLI views).
+pub fn short_digest_pub(digest: &str) -> String {
+    short(digest)
+}
+
 // ---------------------------------------------------------------------------
 // B.1 manifest reader (providers[] + backward-compat single-artifact)
 // ---------------------------------------------------------------------------
