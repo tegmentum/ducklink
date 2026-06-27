@@ -5199,6 +5199,95 @@ impl CliHarness {
     }
 }
 
+/// Route A: run the REAL DuckDB shell as a `wasi:cli/run` command component that
+/// imports the componentized-extension surface, so `LOAD <name>` inside the
+/// shell dispatches shell -> ducklink runtime -> resident extension wasm.
+///
+/// Unlike `run_cli_with_stdio` (which drives the composed core's `database`
+/// interface from a thin CLI front-end), the shell IS the engine: it statically
+/// links DuckDB and registers a loaded extension's scalar functions onto its own
+/// connection (via the shell-glue install glue + the db-handle bridge). The host
+/// still instantiates the composed core, but only to provide `CoreServices`
+/// (config/logging/live-query) to the extension loader during `LOAD`.
+///
+/// The shell command's imports (host-extension-loader, extension-loader-hooks,
+/// callback-dispatch@2.0.0) are a subset of the core world, so the linker reuses
+/// `CoreStoreState` and the exact same `add_to_linker` wiring `instantiate_core`
+/// uses. stdio is inherited (the TTY) instead of driving `database`.
+pub fn run_shell_with_stdio(
+    shell_component: &Path,
+    artifacts: &ComponentArtifacts,
+    args: &[impl AsRef<str>],
+    preopens: &[(&Path, &str)],
+) -> Result<Result<(), ()>> {
+    let engine = build_engine()?;
+    let owned_preopens = resolve_preopens_with_default(preopens)?;
+    let preopen_refs: Vec<(&Path, &str)> = owned_preopens
+        .iter()
+        .map(|(host, guest)| (host.as_path(), guest.as_str()))
+        .collect();
+    let args_vec: Vec<String> = args.iter().map(|s| s.as_ref().to_owned()).collect();
+    let shell_wasi = build_wasi_ctx_inherit(&args_vec, &preopen_refs)?;
+    let core_wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &preopen_refs)?;
+
+    // The composed core is instantiated purely as the CoreServices provider
+    // (config/logging/live-query) for extension LOADs; the SHELL runs queries.
+    let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
+    let core_exec = instantiate_core(
+        &engine,
+        &artifacts.core_component,
+        core_wasi,
+        extension_manager.clone(),
+    )?;
+    let core = Arc::new(Mutex::new(core_exec));
+    {
+        let mut manager = extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager.attach_core(core.clone());
+        manager.attach_current_connection(Arc::new(Mutex::new(None)));
+    }
+
+    // CoreStoreState implements the host-extension-loader / extension-loader-hooks
+    // / callback-dispatch Host traits via the ExtensionManager -- exactly the
+    // imports the shell command declares.
+    let mut linker = Linker::<CoreStoreState>::new(&engine);
+    p2::add_to_linker_sync(&mut linker)?;
+    core_host_loader::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |s| s)?;
+    core_extension_hooks::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |s| s)?;
+    core_callback_dispatch::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |s| s)?;
+
+    let mut store = Store::new(
+        &engine,
+        CoreStoreState {
+            table: ResourceTable::new(),
+            wasi: shell_wasi,
+            extension_manager: extension_manager.clone(),
+            tvm: tvm_core::RegionDirectory::new(),
+            tvm_slots: std::collections::HashMap::new(),
+        },
+    );
+
+    let component = load_component(&engine, shell_component).with_context(|| {
+        format!(
+            "failed to load shell component from {}",
+            shell_component.display()
+        )
+    })?;
+    let instance = linker.instantiate(store.as_context_mut(), &component)?;
+    let (_, run_iface) = instance
+        .get_export(store.as_context_mut(), None, "wasi:cli/run@0.2.0")
+        .context("shell component missing wasi:cli/run@0.2.0 export")?;
+    let (_, run_idx) = instance
+        .get_export(store.as_context_mut(), Some(&run_iface), "run")
+        .context("shell component missing run function")?;
+    let run = instance
+        .get_typed_func::<(), (Result<(), ()>,)>(store.as_context_mut(), run_idx)?;
+    let (result,) = run.call(store.as_context_mut(), ())?;
+    run.post_return(store.as_context_mut())?;
+    Ok(result)
+}
+
 pub fn run_cli_with_stdio(
     artifacts: &ComponentArtifacts,
     args: &[impl AsRef<str>],

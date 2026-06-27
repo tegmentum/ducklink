@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use clap::{ArgAction, Parser};
 use ducklink_host::{
-    precompile_component_to_file, run_cli_with_stdio, serve_httpd, serve_ui, set_extension_root,
-    ComponentArtifacts, HandlerRegistry, HttpdOptions, TlsMode, UiMode,
+    precompile_component_to_file, run_cli_with_stdio, run_shell_with_stdio, serve_httpd, serve_ui,
+    set_extension_root, ComponentArtifacts, HandlerRegistry, HttpdOptions, TlsMode, UiMode,
 };
 
 #[derive(Parser, Debug)]
@@ -351,6 +351,61 @@ fn main() -> Result<()> {
                 std::process::exit(2);
             }
         }
+    }
+
+    // `ducklink run-tool <tool.wasm> [--extensions-dir DIR] [-- shell args...]`
+    // Route A: run a wasi:cli/run tool component (the real DuckDB shell built by
+    // duckdb-wasm/scripts/build-shell-ext-wasm.sh) through the ducklink runtime,
+    // so `LOAD <name>` inside it dispatches to a resident extension wasm. stdio is
+    // inherited (the TTY); extensions resolve from --extensions-dir (default
+    // ./artifacts/extensions) by filename.
+    if raw.get(1).map(String::as_str) == Some("run-tool") {
+        let mut tool: Option<String> = None;
+        let mut extensions_dir: Option<PathBuf> = None;
+        let mut shell_args: Vec<String> = Vec::new();
+        let mut i = 2;
+        while i < raw.len() {
+            match raw[i].as_str() {
+                "--extensions-dir" => {
+                    i += 1;
+                    if let Some(d) = raw.get(i) {
+                        extensions_dir = Some(PathBuf::from(d));
+                    }
+                }
+                "--" => {
+                    shell_args.extend(raw[i + 1..].iter().cloned());
+                    break;
+                }
+                other => {
+                    if tool.is_none() {
+                        tool = Some(other.to_string());
+                    } else {
+                        shell_args.push(other.to_string());
+                    }
+                }
+            }
+            i += 1;
+        }
+        let tool = match tool {
+            Some(t) => t,
+            None => {
+                eprintln!("usage: ducklink run-tool <tool.wasm> [--extensions-dir DIR] [-- args...]");
+                std::process::exit(2);
+            }
+        };
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let cwd = std::env::current_dir()?;
+        let extensions_dir =
+            extensions_dir.unwrap_or_else(|| cwd.join("artifacts/extensions"));
+        set_extension_root(extensions_dir);
+        // DuckDB's wasm home is "/"; pre-create cwd/.duckdb/extension_data (the
+        // fs shim's mkdir isn't recursive), mirroring the ui/cli paths.
+        std::fs::create_dir_all(cwd.join(".duckdb/extension_data")).ok();
+        let preopens: Vec<(&Path, &str)> = vec![(cwd.as_path(), ".")];
+        let mut argv: Vec<String> = vec![String::from("duckdb")];
+        argv.extend(shell_args);
+        let status = run_shell_with_stdio(Path::new(&tool), &artifacts, &argv, &preopens)?;
+        std::process::exit(if status.is_ok() { 0 } else { 1 });
     }
 
     // `ducklink compose --list`
