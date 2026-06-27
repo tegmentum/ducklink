@@ -4253,7 +4253,7 @@
       "prefix": "aggstat",
       "expansion": "com.tegmentum.ducklink.aggstat",
       "wit_contract_version": "2.2.0",
-      "content_digest": "ecbef873c9590f539e024a10aa7561c211a341a6c835c7fc00b7989cf2e6e38a"
+      "content_digest": "84081ce3ccb96f17c9ec127583e95b6c7ee49d30deef91e9e9212c2501517c48"
     },
     {
       "name": "bloom",
@@ -4290,7 +4290,7 @@
       "prefix": "bloom",
       "expansion": "com.tegmentum.ducklink.bloom",
       "wit_contract_version": "2.2.0",
-      "content_digest": "b60c19121eba1530d361e623c9e98d3afee0ae624a44e4ebb1e462386e89b390"
+      "content_digest": "42b5d47cecf70963ea397d0fa32583aa59137eea942517d29e44842480d3b180"
     },
     {
       "name": "minhash",
@@ -4327,7 +4327,7 @@
       "prefix": "minhash",
       "expansion": "com.tegmentum.ducklink.minhash",
       "wit_contract_version": "2.2.0",
-      "content_digest": "5ecc5e6feff3ae0b41a05671900bcc312e6456abfc07cfd035396df15459df0d"
+      "content_digest": "32ca4b6c6ebcb66d9f3513531ed166fe32491ca0cb912ddb2e7c5bab2b5ebe17"
     },
     {
       "name": "countmin",
@@ -4364,7 +4364,7 @@
       "prefix": "countmin",
       "expansion": "com.tegmentum.ducklink.countmin",
       "wit_contract_version": "2.2.0",
-      "content_digest": "c8f4f35dd394ede89d194f37479f0105552f7e1eaf8fb25457e53bd32b84ef8f"
+      "content_digest": "974eabe410d1abf57059d35b5a30da17c63d67b922ba521560f99079bfd8606c"
     },
     {
       "name": "dns",
@@ -4798,7 +4798,7 @@
       "prefix": "bitfilters",
       "expansion": "com.tegmentum.ducklink.bitfilters",
       "wit_contract_version": "2.2.0",
-      "content_digest": "9313fac88d3309aec607fb4624dc318624aa73c0916df8a7f33843956341a75e"
+      "content_digest": "57db3afc223260d7e42452fa70ffab5c7290601ab29f60920f822606cfe7ad16"
     },
     {
       "name": "prql",
@@ -5369,7 +5369,7 @@
       "prefix": "tdigest",
       "expansion": "com.tegmentum.ducklink.tdigest",
       "wit_contract_version": "2.2.0",
-      "content_digest": "99dccff727d973f76e9035731e840a1e4dce8ca63e75891f2cb1f7f3004055b9"
+      "content_digest": "ef25b91f4cea5e992bed0f6817a0ae11dc0c0264671de64aa0d22fb3efae9166"
     },
     {
       "name": "mlkmeans",
