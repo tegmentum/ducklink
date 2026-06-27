@@ -21,8 +21,19 @@ tvm-core = { path = "../../../tvm-wasm/crates/tvm-core" }
 rustls = { version = "0.23", features = ["ring"] }
 rustls-pemfile = "2"
 rcgen = "0.13"
-# Parse the structured `{status, body, ctype}` response a wasm handler returns.
+# Parse the structured `{status, body, ctype}` response a wasm handler returns,
+# and the duckstream replicator's state.json sidecar.
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# duckstream MVP (native-host checkpoint-snapshot replication to S3): blocking
+# HTTP transport over rustls (HTTPS), lz4 snapshot compression, and the SigV4
+# signing primitives (hmac/sha2/hex) reused by the `sigv4` module copied verbatim
+# from the wasm s3fs transport.
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls", "webpki-roots", "http2"] }
+lz4_flex = "0.11"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
 # Shared content-addressed-storage core: the BlobBackend trait + the
 # trust-gated CompileCache. Used here to HMAC-authenticate the precompiled
 # `.cwasm` (a `.cwasm` deserializes to runnable machine code, so it must be

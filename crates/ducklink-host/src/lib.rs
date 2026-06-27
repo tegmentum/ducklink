@@ -128,6 +128,11 @@ mod handler;
 pub use handler::HandlerRegistry;
 mod httpd;
 pub use httpd::{serve_httpd, HttpdOptions, TlsMode};
+// duckstream MVP: SigV4 signing (reused verbatim from the wasm s3fs transport)
+// + the native-host checkpoint-snapshot replicator/restore.
+mod sigv4;
+mod replicate;
+pub use replicate::{run_backup, run_restore, ReplicaState, S3Target};
 use wasmtime_wasi::p2::{
     self,
     pipe::{MemoryInputPipe, MemoryOutputPipe},

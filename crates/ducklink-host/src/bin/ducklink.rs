@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use clap::{ArgAction, Parser};
 use ducklink_host::{
-    precompile_component_to_file, run_cli_with_stdio, run_shell_with_stdio, serve_httpd,
-    serve_quack, serve_ui, set_extension_root, ComponentArtifacts, HandlerRegistry, HttpdOptions,
-    TlsMode, UiMode,
+    precompile_component_to_file, run_backup, run_cli_with_stdio, run_restore, run_shell_with_stdio,
+    serve_httpd, serve_quack, serve_ui, set_extension_root, ComponentArtifacts, HandlerRegistry,
+    HttpdOptions, S3Target, TlsMode, UiMode,
 };
 
 #[derive(Parser, Debug)]
@@ -500,6 +500,98 @@ fn main() -> Result<()> {
         std::fs::create_dir_all(cwd.join(".duckdb/extension_data")).ok();
         let preopens: Vec<(&Path, &str)> = vec![(cwd.as_path(), ".")];
         serve_quack(&artifacts, db.as_deref(), port, &token, &preopens)?;
+        return Ok(());
+    }
+
+    // `ducklink backup <db> s3://bucket/prefix [--interval SECS]`
+    // duckstream MVP (feasibility Option c): native-host checkpoint-snapshot
+    // replication. Opens the persistent single-file DuckDB under the cwd
+    // preopen, drives CHECKPOINT to produce a clean `.duckdb`, lz4-compresses it
+    // and uploads `snapshots/{ts}.duckdb.lz4` + a `latest` pointer + `state.json`.
+    // `--interval SECS` runs continuously (a snapshot every SECS); without it,
+    // one snapshot is taken and the command exits. S3 creds/region/endpoint come
+    // from the environment (AWS_ACCESS_KEY_ID/SECRET/SESSION_TOKEN, AWS_REGION,
+    // AWS_ENDPOINT_URL for minio). Phase 2 (WAL-tailing fine PITR) is deferred.
+    if raw.get(1).map(String::as_str) == Some("backup") {
+        let mut db: Option<String> = None;
+        let mut dest: Option<String> = None;
+        let mut interval: Option<u64> = None;
+        let mut i = 2;
+        while i < raw.len() {
+            match raw[i].as_str() {
+                "--interval" => {
+                    i += 1;
+                    interval = raw.get(i).and_then(|s| s.parse().ok());
+                    if interval.is_none() {
+                        anyhow::bail!("--interval expects a positive number of seconds");
+                    }
+                }
+                other if other.starts_with("s3://") => dest = Some(other.to_string()),
+                other => {
+                    if db.is_none() {
+                        db = Some(other.to_string());
+                    } else {
+                        anyhow::bail!("ducklink backup: unexpected argument `{other}`");
+                    }
+                }
+            }
+            i += 1;
+        }
+        let (db, dest) = match (db, dest) {
+            (Some(db), Some(dest)) => (db, dest),
+            _ => {
+                eprintln!("usage: ducklink backup <db> s3://bucket/prefix [--interval SECS]");
+                std::process::exit(2);
+            }
+        };
+        let target = S3Target::parse(&dest)?;
+
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let extensions_dir = std::env::current_dir()?.join("artifacts/extensions");
+        set_extension_root(extensions_dir);
+        let cwd = std::env::current_dir()?;
+        std::fs::create_dir_all(cwd.join(".duckdb/extension_data")).ok();
+        let preopens: Vec<(&Path, &str)> = vec![(cwd.as_path(), ".")];
+
+        // The guest opens the db relative to its "/" home (-> cwd preopen); the
+        // host reads the same file at cwd/<db> for the snapshot.
+        let db_path = PathBuf::from(&db);
+        let host_db = if db_path.is_absolute() { db_path.clone() } else { cwd.join(&db_path) };
+        run_backup(&artifacts, &host_db, &db, &target, interval, &preopens)?;
+        return Ok(());
+    }
+
+    // `ducklink restore s3://bucket/prefix [<db>]`
+    // Pull the `latest` snapshot, lz4-decompress it, and write it to <db>
+    // (default: the db name recorded in state.json, else restored.duckdb). Open
+    // the result with `ducklink -- duckdb-cli <db>` to query the restored data.
+    if raw.get(1).map(String::as_str) == Some("restore") {
+        let mut src: Option<String> = None;
+        let mut dest: Option<String> = None;
+        let mut i = 2;
+        while i < raw.len() {
+            match raw[i].as_str() {
+                other if other.starts_with("s3://") => src = Some(other.to_string()),
+                other => {
+                    if dest.is_none() {
+                        dest = Some(other.to_string());
+                    } else {
+                        anyhow::bail!("ducklink restore: unexpected argument `{other}`");
+                    }
+                }
+            }
+            i += 1;
+        }
+        let src = match src {
+            Some(s) => s,
+            None => {
+                eprintln!("usage: ducklink restore s3://bucket/prefix [<db>]");
+                std::process::exit(2);
+            }
+        };
+        let target = S3Target::parse(&src)?;
+        let dest_path = dest.map(PathBuf::from);
+        run_restore(&target, dest_path.as_deref())?;
         return Ok(());
     }
 
