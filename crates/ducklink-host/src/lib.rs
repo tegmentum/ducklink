@@ -122,6 +122,8 @@ mod ui_server;
 pub const RESOLVER_EXPLAIN_HANDLE: u32 = 0xFFFF_FFFF;
 pub const RESOLVER_SET_HANDLE: u32 = 0xFFFF_FFFE;
 pub use ui_server::{serve_ui, UiMode};
+mod quack_server;
+pub use quack_server::serve_quack;
 mod handler;
 pub use handler::HandlerRegistry;
 mod httpd;
