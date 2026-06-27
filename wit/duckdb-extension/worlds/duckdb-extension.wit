@@ -10,6 +10,10 @@ use guest;
 use storage;
 use storage-dispatch;
 use query;
+use index;
+use index-dispatch;
+use files-reg;
+use file-dispatch;
 
 world duckdb-extension {
   import runtime;
@@ -54,4 +58,38 @@ world duckdb-extension-storage {
   export guest;
   export callback-dispatch;
   export storage-dispatch;
+}
+
+// Index-capable world: a superset that additionally imports the custom-index
+// registration surface and exports the index-dispatch callbacks. Only components
+// that back a `CREATE INDEX ... USING <type>` custom index (e.g. hnswfns) target
+// this world; the default `duckdb-extension` world is unchanged, so every
+// existing component's frozen WIT copy keeps linking identically.
+world duckdb-extension-index {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import index;
+  export guest;
+  export callback-dispatch;
+  export index-dispatch;
+}
+
+// Files-capable world: a superset that additionally imports the files-backend
+// registration surface and exports the file-dispatch callbacks. Only components
+// that back remote file reads (an http(s) fetcher, e.g. webfs) target this
+// world; the default `duckdb-extension` world is unchanged, so every existing
+// component's frozen WIT copy keeps linking identically.
+world duckdb-extension-files {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import files-reg;
+  export guest;
+  export callback-dispatch;
+  export file-dispatch;
 }

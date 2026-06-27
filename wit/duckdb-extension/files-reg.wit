@@ -1,0 +1,19 @@
+package duckdb:extension@2.0.0;
+
+use types;
+
+// httpfs M2 files backend registration surface. A component that wants to back
+// remote file reads (an http(s) fetcher) registers a files backend here in
+// load(), then implements the `file-dispatch` export the host calls to open /
+// read / close URLs. Mirrors `storage.register-storage` for ATTACH catalogs.
+//
+// Kept as a SEPARATE interface so existing components' frozen WIT copies stay
+// structurally unchanged.
+interface files-reg {
+  use types.{duckerror};
+
+  // Declared in load() to mark this component as the files backend.
+  // `callback-handle` is an opaque id the host passes back to every
+  // file-dispatch call so the component can route it.
+  register-files: func(callback-handle: u32) -> result<u32, duckerror>;
+}
