@@ -18,6 +18,7 @@
 //! through an [`extension::ExtensionServices`] sink — the one direction-specific
 //! seam.
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use wasmtime::component::Component;
 use wasmtime::Engine;
@@ -963,7 +964,11 @@ pub mod reg {
 /// handle to invoke, and the function kind.
 #[derive(Clone, Debug)]
 pub struct CallbackEntry {
-    pub extension: String,
+    /// The owning extension name as a refcounted slice. `Arc<str>` (rather than
+    /// `String`) makes the per-row dispatch handoff a cheap atomic refcount bump
+    /// instead of a heap allocation + copy, while still indexing the
+    /// `HashMap<String, ...>` of loaded extensions via `Borrow<str>`.
+    pub extension: Arc<str>,
     pub dispatcher_handle: u32,
     pub kind: CallbackKind,
 }
@@ -991,7 +996,7 @@ impl CallbackRegistry {
         self.entries.insert(
             handle,
             CallbackEntry {
-                extension: extension.to_string(),
+                extension: Arc::from(extension),
                 dispatcher_handle,
                 kind,
             },
@@ -1018,7 +1023,8 @@ impl CallbackRegistry {
 
     pub fn remove_extension(&mut self, extension: &str) {
         let initial = self.entries.len();
-        self.entries.retain(|_, entry| entry.extension != extension);
+        self.entries
+            .retain(|_, entry| &*entry.extension != extension);
         let removed = initial.saturating_sub(self.entries.len());
         if removed > 0 {
             eprintln!(
@@ -1030,5 +1036,38 @@ impl CallbackRegistry {
 
     pub fn get(&self, handle: u32) -> Option<CallbackEntry> {
         self.entries.get(&handle).cloned()
+    }
+
+    /// Borrowing handle resolution for the dispatch hot path. Unlike [`get`],
+    /// this does NOT clone the [`CallbackEntry`], so the per-row scalar path
+    /// reads `dispatcher_handle` + `kind` and borrows the owning extension name
+    /// with no allocation (the caller then refcount-bumps just the `Arc<str>`
+    /// name it needs). The caller holds the registry lock for the duration of
+    /// the borrow, which on the dispatch path is already the case.
+    #[inline]
+    pub fn resolve(&self, handle: u32) -> Option<&CallbackEntry> {
+        self.entries.get(&handle)
+    }
+
+    /// Like [`allocate`] but without the per-registration `eprintln!`. Used by
+    /// benchmarks/tests that allocate many handles; the production `allocate`
+    /// keeps its load-time log line.
+    pub fn allocate_quiet(
+        &mut self,
+        extension: &str,
+        kind: CallbackKind,
+        dispatcher_handle: u32,
+    ) -> u32 {
+        let handle = self.next_handle;
+        self.next_handle = self.next_handle.wrapping_add(1).max(1);
+        self.entries.insert(
+            handle,
+            CallbackEntry {
+                extension: Arc::from(extension),
+                dispatcher_handle,
+                kind,
+            },
+        );
+        handle
     }
 }

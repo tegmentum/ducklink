@@ -29,9 +29,22 @@ fn registry_get_returns_stored_entry() {
     let mut reg = CallbackRegistry::new();
     let h = reg.allocate("myext", CallbackKind::Cast, 42);
     let entry = reg.get(h).expect("allocated handle resolves");
-    assert_eq!(entry.extension, "myext");
+    assert_eq!(&*entry.extension, "myext");
     assert_eq!(entry.dispatcher_handle, 42);
     assert_eq!(entry.kind, CallbackKind::Cast);
+}
+
+#[test]
+fn registry_resolve_borrows_same_entry_as_get() {
+    // The dispatch hot path uses `resolve` (borrowing, no clone) instead of
+    // `get` (cloning). Both must agree on the stored entry.
+    let mut reg = CallbackRegistry::new();
+    let h = reg.allocate_quiet("myext", CallbackKind::Scalar, 7);
+    let borrowed = reg.resolve(h).expect("resolve returns the stored entry");
+    assert_eq!(&*borrowed.extension, "myext");
+    assert_eq!(borrowed.dispatcher_handle, 7);
+    assert_eq!(borrowed.kind, CallbackKind::Scalar);
+    assert!(reg.resolve(h + 999).is_none(), "unknown handle resolves None");
 }
 
 #[test]

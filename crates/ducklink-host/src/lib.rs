@@ -2394,13 +2394,21 @@ impl ExtensionManager {
         args: &[extension_types::Duckvalue],
         ctx: extension_runtime::Invokeinfo,
     ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
-        let entry = {
+        // Per-row hot path: borrow the entry under the registry lock (no
+        // `CallbackEntry` clone) and copy out only the Copy `dispatcher_handle`
+        // plus an `Arc<str>` refcount-bump of the extension name. The historical
+        // path `registry.get(handle)` cloned the whole entry -- a heap
+        // allocation + string copy on EVERY dispatched row; `resolve` borrows and
+        // the `Arc<str>` name handoff is an atomic refcount bump instead.
+        let (dispatcher_handle, ext_name) = {
             let registry = self
                 .callback_registry
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
-            match registry.get(handle) {
-                Some(entry) if entry.kind == CallbackKind::Scalar => entry,
+            match registry.resolve(handle) {
+                Some(entry) if entry.kind == CallbackKind::Scalar => {
+                    (entry.dispatcher_handle, entry.extension.clone())
+                }
                 Some(entry) => {
                     eprintln!(
                         "[extension-manager] callback handle {handle} expected scalar but is {:?}",
@@ -2420,20 +2428,18 @@ impl ExtensionManager {
                 }
             }
         };
-        let instance = match self.extensions.get_mut(&entry.extension) {
+        let instance = match self.extensions.get_mut(&*ext_name) {
             Some(instance) => instance,
             None => {
                 eprintln!(
-                    "[extension-manager] dispatch_scalar could not find loaded extension '{}'",
-                    entry.extension
+                    "[extension-manager] dispatch_scalar could not find loaded extension '{ext_name}'"
                 );
                 return Err(extension_types::Duckerror::Invalidstate(format!(
-                    "extension {} is not loaded",
-                    entry.extension
+                    "extension {ext_name} is not loaded"
                 )));
             }
         };
-        instance.dispatch_scalar(entry.dispatcher_handle, args, ctx)
+        instance.dispatch_scalar(dispatcher_handle, args, ctx)
     }
 
     #[allow(clippy::ptr_arg)] // forwarded to a bindgen call that takes &Vec (rowbatch)
@@ -2474,7 +2480,7 @@ impl ExtensionManager {
                 )));
             }
         };
-        let instance = match self.extensions.get_mut(&entry.extension) {
+        let instance = match self.extensions.get_mut(&*entry.extension) {
             Some(instance) => instance,
             None => {
                 return Err(extension_types::Duckerror::Invalidstate(format!(
@@ -2502,7 +2508,7 @@ impl ExtensionManager {
                 )));
             }
         };
-        let instance = match self.extensions.get_mut(&entry.extension) {
+        let instance = match self.extensions.get_mut(&*entry.extension) {
             Some(instance) => instance,
             None => {
                 eprintln!(
@@ -2534,7 +2540,7 @@ impl ExtensionManager {
                 )));
             }
         };
-        let instance = match self.extensions.get_mut(&entry.extension) {
+        let instance = match self.extensions.get_mut(&*entry.extension) {
             Some(instance) => instance,
             None => {
                 eprintln!(
@@ -2566,7 +2572,7 @@ impl ExtensionManager {
                 )));
             }
         };
-        let instance = match self.extensions.get_mut(&entry.extension) {
+        let instance = match self.extensions.get_mut(&*entry.extension) {
             Some(instance) => instance,
             None => {
                 eprintln!(
@@ -2596,7 +2602,7 @@ impl ExtensionManager {
                 )));
             }
         };
-        let instance = match self.extensions.get_mut(&entry.extension) {
+        let instance = match self.extensions.get_mut(&*entry.extension) {
             Some(instance) => instance,
             None => {
                 return Err(extension_types::Duckerror::Invalidstate(format!(
