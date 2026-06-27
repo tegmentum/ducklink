@@ -112,6 +112,8 @@ mod delta_rewrite;
 mod prefix;
 mod ui_server;
 pub use ui_server::{serve_ui, UiMode};
+mod quack_server;
+pub use quack_server::serve_quack;
 mod handler;
 pub use handler::HandlerRegistry;
 mod httpd;

@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use clap::{ArgAction, Parser};
 use ducklink_host::{
-    precompile_component_to_file, run_cli_with_stdio, serve_httpd, serve_ui, set_extension_root,
-    ComponentArtifacts, HandlerRegistry, HttpdOptions, TlsMode, UiMode,
+    precompile_component_to_file, run_cli_with_stdio, serve_httpd, serve_quack, serve_ui,
+    set_extension_root, ComponentArtifacts, HandlerRegistry, HttpdOptions, TlsMode, UiMode,
 };
 
 #[derive(Parser, Debug)]
@@ -407,6 +407,43 @@ fn main() -> Result<()> {
         std::fs::create_dir_all(cwd.join(".duckdb/extension_data")).ok();
         let preopens: Vec<(&Path, &str)> = vec![(cwd.as_path(), ".")];
         serve_ui(&artifacts, db.as_deref(), port, mode, open_browser, &assets, &preopens)?;
+        return Ok(());
+    }
+
+    // `ducklink quack-serve [--port N] [--token TOK] [DB]`
+    // Act as a quack RPC SERVER: the host owns the listening socket + accept loop
+    // and bridges each POST /quack into the core's quack handler (httplib can't
+    // listen() in the wasip2 sandbox). Connect any DuckDB quack CLIENT to
+    // `quack:localhost:<port>`. Default port 9494 (quack's default), default db
+    // :memory:. A file db (or DuckLake) is required to ATTACH 'quack:...'.
+    if raw.get(1).map(String::as_str) == Some("quack-serve") {
+        let mut port: u16 = 9494;
+        let mut token: Option<String> = None;
+        let mut db: Option<String> = None;
+        let mut i = 2;
+        while i < raw.len() {
+            match raw[i].as_str() {
+                "--port" => {
+                    i += 1;
+                    port = raw.get(i).and_then(|s| s.parse().ok()).unwrap_or(port);
+                }
+                "--token" => {
+                    i += 1;
+                    token = raw.get(i).cloned();
+                }
+                other => db = Some(other.to_string()),
+            }
+            i += 1;
+        }
+        let token = token.unwrap_or_else(|| "quacktoken".to_string());
+
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let extensions_dir = std::env::current_dir()?.join("artifacts/extensions");
+        set_extension_root(extensions_dir);
+        let cwd = std::env::current_dir()?;
+        std::fs::create_dir_all(cwd.join(".duckdb/extension_data")).ok();
+        let preopens: Vec<(&Path, &str)> = vec![(cwd.as_path(), ".")];
+        serve_quack(&artifacts, db.as_deref(), port, &token, &preopens)?;
         return Ok(());
     }
 
