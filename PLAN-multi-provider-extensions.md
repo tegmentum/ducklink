@@ -277,3 +277,156 @@ DuckLink treats implementations as interchangeable providers behind a stable
 **ABI** contracts. Users choose capabilities; DuckLink chooses execution strategy;
 performance is an implementation detail; **semantics — certified, not assumed — are
 the product.**
+
+---
+
+# Appendix B — Manifest schema + `Provider` trait (nailed down)
+
+## B.1 Manifest schema (generalizing `registry/index.json`)
+
+Today each registry entry has **one** `artifact` + `content_digest`. The
+generalization keeps every **logical-extension / semantic-contract** field at the
+entry level and replaces the single artifact with a `providers[]` array. The
+logical fields *define the semantic contract*; the provider fields *describe one
+implementation of it*.
+
+```jsonc
+{
+  // ---- logical extension identity + SEMANTIC contract (unchanged from today) ----
+  "name": "spatial",
+  "version": "1.2.0",
+  "description": "...", "license": "...", "authors": [...], "categories": [...],
+  "wit_contract": "90fdc46a585c...",        // THE semantic_contract digest (witcanon)
+  "wit_contract_version": "2.0.0",
+  "exports": ["st_buffer", "st_distance"],   // the certified signature surface
+  "requires": ["scalar", "table"],           // capability kinds
+  "prefix": "spatial", "expansion": "com.tegmentum.ducklink.spatial",
+  "min_duckdb_version": "1.0.0",
+
+  // ---- providers: one or more implementations of the SAME semantic contract ----
+  "providers": [
+    {
+      "id": "wasm-component",
+      "kind": "wasm",
+      "abi": "duckdb:extension@2.0.0",          // the ABI contract for this kind
+      "artifact": "artifacts/extensions/spatial.wasm",
+      "content_digest": "3d098f...",
+      "reference": true,                         // defines semantics (the baseline)
+      "conformance": { "suite": "spatial@2", "passed": true, "at": "90fdc46a585c..." }
+    },
+    {
+      "id": "wasm-browser",
+      "kind": "wasm", "abi": "duckdb:extension@2.0.0",
+      "artifact": "artifacts/extensions/spatial.browser.wasm",
+      "content_digest": "aa11...", "browser_safe": true,
+      "conformance": { "suite": "spatial@2", "passed": true, "at": "90fdc46a585c..." }
+    },
+    {
+      "id": "native-linux-x86_64",
+      "kind": "native",
+      "platform": { "os": "linux", "arch": "x86_64", "min_duckdb_abi": "v1.5" },
+      "artifact": "oci://.../spatial-linux-x86_64.duckdb_extension",
+      "content_digest": "bb22...",
+      "trust": { "signed_by": "ed25519:...", "attestation": "..." },  // native load = trust
+      "conformance": { "suite": "spatial@2", "passed": true, "at": "90fdc46a585c..." }
+    },
+    {
+      "id": "remote-quack",
+      "kind": "remote",
+      "endpoint": "quack:analytics.internal:9494",
+      "conformance": { "suite": "spatial@2", "passed": true, "at": "90fdc46a585c..." }
+    }
+  ]
+}
+```
+
+**Rules:**
+- Exactly one provider SHOULD set `reference: true` (the wasm-component baseline);
+  its artifact's witcanon digest MUST equal the entry's `wit_contract`.
+- Each `conformance.at` is a contract digest; the resolver treats a provider as
+  **uncertified** unless `conformance.passed && conformance.at == wit_contract`.
+- `content_digest` is the content-addressed artifact id (the existing scheme),
+  used by `datalink-dynlink::register_digest` for wasm and by the trust/attest
+  path for native.
+
+**Backward compatibility:** a current single-artifact entry is *exactly* a
+one-element `providers[]` with `kind:"wasm", reference:true`, lifting today's
+`artifact`/`content_digest` verbatim. The catalog tooling (`gen-catalog.py` /
+`verify-catalog.py`) migrates mechanically; the resolver reads the new shape.
+
+## B.2 The `Provider` trait (ducklink-host first; lift to datalink later)
+
+The resolver works over a `Provider` abstraction that sits **above** the existing
+substrates — `datalink-dynlink` (wasm), a native loader, quack (remote). It is
+not a replacement for `ProviderBackend` (that stays the wasm substrate); it is the
+resolver-level unifier.
+
+```rust
+/// One implementation of a logical extension's semantic contract, as described
+/// by the manifest. Resolver-level — wraps a substrate, doesn't replace it.
+pub trait Provider {
+    /// Static descriptor parsed from the manifest provider entry.
+    fn descriptor(&self) -> &ProviderDescriptor;
+
+    /// Is this provider's substrate usable in this environment?
+    ///   wasm   -> a wasm runtime is present (always true in-process)
+    ///   native -> platform matches AND the .duckdb_extension dlopen-loads AND ABI ok
+    ///   remote -> the endpoint is reachable
+    fn available(&self, env: &Env) -> bool;
+
+    /// Load + register this implementation's functions into the engine catalog,
+    /// returning a live handle. The per-kind substrate:
+    ///   wasm   -> datalink-dynlink ResidentBackend resolve_by_digest +
+    ///             the register-capture / callback-dispatch path (Route A, reused)
+    ///   native -> dlopen + DuckDB's native extension init into this connection
+    ///   remote -> ATTACH the quack endpoint / register proxy scalars
+    fn load(&self, conn: &EngineConn, env: &Env) -> anyhow::Result<LoadedProvider>;
+}
+
+pub struct ProviderDescriptor {
+    pub id: String,                 // "wasm-component", "native-linux-x86_64", ...
+    pub kind: ProviderKind,
+    pub reference: bool,            // defines semantics
+    pub conformance: Option<Conformance>,
+    pub trust: Option<Trust>,
+}
+
+pub enum ProviderKind {
+    Wasm   { abi: String, artifact: ContentRef, browser_safe: bool },
+    Native { platform: Platform, artifact: ContentRef },
+    Remote { endpoint: String },
+}
+
+pub struct Conformance {           // the SEMANTIC-contract certificate
+    pub suite: String,             // "spatial@2"
+    pub contract_digest: String,   // must == the logical extension's wit_contract
+    pub passed: bool,
+}
+
+pub struct Trust {                 // native/remote admission (datalink-contract / std:attest)
+    pub signed_by: Option<String>,
+    pub attestation: Option<String>,
+}
+
+pub struct Platform { pub os: String, pub arch: String, pub min_duckdb_abi: Option<String> }
+pub enum ContentRef { Path(PathBuf), Digest(Vec<u8>), Oci(String) }
+
+/// A loaded, live provider (functions registered into the engine's catalog).
+pub struct LoadedProvider {
+    pub provider_id: String,
+    pub kind: &'static str,
+    // kind-specific resident handle (the datalink-dynlink instance, the dlopen
+    // handle, or the quack attachment) kept alive for the connection's lifetime.
+    handle: ProviderHandle,
+}
+```
+
+### Kind → substrate mapping (what `load()` calls — all reuse)
+| `ProviderKind` | `available()` | `load()` substrate |
+| --- | --- | --- |
+| `Wasm` | wasm runtime present | `datalink-dynlink` `register_digest` + `ResidentBackend::resolve_by_digest` → Route A's register-capture + `callback-dispatch` (direct import) |
+| `Native` | platform match + dlopen + ABI check | `dlopen` the `.duckdb_extension` + DuckDB native init into `conn` |
+| `Remote` | endpoint reachable | quack `ATTACH` / proxy-scalar registration |
+
+The `Provider` trait is the seam the resolver (A) selects over; each `load()` arm
+is the substrate that already exists (wasm shipped via Route A, remote via quack).
