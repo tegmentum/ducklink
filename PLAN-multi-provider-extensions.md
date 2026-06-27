@@ -115,7 +115,7 @@ providers:
     kind: wasm
     abi: duckdb:extension@2.0.0
     artifact: sha256:...                    # content-addressed
-    conformance: { suite: spatial@2, passed: true, at: witcanon:90fdc46a585c }
+    conformance: { suite: spatial@2, suite_digest: sha256:7f3c.., passed: true, at: witcanon:90fdc46a585c }
     reference: true                         # defines semantics
 
   - id: native-linux-x86_64
@@ -123,12 +123,12 @@ providers:
     platform: { os: linux, arch: x86_64 }
     artifact: sha256:...
     trust: { signed_by: ..., attestation: ... }   # native load is a trust decision
-    conformance: { suite: spatial@2, passed: true, at: witcanon:90fdc46a585c }
+    conformance: { suite: spatial@2, suite_digest: sha256:7f3c.., passed: true, at: witcanon:90fdc46a585c }
 
   - id: remote-quack
     kind: remote
     endpoint: quack:analytics.internal:9494
-    conformance: { suite: spatial@2, passed: true, at: witcanon:90fdc46a585c }
+    conformance: { suite: spatial@2, suite_digest: sha256:7f3c.., passed: true, at: witcanon:90fdc46a585c }
 ```
 
 Every provider carries a `conformance` record keyed to a `semantic_contract`
@@ -312,14 +312,14 @@ implementation of it*.
       "artifact": "artifacts/extensions/spatial.wasm",
       "content_digest": "3d098f...",
       "reference": true,                         // defines semantics (the baseline)
-      "conformance": { "suite": "spatial@2", "passed": true, "at": "90fdc46a585c..." }
+      "conformance": { "suite": "spatial@2", "suite_digest": "7f3c...", "passed": true, "at": "90fdc46a585c..." }
     },
     {
       "id": "wasm-browser",
       "kind": "wasm", "abi": "duckdb:extension@2.0.0",
       "artifact": "artifacts/extensions/spatial.browser.wasm",
       "content_digest": "aa11...", "browser_safe": true,
-      "conformance": { "suite": "spatial@2", "passed": true, "at": "90fdc46a585c..." }
+      "conformance": { "suite": "spatial@2", "suite_digest": "7f3c...", "passed": true, "at": "90fdc46a585c..." }
     },
     {
       "id": "native-linux-x86_64",
@@ -328,13 +328,13 @@ implementation of it*.
       "artifact": "oci://.../spatial-linux-x86_64.duckdb_extension",
       "content_digest": "bb22...",
       "trust": { "signed_by": "ed25519:...", "attestation": "..." },  // native load = trust
-      "conformance": { "suite": "spatial@2", "passed": true, "at": "90fdc46a585c..." }
+      "conformance": { "suite": "spatial@2", "suite_digest": "7f3c...", "passed": true, "at": "90fdc46a585c..." }
     },
     {
       "id": "remote-quack",
       "kind": "remote",
       "endpoint": "quack:analytics.internal:9494",
-      "conformance": { "suite": "spatial@2", "passed": true, "at": "90fdc46a585c..." }
+      "conformance": { "suite": "spatial@2", "suite_digest": "7f3c...", "passed": true, "at": "90fdc46a585c..." }
     }
   ]
 }
@@ -345,6 +345,13 @@ implementation of it*.
   its artifact's witcanon digest MUST equal the entry's `wit_contract`.
 - Each `conformance.at` is a contract digest; the resolver treats a provider as
   **uncertified** unless `conformance.passed && conformance.at == wit_contract`.
+- `conformance.suite_digest` is the **content digest of the conformance suite
+  itself** (the `compose-core` content-digest scheme over the suite's
+  queries+expected). The resolver verifies `suite_digest` against the canonical
+  suite it holds for `(extension, wit_contract)`; a record whose `suite_digest`
+  doesn't match the canonical suite is **uncertified** — so a tampered/forged or
+  stale suite cannot false-certify a provider. (Certification = "this provider
+  passed *this exact suite* at *this exact contract*.")
 - `content_digest` is the content-addressed artifact id (the existing scheme),
   used by `datalink-dynlink::register_digest` for wasm and by the trust/attest
   path for native.
@@ -399,6 +406,9 @@ pub enum ProviderKind {
 
 pub struct Conformance {           // the SEMANTIC-contract certificate
     pub suite: String,             // "spatial@2"
+    pub suite_digest: String,      // content digest of the suite itself; must == the
+                                   // canonical suite the resolver holds for (ext, contract)
+                                   // -> a tampered/forged/stale suite cannot false-certify
     pub contract_digest: String,   // must == the logical extension's wit_contract
     pub passed: bool,
 }
