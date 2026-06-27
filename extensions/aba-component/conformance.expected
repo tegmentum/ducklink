@@ -1,0 +1,17 @@
+# Conformance expected output for extensions/aba-component/conformance.sql.
+# `.mode csv` emits a header line (the AS alias) then the value, per SELECT.
+# Wildcards (shared with smoke): exact | `~~` skip | `?` any-non-empty.
+chase
+true
+wells
+true
+bad_checksum
+false
+too_short
+false
+empty
+false
+junk
+false
+null_in
+NULL

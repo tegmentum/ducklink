@@ -1,0 +1,15 @@
+# Conformance expected output for extensions/ascii85-component/conformance.sql.
+# `.mode csv` emits a header line (the AS alias) then the value, per SELECT.
+# Wildcards (shared with smoke): exact | `~~` skip | `?` any-non-empty.
+enc
+<~87cURDZ~>
+roundtrip
+round trip!
+empty_enc
+<~~>
+invalid_decode
+NULL
+null_enc
+NULL
+null_dec
+NULL
