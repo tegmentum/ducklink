@@ -1,27 +1,40 @@
 package duckdb:extension-host;
 
-use duckdb:extension/runtime@2.1.0;
-use duckdb:extension/callback-dispatch@2.1.0;
-use duckdb:extension/config@2.1.0;
-use duckdb:extension/logging@2.1.0;
-use duckdb:extension/catalog@2.1.0;
-use duckdb:extension/files@2.1.0;
-use duckdb:extension/storage@2.1.0;
-use duckdb:extension/storage-dispatch@2.1.0;
-use duckdb:extension/index@2.1.0;
-use duckdb:extension/index-dispatch@2.1.0;
-use duckdb:extension/collation@2.1.0;
-use duckdb:extension/files-reg@2.1.0;
-use duckdb:extension/file-dispatch@2.1.0;
-use duckdb:extension/query@2.1.0;
-use duckdb:extension/secret@2.1.0;
-use duckdb:extension/secret-dispatch@2.1.0;
-use duckdb:extension/settings@2.1.0;
-use duckdb:extension/macro-ext@2.1.0;
-use duckdb:extension/types-ext@2.1.0;
-use duckdb:extension/copy-dispatch@2.1.0;
-use duckdb:extension/storage-write-dispatch@2.1.0;
-use duckdb:extension/guest@2.1.0;
+use duckdb:extension/runtime@2.2.0;
+use duckdb:extension/callback-dispatch@2.2.0;
+use duckdb:extension/config@2.2.0;
+use duckdb:extension/logging@2.2.0;
+use duckdb:extension/catalog@2.2.0;
+use duckdb:extension/files@2.2.0;
+use duckdb:extension/storage@2.2.0;
+use duckdb:extension/storage-dispatch@2.2.0;
+use duckdb:extension/index@2.2.0;
+use duckdb:extension/index-dispatch@2.2.0;
+use duckdb:extension/collation@2.2.0;
+use duckdb:extension/files-reg@2.2.0;
+use duckdb:extension/file-dispatch@2.2.0;
+use duckdb:extension/query@2.2.0;
+use duckdb:extension/secret@2.2.0;
+use duckdb:extension/secret-dispatch@2.2.0;
+use duckdb:extension/settings@2.2.0;
+use duckdb:extension/macro-ext@2.2.0;
+use duckdb:extension/types-ext@2.2.0;
+use duckdb:extension/copy-dispatch@2.2.0;
+use duckdb:extension/storage-write-dispatch@2.2.0;
+// 2.2.0 additive interfaces (Items 6-7).
+use duckdb:extension/runtime-ext@2.2.0;
+use duckdb:extension/lifecycle@2.2.0;
+use duckdb:extension/coordinate-system@2.2.0;
+use duckdb:extension/arrow-ext@2.2.0;
+use duckdb:extension/encoding@2.2.0;
+use duckdb:extension/compression@2.2.0;
+use duckdb:extension/table-stream-dispatch@2.2.0;
+use duckdb:extension/aggregate-incr-dispatch@2.2.0;
+use duckdb:extension/conn-dispatch@2.2.0;
+use duckdb:extension/file-write-dispatch@2.2.0;
+use duckdb:extension/index-write-dispatch@2.2.0;
+use duckdb:extension/settings-dispatch@2.2.0;
+use duckdb:extension/guest@2.2.0;
 
 // Base extension world: every loadable extension exports these. storage-dispatch
 // is NOT mandated here (non-storage extensions like geohash don't export it);
@@ -31,28 +44,36 @@ use duckdb:extension/guest@2.1.0;
 // instantiate against this base world; index-dispatch is driven through the
 // separate `duckdb-extension-index` world.
 world duckdb-extension {
-  import duckdb:extension/runtime@2.1.0;
-  import duckdb:extension/config@2.1.0;
-  import duckdb:extension/logging@2.1.0;
-  import duckdb:extension/catalog@2.1.0;
-  import duckdb:extension/files@2.1.0;
-  import duckdb:extension/storage@2.1.0;
-  import duckdb:extension/index@2.1.0;
-  import duckdb:extension/collation@2.1.0;
-  import duckdb:extension/files-reg@2.1.0;
+  import duckdb:extension/runtime@2.2.0;
+  import duckdb:extension/config@2.2.0;
+  import duckdb:extension/logging@2.2.0;
+  import duckdb:extension/catalog@2.2.0;
+  import duckdb:extension/files@2.2.0;
+  import duckdb:extension/storage@2.2.0;
+  import duckdb:extension/index@2.2.0;
+  import duckdb:extension/collation@2.2.0;
+  import duckdb:extension/files-reg@2.2.0;
   // v1.1 live-query host import (catalog completion). The host always PROVIDES it
   // in the extension linker; query-capable components (autocomplete) import it,
   // others don't. Listed here so the host bindings generate the `query::Host`
   // trait + `add_to_linker`.
-  import duckdb:extension/query@2.1.0;
+  import duckdb:extension/query@2.2.0;
   // 2.1.0 additive registration imports: secret types/providers, extension
   // settings/options, table macros, and modified/enum logical types. The host
   // always PROVIDES them; components import only the subset they use.
-  import duckdb:extension/secret@2.1.0;
-  import duckdb:extension/settings@2.1.0;
-  import duckdb:extension/macro-ext@2.1.0;
-  import duckdb:extension/types-ext@2.1.0;
-  export duckdb:extension/guest@2.1.0;
+  import duckdb:extension/secret@2.2.0;
+  import duckdb:extension/settings@2.2.0;
+  import duckdb:extension/macro-ext@2.2.0;
+  import duckdb:extension/types-ext@2.2.0;
+  // 2.2.0 additive registration imports (Items 6-7). The host always PROVIDES
+  // them; components import only the subset they use.
+  import duckdb:extension/runtime-ext@2.2.0;
+  import duckdb:extension/lifecycle@2.2.0;
+  import duckdb:extension/coordinate-system@2.2.0;
+  import duckdb:extension/arrow-ext@2.2.0;
+  import duckdb:extension/encoding@2.2.0;
+  import duckdb:extension/compression@2.2.0;
+  export duckdb:extension/guest@2.2.0;
   export callback-dispatch;
 }
 
@@ -60,15 +81,15 @@ world duckdb-extension {
 // backend components (e.g. sqlitewasm) satisfy this; the runtime instantiates
 // its bindings lazily from an already-loaded ExtensionInstance.
 world duckdb-extension-storage {
-  import duckdb:extension/runtime@2.1.0;
-  import duckdb:extension/config@2.1.0;
-  import duckdb:extension/logging@2.1.0;
-  import duckdb:extension/catalog@2.1.0;
-  import duckdb:extension/files@2.1.0;
-  import duckdb:extension/storage@2.1.0;
-  import duckdb:extension/index@2.1.0;
-  import duckdb:extension/collation@2.1.0;
-  export duckdb:extension/guest@2.1.0;
+  import duckdb:extension/runtime@2.2.0;
+  import duckdb:extension/config@2.2.0;
+  import duckdb:extension/logging@2.2.0;
+  import duckdb:extension/catalog@2.2.0;
+  import duckdb:extension/files@2.2.0;
+  import duckdb:extension/storage@2.2.0;
+  import duckdb:extension/index@2.2.0;
+  import duckdb:extension/collation@2.2.0;
+  export duckdb:extension/guest@2.2.0;
   export callback-dispatch;
   export storage-dispatch;
 }
@@ -77,15 +98,15 @@ world duckdb-extension-storage {
 // backend components (e.g. hnswfns) satisfy this; the runtime instantiates its
 // bindings lazily from an already-loaded ExtensionInstance.
 world duckdb-extension-index {
-  import duckdb:extension/runtime@2.1.0;
-  import duckdb:extension/config@2.1.0;
-  import duckdb:extension/logging@2.1.0;
-  import duckdb:extension/catalog@2.1.0;
-  import duckdb:extension/files@2.1.0;
-  import duckdb:extension/storage@2.1.0;
-  import duckdb:extension/index@2.1.0;
-  import duckdb:extension/collation@2.1.0;
-  export duckdb:extension/guest@2.1.0;
+  import duckdb:extension/runtime@2.2.0;
+  import duckdb:extension/config@2.2.0;
+  import duckdb:extension/logging@2.2.0;
+  import duckdb:extension/catalog@2.2.0;
+  import duckdb:extension/files@2.2.0;
+  import duckdb:extension/storage@2.2.0;
+  import duckdb:extension/index@2.2.0;
+  import duckdb:extension/collation@2.2.0;
+  export duckdb:extension/guest@2.2.0;
   export callback-dispatch;
   export index-dispatch;
 }
@@ -94,16 +115,16 @@ world duckdb-extension-index {
 // components (e.g. webfs) satisfy this; the runtime instantiates its bindings
 // lazily from an already-loaded ExtensionInstance.
 world duckdb-extension-files {
-  import duckdb:extension/runtime@2.1.0;
-  import duckdb:extension/config@2.1.0;
-  import duckdb:extension/logging@2.1.0;
-  import duckdb:extension/catalog@2.1.0;
-  import duckdb:extension/files@2.1.0;
-  import duckdb:extension/storage@2.1.0;
-  import duckdb:extension/index@2.1.0;
-  import duckdb:extension/collation@2.1.0;
-  import duckdb:extension/files-reg@2.1.0;
-  export duckdb:extension/guest@2.1.0;
+  import duckdb:extension/runtime@2.2.0;
+  import duckdb:extension/config@2.2.0;
+  import duckdb:extension/logging@2.2.0;
+  import duckdb:extension/catalog@2.2.0;
+  import duckdb:extension/files@2.2.0;
+  import duckdb:extension/storage@2.2.0;
+  import duckdb:extension/index@2.2.0;
+  import duckdb:extension/collation@2.2.0;
+  import duckdb:extension/files-reg@2.2.0;
+  export duckdb:extension/guest@2.2.0;
   export callback-dispatch;
   export file-dispatch;
 }
@@ -112,15 +133,15 @@ world duckdb-extension-files {
 // that register a COPY handler (via files.register-copy-handler) satisfy this; the
 // runtime instantiates its bindings lazily from an already-loaded instance.
 world duckdb-extension-copy {
-  import duckdb:extension/runtime@2.1.0;
-  import duckdb:extension/config@2.1.0;
-  import duckdb:extension/logging@2.1.0;
-  import duckdb:extension/catalog@2.1.0;
-  import duckdb:extension/files@2.1.0;
-  import duckdb:extension/storage@2.1.0;
-  import duckdb:extension/index@2.1.0;
-  import duckdb:extension/collation@2.1.0;
-  export duckdb:extension/guest@2.1.0;
+  import duckdb:extension/runtime@2.2.0;
+  import duckdb:extension/config@2.2.0;
+  import duckdb:extension/logging@2.2.0;
+  import duckdb:extension/catalog@2.2.0;
+  import duckdb:extension/files@2.2.0;
+  import duckdb:extension/storage@2.2.0;
+  import duckdb:extension/index@2.2.0;
+  import duckdb:extension/collation@2.2.0;
+  export duckdb:extension/guest@2.2.0;
   export callback-dispatch;
   export copy-dispatch;
 }
@@ -129,16 +150,16 @@ world duckdb-extension-copy {
 // components that register a secret type/provider satisfy this; the runtime
 // instantiates its bindings lazily from an already-loaded instance.
 world duckdb-extension-secret {
-  import duckdb:extension/runtime@2.1.0;
-  import duckdb:extension/config@2.1.0;
-  import duckdb:extension/logging@2.1.0;
-  import duckdb:extension/catalog@2.1.0;
-  import duckdb:extension/files@2.1.0;
-  import duckdb:extension/storage@2.1.0;
-  import duckdb:extension/index@2.1.0;
-  import duckdb:extension/collation@2.1.0;
-  import duckdb:extension/secret@2.1.0;
-  export duckdb:extension/guest@2.1.0;
+  import duckdb:extension/runtime@2.2.0;
+  import duckdb:extension/config@2.2.0;
+  import duckdb:extension/logging@2.2.0;
+  import duckdb:extension/catalog@2.2.0;
+  import duckdb:extension/files@2.2.0;
+  import duckdb:extension/storage@2.2.0;
+  import duckdb:extension/index@2.2.0;
+  import duckdb:extension/collation@2.2.0;
+  import duckdb:extension/secret@2.2.0;
+  export duckdb:extension/guest@2.2.0;
   export callback-dispatch;
   export secret-dispatch;
 }
@@ -147,16 +168,112 @@ world duckdb-extension-secret {
 // top of the read-only storage-dispatch. Only storage backends that can write
 // through satisfy this; the runtime instantiates its bindings lazily.
 world duckdb-extension-storage-write {
-  import duckdb:extension/runtime@2.1.0;
-  import duckdb:extension/config@2.1.0;
-  import duckdb:extension/logging@2.1.0;
-  import duckdb:extension/catalog@2.1.0;
-  import duckdb:extension/files@2.1.0;
-  import duckdb:extension/storage@2.1.0;
-  import duckdb:extension/index@2.1.0;
-  import duckdb:extension/collation@2.1.0;
-  export duckdb:extension/guest@2.1.0;
+  import duckdb:extension/runtime@2.2.0;
+  import duckdb:extension/config@2.2.0;
+  import duckdb:extension/logging@2.2.0;
+  import duckdb:extension/catalog@2.2.0;
+  import duckdb:extension/files@2.2.0;
+  import duckdb:extension/storage@2.2.0;
+  import duckdb:extension/index@2.2.0;
+  import duckdb:extension/collation@2.2.0;
+  export duckdb:extension/guest@2.2.0;
   export callback-dispatch;
   export storage-dispatch;
   export storage-write-dispatch;
+}
+
+// Streaming-table world (2.2.0, Item 6): additionally exports
+// table-stream-dispatch. Built lazily from an already-loaded instance.
+world duckdb-extension-table-stream {
+  import duckdb:extension/runtime@2.2.0;
+  import duckdb:extension/config@2.2.0;
+  import duckdb:extension/logging@2.2.0;
+  import duckdb:extension/catalog@2.2.0;
+  import duckdb:extension/files@2.2.0;
+  import duckdb:extension/storage@2.2.0;
+  import duckdb:extension/index@2.2.0;
+  import duckdb:extension/collation@2.2.0;
+  export duckdb:extension/guest@2.2.0;
+  export callback-dispatch;
+  export table-stream-dispatch;
+}
+
+// Incremental-aggregate world (2.2.0, Item 6): additionally exports
+// aggregate-incr-dispatch. Built lazily from an already-loaded instance.
+world duckdb-extension-aggregate-incr {
+  import duckdb:extension/runtime@2.2.0;
+  import duckdb:extension/config@2.2.0;
+  import duckdb:extension/logging@2.2.0;
+  import duckdb:extension/catalog@2.2.0;
+  import duckdb:extension/files@2.2.0;
+  import duckdb:extension/storage@2.2.0;
+  import duckdb:extension/index@2.2.0;
+  import duckdb:extension/collation@2.2.0;
+  export duckdb:extension/guest@2.2.0;
+  export callback-dispatch;
+  export aggregate-incr-dispatch;
+}
+
+// Connection-lifecycle world (2.2.0, Item 7): additionally exports conn-dispatch.
+// Built lazily from an already-loaded instance.
+world duckdb-extension-conn {
+  import duckdb:extension/runtime@2.2.0;
+  import duckdb:extension/config@2.2.0;
+  import duckdb:extension/logging@2.2.0;
+  import duckdb:extension/catalog@2.2.0;
+  import duckdb:extension/files@2.2.0;
+  import duckdb:extension/storage@2.2.0;
+  import duckdb:extension/index@2.2.0;
+  import duckdb:extension/collation@2.2.0;
+  export duckdb:extension/guest@2.2.0;
+  export callback-dispatch;
+  export conn-dispatch;
+}
+
+// Writable/glob files world (2.2.0, Item 7): additionally exports
+// file-write-dispatch. Built lazily from an already-loaded instance.
+world duckdb-extension-file-write {
+  import duckdb:extension/runtime@2.2.0;
+  import duckdb:extension/config@2.2.0;
+  import duckdb:extension/logging@2.2.0;
+  import duckdb:extension/catalog@2.2.0;
+  import duckdb:extension/files@2.2.0;
+  import duckdb:extension/storage@2.2.0;
+  import duckdb:extension/index@2.2.0;
+  import duckdb:extension/collation@2.2.0;
+  export duckdb:extension/guest@2.2.0;
+  export callback-dispatch;
+  export file-write-dispatch;
+}
+
+// General-index world (2.2.0, Item 7): additionally exports index-write-dispatch.
+// Built lazily from an already-loaded instance.
+world duckdb-extension-index-write {
+  import duckdb:extension/runtime@2.2.0;
+  import duckdb:extension/config@2.2.0;
+  import duckdb:extension/logging@2.2.0;
+  import duckdb:extension/catalog@2.2.0;
+  import duckdb:extension/files@2.2.0;
+  import duckdb:extension/storage@2.2.0;
+  import duckdb:extension/index@2.2.0;
+  import duckdb:extension/collation@2.2.0;
+  export duckdb:extension/guest@2.2.0;
+  export callback-dispatch;
+  export index-write-dispatch;
+}
+
+// Settings-callback world (2.2.0, Item 7): additionally exports settings-dispatch.
+// Built lazily from an already-loaded instance.
+world duckdb-extension-settings {
+  import duckdb:extension/runtime@2.2.0;
+  import duckdb:extension/config@2.2.0;
+  import duckdb:extension/logging@2.2.0;
+  import duckdb:extension/catalog@2.2.0;
+  import duckdb:extension/files@2.2.0;
+  import duckdb:extension/storage@2.2.0;
+  import duckdb:extension/index@2.2.0;
+  import duckdb:extension/collation@2.2.0;
+  export duckdb:extension/guest@2.2.0;
+  export callback-dispatch;
+  export settings-dispatch;
 }

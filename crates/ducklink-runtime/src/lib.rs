@@ -69,13 +69,13 @@ pub const CONTRACT_MAJOR: u64 = 2;
 /// this host does not provide, so instantiation would fail with a cryptic
 /// missing-import error. [`check_component_contract`] turns that into a friendly,
 /// actionable message. Bump this in lockstep with each additive MINOR contract
-/// bump (set back to 0 on a new MAJOR). For the 2.1.0 expansion this is 1.
-pub const CONTRACT_MINOR: u64 = 1;
+/// bump (set back to 0 on a new MAJOR). For the 2.2.0 expansion this is 2.
+pub const CONTRACT_MINOR: u64 = 2;
 
 /// Full contract version string the host advertises (observability only; the
 /// guard compares MAJOR.minor via [`CONTRACT_MAJOR`]/[`CONTRACT_MINOR`], and the
 /// authoritative identity is the content-addressed [`CONTRACT_DIGEST`]).
-pub const CONTRACT_VERSION: &str = "2.1.0";
+pub const CONTRACT_VERSION: &str = "2.2.0";
 
 /// The host's `duckdb:extension` contract version, for logging / a built-in.
 /// This is the human-readable version; the authoritative content-addressed
@@ -347,7 +347,7 @@ pub mod duckdb_extension_copy_bindings {
         // per-world type conversion. NOTE: bump the @version here in lockstep
         // with the contract.
         with: {
-            "duckdb:extension/types@2.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -362,7 +362,7 @@ pub mod duckdb_extension_secret_bindings {
         world: "duckdb:extension-host/duckdb-extension-secret",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -377,7 +377,92 @@ pub mod duckdb_extension_storage_write_bindings {
         world: "duckdb:extension-host/duckdb-extension-storage-write",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+        },
+    });
+}
+
+/// Bindings for the streaming-table world (`duckdb-extension-table-stream`,
+/// 2.2.0, Item 6), which additionally exports `table-stream-dispatch`. Only
+/// components that back a streaming/pushdown table function satisfy this; built
+/// lazily from an already-loaded instance.
+pub mod duckdb_extension_table_stream_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-table-stream",
+        require_store_data_send: true,
+        with: {
+            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+        },
+    });
+}
+
+/// Bindings for the incremental-aggregate world (`duckdb-extension-aggregate-incr`,
+/// 2.2.0, Item 6), which additionally exports `aggregate-incr-dispatch`. Only
+/// components that back an incremental aggregate satisfy this; built lazily.
+pub mod duckdb_extension_aggregate_incr_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-aggregate-incr",
+        require_store_data_send: true,
+        with: {
+            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+        },
+    });
+}
+
+/// Bindings for the connection-lifecycle world (`duckdb-extension-conn`, 2.2.0,
+/// Item 7), which additionally exports `conn-dispatch`. Only components that
+/// subscribed to connection callbacks satisfy this; built lazily.
+pub mod duckdb_extension_conn_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-conn",
+        require_store_data_send: true,
+        with: {
+            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+        },
+    });
+}
+
+/// Bindings for the writable/glob files world (`duckdb-extension-file-write`,
+/// 2.2.0, Item 7), which additionally exports `file-write-dispatch`. Only files
+/// backends that support write/glob/stat satisfy this; built lazily.
+pub mod duckdb_extension_file_write_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-file-write",
+        require_store_data_send: true,
+        with: {
+            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+        },
+    });
+}
+
+/// Bindings for the general-index world (`duckdb-extension-index-write`, 2.2.0,
+/// Item 7), which additionally exports `index-write-dispatch`. Only general
+/// (non-ANN) index backends satisfy this; built lazily.
+pub mod duckdb_extension_index_write_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-index-write",
+        require_store_data_send: true,
+        with: {
+            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+        },
+    });
+}
+
+/// Bindings for the settings-callback world (`duckdb-extension-settings`, 2.2.0,
+/// Item 7), which additionally exports `settings-dispatch`. Only components that
+/// react to `SET <option>` satisfy this; built lazily.
+pub mod duckdb_extension_settings_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-settings",
+        require_store_data_send: true,
+        with: {
+            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -779,6 +864,71 @@ pub mod reg {
         pub extension: String,
         pub name: String,
         pub members: Vec<String>,
+    }
+
+    /// A RICHER scalar function registered by an extension (2.2.0, Item 6) via
+    /// `runtime-ext.register-scalar-ex`: varargs, (optionally named) args, and a
+    /// NULL-handling mode. `varargs` is the declared trailing repeatable type
+    /// (None = no varargs); `special_null` is true when the function is invoked on
+    /// NULL inputs. `callback_handle` routes invocations.
+    #[derive(Clone, Debug)]
+    pub struct ScalarExReg {
+        pub extension: String,
+        pub name: String,
+        pub arguments: Vec<FuncArg>,
+        pub varargs: Option<LogicalType>,
+        pub returns: LogicalType,
+        pub special_null: bool,
+        pub callback_handle: u32,
+        pub options: Option<FuncOpts>,
+    }
+
+    /// A connection-lifecycle subscription registered by an extension (2.2.0,
+    /// Item 7). `on_opened`/`on_closed` mirror the requested `conn-events` flags;
+    /// `callback_handle` routes every `conn-dispatch` notification.
+    #[derive(Clone, Debug)]
+    pub struct ConnCallbackReg {
+        pub extension: String,
+        pub on_opened: bool,
+        pub on_closed: bool,
+        pub callback_handle: u32,
+    }
+
+    /// A coordinate reference system registered by an extension (2.2.0, Item 7).
+    #[derive(Clone, Debug)]
+    pub struct CoordinateSystemReg {
+        pub extension: String,
+        pub auth_name: String,
+        pub code: u32,
+        pub wkt: String,
+    }
+
+    /// An Arrow table producer registered by an extension (2.2.0, Item 7).
+    /// `callback_handle` routes the host's pull calls.
+    #[derive(Clone, Debug)]
+    pub struct ArrowTableReg {
+        pub extension: String,
+        pub name: String,
+        pub columns: Vec<ColumnDef>,
+        pub callback_handle: u32,
+    }
+
+    /// A text encoding registered by an extension (2.2.0, Item 7).
+    #[derive(Clone, Debug)]
+    pub struct EncodingReg {
+        pub extension: String,
+        pub name: String,
+        pub aliases: Vec<String>,
+        pub callback_handle: u32,
+    }
+
+    /// A compression codec registered by an extension (2.2.0, Item 7).
+    #[derive(Clone, Debug)]
+    pub struct CompressionReg {
+        pub extension: String,
+        pub name: String,
+        pub file_extension: String,
+        pub callback_handle: u32,
     }
 }
 

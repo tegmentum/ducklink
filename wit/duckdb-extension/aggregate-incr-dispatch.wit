@@ -1,0 +1,33 @@
+package duckdb:extension@2.2.0;
+
+use types;
+
+// Host -> component callbacks for an INCREMENTAL aggregate (additive, 2.2.0,
+// Item 6). The existing `runtime.aggregate-callback.call` takes the whole row set
+// at once; this adds the classic init/update/combine/finalize state machine so a
+// component can aggregate in bounded memory and parallelize via combine (the
+// engine merges partial states).
+//
+// Every call carries `handle` = the callback-handle the component registered for
+// the incremental aggregate. `state` handles are opaque ids the component
+// allocates in `call-aggregate-init` and frees in `call-aggregate-finalize`.
+interface aggregate-incr-dispatch {
+  use types.{duckerror, duckvalue, rowbatch};
+
+  // Allocate a fresh aggregation state; returns an opaque state handle.
+  call-aggregate-init: func(handle: u32) -> result<u32, duckerror>;
+
+  // Fold a batch of rows into `state`.
+  call-aggregate-update: func(handle: u32,
+                              state: u32,
+                              rows: rowbatch) -> result<_, duckerror>;
+
+  // Merge the partial `source` state into `target` (parallel aggregation).
+  call-aggregate-combine: func(handle: u32,
+                               target: u32,
+                               source: u32) -> result<_, duckerror>;
+
+  // Produce the final value from `state` and free it.
+  call-aggregate-finalize: func(handle: u32,
+                                state: u32) -> result<duckvalue, duckerror>;
+}

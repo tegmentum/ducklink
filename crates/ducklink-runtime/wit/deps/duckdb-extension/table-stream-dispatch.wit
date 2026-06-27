@@ -1,0 +1,36 @@
+package duckdb:extension@2.2.0;
+
+use types;
+
+// Host -> component callbacks for a STREAMING + pushdown table function
+// (additive, 2.2.0, Item 6). The existing `runtime.table-callback.call` returns a
+// whole resultset at once; this adds an open/next/close cursor so a component can
+// stream large results in bounded chunks and accept a projection pushdown,
+// reusing the storage-dispatch chunked PULL-cursor shape.
+//
+// Every call carries `handle` = the callback-handle the component registered for
+// the streaming table function.
+interface table-stream-dispatch {
+  use types.{duckerror, duckvalue, columndef, resultset};
+
+  // Result of opening a streaming table cursor: an opaque cursor handle plus the
+  // column schema the scan will emit (after the requested projection).
+  record table-open-result {
+    cursor: u32,
+    columns: list<columndef>,
+  }
+
+  // Open a streaming cursor for the table function `handle` with the bound `args`
+  // and a `projection` (column indices to emit, in order; empty = all columns).
+  call-table-open: func(handle: u32,
+                        args: list<duckvalue>,
+                        projection: list<u32>) -> result<table-open-result, duckerror>;
+
+  // Pull up to `max-rows` from the cursor; an empty resultset signals EOF.
+  call-table-next: func(handle: u32,
+                        cursor: u32,
+                        max-rows: u32) -> result<resultset, duckerror>;
+
+  // Close the cursor and free its state.
+  call-table-close: func(handle: u32, cursor: u32) -> result<bool, duckerror>;
+}

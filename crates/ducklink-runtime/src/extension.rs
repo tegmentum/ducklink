@@ -19,11 +19,15 @@ use wasmtime::{AsContextMut, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 use crate::duckdb_extension_bindings::duckdb::extension::{
-    catalog as extension_catalog, config as extension_config, files as extension_files,
-    collation as extension_collation, files_reg as extension_files_reg, index as extension_index,
-    logging as extension_logging, macro_ext as extension_macro_ext, query as extension_query,
-    runtime as extension_runtime, secret as extension_secret, settings as extension_settings,
-    storage as extension_storage, types as extension_types, types_ext as extension_types_ext,
+    arrow_ext as extension_arrow_ext, catalog as extension_catalog,
+    compression as extension_compression, config as extension_config,
+    coordinate_system as extension_coordinate_system, encoding as extension_encoding,
+    files as extension_files, collation as extension_collation, files_reg as extension_files_reg,
+    index as extension_index, lifecycle as extension_lifecycle, logging as extension_logging,
+    macro_ext as extension_macro_ext, query as extension_query, runtime as extension_runtime,
+    runtime_ext as extension_runtime_ext, secret as extension_secret,
+    settings as extension_settings, storage as extension_storage, types as extension_types,
+    types_ext as extension_types_ext,
 };
 use crate::duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
 use crate::reg;
@@ -135,6 +139,13 @@ type PendingSetting = reg::SettingReg;
 type PendingTableMacro = reg::TableMacroReg;
 type PendingModifiedType = reg::ModifiedTypeReg;
 type PendingEnumType = reg::EnumTypeReg;
+// 2.2.0 additive captures (Items 6-7).
+type PendingScalarEx = reg::ScalarExReg;
+type PendingConnCallback = reg::ConnCallbackReg;
+type PendingCoordinateSystem = reg::CoordinateSystemReg;
+type PendingArrowTable = reg::ArrowTableReg;
+type PendingEncoding = reg::EncodingReg;
+type PendingCompression = reg::CompressionReg;
 
 #[derive(Default)]
 struct PendingScalarRegistry {
@@ -233,6 +244,13 @@ pub struct ExtensionStoreState {
     pending_table_macros: Vec<PendingTableMacro>,
     pending_modified_types: Vec<PendingModifiedType>,
     pending_enum_types: Vec<PendingEnumType>,
+    // 2.2.0 additive capture buffers (Items 6-7).
+    pending_scalar_ex: Vec<PendingScalarEx>,
+    pending_conn_callbacks: Vec<PendingConnCallback>,
+    pending_coordinate_systems: Vec<PendingCoordinateSystem>,
+    pending_arrow_tables: Vec<PendingArrowTable>,
+    pending_encodings: Vec<PendingEncoding>,
+    pending_compressions: Vec<PendingCompression>,
     /// Maps the handle returned from `table-registry.register` to the table
     /// function name, so `files.register-replacement-scan` can resolve it.
     table_handle_names: HashMap<u32, String>,
@@ -290,6 +308,12 @@ impl ExtensionStoreState {
             pending_table_macros: Vec::new(),
             pending_modified_types: Vec::new(),
             pending_enum_types: Vec::new(),
+            pending_scalar_ex: Vec::new(),
+            pending_conn_callbacks: Vec::new(),
+            pending_coordinate_systems: Vec::new(),
+            pending_arrow_tables: Vec::new(),
+            pending_encodings: Vec::new(),
+            pending_compressions: Vec::new(),
             table_handle_names: HashMap::new(),
             callback_registry,
             extension_name,
@@ -385,6 +409,26 @@ impl ExtensionStoreState {
     }
     fn take_pending_enum_types(&mut self) -> Vec<PendingEnumType> {
         std::mem::take(&mut self.pending_enum_types)
+    }
+
+    // --- 2.2.0 additive drains (Items 6-7; mirror the 2.1.0 drains) ---
+    fn take_pending_scalar_ex(&mut self) -> Vec<PendingScalarEx> {
+        std::mem::take(&mut self.pending_scalar_ex)
+    }
+    fn take_pending_conn_callbacks(&mut self) -> Vec<PendingConnCallback> {
+        std::mem::take(&mut self.pending_conn_callbacks)
+    }
+    fn take_pending_coordinate_systems(&mut self) -> Vec<PendingCoordinateSystem> {
+        std::mem::take(&mut self.pending_coordinate_systems)
+    }
+    fn take_pending_arrow_tables(&mut self) -> Vec<PendingArrowTable> {
+        std::mem::take(&mut self.pending_arrow_tables)
+    }
+    fn take_pending_encodings(&mut self) -> Vec<PendingEncoding> {
+        std::mem::take(&mut self.pending_encodings)
+    }
+    fn take_pending_compressions(&mut self) -> Vec<PendingCompression> {
+        std::mem::take(&mut self.pending_compressions)
     }
 
     fn drain_pending(&mut self) -> PendingRegistrationsData {
