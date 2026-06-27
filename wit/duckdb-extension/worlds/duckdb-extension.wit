@@ -1,4 +1,4 @@
-package duckdb:extension@2.0.0;
+package duckdb:extension@2.1.0;
 
 use runtime;
 use callback-dispatch;
@@ -14,6 +14,13 @@ use index;
 use index-dispatch;
 use files-reg;
 use file-dispatch;
+use secret;
+use secret-dispatch;
+use settings;
+use macro-ext;
+use types-ext;
+use copy-dispatch;
+use storage-write-dispatch;
 
 world duckdb-extension {
   import runtime;
@@ -21,6 +28,11 @@ world duckdb-extension {
   import logging;
   import catalog;
   import files;
+  // 2.1.0 additive registration imports.
+  import secret;
+  import settings;
+  import macro-ext;
+  import types-ext;
   export guest;
   export callback-dispatch;
 }
@@ -92,4 +104,44 @@ world duckdb-extension-files {
   export guest;
   export callback-dispatch;
   export file-dispatch;
+}
+
+// Copy-capable world (2.1.0): exports copy-dispatch.
+world duckdb-extension-copy {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  export guest;
+  export callback-dispatch;
+  export copy-dispatch;
+}
+
+// Secret-capable world (2.1.0): exports secret-dispatch.
+world duckdb-extension-secret {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import secret;
+  export guest;
+  export callback-dispatch;
+  export secret-dispatch;
+}
+
+// Writable-storage world (2.1.0): exports storage-write-dispatch on top of the
+// read-only storage-dispatch.
+world duckdb-extension-storage-write {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import storage;
+  export guest;
+  export callback-dispatch;
+  export storage-dispatch;
+  export storage-write-dispatch;
 }

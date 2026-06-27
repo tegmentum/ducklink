@@ -60,10 +60,22 @@ pub fn contract_digest() -> &'static str {
 /// catalog-verify; this @MAJOR check is its runtime proxy.
 pub const CONTRACT_MAJOR: u64 = 2;
 
+/// The MINOR version of the `duckdb:extension` WIT contract this host speaks.
+///
+/// MINORs are ADDITIVE: a host at `MAJOR.minor` can load any component built at
+/// `MAJOR.k` for `k <= minor` (forward-compat: the component imports a subset of
+/// what the host provides). It CANNOT load a component built at a HIGHER minor —
+/// that component imports interfaces (e.g. the 2.1 copy/secret/settings surface)
+/// this host does not provide, so instantiation would fail with a cryptic
+/// missing-import error. [`check_component_contract`] turns that into a friendly,
+/// actionable message. Bump this in lockstep with each additive MINOR contract
+/// bump (set back to 0 on a new MAJOR). For the 2.1.0 expansion this is 1.
+pub const CONTRACT_MINOR: u64 = 1;
+
 /// Full contract version string the host advertises (observability only; the
-/// guard compares the MAJOR via [`CONTRACT_MAJOR`], and the authoritative
-/// identity is the content-addressed [`CONTRACT_DIGEST`]).
-pub const CONTRACT_VERSION: &str = "2.0.0";
+/// guard compares MAJOR.minor via [`CONTRACT_MAJOR`]/[`CONTRACT_MINOR`], and the
+/// authoritative identity is the content-addressed [`CONTRACT_DIGEST`]).
+pub const CONTRACT_VERSION: &str = "2.1.0";
 
 /// The host's `duckdb:extension` contract version, for logging / a built-in.
 /// This is the human-readable version; the authoritative content-addressed
@@ -88,6 +100,47 @@ pub fn component_contract_major(engine: &Engine, component: &Component) -> Optio
     datalink_contract::component_contract_major(engine, component, CONTRACT_PACKAGE)
 }
 
+/// The `duckdb:extension` contract `(major, minor)` a component targets, read
+/// from its imported package ids. Returns:
+///   - `Some((major, minor))` if it imports `duckdb:extension/...@MAJOR.MINOR.x`;
+///     `minor` is the MAX minor across the package's interface imports (a 2.1
+///     component imports the new interfaces `@2.1.x` -> minor 1; an existing 2.0
+///     component imports everything `@2.0.x` -> minor 0).
+///   - `None` if it imports the package UNVERSIONED (legacy pre-versioning).
+///
+/// This completes the runtime version proxy with MINOR granularity (the shared
+/// [`datalink_contract::component_contract_major`] keeps only the major). The
+/// introspection technique mirrors that crate: scan `component_type().imports`,
+/// whose instance names look like `duckdb:extension/runtime@2.1.0`.
+///
+/// NOTE: this lives in ducklink (not the shared crate) so it ships with the 2.1.0
+/// bump without a cross-repo change; lifting it into `datalink-contract` so sqlink
+/// inherits the same minor story is a recommended follow-up.
+pub fn component_contract_version(engine: &Engine, component: &Component) -> Option<(u64, u64)> {
+    let mut found: Option<(u64, u64)> = None;
+    for (name, _) in component.component_type().imports(engine) {
+        let pkg = name.split('/').next().unwrap_or(name);
+        if !pkg.starts_with(CONTRACT_PACKAGE) {
+            continue;
+        }
+        let ver = match name.rsplit_once('@') {
+            Some((_, ver)) => ver,
+            None => return None, // unversioned -> legacy
+        };
+        let mut parts = ver.split('.');
+        let major = parts.next().and_then(|m| m.parse::<u64>().ok());
+        let minor = parts.next().and_then(|m| m.parse::<u64>().ok()).unwrap_or(0);
+        if let Some(major) = major {
+            found = match found {
+                // Keep the highest (major, minor) seen for the contract package.
+                Some(cur) if cur >= (major, minor) => Some(cur),
+                _ => Some((major, minor)),
+            };
+        }
+    }
+    found
+}
+
 /// Loader pre-check: reject a component whose `duckdb:extension` contract major
 /// differs from this host's [`CONTRACT_MAJOR`] (or is unversioned/legacy) with a
 /// clear, actionable error BEFORE instantiation. Wasmtime would itself reject a
@@ -105,6 +158,8 @@ pub fn check_component_contract(
     extension_name: &str,
 ) -> wasmtime::Result<()> {
     let major = component_contract_major(engine, component);
+    // The shared guard handles the MAJOR-mismatch + unversioned-legacy cases
+    // (message + behavior preserved exactly).
     datalink_contract::check_component_contract(
         major,
         CONTRACT_MAJOR,
@@ -113,7 +168,46 @@ pub fn check_component_contract(
     )
     // datalink-contract returns anyhow::Result; map its error into the
     // wasmtime::Error this host's loader expects (the message is preserved).
-    .map_err(|e| wasmtime::Error::msg(e.to_string()))
+    .map_err(|e| wasmtime::Error::msg(e.to_string()))?;
+
+    // MINOR gate (additive, completes the runtime proxy): same major, but the
+    // component needs a HIGHER minor than this host provides -> it imports
+    // interfaces this host can't satisfy. Reject with a friendly message BEFORE
+    // wasmtime fails at instantiate with a cryptic missing-import error. A LOWER
+    // or equal minor is fine (additive forward-compat: a 2.0 component on a 2.1
+    // host still loads).
+    let component_ver = component_contract_version(engine, component);
+    check_contract_minor(
+        component_ver,
+        CONTRACT_MAJOR,
+        CONTRACT_MINOR,
+        CONTRACT_PACKAGE,
+        extension_name,
+    )
+    .map_err(wasmtime::Error::msg)
+}
+
+/// Pure MINOR-gate decision (extracted so it is unit-testable without a real
+/// `Component`). Given the `component_ver` a component targets and the host's
+/// `(host_major, host_minor)`, returns `Err(message)` iff the component needs a
+/// HIGHER minor on the SAME major than the host provides; `Ok(())` otherwise.
+/// Major-mismatch / legacy / lower-or-equal-minor are all `Ok` here (the major +
+/// legacy cases are handled by the shared guard before this).
+fn check_contract_minor(
+    component_ver: Option<(u64, u64)>,
+    host_major: u64,
+    host_minor: u64,
+    package: &str,
+    ext_name: &str,
+) -> Result<(), String> {
+    match component_ver {
+        Some((cmajor, cminor)) if cmajor == host_major && cminor > host_minor => Err(format!(
+            "extension '{ext_name}' needs {package} contract >= {cmajor}.{cminor} but this \
+             host speaks {host_major}.{host_minor}; upgrade the host (or use a build \
+             targeting {host_major}.{host_minor})"
+        )),
+        _ => Ok(()),
+    }
 }
 
 #[cfg(test)]
@@ -159,6 +253,52 @@ mod contract_guard_tests {
         .to_string();
         assert!(legacy.contains("UNVERSIONED"));
         assert!(legacy.contains("duckdb:extension"));
+    }
+
+    // MINOR-gate completion (2.1.0): additive forward-compat within a major.
+    #[test]
+    fn minor_gate_admits_equal_and_lower_rejects_higher() {
+        use super::{check_contract_minor, CONTRACT_MINOR, CONTRACT_PACKAGE};
+        let host_major = CONTRACT_MAJOR;
+        let host_minor = CONTRACT_MINOR; // 1
+
+        // Equal minor (2.1 component on a 2.1 host) -> Ok.
+        assert!(check_contract_minor(
+            Some((host_major, host_minor)),
+            host_major,
+            host_minor,
+            CONTRACT_PACKAGE,
+            "ext",
+        )
+        .is_ok());
+
+        // Lower minor (an existing 2.0 component on a 2.1 host) -> Ok
+        // (additive forward-compat: it imports a subset of what the host provides).
+        assert!(check_contract_minor(
+            Some((host_major, 0)),
+            host_major,
+            host_minor,
+            CONTRACT_PACKAGE,
+            "aba",
+        )
+        .is_ok());
+
+        // Higher minor (a 2.1 component on a 2.0 host) -> rejected with the
+        // friendly, actionable message BEFORE the cryptic instantiate failure.
+        let err = check_contract_minor(
+            Some((2, 1)),
+            2,
+            0, // pretend this host only speaks 2.0
+            CONTRACT_PACKAGE,
+            "needs_copy",
+        )
+        .unwrap_err();
+        assert!(err.contains("needs_copy"));
+        assert!(err.contains("needs duckdb:extension contract >= 2.1"));
+        assert!(err.contains("speaks 2.0"));
+
+        // Legacy / no version -> not the minor gate's concern (Ok here).
+        assert!(check_contract_minor(None, host_major, host_minor, CONTRACT_PACKAGE, "ext").is_ok());
     }
 }
 
@@ -234,6 +374,54 @@ pub mod duckdb_extension_files_bindings {
         path: "./wit",
         world: "duckdb:extension-host/duckdb-extension-files",
         require_store_data_send: true,
+    });
+}
+
+/// Bindings for the copy-capable world (`duckdb-extension-copy`, 2.1.0), which
+/// additionally exports `copy-dispatch`. Only components that register a COPY
+/// handler satisfy this; built lazily from an already-loaded instance.
+pub mod duckdb_extension_copy_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-copy",
+        require_store_data_send: true,
+        // Reuse the base world's `types` so copy-dispatch exchanges the SAME
+        // Duckvalue/Columndef/Duckerror the rest of the runtime uses -- no
+        // per-world type conversion. NOTE: bump the @version here in lockstep
+        // with the contract.
+        with: {
+            "duckdb:extension/types@2.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+        },
+    });
+}
+
+/// Bindings for the secret-capable world (`duckdb-extension-secret`, 2.1.0),
+/// which additionally exports `secret-dispatch`. Only components that register a
+/// secret type/provider satisfy this; built lazily from an already-loaded
+/// instance.
+pub mod duckdb_extension_secret_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-secret",
+        require_store_data_send: true,
+        with: {
+            "duckdb:extension/types@2.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+        },
+    });
+}
+
+/// Bindings for the writable-storage world (`duckdb-extension-storage-write`,
+/// 2.1.0), which additionally exports `storage-write-dispatch` on top of the
+/// read-only `storage-dispatch`. Only writable storage backends satisfy this;
+/// built lazily from an already-loaded instance.
+pub mod duckdb_extension_storage_write_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-storage-write",
+        require_store_data_send: true,
+        with: {
+            "duckdb:extension/types@2.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+        },
     });
 }
 
@@ -566,6 +754,74 @@ pub mod reg {
         pub source: String,
         pub target: String,
         pub callback_handle: u32,
+    }
+
+    // --- 2.1.0 additive registrations ---
+
+    /// A COPY handler registered by an extension (2.1.0, Item 1). Binds a file
+    /// `extension` (e.g. "parquet") to a copy function; `function_handle` routes
+    /// every `copy-dispatch` call back to the owning component.
+    #[derive(Clone, Debug)]
+    pub struct CopyHandlerReg {
+        pub extension: String,
+        pub file_extension: String,
+        pub function_handle: u32,
+    }
+
+    /// A secret TYPE or PROVIDER registered by an extension (2.1.0, Item 2).
+    /// `provider` is `None` for a bare type registration. `params` lists the
+    /// accepted (name, redacted) keys (empty for a provider registration).
+    /// `callback_handle` routes every `secret-dispatch` call.
+    #[derive(Clone, Debug)]
+    pub struct SecretReg {
+        pub extension: String,
+        pub type_name: String,
+        pub provider: Option<String>,
+        pub params: Vec<(String, bool)>,
+        pub callback_handle: u32,
+    }
+
+    /// A configuration option declared by an extension (2.1.0, Item 3). Distinct
+    /// from `config` reads: this DECLARES an option the core should expose.
+    #[derive(Clone, Debug)]
+    pub struct SettingReg {
+        pub extension: String,
+        pub name: String,
+        pub description: String,
+        /// One of "boolean" / "varchar" / "bigint" / "double".
+        pub ty: String,
+        pub default_value: Option<String>,
+        /// "local" or "global".
+        pub scope: String,
+    }
+
+    /// A TABLE macro declared by an extension (2.1.0, Item 5). The body is a SQL
+    /// relation usable in the FROM clause.
+    #[derive(Clone, Debug)]
+    pub struct TableMacroReg {
+        pub extension: String,
+        pub schema: String,
+        pub name: String,
+        pub parameters: Vec<String>,
+        pub body_sql: String,
+    }
+
+    /// A logical type registered over a full type-expression (2.1.0, Item 5),
+    /// carrying modifiers (e.g. "DECIMAL(18,3)"). Rides the existing
+    /// type-expression escape hatch -- no new `logicaltype` arm.
+    #[derive(Clone, Debug)]
+    pub struct ModifiedTypeReg {
+        pub extension: String,
+        pub name: String,
+        pub type_expr: String,
+    }
+
+    /// An ENUM type registered by an extension (2.1.0, Item 5).
+    #[derive(Clone, Debug)]
+    pub struct EnumTypeReg {
+        pub extension: String,
+        pub name: String,
+        pub members: Vec<String>,
     }
 }
 
