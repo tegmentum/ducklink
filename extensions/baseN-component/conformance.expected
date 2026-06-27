@@ -1,0 +1,14 @@
+# Expected output for extensions/baseN-component/smoke.sql (reviewed).
+# `.mode csv` emits a header line (the AS alias) then the value, per SELECT.
+# BLOB values render in DuckDB's text form: printable bytes literally, others as
+# \xNN. Invalid decode input returns SQL NULL (renders as NULL), not an error.
+b32enc
+JBSWY3DP
+b32dec
+0x48656c6c6f
+b58enc
+12VfUX
+b58dec
+0x0001020304
+b58bad
+NULL

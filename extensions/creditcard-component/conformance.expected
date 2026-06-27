@@ -1,0 +1,17 @@
+# Expected output for extensions/creditcard-component/smoke.sql (reviewed).
+visa_ok
+true
+mc_ok
+true
+amex_ok
+true
+bad_luhn
+false
+visa_net
+Visa
+mc_net
+Mastercard
+amex_net
+American Express
+discover_net
+Discover

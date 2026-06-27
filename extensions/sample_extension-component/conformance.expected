@@ -1,0 +1,9 @@
+# Conformance expected output for the sample_extension reference suite.
+plus_one
+42
+add_two
+42
+zero
+1
+null_in
+NULL

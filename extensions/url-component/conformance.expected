@@ -1,0 +1,17 @@
+# AUTO-SEEDED by smoke.py --seed-expected. Review and trim:
+#   - csv mode emits a header line per SELECT; keep or drop as you like
+#   - replace nondeterministic lines (timestamps, rng) with ~~
+#   - replace order-sensitive lines with ? if any-non-empty is OK
+#   - delete this banner once you've reviewed each line
+scheme
+https
+host
+ex.com
+default_port
+443
+path
+/a/b/c
+query
+a=1&b=2
+bad
+NULL

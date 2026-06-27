@@ -1,0 +1,18 @@
+# Expected output for extensions/isin-component/smoke.sql (reviewed).
+# `.mode csv` emits a header line (the AS alias) then the value, per SELECT.
+apple
+true
+tesla
+true
+bmw
+true
+junk
+false
+bad_check_digit
+false
+apple_check_digit
+5
+apple_country
+US
+apple_nsin
+037833100
