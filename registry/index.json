@@ -397,7 +397,43 @@
       "prefix": "aba",
       "expansion": "com.tegmentum.ducklink.aba",
       "wit_contract_version": "2.0.0",
-      "content_digest": "366cdfd56dee914e74148455b1e74eabb55cac5918489cd372e80766c2fc74f4"
+      "content_digest": "366cdfd56dee914e74148455b1e74eabb55cac5918489cd372e80766c2fc74f4",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@2.0.0",
+          "artifact": "artifacts/extensions/aba.wasm",
+          "content_digest": "366cdfd56dee914e74148455b1e74eabb55cac5918489cd372e80766c2fc74f4",
+          "conformance": {
+            "suite": "aba@2",
+            "suite_digest": "canonical-aba-suite",
+            "at": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
+            "passed": true
+          }
+        },
+        {
+          "id": "native-arm64-macos",
+          "kind": "native",
+          "platform": {
+            "os": "macos",
+            "arch": "arm64",
+            "min_duckdb_abi": "v1.5"
+          },
+          "artifact": "oci://example.invalid/aba-macos-arm64.duckdb_extension",
+          "trust": {
+            "signed_by": "ed25519:example",
+            "attestation": "none"
+          },
+          "conformance": {
+            "suite": "aba@2",
+            "suite_digest": "canonical-aba-suite",
+            "at": "90fdc46a585c64a0eab2c0e6bc79e721264bf286053c207f3bf6ccc8377e9b23",
+            "passed": true
+          }
+        }
+      ]
     },
     {
       "name": "creditcard",

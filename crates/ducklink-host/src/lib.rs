@@ -110,7 +110,17 @@ pub mod compose_dynlink_test_support {
 }
 mod delta_rewrite;
 mod prefix;
+mod resolver;
 mod ui_server;
+
+/// Sentinel callback handles for the resolver observability scalars
+/// (`extension_provider` / `set_extension_provider`). The shell-glue registers
+/// these two scalars with these exact handles; `dispatch_scalar_batch` routes
+/// them to the resolver instead of a resident extension. Chosen at the top of
+/// the u32 space so they never collide with real per-extension callback handles
+/// (which start at 1 and increment).
+pub const RESOLVER_EXPLAIN_HANDLE: u32 = 0xFFFF_FFFF;
+pub const RESOLVER_SET_HANDLE: u32 = 0xFFFF_FFFE;
 pub use ui_server::{serve_ui, UiMode};
 mod handler;
 pub use handler::HandlerRegistry;
@@ -1535,12 +1545,41 @@ struct ExtensionManager {
     // v1.1 live-query host import: the re-entrancy fallback catalog snapshot,
     // shared with each component's CoreServices + refreshed at CLI boundaries.
     catalog_snapshot: Arc<Mutex<CatalogSnapshot>>,
+    // Multi-provider resolver (design A, PLAN-multi-provider-extensions.md): the
+    // parsed registry manifest, the resolution policy (`SET extension_provider` /
+    // deny), and the last per-extension resolution reasoning (for the
+    // `extension_provider(...)` observability function). LOAD resolves a provider
+    // through the resolver instead of the bare filename shortcut.
+    registry_index: Arc<serde_json::Value>,
+    resolver_policy: resolver::ResolvePolicy,
+    last_resolutions: HashMap<String, String>,
 }
 
 impl ExtensionManager {
     fn new(engine: Engine) -> Self {
         let index_path = workspace_root().join("registry/index.json");
         let prefix_registry = prefix::PrefixRegistry::load_from_index(&index_path);
+        let registry_index = Arc::new(
+            std::fs::read_to_string(&index_path)
+                .ok()
+                .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+                .unwrap_or(serde_json::Value::Null),
+        );
+        // Seed the resolution policy from the environment (the `SET
+        // extension_provider` / deny analog at startup; the runtime
+        // `set_extension_provider(...)` function updates it live).
+        let forced_provider = std::env::var("DUCKLINK_EXTENSION_PROVIDER")
+            .ok()
+            .filter(|s| !s.is_empty());
+        let denied = std::env::var("DUCKLINK_EXTENSION_PROVIDER_DENY")
+            .ok()
+            .map(|s| {
+                s.split(',')
+                    .map(|x| x.trim().to_string())
+                    .filter(|x| !x.is_empty())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         Self {
             engine,
             core: None,
@@ -1559,6 +1598,108 @@ impl ExtensionManager {
             pin_cache: HashMap::new(),
             current_connection: Arc::new(Mutex::new(None)),
             catalog_snapshot: Arc::new(Mutex::new(CatalogSnapshot::default())),
+            registry_index,
+            resolver_policy: resolver::ResolvePolicy {
+                forced_provider,
+                denied,
+            },
+            last_resolutions: HashMap::new(),
+        }
+    }
+
+    /// Multi-provider resolution for a logical extension: read its manifest entry
+    /// (providers[] or backward-compat single-artifact) and run the resolver
+    /// candidate pipeline (conformance gate -> available -> trusted -> !excluded
+    /// -> precedence). Returns the chosen provider's on-disk artifact path
+    /// (located within the configured extensions dir, honoring --extensions-dir),
+    /// recording the per-candidate reasoning for observability. Extensions absent
+    /// from the manifest fall back to the bare filename (backward-compat).
+    fn resolve_provider_artifact(&mut self, name: &str) -> Result<PathBuf, String> {
+        let entry = match resolver::read_manifest_entry(&self.registry_index, name) {
+            Some(e) => e,
+            None => {
+                // No manifest entry: backward-compat filename resolution.
+                self.last_resolutions.insert(
+                    name.to_string(),
+                    "no manifest entry; backward-compat filename resolution".to_string(),
+                );
+                return Ok(extension_artifact_path(name));
+            }
+        };
+        let env = resolver::Env::default();
+        match resolver::resolve(&entry, &env, &self.resolver_policy, None) {
+            Ok(res) => {
+                let reasoning = resolver::render_reasoning(&res.reasoning);
+                eprintln!(
+                    "[resolver] '{name}' -> provider '{}' [{}] (contract {}); {}",
+                    res.chosen_id,
+                    res.chosen_kind,
+                    short_digest(&entry.wit_contract),
+                    reasoning
+                );
+                self.last_resolutions.insert(
+                    name.to_string(),
+                    format!(
+                        "chosen: {} [{}] at contract {}; {}",
+                        res.chosen_id,
+                        res.chosen_kind,
+                        short_digest(&entry.wit_contract),
+                        reasoning
+                    ),
+                );
+                // Locate the chosen provider's artifact within the extensions dir
+                // (its basename), so --extensions-dir stays the source of truth.
+                let root = EXTENSION_ROOT
+                    .get()
+                    .cloned()
+                    .unwrap_or_else(|| workspace_root().join("artifacts/extensions"));
+                let basename = match &res.artifact {
+                    resolver::ContentRef::Path(p) => p
+                        .file_name()
+                        .map(|f| f.to_owned())
+                        .unwrap_or_else(|| std::ffi::OsString::from(format!("{name}.wasm"))),
+                    _ => std::ffi::OsString::from(format!("{name}.wasm")),
+                };
+                Ok(root.join(basename))
+            }
+            Err(e) => {
+                let reasoning = resolver::render_reasoning(&e.reasoning);
+                self.last_resolutions
+                    .insert(name.to_string(), format!("FAILED: {reasoning}"));
+                Err(e.to_string())
+            }
+        }
+    }
+
+    /// Observability for `extension_provider('<ext>')`: run the resolver as a
+    /// dry-run and render the chosen provider + why each loser lost.
+    fn explain_resolution(&self, name: &str) -> String {
+        match resolver::read_manifest_entry(&self.registry_index, name) {
+            None => format!("'{name}': no manifest entry (backward-compat filename load)"),
+            Some(entry) => {
+                let env = resolver::Env::default();
+                match resolver::resolve(&entry, &env, &self.resolver_policy, None) {
+                    Ok(res) => format!(
+                        "'{name}': chosen '{}' [{}] at contract {}; {}",
+                        res.chosen_id,
+                        res.chosen_kind,
+                        short_digest(&entry.wit_contract),
+                        resolver::render_reasoning(&res.reasoning)
+                    ),
+                    Err(e) => format!("'{name}': {e}"),
+                }
+            }
+        }
+    }
+
+    /// `set_extension_provider('<id>')`: force a provider id for subsequent LOADs.
+    fn set_forced_provider(&mut self, id: &str) -> String {
+        if id.is_empty() || id.eq_ignore_ascii_case("auto") || id.eq_ignore_ascii_case("none") {
+            self.resolver_policy.forced_provider = None;
+            "extension_provider override cleared (auto)".to_string()
+        } else {
+            self.resolver_policy.forced_provider = Some(id.to_string());
+            format!("extension_provider forced to '{id}'")
         }
     }
 
@@ -2271,6 +2412,26 @@ impl ExtensionManager {
         rows: &Vec<Vec<extension_types::Duckvalue>>,
         ctx: extension_runtime::Invokeinfo,
     ) -> Result<Vec<extension_types::Duckvalue>, extension_types::Duckerror> {
+        // Resolver observability functions ride the SAME direct call-scalar-batch
+        // import (no new contract): the shell-glue registers `extension_provider`
+        // / `set_extension_provider` scalars with sentinel handles, which route to
+        // the resolver here instead of to a resident extension.
+        if handle == RESOLVER_EXPLAIN_HANDLE || handle == RESOLVER_SET_HANDLE {
+            let mut out = Vec::with_capacity(rows.len());
+            for row in rows {
+                let arg = match row.first() {
+                    Some(extension_types::Duckvalue::Text(s)) => s.clone(),
+                    _ => String::new(),
+                };
+                let text = if handle == RESOLVER_EXPLAIN_HANDLE {
+                    self.explain_resolution(&arg)
+                } else {
+                    self.set_forced_provider(&arg)
+                };
+                out.push(extension_types::Duckvalue::Text(text));
+            }
+            return Ok(out);
+        }
         let entry = match self.lookup_callback(handle, CallbackKind::Scalar) {
             Some(entry) => entry,
             None => {
@@ -2430,10 +2591,19 @@ impl ExtensionManager {
             return Ok(true);
         }
 
-        let artifact = extension_artifact_path(&sanitized);
+        // Multi-provider resolution (design A): pick a certified provider via the
+        // resolver candidate pipeline instead of the bare filename shortcut. An
+        // extension absent from the manifest falls back to the filename.
+        let artifact = match self.resolve_provider_artifact(&sanitized) {
+            Ok(p) => p,
+            Err(reason) => {
+                eprintln!("[resolver] no admissible provider for '{sanitized}': {reason}");
+                return Ok(false);
+            }
+        };
         if !artifact.exists() {
             eprintln!(
-                "[extension-manager] no artifact found for '{sanitized}' at {}; skipping load request",
+                "[extension-manager] resolved artifact for '{sanitized}' not found at {}; skipping load request",
                 artifact.display()
             );
             return Ok(false);
@@ -4697,6 +4867,11 @@ fn extension_artifact_path(name: &str) -> PathBuf {
         .cloned()
         .unwrap_or_else(|| workspace_root().join("artifacts/extensions"));
     root.join(format!("{name}.wasm"))
+}
+
+/// First 12 hex chars of a contract digest (for human-readable resolver logs).
+fn short_digest(digest: &str) -> String {
+    digest.chars().take(12).collect()
 }
 
 fn sanitize_extension_name(raw: &str) -> String {
