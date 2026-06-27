@@ -1110,7 +1110,7 @@
       "prefix": "ids",
       "expansion": "com.tegmentum.ducklink.ids",
       "wit_contract_version": "2.2.0",
-      "content_digest": "5fb0facdba13a3f2e52d53c536ec908c1868c02613f58f18b1ea8a09694314ba"
+      "content_digest": "df49628b8d353d35e6710a9ce022046c0f33c6827d704b6b902af1639a5a8178"
     },
     {
       "name": "idna",
@@ -2142,7 +2142,7 @@
       "prefix": "unitconv",
       "expansion": "com.tegmentum.ducklink.unitconv",
       "wit_contract_version": "2.2.0",
-      "content_digest": "d26b4aedf9bb7ab3aa24670fd43273b0b661e091b4d65f4121e9a0eeb83f26be"
+      "content_digest": "28c25a04ad9f4128483820b55831a702453825f29319b91df781710043ad5287"
     },
     {
       "name": "wordwrap",
@@ -3502,7 +3502,7 @@
       "prefix": "yaml",
       "expansion": "com.tegmentum.ducklink.yaml",
       "wit_contract_version": "2.2.0",
-      "content_digest": "92d326d0031d392ac0aa9d507a1a2957c79780b6d0802d67d7951b4588de31ae"
+      "content_digest": "a7af6195b539386a9dac1a4e5e766abdcb62f8e20d4c2554217cd2805d833523"
     },
     {
       "name": "unicodenorm",
@@ -4218,7 +4218,7 @@
       "prefix": "qrcode",
       "expansion": "com.tegmentum.ducklink.qrcode",
       "wit_contract_version": "2.2.0",
-      "content_digest": "27cb507d962089340b6e112357d22b6f6fb21a99128f29e89151b22dc8b6c5fb"
+      "content_digest": "efa9fabb866fa30e32e91f049a09c19ff6b5cd5887b3321c39833e25e38fbc08"
     },
     {
       "name": "aggstat",
@@ -4522,7 +4522,7 @@
       "prefix": "faker",
       "expansion": "com.tegmentum.ducklink.faker",
       "wit_contract_version": "2.2.0",
-      "content_digest": "df485665def67e241182030641f4db9b800a275c1491ebd1642a262ccd7afba0"
+      "content_digest": "91e058dfd8ae480f90c215c17bf2ff85d330e1e37ad408a25a778c692373b66c"
     },
     {
       "name": "passphrase",
@@ -4601,7 +4601,7 @@
       "prefix": "h3",
       "expansion": "com.tegmentum.ducklink.h3",
       "wit_contract_version": "2.2.0",
-      "content_digest": "cd71bbc20bd0f5ab3a4d7887da6fb56da02cdc846b6511cfa719b0a0e59d7887"
+      "content_digest": "1d70c8cdbd73e771aa7b03d971075c6907b86973bbdb2b410028e7b3ea5ad0c5"
     },
     {
       "name": "lindel",
@@ -5334,7 +5334,7 @@
       "prefix": "ical",
       "expansion": "com.tegmentum.ducklink.ical",
       "wit_contract_version": "2.2.0",
-      "content_digest": "cff0a34c49fa95045e929a32f43c2068fa962c2cc738186818895953a29f41a7"
+      "content_digest": "7afc384992e20ae31ed7a28342db25801d31b3c79b075164b40d93ab820d985a"
     },
     {
       "name": "tdigest",
@@ -5722,7 +5722,7 @@
       "prefix": "html",
       "expansion": "com.tegmentum.ducklink.html",
       "wit_contract_version": "2.2.0",
-      "content_digest": "c09094b90304b044e174ec508bcfb8d17b2a0f6a75301cb2e57addf8a56ac4ce"
+      "content_digest": "9d82e049095370ae7f4c8f23ad03e3a0717a9ab72edf714ae31d8cd407ff0da4"
     },
     {
       "name": "vcard",
@@ -5756,7 +5756,7 @@
       "prefix": "vcard",
       "expansion": "com.tegmentum.ducklink.vcard",
       "wit_contract_version": "2.2.0",
-      "content_digest": "0450344084cad972f92479217ff777adfea3b925ba85655ff5fe090f666e2e08"
+      "content_digest": "bfd8774ef0ad1b130b582b1b6c826e9a877712385e7707c3cdc9e271b073adc8"
     },
     {
       "name": "ini",
