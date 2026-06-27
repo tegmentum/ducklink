@@ -8,7 +8,7 @@
 // synchronously, so extensions are PRE-LOADED; `request-load` then returns the
 // cached result and `call-*` dispatch synchronously to the loaded instance.
 import { createRuntimeBindgen } from '@tegmentum/wasi-polyfill/wasip2/runtime'
-import { configurePolyfill } from './run-core.mjs'
+import { configurePolyfill, hostProviderStubs } from './run-core.mjs'
 
 export function createExtensionHost() {
   // name -> { instance, pending }
@@ -178,6 +178,11 @@ export function createExtensionHost() {
         throw new Error('no extension loaded for callback ' + handle)
       }
       return {
+        // The core also imports the rich-types host interfaces (collation /
+        // pragma / storage / index / files). The sample extension registers
+        // none of them, so the empty stubs report "nothing registered"; an
+        // extension that does would override these here.
+        ...hostProviderStubs(),
         'duckdb:component/host-extension-loader': {
           requestLoad: (name) => loaded.has(name),
         },

@@ -108,6 +108,47 @@ export const duckdbStubImports = {
     callPragma: () => { throw new Error('callbacks unavailable') },
     callCast: () => { throw new Error('callbacks unavailable') },
   },
+  // Rich-types host callbacks the core enumerates on load (collations, pragmas,
+  // custom storage backends, index types, host files). The plain-query path
+  // registers none of these, so the stubs report "nothing registered". The
+  // extension host (coreImports) overrides these when an extension is loaded.
+  ...hostProviderStubs(),
+}
+
+// Empty implementations of the core's rich-types host interfaces. Shared by the
+// plain-query stubs and the extension host so the core instantiates whether or
+// not an extension contributes collations/pragmas/storage/index/file backends.
+export function hostProviderStubs() {
+  return {
+    'duckdb:extension/collation-host': {
+      collationList: () => [],
+    },
+    'duckdb:extension/pragma-host': {
+      pragmaList: () => [],
+    },
+    'duckdb:extension/storage-host': {
+      storageListTypes: () => [],
+      storageAttach: () => { throw new Error('no storage backend registered') },
+      storageListTables: () => { throw new Error('no storage backend registered') },
+      storageTableColumns: () => { throw new Error('no storage backend registered') },
+      storageScanOpen: () => { throw new Error('no storage backend registered') },
+      storageScanNext: () => { throw new Error('no storage backend registered') },
+      storageScanClose: () => { throw new Error('no storage backend registered') },
+    },
+    'duckdb:extension/index-host': {
+      indexTypeList: () => [],
+      indexCreate: () => { throw new Error('no index backend registered') },
+      indexAppend: () => { throw new Error('no index backend registered') },
+      indexBuild: () => { throw new Error('no index backend registered') },
+      indexSearch: () => { throw new Error('no index backend registered') },
+      indexDrop: () => { throw new Error('no index backend registered') },
+    },
+    'duckdb:extension/files-host': {
+      fileOpen: () => { throw new Error('no host file backend registered') },
+      fileRead: () => { throw new Error('no host file backend registered') },
+      fileClose: () => { throw new Error('no host file backend registered') },
+    },
+  }
 }
 
 // Instantiate the core component. `additionalImports` defaults to the stubs;
