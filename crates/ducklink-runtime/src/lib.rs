@@ -108,37 +108,12 @@ pub fn component_contract_major(engine: &Engine, component: &Component) -> Optio
 ///     component imports everything `@2.0.x` -> minor 0).
 ///   - `None` if it imports the package UNVERSIONED (legacy pre-versioning).
 ///
-/// This completes the runtime version proxy with MINOR granularity (the shared
-/// [`datalink_contract::component_contract_major`] keeps only the major). The
-/// introspection technique mirrors that crate: scan `component_type().imports`,
-/// whose instance names look like `duckdb:extension/runtime@2.1.0`.
-///
-/// NOTE: this lives in ducklink (not the shared crate) so it ships with the 2.1.0
-/// bump without a cross-repo change; lifting it into `datalink-contract` so sqlink
-/// inherits the same minor story is a recommended follow-up.
+/// Thin wrapper over the shared [`datalink_contract::component_contract_version`]
+/// pinned to this host's [`CONTRACT_PACKAGE`] — the MINOR-granular companion to
+/// [`component_contract_major`]. Lifted into `datalink-contract` so sqlink
+/// inherits the same minor story from the one shared guard.
 pub fn component_contract_version(engine: &Engine, component: &Component) -> Option<(u64, u64)> {
-    let mut found: Option<(u64, u64)> = None;
-    for (name, _) in component.component_type().imports(engine) {
-        let pkg = name.split('/').next().unwrap_or(name);
-        if !pkg.starts_with(CONTRACT_PACKAGE) {
-            continue;
-        }
-        let ver = match name.rsplit_once('@') {
-            Some((_, ver)) => ver,
-            None => return None, // unversioned -> legacy
-        };
-        let mut parts = ver.split('.');
-        let major = parts.next().and_then(|m| m.parse::<u64>().ok());
-        let minor = parts.next().and_then(|m| m.parse::<u64>().ok()).unwrap_or(0);
-        if let Some(major) = major {
-            found = match found {
-                // Keep the highest (major, minor) seen for the contract package.
-                Some(cur) if cur >= (major, minor) => Some(cur),
-                _ => Some((major, minor)),
-            };
-        }
-    }
-    found
+    datalink_contract::component_contract_version(engine, component, CONTRACT_PACKAGE)
 }
 
 /// Loader pre-check: reject a component whose `duckdb:extension` contract major
@@ -157,57 +132,25 @@ pub fn check_component_contract(
     component: &Component,
     extension_name: &str,
 ) -> wasmtime::Result<()> {
-    let major = component_contract_major(engine, component);
-    // The shared guard handles the MAJOR-mismatch + unversioned-legacy cases
-    // (message + behavior preserved exactly).
-    datalink_contract::check_component_contract(
-        major,
-        CONTRACT_MAJOR,
-        CONTRACT_PACKAGE,
-        extension_name,
-    )
-    // datalink-contract returns anyhow::Result; map its error into the
-    // wasmtime::Error this host's loader expects (the message is preserved).
-    .map_err(|e| wasmtime::Error::msg(e.to_string()))?;
-
-    // MINOR gate (additive, completes the runtime proxy): same major, but the
-    // component needs a HIGHER minor than this host provides -> it imports
-    // interfaces this host can't satisfy. Reject with a friendly message BEFORE
-    // wasmtime fails at instantiate with a cryptic missing-import error. A LOWER
-    // or equal minor is fine (additive forward-compat: a 2.0 component on a 2.1
-    // host still loads).
-    let component_ver = component_contract_version(engine, component);
-    check_contract_minor(
-        component_ver,
+    // The shared minor-aware guard handles ALL cases with messages + behavior
+    // preserved exactly: MAJOR-mismatch + unversioned/legacy (delegated to
+    // datalink_contract::check_component_contract internally), plus the MINOR
+    // gate -- same major but the component needs a HIGHER minor than this host
+    // provides (it imports interfaces this host can't satisfy), rejected with a
+    // friendly message BEFORE wasmtime fails at instantiate with a cryptic
+    // missing-import error. A LOWER or equal minor is fine (additive
+    // forward-compat: a 2.0 component on a 2.1 host still loads).
+    let version = component_contract_version(engine, component);
+    datalink_contract::check_component_version(
+        version,
         CONTRACT_MAJOR,
         CONTRACT_MINOR,
         CONTRACT_PACKAGE,
         extension_name,
     )
-    .map_err(wasmtime::Error::msg)
-}
-
-/// Pure MINOR-gate decision (extracted so it is unit-testable without a real
-/// `Component`). Given the `component_ver` a component targets and the host's
-/// `(host_major, host_minor)`, returns `Err(message)` iff the component needs a
-/// HIGHER minor on the SAME major than the host provides; `Ok(())` otherwise.
-/// Major-mismatch / legacy / lower-or-equal-minor are all `Ok` here (the major +
-/// legacy cases are handled by the shared guard before this).
-fn check_contract_minor(
-    component_ver: Option<(u64, u64)>,
-    host_major: u64,
-    host_minor: u64,
-    package: &str,
-    ext_name: &str,
-) -> Result<(), String> {
-    match component_ver {
-        Some((cmajor, cminor)) if cmajor == host_major && cminor > host_minor => Err(format!(
-            "extension '{ext_name}' needs {package} contract >= {cmajor}.{cminor} but this \
-             host speaks {host_major}.{host_minor}; upgrade the host (or use a build \
-             targeting {host_major}.{host_minor})"
-        )),
-        _ => Ok(()),
-    }
+    // datalink-contract returns anyhow::Result; map its error into the
+    // wasmtime::Error this host's loader expects (the message is preserved).
+    .map_err(|e| wasmtime::Error::msg(e.to_string()))
 }
 
 #[cfg(test)]
@@ -255,15 +198,17 @@ mod contract_guard_tests {
         assert!(legacy.contains("duckdb:extension"));
     }
 
-    // MINOR-gate completion (2.1.0): additive forward-compat within a major.
+    // MINOR-gate completion (2.1.0): additive forward-compat within a major,
+    // now exercised through the SHARED datalink_contract::check_component_version
+    // path (the local check_contract_minor was lifted into datalink-contract).
     #[test]
     fn minor_gate_admits_equal_and_lower_rejects_higher() {
-        use super::{check_contract_minor, CONTRACT_MINOR, CONTRACT_PACKAGE};
+        use super::{CONTRACT_MINOR, CONTRACT_PACKAGE};
         let host_major = CONTRACT_MAJOR;
         let host_minor = CONTRACT_MINOR; // 1
 
         // Equal minor (2.1 component on a 2.1 host) -> Ok.
-        assert!(check_contract_minor(
+        assert!(datalink_contract::check_component_version(
             Some((host_major, host_minor)),
             host_major,
             host_minor,
@@ -274,7 +219,7 @@ mod contract_guard_tests {
 
         // Lower minor (an existing 2.0 component on a 2.1 host) -> Ok
         // (additive forward-compat: it imports a subset of what the host provides).
-        assert!(check_contract_minor(
+        assert!(datalink_contract::check_component_version(
             Some((host_major, 0)),
             host_major,
             host_minor,
@@ -285,20 +230,32 @@ mod contract_guard_tests {
 
         // Higher minor (a 2.1 component on a 2.0 host) -> rejected with the
         // friendly, actionable message BEFORE the cryptic instantiate failure.
-        let err = check_contract_minor(
+        let err = datalink_contract::check_component_version(
             Some((2, 1)),
             2,
             0, // pretend this host only speaks 2.0
             CONTRACT_PACKAGE,
             "needs_copy",
         )
-        .unwrap_err();
+        .unwrap_err()
+        .to_string();
         assert!(err.contains("needs_copy"));
         assert!(err.contains("needs duckdb:extension contract >= 2.1"));
         assert!(err.contains("speaks 2.0"));
 
-        // Legacy / no version -> not the minor gate's concern (Ok here).
-        assert!(check_contract_minor(None, host_major, host_minor, CONTRACT_PACKAGE, "ext").is_ok());
+        // Legacy / no version -> the comprehensive shared guard rejects it as
+        // legacy (the major-guard's concern, behavior preserved), not via the
+        // minor gate.
+        let legacy = datalink_contract::check_component_version(
+            None,
+            host_major,
+            host_minor,
+            CONTRACT_PACKAGE,
+            "ext",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(legacy.contains("UNVERSIONED"));
     }
 }
 
