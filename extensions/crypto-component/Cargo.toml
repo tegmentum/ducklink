@@ -14,11 +14,10 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-sha1 = "0.10"
-sha2 = "0.10"
-sha3 = "0.10"
-blake3 = "1"
-crc32fast = "1"
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+# This shim is GENERATED from the core by datalink-extcore::duckdb_shim!.
+crypto-core = { path = "../../../datalink/extensions/crypto-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"

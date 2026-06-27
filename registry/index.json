@@ -560,7 +560,7 @@
       "prefix": "crypto",
       "expansion": "com.tegmentum.ducklink.crypto",
       "wit_contract_version": "2.2.0",
-      "content_digest": "2a5428480ddeed233cd2e9d0dc9ef8fa4deb23f2cbb5e2597f9ac67372a1a09a"
+      "content_digest": "6e17448b1ad7dd7efb3d1d92e749a3e93b54bf8e29265bb8d1907b41b5ef8459"
     },
     {
       "name": "markdown",
@@ -802,7 +802,7 @@
       "prefix": "url",
       "expansion": "com.tegmentum.ducklink.url",
       "wit_contract_version": "2.2.0",
-      "content_digest": "eb5d773c7198aca6a4be152d0b80ef9b0a09a97e21286a2963c3782dabef1ba6"
+      "content_digest": "2c864b50d736875960652b7a85cda829bf625c667696a17d78d09c0d48fb46c2"
     },
     {
       "name": "email",
@@ -840,7 +840,7 @@
       "prefix": "email",
       "expansion": "com.tegmentum.ducklink.email",
       "wit_contract_version": "2.2.0",
-      "content_digest": "80b6ed25fd6966a4216c06b7bd11cf222616080aaa38b2786b66eee940e99e0c"
+      "content_digest": "766c3f1ec69584e542bf7e4eb271c2a922f69028e920f9b16a1499adb6b6c6b0"
     },
     {
       "name": "semver",
@@ -1412,7 +1412,7 @@
       "prefix": "geohash",
       "expansion": "com.tegmentum.ducklink.geohash",
       "wit_contract_version": "2.2.0",
-      "content_digest": "d64c77990a75c430cdecc8829536ca6b035b8976b086ab2e7a556d7800971309"
+      "content_digest": "687c757106a5adad2b3518246870b4e4b5f7534424b585348fa7ebb20de77f9c"
     },
     {
       "name": "parsertools",
@@ -1606,7 +1606,7 @@
       "prefix": "jwt",
       "expansion": "com.tegmentum.ducklink.jwt",
       "wit_contract_version": "2.2.0",
-      "content_digest": "b306baa915e808feb5ee1a588cff6571867b2f953aafd777339b129b471546cf"
+      "content_digest": "6fd745173743b8c80350a8d991e22529e02be346962f916c402fcfdf979f7dc1"
     },
     {
       "name": "totp",
@@ -1645,7 +1645,7 @@
       "prefix": "totp",
       "expansion": "com.tegmentum.ducklink.totp",
       "wit_contract_version": "2.2.0",
-      "content_digest": "148099801686a331692e3aca905d9a205cb99fda3e6f3d44afa1c48512f917cf"
+      "content_digest": "83020dc6922ba1a80cade811f93d24c2411a9d59ae75774d0abead15cfade092"
     },
     {
       "name": "baseconv",
@@ -1795,7 +1795,7 @@
       "prefix": "ipaddr",
       "expansion": "com.tegmentum.ducklink.ipaddr",
       "wit_contract_version": "2.2.0",
-      "content_digest": "428c079b43c0131041fa72ef9dc3284190fd5c037ca71c639e5f9d226823a94e"
+      "content_digest": "983694d7c4c74509e25f03faa6798bd25ad50c10240c7cebdd3ff3573beb3ae9"
     },
     {
       "name": "mime",
@@ -3463,7 +3463,7 @@
       "prefix": "toml",
       "expansion": "com.tegmentum.ducklink.toml",
       "wit_contract_version": "2.2.0",
-      "content_digest": "e9c1d36241bc44253a08fa100c0efbe36d042c9bc68df478a4336afea1226953"
+      "content_digest": "ace96e75a005e55ecd719b9108490bf61246c19d0ac8c0896c360ac008f35b34"
     },
     {
       "name": "yaml",
@@ -5027,7 +5027,7 @@
       "prefix": "bencode",
       "expansion": "com.tegmentum.ducklink.bencode",
       "wit_contract_version": "2.2.0",
-      "content_digest": "e6db80e74bf221c82eaf21cdbef93cdac7832457da8a08ec5cfe2a22c7bbbac3"
+      "content_digest": "6fdbeabd453c368ac73f06b35dc2ec6cc4c977fb713024e52e21e7c99172a784"
     },
     {
       "name": "maidenhead",
@@ -5169,7 +5169,7 @@
       "prefix": "mailto",
       "expansion": "com.tegmentum.ducklink.mailto",
       "wit_contract_version": "2.2.0",
-      "content_digest": "5fc0fab9fc99dc215c4287826cb705699740d7a472ac1bbbc32dc532b0886f3b"
+      "content_digest": "4e5b41f1147ae06fe010a13f9e0ea11d2b94c48b4f23d36e6c4677e8e51f8052"
     },
     {
       "name": "hexdump",
@@ -5232,7 +5232,7 @@
       "prefix": "secp256k1",
       "expansion": "com.tegmentum.ducklink.secp256k1",
       "wit_contract_version": "2.2.0",
-      "content_digest": "dcb8a55f7ef62dbdb260dffcbc3bc1a9376a3a61e6ab50c9149b21243078dc3f"
+      "content_digest": "57b00e6ce02db299e210d516369a1a49d1f74a0a81219dce24ff7c312996d20f"
     },
     {
       "name": "bibtex",
@@ -5300,7 +5300,7 @@
       "prefix": "useragent",
       "expansion": "com.tegmentum.ducklink.useragent",
       "wit_contract_version": "2.2.0",
-      "content_digest": "2e2537ffa952dfb6850cb0fb8acf4da7173504ead405cb5f48965bae43d305d5"
+      "content_digest": "04602669f00d5cfadfcbf22901ca354e16afb313b7d9ef695ea42f1a3dd71e47"
     },
     {
       "name": "ical",
