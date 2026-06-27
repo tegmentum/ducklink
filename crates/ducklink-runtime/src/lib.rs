@@ -243,6 +243,33 @@ mod contract_guard_tests {
         assert!(err.contains("needs duckdb:extension contract >= 2.1"));
         assert!(err.contains("speaks 2.0"));
 
+        // 2.2.0: the shared minor gate rejects a 2.2-component on a 2.1-host
+        // (host_minor=1) with the friendly, actionable message -- the concrete
+        // bump this PR lands. A 2.1-host cannot satisfy the 2.2 Items 6-7
+        // imports, so the gate stops it BEFORE the cryptic instantiate failure.
+        let err_22 = datalink_contract::check_component_version(
+            Some((2, 2)),
+            2,
+            1, // pretend this host only speaks 2.1
+            CONTRACT_PACKAGE,
+            "needs_arrow",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err_22.contains("needs_arrow"));
+        assert!(err_22.contains("needs duckdb:extension contract >= 2.2"));
+        assert!(err_22.contains("speaks 2.1"));
+
+        // And the CURRENT 2.2 host (CONTRACT_MINOR=2) ADMITS a 2.2-component.
+        assert!(datalink_contract::check_component_version(
+            Some((CONTRACT_MAJOR, CONTRACT_MINOR)),
+            CONTRACT_MAJOR,
+            CONTRACT_MINOR,
+            CONTRACT_PACKAGE,
+            "arrow_ext",
+        )
+        .is_ok());
+
         // Legacy / no version -> the comprehensive shared guard rejects it as
         // legacy (the major-guard's concern, behavior preserved), not via the
         // minor gate.

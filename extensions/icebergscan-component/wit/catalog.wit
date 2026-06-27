@@ -1,4 +1,4 @@
-package duckdb:extension@2.1.0;
+package duckdb:extension@2.2.0;
 
 interface catalog {
   use runtime.{cast-callback};
