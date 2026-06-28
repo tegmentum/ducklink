@@ -1,0 +1,173 @@
+package duckdb:extension@3.1.0;
+
+interface types {
+  // ESCAPE-HATCH logical type. The `complex` arm carries a DuckDB type-expression
+  // string (e.g. "INTEGER[]", "STRUCT(a INTEGER, b VARCHAR)"); the core resolves it
+  // to a real logical type. This makes `logicaltype` a `variant` (was an `enum`); the
+  // fieldless arms keep their discriminant order, so the canonical-ABI is appended-to,
+  // not reordered. Any FUTURE type rides this arm with no further contract bump.
+  variant logicaltype {
+    boolean,
+    int64,
+    uint64,
+    float64,
+    text,
+    blob,
+    int32,
+    timestamp,
+    int8,
+    int16,
+    uint8,
+    uint16,
+    uint32,
+    float32,
+    date,
+    time,
+    timestamptz,
+    decimal,
+    interval,
+    uuid,
+    complex(string),
+  }
+
+  // DuckDB DECIMAL is a HUGEINT-backed scaled integer:
+  //   value = ((upper as i128) << 64 | lower as i128), interpreted with
+  //   `width` total digits and `scale` fractional digits.
+  record decimalvalue {
+    lower: u64,
+    upper: u64,
+    width: u8,
+    scale: u8,
+  }
+
+  // DuckDB INTERVAL: months + days + microseconds components.
+  record intervalvalue {
+    months: s32,
+    days: s32,
+    micros: s64,
+  }
+
+  // 128-bit UUID. hi/lo are the logical big-endian halves of the UUID value
+  // (NOT the sign-flipped physical hugeint storage DuckDB uses internally).
+  record uuidvalue {
+    hi: u64,
+    lo: u64,
+  }
+
+  // ESCAPE-HATCH composite value. `type-expr` is a DuckDB type string (e.g.
+  // "INTEGER[]" / "STRUCT(a INTEGER, b VARCHAR)") and `json` is the value rendered
+  // as JSON (e.g. "[10,20,30]" / {"a":1,"b":"hi"}). This is a FLAT record -- it does
+  // NOT reference `duckvalue`, so there is no recursive WIT cycle. The core
+  // reconstructs the real LIST/STRUCT vector from the JSON via the duckdb C vector
+  // API (which has no recursion limit).
+  record complexvalue {
+    type-expr: string,
+    json: string,
+  }
+
+  record funcarg {
+    name: option<string>,
+    logical: logicaltype,
+  }
+
+  flags funcflags {
+    deterministic,
+    commutative,
+    stateless,
+    sideeffecting,
+    deprecated,
+  }
+
+  record funcopts {
+    description: option<string>,
+    tags: list<string>,
+    attributes: funcflags,
+  }
+
+  record columndef {
+    name: string,
+    logical: logicaltype,
+  }
+
+  record extopts {
+    description: option<string>,
+    tags: list<string>,
+  }
+
+  variant duckvalue {
+    null,
+    boolean(bool),
+    int64(s64),
+    uint64(u64),
+    float64(f64),
+    text(string),
+    blob(list<u8>),
+    int32(s32),
+    timestamp(s64),
+    int8(s8),
+    int16(s16),
+    uint8(u8),
+    uint16(u16),
+    uint32(u32),
+    float32(f32),
+    date(s32),
+    time(s64),
+    timestamptz(s64),
+    decimal(decimalvalue),
+    interval(intervalvalue),
+    uuid(uuidvalue),
+    complex(complexvalue),
+  }
+
+  type resultset = list<list<duckvalue>>;
+  type rowbatch = list<list<duckvalue>>;
+
+  record invokeinfo {
+    rowindex: option<u64>,
+    iswindow: bool,
+  }
+
+  variant duckerror {
+    invalidargument(string),
+    unsupported(string),
+    invalidstate(string),
+    io(string),
+    internal(string),
+  }
+
+  variant configerror {
+    invalidkey(string),
+    typemismatch(string),
+    unavailable(string),
+    internalconfig(string),
+  }
+
+  enum loglevel {
+    trace,
+    debug,
+    info,
+    warn,
+    error,
+  }
+
+  record logfield {
+    key: string,
+    value: string,
+  }
+
+  record loadresult {
+    name: string,
+    version: option<string>,
+    requires: list<capabilitykind>,
+  }
+
+  enum capabilitykind {
+    scalar,
+    table,
+    aggregate,
+    pragma,
+    macro,
+    catalog,
+    file-format,
+  }
+}
