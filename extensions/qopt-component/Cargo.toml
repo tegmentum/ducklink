@@ -1,0 +1,27 @@
+[package]
+name = "qopt-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Component-driven optimizer PoC (2.3.0 / v3). Registers an optimizer rule; on a
+plan whose flattened shape contains a GET on a table named 'optme', returns a
+rewrite-query directive that re-plans the whole query to SELECT 99. Proves the
+component-driven OptimizerExtension fires + the rewrite applies end-to-end.
+"""
+license = "MIT"
+publish = false
+
+[lib]
+name = "qopt"
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension-optimizer"

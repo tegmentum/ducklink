@@ -1,0 +1,36 @@
+package duckdb:extension@3.0.0;
+
+use runtime;
+use callback-dispatch;
+use config;
+use logging;
+use catalog;
+use files;
+use guest;
+use optimizer;
+use optimizer-dispatch;
+
+world duckdb-extension {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  export guest;
+  export callback-dispatch;
+}
+
+// Optimizer-capable world: imports the optimizer-rule registration surface and
+// exports the optimizer-dispatch callback (call-optimize). The host offers the
+// flattened plan-shape; the rule returns a rewrite directive.
+world duckdb-extension-optimizer {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import optimizer;
+  export guest;
+  export callback-dispatch;
+  export optimizer-dispatch;
+}

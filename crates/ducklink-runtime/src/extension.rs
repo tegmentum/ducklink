@@ -1892,6 +1892,10 @@ pub struct ExtensionInstance {
     // 2.3.0 / v3: lazily-built parser-dispatch bindings (None until first
     // call-parse, or for non-parser extensions).
     parser_bindings: Option<crate::duckdb_extension_parser_bindings::DuckdbExtensionParser>,
+    // 2.3.0 / v3: lazily-built optimizer-dispatch bindings (None until first
+    // call-optimize, or for non-optimizer extensions).
+    optimizer_bindings:
+        Option<crate::duckdb_extension_optimizer_bindings::DuckdbExtensionOptimizer>,
     // 2.1.0: lazily-built copy / secret / writable-storage bindings.
     copy_bindings: Option<crate::duckdb_extension_copy_bindings::DuckdbExtensionCopy>,
     secret_bindings: Option<crate::duckdb_extension_secret_bindings::DuckdbExtensionSecret>,
@@ -2076,6 +2080,7 @@ impl ExtensionInstance {
             index_bindings: None,
             files_bindings: None,
             parser_bindings: None,
+            optimizer_bindings: None,
             copy_bindings: None,
             secret_bindings: None,
             storage_write_bindings: None,
@@ -3340,6 +3345,67 @@ impl ExtensionInstance {
         Ok(match outcome {
             ParseOutcome::Declined => None,
             ParseOutcome::Rewrite(sql) => Some(sql),
+        })
+    }
+
+    // 2.3.0 / v3: lazily-built optimizer-dispatch bindings.
+    fn optimizer_bindings(
+        &mut self,
+    ) -> Result<
+        &crate::duckdb_extension_optimizer_bindings::DuckdbExtensionOptimizer,
+        extension_types::Duckerror,
+    > {
+        if self.optimizer_bindings.is_none() {
+            let built = crate::duckdb_extension_optimizer_bindings::DuckdbExtensionOptimizer::new(
+                self.store.as_context_mut(),
+                &self.instance,
+            )
+            .map_err(map_extension_trap)?;
+            self.optimizer_bindings = Some(built);
+        }
+        Ok(self.optimizer_bindings.as_ref().unwrap())
+    }
+
+    /// Offer the flattened plan (`nodes` = (id, op-type, parent, params-json);
+    /// `query` = the source SQL or empty) to the optimizer rule `handle`. Returns
+    /// `Some(rewrite_sql)` for a `rewrite-query` directive, or `None` for declined /
+    /// a structured `apply` directive (not driven via SQL re-plan). Drives
+    /// `optimizer-dispatch.call-optimize`.
+    pub fn call_optimize(
+        &mut self,
+        handle: u32,
+        nodes: Vec<(u32, String, Option<u32>, String)>,
+        query: &str,
+    ) -> Result<Option<String>, extension_types::Duckerror> {
+        use crate::duckdb_extension_optimizer_bindings::exports::duckdb::extension::optimizer_dispatch::{
+            PlanNode, PlanShape, RewriteDirective,
+        };
+        self.optimizer_bindings()?;
+        let bindings = self.optimizer_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_optimizer_dispatch();
+        let plan_nodes: Vec<PlanNode> = nodes
+            .into_iter()
+            .map(|(id, op_type, parent, params_json)| PlanNode {
+                id,
+                op_type,
+                parent,
+                params_json,
+            })
+            .collect();
+        let plan = PlanShape {
+            nodes: plan_nodes,
+            query: query.to_string(),
+        };
+        let store = &mut self.store;
+        let directive = guest
+            .call_call_optimize(store.as_context_mut(), handle, &plan)
+            .map_err(map_extension_trap)??;
+        Ok(match directive {
+            RewriteDirective::Declined => None,
+            RewriteDirective::RewriteQuery(sql) => Some(sql),
+            // Structured rewrites are not (yet) applied via SQL re-plan; treat as
+            // declined so the core keeps the original plan.
+            RewriteDirective::Apply(_) => None,
         })
     }
 }

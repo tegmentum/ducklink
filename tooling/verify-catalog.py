@@ -69,10 +69,9 @@ def ducklink_checks(cfg, entries):
     # needs a live external server, so they ship a `smoke.sql.requires-live-server`
     # marker instead of a smoke.sql and are excluded from the catalog and `--all`.
     registered = ({e["name"] for e in exts}
-                  # ggsql = the v3 parser-extension capability PoC (proves the
-                  # parser-dispatch contract; end-to-end driving needs the core
-                  # ParserExtension shim), excluded like the typetest fixture.
-                  | {"sample_extension", "sample-extension", "typetest", "ggsql"})
+                  # v3 capability PoCs (parser=ggsql, optimizer=qopt): prove the
+                  # parser/optimizer driving end-to-end; excluded like typetest.
+                  | {"sample_extension", "sample-extension", "typetest", "ggsql", "qopt"})
 
     def is_live_server_backend(name):
         return (root / "extensions" / f"{name}-component"

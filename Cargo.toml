@@ -191,6 +191,7 @@ members = [
     "extensions/frequentitems-component",
     "extensions/sqlitewasm-component",
     "extensions/ggsql-component",
+    "extensions/qopt-component",
     "extensions/hnswfns-component",
     "extensions/jsonfns-component",
     "extensions/inetfns-component",    "extensions/excelfns-component",

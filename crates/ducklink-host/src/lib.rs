@@ -58,6 +58,7 @@ use duckdb_core_bindings::duckdb::extension::index_host as core_index_host;
 use duckdb_core_bindings::duckdb::extension::collation_host as core_collation_host;
 use duckdb_core_bindings::duckdb::extension::pragma_host as core_pragma_host;
 use duckdb_core_bindings::duckdb::extension::parser_host as core_parser_host;
+use duckdb_core_bindings::duckdb::extension::optimizer_host as core_optimizer_host;
 use duckdb_core_bindings::duckdb::extension::files_host as core_files_host;
 use duckdb_core_bindings::duckdb::extension::types as core_types;
 use duckdb_core_bindings::tvm::memory::bytes as core_tvm_bytes;
@@ -616,6 +617,42 @@ impl core_parser_host::Host for CoreStoreState {
             .expect("extension manager mutex poisoned");
         manager
             .dispatch_parse(handle, &query)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+}
+
+// 2.3.0 / v3: the core imports `duckdb:extension/optimizer-host` to pull declared
+// optimizer rules and offer the flattened plan to them. The host PROVIDES it:
+// `optimizer_list` enumerates declarations (the core registers its component
+// OptimizerExtension when non-empty); `call_optimize` routes to the owning
+// component's `optimizer-dispatch.call-optimize` and returns its rewrite SQL.
+impl core_optimizer_host::Host for CoreStoreState {
+    fn optimizer_list(&mut self) -> Vec<core_optimizer_host::OptimizerSpec> {
+        let manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .registered_optimizers()
+            .into_iter()
+            .map(|(rule_name, callback_handle)| core_optimizer_host::OptimizerSpec {
+                rule_name,
+                callback_handle,
+            })
+            .collect()
+    }
+
+    fn call_optimize(
+        &mut self,
+        handle: u32,
+        plan_json: String,
+    ) -> Result<Option<String>, core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_optimize(handle, &plan_json)
             .map_err(convert_extension_duckerror_to_core)
     }
 }
@@ -1571,6 +1608,12 @@ struct ExtensionManager {
     // offers the text via `parser-host.call-parse`; the owning component returns a
     // string->SQL rewrite. Keyed by parser name -> (extension, callback-handle).
     parsers: HashMap<String, (String, u32)>,
+    // 2.3.0 / v3: optimizer rules components have declared via
+    // `optimizer.register-optimizer-rule`. The core registers a component-driven
+    // OptimizerExtension (via optimizer-host.optimizer-list) and offers the
+    // flattened plan via `optimizer-host.call-optimize`. Keyed by rule name ->
+    // (extension, callback-handle).
+    optimizers: HashMap<String, (String, u32)>,
     // Function prefixes (PLAN-prefixes): the registry/index.json name ->
     // {prefix, expansion} map loaded at host start, used to namespace every
     // scalar/table/aggregate registration as `prefix__name`.
@@ -1648,6 +1691,7 @@ impl ExtensionManager {
             collations: HashMap::new(),
             pragmas: HashMap::new(),
             parsers: HashMap::new(),
+            optimizers: HashMap::new(),
             prefix_registry,
             prefix_collisions: prefix::CollisionTracker::default(),
             prefix_recorded: std::collections::HashSet::new(),
@@ -2190,6 +2234,64 @@ impl ExtensionManager {
             extension_types::Duckerror::Invalidstate(format!("parser extension '{ext}' not loaded"))
         })?;
         instance.call_parse(handle, query)
+    }
+
+    /// 2.3.0 / v3: the optimizer rules components have declared, as
+    /// (rule-name, callback-handle). The core registers the component-driven
+    /// OptimizerExtension when this is non-empty.
+    fn registered_optimizers(&self) -> Vec<(String, u32)> {
+        self.optimizers
+            .iter()
+            .map(|(name, (_extension, handle))| (name.clone(), *handle))
+            .collect()
+    }
+
+    /// 2.3.0 / v3: offer the flattened plan (`plan_json` from the core) to the
+    /// optimizer rule that owns `handle`. Parses the neutral JSON node list, drives
+    /// the owning component's `optimizer-dispatch.call-optimize`, and returns the
+    /// `rewrite-query` SQL (or None for declined / structured-apply).
+    fn dispatch_optimize(
+        &mut self,
+        handle: u32,
+        plan_json: &str,
+    ) -> Result<Option<String>, extension_types::Duckerror> {
+        let ext = self
+            .optimizers
+            .values()
+            .find(|(_e, h)| *h == handle)
+            .map(|(e, _h)| e.clone())
+            .ok_or_else(|| {
+                extension_types::Duckerror::Invalidstate(format!(
+                    "no optimizer rule registered for handle {handle}"
+                ))
+            })?;
+        // Parse the core's flattened plan JSON: [{"id":N,"op":"X","parent":P,"table":"T"?}].
+        let parsed: serde_json::Value = serde_json::from_str(plan_json).map_err(|e| {
+            extension_types::Duckerror::Invalidargument(format!("bad plan JSON: {e}"))
+        })?;
+        let mut nodes: Vec<(u32, String, Option<u32>, String)> = Vec::new();
+        if let Some(arr) = parsed.as_array() {
+            for node in arr {
+                let id = node.get("id").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                let op = node
+                    .get("op")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let parent = node
+                    .get("parent")
+                    .and_then(|v| v.as_i64())
+                    .filter(|p| *p >= 0)
+                    .map(|p| p as u32);
+                // params-json carries any extra neutral fields (e.g. the table name).
+                let params = node.to_string();
+                nodes.push((id, op, parent, params));
+            }
+        }
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("optimizer extension '{ext}' not loaded"))
+        })?;
+        instance.call_optimize(handle, nodes, "")
     }
 
     /// The ATTACH `TYPE` names of every storage backend a component has
@@ -2909,6 +3011,7 @@ impl ExtensionManager {
             // 2.3.0 / v3: capture this extension's parser extensions, so the core
             // can offer rejected statements to them (via parser-host).
             let parsers_captured = instance.take_pending_parsers();
+            let optimizers_captured = instance.take_pending_optimizers();
             for parser in &parsers_captured {
                 eprintln!(
                     "[extension-manager] parser '{}' -> extension '{}' (callback={})",
@@ -2917,6 +3020,16 @@ impl ExtensionManager {
                 self.parsers.insert(
                     parser.name.clone(),
                     (parser.extension.clone(), parser.callback_handle),
+                );
+            }
+            for opt in &optimizers_captured {
+                eprintln!(
+                    "[extension-manager] optimizer rule '{}' -> extension '{}' (callback={})",
+                    opt.rule_name, opt.extension, opt.callback_handle
+                );
+                self.optimizers.insert(
+                    opt.rule_name.clone(),
+                    (opt.extension.clone(), opt.callback_handle),
                 );
             }
             for collation in &collations_captured {
@@ -4625,6 +4738,10 @@ fn instantiate_core(
         |state| state,
     )?;
     core_parser_host::add_to_linker::<CoreStoreState, CoreStoreState>(
+        &mut linker,
+        |state| state,
+    )?;
+    core_optimizer_host::add_to_linker::<CoreStoreState, CoreStoreState>(
         &mut linker,
         |state| state,
     )?;
