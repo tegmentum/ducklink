@@ -62,8 +62,11 @@ jobs:
       - name: Install component tooling
         run: |
           set -euo pipefail
-          command -v cargo-component >/dev/null || cargo install cargo-component --locked
-          command -v wac >/dev/null            || cargo install wac-cli --locked
+          # crates.io downloads occasionally reset mid-stream; retry so the heavy
+          # job doesn't fail on transient network blips.
+          retry() { for n in 1 2 3 4 5; do "$@" && return 0; echo "attempt $n failed; retrying in $((n*10))s" >&2; sleep $((n*10)); done; return 1; }
+          command -v cargo-component >/dev/null || retry cargo install cargo-component --locked
+          command -v wac >/dev/null            || retry cargo install wac-cli --locked
 
       - name: Install wasi-sdk
         run: |
