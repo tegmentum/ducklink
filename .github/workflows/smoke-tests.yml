@@ -39,6 +39,14 @@ jobs:
           repository: tegmentum/duckdb-wasm
           path: duckdb-wasm
 
+      # ducklink-host has a path dep on ../../../tvm-wasm/crates/tvm-core (sibling
+      # repo). Check it out as a sibling so the workspace manifest resolves.
+      - name: Checkout tvm-wasm (sibling repo; ducklink-host tvm-core dep)
+        uses: actions/checkout@v4
+        with:
+          repository: tegmentum/tvm-wasm
+          path: tvm-wasm
+
       # The core build (libduckdb-sys/build.rs) needs duckdb.h via
       # DUCKDB_SOURCE_DIR (= ducklink/external/duckdb by default). Public, no token.
       - name: Checkout the DuckDB source (for duckdb.h / DUCKDB_SOURCE_DIR)
