@@ -15,8 +15,9 @@
 
 use libfuzzer_sys::fuzz_target;
 
-#[path = "../../extensions/ggsql-component/src/parse.rs"]
-mod parse;
+// Parse/rewrite logic lifted to the shared datalink core (write-once for
+// the ducklink + sqlink ports). Fuzz the canonical engine.
+use ggsql_core::parse;
 
 fuzz_target!(|data: &[u8]| {
     if data.is_empty() {

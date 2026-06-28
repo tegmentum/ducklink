@@ -21,6 +21,11 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 
+# ggsql VISUALIZE parse/rewrite logic now lives in the shared datalink
+# core (DB-neutral; consumed by the ducklink + sqlink shims). Fuzz it
+# from there rather than #[path]-including the old component-local copy.
+ggsql-core = { path = "../../datalink/extensions/ggsql-core" }
+
 # MySQL wire parser deps (mysql.rs is wit-free: std + sha1).
 sha1 = "0.10"
 # Postgres wire parser deps (postgres.rs is wit-free: std + md5).

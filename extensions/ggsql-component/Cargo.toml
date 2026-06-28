@@ -19,6 +19,10 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
+# Shared, DB-agnostic VISUALIZE parse/rewrite logic (datalink pull-up).
+# This shim only maps the core's neutral Outcome onto the duckdb:extension
+# parser-dispatch surface; the rewrite engine lives ONCE in the core.
+ggsql-core = { path = "../../../datalink/extensions/ggsql-core" }
 
 [package.metadata.component]
 package = "duckdb:extension"

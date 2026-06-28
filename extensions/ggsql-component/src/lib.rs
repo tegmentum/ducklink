@@ -13,9 +13,13 @@
 use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 
-// VISUALIZE parse/rewrite logic lives in a wit-free module so the cargo-fuzz
-// target can drive it natively (never-panic contract; see parse.rs).
-mod parse;
+// VISUALIZE parse/rewrite logic now lives ONCE in the shared datalink
+// `ggsql-core` crate (DB-neutral; consumed by the sqlink shim too). This
+// thin ducklink shim maps the core's neutral `Outcome` onto the
+// `duckdb:extension` parser-dispatch surface. The cargo-fuzz target drives
+// `ggsql_core::parse_visualize` directly (the never-panic contract lives
+// with the core now).
+use ggsql_core::parse;
 
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension-parser" });
 
