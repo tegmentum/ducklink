@@ -67,11 +67,11 @@
     "entries_key": "extensions"
   },
   "identity": {
-    "$comment": "ducklink's Phase-1 values. wit_source_dir is the CANONICAL duckdb:extension contract dir (*.wit files; deps.toml excluded by the glob) -- NOT the per-crate propagated copy in wit.source_dir. witcanon_digest over these (at contract 2.2.0) == da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905.",
+    "$comment": "ducklink's Phase-1 values. wit_source_dir is the CANONICAL duckdb:extension contract dir (*.wit files; deps.toml excluded by the glob) -- NOT the per-crate propagated copy in wit.source_dir. witcanon_digest over these (at the frozen v3 contract 2.3.0) == 437a7c4805b6… (the digest the runtime build.rs computes + serves as CONTRACT_DIGEST). contract_major stays 2 by the v3 freeze policy (docs/wit-freeze-policy.md): v3 is additive over 2.x so existing components load un-rebuilt.",
     "wit_source_dir": "wit/duckdb-extension",
     "contract_package": "duckdb:extension",
     "contract_major": "2",
-    "contract_version": "2.2.0",
+    "contract_version": "2.3.0",
     "artifacts_dir": "artifacts/extensions",
     "wasm_tools_bin": "wasm-tools",
     "exclude": ["sample_extension"]

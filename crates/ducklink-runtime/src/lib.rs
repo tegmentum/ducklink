@@ -59,6 +59,17 @@ pub fn contract_digest() -> &'static str {
 /// v1 component), so a mismatched component never instantiates and silently
 /// marshals corrupted values. The AUTHORITATIVE check is the digest, enforced at
 /// catalog-verify; this @MAJOR check is its runtime proxy.
+///
+/// v3 FREEZE (2026-06-28): the "v3 stabilization" completed the capability surface
+/// (parser, general optimizer, window aggregate+frame, table-fn filter pushdown)
+/// as ADDITIVE interfaces + opt-in worlds, landed at WIT `@2.3.0`. The MAJOR is
+/// deliberately HELD at 2: a major bump would reject every already-shipped @2.x
+/// component (forcing a mass rebuild -- the exact churn v3 exists to END), and
+/// would contradict the additive-only freeze guarantee. "v3" is the FROZEN-SURFACE
+/// MILESTONE, identified by its content-addressed [`CONTRACT_DIGEST`]; it is NOT a
+/// wasmtime-semver major. Under the freeze policy (docs/wit-freeze-policy.md) the
+/// MAJOR never bumps again: all future growth is additive minors (opt-in worlds)
+/// or new types via the `complex()` escape hatch (no bump at all).
 pub const CONTRACT_MAJOR: u64 = 2;
 
 /// The MINOR version of the `duckdb:extension` WIT contract this host speaks.
@@ -70,13 +81,13 @@ pub const CONTRACT_MAJOR: u64 = 2;
 /// this host does not provide, so instantiation would fail with a cryptic
 /// missing-import error. [`check_component_contract`] turns that into a friendly,
 /// actionable message. Bump this in lockstep with each additive MINOR contract
-/// bump (set back to 0 on a new MAJOR). For the 2.2.0 expansion this is 2.
-pub const CONTRACT_MINOR: u64 = 2;
+/// bump (set back to 0 on a new MAJOR). For the 2.3.0 / v3 expansion this is 3.
+pub const CONTRACT_MINOR: u64 = 3;
 
 /// Full contract version string the host advertises (observability only; the
 /// guard compares MAJOR.minor via [`CONTRACT_MAJOR`]/[`CONTRACT_MINOR`], and the
 /// authoritative identity is the content-addressed [`CONTRACT_DIGEST`]).
-pub const CONTRACT_VERSION: &str = "2.2.0";
+pub const CONTRACT_VERSION: &str = "2.3.0";
 
 /// The host's `duckdb:extension` contract version, for logging / a built-in.
 /// This is the human-readable version; the authoritative content-addressed
@@ -375,7 +386,7 @@ pub mod duckdb_extension_copy_bindings {
         // per-world type conversion. NOTE: bump the @version here in lockstep
         // with the contract.
         with: {
-            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -390,7 +401,7 @@ pub mod duckdb_extension_secret_bindings {
         world: "duckdb:extension-host/duckdb-extension-secret",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -405,7 +416,7 @@ pub mod duckdb_extension_storage_write_bindings {
         world: "duckdb:extension-host/duckdb-extension-storage-write",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -420,7 +431,7 @@ pub mod duckdb_extension_table_stream_bindings {
         world: "duckdb:extension-host/duckdb-extension-table-stream",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -434,7 +445,7 @@ pub mod duckdb_extension_aggregate_incr_bindings {
         world: "duckdb:extension-host/duckdb-extension-aggregate-incr",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -448,7 +459,7 @@ pub mod duckdb_extension_conn_bindings {
         world: "duckdb:extension-host/duckdb-extension-conn",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -462,7 +473,7 @@ pub mod duckdb_extension_file_write_bindings {
         world: "duckdb:extension-host/duckdb-extension-file-write",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -476,7 +487,7 @@ pub mod duckdb_extension_index_write_bindings {
         world: "duckdb:extension-host/duckdb-extension-index-write",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -490,7 +501,37 @@ pub mod duckdb_extension_settings_bindings {
         world: "duckdb:extension-host/duckdb-extension-settings",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.2.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+        },
+    });
+}
+
+/// Bindings for the parser-extension world (`duckdb-extension-parser`, 2.3.0 / v3),
+/// which additionally exports `parser-dispatch`. Only components that register a
+/// parser extension satisfy this; built lazily from an already-loaded instance and
+/// driven by a DuckDB `ParserExtension` in the core shim.
+pub mod duckdb_extension_parser_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-parser",
+        require_store_data_send: true,
+        with: {
+            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+        },
+    });
+}
+
+/// Bindings for the general-optimizer world (`duckdb-extension-optimizer`, 2.3.0 /
+/// v3), which additionally exports `optimizer-dispatch`. Only components that
+/// register an optimizer rule satisfy this; built lazily and driven by a DuckDB
+/// `OptimizerExtension` in the core shim (the generalized index-scan rule).
+pub mod duckdb_extension_optimizer_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-optimizer",
+        require_store_data_send: true,
+        with: {
+            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -956,6 +997,28 @@ pub mod reg {
         pub extension: String,
         pub name: String,
         pub file_extension: String,
+        pub callback_handle: u32,
+    }
+
+    /// A parser extension registered by an extension (2.3.0 / v3). `callback_handle`
+    /// routes every `parser-dispatch.call-parse` to the owning component. The core
+    /// shim wires a DuckDB `ParserExtension` that forwards unrecognized statement
+    /// text and applies the returned string->SQL rewrite.
+    #[derive(Clone, Debug)]
+    pub struct ParserReg {
+        pub extension: String,
+        pub name: String,
+        pub callback_handle: u32,
+    }
+
+    /// A general optimizer rule registered by an extension (2.3.0 / v3).
+    /// `callback_handle` routes every `optimizer-dispatch.call-optimize` to the
+    /// owning component. The core shim wires a DuckDB `OptimizerExtension` that
+    /// offers the flattened plan-shape and applies the returned rewrite directive.
+    #[derive(Clone, Debug)]
+    pub struct OptimizerReg {
+        pub extension: String,
+        pub rule_name: String,
         pub callback_handle: u32,
     }
 }

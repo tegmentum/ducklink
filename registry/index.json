@@ -148,7 +148,7 @@
       "source": "builtin",
       "status": "working",
       "artifact": "artifacts/extensions/sample_extension.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "sample_plus_one",
         "sample_emit_sequence",
@@ -168,7 +168,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "sample_extension",
       "expansion": "com.tegmentum.ducklink.sample_extension",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "b5355ee6bc40bdb24db426b00ff1a176f706140c3028a34900467dc395bdc777",
       "providers": [
         {
@@ -181,7 +181,7 @@
           "conformance": {
             "suite": "sample_extension@2",
             "suite_digest": "4c6fae795ef67612e82f4a4ea960848a039d25d11aa554139577db829d1694be",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -210,7 +210,7 @@
       "source": "extensions/isin-component",
       "status": "working",
       "artifact": "artifacts/extensions/isin.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "isin_validate",
         "isin_check_digit",
@@ -224,7 +224,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "isin",
       "expansion": "com.tegmentum.ducklink.isin",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "8a19cf2308e31d07c74e3b88443dba3d8aacd151f9c60d8c670ebd9c1f8ffde7",
       "providers": [
         {
@@ -237,7 +237,7 @@
           "conformance": {
             "suite": "isin@2",
             "suite_digest": "72d666116e2c6ea14bb52afb8a24b27521b25017803262b598c34a571727263b",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -265,7 +265,7 @@
       "source": "extensions/baseN-component",
       "status": "working",
       "artifact": "artifacts/extensions/baseN.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "base32_encode",
         "base32_decode",
@@ -282,7 +282,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "baseN",
       "expansion": "com.tegmentum.ducklink.baseN",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "f6ac1dc2186f73b051da77cdef2592b95fe19989f52915b419afe28634bcc8f0",
       "providers": [
         {
@@ -295,7 +295,7 @@
           "conformance": {
             "suite": "baseN@2",
             "suite_digest": "82d734bb13c74c3686d45284b6e41a43bbc23a945759ba83ded926042336de70",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -322,7 +322,7 @@
       "source": "extensions/luhn-component",
       "status": "working",
       "artifact": "artifacts/extensions/luhn.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "luhn_validate",
         "luhn_check_digit"
@@ -334,7 +334,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "luhn",
       "expansion": "com.tegmentum.ducklink.luhn",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "0458bebaa6b7b866aaf4a67dc0fd7159a39173bf2f0fe81fd355fdd837748bb1"
     },
     {
@@ -360,7 +360,7 @@
       "source": "extensions/iban-component",
       "status": "working",
       "artifact": "artifacts/extensions/iban.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "iban_validate",
         "iban_country",
@@ -373,7 +373,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "iban",
       "expansion": "com.tegmentum.ducklink.iban",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "fec33f7a7b81b40a654afa034d44245243021d56c40f8f8db4472fa79ad7ca4b"
     },
     {
@@ -398,7 +398,7 @@
       "source": "extensions/ean-component",
       "status": "working",
       "artifact": "artifacts/extensions/ean.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "ean_validate",
         "ean_check_digit",
@@ -412,7 +412,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "ean",
       "expansion": "com.tegmentum.ducklink.ean",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "fa5b8c6d5f978a9f29ad593fe89b5dfbed401bb2a12f24c209abfdd0ad424dcc"
     },
     {
@@ -436,7 +436,7 @@
       "source": "extensions/aba-component",
       "status": "working",
       "artifact": "artifacts/extensions/aba.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "aba_validate"
       ],
@@ -447,7 +447,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "aba",
       "expansion": "com.tegmentum.ducklink.aba",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "6f308be50ee62c2c977086f734c50a1c5d4bdc892d1dc49a93f5ddf003b07ea2",
       "providers": [
         {
@@ -460,7 +460,7 @@
           "conformance": {
             "suite": "aba@2",
             "suite_digest": "e2833ab9fdc2e3b09994610b006002a54c0e37ce82f0964bee33e3fd17328dcc",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         },
@@ -480,7 +480,7 @@
           "conformance": {
             "suite": "aba@2",
             "suite_digest": "e2833ab9fdc2e3b09994610b006002a54c0e37ce82f0964bee33e3fd17328dcc",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -507,7 +507,7 @@
       "source": "extensions/creditcard-component",
       "status": "working",
       "artifact": "artifacts/extensions/creditcard.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "cc_validate",
         "cc_network",
@@ -524,7 +524,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "creditcard",
       "expansion": "com.tegmentum.ducklink.creditcard",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "d0a2144663e4b1bcd23cea3f91d6a113f3a46e71923204d49202916fb432ecef",
       "providers": [
         {
@@ -537,7 +537,7 @@
           "conformance": {
             "suite": "creditcard@2",
             "suite_digest": "6c0e5ed82a82412bc37faa293125f18440742a3afef5902839c4af70cd88282e",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -569,7 +569,7 @@
       "repository": "https://github.com/tegmentum/ducklink",
       "source": "extensions/uuidx-component",
       "artifact": "artifacts/extensions/uuidx.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "keywords": [
         "uuid",
         "v7",
@@ -578,7 +578,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "uuidx",
       "expansion": "com.tegmentum.ducklink.uuidx",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "5c7cb63592754f56c04e4f3e19f4b0d53f7730606e8eee01b3ceda19f233cc20"
     },
     {
@@ -613,7 +613,7 @@
       "repository": "https://github.com/tegmentum/ducklink",
       "source": "extensions/crypto-component",
       "artifact": "artifacts/extensions/crypto.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "keywords": [
         "crypto",
         "hash",
@@ -624,7 +624,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "crypto",
       "expansion": "com.tegmentum.ducklink.crypto",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "6e17448b1ad7dd7efb3d1d92e749a3e93b54bf8e29265bb8d1907b41b5ef8459",
       "providers": [
         {
@@ -637,7 +637,7 @@
           "conformance": {
             "suite": "crypto@2",
             "suite_digest": "b11bf7ce1601360c5ab2e819c9980b35a35f3b402a2a68188e09d8c8b3b2e2a1",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -664,7 +664,7 @@
       "source": "extensions/markdown-component",
       "status": "working",
       "artifact": "artifacts/extensions/markdown.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "md_to_html",
         "md_to_text"
@@ -678,7 +678,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "markdown",
       "expansion": "com.tegmentum.ducklink.markdown",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "149ec5cb76eb748392adefd5672d4cca5bae543cfbffa0590fba3b6b523b6f38"
     },
     {
@@ -703,7 +703,7 @@
       "source": "extensions/hashfuncs-component",
       "status": "working",
       "artifact": "artifacts/extensions/hashfuncs.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "xxh32",
         "xxh64",
@@ -720,7 +720,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "hashfuncs",
       "expansion": "com.tegmentum.ducklink.hashfuncs",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "5b2c436495a492631ca7f8f9a6bacb9230fb16d49fbd119856544280c841bd10"
     },
     {
@@ -744,7 +744,7 @@
       "source": "extensions/rapidfuzz-component",
       "status": "working",
       "artifact": "artifacts/extensions/rapidfuzz.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "fuzz_ratio",
         "damerau_levenshtein",
@@ -760,7 +760,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "rapidfuzz",
       "expansion": "com.tegmentum.ducklink.rapidfuzz",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "d2650700ce27008e10c6d560fd1eab38a5a84a36225ab696412f1e778b719ba5"
     },
     {
@@ -785,7 +785,7 @@
       "source": "extensions/casing-component",
       "status": "working",
       "artifact": "artifacts/extensions/casing.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "to_snake_case",
         "to_camel_case",
@@ -803,7 +803,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "casing",
       "expansion": "com.tegmentum.ducklink.casing",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "e7f6b812ec2f51669f08d92e855766812e48b3ad8281d2d1830c1a41a14f2264"
     },
     {
@@ -827,7 +827,7 @@
       "source": "extensions/csscolor-component",
       "status": "working",
       "artifact": "artifacts/extensions/csscolor.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "css_to_hex",
         "css_to_rgb",
@@ -842,7 +842,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "csscolor",
       "expansion": "com.tegmentum.ducklink.csscolor",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "3d2f19e9fb161d1c3fa659867f5f825dc5c461dde0818449cdaa9c67005fd20d"
     },
     {
@@ -865,7 +865,7 @@
       "source": "extensions/url-component",
       "status": "working",
       "artifact": "artifacts/extensions/url.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "url_scheme",
         "url_host",
@@ -882,7 +882,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "url",
       "expansion": "com.tegmentum.ducklink.url",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "2c864b50d736875960652b7a85cda829bf625c667696a17d78d09c0d48fb46c2",
       "providers": [
         {
@@ -895,7 +895,7 @@
           "conformance": {
             "suite": "url@2",
             "suite_digest": "c5d3eb272b70cc5ec9b92c69ce76d1d3f2ebf0372a6128bea829bc5880428b21",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -921,7 +921,7 @@
       "source": "extensions/email-component",
       "status": "working",
       "artifact": "artifacts/extensions/email.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "email_validate",
         "email_domain",
@@ -936,7 +936,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "email",
       "expansion": "com.tegmentum.ducklink.email",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "766c3f1ec69584e542bf7e4eb271c2a922f69028e920f9b16a1499adb6b6c6b0",
       "providers": [
         {
@@ -949,7 +949,7 @@
           "conformance": {
             "suite": "email@2",
             "suite_digest": "894323cb99caa3ca6e83cac0b9c4fdc307786b324edbd302e976e6d7de4d0b22",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -975,7 +975,7 @@
       "source": "extensions/semver-component",
       "status": "working",
       "artifact": "artifacts/extensions/semver.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "semver_valid",
         "semver_major",
@@ -992,7 +992,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "semver",
       "expansion": "com.tegmentum.ducklink.semver",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "621954f9e889c4f7c357468d600240c79ce89460730b2a25e47e5abfa04a74f1",
       "providers": [
         {
@@ -1005,7 +1005,7 @@
           "conformance": {
             "suite": "semver@2",
             "suite_digest": "49f6f5ab2bcf456ee94112167b48933ce1f731984560550560c791b9ee02ed6b",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -1031,7 +1031,7 @@
       "source": "extensions/slug-component",
       "status": "working",
       "artifact": "artifacts/extensions/slug.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "slugify"
       ],
@@ -1044,7 +1044,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "slug",
       "expansion": "com.tegmentum.ducklink.slug",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "916465cc622386262dab034d5060cafb92d78cf86fdda689256a08e52df6673e"
     },
     {
@@ -1068,7 +1068,7 @@
       "source": "extensions/escape-component",
       "status": "working",
       "artifact": "artifacts/extensions/escape.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "html_escape",
         "html_unescape",
@@ -1085,7 +1085,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "escape",
       "expansion": "com.tegmentum.ducklink.escape",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "6274e236fd55b8cd0224ad1c7cb0ab6a9ee68d4bc9cb037e631bf9ff7b8a3f00"
     },
     {
@@ -1108,7 +1108,7 @@
       "source": "extensions/natsort-component",
       "status": "working",
       "artifact": "artifacts/extensions/natsort.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "natsort_compare"
       ],
@@ -1121,7 +1121,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "natsort",
       "expansion": "com.tegmentum.ducklink.natsort",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "746724ea3ffb411e8db8a4a5a4f351cefb5711451db1fde31263c002b7022215"
     },
     {
@@ -1144,7 +1144,7 @@
       "source": "extensions/roman-component",
       "status": "working",
       "artifact": "artifacts/extensions/roman.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "to_roman",
         "from_roman",
@@ -1161,7 +1161,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "roman",
       "expansion": "com.tegmentum.ducklink.roman",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "da384461f8b06e6b2be13438f089e5271be7100925e38a4f017c3ad4421a1700",
       "providers": [
         {
@@ -1174,7 +1174,7 @@
           "conformance": {
             "suite": "roman@2",
             "suite_digest": "512904f3cdd0188a81e32a429b712a908c385910da65f72d9e015e95f49e0c03",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -1200,7 +1200,7 @@
       "source": "extensions/humansize-component",
       "status": "working",
       "artifact": "artifacts/extensions/humansize.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "humansize",
         "humansize_binary"
@@ -1214,7 +1214,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "humansize",
       "expansion": "com.tegmentum.ducklink.humansize",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "afd055ac674dd5417d4c1a4254ac2e25314413e005a1581e19ce1f5a923c57c0"
     },
     {
@@ -1238,7 +1238,7 @@
       "source": "extensions/ids-component",
       "status": "working",
       "artifact": "artifacts/extensions/ids.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "ulid",
         "nanoid",
@@ -1254,7 +1254,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "ids",
       "expansion": "com.tegmentum.ducklink.ids",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "df49628b8d353d35e6710a9ce022046c0f33c6827d704b6b902af1639a5a8178"
     },
     {
@@ -1278,7 +1278,7 @@
       "source": "extensions/idna-component",
       "status": "working",
       "artifact": "artifacts/extensions/idna.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "idna_to_ascii",
         "idna_to_unicode"
@@ -1292,7 +1292,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "idna",
       "expansion": "com.tegmentum.ducklink.idna",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "5620fe55f99e91da10aca6161172bf81d8dbdae82ff0927cff929af52d4e3733"
     },
     {
@@ -1316,7 +1316,7 @@
       "source": "extensions/mac-component",
       "status": "working",
       "artifact": "artifacts/extensions/mac.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "mac_valid",
         "mac_normalize"
@@ -1330,7 +1330,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "mac",
       "expansion": "com.tegmentum.ducklink.mac",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "2d4472dab47d777b371cbf1f77a6882a0b974a023e95947189dc31f7e5faacc8"
     },
     {
@@ -1354,7 +1354,7 @@
       "source": "extensions/isbn-component",
       "status": "working",
       "artifact": "artifacts/extensions/isbn.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "isbn_valid",
         "isbn_normalize"
@@ -1366,7 +1366,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "isbn",
       "expansion": "com.tegmentum.ducklink.isbn",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "5efac8cc5736825780fd08dd295f9fb53796c08657b3af25f6d21951b4eed68e"
     },
     {
@@ -1390,7 +1390,7 @@
       "source": "extensions/humantime-component",
       "status": "working",
       "artifact": "artifacts/extensions/humantime.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "humantime_parse",
         "humantime_format"
@@ -1404,7 +1404,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "humantime",
       "expansion": "com.tegmentum.ducklink.humantime",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "eabbbe556173d55beeb520a62e73e6962dc54dcf9b8458ce688ece67f5fa4b8d"
     },
     {
@@ -1428,7 +1428,7 @@
       "source": "extensions/iso-component",
       "status": "working",
       "artifact": "artifacts/extensions/iso.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "iso_country_name",
         "iso_country_alpha3",
@@ -1443,7 +1443,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "iso",
       "expansion": "com.tegmentum.ducklink.iso",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "adffd04f2cd0a186e6d4acca1d6faea30a0438c596a17a01feb2fd6cf361e58a"
     },
     {
@@ -1467,7 +1467,7 @@
       "source": "extensions/morse-component",
       "status": "working",
       "artifact": "artifacts/extensions/morse.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "morse_encode",
         "morse_decode"
@@ -1479,7 +1479,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "morse",
       "expansion": "com.tegmentum.ducklink.morse",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "5b3dc6e5f1becfde518a5ecbca6f218df328b33467ee84a695558700f5e2fc07"
     },
     {
@@ -1503,7 +1503,7 @@
       "source": "extensions/color-component",
       "status": "working",
       "artifact": "artifacts/extensions/color.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "color_luminance",
         "color_contrast"
@@ -1517,7 +1517,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "color",
       "expansion": "com.tegmentum.ducklink.color",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "2d212fa1becdc86571707388dd5117bedf9f3ff49325cd24090f45bbb451b1f0"
     },
     {
@@ -1541,7 +1541,7 @@
       "source": "extensions/geohash-component",
       "status": "working",
       "artifact": "artifacts/extensions/geohash.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "geohash_encode",
         "geohash_decode_lat",
@@ -1556,7 +1556,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "geohash",
       "expansion": "com.tegmentum.ducklink.geohash",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "687c757106a5adad2b3518246870b4e4b5f7534424b585348fa7ebb20de77f9c",
       "providers": [
         {
@@ -1569,7 +1569,7 @@
           "conformance": {
             "suite": "geohash@2",
             "suite_digest": "0c4a779da6606ebe682fbe3bf150d17d1a6aada4765fcfb96ba3e81ec2434841",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -1596,7 +1596,7 @@
       "source": "extensions/parsertools-component",
       "status": "working",
       "artifact": "artifacts/extensions/parsertools.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "sql_tables",
         "sql_is_valid",
@@ -1611,7 +1611,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "parsertools",
       "expansion": "com.tegmentum.ducklink.parsertools",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "95d48376cd46a6ad8749630dcedd5960d344d53c799a971ca1224fbd980d7e47"
     },
     {
@@ -1635,7 +1635,7 @@
       "source": "extensions/currency-component",
       "status": "working",
       "artifact": "artifacts/extensions/currency.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "currency_name",
         "currency_symbol",
@@ -1651,7 +1651,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "currency",
       "expansion": "com.tegmentum.ducklink.currency",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "99371fc9ff6bc57d5ca568736ad1e35df35e24e87ca9342a2cd8b3afe0a027b6"
     },
     {
@@ -1675,7 +1675,7 @@
       "source": "extensions/hmac-component",
       "status": "working",
       "artifact": "artifacts/extensions/hmac.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "hmac_sha256",
         "hmac_sha512"
@@ -1690,7 +1690,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "hmac",
       "expansion": "com.tegmentum.ducklink.hmac",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "d7debd697d97e37156e369aca86eaea8fbecdc4f953677ab35b38e75efdfc9ff"
     },
     {
@@ -1714,7 +1714,7 @@
       "source": "extensions/phonetic-component",
       "status": "working",
       "artifact": "artifacts/extensions/phonetic.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "soundex",
         "metaphone"
@@ -1728,7 +1728,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "phonetic",
       "expansion": "com.tegmentum.ducklink.phonetic",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "4b78220e56dc13664f51dd5b8880b5be596b91ec4fa598b9b40b8a12390dd6e2"
     },
     {
@@ -1752,7 +1752,7 @@
       "source": "extensions/jwt-component",
       "status": "working",
       "artifact": "artifacts/extensions/jwt.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "jwt_header",
         "jwt_payload"
@@ -1766,7 +1766,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "jwt",
       "expansion": "com.tegmentum.ducklink.jwt",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "6fd745173743b8c80350a8d991e22529e02be346962f916c402fcfdf979f7dc1"
     },
     {
@@ -1790,7 +1790,7 @@
       "source": "extensions/totp-component",
       "status": "working",
       "artifact": "artifacts/extensions/totp.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "totp"
       ],
@@ -1805,7 +1805,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "totp",
       "expansion": "com.tegmentum.ducklink.totp",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "83020dc6922ba1a80cade811f93d24c2411a9d59ae75774d0abead15cfade092"
     },
     {
@@ -1829,7 +1829,7 @@
       "source": "extensions/baseconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/baseconv.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "from_base"
       ],
@@ -1840,7 +1840,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "baseconv",
       "expansion": "com.tegmentum.ducklink.baseconv",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "d122c6e1e7381b110786015f620d9ef2468cbf29f12601d1e5ab9128d673c475"
     },
     {
@@ -1864,7 +1864,7 @@
       "source": "extensions/emoji-component",
       "status": "working",
       "artifact": "artifacts/extensions/emoji.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "emoji_name",
         "emoji_shortcode",
@@ -1879,7 +1879,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "emoji",
       "expansion": "com.tegmentum.ducklink.emoji",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "af75e9a57798ebb868e5e1e03e1cd5f3ba66f148b900dce2b22d4e0fba38c581"
     },
     {
@@ -1903,7 +1903,7 @@
       "source": "extensions/whatlang-component",
       "status": "working",
       "artifact": "artifacts/extensions/whatlang.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "detect_language",
         "detect_language_name",
@@ -1918,7 +1918,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "whatlang",
       "expansion": "com.tegmentum.ducklink.whatlang",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "cc4ee43ab778b9cebadf42ba6404d91540a70b4189a7b58a5b7a27a53f708135"
     },
     {
@@ -1942,7 +1942,7 @@
       "source": "extensions/ipaddr-component",
       "status": "working",
       "artifact": "artifacts/extensions/ipaddr.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "ip_valid",
         "ip_version",
@@ -1955,7 +1955,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "ipaddr",
       "expansion": "com.tegmentum.ducklink.ipaddr",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "983694d7c4c74509e25f03faa6798bd25ad50c10240c7cebdd3ff3573beb3ae9"
     },
     {
@@ -1979,7 +1979,7 @@
       "source": "extensions/mime-component",
       "status": "working",
       "artifact": "artifacts/extensions/mime.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "mime_type",
         "mime_from_ext"
@@ -1993,7 +1993,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "mime",
       "expansion": "com.tegmentum.ducklink.mime",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "f3649523bf87137489d30cb7a0d582c683ad7eaa8ac31e232bb3114533e6c13d"
     },
     {
@@ -2017,7 +2017,7 @@
       "source": "extensions/pluralize-component",
       "status": "working",
       "artifact": "artifacts/extensions/pluralize.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "pluralize",
         "singularize"
@@ -2031,7 +2031,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "pluralize",
       "expansion": "com.tegmentum.ducklink.pluralize",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "c673f4252b418b64467d668e1861d9a9b2c6b6b9031de97f079dac4e5ec727d1"
     },
     {
@@ -2055,7 +2055,7 @@
       "source": "extensions/haversine-component",
       "status": "working",
       "artifact": "artifacts/extensions/haversine.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "haversine_km",
         "haversine_mi"
@@ -2067,7 +2067,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "haversine",
       "expansion": "com.tegmentum.ducklink.haversine",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "e7055b74869f080226a6cb8668e846bdc350a60c63e136b2aa36ebdca3ae5115"
     },
     {
@@ -2091,7 +2091,7 @@
       "source": "extensions/numwords-component",
       "status": "working",
       "artifact": "artifacts/extensions/numwords.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "num_to_words",
         "num_to_ordinal_words"
@@ -2105,7 +2105,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "numwords",
       "expansion": "com.tegmentum.ducklink.numwords",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "a024a7563d07935cc480239ca5db0c32f8313fcd484ea2cd8006184fd5a0ae1e"
     },
     {
@@ -2129,7 +2129,7 @@
       "source": "extensions/ordinal-component",
       "status": "working",
       "artifact": "artifacts/extensions/ordinal.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "ordinal"
       ],
@@ -2140,7 +2140,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "ordinal",
       "expansion": "com.tegmentum.ducklink.ordinal",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "b1edb7a274b79a6bd9d4c6c1efe2e5a9357ded4c6dac1da699802907919158ff"
     },
     {
@@ -2164,7 +2164,7 @@
       "source": "extensions/nato-component",
       "status": "working",
       "artifact": "artifacts/extensions/nato.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "nato"
       ],
@@ -2175,7 +2175,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "nato",
       "expansion": "com.tegmentum.ducklink.nato",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "416ad4ef9d834adf5fbed05742e7d645d5140b2f8f30eced20b75a3531c69b3b"
     },
     {
@@ -2198,7 +2198,7 @@
       "source": "extensions/ascii85-component",
       "status": "working",
       "artifact": "artifacts/extensions/ascii85.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "ascii85_encode",
         "ascii85_decode"
@@ -2212,7 +2212,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "ascii85",
       "expansion": "com.tegmentum.ducklink.ascii85",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "2dfadd893440506e138c048f3ee8c66e7aef576868220e4da9b171b3742342fc",
       "providers": [
         {
@@ -2225,7 +2225,7 @@
           "conformance": {
             "suite": "ascii85@2",
             "suite_digest": "df35bc9afa52d8b746e0023d5077fad6823719269b03e3320b9cc3c776703420",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -2252,7 +2252,7 @@
       "source": "extensions/quotedprintable-component",
       "status": "working",
       "artifact": "artifacts/extensions/quotedprintable.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "qp_encode",
         "qp_decode"
@@ -2266,7 +2266,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "quotedprintable",
       "expansion": "com.tegmentum.ducklink.quotedprintable",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "973c69b16c017d85b304dd8519d473f81e7d4cd84d7e2df95e9aeff638778cea"
     },
     {
@@ -2291,7 +2291,7 @@
       "source": "extensions/unitconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/unitconv.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "unit_convert"
       ],
@@ -2302,7 +2302,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "unitconv",
       "expansion": "com.tegmentum.ducklink.unitconv",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "28c25a04ad9f4128483820b55831a702453825f29319b91df781710043ad5287"
     },
     {
@@ -2326,7 +2326,7 @@
       "source": "extensions/wordwrap-component",
       "status": "working",
       "artifact": "artifacts/extensions/wordwrap.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "word_wrap"
       ],
@@ -2339,7 +2339,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "wordwrap",
       "expansion": "com.tegmentum.ducklink.wordwrap",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "dd2ce03c76e1b2cd681d728d239652b1f8949d229a935a458576e61f3ea5a2ed"
     },
     {
@@ -2363,7 +2363,7 @@
       "source": "extensions/timezone-component",
       "status": "working",
       "artifact": "artifacts/extensions/timezone.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "tz_valid",
         "tz_offset_seconds",
@@ -2379,7 +2379,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "timezone",
       "expansion": "com.tegmentum.ducklink.timezone",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "c0df39de50dd2c578d1b4d3bc1232e4f5c12d2e688986286a674b02a12dcccfe"
     },
     {
@@ -2403,7 +2403,7 @@
       "source": "extensions/rot13-component",
       "status": "working",
       "artifact": "artifacts/extensions/rot13.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "rot13",
         "caesar"
@@ -2415,7 +2415,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "rot13",
       "expansion": "com.tegmentum.ducklink.rot13",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "f9a41db6597ebef91cc4ee8ae32c64d7ac49f40e0bf5821e68020f3c28c26651"
     },
     {
@@ -2439,7 +2439,7 @@
       "source": "extensions/leetspeak-component",
       "status": "working",
       "artifact": "artifacts/extensions/leetspeak.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "to_leet"
       ],
@@ -2450,7 +2450,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "leetspeak",
       "expansion": "com.tegmentum.ducklink.leetspeak",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "b2dbabb87dc4e48e4add91b9949f199f666a0bd2cd8d08759106dd6203d2ae6a"
     },
     {
@@ -2474,7 +2474,7 @@
       "source": "extensions/dms-component",
       "status": "working",
       "artifact": "artifacts/extensions/dms.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "dms_to_decimal",
         "decimal_to_dms"
@@ -2486,7 +2486,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "dms",
       "expansion": "com.tegmentum.ducklink.dms",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "a15d59270f7794095be787ef3154c13441bcfb7675ac87c6e042677e6a2997ae"
     },
     {
@@ -2510,7 +2510,7 @@
       "source": "extensions/cbor-component",
       "status": "working",
       "artifact": "artifacts/extensions/cbor.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "cbor_from_json",
         "cbor_to_json"
@@ -2526,7 +2526,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "cbor",
       "expansion": "com.tegmentum.ducklink.cbor",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "eb56fc05425a22d759ee0bd5673a88e373c06314c77bfda8a6bbd4bd5d027d2e"
     },
     {
@@ -2550,7 +2550,7 @@
       "source": "extensions/msgpack-component",
       "status": "working",
       "artifact": "artifacts/extensions/msgpack.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "msgpack_from_json",
         "msgpack_to_json"
@@ -2566,7 +2566,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "msgpack",
       "expansion": "com.tegmentum.ducklink.msgpack",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "e3ce01fd864a3f749d01c19d4c56fc2f642c4a73eafedcdce79e0b6df4aa27c4"
     },
     {
@@ -2590,7 +2590,7 @@
       "source": "extensions/elements-component",
       "status": "working",
       "artifact": "artifacts/extensions/elements.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "element_name",
         "element_number",
@@ -2605,7 +2605,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "elements",
       "expansion": "com.tegmentum.ducklink.elements",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "213921f1dc64fa7e248e62eb397130f255bf87fb2fc679db382f0d1af76281bb"
     },
     {
@@ -2629,7 +2629,7 @@
       "source": "extensions/vigenere-component",
       "status": "working",
       "artifact": "artifacts/extensions/vigenere.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "vigenere_encrypt",
         "vigenere_decrypt"
@@ -2641,7 +2641,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "vigenere",
       "expansion": "com.tegmentum.ducklink.vigenere",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "9eefe75f1f5e8838cd25c8622d67b1c6fc1cf0df2411d4cd0af32be45981e415"
     },
     {
@@ -2665,7 +2665,7 @@
       "source": "extensions/petname-component",
       "status": "working",
       "artifact": "artifacts/extensions/petname.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "petname"
       ],
@@ -2678,7 +2678,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "petname",
       "expansion": "com.tegmentum.ducklink.petname",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "9b33effa9e43084bc2f4410f489e79796838d6332ac0cd9dc3e062ddebbb88f5"
     },
     {
@@ -2702,7 +2702,7 @@
       "source": "extensions/base58check-component",
       "status": "working",
       "artifact": "artifacts/extensions/base58check.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "base58check_encode",
         "base58check_decode"
@@ -2716,7 +2716,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "base58check",
       "expansion": "com.tegmentum.ducklink.base58check",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "a1a01a0ccc59c8d27400c9dc39919bef338bf62e042889b63c1c3347b029fe30"
     },
     {
@@ -2740,7 +2740,7 @@
       "source": "extensions/checksums-component",
       "status": "working",
       "artifact": "artifacts/extensions/checksums.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "crc16",
         "adler32",
@@ -2757,7 +2757,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "checksums",
       "expansion": "com.tegmentum.ducklink.checksums",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "4d807564abe937214a7f868f5ab5d32bd10d04e1ab34128010fe4c9d9fdbee68"
     },
     {
@@ -2781,7 +2781,7 @@
       "source": "extensions/siphash-component",
       "status": "working",
       "artifact": "artifacts/extensions/siphash.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "siphash"
       ],
@@ -2794,7 +2794,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "siphash",
       "expansion": "com.tegmentum.ducklink.siphash",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "8e9eed58dbfe332023a6fc8338eb0c6f0798f01aca6f2448442b3be116f3342c"
     },
     {
@@ -2819,7 +2819,7 @@
       "source": "extensions/tiktoken-component",
       "status": "working",
       "artifact": "artifacts/extensions/tiktoken.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "tiktoken_count",
         "tiktoken_encode",
@@ -2834,7 +2834,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "tiktoken",
       "expansion": "com.tegmentum.ducklink.tiktoken",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "381012bd0a8d952d38f2e2ebc8c61f4f906480a77a7fb5e1ed315abe4230f1dd"
     },
     {
@@ -2858,7 +2858,7 @@
       "source": "extensions/bech32-component",
       "status": "working",
       "artifact": "artifacts/extensions/bech32.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "bech32_encode",
         "bech32_hrp",
@@ -2874,7 +2874,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "bech32",
       "expansion": "com.tegmentum.ducklink.bech32",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "90bf68d75f22c5e96e4e2dce48b2b3979d35f908098c535a7cb8a0a1ebf19931"
     },
     {
@@ -2898,7 +2898,7 @@
       "source": "extensions/uuid5-component",
       "status": "working",
       "artifact": "artifacts/extensions/uuid5.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "uuid_v5",
         "uuid_v3"
@@ -2912,7 +2912,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "uuid5",
       "expansion": "com.tegmentum.ducklink.uuid5",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "76c9d7ea8d4a0c286ca7dee91a7a1017cd416a5841380655f20e0e67d3e5e6c3"
     },
     {
@@ -2936,7 +2936,7 @@
       "source": "extensions/gravatar-component",
       "status": "working",
       "artifact": "artifacts/extensions/gravatar.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "gravatar_hash",
         "gravatar_url"
@@ -2950,7 +2950,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "gravatar",
       "expansion": "com.tegmentum.ducklink.gravatar",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "965d8f94572bae5dbe2dab4c17a44c111f182f84263beca2bc32dd4e15426ed3"
     },
     {
@@ -2974,7 +2974,7 @@
       "source": "extensions/html2text-component",
       "status": "working",
       "artifact": "artifacts/extensions/html2text.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "html_to_text"
       ],
@@ -2987,7 +2987,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "html2text",
       "expansion": "com.tegmentum.ducklink.html2text",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "51c65ee4fc3dbedd38c92a530bb00743948fa286dba893f656bab10982f39744"
     },
     {
@@ -3011,7 +3011,7 @@
       "source": "extensions/textstat-component",
       "status": "working",
       "artifact": "artifacts/extensions/textstat.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "word_count",
         "sentence_count",
@@ -3026,7 +3026,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "textstat",
       "expansion": "com.tegmentum.ducklink.textstat",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "32b53db967e7da95b14c0db911b9db21d1cce631ebf98bd6ca076cae27b18436"
     },
     {
@@ -3050,7 +3050,7 @@
       "source": "extensions/hashids-component",
       "status": "working",
       "artifact": "artifacts/extensions/hashids.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "hashids_encode",
         "hashids_decode"
@@ -3064,7 +3064,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "hashids",
       "expansion": "com.tegmentum.ducklink.hashids",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "9f1156d98ea68a369f4e9417eb9d260ff63f62f5a808f76b129bbe1121cb58d1"
     },
     {
@@ -3088,7 +3088,7 @@
       "source": "extensions/checkdigit-component",
       "status": "working",
       "artifact": "artifacts/extensions/checkdigit.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "verhoeff_validate",
         "verhoeff_append",
@@ -3102,7 +3102,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "checkdigit",
       "expansion": "com.tegmentum.ducklink.checkdigit",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "274e4a4f0e09ff6fe943228d3cfce9da0c3b87be0e71970c53281628a3a0ed30"
     },
     {
@@ -3126,7 +3126,7 @@
       "source": "extensions/dice-component",
       "status": "working",
       "artifact": "artifacts/extensions/dice.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "dice_roll",
         "dice_min",
@@ -3141,7 +3141,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "dice",
       "expansion": "com.tegmentum.ducklink.dice",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "c5e4d6ff4d36dc6bdef9d49286e39020e3a07a230ec55c5824f3ea5629720c63"
     },
     {
@@ -3165,7 +3165,7 @@
       "source": "extensions/graycode-component",
       "status": "working",
       "artifact": "artifacts/extensions/graycode.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "gray_encode",
         "gray_decode"
@@ -3177,7 +3177,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "graycode",
       "expansion": "com.tegmentum.ducklink.graycode",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "5a5dbbe86339600dc3174b82a822271fe2d55cceccc95ecf6c85fbf90b699af8"
     },
     {
@@ -3201,7 +3201,7 @@
       "source": "extensions/cardtype-component",
       "status": "working",
       "artifact": "artifacts/extensions/cardtype.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "card_brand"
       ],
@@ -3212,7 +3212,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "cardtype",
       "expansion": "com.tegmentum.ducklink.cardtype",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "e7622d65f655323c13067e20a88838369bd3c897487d19c550684cfda5f0e9cd"
     },
     {
@@ -3236,7 +3236,7 @@
       "source": "extensions/money-component",
       "status": "working",
       "artifact": "artifacts/extensions/money.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "format_money"
       ],
@@ -3249,7 +3249,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "money",
       "expansion": "com.tegmentum.ducklink.money",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "94aa0c0016ff1666b011c476af215610122e8a924b7add0ce3334ac9924871f7"
     },
     {
@@ -3273,7 +3273,7 @@
       "source": "extensions/ngrams-component",
       "status": "working",
       "artifact": "artifacts/extensions/ngrams.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "char_ngrams",
         "word_ngrams"
@@ -3287,7 +3287,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "ngrams",
       "expansion": "com.tegmentum.ducklink.ngrams",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "d3ec6a41f1f63cce7a4cd4941d3ef436e699e06bc4bf60caf0ecf608cc32fe43"
     },
     {
@@ -3311,7 +3311,7 @@
       "source": "extensions/stem-component",
       "status": "working",
       "artifact": "artifacts/extensions/stem.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "stem"
       ],
@@ -3324,7 +3324,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "stem",
       "expansion": "com.tegmentum.ducklink.stem",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "c8ff4c6901875efe301c0a3b2d8827bc4b75d7b7bfa808b3e94dd83e6f1bc829"
     },
     {
@@ -3348,7 +3348,7 @@
       "source": "extensions/transliterate-component",
       "status": "working",
       "artifact": "artifacts/extensions/transliterate.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "deunicode"
       ],
@@ -3361,7 +3361,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "transliterate",
       "expansion": "com.tegmentum.ducklink.transliterate",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "2e7fe51e14cc720186fcce59d8bc7ef1caddb595c41321a729d931f0bca638c2"
     },
     {
@@ -3385,7 +3385,7 @@
       "source": "extensions/pluscode-component",
       "status": "working",
       "artifact": "artifacts/extensions/pluscode.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "pluscode_encode",
         "pluscode_valid",
@@ -3402,7 +3402,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "pluscode",
       "expansion": "com.tegmentum.ducklink.pluscode",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "bc9f980cf0f9b661d7cd6a10e4a71400f7b390339233e45aa4375fef0c7d388a"
     },
     {
@@ -3426,7 +3426,7 @@
       "source": "extensions/rot47-component",
       "status": "working",
       "artifact": "artifacts/extensions/rot47.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "rot47"
       ],
@@ -3437,7 +3437,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "rot47",
       "expansion": "com.tegmentum.ducklink.rot47",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "d6408586ba15a571eed8b83858742e1f3d567688ab85f16d800c700092b65fc8"
     },
     {
@@ -3461,7 +3461,7 @@
       "source": "extensions/stopwords-component",
       "status": "working",
       "artifact": "artifacts/extensions/stopwords.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "is_stopword",
         "remove_stopwords"
@@ -3475,7 +3475,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "stopwords",
       "expansion": "com.tegmentum.ducklink.stopwords",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "07bd2ce965111c08822aef0e92d92cbb4314042ca8315e09abbf782c7afaa1b1"
     },
     {
@@ -3499,7 +3499,7 @@
       "source": "extensions/isbnconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/isbnconv.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "isbn10_to_13",
         "isbn13_to_10"
@@ -3511,7 +3511,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "isbnconv",
       "expansion": "com.tegmentum.ducklink.isbnconv",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "7511466f25e7031739a7945b54b62ffb73fecf70508819911b5dd2d4fcd07acc"
     },
     {
@@ -3535,7 +3535,7 @@
       "source": "extensions/passgen-component",
       "status": "working",
       "artifact": "artifacts/extensions/passgen.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "gen_password",
         "gen_password_alnum"
@@ -3549,7 +3549,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "passgen",
       "expansion": "com.tegmentum.ducklink.passgen",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "c25fdb1ad24e8ad410abecc913069145421db8454b187b53e5f043faf6537b4b"
     },
     {
@@ -3573,7 +3573,7 @@
       "source": "extensions/braille-component",
       "status": "working",
       "artifact": "artifacts/extensions/braille.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "to_braille"
       ],
@@ -3584,7 +3584,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "braille",
       "expansion": "com.tegmentum.ducklink.braille",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "2012016c21708564c1db8ccaa34449bbc9b3631d565576ee0c47409f38592466"
     },
     {
@@ -3608,7 +3608,7 @@
       "source": "extensions/toml-component",
       "status": "working",
       "artifact": "artifacts/extensions/toml.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "toml_to_json",
         "json_to_toml"
@@ -3623,7 +3623,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "toml",
       "expansion": "com.tegmentum.ducklink.toml",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "ace96e75a005e55ecd719b9108490bf61246c19d0ac8c0896c360ac008f35b34"
     },
     {
@@ -3647,7 +3647,7 @@
       "source": "extensions/yaml-component",
       "status": "working",
       "artifact": "artifacts/extensions/yaml.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "yaml_to_json",
         "json_to_yaml"
@@ -3662,7 +3662,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "yaml",
       "expansion": "com.tegmentum.ducklink.yaml",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "a7af6195b539386a9dac1a4e5e766abdcb62f8e20d4c2554217cd2805d833523"
     },
     {
@@ -3686,7 +3686,7 @@
       "source": "extensions/unicodenorm-component",
       "status": "working",
       "artifact": "artifacts/extensions/unicodenorm.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "nfc",
         "nfd",
@@ -3702,7 +3702,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "unicodenorm",
       "expansion": "com.tegmentum.ducklink.unicodenorm",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "61f024114789e1460738d79c4a244ab2a85d5dd66c083a333e44b1557f51a72f"
     },
     {
@@ -3726,7 +3726,7 @@
       "source": "extensions/unicodewidth-component",
       "status": "working",
       "artifact": "artifacts/extensions/unicodewidth.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "grapheme_count",
         "display_width"
@@ -3741,7 +3741,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "unicodewidth",
       "expansion": "com.tegmentum.ducklink.unicodewidth",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "c3b835ff93f0558ccd13a2b3db458c9d25eb787a4ba83df5ce1f96417cc616e5"
     },
     {
@@ -3765,7 +3765,7 @@
       "source": "extensions/colorconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/colorconv.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "hex_to_hsl",
         "hex_to_hsv",
@@ -3778,7 +3778,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "colorconv",
       "expansion": "com.tegmentum.ducklink.colorconv",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "906514b25f9265e4bd40e7f7a782ed0e58e481be4261174be72e010308889edb"
     },
     {
@@ -3801,7 +3801,7 @@
       "source": "extensions/jsonschema-component",
       "status": "working",
       "artifact": "artifacts/extensions/jsonschema.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "json_schema_valid"
       ],
@@ -3815,7 +3815,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "jsonschema",
       "expansion": "com.tegmentum.ducklink.jsonschema",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "8f12bcf08167595b79bf2343c7fc597717fe11a41f7eef24b0f51b47e882d58b"
     },
     {
@@ -3839,7 +3839,7 @@
       "source": "extensions/simhash-component",
       "status": "working",
       "artifact": "artifacts/extensions/simhash.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "simhash",
         "simhash_distance"
@@ -3851,7 +3851,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "simhash",
       "expansion": "com.tegmentum.ducklink.simhash",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "f739eb6f5080c8ce1e753a9deff2e33ed99004cd810f3427611cfc204e02ae33"
     },
     {
@@ -3875,7 +3875,7 @@
       "source": "extensions/idextra-component",
       "status": "working",
       "artifact": "artifacts/extensions/idextra.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "ksuid",
         "cuid2"
@@ -3890,7 +3890,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "idextra",
       "expansion": "com.tegmentum.ducklink.idextra",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "e7b6c498b3ca44258b2135912f660d92597533c130f0ccbd5d1bb0f0eb964d66"
     },
     {
@@ -3914,7 +3914,7 @@
       "source": "extensions/phonetic2-component",
       "status": "working",
       "artifact": "artifacts/extensions/phonetic2.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "nysiis",
         "refined_soundex",
@@ -3929,7 +3929,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "phonetic2",
       "expansion": "com.tegmentum.ducklink.phonetic2",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "630ff29fdf97c4f56f85f5917116ab1ec14d0a018d174ed3cc6e46cb66a5a80b"
     },
     {
@@ -3953,7 +3953,7 @@
       "source": "extensions/z85-component",
       "status": "working",
       "artifact": "artifacts/extensions/z85.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "z85_encode",
         "z85_decode"
@@ -3967,7 +3967,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "z85",
       "expansion": "com.tegmentum.ducklink.z85",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "856e02d3b21ac48d7017f32b096e0c4dec2d0a73f2afa129ac2ba11486f4d1af"
     },
     {
@@ -3991,7 +3991,7 @@
       "source": "extensions/initials-component",
       "status": "working",
       "artifact": "artifacts/extensions/initials.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "initials",
         "initials_dotted"
@@ -4003,7 +4003,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "initials",
       "expansion": "com.tegmentum.ducklink.initials",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "0c3a3e584079141b63c4f385c0c6600c485ef40f0fe282d8f2bcb44003c2aef2"
     },
     {
@@ -4027,7 +4027,7 @@
       "source": "extensions/luhngen-component",
       "status": "working",
       "artifact": "artifacts/extensions/luhngen.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "luhn_check_digit",
         "luhn_append"
@@ -4039,7 +4039,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "luhngen",
       "expansion": "com.tegmentum.ducklink.luhngen",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "3f928e033735e815186c628b1766aa3cdae8c345d4565f57e80b2f399756ae08"
     },
     {
@@ -4064,7 +4064,7 @@
       "source": "extensions/pintest-a-component",
       "status": "working",
       "artifact": "artifacts/extensions/pintest_a.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "pin_probe"
       ],
@@ -4073,7 +4073,7 @@
       ],
       "crates": [],
       "min_duckdb_version": "1.0.0",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "b691742e56e205b0f8c182aae94822f0b56ff88132b7c49104ed839b78e65d67"
     },
     {
@@ -4098,7 +4098,7 @@
       "source": "extensions/pintest-b-component",
       "status": "working",
       "artifact": "artifacts/extensions/pintest_b.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "pin_probe"
       ],
@@ -4107,7 +4107,7 @@
       ],
       "crates": [],
       "min_duckdb_version": "1.0.0",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "a033dc0344caa726c3067fd1c382430d4250fea8e2b44af0ab1d3f96257336a8"
     },
     {
@@ -4131,7 +4131,7 @@
       "source": "extensions/atbash-component",
       "status": "working",
       "artifact": "artifacts/extensions/atbash.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "atbash"
       ],
@@ -4142,7 +4142,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "atbash",
       "expansion": "com.tegmentum.ducklink.atbash",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "9f12260f7d220b96fb31fe0394aeb5d8e825436a5254b9186c4a3962cf42a970",
       "providers": [
         {
@@ -4155,7 +4155,7 @@
           "conformance": {
             "suite": "atbash@2",
             "suite_digest": "618f290b2e4031a00c48453fbfbff5c9128d05f124adbfe12e71eb813493e719",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -4182,7 +4182,7 @@
       "source": "extensions/piglatin-component",
       "status": "working",
       "artifact": "artifacts/extensions/piglatin.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "to_pig_latin"
       ],
@@ -4193,7 +4193,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "piglatin",
       "expansion": "com.tegmentum.ducklink.piglatin",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "e499d60e65e9ed499f69bb5b6c5a169c287f1570486ada030e5abb63948515a4"
     },
     {
@@ -4217,7 +4217,7 @@
       "source": "extensions/rle-component",
       "status": "working",
       "artifact": "artifacts/extensions/rle.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "rle_encode",
         "rle_decode"
@@ -4229,7 +4229,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "rle",
       "expansion": "com.tegmentum.ducklink.rle",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "fb71e0106f42d8c104befa4269085291db7f4f782a99eda1450cea125c5db81e"
     },
     {
@@ -4253,7 +4253,7 @@
       "source": "extensions/bbcode-component",
       "status": "working",
       "artifact": "artifacts/extensions/bbcode.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "bbcode_to_html"
       ],
@@ -4264,7 +4264,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "bbcode",
       "expansion": "com.tegmentum.ducklink.bbcode",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "7da5b9034d7acbd77d191f80f9a9ae3213a5fcacf903054c020436557e84544a"
     },
     {
@@ -4288,7 +4288,7 @@
       "source": "extensions/phonenumber-component",
       "status": "working",
       "artifact": "artifacts/extensions/phonenumber.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "phone_valid",
         "phone_format",
@@ -4303,7 +4303,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "phonenumber",
       "expansion": "com.tegmentum.ducklink.phonenumber",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "0d1d1fd8714b0ac1f130a692fc616806d0bc7d75418d85b3191369d1efa7cffd"
     },
     {
@@ -4327,7 +4327,7 @@
       "source": "extensions/pwstrength-component",
       "status": "working",
       "artifact": "artifacts/extensions/pwstrength.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "password_score",
         "password_strength"
@@ -4341,7 +4341,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "pwstrength",
       "expansion": "com.tegmentum.ducklink.pwstrength",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "c086d12643d74a6763dd5db589b7c64507c33194891a2294099bde94ca112736"
     },
     {
@@ -4365,7 +4365,7 @@
       "source": "extensions/qrcode-component",
       "status": "working",
       "artifact": "artifacts/extensions/qrcode.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "qr_svg"
       ],
@@ -4378,7 +4378,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "qrcode",
       "expansion": "com.tegmentum.ducklink.qrcode",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "efa9fabb866fa30e32e91f049a09c19ff6b5cd5887b3321c39833e25e38fbc08"
     },
     {
@@ -4402,7 +4402,7 @@
       "source": "extensions/aggstat-component",
       "status": "working",
       "artifact": "artifacts/extensions/aggstat.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "harmonic_mean"
       ],
@@ -4413,7 +4413,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "aggstat",
       "expansion": "com.tegmentum.ducklink.aggstat",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "84081ce3ccb96f17c9ec127583e95b6c7ee49d30deef91e9e9212c2501517c48",
       "providers": [
         {
@@ -4426,7 +4426,7 @@
           "conformance": {
             "suite": "aggstat@2",
             "suite_digest": "14eec21dc0c9373b3c83730b7d2b0d11615595e2fafea5005828a9992a34093e",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -4453,7 +4453,7 @@
       "source": "extensions/bloom-component",
       "status": "working",
       "artifact": "artifacts/extensions/bloom.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "bloom_filter",
         "bloom_contains"
@@ -4466,7 +4466,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "bloom",
       "expansion": "com.tegmentum.ducklink.bloom",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "42b5d47cecf70963ea397d0fa32583aa59137eea942517d29e44842480d3b180"
     },
     {
@@ -4490,7 +4490,7 @@
       "source": "extensions/minhash-component",
       "status": "working",
       "artifact": "artifacts/extensions/minhash.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "minhash",
         "minhash_similarity"
@@ -4503,7 +4503,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "minhash",
       "expansion": "com.tegmentum.ducklink.minhash",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "32ca4b6c6ebcb66d9f3513531ed166fe32491ca0cb912ddb2e7c5bab2b5ebe17"
     },
     {
@@ -4527,7 +4527,7 @@
       "source": "extensions/countmin-component",
       "status": "working",
       "artifact": "artifacts/extensions/countmin.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "count_min",
         "cms_estimate"
@@ -4540,7 +4540,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "countmin",
       "expansion": "com.tegmentum.ducklink.countmin",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "974eabe410d1abf57059d35b5a30da17c63d67b922ba521560f99079bfd8606c"
     },
     {
@@ -4564,7 +4564,7 @@
       "source": "extensions/dns-component",
       "status": "working",
       "artifact": "artifacts/extensions/dns.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "dns_lookup",
         "dns_resolve_all"
@@ -4577,7 +4577,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "dns",
       "expansion": "com.tegmentum.ducklink.dns",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "08490ddcd218cc7bc134e95b4aa667d9a7626f559728c6d1580fe550eaef70d5"
     },
     {
@@ -4601,7 +4601,7 @@
       "source": "extensions/httpclient-component",
       "status": "working",
       "artifact": "artifacts/extensions/httpclient.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "http_get",
         "http_status",
@@ -4619,7 +4619,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "httpclient",
       "expansion": "com.tegmentum.ducklink.httpclient",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "a56b4030b2d66918986cf97c7bb499be2050eaece4703d01d272ba6b32c57532"
     },
     {
@@ -4643,7 +4643,7 @@
       "source": "extensions/lorem-component",
       "status": "working",
       "artifact": "artifacts/extensions/lorem.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "lorem_words",
         "lorem_title"
@@ -4657,7 +4657,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "lorem",
       "expansion": "com.tegmentum.ducklink.lorem",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "f8f94fe58d5beccc29a807a1082885b97596705ba845f9040c49c6f02cdb7129"
     },
     {
@@ -4681,7 +4681,7 @@
       "source": "extensions/faker-component",
       "status": "working",
       "artifact": "artifacts/extensions/faker.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "fake_name",
         "fake_email",
@@ -4698,7 +4698,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "faker",
       "expansion": "com.tegmentum.ducklink.faker",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "91e058dfd8ae480f90c215c17bf2ff85d330e1e37ad408a25a778c692373b66c"
     },
     {
@@ -4722,7 +4722,7 @@
       "source": "extensions/passphrase-component",
       "status": "working",
       "artifact": "artifacts/extensions/passphrase.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "passphrase"
       ],
@@ -4735,7 +4735,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "passphrase",
       "expansion": "com.tegmentum.ducklink.passphrase",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "70bfe883299bca9279fadd98567742e268eceee608cd10b339c12d29229e5db3"
     },
     {
@@ -4759,7 +4759,7 @@
       "source": "extensions/h3-component",
       "status": "working",
       "artifact": "artifacts/extensions/h3.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "h3_latlng_to_cell",
         "h3_cell_to_lat",
@@ -4777,7 +4777,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "h3",
       "expansion": "com.tegmentum.ducklink.h3",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "1d70c8cdbd73e771aa7b03d971075c6907b86973bbdb2b410028e7b3ea5ad0c5",
       "providers": [
         {
@@ -4790,7 +4790,7 @@
           "conformance": {
             "suite": "h3@2",
             "suite_digest": "bdac7a0ab7cc22fe084b3064a14a558c6ad77ed08691726f94b24fc126fb63dc",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -4817,7 +4817,7 @@
       "source": "extensions/lindel-component",
       "status": "working",
       "artifact": "artifacts/extensions/lindel.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "morton_encode",
         "morton_decode_x",
@@ -4833,7 +4833,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "lindel",
       "expansion": "com.tegmentum.ducklink.lindel",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "2564cb5a5753bff1c02451c9b08b59905212c59092601cae2de83edb2c26b598"
     },
     {
@@ -4857,7 +4857,7 @@
       "source": "extensions/magic-component",
       "status": "working",
       "artifact": "artifacts/extensions/magic.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "magic_mime",
         "magic_extension",
@@ -4873,7 +4873,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "magic",
       "expansion": "com.tegmentum.ducklink.magic",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "3626894ecfcf510b9333b309cce158d7662a6db57f26fe51cd0b86aa48756f6d"
     },
     {
@@ -4897,7 +4897,7 @@
       "source": "extensions/tsid-component",
       "status": "working",
       "artifact": "artifacts/extensions/tsid.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "tsid_encode",
         "tsid_decode",
@@ -4911,7 +4911,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "tsid",
       "expansion": "com.tegmentum.ducklink.tsid",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "bd965d0da2e73f45b73d1d23ba0bb1416368c0a5917d35f2fe6994aadb14b205"
     },
     {
@@ -4935,7 +4935,7 @@
       "source": "extensions/rhai-component",
       "status": "working",
       "artifact": "artifacts/extensions/rhai.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "rhai_eval",
         "rhai_eval_int",
@@ -4950,7 +4950,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "rhai",
       "expansion": "com.tegmentum.ducklink.rhai",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "a65f11738195be4ce030c3063663162162de9240055fd5ee902bdcfa0a986a74"
     },
     {
@@ -4974,7 +4974,7 @@
       "source": "extensions/bitfilters-component",
       "status": "working",
       "artifact": "artifacts/extensions/bitfilters.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "xor_filter",
         "xor_filter_contains"
@@ -4990,7 +4990,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "bitfilters",
       "expansion": "com.tegmentum.ducklink.bitfilters",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "57db3afc223260d7e42452fa70ffab5c7290601ab29f60920f822606cfe7ad16"
     },
     {
@@ -5008,7 +5008,7 @@
       "source": "extensions/prql-component",
       "status": "working",
       "artifact": "artifacts/extensions/prql.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "prql_to_sql",
         "prql_is_valid"
@@ -5022,7 +5022,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "prql",
       "expansion": "com.tegmentum.ducklink.prql",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "7c64907572250d1371747f0f660e095194a21f613f3637a4bad52cb7a86e0efe"
     },
     {
@@ -5040,7 +5040,7 @@
       "source": "extensions/jaq-component",
       "status": "working",
       "artifact": "artifacts/extensions/jaq.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "jq",
         "jq_first"
@@ -5056,7 +5056,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "jaq",
       "expansion": "com.tegmentum.ducklink.jaq",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "bea1a97091e261cc59f7ac990e400890bca93a987d696138e9b1f091d7f6b828"
     },
     {
@@ -5074,7 +5074,7 @@
       "source": "extensions/cron-component",
       "status": "working",
       "artifact": "artifacts/extensions/cron.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "cron_is_valid",
         "cron_next",
@@ -5089,7 +5089,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "cron",
       "expansion": "com.tegmentum.ducklink.cron",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "42c3e2f62ff13771e36428a869d6f310cfe04d2aa6106f80ef0534ad0aa43336"
     },
     {
@@ -5107,7 +5107,7 @@
       "source": "extensions/xml-component",
       "status": "working",
       "artifact": "artifacts/extensions/xml.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "xml_valid",
         "xml_extract",
@@ -5122,7 +5122,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "xml",
       "expansion": "com.tegmentum.ducklink.xml",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "feb5aa4a41ca9276c33c1714a50399e9fdc23d5415dec1e12176b238596626e7"
     },
     {
@@ -5140,7 +5140,7 @@
       "source": "extensions/pinyin-component",
       "status": "working",
       "artifact": "artifacts/extensions/pinyin.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "to_pinyin",
         "to_pinyin_plain",
@@ -5155,7 +5155,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "pinyin",
       "expansion": "com.tegmentum.ducklink.pinyin",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "d62d789b495060e31c7cf3bdadd16df1dc0bc7396a085bc30de45696b7380b22"
     },
     {
@@ -5173,7 +5173,7 @@
       "source": "extensions/sqlformat-component",
       "status": "working",
       "artifact": "artifacts/extensions/sqlformat.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "sql_format",
         "sql_format_compact"
@@ -5187,7 +5187,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "sqlformat",
       "expansion": "com.tegmentum.ducklink.sqlformat",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "ef704c5fe9055129b67af594c640769de75872e6045abb6dd10da17a5fd1956f"
     },
     {
@@ -5205,7 +5205,7 @@
       "source": "extensions/bencode-component",
       "status": "working",
       "artifact": "artifacts/extensions/bencode.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "bencode_to_json",
         "bencode_is_valid"
@@ -5219,7 +5219,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "bencode",
       "expansion": "com.tegmentum.ducklink.bencode",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "6fdbeabd453c368ac73f06b35dc2ec6cc4c977fb713024e52e21e7c99172a784"
     },
     {
@@ -5237,7 +5237,7 @@
       "source": "extensions/maidenhead-component",
       "status": "working",
       "artifact": "artifacts/extensions/maidenhead.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "to_maidenhead",
         "maidenhead_lat",
@@ -5250,7 +5250,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "maidenhead",
       "expansion": "com.tegmentum.ducklink.maidenhead",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "76980ad9ffe9cff712d38198b7e2e05814b9335ec5022e52e849c2805c46f391"
     },
     {
@@ -5268,7 +5268,7 @@
       "source": "extensions/base45-component",
       "status": "working",
       "artifact": "artifacts/extensions/base45.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "base45_encode",
         "base45_decode"
@@ -5282,7 +5282,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "base45",
       "expansion": "com.tegmentum.ducklink.base45",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "9b5efb96655ddef753fefe1c158d12d83b1fae087073666f768338688ddaa94b",
       "providers": [
         {
@@ -5295,7 +5295,7 @@
           "conformance": {
             "suite": "base45@2",
             "suite_digest": "e57aa548585622a8e25905b4c4ca03f1f27d95cda9e07ea49f2746a719b00a7b",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -5316,7 +5316,7 @@
       "source": "extensions/numfmt-component",
       "status": "working",
       "artifact": "artifacts/extensions/numfmt.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "num_group",
         "num_si"
@@ -5328,7 +5328,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "numfmt",
       "expansion": "com.tegmentum.ducklink.numfmt",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "9330c2cc20d13bcfb095948be4e75d7665573b6e352e11fe9d5adbcc1d4c38a3"
     },
     {
@@ -5346,7 +5346,7 @@
       "source": "extensions/mailto-component",
       "status": "working",
       "artifact": "artifacts/extensions/mailto.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "mailto_to",
         "mailto_field",
@@ -5361,7 +5361,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "mailto",
       "expansion": "com.tegmentum.ducklink.mailto",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "4e5b41f1147ae06fe010a13f9e0ea11d2b94c48b4f23d36e6c4677e8e51f8052"
     },
     {
@@ -5379,7 +5379,7 @@
       "source": "extensions/hexdump-component",
       "status": "working",
       "artifact": "artifacts/extensions/hexdump.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "hexdump",
         "hex_pretty"
@@ -5391,7 +5391,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "hexdump",
       "expansion": "com.tegmentum.ducklink.hexdump",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "9045dd9dda8ed0cfbafa524de30be775116211ea653a7b6c225e6cf72f5c8367"
     },
     {
@@ -5409,7 +5409,7 @@
       "source": "extensions/secp256k1-component",
       "status": "working",
       "artifact": "artifacts/extensions/secp256k1.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "secp256k1_pubkey",
         "secp256k1_sign",
@@ -5424,7 +5424,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "secp256k1",
       "expansion": "com.tegmentum.ducklink.secp256k1",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "57b00e6ce02db299e210d516369a1a49d1f74a0a81219dce24ff7c312996d20f"
     },
     {
@@ -5442,7 +5442,7 @@
       "source": "extensions/bibtex-component",
       "status": "working",
       "artifact": "artifacts/extensions/bibtex.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "bibtex_count",
         "bibtex_to_json",
@@ -5457,7 +5457,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "bibtex",
       "expansion": "com.tegmentum.ducklink.bibtex",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "c59f2906a54a6791b74fede6bd92a91725ae297d3ed3f7be003581642c75a031"
     },
     {
@@ -5475,7 +5475,7 @@
       "source": "extensions/useragent-component",
       "status": "working",
       "artifact": "artifacts/extensions/useragent.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "ua_browser",
         "ua_browser_version",
@@ -5492,7 +5492,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "useragent",
       "expansion": "com.tegmentum.ducklink.useragent",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "04602669f00d5cfadfcbf22901ca354e16afb313b7d9ef695ea42f1a3dd71e47"
     },
     {
@@ -5510,7 +5510,7 @@
       "source": "extensions/ical-component",
       "status": "working",
       "artifact": "artifacts/extensions/ical.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "ical_event_count",
         "ical_to_json",
@@ -5526,7 +5526,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "ical",
       "expansion": "com.tegmentum.ducklink.ical",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "7afc384992e20ae31ed7a28342db25801d31b3c79b075164b40d93ab820d985a"
     },
     {
@@ -5544,7 +5544,7 @@
       "source": "extensions/tdigest-component",
       "status": "working",
       "artifact": "artifacts/extensions/tdigest.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "tdigest",
         "tdigest_quantile",
@@ -5561,7 +5561,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "tdigest",
       "expansion": "com.tegmentum.ducklink.tdigest",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "ef25b91f4cea5e992bed0f6817a0ae11dc0c0264671de64aa0d22fb3efae9166",
       "providers": [
         {
@@ -5574,7 +5574,7 @@
           "conformance": {
             "suite": "tdigest@2",
             "suite_digest": "e46de89c85e237d8bf8f6b787c30e70ab800968243e67f4151234e40fd23348e",
-            "at": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+            "at": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
             "passed": true
           }
         }
@@ -5595,7 +5595,7 @@
       "source": "extensions/mlkmeans-component",
       "status": "working",
       "artifact": "artifacts/extensions/mlkmeans.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "ml_kmeans"
       ],
@@ -5614,7 +5614,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "mlkmeans",
       "expansion": "com.tegmentum.ducklink.mlkmeans",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "f3b5488467d8b832c1e59e69fdc9f5dfbb1030aa1cf742a3eeaf8ebe01e679d5"
     },
     {
@@ -5632,7 +5632,7 @@
       "source": "extensions/urlpattern-component",
       "status": "working",
       "artifact": "artifacts/extensions/urlpattern.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "url_pattern_test",
         "url_pattern_match"
@@ -5646,7 +5646,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "urlpattern",
       "expansion": "com.tegmentum.ducklink.urlpattern",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "c1a07c5d9db1f75a0dbebdc6438046d8bd4c5ec4f17dbc9ea4a6eea35d41ee85"
     },
     {
@@ -5664,7 +5664,7 @@
       "source": "extensions/celestial-component",
       "status": "working",
       "artifact": "artifacts/extensions/celestial.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "equatorial_to_galactic_l",
         "equatorial_to_galactic_b",
@@ -5679,7 +5679,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "celestial",
       "expansion": "com.tegmentum.ducklink.celestial",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "081e6258eff4a7b5a93aeaad3950cfb9794ea29bfb42c4e2c771b069e23803d0"
     },
     {
@@ -5697,7 +5697,7 @@
       "source": "extensions/textlines-component",
       "status": "working",
       "artifact": "artifacts/extensions/textlines.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "split_lines"
       ],
@@ -5708,7 +5708,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "textlines",
       "expansion": "com.tegmentum.ducklink.textlines",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "30d37bc1df9d3360f26926bd3825a6cd70ca47031025ea30c4a6db1d4561f510"
     },
     {
@@ -5726,7 +5726,7 @@
       "source": "extensions/netquack-component",
       "status": "working",
       "artifact": "artifacts/extensions/netquack.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "registrable_domain",
         "public_suffix",
@@ -5742,7 +5742,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "netquack",
       "expansion": "com.tegmentum.ducklink.netquack",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "07829c9bae0ebacfff702b22d47d1b88a8041bc66621aa145a7eded599244ce9"
     },
     {
@@ -5760,7 +5760,7 @@
       "source": "extensions/openprompt-component",
       "status": "working",
       "artifact": "artifacts/extensions/openprompt.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "prompt",
         "prompt_model"
@@ -5776,7 +5776,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "openprompt",
       "expansion": "com.tegmentum.ducklink.openprompt",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "12b413bfe489853a3cb4b2acc45613839350c70325190a0f8dba4418d1f3ed67"
     },
     {
@@ -5794,7 +5794,7 @@
       "source": "extensions/dbf-component",
       "status": "working",
       "artifact": "artifacts/extensions/dbf.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "read_dbf"
       ],
@@ -5807,7 +5807,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "dbf",
       "expansion": "com.tegmentum.ducklink.dbf",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "c25297c40cff30223ef6c8510bf4b0805be0437c2512f69b5a918715def3ac30"
     },
     {
@@ -5825,7 +5825,7 @@
       "source": "extensions/shapefile-component",
       "status": "working",
       "artifact": "artifacts/extensions/shapefile.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "read_shp"
       ],
@@ -5838,7 +5838,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "shapefile",
       "expansion": "com.tegmentum.ducklink.shapefile",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "b6f636535c5e8e9e92dd03b031deccde84938f00b1595bc9c23d82a99b603826"
     },
     {
@@ -5856,7 +5856,7 @@
       "source": "extensions/fit-component",
       "status": "working",
       "artifact": "artifacts/extensions/fit.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "read_fit"
       ],
@@ -5869,7 +5869,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "fit",
       "expansion": "com.tegmentum.ducklink.fit",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "7fc1657219cfae9e789879d7ed4700ed1a0224974da016a885ad980d401a6113"
     },
     {
@@ -5887,7 +5887,7 @@
       "source": "extensions/warc-component",
       "status": "working",
       "artifact": "artifacts/extensions/warc.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "read_warc"
       ],
@@ -5900,7 +5900,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "warc",
       "expansion": "com.tegmentum.ducklink.warc",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "a3a8c58b323234b76b1d1e664d47a29c634bca250e4b153d05c3d08aeb058ab8"
     },
     {
@@ -5918,7 +5918,7 @@
       "source": "extensions/html-component",
       "status": "working",
       "artifact": "artifacts/extensions/html.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "html_extract",
         "html_extract_all",
@@ -5933,7 +5933,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "html",
       "expansion": "com.tegmentum.ducklink.html",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "9d82e049095370ae7f4c8f23ad03e3a0717a9ab72edf714ae31d8cd407ff0da4"
     },
     {
@@ -5951,7 +5951,7 @@
       "source": "extensions/vcard-component",
       "status": "working",
       "artifact": "artifacts/extensions/vcard.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "vcard_count",
         "vcard_to_json",
@@ -5967,7 +5967,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "vcard",
       "expansion": "com.tegmentum.ducklink.vcard",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "bfd8774ef0ad1b130b582b1b6c826e9a877712385e7707c3cdc9e271b073adc8"
     },
     {
@@ -5985,7 +5985,7 @@
       "source": "extensions/ini-component",
       "status": "working",
       "artifact": "artifacts/extensions/ini.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "ini_to_json",
         "ini_get",
@@ -6001,7 +6001,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "ini",
       "expansion": "com.tegmentum.ducklink.ini",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "cc97e209d8f31a03645074ffa86559e87fb57075a7ac165ecf0e1a275fd4f1b0"
     },
     {
@@ -6019,7 +6019,7 @@
       "source": "extensions/plist-component",
       "status": "working",
       "artifact": "artifacts/extensions/plist.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "plist_to_json",
         "plist_get"
@@ -6033,7 +6033,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "plist",
       "expansion": "com.tegmentum.ducklink.plist",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "4788f200ba87373f08904520060ae1c7f2a04cb7f252769bdede06b007a7bf29"
     },
     {
@@ -6051,7 +6051,7 @@
       "source": "extensions/dotenv-component",
       "status": "working",
       "artifact": "artifacts/extensions/dotenv.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "dotenv_to_json",
         "dotenv_get",
@@ -6064,7 +6064,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "dotenv",
       "expansion": "com.tegmentum.ducklink.dotenv",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "bb27e14b70a1b48bda966f31368d4717842ff44035dac246624184e8c3fa36bc"
     },
     {
@@ -6082,7 +6082,7 @@
       "source": "extensions/hocon-component",
       "status": "working",
       "artifact": "artifacts/extensions/hocon.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "hocon_to_json",
         "hocon_get"
@@ -6096,7 +6096,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "hocon",
       "expansion": "com.tegmentum.ducklink.hocon",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "5f06ab4032a59c3a229858cae5c60f649ef3ca7c11d9391aa45b02130ff14703"
     },
     {
@@ -6114,7 +6114,7 @@
       "source": "extensions/uuid7-component",
       "status": "working",
       "artifact": "artifacts/extensions/uuid7.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "uuid7_build",
         "uuid7_timestamp",
@@ -6129,7 +6129,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "uuid7",
       "expansion": "com.tegmentum.ducklink.uuid7",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "a75eef58ed9fcbb067b07541a116b5f9a83b4e5abf6eb69cc6b9612c097ac04a"
     },
     {
@@ -6147,7 +6147,7 @@
       "source": "extensions/textdiff-component",
       "status": "working",
       "artifact": "artifacts/extensions/textdiff.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "text_diff",
         "diff_ratio",
@@ -6162,7 +6162,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "textdiff",
       "expansion": "com.tegmentum.ducklink.textdiff",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "479cafb1d209e4c5e484a9d07c58989d622e8609bad405c52d658848c7ee3415"
     },
     {
@@ -6180,7 +6180,7 @@
       "source": "extensions/polyline-component",
       "status": "working",
       "artifact": "artifacts/extensions/polyline.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "polyline_encode",
         "polyline_decode"
@@ -6194,7 +6194,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "polyline",
       "expansion": "com.tegmentum.ducklink.polyline",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "0d1367d612170c9df388e5a77c6da54a3bad2f42428d815d1910c8f0db5bca6a"
     },
     {
@@ -6212,7 +6212,7 @@
       "source": "extensions/json_schema-component",
       "status": "working",
       "artifact": "artifacts/extensions/json_schema.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "json_schema_valid",
         "json_schema_errors"
@@ -6226,7 +6226,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "json_schema",
       "expansion": "com.tegmentum.ducklink.json_schema",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "57b414e3c956b73ee81c05161b981ef6de8df5e3b2d4b03c34f41b1c600dc7a2"
     },
     {
@@ -6244,7 +6244,7 @@
       "source": "extensions/stochastic-component",
       "status": "working",
       "artifact": "artifacts/extensions/stochastic.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "normal_cdf",
         "normal_pdf",
@@ -6263,7 +6263,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "stochastic",
       "expansion": "com.tegmentum.ducklink.stochastic",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "2e165976ddb71c4dc9eac49c4f702296ff16ac4ff8b2ca4b5fce6e64d3372ed4"
     },
     {
@@ -6281,7 +6281,7 @@
       "source": "extensions/ion-component",
       "status": "working",
       "artifact": "artifacts/extensions/ion.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "ion_to_json",
         "ion_from_json",
@@ -6296,7 +6296,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "ion",
       "expansion": "com.tegmentum.ducklink.ion",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "0cb9f3539379c5138045cd6130e732457d6f09464434f20ff0f9eddbe2b65c51"
     },
     {
@@ -6314,7 +6314,7 @@
       "source": "extensions/textplot-component",
       "status": "working",
       "artifact": "artifacts/extensions/textplot.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "plot_sparkline",
         "plot_bars",
@@ -6329,7 +6329,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "textplot",
       "expansion": "com.tegmentum.ducklink.textplot",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "ad4a320f2b92c4f1fca0ce47b66b667d9f24e49e1a6b6d2526eb66bc0e365bf8"
     },
     {
@@ -6347,7 +6347,7 @@
       "source": "extensions/marisa-component",
       "status": "working",
       "artifact": "artifacts/extensions/marisa.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "fst_contains",
         "fst_prefix",
@@ -6362,7 +6362,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "marisa",
       "expansion": "com.tegmentum.ducklink.marisa",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "e0bcffcbb4d0df46f6cb4613d23cad54e0cf6b9833237b8223534cbb80ed2c9c"
     },
     {
@@ -6380,7 +6380,7 @@
       "source": "extensions/frequentitems-component",
       "status": "working",
       "artifact": "artifacts/extensions/frequentitems.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "top_k",
         "top_k_value"
@@ -6392,7 +6392,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "frequentitems",
       "expansion": "com.tegmentum.ducklink.frequentitems",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "136456c0317b15a0223878ab4972070193d991eeb2882987f220d18c3936e531"
     },
     {
@@ -6410,7 +6410,7 @@
       "source": "extensions/sqlitewasm-component",
       "status": "working",
       "artifact": "artifacts/extensions/sqlitewasm.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "sqlite_blob_scan"
       ],
@@ -6424,7 +6424,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "sqlitewasm",
       "expansion": "com.tegmentum.ducklink.sqlitewasm",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "72f0a4cef359c8bbb7f46fb8977e2fb86613b7a5a3acd6b5e14aa39bad40357d"
     },
     {
@@ -6444,7 +6444,7 @@
       "source": "extensions/jsonfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/jsonfns.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "json_valid",
         "json_extract",
@@ -6464,7 +6464,7 @@
         "serde_json_path"
       ],
       "min_duckdb_version": "1.0.0",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "62ab93c5dc3149f9041024e6b1179d76c1f49f7460a3998a40b949a61860baad"
     },
     {
@@ -6484,7 +6484,7 @@
       "source": "extensions/inetfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/inetfns.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "host",
         "family",
@@ -6500,7 +6500,7 @@
         "ipnetwork"
       ],
       "min_duckdb_version": "1.0.0",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "daf63b3405887f011d589e5bb53abb25d81eb0e70d49bd7b626b5f5de4900a69"
     },
     {
@@ -6518,7 +6518,7 @@
       "source": "extensions/excelfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/excelfns.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "xlsx_sheets",
         "read_xlsx",
@@ -6533,7 +6533,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "excelfns",
       "expansion": "com.tegmentum.ducklink.excelfns",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "d4ef0db3d45c516ce499945b50f59a6471fbebc7e307b66c498f5653bb7dbcc2"
     },
     {
@@ -6551,7 +6551,7 @@
       "source": "extensions/avrofns-component",
       "status": "working",
       "artifact": "artifacts/extensions/avrofns.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "avro_schema",
         "read_avro",
@@ -6567,7 +6567,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "avrofns",
       "expansion": "com.tegmentum.ducklink.avrofns",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "87ebf83d70dca24c27028cff68148b30acad98784606adc4e428a90de839d823"
     },
     {
@@ -6587,7 +6587,7 @@
       "source": "extensions/spatialfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/spatialfns.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "ST_Point",
         "ST_GeomFromText",
@@ -6613,7 +6613,7 @@
         "geojson"
       ],
       "min_duckdb_version": "1.0.0",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "800fffe178094d979b012aa1789d8d7b81b39ed8f3e077ee90d431dc0c2d871d"
     },
     {
@@ -6631,7 +6631,7 @@
       "source": "extensions/ftsfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/ftsfns.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "fts_tokenize",
         "fts_stem",
@@ -6648,7 +6648,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "ftsfns",
       "expansion": "com.tegmentum.ducklink.ftsfns",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "b4025ffb28560db9703ac02597bb201e8832a7247ea3110a002d188f01f48bdf"
     },
     {
@@ -6666,7 +6666,7 @@
       "source": "extensions/icufns-component",
       "status": "working",
       "artifact": "artifacts/extensions/icufns.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "icu_sort_key",
         "icu_compare",
@@ -6681,7 +6681,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "icufns",
       "expansion": "com.tegmentum.ducklink.icufns",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "52cb78537ac0b8c5c8f9728370726cff1d3de3bde6067960d12e5dd629f0eae5"
     },
     {
@@ -6699,7 +6699,7 @@
       "source": "extensions/vssfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/vssfns.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "vec_l1_distance",
         "vec_linf_distance",
@@ -6712,7 +6712,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "vssfns",
       "expansion": "com.tegmentum.ducklink.vssfns",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "311bb552caf1ed28a7868fb2ffa9002260f1cd11575c639eeac0c16114d8ebad"
     },
     {
@@ -6730,7 +6730,7 @@
       "source": "extensions/rtreefns-component",
       "status": "working",
       "artifact": "artifacts/extensions/rtreefns.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "rtree_search",
         "bbox4"
@@ -6746,7 +6746,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "rtreefns",
       "expansion": "com.tegmentum.ducklink.rtreefns",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "62ad9f135e2d496ed0cfa1b4884948e938ca834a4a1c5349556cfe3842b79912"
     },
     {
@@ -6764,7 +6764,7 @@
       "source": "extensions/hnswfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/hnswfns.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "hnsw_search"
       ],
@@ -6778,7 +6778,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "hnswfns",
       "expansion": "com.tegmentum.ducklink.hnswfns",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "04d9cfa523f7607e942e34ff41fddb272796f19d69835236178bb428e60a7903"
     },
     {
@@ -6796,7 +6796,7 @@
       "source": "extensions/geomtype-component",
       "status": "working",
       "artifact": "artifacts/extensions/geomtype.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "geom_area",
         "geom_astext"
@@ -6812,7 +6812,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "geomtype",
       "expansion": "com.tegmentum.ducklink.geomtype",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "16d5a83e89dc0d4d8bea7dab05890f84640e425510136b51cea52b66e57fda91"
     },
     {
@@ -6830,7 +6830,7 @@
       "source": "extensions/spatialproj-component",
       "status": "working",
       "artifact": "artifacts/extensions/spatialproj.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "ST_Transform"
       ],
@@ -6848,7 +6848,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "spatialproj",
       "expansion": "com.tegmentum.ducklink.spatialproj",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "72ba8c5e17293634673e7a234e19b0609fd0890df2e34cc3790c0e6c8a68bc31"
     },
     {
@@ -6866,7 +6866,7 @@
       "source": "extensions/tpchgen-component",
       "status": "working",
       "artifact": "artifacts/extensions/tpchgen.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "tpch_region",
         "tpch_nation",
@@ -6888,7 +6888,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "tpchgen",
       "expansion": "com.tegmentum.ducklink.tpchgen",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "ee30cad8ee7134aaf8daed26679256b773d26e42aab4d6d90099da811644fe6a"
     },
     {
@@ -6906,7 +6906,7 @@
       "source": "extensions/tpcdsgen-component",
       "status": "working",
       "artifact": "artifacts/extensions/tpcdsgen.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "tpcds_income_band",
         "tpcds_date_dim_sample"
@@ -6918,7 +6918,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "tpcdsgen",
       "expansion": "com.tegmentum.ducklink.tpcdsgen",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "ffc706bf980a2124f0adb4213bc8c491a7786ab34434839c8d68f86479d3ca2a"
     },
     {
@@ -6936,7 +6936,7 @@
       "source": "extensions/deltascan-component",
       "status": "working",
       "artifact": "artifacts/extensions/deltascan.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "delta_log_info",
         "delta_schema"
@@ -6950,7 +6950,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "deltascan",
       "expansion": "com.tegmentum.ducklink.deltascan",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "0df493dabcf2475f3c8c23ff61b454623b30b69b295e06399f6d271975cc85b6"
     },
     {
@@ -6968,7 +6968,7 @@
       "source": "extensions/icebergscan-component",
       "status": "working",
       "artifact": "artifacts/extensions/icebergscan.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "iceberg_metadata",
         "iceberg_schema",
@@ -6983,7 +6983,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "icebergscan",
       "expansion": "com.tegmentum.ducklink.icebergscan",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "7bfd4b64489d384a565399730f8c463840139df363d41a83b7272e4ec9eb62d8"
     },
     {
@@ -7001,7 +7001,7 @@
       "source": "extensions/autocomplete-component",
       "status": "working",
       "artifact": "artifacts/extensions/autocomplete.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "sql_complete"
       ],
@@ -7013,7 +7013,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "autocomplete",
       "expansion": "com.tegmentum.ducklink.autocomplete",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "9694d7d15e55f98b9278cfb0facb3fb61e0cb633771c85af52b3198c6172b858"
     },
     {
@@ -7031,7 +7031,7 @@
       "source": "extensions/statsduck-component",
       "status": "working",
       "artifact": "artifacts/extensions/statsduck.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "adjust_p",
         "anderson_darling",
@@ -7075,7 +7075,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "statsduck",
       "expansion": "com.tegmentum.ducklink.stats",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "ec56ab76c73192ac1644caa55b45e0bca29e4c2fc15b7904c1513ee9d0ed5bd7"
     },
     {
@@ -7100,7 +7100,7 @@
       "source": "extensions/math-component",
       "status": "working",
       "artifact": "artifacts/extensions/math.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "exp2",
         "e",
@@ -7117,7 +7117,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "math",
       "expansion": "com.tegmentum.ducklink.math",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "dbb962cf2b8d4799d4d1587d0b35371201d1fe320d4d5d880adc65393a424631",
       "providers": [
         {
@@ -7152,7 +7152,7 @@
       "source": "extensions/text_utils-component",
       "status": "working",
       "artifact": "artifacts/extensions/text_utils.wasm",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
       "exports": [
         "sql_normalize",
         "insert",
@@ -7165,7 +7165,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "text_utils",
       "expansion": "com.tegmentum.ducklink.text_utils",
-      "wit_contract_version": "2.2.0",
+      "wit_contract_version": "2.3.0",
       "content_digest": "14987a25123d28f4fe183f0bbe237e77d5b582f8c284a75ecb026efeaeab4e06",
       "providers": [
         {
@@ -7258,8 +7258,8 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "chrono",
       "expansion": "com.tegmentum.ducklink.chrono",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
-      "wit_contract_version": "2.2.0",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
+      "wit_contract_version": "2.3.0",
       "content_digest": "94f917b10d710b7e5d8b809a9433fbcd38098db9d802a089fb2c5fdf7b0f394f"
     },
     {
@@ -7310,8 +7310,8 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "list",
       "expansion": "com.tegmentum.ducklink.list",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
-      "wit_contract_version": "2.2.0",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
+      "wit_contract_version": "2.3.0",
       "content_digest": "7797086b9a67c9dc4ad47b8cff0a72a48d72085066425009e0e99304d9c98e49"
     },
     {
@@ -7365,8 +7365,8 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "stdsql",
       "expansion": "com.tegmentum.ducklink.stdsql",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
-      "wit_contract_version": "2.2.0",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
+      "wit_contract_version": "2.3.0",
       "content_digest": "482aa4513e3ed171eb21ba809c873a0c0d5ae12d8617fb67db1ccb8b915057c4"
     },
     {
@@ -7402,8 +7402,8 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "stats",
       "expansion": "com.tegmentum.ducklink.stats",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
-      "wit_contract_version": "2.2.0",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
+      "wit_contract_version": "2.3.0",
       "content_digest": "186a0014e0b2d6d49721019d0df79bff010365979f3dc5951be71bbc7552e44d"
     },
     {
@@ -7440,8 +7440,8 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "sys_compat",
       "expansion": "com.tegmentum.ducklink.sys_compat",
-      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
-      "wit_contract_version": "2.2.0",
+      "wit_contract": "437a7c4805b6a723050f9df7c2a026d3e754e952891db3bfa83dbcb34f4be4fa",
+      "wit_contract_version": "2.3.0",
       "content_digest": "3756affb354f55c94b30dcbe32c196861447924fa06675ef2aae7c60c166cded"
     }
   ],

@@ -24,7 +24,8 @@ use crate::duckdb_extension_bindings::duckdb::extension::{
     coordinate_system as extension_coordinate_system, encoding as extension_encoding,
     files as extension_files, collation as extension_collation, files_reg as extension_files_reg,
     index as extension_index, lifecycle as extension_lifecycle, logging as extension_logging,
-    macro_ext as extension_macro_ext, query as extension_query, runtime as extension_runtime,
+    macro_ext as extension_macro_ext, optimizer as extension_optimizer, parser as extension_parser,
+    query as extension_query, runtime as extension_runtime,
     runtime_ext as extension_runtime_ext, secret as extension_secret,
     settings as extension_settings, storage as extension_storage, types as extension_types,
     types_ext as extension_types_ext,
@@ -146,6 +147,9 @@ type PendingCoordinateSystem = reg::CoordinateSystemReg;
 type PendingArrowTable = reg::ArrowTableReg;
 type PendingEncoding = reg::EncodingReg;
 type PendingCompression = reg::CompressionReg;
+// 2.3.0 / v3 additive captures.
+type PendingParser = reg::ParserReg;
+type PendingOptimizer = reg::OptimizerReg;
 
 #[derive(Default)]
 struct PendingScalarRegistry {
@@ -251,6 +255,9 @@ pub struct ExtensionStoreState {
     pending_arrow_tables: Vec<PendingArrowTable>,
     pending_encodings: Vec<PendingEncoding>,
     pending_compressions: Vec<PendingCompression>,
+    // 2.3.0 / v3 additive capture buffers.
+    pending_parsers: Vec<PendingParser>,
+    pending_optimizers: Vec<PendingOptimizer>,
     /// Maps the handle returned from `table-registry.register` to the table
     /// function name, so `files.register-replacement-scan` can resolve it.
     table_handle_names: HashMap<u32, String>,
@@ -314,6 +321,8 @@ impl ExtensionStoreState {
             pending_arrow_tables: Vec::new(),
             pending_encodings: Vec::new(),
             pending_compressions: Vec::new(),
+            pending_parsers: Vec::new(),
+            pending_optimizers: Vec::new(),
             table_handle_names: HashMap::new(),
             callback_registry,
             extension_name,
@@ -429,6 +438,14 @@ impl ExtensionStoreState {
     }
     fn take_pending_compressions(&mut self) -> Vec<PendingCompression> {
         std::mem::take(&mut self.pending_compressions)
+    }
+
+    // --- 2.3.0 / v3 additive drains ---
+    fn take_pending_parsers(&mut self) -> Vec<PendingParser> {
+        std::mem::take(&mut self.pending_parsers)
+    }
+    fn take_pending_optimizers(&mut self) -> Vec<PendingOptimizer> {
+        std::mem::take(&mut self.pending_optimizers)
     }
 
     fn drain_pending(&mut self) -> PendingRegistrationsData {
@@ -1258,6 +1275,54 @@ impl extension_settings::Host for ExtensionStoreState {
             scope,
         });
         Ok(())
+    }
+}
+
+// 2.3.0 / v3: the `parser` interface declares a parser extension. Captured into a
+// neutral pending buffer; the core shim drains it and wires a DuckDB
+// `ParserExtension` that forwards unrecognized statement text to the component's
+// `parser-dispatch.call-parse` and applies the returned string->SQL rewrite.
+impl extension_parser::Host for ExtensionStoreState {
+    fn register_parser_extension(
+        &mut self,
+        name: String,
+        callback_handle: u32,
+    ) -> Result<u32, extension_types::Duckerror> {
+        let registry_id = self.alloc_resource_id();
+        eprintln!(
+            "[extension-runtime:{}] registered parser extension '{name}' (registry={registry_id}, callback={callback_handle})",
+            self.extension_name
+        );
+        self.pending_parsers.push(PendingParser {
+            extension: self.extension_name.clone(),
+            name,
+            callback_handle,
+        });
+        Ok(registry_id)
+    }
+}
+
+// 2.3.0 / v3: the `optimizer` interface declares a general optimizer rule.
+// Captured into a neutral pending buffer; the core shim drains it and wires a
+// DuckDB `OptimizerExtension` that offers the flattened plan-shape to the
+// component's `optimizer-dispatch.call-optimize` and applies the rewrite directive.
+impl extension_optimizer::Host for ExtensionStoreState {
+    fn register_optimizer_rule(
+        &mut self,
+        rule_name: String,
+        callback_handle: u32,
+    ) -> Result<u32, extension_types::Duckerror> {
+        let registry_id = self.alloc_resource_id();
+        eprintln!(
+            "[extension-runtime:{}] registered optimizer rule '{rule_name}' (registry={registry_id}, callback={callback_handle})",
+            self.extension_name
+        );
+        self.pending_optimizers.push(PendingOptimizer {
+            extension: self.extension_name.clone(),
+            rule_name,
+            callback_handle,
+        });
+        Ok(registry_id)
     }
 }
 
@@ -2246,6 +2311,22 @@ impl ExtensionInstance {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
         unsafe { (*data).take_pending_compressions() }
+    }
+
+    /// 2.3.0 / v3: drains the captured parser-extension registrations. The core
+    /// shim wires each into a DuckDB `ParserExtension`.
+    pub fn take_pending_parsers(&mut self) -> Vec<crate::reg::ParserReg> {
+        let mut ctx = self.store.as_context_mut();
+        let data: *mut ExtensionStoreState = ctx.data_mut();
+        unsafe { (*data).take_pending_parsers() }
+    }
+
+    /// 2.3.0 / v3: drains the captured optimizer-rule registrations. The core shim
+    /// wires each into a DuckDB `OptimizerExtension`.
+    pub fn take_pending_optimizers(&mut self) -> Vec<crate::reg::OptimizerReg> {
+        let mut ctx = self.store.as_context_mut();
+        let data: *mut ExtensionStoreState = ctx.data_mut();
+        unsafe { (*data).take_pending_optimizers() }
     }
 
     // --- 2.1.0 (Item 1): copy-dispatch re-entry ---
@@ -3935,6 +4016,9 @@ pub fn add_extension_interfaces_to_linker(
     extension_arrow_ext::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_encoding::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_compression::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    // 2.3.0 / v3 additive registration imports.
+    extension_parser::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    extension_optimizer::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     Ok(())
 }
 
