@@ -1,4 +1,4 @@
-package duckdb:extension@2.3.0;
+package duckdb:extension@3.0.0;
 
 interface files {
   type table-function-handle = u32;

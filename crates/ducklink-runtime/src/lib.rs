@@ -62,15 +62,15 @@ pub fn contract_digest() -> &'static str {
 ///
 /// v3 FREEZE (2026-06-28): the "v3 stabilization" completed the capability surface
 /// (parser, general optimizer, window aggregate+frame, table-fn filter pushdown)
-/// as ADDITIVE interfaces + opt-in worlds, landed at WIT `@2.3.0`. The MAJOR is
-/// deliberately HELD at 2: a major bump would reject every already-shipped @2.x
-/// component (forcing a mass rebuild -- the exact churn v3 exists to END), and
-/// would contradict the additive-only freeze guarantee. "v3" is the FROZEN-SURFACE
-/// MILESTONE, identified by its content-addressed [`CONTRACT_DIGEST`]; it is NOT a
-/// wasmtime-semver major. Under the freeze policy (docs/wit-freeze-policy.md) the
-/// MAJOR never bumps again: all future growth is additive minors (opt-in worlds)
-/// or new types via the `complex()` escape hatch (no bump at all).
-pub const CONTRACT_MAJOR: u64 = 2;
+/// and landed it as the BREAKING `duckdb:extension@3.0.0` -- a DELIBERATE clean
+/// break taken now (no external consumers yet), rejecting every @2.x component by
+/// design rather than breaking users later. MAJOR is 3, the FROZEN BASELINE: all
+/// ~188 components were rebuilt against it. Future growth is additive MINORS off
+/// major-3 (opt-in worlds) + new types via the `complex()` escape hatch (no bump);
+/// MAJOR-3 never bumps again. The authoritative contract identity is the
+/// content-addressed canonical-WIT [`CONTRACT_DIGEST`] (compose:dynlink hash); this
+/// @MAJOR is its runtime proxy. See docs/wit-freeze-policy.md.
+pub const CONTRACT_MAJOR: u64 = 3;
 
 /// The MINOR version of the `duckdb:extension` WIT contract this host speaks.
 ///
@@ -81,13 +81,13 @@ pub const CONTRACT_MAJOR: u64 = 2;
 /// this host does not provide, so instantiation would fail with a cryptic
 /// missing-import error. [`check_component_contract`] turns that into a friendly,
 /// actionable message. Bump this in lockstep with each additive MINOR contract
-/// bump (set back to 0 on a new MAJOR). For the 2.3.0 / v3 expansion this is 3.
-pub const CONTRACT_MINOR: u64 = 3;
+/// bump (set back to 0 on a new MAJOR). Reset to 0 for the major-3 baseline.
+pub const CONTRACT_MINOR: u64 = 0;
 
 /// Full contract version string the host advertises (observability only; the
 /// guard compares MAJOR.minor via [`CONTRACT_MAJOR`]/[`CONTRACT_MINOR`], and the
 /// authoritative identity is the content-addressed [`CONTRACT_DIGEST`]).
-pub const CONTRACT_VERSION: &str = "2.3.0";
+pub const CONTRACT_VERSION: &str = "3.0.0";
 
 /// The host's `duckdb:extension` contract version, for logging / a built-in.
 /// This is the human-readable version; the authoritative content-addressed
@@ -386,7 +386,7 @@ pub mod duckdb_extension_copy_bindings {
         // per-world type conversion. NOTE: bump the @version here in lockstep
         // with the contract.
         with: {
-            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -401,7 +401,7 @@ pub mod duckdb_extension_secret_bindings {
         world: "duckdb:extension-host/duckdb-extension-secret",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -416,7 +416,7 @@ pub mod duckdb_extension_storage_write_bindings {
         world: "duckdb:extension-host/duckdb-extension-storage-write",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -431,7 +431,7 @@ pub mod duckdb_extension_table_stream_bindings {
         world: "duckdb:extension-host/duckdb-extension-table-stream",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -445,7 +445,7 @@ pub mod duckdb_extension_aggregate_incr_bindings {
         world: "duckdb:extension-host/duckdb-extension-aggregate-incr",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -459,7 +459,7 @@ pub mod duckdb_extension_conn_bindings {
         world: "duckdb:extension-host/duckdb-extension-conn",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -473,7 +473,7 @@ pub mod duckdb_extension_file_write_bindings {
         world: "duckdb:extension-host/duckdb-extension-file-write",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -487,7 +487,7 @@ pub mod duckdb_extension_index_write_bindings {
         world: "duckdb:extension-host/duckdb-extension-index-write",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -501,7 +501,7 @@ pub mod duckdb_extension_settings_bindings {
         world: "duckdb:extension-host/duckdb-extension-settings",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -516,7 +516,7 @@ pub mod duckdb_extension_parser_bindings {
         world: "duckdb:extension-host/duckdb-extension-parser",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -531,7 +531,7 @@ pub mod duckdb_extension_optimizer_bindings {
         world: "duckdb:extension-host/duckdb-extension-optimizer",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@2.3.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }

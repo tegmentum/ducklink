@@ -44,7 +44,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # THE single source of truth for the contract version. Bump this, run the tool,
 # rebuild both hosts + all components, and the whole catalog moves in lockstep.
-CONTRACT_VERSION = "2.3.0"
+CONTRACT_VERSION = "3.0.0"
 
 PACKAGE = "duckdb:extension"
 

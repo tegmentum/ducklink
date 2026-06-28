@@ -1,27 +1,31 @@
 # The v3 WIT freeze policy
 
-Status: **FROZEN at `duckdb:extension@2.3.0` (the "v3" surface), 2026-06-28.**
+Status: **FROZEN at `duckdb:extension@3.0.0` (the "v3" baseline), 2026-06-28.**
 
 This document is the contract for evolving the `duckdb:extension` WIT after the v3
-stabilization. It exists because the 2.0 -> 2.1 -> 2.2 -> 2.3 bumps were churn, and
-the whole point of v3 was to complete the capability surface ONCE and then stop
-moving it. Read this before touching anything under `wit/duckdb-extension/`.
+stabilization. It exists because the 2.0 -> 2.1 -> 2.2 bumps were churn, and the
+whole point of v3 was to complete the capability surface ONCE and then stop moving
+it. Read this before touching anything under `wit/duckdb-extension/`.
 
 ## What "v3" is (and is not)
 
-- **v3 is the FROZEN-SURFACE MILESTONE**, not a wasmtime semver major. It is the
-  completed `duckdb:extension` capability surface, identified by its
-  **content-addressed contract digest** (`witcanon:1` over the canonical WIT
-  bytes; see `crates/ducklink-runtime/build.rs` and `CONTRACT_DIGEST`). The digest
-  IS the contract identity (it changes iff the shape changes); the semver string is
-  a human label and a coarse runtime proxy.
-- **The WIT package stays at major 2** (`duckdb:extension@2.3.x`). `CONTRACT_MAJOR`
-  is deliberately HELD at 2 and **will never bump again**. A major bump would
-  reject every already-shipped `@2.x` component (a mass rebuild -- the exact churn
-  v3 exists to end) and break the additive-only guarantee below. v3 was landed as
-  an ADDITIVE MINOR (2.2 -> 2.3) so all ~189 existing components keep loading
-  un-rebuilt (minor forward-compat: a `@2.k` component loads on a `@2.minor` host
-  for `k <= minor`).
+- **v3 is `duckdb:extension@3.0.0`, a DELIBERATE BREAKING major.** The completed
+  capability surface (parser, general optimizer, window aggregate+frame, table-fn
+  filter pushdown) was landed as a clean major-3 break, taken NOW because there are
+  no external consumers yet -- far better to take the one-time churn now than to
+  break users later. The major-3 host REJECTS every `@2.x` component BY DESIGN; all
+  ~188 components were rebuilt at `@3.0.0`.
+- **The authoritative contract identity is the content-addressed digest**
+  (`witcanon:1` over the canonical WIT bytes; see `crates/ducklink-runtime/build.rs`
+  and `CONTRACT_DIGEST`, byte-compatible with the compose:dynlink canonical-WIT
+  hash). The digest IS the contract identity (it changes iff the shape changes); the
+  `@MAJOR` semver is its coarse runtime proxy in the loader guard.
+- **Major-3 is the FROZEN BASELINE and never bumps again.** Future growth is
+  ADDITIVE MINORS off major-3 (`@3.minor`): a new interface is a new opt-in world a
+  capable component imports; components that do not import it keep loading
+  un-rebuilt (minor forward-compat: a `@3.k` component loads on a `@3.minor` host
+  for `k <= minor`). New types ride `complex()` (no bump). The ONLY thing that could
+  force a major-4 is editing the shared `types`/`runtime` enums -- forbidden below.
 
 ## The freeze rules (in priority order)
 
@@ -89,7 +93,7 @@ This is the "2.1/2.2 procedure" -- additive, no mass rebuild:
    interface to the base world imports only if components declare via it in load().
 3. Bump `CONTRACT_VERSION` in `tooling/propagate-wit.py`, run it (rewrites every
    managed WIT file's `@version`), and bump `CONTRACT_MINOR` + `CONTRACT_VERSION`
-   in `crates/ducklink-runtime/src/lib.rs` (leave `CONTRACT_MAJOR = 2`). Bump the
+   in `crates/ducklink-runtime/src/lib.rs` (leave `CONTRACT_MAJOR = 3`). Bump the
    `types@<ver>` keys in the lib.rs `bindgen!{ with: ... }` maps.
 4. Wire the host: a `pending_*` buffer + `reg::*Reg` struct + a `Host` impl that
    captures the registration + a `take_pending_*` drain + an `add_to_linker` line +
