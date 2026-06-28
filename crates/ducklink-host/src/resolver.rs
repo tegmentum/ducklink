@@ -25,6 +25,10 @@ pub enum ContentRef {
     Path(PathBuf),
     Digest(String),
     Oci(String),
+    /// A plain `https://` URL (the published R2 content-addressed store). The
+    /// `ducklink ext install` flow fetches the bytes over HTTPS and verifies the
+    /// provider's `content_digest` — so install is direct-from-R2, no OCI client.
+    Url(String),
 }
 
 /// Substrate of one provider. Only `Wasm` is implemented this pass; `Native` and
@@ -609,7 +613,7 @@ pub fn read_manifest_entry(index: &serde_json::Value, name: &str) -> Option<Mani
             id: "wasm-component".to_string(),
             kind: ProviderKind::Wasm {
                 abi: abi.clone(),
-                artifact: ContentRef::Path(PathBuf::from(artifact)),
+                artifact: artifact_ref(artifact),
                 content_digest: entry
                     .get("content_digest")
                     .and_then(|v| v.as_str())
@@ -648,6 +652,17 @@ pub fn read_manifest_entry(index: &serde_json::Value, name: &str) -> Option<Mani
     })
 }
 
+/// Classify a catalog `artifact` string into a [`ContentRef`]. An `https://`
+/// value is the published R2 content-addressed store (fetched + digest-verified
+/// at install); anything else is a local repo-relative path (the dev/CI layout).
+fn artifact_ref(artifact: &str) -> ContentRef {
+    if artifact.starts_with("https://") {
+        ContentRef::Url(artifact.to_string())
+    } else {
+        ContentRef::Path(PathBuf::from(artifact))
+    }
+}
+
 fn parse_provider(p: &serde_json::Value, default_abi: &str) -> Option<ProviderDescriptor> {
     let id = p.get("id").and_then(|v| v.as_str())?.to_string();
     let kind_tag = p.get("kind").and_then(|v| v.as_str()).unwrap_or("wasm");
@@ -662,7 +677,7 @@ fn parse_provider(p: &serde_json::Value, default_abi: &str) -> Option<ProviderDe
                     .and_then(|v| v.as_str())
                     .unwrap_or(default_abi)
                     .to_string(),
-                artifact: ContentRef::Path(PathBuf::from(artifact)),
+                artifact: artifact_ref(artifact),
                 content_digest: p
                     .get("content_digest")
                     .and_then(|v| v.as_str())
@@ -1009,6 +1024,30 @@ mod tests {
         });
         let e = read_manifest_entry(&index, "mlkmeans").expect("entry");
         assert_eq!(e.requires_components, vec!["pylon".to_string()]);
+    }
+
+    #[test]
+    fn https_artifact_is_read_as_a_url_contentref() {
+        // A published catalog points its artifact at the R2 content-addressed
+        // store; the manifest reader classifies it as ContentRef::Url so install
+        // fetches it over HTTPS (a local-path artifact stays ContentRef::Path).
+        let index = serde_json::json!({
+            "extensions": [
+                { "name": "aba", "wit_contract": "90fdc46a585c", "wit_contract_version": "2.0.0",
+                  "artifact": "https://ext.example.dev/wasm/sha256/366cdf/aba.wasm",
+                  "content_digest": "366cdf" }
+            ]
+        });
+        let e = read_manifest_entry(&index, "aba").expect("entry");
+        match &e.providers[0].kind {
+            ProviderKind::Wasm { artifact, .. } => assert_eq!(
+                artifact,
+                &ContentRef::Url(
+                    "https://ext.example.dev/wasm/sha256/366cdf/aba.wasm".to_string()
+                )
+            ),
+            other => panic!("expected wasm provider, got {other:?}"),
+        }
     }
 
     #[test]

@@ -136,6 +136,10 @@ pub use httpd::{serve_httpd, HttpdOptions, TlsMode};
 mod sigv4;
 mod replicate;
 pub use replicate::{run_backup, run_restore, ReplicaState, S3Target};
+// `ducklink publish`: upload the catalog + content-addressed artifacts to the
+// shared Cloudflare R2 extension-distribution bucket (reuses `sigv4`).
+pub mod publish;
+pub use publish::{plan_publish, print_dry_run, run_publish, PlanInputs, PublishPlan};
 use wasmtime_wasi::p2::{
     self,
     pipe::{MemoryInputPipe, MemoryOutputPipe},

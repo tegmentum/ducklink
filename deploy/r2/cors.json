@@ -1,0 +1,11 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://DEMO_ORIGIN_PLACEHOLDER"
+    ],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["range", "if-match", "if-none-match"],
+    "ExposeHeaders": ["etag", "content-length", "content-range", "cache-control"],
+    "MaxAgeSeconds": 86400
+  }
+]

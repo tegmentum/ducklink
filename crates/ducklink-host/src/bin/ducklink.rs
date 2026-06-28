@@ -20,6 +20,7 @@ use ducklink_host::{
         quack-serve      Act as a quack RPC server\n  \
         serve            HTTP/HTTPS SQL server (routes table)\n  \
         backup, restore  duckstream snapshot replication to S3\n  \
+        publish          Publish the catalog + artifacts to the R2 ext bucket\n  \
         precompile       AOT-compile a component to .cwasm",
     trailing_var_arg = true,
     arg_required_else_help = true
@@ -613,6 +614,72 @@ fn main() -> Result<()> {
         let target = S3Target::parse(&src)?;
         let dest_path = dest.map(PathBuf::from);
         run_restore(&target, dest_path.as_deref())?;
+        return Ok(());
+    }
+
+    // `ducklink publish [--dry-run] [--catalog PATH] [--artifacts-dir DIR]
+    //  [--native-repo DIR] [--db NAME]`
+    // Publish the catalog + content-addressed artifacts to the shared Cloudflare
+    // R2 extension-distribution bucket (datalink-ext). Builds the single-bucket
+    // layout (wasm/sha256/<digest>/<name>.wasm + <db>/catalog.json + the
+    // ${REVISION}/${PLATFORM} native tree) and PUTs each object to
+    // https://<account>.r2.cloudflarestorage.com/<bucket>/<key>, SigV4-signed
+    // (service s3, region auto) with the same signer the duckstream replicator
+    // uses. R2 creds come from the env (R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY/
+    // R2_ACCOUNT_ID/R2_BUCKET — the org-level GitHub secrets in CI). `--dry-run`
+    // prints the object keys + sizes it WOULD upload, with no network or creds.
+    if raw.get(1).map(String::as_str) == Some("publish") {
+        let mut dry_run = false;
+        let mut catalog: Option<PathBuf> = None;
+        let mut artifacts_dir: Option<PathBuf> = None;
+        let mut native_repo: Option<PathBuf> = None;
+        let mut db = "ducklink".to_string();
+        let mut i = 2;
+        while i < raw.len() {
+            match raw[i].as_str() {
+                "--dry-run" => dry_run = true,
+                "--catalog" => {
+                    i += 1;
+                    catalog = raw.get(i).map(PathBuf::from);
+                }
+                "--artifacts-dir" => {
+                    i += 1;
+                    artifacts_dir = raw.get(i).map(PathBuf::from);
+                }
+                "--native-repo" => {
+                    i += 1;
+                    native_repo = raw.get(i).map(PathBuf::from);
+                }
+                "--db" => {
+                    i += 1;
+                    if let Some(d) = raw.get(i) {
+                        db = d.clone();
+                    }
+                }
+                other => anyhow::bail!("ducklink publish: unexpected argument `{other}`"),
+            }
+            i += 1;
+        }
+
+        let cwd = std::env::current_dir()?;
+        let catalog = catalog.unwrap_or_else(|| cwd.join("registry/index.json"));
+        let artifacts_dir = artifacts_dir.unwrap_or_else(|| cwd.join("artifacts/extensions"));
+        let inputs = ducklink_host::PlanInputs {
+            catalog_path: &catalog,
+            artifacts_dir: &artifacts_dir,
+            native_repo: native_repo.as_deref(),
+            db: &db,
+        };
+
+        if dry_run {
+            let plan = ducklink_host::plan_publish(&inputs)?;
+            // Bucket label is cosmetic in dry-run (no creds read); prefer R2_BUCKET
+            // when present, else the documented shared bucket name.
+            let bucket = std::env::var("R2_BUCKET").unwrap_or_else(|_| "datalink-ext".to_string());
+            ducklink_host::print_dry_run(&plan, &bucket, &db);
+        } else {
+            ducklink_host::run_publish(&inputs)?;
+        }
         return Ok(());
     }
 

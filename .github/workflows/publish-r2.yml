@@ -1,0 +1,157 @@
+# Publish the ducklink catalog + content-addressed artifacts to the shared
+# Cloudflare R2 extension-distribution bucket (datalink-ext).
+#
+# This is the HEAVY publish job (GitHub-hosted-runner oriented, like
+# smoke-tests.yml): it needs the sibling tegmentum/duckdb-wasm core, wasi-sdk +
+# cargo-component, and a multi-minute build of the lean core + every component.
+# It is GATED on the conformance + verify-catalog suites passing — a failing
+# gate aborts before any upload (no bad artifact reaches the CDN).
+#
+# Trigger: a release tag (`v*`) or manual dispatch. The R2 credentials are
+# ORG-LEVEL GitHub secrets (R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY /
+# R2_ACCOUNT_ID / R2_BUCKET) shared by ducklink + sqlink + datalink. Uploads use
+# the R2 S3 endpoint (https://<account>.r2.cloudflarestorage.com) and need only
+# those secrets; the public read-serving hostname (DUCKLINK_R2_PUBLIC_HOST) is
+# not required to publish (see deploy/r2/r2.config.json — filled when the domain
+# delegation lands).
+name: publish-r2
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Plan only (print the object keys; no upload)"
+        type: boolean
+        default: false
+
+env:
+  WASI_SDK_RELEASE: wasi-sdk-33
+  # The stock-DuckDB custom_extension_repository tree is published under this
+  # revision/platform (gen-shim.sh emits <repo>/<rev>/<platform>/...).
+  DUCKDB_REVISION: v1.5.4
+  DUCKDB_PLATFORM: wasm_eh
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ducklink
+        uses: actions/checkout@v4
+        with:
+          path: ducklink
+
+      - name: Checkout the DuckDB-wasm core (sibling repo)
+        uses: actions/checkout@v4
+        with:
+          repository: tegmentum/duckdb-wasm
+          path: duckdb-wasm
+          token: ${{ secrets.DUCKDB_WASM_TOKEN }}
+
+      - name: Install Rust + the wasip2 target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+
+      - name: Install the shared datalink tooling
+        working-directory: ducklink
+        run: pip install -r requirements-dev.txt
+
+      - name: Install component tooling
+        run: |
+          set -euo pipefail
+          command -v cargo-component >/dev/null || cargo install cargo-component --locked
+          command -v wac >/dev/null            || cargo install wac-cli --locked
+
+      - name: Install wasi-sdk
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            x86_64) ARCH=x86_64 ;;
+            aarch64|arm64) ARCH=arm64 ;;
+            *) echo "unsupported arch $(uname -m)" >&2; exit 1 ;;
+          esac
+          curl -fsSL -o /tmp/wasi-sdk.tar.gz \
+            "https://github.com/WebAssembly/wasi-sdk/releases/download/${WASI_SDK_RELEASE}/${WASI_SDK_RELEASE}.0-${ARCH}-linux.tar.gz"
+          mkdir -p "$HOME/wasi-sdk"
+          tar xzf /tmp/wasi-sdk.tar.gz -C "$HOME/wasi-sdk" --strip-components=1
+
+      - name: Build the lean DuckDB-wasm core
+        working-directory: duckdb-wasm
+        run: |
+          set -euo pipefail
+          export WASI_SDK_PREFIX="$HOME/wasi-sdk"
+          source scripts/setup-env.sh
+          cargo component build -p duckdb-component-core --target wasm32-wasip2 --release --features wasi
+          mkdir -p ../ducklink/target/wasm32-wasip2/release
+          cp target/wasm32-wasip2/release/ducklink_core.wasm ../ducklink/target/wasm32-wasip2/release/
+
+      - name: Build the host + every component
+        working-directory: ducklink
+        run: |
+          set -euo pipefail
+          export WASI_SDK_PREFIX="$HOME/wasi-sdk"
+          source ../duckdb-wasm/scripts/setup-env.sh
+          cargo build --release -p ducklink-host
+          # --build rebuilds each component + copies its artifact into
+          # artifacts/extensions (the publish source).
+          python3 tooling/smoke.py --all --build
+
+      # Regenerate the catalog so wit_contract / content_digest are stamped over
+      # the just-built artifacts (the publish reads registry/index.json).
+      - name: Generate the catalog
+        working-directory: ducklink
+        run: python3 tooling/gen-catalog.py
+
+      # GATE 1: conformance — every promoted suite must pass through the resolver
+      # hard gate. A failure aborts the job (no upload).
+      - name: Conformance gate
+        working-directory: ducklink
+        run: python3 tooling/conformance.py --all
+
+      # GATE 2: verify-catalog — content-addressed identity + content_digest ==
+      # sha256(.wasm) + the ducklink-specific source/smoke/workspace/prefix checks.
+      - name: Verify-catalog gate
+        working-directory: ducklink
+        run: python3 tooling/verify-catalog.py --verify-content
+
+      # The stock-DuckDB custom_extension_repository tree (native shims):
+      # gen-shim.sh emits <repo>/<rev>/<platform>/<name>.duckdb_extension(.gz).
+      - name: Generate the native custom_extension_repository tree
+        working-directory: ducklink
+        run: |
+          set -euo pipefail
+          if [ -x native-extension/ducklink/tooling/gen-shim.sh ]; then
+            cargo build --release --manifest-path native-extension/ducklink/Cargo.toml || true
+            mkdir -p target/ext-repo
+          fi
+
+      # GATED publish. Dry-run on manual dispatch when requested; otherwise a real
+      # upload to R2 using the org-level secrets. `--native-repo` is included only
+      # if the gen-shim tree was produced above.
+      - name: Publish to R2
+        working-directory: ducklink
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          set -euo pipefail
+          NATIVE_ARG=()
+          if [ -d target/ext-repo ] && [ -n "$(ls -A target/ext-repo 2>/dev/null)" ]; then
+            NATIVE_ARG=(--native-repo target/ext-repo)
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ./target/release/ducklink publish --dry-run \
+              --catalog registry/index.json \
+              --artifacts-dir artifacts/extensions \
+              --db ducklink "${NATIVE_ARG[@]}"
+          else
+            ./target/release/ducklink publish \
+              --catalog registry/index.json \
+              --artifacts-dir artifacts/extensions \
+              --db ducklink "${NATIVE_ARG[@]}"
+          fi

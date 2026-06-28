@@ -1,0 +1,31 @@
+{
+  "$comment": "Single source of truth for the shared R2 extension-distribution bucket (datalink-ext) and the client-repointing values. The PUBLIC HOSTNAME is the one TBD value (a subdomain ext.<domain> is being delegated to a Cloudflare zone); fill `public_host` once it lands, then re-render the repoint URLs (they interpolate {public_host}). Uploads do NOT need the hostname — only the read-serving + CORS + repoint do. The R2 credentials live in CI org secrets (R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY/R2_ACCOUNT_ID/R2_BUCKET), never in this file.",
+  "account_id": "a633389b157fd8a9ec3d3a27cd375643",
+  "bucket": "datalink-ext",
+  "s3_endpoint": "https://a633389b157fd8a9ec3d3a27cd375643.r2.cloudflarestorage.com",
+  "public_host": "",
+  "_public_host_hint": "e.g. ext.ducklink.dev — fill when the domain delegation completes; until then the repoint URLs below are templates.",
+  "layout": {
+    "wasm_store": "wasm/sha256/<digest>/<name>.wasm",
+    "ducklink_catalog": "ducklink/catalog.json",
+    "sqlink_catalog": "sqlink/catalog.json (RESERVED; sqlink publishes its own)",
+    "native_repo": "${REVISION}/${PLATFORM}/<name>.duckdb_extension(.gz)"
+  },
+  "repoint": {
+    "$comment": "Config-driven client repointing. Substitute {public_host} with `public_host` above. These are the values the demo + CLI + stock DuckDB use to read DIRECTLY from R2 (the host is never in the byte path).",
+    "ducklink_catalog_url": "https://{public_host}/ducklink/catalog.json",
+    "custom_extension_repository": "https://{public_host}/${REVISION}/${PLATFORM}",
+    "demo_base": "https://{public_host}",
+    "env": {
+      "DUCKLINK_CATALOG_URL": "https://{public_host}/ducklink/catalog.json"
+    },
+    "duckdb_sql": "SET custom_extension_repository='https://{public_host}/${REVISION}/${PLATFORM}';"
+  },
+  "cors": {
+    "$comment": "The browser demo origin (GCP, TBD) that is allowed to fetch artifacts from R2. CORS is a permission header, NOT a proxy hop — zero R2 egress is preserved. Edit allowed_origins when the demo origin is decided; cors.json is rendered from this. Apply with deploy/r2/apply-cors.sh.",
+    "allowed_origins": [
+      "https://{demo_origin}"
+    ],
+    "_demo_origin_hint": "the GCP demo shell origin, e.g. https://demo.ducklink.dev (Cloud Storage+CDN or Cloud Run) — TBD."
+  }
+}

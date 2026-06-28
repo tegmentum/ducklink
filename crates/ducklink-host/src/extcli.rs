@@ -912,9 +912,22 @@ fn cmd_install(g: &GlobalOpts, pos: &[String]) -> Result<()> {
         ProviderKind::Wasm {
             content_digest, ..
         } => {
-            let src = resolve_wasm_source(&catalog, &resolution.artifact)?;
             let dest = dir.join(format!("{name}.wasm"));
-            install_wasm(&src, &dest, content_digest.as_deref())?;
+            match &resolution.artifact {
+                // Direct-from-R2: the published catalog points the artifact at an
+                // https:// content-addressed URL; fetch the bytes, verify the
+                // content_digest, and cache them locally.
+                ContentRef::Url(url) => {
+                    let bytes = fetch_url_artifact(url, content_digest.as_deref())?;
+                    std::fs::write(&dest, &bytes)
+                        .with_context(|| format!("write {}", dest.display()))?;
+                    eprintln!("[install] fetched {url} -> {}", dest.display());
+                }
+                _ => {
+                    let src = resolve_wasm_source(&catalog, &resolution.artifact)?;
+                    install_wasm(&src, &dest, content_digest.as_deref())?;
+                }
+            }
             eprintln!(
                 "[install] wrote {} ({})",
                 dest.display(),
@@ -971,31 +984,64 @@ fn resolve_wasm_source(catalog: &Catalog, artifact: &ContentRef) -> Result<PathB
         ContentRef::Oci(r) => {
             bail!("OCI artifact {r} is not fetchable in this build (no OCI client wired)")
         }
+        ContentRef::Url(u) => {
+            // Handled directly by cmd_install (fetch_url_artifact); this path is
+            // only for local artifacts copied off disk.
+            bail!("url artifact {u} must be fetched, not copied (internal: use fetch_url_artifact)")
+        }
     }
 }
 
-/// Copy the wasm component into the extension dir, verifying `content_digest`.
-fn install_wasm(src: &Path, dest: &Path, expected_digest: Option<&str>) -> Result<()> {
-    let bytes = std::fs::read(src).with_context(|| format!("read {}", src.display()))?;
-    if let Some(expected) = expected_digest {
-        if !expected.is_empty() {
-            let actual: String = compose_core::blobs::compute_digest(&bytes)
+/// Verify `bytes` against an expected `content_digest` (sha256, hex), using the
+/// project content-digest scheme (`compose_core::blobs::compute_digest`). An
+/// empty/absent expectation is a no-op (the un-pinned long tail). `src` is a
+/// human label for the error. Shared by the local-copy and the HTTPS-fetch
+/// install paths so both verify identically.
+fn verify_content_digest(bytes: &[u8], expected_digest: Option<&str>, src: &str) -> Result<()> {
+    match expected_digest {
+        Some(expected) if !expected.is_empty() => {
+            let actual: String = compose_core::blobs::compute_digest(bytes)
                 .iter()
                 .map(|b| format!("{b:02x}"))
                 .collect();
             if actual != expected {
                 bail!(
-                    "content_digest mismatch for {}:\n  expected {}\n  actual   {}",
-                    src.display(),
-                    expected,
-                    actual
+                    "content_digest mismatch for {src}:\n  expected {expected}\n  actual   {actual}"
                 );
             }
             eprintln!("[install] verified content_digest {}", short(expected));
+            Ok(())
         }
-    } else {
-        eprintln!("[install] no content_digest in catalog entry (skipping verification)");
+        _ => {
+            eprintln!("[install] no content_digest in catalog entry (skipping verification)");
+            Ok(())
+        }
     }
+}
+
+/// Fetch a wasm component artifact directly from the published R2 store over
+/// HTTPS (the `ContentRef::Url` install path), verifying its `content_digest`.
+/// HTTPS only; the digest check defeats tampering/MITM (the no-signing model's
+/// integrity guarantee). `reqwest` is already used for the catalog fetch.
+fn fetch_url_artifact(url: &str, expected_digest: Option<&str>) -> Result<Vec<u8>> {
+    if !url.starts_with("https://") {
+        bail!("artifact URL must be https:// (got {url})");
+    }
+    let bytes = reqwest::blocking::get(url)
+        .with_context(|| format!("fetch artifact {url}"))?
+        .error_for_status()
+        .with_context(|| format!("artifact {url}"))?
+        .bytes()
+        .with_context(|| format!("read artifact body {url}"))?
+        .to_vec();
+    verify_content_digest(&bytes, expected_digest, url)?;
+    Ok(bytes)
+}
+
+/// Copy the wasm component into the extension dir, verifying `content_digest`.
+fn install_wasm(src: &Path, dest: &Path, expected_digest: Option<&str>) -> Result<()> {
+    let bytes = std::fs::read(src).with_context(|| format!("read {}", src.display()))?;
+    verify_content_digest(&bytes, expected_digest, &src.display().to_string())?;
     std::fs::write(dest, &bytes).with_context(|| format!("write {}", dest.display()))?;
     Ok(())
 }
@@ -1189,6 +1235,31 @@ mod tests {
         assert_eq!(providers_kinds(&e), "wasm,native");
         let bc = json!({"artifact": "x.wasm"});
         assert_eq!(providers_kinds(&bc), "wasm");
+    }
+
+    #[test]
+    fn verify_content_digest_accepts_match_rejects_mismatch() {
+        let bytes = b"a representative wasm component artifact".to_vec();
+        let good: String = compose_core::blobs::compute_digest(&bytes)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        // The matching digest verifies (the URL+digest fetch's integrity gate).
+        assert!(verify_content_digest(&bytes, Some(&good), "test").is_ok());
+        // A wrong/forged digest is rejected (tamper/MITM defense).
+        let err = verify_content_digest(&bytes, Some("deadbeef"), "test").unwrap_err();
+        assert!(err.to_string().contains("content_digest mismatch"));
+        // No expectation (the un-pinned long tail) is a no-op.
+        assert!(verify_content_digest(&bytes, None, "test").is_ok());
+        assert!(verify_content_digest(&bytes, Some(""), "test").is_ok());
+    }
+
+    #[test]
+    fn fetch_url_artifact_requires_https() {
+        // The URL install path is HTTPS-only (provenance); a non-https URL is
+        // rejected before any network access.
+        let err = fetch_url_artifact("http://insecure.example/aba.wasm", None).unwrap_err();
+        assert!(err.to_string().contains("https://"));
     }
 
     #[test]
