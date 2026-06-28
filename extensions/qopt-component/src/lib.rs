@@ -8,6 +8,10 @@
 use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 
+// Plan-shape match logic lives in a wit-free module so the cargo-fuzz target can
+// drive it natively (never-panic contract; see optimize.rs).
+mod optimize;
+
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension-optimizer" });
 
 use duckdb::extension::{optimizer, types};
@@ -44,11 +48,16 @@ impl optimizer_dispatch::Guest for Extension {
         }
         // Match a GET on table `optme` in the flattened plan-shape. The host packs
         // the source node JSON (incl. the table name) into each node's params-json.
-        let matched = plan.nodes.iter().any(|n| {
-            let op = n.op_type.to_ascii_uppercase();
-            (op.contains("GET") || op.contains("SCAN")) && n.params_json.contains("optme")
-        });
-        if matched {
+        // The shape-match is the wit-free, fuzzed `optimize::matches_optme`.
+        let views: Vec<optimize::NodeView> = plan
+            .nodes
+            .iter()
+            .map(|n| optimize::NodeView {
+                op_type: n.op_type.as_str(),
+                params_json: n.params_json.as_str(),
+            })
+            .collect();
+        if optimize::matches_optme(&views) {
             Ok(optimizer_dispatch::RewriteDirective::RewriteQuery(
                 "SELECT 99 AS rewritten".into(),
             ))

@@ -4,11 +4,15 @@
 # input (a panic in a parser or the FFI bridge can abort the host).
 #
 # Targets (fuzz/fuzz_targets/):
-#   mysql_parse     - hand-rolled MySQL wire protocol (untrusted server bytes)
-#   postgres_parse  - hand-rolled PostgreSQL v3 wire protocol
-#   wkb_decode      - little-endian WKB geometry binary decoder (geomtype)
-#   hex_decode      - SQLite hex-VARCHAR -> bytes decoder
-#   bencode_decode  - BitTorrent bencode -> JSON decoder
+#   mysql_parse      - hand-rolled MySQL wire protocol (untrusted server bytes)
+#   postgres_parse   - hand-rolled PostgreSQL v3 wire protocol
+#   wkb_decode       - little-endian WKB geometry binary decoder (geomtype)
+#   hex_decode       - SQLite hex-VARCHAR -> bytes decoder
+#   bencode_decode   - BitTorrent bencode -> JSON decoder
+#   ggsql_parse      - v3 parser-dispatch: ggsql VISUALIZE rewrite (untrusted SQL)
+#   qopt_optimize    - v3 optimizer-dispatch: qopt plan-shape match (untrusted plan)
+#   plan_shape_parse - v3 optimizer-dispatch HOST side: flattened plan-shape JSON
+#   window_frame     - v3 aggregate-incr call-aggregate-window frame-bounds contract
 #
 # Usage:
 #   tooling/fuzz.sh                 # 60s per target
@@ -23,7 +27,8 @@ SECS="${1:-60}"
 shift || true
 TARGETS=("$@")
 if [ "${#TARGETS[@]}" -eq 0 ]; then
-  TARGETS=(mysql_parse postgres_parse wkb_decode hex_decode bencode_decode)
+  TARGETS=(mysql_parse postgres_parse wkb_decode hex_decode bencode_decode \
+           ggsql_parse qopt_optimize plan_shape_parse window_frame)
 fi
 
 # cargo-fuzz requires a nightly toolchain (libfuzzer + sanitizer support).

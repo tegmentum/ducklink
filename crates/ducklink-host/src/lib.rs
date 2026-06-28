@@ -111,7 +111,30 @@ pub mod compose_dynlink_test_support {
     pub use ducklink_runtime::compose_dynlink::{add_to_linker, imports_linker, DynState};
 }
 mod delta_rewrite;
+mod plan_shape;
 mod prefix;
+
+/// Defensive guard for a parser extension's returned rewrite (v3 @3.0.0
+/// parser-dispatch boundary). The core RE-PLANS the rewrite, so a bad component
+/// must not be able to drive the core into a re-plan loop or hand it nothing to
+/// parse. Rejects:
+///   * an empty / whitespace-only rewrite (nothing to re-plan), and
+///   * a rewrite byte-identical to the input statement (the simplest infinite
+///     re-plan: the core re-offers the same text to us forever).
+/// The full SQL is still validated by the core's binder; this only stops the
+/// pathological shapes that never reach a clean binder error. Pure + panic-free.
+fn validate_parser_rewrite(ext: &str, query: &str, rewrite: &str) -> Result<(), String> {
+    let r = rewrite.trim();
+    if r.is_empty() {
+        return Err(format!("parser extension '{ext}' returned an empty rewrite"));
+    }
+    if r == query.trim() {
+        return Err(format!(
+            "parser extension '{ext}' returned a rewrite identical to the input (would re-loop)"
+        ));
+    }
+    Ok(())
+}
 pub mod resolver;
 
 /// `ducklink extension <subcommand>` (alias `ext`) — extension-management CLI UX.
@@ -2233,7 +2256,14 @@ impl ExtensionManager {
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
             extension_types::Duckerror::Invalidstate(format!("parser extension '{ext}' not loaded"))
         })?;
-        instance.call_parse(handle, query)
+        let outcome = instance.call_parse(handle, query)?;
+        // Defensive boundary: the core RE-PLANS the returned rewrite, so reject an
+        // adversarial/degenerate rewrite here (see `validate_parser_rewrite`).
+        if let Some(rewrite) = &outcome {
+            validate_parser_rewrite(&ext, query, rewrite)
+                .map_err(extension_types::Duckerror::Invalidargument)?;
+        }
+        Ok(outcome)
     }
 
     /// 2.3.0 / v3: the optimizer rules components have declared, as
@@ -2266,28 +2296,10 @@ impl ExtensionManager {
                 ))
             })?;
         // Parse the core's flattened plan JSON: [{"id":N,"op":"X","parent":P,"table":"T"?}].
-        let parsed: serde_json::Value = serde_json::from_str(plan_json).map_err(|e| {
-            extension_types::Duckerror::Invalidargument(format!("bad plan JSON: {e}"))
-        })?;
-        let mut nodes: Vec<(u32, String, Option<u32>, String)> = Vec::new();
-        if let Some(arr) = parsed.as_array() {
-            for node in arr {
-                let id = node.get("id").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                let op = node
-                    .get("op")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let parent = node
-                    .get("parent")
-                    .and_then(|v| v.as_i64())
-                    .filter(|p| *p >= 0)
-                    .map(|p| p as u32);
-                // params-json carries any extra neutral fields (e.g. the table name).
-                let params = node.to_string();
-                nodes.push((id, op, parent, params));
-            }
-        }
+        // Flattening lives in the wit-free, fuzzed `plan_shape` module (never-panic
+        // boundary; bounds the node count against an adversarial core).
+        let nodes = crate::plan_shape::flatten_plan_json(plan_json)
+            .map_err(extension_types::Duckerror::Invalidargument)?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
             extension_types::Duckerror::Invalidstate(format!("optimizer extension '{ext}' not loaded"))
         })?;
@@ -5846,6 +5858,19 @@ pub fn run_cli_with_stdio(
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn parser_rewrite_guard_rejects_loops_and_empty() {
+        // Empty / whitespace-only rewrite is rejected.
+        assert!(validate_parser_rewrite("ggsql", "VISUALIZE x", "").is_err());
+        assert!(validate_parser_rewrite("ggsql", "VISUALIZE x", "   \n\t").is_err());
+        // A rewrite identical to the input (modulo surrounding whitespace) is the
+        // simplest re-plan loop -> rejected.
+        assert!(validate_parser_rewrite("ggsql", "VISUALIZE x", "VISUALIZE x").is_err());
+        assert!(validate_parser_rewrite("ggsql", "  VISUALIZE x  ", "VISUALIZE x").is_err());
+        // A genuine rewrite to different SQL is accepted (the core then binds it).
+        assert!(validate_parser_rewrite("ggsql", "VISUALIZE x", "SELECT 1").is_ok());
+    }
 
     #[test]
     fn network_grant_adapter_preserves_behavior() {
