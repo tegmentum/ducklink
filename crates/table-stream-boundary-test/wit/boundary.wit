@@ -1,0 +1,30 @@
+package duckdb:extension@3.1.0;
+
+use runtime;
+use callback-dispatch;
+use config;
+use logging;
+use catalog;
+use files;
+use guest;
+use table-stream;
+use table-stream-dispatch;
+
+// Mirrors the canonical `duckdb-extension-table-stream` world (3.1.0): same
+// imports/exports. Used host-side to bind the already-built numstream component
+// and drive its `table-stream-dispatch` exports ACROSS the WIT boundary via
+// wasmtime, proving the pushed-down FILTER descriptor crosses the interface and
+// prunes at the source (not merely the component's native logic). Imports are
+// satisfied with trapping stubs at link time; they are never called because we
+// never invoke the guest `load`/`reconfigure`/`shutdown` exports.
+world boundary-test {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import table-stream;
+  export guest;
+  export callback-dispatch;
+  export table-stream-dispatch;
+}

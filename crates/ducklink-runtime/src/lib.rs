@@ -82,12 +82,12 @@ pub const CONTRACT_MAJOR: u64 = 3;
 /// missing-import error. [`check_component_contract`] turns that into a friendly,
 /// actionable message. Bump this in lockstep with each additive MINOR contract
 /// bump (set back to 0 on a new MAJOR). Reset to 0 for the major-3 baseline.
-pub const CONTRACT_MINOR: u64 = 0;
+pub const CONTRACT_MINOR: u64 = 1;
 
 /// Full contract version string the host advertises (observability only; the
 /// guard compares MAJOR.minor via [`CONTRACT_MAJOR`]/[`CONTRACT_MINOR`], and the
 /// authoritative identity is the content-addressed [`CONTRACT_DIGEST`]).
-pub const CONTRACT_VERSION: &str = "3.0.0";
+pub const CONTRACT_VERSION: &str = "3.1.0";
 
 /// The host's `duckdb:extension` contract version, for logging / a built-in.
 /// This is the human-readable version; the authoritative content-addressed
@@ -386,7 +386,7 @@ pub mod duckdb_extension_copy_bindings {
         // per-world type conversion. NOTE: bump the @version here in lockstep
         // with the contract.
         with: {
-            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -401,7 +401,7 @@ pub mod duckdb_extension_secret_bindings {
         world: "duckdb:extension-host/duckdb-extension-secret",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -416,7 +416,7 @@ pub mod duckdb_extension_storage_write_bindings {
         world: "duckdb:extension-host/duckdb-extension-storage-write",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -431,7 +431,7 @@ pub mod duckdb_extension_table_stream_bindings {
         world: "duckdb:extension-host/duckdb-extension-table-stream",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -445,7 +445,7 @@ pub mod duckdb_extension_aggregate_incr_bindings {
         world: "duckdb:extension-host/duckdb-extension-aggregate-incr",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -459,7 +459,7 @@ pub mod duckdb_extension_conn_bindings {
         world: "duckdb:extension-host/duckdb-extension-conn",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -473,7 +473,7 @@ pub mod duckdb_extension_file_write_bindings {
         world: "duckdb:extension-host/duckdb-extension-file-write",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -487,7 +487,7 @@ pub mod duckdb_extension_index_write_bindings {
         world: "duckdb:extension-host/duckdb-extension-index-write",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -501,7 +501,7 @@ pub mod duckdb_extension_settings_bindings {
         world: "duckdb:extension-host/duckdb-extension-settings",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -516,7 +516,7 @@ pub mod duckdb_extension_parser_bindings {
         world: "duckdb:extension-host/duckdb-extension-parser",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -531,7 +531,7 @@ pub mod duckdb_extension_optimizer_bindings {
         world: "duckdb:extension-host/duckdb-extension-optimizer",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@3.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@3.1.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -1019,6 +1019,23 @@ pub mod reg {
     pub struct OptimizerReg {
         pub extension: String,
         pub rule_name: String,
+        pub callback_handle: u32,
+    }
+
+    /// A STREAMING + FILTER-PUSHDOWN-capable table function registered by an
+    /// extension via the additive 3.1.0 `table-stream` interface (the first
+    /// additive MINOR off the frozen major-3 baseline). Unlike [`TableReg`] (the
+    /// whole-batch `runtime.table-registry` path), this opt-in marker tells the
+    /// core to wire a C++ streaming `TableFunction` with `filter_pushdown = true`
+    /// that pushes the conjunctive filter set down to the owning component's
+    /// `table-stream-dispatch.call-table-open-filtered`. `callback_handle` routes
+    /// every streaming dispatch call back to that component.
+    #[derive(Clone, Debug)]
+    pub struct FilterableTableReg {
+        pub extension: String,
+        pub name: String,
+        pub arguments: Vec<FuncArg>,
+        pub columns: Vec<ColumnDef>,
         pub callback_handle: u32,
     }
 }
