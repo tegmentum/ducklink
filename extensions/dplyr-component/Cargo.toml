@@ -1,0 +1,35 @@
+[package]
+name = "dplyr-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+dplyr parser extension (duckdb:extension parser-dispatch). Registers a parser
+extension in load(); on a `dplyr( tbl |> filter(..) |> select(..) |> ... )`
+statement the built-in parser rejects, transpiles the dplyr pipeline
+(filter/select/mutate/arrange/summarise/group_by) to ordinary DuckDB SQL via
+parser-dispatch.call-parse. No bound parse tree crosses the boundary -- text in,
+SQL text out. The transpiler lives ONCE in the shared datalink dplyr-core (the
+same core the sqlink shim consumes); this shim only maps the neutral Outcome
+onto the duckdb:extension parser-dispatch surface.
+"""
+license = "MIT"
+publish = false
+
+[lib]
+name = "dplyr"
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+# Shared, DB-agnostic dplyr->SQL transpiler (datalink pull-up). This shim
+# only maps the core's neutral Outcome onto the duckdb:extension
+# parser-dispatch surface; the transpiler lives ONCE in the core.
+dplyr-core = { path = "../../../datalink/extensions/dplyr-core" }
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension-parser"

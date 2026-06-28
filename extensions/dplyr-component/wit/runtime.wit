@@ -1,0 +1,87 @@
+package duckdb:extension@3.1.0;
+
+use types;
+
+interface runtime {
+  use types.{capabilitykind, duckerror, duckvalue, extopts, funcarg, funcopts, invokeinfo, logicaltype, resultset, rowbatch, columndef};
+
+  resource scalar-callback {
+    constructor(handle: u32);
+    call: func(args: list<duckvalue>, ctx: invokeinfo) -> result<duckvalue, duckerror>;
+  }
+
+  resource table-callback {
+    constructor(handle: u32);
+    call: func(args: list<duckvalue>) -> result<resultset, duckerror>;
+  }
+
+  resource aggregate-callback {
+    constructor(handle: u32);
+    call: func(rows: rowbatch) -> result<duckvalue, duckerror>;
+  }
+
+  resource pragma-callback {
+    constructor(handle: u32);
+    call: func(args: list<duckvalue>) -> result<option<duckvalue>, duckerror>;
+  }
+
+  resource cast-callback {
+    constructor(handle: u32);
+    call: func(value: duckvalue) -> result<duckvalue, duckerror>;
+  }
+
+  resource scalar-registry {
+    register: func(
+                   name: string,
+                   arguments: list<funcarg>,
+                   returns: logicaltype,
+                   callback: scalar-callback,
+                   options: option<funcopts>) -> result<u32, duckerror>;
+  }
+
+  resource table-registry {
+    register: func(
+                   name: string,
+                   arguments: list<funcarg>,
+                   columns: list<columndef>,
+                   callback: table-callback,
+                   options: option<extopts>) -> result<u32, duckerror>;
+  }
+
+  resource aggregate-registry {
+    register: func(
+                   name: string,
+                   arguments: list<funcarg>,
+                   returns: logicaltype,
+                   callback: aggregate-callback,
+                   options: option<funcopts>) -> result<u32, duckerror>;
+  }
+
+  resource pragma-registry {
+    register-call: func(
+                        name: string,
+                        arguments: list<funcarg>,
+                        returns: logicaltype,
+                        callback: pragma-callback,
+                        options: option<extopts>) -> result<u32, duckerror>;
+  }
+
+  resource macro-registry {
+    register-scalar: func(
+                          name: string,
+                          parameters: list<string>,
+                          body-sql: string,
+                          options: option<extopts>) -> result<bool, duckerror>;
+  }
+
+  variant capability {
+    scalar(scalar-registry),
+    table(table-registry),
+    aggregate(aggregate-registry),
+    pragma(pragma-registry),
+    macro(macro-registry),
+  }
+
+  get-capability: func(kind: capabilitykind) -> option<capability>;
+  list-capabilities: func() -> list<capabilitykind>;
+}

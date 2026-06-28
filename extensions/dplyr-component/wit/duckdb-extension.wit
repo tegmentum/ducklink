@@ -1,0 +1,37 @@
+package duckdb:extension@3.1.0;
+
+use runtime;
+use callback-dispatch;
+use config;
+use logging;
+use catalog;
+use files;
+use guest;
+use parser;
+use parser-dispatch;
+
+world duckdb-extension {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  export guest;
+  export callback-dispatch;
+}
+
+// Parser-capable world targeted by this PoC: additionally imports the parser
+// registration surface and exports the parser-dispatch callback (call-parse). The
+// host drives call-parse from a DuckDB ParserExtension and runs the returned
+// string->SQL rewrite.
+world duckdb-extension-parser {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import parser;
+  export guest;
+  export callback-dispatch;
+  export parser-dispatch;
+}
