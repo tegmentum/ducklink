@@ -33,6 +33,15 @@
 //! credentials, so the layout can be verified offline (e.g. in this build, since
 //! the R2 secrets live only in CI). The live first publish runs from the
 //! publish-r2 CI workflow after merge.
+//!
+//! PREBUILT INTEGRITY GATE: the heavy C-lib extension components (spatialfns /
+//! avrofns / azfs / mysqlwasm / postgreswasm / sqlitewasm …) are NOT recompiled in
+//! CI — they are downloaded prebuilt and pinned by the catalog `content_digest`.
+//! Set `DUCKLINK_PUBLISH_VERIFY=1` to make BOTH the dry-run plan and the live
+//! publish hash every content-addressed artifact and reject any mismatch against
+//! the catalog pin (the integrity gate that replaces rebuild-from-source). The
+//! live upload path additionally re-verifies each object's bytes immediately
+//! before the PUT (see [`object_bytes`]).
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -199,6 +208,17 @@ pub fn plan_publish(inputs: &PlanInputs) -> Result<PublishPlan> {
         }
     }
 
+    // PREBUILT INTEGRITY GATE: when DUCKLINK_PUBLISH_VERIFY is truthy, hash every
+    // content-addressed wasm object NOW and reject any mismatch (or missing file).
+    // This is the gate that REPLACES rebuild-from-source in the publish-r2 CI: the
+    // heavy C-lib components are downloaded prebuilt (not recompiled), so the only
+    // thing standing between a prebuilt artifact and the CDN is its sha256 ==
+    // catalog content_digest. Env-gated so the live publish + the CI dry-run both
+    // verify, while the offline unit tests (fixture digests) stay fast + pure.
+    if verify_enabled() {
+        verify_objects(&objects)?;
+    }
+
     // 2. The per-DB catalog (mutable, short-TTL), pointing at the wasm store.
     //    `sqlink/catalog.json` is RESERVED in the layout (sqlink publishes its
     //    own to the shared bucket) — we deliberately do NOT write it here.
@@ -226,6 +246,58 @@ pub fn plan_publish(inputs: &PlanInputs) -> Result<PublishPlan> {
     }
 
     Ok(PublishPlan { objects, deduped })
+}
+
+/// Is the prebuilt content-digest gate enabled? (`DUCKLINK_PUBLISH_VERIFY` set to
+/// a truthy value — `1`/`true`/`yes`, case-insensitive). Off by default so the
+/// offline plan/dry-run stays pure unless a caller (the CI publish job) opts in.
+fn verify_enabled() -> bool {
+    matches!(
+        std::env::var("DUCKLINK_PUBLISH_VERIFY")
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase()
+            .as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
+/// Hash every content-addressed (digest-bearing, file-sourced) object and reject
+/// the whole plan on the first mismatch or unreadable file — the prebuilt-artifact
+/// integrity gate. Memory-sourced objects (the catalog JSON) carry no digest and
+/// are skipped here.
+fn verify_objects(objects: &[PlannedObject]) -> Result<()> {
+    let mut checked = 0usize;
+    for o in objects {
+        let Some(expected) = o.digest.as_deref() else {
+            continue;
+        };
+        if expected.is_empty() {
+            continue;
+        }
+        let ObjectSource::File(path) = &o.source else {
+            continue;
+        };
+        let bytes = std::fs::read(path).with_context(|| {
+            format!(
+                "verify {}: read prebuilt artifact {}",
+                o.key,
+                path.display()
+            )
+        })?;
+        let actual = hex::encode(Sha256::digest(&bytes));
+        if actual != expected {
+            bail!(
+                "prebuilt content_digest mismatch for {} ({}):\n  expected {expected}\n  actual   {actual}\n  \
+                 (the prebuilt artifact does not match the catalog pin — rebuild + re-upload the prebuilt-components release)",
+                o.key,
+                path.display(),
+            );
+        }
+        checked += 1;
+    }
+    eprintln!("ducklink publish: prebuilt integrity gate OK — {checked} artifact digest(s) verified against the catalog");
+    Ok(())
 }
 
 /// Pull (content_digest, artifact-path) pairs for every wasm provider of a
@@ -611,6 +683,31 @@ mod tests {
             cfg.endpoint_host(),
             "a633389b157fd8a9ec3d3a27cd375643.r2.cloudflarestorage.com"
         );
+    }
+
+    #[test]
+    fn verify_objects_rejects_prebuilt_digest_mismatch() {
+        let tmp = tempfile::tempdir().unwrap();
+        let art = tmp.path().join("x.wasm");
+        std::fs::write(&art, b"\0asm\x01\0\0\0").unwrap();
+        // A digest that does NOT match sha256(b"\0asm\x01\0\0\0").
+        let objs = vec![PlannedObject {
+            key: "wasm/sha256/abcd/x.wasm".into(),
+            size: 8,
+            cache_control: CACHE_IMMUTABLE,
+            digest: Some("00".repeat(32)),
+            source: ObjectSource::File(art.clone()),
+        }];
+        let err = verify_objects(&objs).unwrap_err();
+        assert!(err.to_string().contains("prebuilt content_digest mismatch"));
+
+        // The matching digest passes.
+        let good = hex::encode(Sha256::digest(b"\0asm\x01\0\0\0"));
+        let objs = vec![PlannedObject {
+            digest: Some(good),
+            ..objs.into_iter().next().unwrap()
+        }];
+        verify_objects(&objs).unwrap();
     }
 
     #[test]

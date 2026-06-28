@@ -1,19 +1,35 @@
 # Publish the ducklink catalog + content-addressed artifacts to the shared
 # Cloudflare R2 extension-distribution bucket (datalink-ext).
 #
-# This is the HEAVY publish job (GitHub-hosted-runner oriented, like
-# smoke-tests.yml): it needs the sibling tegmentum/duckdb-wasm core, wasi-sdk +
-# cargo-component, and a multi-minute build of the lean core + every component.
-# It is GATED on the conformance + verify-catalog suites passing — a failing
-# gate aborts before any upload (no bad artifact reaches the CDN).
+# PUBLISH-FROM-PREBUILT + VERIFY-DIGESTS (not rebuild-from-source).
+# ----------------------------------------------------------------
+# The extension components are built LOCALLY and pinned by the catalog
+# `content_digest`. Several are heavy C-lib components — spatialfns/avrofns/azfs/
+# mysqlwasm/postgreswasm need GEOS/PROJ/GDAL/libpq, and sqlitewasm compiles C —
+# so rebuilding all ~189 from source on a hosted runner is impractical and is NOT
+# how the live R2 artifacts are produced. Instead this job:
+#   1. PROVISIONS the runner exactly like the proven feat/r2-ci-provision flow
+#      (sibling checkouts; the prebuilt libduckdb-wasi.a core-libs release; the
+#      lean DuckDB-wasm core; the host; the pure-Rust cli/loader/dotcmd needed by
+#      the conformance gate). It does NOT compile any extension component.
+#   2. DOWNLOADS the prebuilt component artifacts from the
+#      tegmentum/ducklink `prebuilt-components-*` GitHub release (the download
+#      home, mirroring how libduckdb-wasi.a is hosted on the core-libs release).
+#   3. VERIFIES every artifact's sha256 against the catalog `content_digest`
+#      (reject on mismatch). This integrity gate REPLACES rebuild-from-source: a
+#      tampered/skewed prebuilt artifact never reaches the CDN. Verified three
+#      times for defence in depth — a fast fail-fast check right after download,
+#      the unmodified `verify-catalog --verify-content` gate, and `publish` with
+#      DUCKLINK_PUBLISH_VERIFY=1 (re-hashes in the plan + before each PUT).
+#   4. Runs the conformance + verify-catalog gates UNMODIFIED. A failing gate
+#      aborts before any upload (no bad artifact reaches the CDN).
 #
 # Trigger: a release tag (`v*`) or manual dispatch. The R2 credentials are
 # ORG-LEVEL GitHub secrets (R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY /
 # R2_ACCOUNT_ID / R2_BUCKET) shared by ducklink + sqlink + datalink. Uploads use
 # the R2 S3 endpoint (https://<account>.r2.cloudflarestorage.com) and need only
 # those secrets; the public read-serving hostname (DUCKLINK_R2_PUBLIC_HOST) is
-# not required to publish (see deploy/r2/r2.config.json — filled when the domain
-# delegation lands).
+# not required to publish (see deploy/r2/r2.config.json).
 name: publish-r2
 
 on:
@@ -23,7 +39,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Plan only (print the object keys; no upload)"
+        description: "Plan only (verify digests + print the object keys; no upload)"
         type: boolean
         default: false
 
@@ -39,6 +55,13 @@ env:
   # no other download home on a fresh runner.
   DUCKDB_SOURCE_REF: v1.5.4
   DUCKDB_CORE_LIBS_TAG: core-libs-v1.5.4
+  # The download home for the PREBUILT extension components (the ~189 <name>.wasm,
+  # built locally; the heavy C-lib ones can't be rebuilt on a hosted runner). A
+  # GitHub release on tegmentum/ducklink, mirroring how libduckdb-wasi.a is hosted
+  # on the core-libs release. Bump this tag in lockstep with a catalog
+  # regeneration: the digest-verify gate below rejects a stale/mismatched set.
+  DUCKLINK_COMPONENTS_TAG: prebuilt-components-v1.5.4
+  DUCKLINK_COMPONENTS_TARBALL: ducklink-components.tar.gz
   # The pull-up'd extension components path-dep the shared datalink -core crates
   # (a sibling repo); check this ref of tegmentum/datalink out as a sibling.
   DATALINK_REF: main
@@ -97,6 +120,10 @@ jobs:
         working-directory: ducklink
         run: pip install -r requirements-dev.txt
 
+      # cargo-component builds the lean DuckDB-wasm core component + the pure-Rust
+      # cli/loader/dotcmd; wac composes them. The EXTENSION components are NOT
+      # built here (they are downloaded prebuilt), so no wasi-sdk-driven C build of
+      # spatialfns/avrofns/sqlitewasm/... happens on the runner.
       - name: Install component tooling
         run: |
           set -euo pipefail
@@ -152,7 +179,11 @@ jobs:
           mkdir -p ../ducklink/target/wasm32-wasip2/release
           cp target/wasm32-wasip2/release/ducklink_core.wasm ../ducklink/target/wasm32-wasip2/release/
 
-      - name: Build the host + every component
+      # Build the NATIVE host + the pure-Rust cli/loader/dotcmd components. These
+      # are needed to RUN the conformance gate (the host is the resolver runner;
+      # ducklink_cli.wasm + ducklink_core.wasm are conformance required-artifacts).
+      # No EXTENSION component is compiled here.
+      - name: Build the host + the pure-Rust cli/loader/dotcmd
         working-directory: ducklink
         run: |
           set -euo pipefail
@@ -161,30 +192,84 @@ jobs:
           export DUCKDB_SOURCE_DIR="$GITHUB_WORKSPACE/ducklink/external/duckdb"
           rm -f ../duckdb-wasm/external/duckdb  # see the core-build step
           source ../duckdb-wasm/scripts/setup-env.sh
-          # Mirror `make all` minus core (already built above): sync the CLI/loader
-          # WIT trees (crates/ducklink-cli/wit is gitignored + generated, and the
-          # host's bindgen! reads it) and build the cli/loader/dotcmd components so
-          # ducklink_cli.wasm (a smoke required-artifact) + dotcmd artifacts exist.
+          # Sync the CLI/loader WIT trees (crates/ducklink-cli/wit is gitignored +
+          # generated, and the host's bindgen! reads it) and build the cli/loader/
+          # dotcmd components so ducklink_cli.wasm (a conformance required-artifact)
+          # + dotcmd artifacts exist. All pure Rust — no C-lib build.
           make standalone-cli loader-stub dotcmds
           cargo build --release -p ducklink-host
-          # --build rebuilds each component + copies its artifact into
-          # artifacts/extensions (the publish source).
-          python3 tooling/smoke.py --all --build
 
-      # Regenerate the catalog so wit_contract / content_digest are stamped over
-      # the just-built artifacts (the publish reads registry/index.json).
-      - name: Generate the catalog
+      # PUBLISH-FROM-PREBUILT: download the prebuilt extension components from the
+      # tegmentum/ducklink prebuilt-components release into artifacts/extensions
+      # (the publish source dir). This REPLACES `smoke.py --all --build` (which
+      # recompiles every component, including the heavy C-lib ones that can't build
+      # on a hosted runner).
+      - name: Download the prebuilt extension components
         working-directory: ducklink
-        run: python3 tooling/gen-catalog.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/extensions
+          gh release download "$DUCKLINK_COMPONENTS_TAG" \
+            -R tegmentum/ducklink \
+            -p "$DUCKLINK_COMPONENTS_TARBALL" \
+            -p "SHA256SUMS" \
+            -D /tmp/prebuilt \
+            --clobber
+          tar xzf "/tmp/prebuilt/$DUCKLINK_COMPONENTS_TARBALL" -C artifacts/extensions
+          echo "downloaded $(ls artifacts/extensions/*.wasm | wc -l) prebuilt component artifact(s)"
+
+      # INTEGRITY GATE (fail-fast): every catalog-referenced artifact's sha256 must
+      # equal its catalog content_digest. This is the gate that REPLACES
+      # rebuild-from-source; it runs first so a bad set aborts before the (cheap but
+      # non-zero) conformance run. verify-catalog --verify-content re-asserts it
+      # over the full set below, and `publish` re-hashes again before each PUT.
+      - name: Verify prebuilt artifacts against the catalog digests
+        working-directory: ducklink
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, hashlib, os, sys
+          cat = json.load(open("registry/index.json"))
+          art = "artifacts/extensions"
+          pairs = {}
+          for e in cat.get("extensions", []):
+              for p in (e.get("providers") or [e]):
+                  if p.get("kind", "wasm") != "wasm":
+                      continue
+                  a, d = p.get("artifact"), p.get("content_digest")
+                  if a and d:
+                      pairs[os.path.basename(a)] = d
+          bad, ok = [], 0
+          for name, want in sorted(pairs.items()):
+              fp = os.path.join(art, name)
+              if not os.path.exists(fp):
+                  bad.append(f"{name}: MISSING prebuilt artifact"); continue
+              got = hashlib.sha256(open(fp, "rb").read()).hexdigest()
+              if got == want:
+                  ok += 1
+              else:
+                  bad.append(f"{name}: sha256 {got[:12]} != catalog content_digest {want[:12]}")
+          print(f"verified {ok}/{len(pairs)} prebuilt artifacts against the catalog content_digest")
+          if bad:
+              print("INTEGRITY FAILURE — prebuilt artifacts do not match the catalog pin:", file=sys.stderr)
+              for b in bad:
+                  print("  " + b, file=sys.stderr)
+              print("\nRebuild locally + upload a new prebuilt-components release, "
+                    "then bump DUCKLINK_COMPONENTS_TAG.", file=sys.stderr)
+              sys.exit(1)
+          PY
 
       # GATE 1: conformance — every promoted suite must pass through the resolver
-      # hard gate. A failure aborts the job (no upload).
+      # hard gate, against the PREBUILT artifacts. A failure aborts the job.
       - name: Conformance gate
         working-directory: ducklink
         run: python3 tooling/conformance.py --all
 
       # GATE 2: verify-catalog — content-addressed identity + content_digest ==
-      # sha256(.wasm) + the ducklink-specific source/smoke/workspace/prefix checks.
+      # sha256(.wasm) over the full set + the ducklink-specific
+      # source/smoke/workspace/prefix checks (the unmodified gate).
       - name: Verify-catalog gate
         working-directory: ducklink
         run: python3 tooling/verify-catalog.py --verify-content
@@ -200,12 +285,14 @@ jobs:
             mkdir -p target/ext-repo
           fi
 
-      # GATED publish. Dry-run on manual dispatch when requested; otherwise a real
-      # upload to R2 using the org-level secrets. `--native-repo` is included only
-      # if the gen-shim tree was produced above.
+      # GATED publish. DUCKLINK_PUBLISH_VERIFY=1 makes BOTH the dry-run plan and the
+      # live publish re-hash every content-addressed artifact against the catalog
+      # pin (defence in depth on top of the fail-fast + verify-catalog gates).
+      # Dry-run on manual dispatch when requested; otherwise a real upload to R2.
       - name: Publish to R2
         working-directory: ducklink
         env:
+          DUCKLINK_PUBLISH_VERIFY: "1"
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
