@@ -1,0 +1,30 @@
+[package]
+name = "sys_compat-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+DB-identity / system scalars not in DuckDB builtins: system_user(), database(),
+schema(), collation(text). DuckDB-appropriate constants (current_user/current_database/
+current_schema/version/format_bytes are DuckDB builtins and are NOT re-registered).
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+# This component is DB-PRIVATE: its values are DuckDB's engine identity
+# (not portable shared logic), so the `declare!` table lives HERE rather
+# than in a datalink core. It still rides the datalink_extcore::duckdb_shim!
+# codegen for the registration/marshalling glue.
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

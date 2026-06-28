@@ -2,14 +2,14 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**185 component extensions** · **573 SQL functions** · 7 expose aggregates · 3 require network.
+**188 component extensions** · **600 SQL functions** · 8 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
 ## Capabilities
 
 - **Scalars** — the default; pure per-row functions.
-- **Aggregates** — `aggstat`, `bloom`, `minhash`, `countmin`, `bitfilters`, `tdigest`, `mlkmeans` use the whole-batch `call_aggregate` path.
+- **Aggregates** — `aggstat`, `bloom`, `minhash`, `countmin`, `bitfilters`, `tdigest`, `mlkmeans`, `stats` use the whole-batch `call_aggregate` path.
 - **Network** — `dns`, `httpclient`, `openprompt` need an outbound-network grant (`DUCKLINK_NETWORK_GRANT`), off by default.
 
 ## Loading & embedding
@@ -96,7 +96,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **yaml** | `yaml_to_json`, `json_to_yaml` | serde_yaml, serde_json |  |
 | **z85** | `z85_encode`, `z85_decode` | z85 |  |
 
-## Text & NLP (58)
+## Text & NLP (59)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -144,6 +144,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **simhash** | `simhash`, `simhash_distance` | hand-rolled |  |
 | **slug** | `slugify` | slug |  |
 | **sqlformat** | `sql_format`, `sql_format_compact` | sqlformat |  |
+| **stdsql** | `space`, `initcap`, `startsWith`, `endsWith`, `lengthUTF8`, `lowerUTF8`, `upperUTF8`, `toString`, `empty`, `notEmpty`, `replaceAll`, `positionUTF8`, `to_bin`, `to_oct`, `to_ascii`, `quote_ident`, `quote_literal`, `quote_nullable`, `get_byte`, `set_byte` | hand-rolled |  |
 | **stem** | `stem` | rust-stemmers |  |
 | **stopwords** | `is_stopword`, `remove_stopwords` | stop-words |  |
 | **text_utils** | `sql_normalize`, `insert`, `locate` | hand-rolled |  |
@@ -177,7 +178,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **totp** | `totp` | hmac, sha1, base32 |  |
 | **vigenere** | `vigenere_encrypt`, `vigenere_decrypt` | hand-rolled |  |
 
-## Math (11)
+## Math (12)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -188,6 +189,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **hnswfns** | `hnsw_search` | instant-distance |  |
 | **math** | `exp2`, `e`, `rand`, `div`, `truncate` | libm |  |
 | **mlkmeans** | `ml_kmeans` | rmp-serde, serde, serde_json | aggregate |
+| **stats** | `percentile`, `percentile_cont`, `percentile_disc` | hand-rolled | aggregate |
 | **statsduck** | `adjust_p`, `anderson_darling`, `anova_oneway`, `bin_edges`, `chisq_cdf`, `chisq_goodness_of_fit`, `chisq_independence`, `corr_matrix`, `f_cdf`, `gamma_cdf`, `jarque_bera`, `kendall_test`, `ks_test_1samp`, `ks_test_2samp`, `lm`, `lm_summary`, `lognormal_cdf`, `mann_whitney_u`, `pearson_test`, `poibin_cdf`, `shapiro_wilk`, `sign_test_1samp`, `sign_test_paired`, `spearman_test`, `t_cdf`, `table_one`, `ttest_1samp`, `ttest_2samp`, `ttest_paired`, `weibull_cdf`, `wilcoxon_signed_rank` | statrs, serde_json |  |
 | **stochastic** | `normal_cdf`, `normal_pdf`, `normal_quantile`, `binomial_pmf`, `poisson_pmf`, `exponential_cdf`, `beta_cdf` | statrs |  |
 | **tdigest** | `tdigest`, `tdigest_quantile`, `tdigest_count` | tdigest, bincode | aggregate |
@@ -216,6 +218,17 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **urlpattern** | `url_pattern_test`, `url_pattern_match` | urlpattern |  |
 | **useragent** | `ua_browser`, `ua_browser_version`, `ua_os`, `ua_category`, `ua_is_bot` | woothee |  |
 
+## Utility (6)
+
+| Extension | Functions | Backed by | Notes |
+|---|---|---|---|
+| **chrono** | `date_parse`, `date_format`, `to_char`, `str_to_date`, `date_tz_convert`, `date_now_tz`, `date_is_business_day`, `date_business_days_between`, `date_iso_week`, `date_iso_year`, `duration_parse`, `duration_format`, `chrono_version`, `from_unixtime`, `timestampdiff`, `timestampadd`, `adddate`, `subdate`, `makedate`, `maketime`, `from_days`, `utc_timestamp`, `sysdate`, `timestamp_add`, `timestamp_sub`, `timestamp_diff`, `timestamp_trunc`, `timestamp_micros`, `timestamp_millis`, `timestamp_seconds`, `datetime_add`, `datetime_sub`, `datetime_diff`, `datetime_trunc`, `parse_date`, `parse_datetime`, `parse_timestamp`, `format_date`, `format_datetime`, `format_timestamp`, `unix_micros`, `unix_millis`, `unix_seconds`, `date_from_unix_date`, `date_bucket` | chrono, chrono-tz |  |
+| **cron** | `cron_is_valid`, `cron_next`, `cron_prev` | croner |  |
+| **parsertools** | `sql_tables`, `sql_is_valid`, `sql_statement_type` | sqlparser |  |
+| **prql** | `prql_to_sql`, `prql_is_valid` | prqlc |  |
+| **rhai** | `rhai_eval`, `rhai_eval_int`, `rhai_eval_double` | rhai |  |
+| **sys_compat** | `system_user`, `database`, `schema`, `collation` | hand-rolled |  |
+
 ## Validators (6)
 
 | Extension | Functions | Backed by | Notes |
@@ -226,16 +239,6 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **iban** | `iban_validate`, `iban_country`, `iban_bban` | hand-rolled |  |
 | **isin** | `isin_validate`, `isin_check_digit`, `isin_country`, `isin_nsin` | hand-rolled |  |
 | **luhn** | `luhn_validate`, `luhn_check_digit` | hand-rolled |  |
-
-## Utility (5)
-
-| Extension | Functions | Backed by | Notes |
-|---|---|---|---|
-| **chrono** | `date_parse`, `date_format`, `to_char`, `str_to_date`, `date_tz_convert`, `date_now_tz`, `date_is_business_day`, `date_business_days_between`, `date_iso_week`, `date_iso_year`, `duration_parse`, `duration_format`, `chrono_version`, `from_unixtime`, `timestampdiff`, `timestampadd`, `adddate`, `subdate`, `makedate`, `maketime`, `from_days`, `utc_timestamp`, `sysdate`, `timestamp_add`, `timestamp_sub`, `timestamp_diff`, `timestamp_trunc`, `timestamp_micros`, `timestamp_millis`, `timestamp_seconds`, `datetime_add`, `datetime_sub`, `datetime_diff`, `datetime_trunc`, `parse_date`, `parse_datetime`, `parse_timestamp`, `format_date`, `format_datetime`, `format_timestamp`, `unix_micros`, `unix_millis`, `unix_seconds`, `date_from_unix_date`, `date_bucket` | chrono, chrono-tz |  |
-| **cron** | `cron_is_valid`, `cron_next`, `cron_prev` | croner |  |
-| **parsertools** | `sql_tables`, `sql_is_valid`, `sql_statement_type` | sqlparser |  |
-| **prql** | `prql_to_sql`, `prql_is_valid` | prqlc |  |
-| **rhai** | `rhai_eval`, `rhai_eval_int`, `rhai_eval_double` | rhai |  |
 
 ## Encoding (4)
 

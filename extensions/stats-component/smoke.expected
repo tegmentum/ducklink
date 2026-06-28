@@ -1,0 +1,15 @@
+# stats percentile aggregates (p in 0..100); values cross-checked vs sqlink's Samples algo.
+p50
+3
+pc25
+2
+pc75
+4
+pd50
+3
+pceven
+2.5
+pdeven
+2
+pempty
+NULL

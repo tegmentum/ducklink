@@ -1,0 +1,9 @@
+# sys_compat DB-identity gaps; DuckDB-appropriate constants (DB-private, not a shared core).
+su
+duckdb
+db
+memory
+sch
+main
+col
+BINARY

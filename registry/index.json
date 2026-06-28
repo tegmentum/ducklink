@@ -7305,6 +7305,136 @@
       "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
       "wit_contract_version": "2.2.0",
       "content_digest": "7797086b9a67c9dc4ad47b8cff0a72a48d72085066425009e0e99304d9c98e49"
+    },
+    {
+      "name": "stdsql",
+      "version": "0.1.0",
+      "description": "Cross-dialect standard-SQL scalars not provided by DuckDB builtins: space, initcap, the ClickHouse camelCase family (startsWith/endsWith/lengthUTF8/lowerUTF8/upperUTF8/toString/empty/notEmpty/replaceAll/positionUTF8), and the PostgreSQL to_bin/to_oct/to_ascii/quote_ident/quote_literal/quote_nullable/get_byte/set_byte. DuckDB's greatest/least/left/right/lpad/rpad/repeat/translate/to_hex/bit_length/chr/ascii/char_length/from_hex/get_bit/set_bit builtins are NOT re-registered, and `if` stays DuckDB's CASE syntax.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "sql",
+        "postgres",
+        "mysql",
+        "clickhouse",
+        "compat"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/stdsql-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/stdsql.wasm",
+      "exports": [
+        "space",
+        "initcap",
+        "startsWith",
+        "endsWith",
+        "lengthUTF8",
+        "lowerUTF8",
+        "upperUTF8",
+        "toString",
+        "empty",
+        "notEmpty",
+        "replaceAll",
+        "positionUTF8",
+        "to_bin",
+        "to_oct",
+        "to_ascii",
+        "quote_ident",
+        "quote_literal",
+        "quote_nullable",
+        "get_byte",
+        "set_byte"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "stdsql",
+      "expansion": "com.tegmentum.ducklink.stdsql",
+      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract_version": "2.2.0",
+      "content_digest": "482aa4513e3ed171eb21ba809c873a0c0d5ae12d8617fb67db1ccb8b915057c4"
+    },
+    {
+      "name": "stats",
+      "version": "0.1.0",
+      "description": "Percentile aggregates not provided by DuckDB's plain catalog: percentile(value, p), percentile_cont(value, p), percentile_disc(value, p), all with p in 0..100. DuckDB's percentile_cont/disc are WITHIN GROUP ordered-set syntax; its stddev/variance/median/mode/corr/covar/regr_*/skewness/kurtosis/bit_*/any_value/array_agg/string_agg aggregates are NOT re-registered.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "statistics",
+        "percentile",
+        "aggregate",
+        "compat"
+      ],
+      "categories": [
+        "math"
+      ],
+      "source": "extensions/stats-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/stats.wasm",
+      "exports": [
+        "percentile",
+        "percentile_cont",
+        "percentile_disc"
+      ],
+      "requires": [
+        "aggregate"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "stats",
+      "expansion": "com.tegmentum.ducklink.stats",
+      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract_version": "2.2.0",
+      "content_digest": "186a0014e0b2d6d49721019d0df79bff010365979f3dc5951be71bbc7552e44d"
+    },
+    {
+      "name": "sys_compat",
+      "version": "0.1.0",
+      "description": "DB-identity / system scalars not provided by DuckDB builtins: system_user(), database(), schema(), collation(text), returning DuckDB-appropriate constants. DuckDB's version()/current_user/session_user/user/current_role/current_database()/current_schema()/current_schemas()/format_bytes() builtins are NOT re-registered. DB-private (engine identity, not portable shared logic).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "system",
+        "identity",
+        "compat",
+        "portability"
+      ],
+      "categories": [
+        "utility"
+      ],
+      "source": "extensions/sys_compat-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/sys_compat.wasm",
+      "exports": [
+        "system_user",
+        "database",
+        "schema",
+        "collation"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "sys_compat",
+      "expansion": "com.tegmentum.ducklink.sys_compat",
+      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract_version": "2.2.0",
+      "content_digest": "3756affb354f55c94b30dcbe32c196861447924fa06675ef2aae7c60c166cded"
     }
   ],
   "dotcmds": [
