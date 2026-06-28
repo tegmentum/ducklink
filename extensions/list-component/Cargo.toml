@@ -1,0 +1,29 @@
+[package]
+name = "list-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+JSON-array-backed list scalars not in DuckDB builtins: array_remove, list_length,
+the array_* reductions (min/max/sum/product/avg/count), array_dims/lower/upper/ndims,
+array_positions, array_replace, arrays_overlap. Carrier is TEXT containing a JSON array.
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+# This shim is GENERATED from the core by datalink-extcore::duckdb_shim!.
+list-core = { path = "../../../datalink/extensions/list-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"

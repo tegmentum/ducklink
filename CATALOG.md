@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**183 component extensions** · **513 SQL functions** · 7 expose aggregates · 3 require network.
+**185 component extensions** · **573 SQL functions** · 7 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -18,7 +18,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 - **Static embed (opt-in):** `ducklink compose --embed <name>` bakes an extension into the core at build time. Wired today for `isin` (`embed-isin` core feature); `ducklink compose --list` shows what's embeddable. Most extensions stay runtime-loaded by design.
 - **Network grant:** net extensions are denied by default; opt in with `--grant-network all` (or a name allowlist), equivalently the `DUCKLINK_NETWORK_GRANT` env var.
 
-## Data types & encoding (72)
+## Data types & encoding (73)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -62,6 +62,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **jsonfns** | `json_valid`, `json_extract`, `json_extract_string`, `json_array_length`, `json_type`, `json_keys`, `json_contains`, `json_quote`, `to_json` | serde_json, serde_json_path |  |
 | **jsonschema** | `json_schema_valid` | jsonschema, serde_json |  |
 | **lindel** | `morton_encode`, `morton_decode_x`, `morton_decode_y`, `hilbert_encode`, `hilbert_decode_x`, `hilbert_decode_y` | hand-rolled |  |
+| **list** | `array_remove`, `list_length`, `array_min`, `array_max`, `array_sum`, `array_product`, `array_avg`, `array_count`, `array_dims`, `array_lower`, `array_upper`, `array_ndims`, `array_positions`, `array_replace`, `arrays_overlap` | serde_json |  |
 | **magic** | `magic_mime`, `magic_extension`, `magic_matcher_type`, `is_image` | infer |  |
 | **maidenhead** | `to_maidenhead`, `maidenhead_lat`, `maidenhead_lon` | hand-rolled |  |
 | **marisa** | `fst_contains`, `fst_prefix`, `fst_count` | fst |  |
@@ -226,6 +227,16 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **isin** | `isin_validate`, `isin_check_digit`, `isin_country`, `isin_nsin` | hand-rolled |  |
 | **luhn** | `luhn_validate`, `luhn_check_digit` | hand-rolled |  |
 
+## Utility (5)
+
+| Extension | Functions | Backed by | Notes |
+|---|---|---|---|
+| **chrono** | `date_parse`, `date_format`, `to_char`, `str_to_date`, `date_tz_convert`, `date_now_tz`, `date_is_business_day`, `date_business_days_between`, `date_iso_week`, `date_iso_year`, `duration_parse`, `duration_format`, `chrono_version`, `from_unixtime`, `timestampdiff`, `timestampadd`, `adddate`, `subdate`, `makedate`, `maketime`, `from_days`, `utc_timestamp`, `sysdate`, `timestamp_add`, `timestamp_sub`, `timestamp_diff`, `timestamp_trunc`, `timestamp_micros`, `timestamp_millis`, `timestamp_seconds`, `datetime_add`, `datetime_sub`, `datetime_diff`, `datetime_trunc`, `parse_date`, `parse_datetime`, `parse_timestamp`, `format_date`, `format_datetime`, `format_timestamp`, `unix_micros`, `unix_millis`, `unix_seconds`, `date_from_unix_date`, `date_bucket` | chrono, chrono-tz |  |
+| **cron** | `cron_is_valid`, `cron_next`, `cron_prev` | croner |  |
+| **parsertools** | `sql_tables`, `sql_is_valid`, `sql_statement_type` | sqlparser |  |
+| **prql** | `prql_to_sql`, `prql_is_valid` | prqlc |  |
+| **rhai** | `rhai_eval`, `rhai_eval_int`, `rhai_eval_double` | rhai |  |
+
 ## Encoding (4)
 
 | Extension | Functions | Backed by | Notes |
@@ -234,15 +245,6 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **baseN** | `base32_encode`, `base32_decode`, `base58_encode`, `base58_decode` | base32, bs58 |  |
 | **bencode** | `bencode_to_json`, `bencode_is_valid` | serde_bencode |  |
 | **hexdump** | `hexdump`, `hex_pretty` | hand-rolled |  |
-
-## Utility (4)
-
-| Extension | Functions | Backed by | Notes |
-|---|---|---|---|
-| **cron** | `cron_is_valid`, `cron_next`, `cron_prev` | croner |  |
-| **parsertools** | `sql_tables`, `sql_is_valid`, `sql_statement_type` | sqlparser |  |
-| **prql** | `prql_to_sql`, `prql_is_valid` | prqlc |  |
-| **rhai** | `rhai_eval`, `rhai_eval_int`, `rhai_eval_double` | rhai |  |
 
 ## Network (2)
 

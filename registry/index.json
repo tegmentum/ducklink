@@ -7169,6 +7169,142 @@
           "content_digest": "14987a25123d28f4fe183f0bbe237e77d5b582f8c284a75ecb026efeaeab4e06"
         }
       ]
+    },
+    {
+      "name": "chrono",
+      "version": "0.1.0",
+      "description": "Cross-dialect datetime scalars not provided by DuckDB builtins: the MySQL/BigQuery/Snowflake date+timestamp spellings (from_unixtime, timestampdiff/add, adddate/subdate, makedate/maketime, to_char, str_to_date, parse_*/format_*, timestamp_*/datetime_* family, unix_*, date_from_unix_date, date_bucket, from_days), tz-convert, duration parse/format, business-day math, and the date_iso_week/year named spellings. DuckDB's own year/month/day/date_part/date_trunc/date_diff/epoch/make_*/age/now/last_day/to_timestamp/time_bucket builtins are NOT re-registered.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "datetime",
+        "timezone",
+        "duration",
+        "mysql",
+        "bigquery",
+        "compat"
+      ],
+      "categories": [
+        "utility"
+      ],
+      "source": "extensions/chrono-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/chrono.wasm",
+      "exports": [
+        "date_parse",
+        "date_format",
+        "to_char",
+        "str_to_date",
+        "date_tz_convert",
+        "date_now_tz",
+        "date_is_business_day",
+        "date_business_days_between",
+        "date_iso_week",
+        "date_iso_year",
+        "duration_parse",
+        "duration_format",
+        "chrono_version",
+        "from_unixtime",
+        "timestampdiff",
+        "timestampadd",
+        "adddate",
+        "subdate",
+        "makedate",
+        "maketime",
+        "from_days",
+        "utc_timestamp",
+        "sysdate",
+        "timestamp_add",
+        "timestamp_sub",
+        "timestamp_diff",
+        "timestamp_trunc",
+        "timestamp_micros",
+        "timestamp_millis",
+        "timestamp_seconds",
+        "datetime_add",
+        "datetime_sub",
+        "datetime_diff",
+        "datetime_trunc",
+        "parse_date",
+        "parse_datetime",
+        "parse_timestamp",
+        "format_date",
+        "format_datetime",
+        "format_timestamp",
+        "unix_micros",
+        "unix_millis",
+        "unix_seconds",
+        "date_from_unix_date",
+        "date_bucket"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "chrono",
+        "chrono-tz"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "chrono",
+      "expansion": "com.tegmentum.ducklink.chrono",
+      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract_version": "2.2.0",
+      "content_digest": "94f917b10d710b7e5d8b809a9433fbcd38098db9d802a089fb2c5fdf7b0f394f"
+    },
+    {
+      "name": "list",
+      "version": "0.1.0",
+      "description": "JSON-array-backed list scalars not provided by DuckDB builtins: array_remove, list_length, the array_* reductions (min/max/sum/product/avg/count), array_dims/lower/upper/ndims, array_positions, array_replace, arrays_overlap. Carrier is TEXT containing a JSON array. DuckDB's native-LIST list_*/array_* family and array_to_json/array_intersect builtins are NOT re-registered.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "array",
+        "list",
+        "json",
+        "postgres",
+        "compat"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/list-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/list.wasm",
+      "exports": [
+        "array_remove",
+        "list_length",
+        "array_min",
+        "array_max",
+        "array_sum",
+        "array_product",
+        "array_avg",
+        "array_count",
+        "array_dims",
+        "array_lower",
+        "array_upper",
+        "array_ndims",
+        "array_positions",
+        "array_replace",
+        "arrays_overlap"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "list",
+      "expansion": "com.tegmentum.ducklink.list",
+      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "wit_contract_version": "2.2.0",
+      "content_digest": "7797086b9a67c9dc4ad47b8cff0a72a48d72085066425009e0e99304d9c98e49"
     }
   ],
   "dotcmds": [

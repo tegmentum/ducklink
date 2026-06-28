@@ -1,0 +1,30 @@
+[package]
+name = "chrono-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Cross-dialect datetime scalars not in DuckDB builtins: the MySQL/BigQuery/Snowflake
+date+timestamp spellings (from_unixtime, timestampdiff/add, adddate, makedate, to_char,
+str_to_date, parse_*/format_*, timestamp_*/datetime_* family, unix_*), tz-convert,
+duration parse/format, business-day math.
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+# This shim is GENERATED from the core by datalink-extcore::duckdb_shim!.
+chrono-core = { path = "../../../datalink/extensions/chrono-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"
