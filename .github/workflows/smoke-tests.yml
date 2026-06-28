@@ -105,6 +105,10 @@ jobs:
           export WASI_SDK_PREFIX="$HOME/wasi-sdk"
           export DUCKDB_STATIC_LIB="$GITHUB_WORKSPACE/duckdb-wasm/artifacts/libduckdb-wasi.a"
           export DUCKDB_SOURCE_DIR="$GITHUB_WORKSPACE/ducklink/external/duckdb"
+          # duckdb-wasm tracks external/duckdb as a checked-in absolute symlink to
+          # a developer path; it dangles on a fresh runner, so setup-env.sh's
+          # idempotent re-link aborts with "File exists". Drop it first.
+          rm -f external/duckdb
           source scripts/setup-env.sh
           cargo component build -p duckdb-component-core --target wasm32-wasip2 --release --features wasi
           mkdir -p ../ducklink/target/wasm32-wasip2/release
@@ -117,6 +121,7 @@ jobs:
           export WASI_SDK_PREFIX="$HOME/wasi-sdk"
           export DUCKDB_STATIC_LIB="$GITHUB_WORKSPACE/duckdb-wasm/artifacts/libduckdb-wasi.a"
           export DUCKDB_SOURCE_DIR="$GITHUB_WORKSPACE/ducklink/external/duckdb"
+          rm -f ../duckdb-wasm/external/duckdb  # see the core-build step
           source ../duckdb-wasm/scripts/setup-env.sh
           cargo build --release -p ducklink-host
           # --build rebuilds each component + copies its artifact, then smokes.
