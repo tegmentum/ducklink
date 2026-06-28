@@ -39,6 +39,9 @@ env:
   # no other download home on a fresh runner.
   DUCKDB_SOURCE_REF: v1.5.4
   DUCKDB_CORE_LIBS_TAG: core-libs-v1.5.4
+  # The pull-up'd extension components path-dep the shared datalink -core crates
+  # (a sibling repo); check this ref of tegmentum/datalink out as a sibling.
+  DATALINK_REF: main
 
 jobs:
   publish:
@@ -63,6 +66,17 @@ jobs:
         with:
           repository: tegmentum/tvm-wasm
           path: tvm-wasm
+
+      # The pull-up'd extension components path-dep the shared datalink -core
+      # crates (../../../datalink/...); check datalink out as a sibling. Public,
+      # no token. (datalink-contract/policy/prefix/dynlink are git deps that cargo
+      # fetches separately.)
+      - name: Checkout datalink (sibling repo; shared -core crates)
+        uses: actions/checkout@v4
+        with:
+          repository: tegmentum/datalink
+          ref: ${{ env.DATALINK_REF }}
+          path: datalink
 
       # The core build (libduckdb-sys/build.rs) needs duckdb.h. setup-env.sh
       # resolves DUCKDB_SOURCE_DIR to ducklink/external/duckdb by default; check
