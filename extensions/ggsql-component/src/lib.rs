@@ -56,9 +56,11 @@ impl parser_dispatch::Guest for Extension {
         if handle != PARSER_HANDLE {
             return Ok(parser_dispatch::ParseOutcome::Declined);
         }
-        // The wit-free, fuzzed parse/rewrite logic; map its outcome onto the WIT
-        // surface. See parse.rs for the never-panic contract.
-        match parse::parse_visualize(&query) {
+        // The shared, fuzzed parse/rewrite engine (datalink ggsql-core);
+        // map its neutral outcome onto the WIT surface. The DuckDB dialect
+        // emits `repeat`/`GREATEST`/`VARCHAR`/`BIGINT`. See ggsql-core for
+        // the never-panic contract.
+        match parse::parse_visualize(&query, &ggsql_core::DUCKDB) {
             parse::Outcome::Declined => Ok(parser_dispatch::ParseOutcome::Declined),
             parse::Outcome::Invalid(msg) => Err(types::Duckerror::Invalidargument(msg.into())),
             parse::Outcome::Rewrite(sql) => Ok(parser_dispatch::ParseOutcome::Rewrite(sql.into())),

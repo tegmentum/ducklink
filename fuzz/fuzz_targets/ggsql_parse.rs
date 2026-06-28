@@ -26,7 +26,9 @@ fuzz_target!(|data: &[u8]| {
     // The real callsite receives a DuckDB VARCHAR (valid UTF-8); lossy conversion
     // keeps the fuzzer exploring multi-byte boundaries that the keyword-slice sees.
     let s = String::from_utf8_lossy(data);
-    let _ = parse::parse_visualize(&s);
+    // Drive both dialects so the rewrite branch is exercised for each.
+    let _ = parse::parse_visualize(&s, &ggsql_core::DUCKDB);
+    let _ = parse::parse_visualize(&s, &ggsql_core::SQLITE);
 
     // Also force the keyword path: prepend a (case-mutated) `VISUALIZE ` so the
     // corpus reliably reaches the inner-select extraction + rewrite, not just the
@@ -40,5 +42,6 @@ fuzz_target!(|data: &[u8]| {
     let mut forced = String::with_capacity(kw.len() + s.len());
     forced.push_str(kw);
     forced.push_str(&s);
-    let _ = parse::parse_visualize(&forced);
+    let _ = parse::parse_visualize(&forced, &ggsql_core::DUCKDB);
+    let _ = parse::parse_visualize(&forced, &ggsql_core::SQLITE);
 });
