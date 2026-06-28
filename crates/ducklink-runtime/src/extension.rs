@@ -1353,11 +1353,16 @@ impl extension_table_stream::Host for ExtensionStoreState {
         columns: BindgenVec<extension_table_stream::Columndef>,
         callback_handle: u32,
     ) -> Result<u32, extension_types::Duckerror> {
-        let registry_id = self.alloc_resource_id();
         let converted_arguments = convert_extension_funcargs(arguments.into());
         let converted_columns = convert_extension_columndefs(columns.into());
+        // Allocate a GLOBALLY-ROUTABLE handle (mapping global -> this extension +
+        // the component-local `callback_handle` dispatcher) so the core can carry
+        // ONE u32 in the C++ TableFunction and the host routes every streaming
+        // dispatch call (open-filtered / next / close) back to the owning
+        // component, exactly as the regular table-callback path routes call-table.
+        let global = self.allocate_callback_handle(callback_handle, CallbackKind::Table);
         eprintln!(
-            "[extension-runtime:{}] registered filterable streaming table fn '{name}' (registry={registry_id}, callback={callback_handle}, args={}, cols={})",
+            "[extension-runtime:{}] registered filterable streaming table fn '{name}' (global={global}, dispatcher={callback_handle}, args={}, cols={})",
             self.extension_name,
             converted_arguments.len(),
             converted_columns.len(),
@@ -1367,9 +1372,9 @@ impl extension_table_stream::Host for ExtensionStoreState {
             name,
             arguments: converted_arguments,
             columns: converted_columns,
-            callback_handle,
+            callback_handle: global,
         });
-        Ok(registry_id)
+        Ok(global)
     }
 }
 
