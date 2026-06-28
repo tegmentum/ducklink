@@ -194,7 +194,7 @@ members = [
     "extensions/sqlitewasm-component",
     "extensions/ggsql-component",
     "extensions/dplyr-component",
-    "extensions/prql-parser-component",
+    "extensions/prql_parser-component",
     "extensions/qopt-component",
     "extensions/hnswfns-component",
     "extensions/jsonfns-component",
@@ -212,6 +212,14 @@ members = [
     "extensions/icebergscan-component",
     "extensions/autocomplete-component",
     "extensions/statsduck-component",
+]
+
+# talib-component carries its own `[workspace]` table (an independent lockfile —
+# see its Cargo.toml) so it is built standalone via `cargo component build`, not
+# as a member of this workspace. Exclude it explicitly so cargo does not treat
+# the nested manifest as a second workspace root.
+exclude = [
+    "extensions/talib-component",
 ]
 
 resolver = "2"

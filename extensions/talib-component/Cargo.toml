@@ -1,8 +1,7 @@
-# Detached from the parent ducklink workspace: this component resolves
-# its datalink path deps against the `datalink-talib-wt` worktree (where
-# talib-core + the window template live), while the rest of the workspace
-# pins `~/git/datalink` (main). An own `[workspace]` table gives it an
-# independent lockfile so the two datalink checkouts don't collide.
+# Detached from the parent ducklink workspace via its own `[workspace]` table
+# (an independent lockfile). talib-core + the window template now live in
+# datalink main (merged from feat/talib-window), so the path deps resolve
+# against `~/git/datalink` like the rest of the workspace.
 # Same technique aba/baseN use for the embed path. `cargo component build`
 # from this dir still produces the wasi component.
 [workspace]
@@ -25,8 +24,8 @@ wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
 # Shared, DB-agnostic logic + capability declaration (datalink pull-up).
 # This shim is GENERATED from the core by datalink-extcore::duckdb_agg_shim!.
-talib-core = { path = "../../../datalink-talib-wt/extensions/talib-core" }
-datalink-extcore = { path = "../../../datalink-talib-wt/crates/datalink-extcore" }
+talib-core = { path = "../../../datalink/extensions/talib-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"

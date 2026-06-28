@@ -7443,6 +7443,195 @@
       "wit_contract": "1b94f15d2c41f9a81de50c6d4d8cf508bf76333c4b901c00f511b811b8eb4983",
       "wit_contract_version": "3.1.0",
       "content_digest": "1167a9f7508693b0b4e4b72a7c9f5b6200f2d017c6b97997648858fab41ecf41"
+    },
+    {
+      "name": "ggsql",
+      "version": "0.1.0",
+      "description": "VISUALIZE statement: a parser extension that rewrites `VISUALIZE <select>` into a text bar-chart query (shared datalink ggsql-core).",
+      "exports": [
+        "VISUALIZE"
+      ],
+      "requires": [
+        "parser"
+      ],
+      "crates": [],
+      "categories": [
+        "utility"
+      ],
+      "keywords": [],
+      "authors": [
+        "Tegmentum"
+      ],
+      "license": "MIT",
+      "repository": "https://github.com/tegmentum/ducklink",
+      "min_duckdb_version": "1.0.0",
+      "source": "extensions/ggsql-component",
+      "status": "working",
+      "prefix": "ggsql",
+      "expansion": "com.tegmentum.ducklink.ggsql",
+      "artifact": "artifacts/extensions/ggsql.wasm",
+      "wit_contract": "1b94f15d2c41f9a81de50c6d4d8cf508bf76333c4b901c00f511b811b8eb4983",
+      "wit_contract_version": "3.1.0",
+      "content_digest": "baad5d603a34ef4be6c24192dd7a959de529fe36f90cec3d99fdf55aa3e69d2c",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@3.1.0",
+          "artifact": "artifacts/extensions/ggsql.wasm",
+          "content_digest": "baad5d603a34ef4be6c24192dd7a959de529fe36f90cec3d99fdf55aa3e69d2c",
+          "conformance": {
+            "suite": "ggsql@3",
+            "suite_digest": "48ff6b2da8a744ab45ceae52faca754c7f854d65ec41f90965a859d21b5ca256",
+            "at": "1b94f15d2c41f9a81de50c6d4d8cf508bf76333c4b901c00f511b811b8eb4983",
+            "passed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "dplyr",
+      "version": "0.1.0",
+      "description": "dplyr(...) pipeline: a parser extension that transpiles R dplyr verbs (filter/select/arrange/group_by/summarise/mutate) to SQL (shared datalink dplyr-core).",
+      "exports": [
+        "dplyr"
+      ],
+      "requires": [
+        "parser"
+      ],
+      "crates": [],
+      "categories": [
+        "utility"
+      ],
+      "keywords": [],
+      "authors": [
+        "Tegmentum"
+      ],
+      "license": "MIT",
+      "repository": "https://github.com/tegmentum/ducklink",
+      "min_duckdb_version": "1.0.0",
+      "source": "extensions/dplyr-component",
+      "status": "working",
+      "prefix": "dplyr",
+      "expansion": "com.tegmentum.ducklink.dplyr",
+      "artifact": "artifacts/extensions/dplyr.wasm",
+      "wit_contract": "1b94f15d2c41f9a81de50c6d4d8cf508bf76333c4b901c00f511b811b8eb4983",
+      "wit_contract_version": "3.1.0",
+      "content_digest": "e77896187ff52f05c6ca742256e97818e44d25f090dc713b6b830305f1a1fbee",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@3.1.0",
+          "artifact": "artifacts/extensions/dplyr.wasm",
+          "content_digest": "e77896187ff52f05c6ca742256e97818e44d25f090dc713b6b830305f1a1fbee",
+          "conformance": {
+            "suite": "dplyr@3",
+            "suite_digest": "73c189bc18a13ad0eec6df00e3f872984b253d652cfa27e218d93f26578cce58",
+            "at": "1b94f15d2c41f9a81de50c6d4d8cf508bf76333c4b901c00f511b811b8eb4983",
+            "passed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "prql_parser",
+      "version": "0.1.0",
+      "description": "PRQL pipelines: a parser extension that compiles `from ... | filter ... | select ...` PRQL to SQL via prqlc (shared datalink prql-core).",
+      "exports": [
+        "prql"
+      ],
+      "requires": [
+        "parser"
+      ],
+      "crates": [
+        "prqlc"
+      ],
+      "categories": [
+        "utility"
+      ],
+      "keywords": [],
+      "authors": [
+        "Tegmentum"
+      ],
+      "license": "MIT",
+      "repository": "https://github.com/tegmentum/ducklink",
+      "min_duckdb_version": "1.0.0",
+      "source": "extensions/prql_parser-component",
+      "status": "working",
+      "prefix": "prql_parser",
+      "expansion": "com.tegmentum.ducklink.prql_parser",
+      "artifact": "artifacts/extensions/prql_parser.wasm",
+      "wit_contract": "1b94f15d2c41f9a81de50c6d4d8cf508bf76333c4b901c00f511b811b8eb4983",
+      "wit_contract_version": "3.1.0",
+      "content_digest": "342c430ada463933f5937329ede6dcdd0170ecfdcd927637bc74ee5cb1a8ba07",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@3.1.0",
+          "artifact": "artifacts/extensions/prql_parser.wasm",
+          "content_digest": "342c430ada463933f5937329ede6dcdd0170ecfdcd927637bc74ee5cb1a8ba07",
+          "conformance": {
+            "suite": "prql_parser@3",
+            "suite_digest": "6719bade3ff2cd734b77e63cbf2a57b88c7f586d76418eed00462f6148b4f235",
+            "at": "1b94f15d2c41f9a81de50c6d4d8cf508bf76333c4b901c00f511b811b8eb4983",
+            "passed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "talib",
+      "version": "0.1.0",
+      "description": "TA-Lib technical indicators (sma/ema/rsi) as aggregate + window functions driven by DuckDB's window machinery (shared datalink talib-core).",
+      "exports": [
+        "sma",
+        "ema",
+        "rsi"
+      ],
+      "requires": [
+        "aggregate",
+        "window"
+      ],
+      "crates": [],
+      "categories": [
+        "utility"
+      ],
+      "keywords": [],
+      "authors": [
+        "Tegmentum"
+      ],
+      "license": "MIT",
+      "repository": "https://github.com/tegmentum/ducklink",
+      "min_duckdb_version": "1.0.0",
+      "source": "extensions/talib-component",
+      "status": "working",
+      "prefix": "talib",
+      "expansion": "com.tegmentum.ducklink.talib",
+      "artifact": "artifacts/extensions/talib.wasm",
+      "wit_contract": "1b94f15d2c41f9a81de50c6d4d8cf508bf76333c4b901c00f511b811b8eb4983",
+      "wit_contract_version": "3.1.0",
+      "content_digest": "3091fc8fa99cc8743b9bd7d685e9a2ba4996777cf17be1c4ed38ee66726a9a5d",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@3.1.0",
+          "artifact": "artifacts/extensions/talib.wasm",
+          "content_digest": "3091fc8fa99cc8743b9bd7d685e9a2ba4996777cf17be1c4ed38ee66726a9a5d",
+          "conformance": {
+            "suite": "talib@3",
+            "suite_digest": "c6c03904e744ec9bd6a98f510f8555077dc9ccb95c294ed9416ac9571db36990",
+            "at": "1b94f15d2c41f9a81de50c6d4d8cf508bf76333c4b901c00f511b811b8eb4983",
+            "passed": true
+          }
+        }
+      ]
     }
   ],
   "dotcmds": [

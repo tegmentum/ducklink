@@ -2,14 +2,14 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**188 component extensions** · **600 SQL functions** · 8 expose aggregates · 3 require network.
+**192 component extensions** · **606 SQL functions** · 9 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
 ## Capabilities
 
 - **Scalars** — the default; pure per-row functions.
-- **Aggregates** — `aggstat`, `bloom`, `minhash`, `countmin`, `bitfilters`, `tdigest`, `mlkmeans`, `stats` use the whole-batch `call_aggregate` path.
+- **Aggregates** — `aggstat`, `bloom`, `minhash`, `countmin`, `bitfilters`, `tdigest`, `mlkmeans`, `stats`, `talib` use the whole-batch `call_aggregate` path.
 - **Network** — `dns`, `httpclient`, `openprompt` need an outbound-network grant (`DUCKLINK_NETWORK_GRANT`), off by default.
 
 ## Loading & embedding
@@ -195,6 +195,21 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **tdigest** | `tdigest`, `tdigest_quantile`, `tdigest_count` | tdigest, bincode | aggregate |
 | **vssfns** | `vec_l1_distance`, `vec_linf_distance`, `vec_normalize` | hand-rolled |  |
 
+## Utility (10)
+
+| Extension | Functions | Backed by | Notes |
+|---|---|---|---|
+| **chrono** | `date_parse`, `date_format`, `to_char`, `str_to_date`, `date_tz_convert`, `date_now_tz`, `date_is_business_day`, `date_business_days_between`, `date_iso_week`, `date_iso_year`, `duration_parse`, `duration_format`, `chrono_version`, `from_unixtime`, `timestampdiff`, `timestampadd`, `adddate`, `subdate`, `makedate`, `maketime`, `from_days`, `utc_timestamp`, `sysdate`, `timestamp_add`, `timestamp_sub`, `timestamp_diff`, `timestamp_trunc`, `timestamp_micros`, `timestamp_millis`, `timestamp_seconds`, `datetime_add`, `datetime_sub`, `datetime_diff`, `datetime_trunc`, `parse_date`, `parse_datetime`, `parse_timestamp`, `format_date`, `format_datetime`, `format_timestamp`, `unix_micros`, `unix_millis`, `unix_seconds`, `date_from_unix_date`, `date_bucket` | chrono, chrono-tz |  |
+| **cron** | `cron_is_valid`, `cron_next`, `cron_prev` | croner |  |
+| **dplyr** | `dplyr` | hand-rolled |  |
+| **ggsql** | `VISUALIZE` | hand-rolled |  |
+| **parsertools** | `sql_tables`, `sql_is_valid`, `sql_statement_type` | sqlparser |  |
+| **prql** | `prql_to_sql`, `prql_is_valid` | prqlc |  |
+| **prql_parser** | `prql` | prqlc |  |
+| **rhai** | `rhai_eval`, `rhai_eval_int`, `rhai_eval_double` | rhai |  |
+| **sys_compat** | `system_user`, `database`, `schema`, `collation` | hand-rolled |  |
+| **talib** | `sma`, `ema`, `rsi` | hand-rolled | aggregate |
+
 ## Import Export (7)
 
 | Extension | Functions | Backed by | Notes |
@@ -217,17 +232,6 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **openprompt** | `prompt`, `prompt_model` | rustls, serde_json | network |
 | **urlpattern** | `url_pattern_test`, `url_pattern_match` | urlpattern |  |
 | **useragent** | `ua_browser`, `ua_browser_version`, `ua_os`, `ua_category`, `ua_is_bot` | woothee |  |
-
-## Utility (6)
-
-| Extension | Functions | Backed by | Notes |
-|---|---|---|---|
-| **chrono** | `date_parse`, `date_format`, `to_char`, `str_to_date`, `date_tz_convert`, `date_now_tz`, `date_is_business_day`, `date_business_days_between`, `date_iso_week`, `date_iso_year`, `duration_parse`, `duration_format`, `chrono_version`, `from_unixtime`, `timestampdiff`, `timestampadd`, `adddate`, `subdate`, `makedate`, `maketime`, `from_days`, `utc_timestamp`, `sysdate`, `timestamp_add`, `timestamp_sub`, `timestamp_diff`, `timestamp_trunc`, `timestamp_micros`, `timestamp_millis`, `timestamp_seconds`, `datetime_add`, `datetime_sub`, `datetime_diff`, `datetime_trunc`, `parse_date`, `parse_datetime`, `parse_timestamp`, `format_date`, `format_datetime`, `format_timestamp`, `unix_micros`, `unix_millis`, `unix_seconds`, `date_from_unix_date`, `date_bucket` | chrono, chrono-tz |  |
-| **cron** | `cron_is_valid`, `cron_next`, `cron_prev` | croner |  |
-| **parsertools** | `sql_tables`, `sql_is_valid`, `sql_statement_type` | sqlparser |  |
-| **prql** | `prql_to_sql`, `prql_is_valid` | prqlc |  |
-| **rhai** | `rhai_eval`, `rhai_eval_int`, `rhai_eval_double` | rhai |  |
-| **sys_compat** | `system_user`, `database`, `schema`, `collation` | hand-rolled |  |
 
 ## Validators (6)
 
