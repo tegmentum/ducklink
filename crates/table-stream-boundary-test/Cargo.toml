@@ -1,0 +1,17 @@
+[package]
+name = "table-stream-boundary-test"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = """
+Host-side integration test (v3.1.0 additive minor): loads the already-built
+numstream component wasm and drives its table-stream-dispatch exports ACROSS the
+WIT component boundary via wasmtime, proving the pushed-down FILTER descriptor
+(column index + comparator + constant) crosses the interface and prunes rows at
+the source. Imports are satisfied with trapping stubs.
+"""
+
+[dependencies]
+wasmtime = { version = "46.0.1", features = ["component-model"] }
+wasmtime-wasi = "46.0.1"
+anyhow = "1"

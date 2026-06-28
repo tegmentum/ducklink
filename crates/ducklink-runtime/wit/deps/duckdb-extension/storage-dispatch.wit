@@ -1,4 +1,4 @@
-package duckdb:extension@3.0.0;
+package duckdb:extension@3.1.0;
 
 use types;
 use storage;

@@ -1,10 +1,10 @@
 package duckdb:component;
 
-use duckdb:extension/config@3.0.0;
-use duckdb:extension/logging@3.0.0;
-use duckdb:extension/runtime@3.0.0;
-use duckdb:extension/types@3.0.0;
-use duckdb:extension/callback-dispatch@3.0.0;
+use duckdb:extension/config@3.1.0;
+use duckdb:extension/logging@3.1.0;
+use duckdb:extension/runtime@3.1.0;
+use duckdb:extension/types@3.1.0;
+use duckdb:extension/callback-dispatch@3.1.0;
 use wasi:cli/environment@0.2.6;
 use wasi:cli/stdout@0.2.6;
 use wasi:cli/stderr@0.2.6;
@@ -242,12 +242,12 @@ world libduckdb {
     import wasi:io/streams@0.2.6;
     import host-extension-loader;
     import extension-loader-hooks;
-    import duckdb:extension/callback-dispatch@3.0.0;
+    import duckdb:extension/callback-dispatch@3.1.0;
     import tvm:memory/manager@0.1.0;
     import tvm:memory/bytes@0.1.0;
 
     export database;
-    export duckdb:extension/config@3.0.0;
-    export duckdb:extension/logging@3.0.0;
-    export duckdb:extension/runtime@3.0.0;
+    export duckdb:extension/config@3.1.0;
+    export duckdb:extension/logging@3.1.0;
+    export duckdb:extension/runtime@3.1.0;
 }

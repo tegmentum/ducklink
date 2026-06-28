@@ -27,7 +27,8 @@ use crate::duckdb_extension_bindings::duckdb::extension::{
     macro_ext as extension_macro_ext, optimizer as extension_optimizer, parser as extension_parser,
     query as extension_query, runtime as extension_runtime,
     runtime_ext as extension_runtime_ext, secret as extension_secret,
-    settings as extension_settings, storage as extension_storage, types as extension_types,
+    settings as extension_settings, storage as extension_storage,
+    table_stream as extension_table_stream, types as extension_types,
     types_ext as extension_types_ext,
 };
 use crate::duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
@@ -150,6 +151,8 @@ type PendingCompression = reg::CompressionReg;
 // 2.3.0 / v3 additive captures.
 type PendingParser = reg::ParserReg;
 type PendingOptimizer = reg::OptimizerReg;
+// 3.1.0 additive capture: streaming/filter-pushdown table function.
+type PendingFilterableTable = reg::FilterableTableReg;
 
 #[derive(Default)]
 struct PendingScalarRegistry {
@@ -258,6 +261,7 @@ pub struct ExtensionStoreState {
     // 2.3.0 / v3 additive capture buffers.
     pending_parsers: Vec<PendingParser>,
     pending_optimizers: Vec<PendingOptimizer>,
+    pending_filterable_tables: Vec<PendingFilterableTable>,
     /// Maps the handle returned from `table-registry.register` to the table
     /// function name, so `files.register-replacement-scan` can resolve it.
     table_handle_names: HashMap<u32, String>,
@@ -323,6 +327,7 @@ impl ExtensionStoreState {
             pending_compressions: Vec::new(),
             pending_parsers: Vec::new(),
             pending_optimizers: Vec::new(),
+            pending_filterable_tables: Vec::new(),
             table_handle_names: HashMap::new(),
             callback_registry,
             extension_name,
@@ -446,6 +451,10 @@ impl ExtensionStoreState {
     }
     fn take_pending_optimizers(&mut self) -> Vec<PendingOptimizer> {
         std::mem::take(&mut self.pending_optimizers)
+    }
+    // --- 3.1.0 additive drain ---
+    fn take_pending_filterable_tables(&mut self) -> Vec<PendingFilterableTable> {
+        std::mem::take(&mut self.pending_filterable_tables)
     }
 
     fn drain_pending(&mut self) -> PendingRegistrationsData {
@@ -1326,6 +1335,44 @@ impl extension_optimizer::Host for ExtensionStoreState {
     }
 }
 
+// 3.1.0 (the first additive MINOR off the frozen major-3 baseline): the
+// `table-stream` interface declares a STREAMING + FILTER-PUSHDOWN-capable table
+// function. Captured into a neutral pending buffer; the core shim drains it and
+// wires a C++ streaming `TableFunction` with `filter_pushdown = true` that pushes
+// the conjunctive filter set down (as a neutral, by-value-safe descriptor) to the
+// component's `table-stream-dispatch.call-table-open-filtered` export.
+//
+// FREEZE-COMPLIANT: this is a brand-new interface (`table-stream`) in a new opt-in
+// world; the shared `runtime`/`types` enums are untouched, so every existing
+// @3.0.0 component keeps loading un-rebuilt.
+impl extension_table_stream::Host for ExtensionStoreState {
+    fn register_filterable_table(
+        &mut self,
+        name: String,
+        arguments: BindgenVec<extension_table_stream::Funcarg>,
+        columns: BindgenVec<extension_table_stream::Columndef>,
+        callback_handle: u32,
+    ) -> Result<u32, extension_types::Duckerror> {
+        let registry_id = self.alloc_resource_id();
+        let converted_arguments = convert_extension_funcargs(arguments.into());
+        let converted_columns = convert_extension_columndefs(columns.into());
+        eprintln!(
+            "[extension-runtime:{}] registered filterable streaming table fn '{name}' (registry={registry_id}, callback={callback_handle}, args={}, cols={})",
+            self.extension_name,
+            converted_arguments.len(),
+            converted_columns.len(),
+        );
+        self.pending_filterable_tables.push(PendingFilterableTable {
+            extension: self.extension_name.clone(),
+            name,
+            arguments: converted_arguments,
+            columns: converted_columns,
+            callback_handle,
+        });
+        Ok(registry_id)
+    }
+}
+
 // 2.1.0 (Item 5): the `macro-ext` interface adds TABLE macros (a relation body)
 // on top of the existing scalar-macro registration.
 impl extension_macro_ext::Host for ExtensionStoreState {
@@ -2052,6 +2099,14 @@ pub use crate::duckdb_extension_secret_bindings::exports::duckdb::extension::sec
 /// projected column schema), re-exported for the host.
 pub use crate::duckdb_extension_table_stream_bindings::exports::duckdb::extension::table_stream_dispatch::TableOpenResult;
 
+/// 3.1.0: the neutral, by-value-safe pushed-down filter descriptor + its
+/// comparator enum (`table-stream-dispatch.table-filter` / `filter-op`),
+/// re-exported so the core<->host bridge can build the conjunctive filter set
+/// the streaming `TableFunction` pushes to `call-table-open-filtered`.
+pub use crate::duckdb_extension_table_stream_bindings::exports::duckdb::extension::table_stream_dispatch::{
+    FilterOp, TableFilter,
+};
+
 /// 2.2.0 (Item 7): metadata for one path returned by `file-write-dispatch.file-stat`,
 /// re-exported for the host.
 pub use crate::duckdb_extension_file_write_bindings::exports::duckdb::extension::file_write_dispatch::FileInfo;
@@ -2336,6 +2391,16 @@ impl ExtensionInstance {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
         unsafe { (*data).take_pending_optimizers() }
+    }
+
+    /// 3.1.0: drains the captured streaming/filter-pushdown table-fn registrations
+    /// (the first additive MINOR off the frozen major-3 baseline). The core shim
+    /// wires each into a C++ streaming `TableFunction` with `filter_pushdown = true`
+    /// that drives the component's `table-stream-dispatch.call-table-open-filtered`.
+    pub fn take_pending_filterable_tables(&mut self) -> Vec<crate::reg::FilterableTableReg> {
+        let mut ctx = self.store.as_context_mut();
+        let data: *mut ExtensionStoreState = ctx.data_mut();
+        unsafe { (*data).take_pending_filterable_tables() }
     }
 
     // --- 2.1.0 (Item 1): copy-dispatch re-entry ---
@@ -2657,6 +2722,28 @@ impl ExtensionInstance {
         let store = &mut self.store;
         guest
             .call_call_table_open(store.as_context_mut(), handle, args, projection)
+            .map_err(map_extension_trap)?
+    }
+
+    /// 3.1.0: open a streaming table cursor WITH pushed-down filters (and a column
+    /// `projection`, empty = all columns). `filters` is the conjunctive
+    /// (AND-of-clauses) neutral filter set the core's streaming `TableFunction`
+    /// extracted from the bound plan. A component that ignores the filters stays
+    /// correct (the core re-checks them above the scan); honoring them prunes at
+    /// the source. Drives the component's `call-table-open-filtered` export.
+    pub fn table_open_filtered(
+        &mut self,
+        handle: u32,
+        args: &[extension_types::Duckvalue],
+        projection: &[u32],
+        filters: &[TableFilter],
+    ) -> Result<TableOpenResult, extension_types::Duckerror> {
+        self.table_stream_bindings()?;
+        let bindings = self.table_stream_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_table_stream_dispatch();
+        let store = &mut self.store;
+        guest
+            .call_call_table_open_filtered(store.as_context_mut(), handle, args, projection, filters)
             .map_err(map_extension_trap)?
     }
 
@@ -3497,6 +3584,90 @@ mod tests {
         ]
     }
 
+    /// Build a component-model engine (with wasm-exceptions) the way the host does.
+    fn test_engine() -> Engine {
+        let mut config = wasmtime::Config::new();
+        config.wasm_component_model(true);
+        config.wasm_exceptions(true);
+        Engine::new(&config).expect("engine")
+    }
+
+    fn load_artifact(engine: &Engine, name: &str) -> wasmtime::Result<ExtensionInstance> {
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        let path = std::path::Path::new(manifest)
+            .join("../../artifacts/extensions")
+            .join(format!("{name}.wasm"));
+        let bytes = std::fs::read(&path).expect("read artifact");
+        let component = Component::new(engine, &bytes)?;
+        let wasi = wasmtime_wasi::WasiCtxBuilder::new().inherit_stderr().build();
+        load_component(
+            engine,
+            &component,
+            wasi,
+            Box::new(NoopServices),
+            Arc::new(Mutex::new(CallbackRegistry::default())),
+            name.to_string(),
+        )
+    }
+
+    /// THE ADDITIVE-MINOR PROOF (3.1.0). The freeze policy's whole point: an
+    /// existing component built at the FROZEN @3.0.0 baseline loads UN-REBUILT on
+    /// the @3.1.0 host. The host now provides the new additive `table-stream`
+    /// import (CONTRACT_MINOR = 1); a @3.0.0 component imports a strict SUBSET of
+    /// what the host provides, so the wasmtime component linker semver-matches it
+    /// and `load()` runs. Only a component that OPTS INTO filter pushdown rebuilds.
+    ///
+    /// Loads the shipped @3.0.0 `aba` + `geohash` artifacts (scalar components that
+    /// do NOT import `table-stream`) against the 3.1.0 host. Skipped gracefully if
+    /// the artifacts are absent (the wasm toolchain-free CI subset).
+    #[test]
+    fn additive_minor_loads_frozen_3_0_0_components_unrebuilt() {
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        let aba = std::path::Path::new(manifest).join("../../artifacts/extensions/aba.wasm");
+        if !aba.exists() {
+            eprintln!("skipping additive-load proof: artifacts/extensions/aba.wasm absent");
+            return;
+        }
+
+        // Sanity: this host is @3.MINOR with MINOR >= 1 (the additive bump landed).
+        assert_eq!(crate::CONTRACT_MAJOR, 3);
+        assert!(
+            crate::CONTRACT_MINOR >= 1,
+            "the additive minor must have bumped CONTRACT_MINOR to >= 1"
+        );
+
+        let engine = test_engine();
+        for name in ["aba", "geohash"] {
+            let path = std::path::Path::new(manifest)
+                .join("../../artifacts/extensions")
+                .join(format!("{name}.wasm"));
+            if !path.exists() {
+                continue;
+            }
+            let bytes = std::fs::read(&path).unwrap();
+            let component = Component::new(&engine, &bytes).unwrap();
+
+            // The artifact is a FROZEN @3.0.0 component (minor 0).
+            let ver = crate::component_contract_version(&engine, &component);
+            assert_eq!(
+                ver,
+                Some((3, 0)),
+                "{name} must be the frozen @3.0.0 baseline (un-rebuilt)"
+            );
+
+            // The contract guard ADMITS it on the 3.1.0 host (minor forward-compat).
+            crate::check_component_contract(&engine, &component, name)
+                .unwrap_or_else(|e| panic!("{name} rejected by the 3.1.0 contract guard: {e}"));
+
+            // And it INSTANTIATES + runs load() un-rebuilt against the 3.1.0 host
+            // linker (which now also provides the new `table-stream` import).
+            let inst = load_artifact(&engine, name)
+                .unwrap_or_else(|e| panic!("{name} failed to load on the 3.1.0 host: {e}"));
+            drop(inst);
+            eprintln!("[additive-load] @3.0.0 '{name}' loaded UN-REBUILT on the 3.1.0 host");
+        }
+    }
+
     #[test]
     fn convert_logicaltype_covers_every_arm_incl_rich_and_complex() {
         use extension_runtime::Logicaltype as L;
@@ -4129,6 +4300,8 @@ pub fn add_extension_interfaces_to_linker(
     // 2.3.0 / v3 additive registration imports.
     extension_parser::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_optimizer::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    // 3.1.0 additive registration import: filterable streaming table-fn marker.
+    extension_table_stream::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     Ok(())
 }
 
