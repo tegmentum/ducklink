@@ -7069,6 +7069,106 @@
       "expansion": "com.tegmentum.ducklink.stats",
       "wit_contract_version": "2.2.0",
       "content_digest": "ec56ab76c73192ac1644caa55b45e0bca29e4c2fc15b7904c1513ee9d0ed5bd7"
+    },
+    {
+      "name": "math",
+      "version": "0.1.0",
+      "description": "Cross-dialect math scalars not provided by DuckDB builtins: exp2 (2^x), e() (Euler's number), rand() (uniform [0,1)), div(x,y) (integer division), truncate(x)/truncate(x,n) (truncate toward zero / to n places). The trig/log/rounding family lives in DuckDB's core_functions.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "math",
+        "exp2",
+        "truncate",
+        "div",
+        "random"
+      ],
+      "categories": [
+        "math"
+      ],
+      "source": "extensions/math-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/math.wasm",
+      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "exports": [
+        "exp2",
+        "e",
+        "rand",
+        "div",
+        "truncate"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "libm"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "math",
+      "expansion": "com.tegmentum.ducklink.math",
+      "wit_contract_version": "2.2.0",
+      "content_digest": "dbb962cf2b8d4799d4d1587d0b35371201d1fe320d4d5d880adc65393a424631",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@2.2.0",
+          "artifact": "artifacts/extensions/math.wasm",
+          "content_digest": "dbb962cf2b8d4799d4d1587d0b35371201d1fe320d4d5d880adc65393a424631"
+        }
+      ]
+    },
+    {
+      "name": "text_utils",
+      "version": "0.1.0",
+      "description": "Cross-dialect string scalars not provided by DuckDB builtins: sql_normalize (parameterize a SQL string), insert (MySQL INSERT()), locate(substr,str) / locate(substr,str,start) (MySQL LOCATE(), 1-based). position/split_part/lcase/ucase/split/string_split/str_split/reverse are DuckDB builtins; the `prefixes` table function stays DB-private.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "text",
+        "string",
+        "sql",
+        "normalize",
+        "locate"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/text_utils-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/text_utils.wasm",
+      "wit_contract": "da7ce909ba9fd744bcc51efacae021c5ddc26e98e4e76e4f4e88ee05a4cbb905",
+      "exports": [
+        "sql_normalize",
+        "insert",
+        "locate"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "text_utils",
+      "expansion": "com.tegmentum.ducklink.text_utils",
+      "wit_contract_version": "2.2.0",
+      "content_digest": "14987a25123d28f4fe183f0bbe237e77d5b582f8c284a75ecb026efeaeab4e06",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@2.2.0",
+          "artifact": "artifacts/extensions/text_utils.wasm",
+          "content_digest": "14987a25123d28f4fe183f0bbe237e77d5b582f8c284a75ecb026efeaeab4e06"
+        }
+      ]
     }
   ],
   "dotcmds": [

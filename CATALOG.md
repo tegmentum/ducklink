@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**181 component extensions** · **505 SQL functions** · 7 expose aggregates · 3 require network.
+**183 component extensions** · **513 SQL functions** · 7 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -95,7 +95,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **yaml** | `yaml_to_json`, `json_to_yaml` | serde_yaml, serde_json |  |
 | **z85** | `z85_encode`, `z85_decode` | z85 |  |
 
-## Text & NLP (57)
+## Text & NLP (58)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -145,6 +145,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **sqlformat** | `sql_format`, `sql_format_compact` | sqlformat |  |
 | **stem** | `stem` | rust-stemmers |  |
 | **stopwords** | `is_stopword`, `remove_stopwords` | stop-words |  |
+| **text_utils** | `sql_normalize`, `insert`, `locate` | hand-rolled |  |
 | **textdiff** | `text_diff`, `diff_ratio`, `diff_changed_lines` | similar |  |
 | **textlines** | `split_lines` | hand-rolled |  |
 | **textplot** | `plot_sparkline`, `plot_bars`, `qr_utf8` | qrcode |  |
@@ -175,7 +176,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **totp** | `totp` | hmac, sha1, base32 |  |
 | **vigenere** | `vigenere_encrypt`, `vigenere_decrypt` | hand-rolled |  |
 
-## Math (10)
+## Math (11)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -184,6 +185,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **frequentitems** | `top_k`, `top_k_value` | hand-rolled |  |
 | **hashfuncs** | `xxh32`, `xxh64`, `xxh3`, `murmur3` | twox-hash, murmur3 |  |
 | **hnswfns** | `hnsw_search` | instant-distance |  |
+| **math** | `exp2`, `e`, `rand`, `div`, `truncate` | libm |  |
 | **mlkmeans** | `ml_kmeans` | rmp-serde, serde, serde_json | aggregate |
 | **statsduck** | `adjust_p`, `anderson_darling`, `anova_oneway`, `bin_edges`, `chisq_cdf`, `chisq_goodness_of_fit`, `chisq_independence`, `corr_matrix`, `f_cdf`, `gamma_cdf`, `jarque_bera`, `kendall_test`, `ks_test_1samp`, `ks_test_2samp`, `lm`, `lm_summary`, `lognormal_cdf`, `mann_whitney_u`, `pearson_test`, `poibin_cdf`, `shapiro_wilk`, `sign_test_1samp`, `sign_test_paired`, `spearman_test`, `t_cdf`, `table_one`, `ttest_1samp`, `ttest_2samp`, `ttest_paired`, `weibull_cdf`, `wilcoxon_signed_rank` | statrs, serde_json |  |
 | **stochastic** | `normal_cdf`, `normal_pdf`, `normal_quantile`, `binomial_pmf`, `poisson_pmf`, `exponential_cdf`, `beta_cdf` | statrs |  |

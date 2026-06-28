@@ -1,0 +1,8 @@
+norm
+select * from t where name=? and age=?
+ins
+QuWhattic
+loc2
+4
+loc3
+7
