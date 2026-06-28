@@ -1889,6 +1889,9 @@ pub struct ExtensionInstance {
     // httpfs M2: lazily-built files bindings (None until first file-dispatch
     // call or for non-files extensions).
     files_bindings: Option<crate::duckdb_extension_files_bindings::DuckdbExtensionFiles>,
+    // 2.3.0 / v3: lazily-built parser-dispatch bindings (None until first
+    // call-parse, or for non-parser extensions).
+    parser_bindings: Option<crate::duckdb_extension_parser_bindings::DuckdbExtensionParser>,
     // 2.1.0: lazily-built copy / secret / writable-storage bindings.
     copy_bindings: Option<crate::duckdb_extension_copy_bindings::DuckdbExtensionCopy>,
     secret_bindings: Option<crate::duckdb_extension_secret_bindings::DuckdbExtensionSecret>,
@@ -2072,6 +2075,7 @@ impl ExtensionInstance {
             storage_bindings: None,
             index_bindings: None,
             files_bindings: None,
+            parser_bindings: None,
             copy_bindings: None,
             secret_bindings: None,
             storage_write_bindings: None,
@@ -3297,6 +3301,46 @@ impl ExtensionInstance {
             .call_file_close(store.as_context_mut(), handle, file)
             .map_err(map_extension_trap)?
             .map_err(extension_types::Duckerror::Io)
+    }
+
+    // 2.3.0 / v3: lazily-built parser-dispatch bindings.
+    fn parser_bindings(
+        &mut self,
+    ) -> Result<
+        &crate::duckdb_extension_parser_bindings::DuckdbExtensionParser,
+        extension_types::Duckerror,
+    > {
+        if self.parser_bindings.is_none() {
+            let built = crate::duckdb_extension_parser_bindings::DuckdbExtensionParser::new(
+                self.store.as_context_mut(),
+                &self.instance,
+            )
+            .map_err(map_extension_trap)?;
+            self.parser_bindings = Some(built);
+        }
+        Ok(self.parser_bindings.as_ref().unwrap())
+    }
+
+    /// Offer the unrecognized statement `query` to the parser extension `handle`.
+    /// Returns `Some(rewrite_sql)` if the component claims it (string->SQL rewrite),
+    /// or `None` if it declines. Drives `parser-dispatch.call-parse`.
+    pub fn call_parse(
+        &mut self,
+        handle: u32,
+        query: &str,
+    ) -> Result<Option<String>, extension_types::Duckerror> {
+        self.parser_bindings()?;
+        let bindings = self.parser_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_parser_dispatch();
+        let store = &mut self.store;
+        let outcome = guest
+            .call_call_parse(store.as_context_mut(), handle, query)
+            .map_err(map_extension_trap)??;
+        use crate::duckdb_extension_parser_bindings::exports::duckdb::extension::parser_dispatch::ParseOutcome;
+        Ok(match outcome {
+            ParseOutcome::Declined => None,
+            ParseOutcome::Rewrite(sql) => Some(sql),
+        })
     }
 }
 

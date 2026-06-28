@@ -57,6 +57,7 @@ use duckdb_core_bindings::duckdb::extension::storage_host as core_storage_host;
 use duckdb_core_bindings::duckdb::extension::index_host as core_index_host;
 use duckdb_core_bindings::duckdb::extension::collation_host as core_collation_host;
 use duckdb_core_bindings::duckdb::extension::pragma_host as core_pragma_host;
+use duckdb_core_bindings::duckdb::extension::parser_host as core_parser_host;
 use duckdb_core_bindings::duckdb::extension::files_host as core_files_host;
 use duckdb_core_bindings::duckdb::extension::types as core_types;
 use duckdb_core_bindings::tvm::memory::bytes as core_tvm_bytes;
@@ -580,6 +581,42 @@ impl core_pragma_host::Host for CoreStoreState {
                 callback_handle,
             })
             .collect()
+    }
+}
+
+// 2.3.0 / v3: the core imports `duckdb:extension/parser-host` to pull declared
+// parser extensions and offer parser-rejected statements to them. The host
+// PROVIDES it: `parser_list` enumerates declarations; `call_parse` routes to the
+// owning component's `parser-dispatch.call-parse` and returns its string->SQL
+// rewrite (or none if declined). The core runs the rewrite in place.
+impl core_parser_host::Host for CoreStoreState {
+    fn parser_list(&mut self) -> Vec<core_parser_host::ParserSpec> {
+        let manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .registered_parsers()
+            .into_iter()
+            .map(|(name, callback_handle)| core_parser_host::ParserSpec {
+                name,
+                callback_handle,
+            })
+            .collect()
+    }
+
+    fn call_parse(
+        &mut self,
+        handle: u32,
+        query: String,
+    ) -> Result<Option<String>, core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_parse(handle, &query)
+            .map_err(convert_extension_duckerror_to_core)
     }
 }
 
@@ -1528,6 +1565,12 @@ struct ExtensionManager {
     // component returns a SQL script the core runs). Keyed by pragma name ->
     // (extension, callback-handle).
     pragmas: HashMap<String, (String, u32)>,
+    // 2.3.0 / v3: parser extensions components have declared via
+    // `parser.register-parser-extension`. The core pulls this list (through
+    // `parser-host.parser-list`) and, when its built-in parser rejects a statement,
+    // offers the text via `parser-host.call-parse`; the owning component returns a
+    // string->SQL rewrite. Keyed by parser name -> (extension, callback-handle).
+    parsers: HashMap<String, (String, u32)>,
     // Function prefixes (PLAN-prefixes): the registry/index.json name ->
     // {prefix, expansion} map loaded at host start, used to namespace every
     // scalar/table/aggregate registration as `prefix__name`.
@@ -1604,6 +1647,7 @@ impl ExtensionManager {
             files_backend: None,
             collations: HashMap::new(),
             pragmas: HashMap::new(),
+            parsers: HashMap::new(),
             prefix_registry,
             prefix_collisions: prefix::CollisionTracker::default(),
             prefix_recorded: std::collections::HashSet::new(),
@@ -2112,6 +2156,40 @@ impl ExtensionManager {
             .iter()
             .map(|(name, (_extension, handle))| (name.clone(), *handle))
             .collect()
+    }
+
+    /// 2.3.0 / v3: the parser extensions components have declared, as
+    /// (name, callback-handle). The core pulls this through `parser-host.parser-list`
+    /// and offers rejected statements to each via `parser-host.call-parse`.
+    fn registered_parsers(&self) -> Vec<(String, u32)> {
+        self.parsers
+            .iter()
+            .map(|(name, (_extension, handle))| (name.clone(), *handle))
+            .collect()
+    }
+
+    /// 2.3.0 / v3: offer a parser-rejected statement to the parser extension that
+    /// owns `handle`, returning `Some(rewrite_sql)` if it claims it, else `None`.
+    /// Drives the owning component's `parser-dispatch.call-parse`.
+    fn dispatch_parse(
+        &mut self,
+        handle: u32,
+        query: &str,
+    ) -> Result<Option<String>, extension_types::Duckerror> {
+        let ext = self
+            .parsers
+            .values()
+            .find(|(_e, h)| *h == handle)
+            .map(|(e, _h)| e.clone())
+            .ok_or_else(|| {
+                extension_types::Duckerror::Invalidstate(format!(
+                    "no parser extension registered for handle {handle}"
+                ))
+            })?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("parser extension '{ext}' not loaded"))
+        })?;
+        instance.call_parse(handle, query)
     }
 
     /// The ATTACH `TYPE` names of every storage backend a component has
@@ -2828,6 +2906,19 @@ impl ExtensionManager {
             // before the first query that uses `COLLATE <name>`.
             collations_captured = instance.take_pending_collations();
             pragmas_captured = instance.take_pending_pragmas();
+            // 2.3.0 / v3: capture this extension's parser extensions, so the core
+            // can offer rejected statements to them (via parser-host).
+            let parsers_captured = instance.take_pending_parsers();
+            for parser in &parsers_captured {
+                eprintln!(
+                    "[extension-manager] parser '{}' -> extension '{}' (callback={})",
+                    parser.name, parser.extension, parser.callback_handle
+                );
+                self.parsers.insert(
+                    parser.name.clone(),
+                    (parser.extension.clone(), parser.callback_handle),
+                );
+            }
             for collation in &collations_captured {
                 eprintln!(
                     "[extension-manager] collation '{}' -> extension '{}' (transform scalar='{}', combinable={})",
@@ -4530,6 +4621,10 @@ fn instantiate_core(
         |state| state,
     )?;
     core_pragma_host::add_to_linker::<CoreStoreState, CoreStoreState>(
+        &mut linker,
+        |state| state,
+    )?;
+    core_parser_host::add_to_linker::<CoreStoreState, CoreStoreState>(
         &mut linker,
         |state| state,
     )?;
