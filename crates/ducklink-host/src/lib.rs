@@ -59,6 +59,9 @@ use duckdb_core_bindings::duckdb::extension::collation_host as core_collation_ho
 use duckdb_core_bindings::duckdb::extension::pragma_host as core_pragma_host;
 use duckdb_core_bindings::duckdb::extension::parser_host as core_parser_host;
 use duckdb_core_bindings::duckdb::extension::optimizer_host as core_optimizer_host;
+// 3.1.0 additive minor: the core imports this; the host provides it and drives a
+// component's streaming filter-pushdown table fn (ts-open-filtered/next/close).
+use duckdb_core_bindings::duckdb::extension::table_stream_host as core_table_stream_host;
 use duckdb_core_bindings::duckdb::extension::files_host as core_files_host;
 use duckdb_core_bindings::duckdb::extension::types as core_types;
 use duckdb_core_bindings::tvm::memory::bytes as core_tvm_bytes;
@@ -653,6 +656,121 @@ impl core_optimizer_host::Host for CoreStoreState {
             .expect("extension manager mutex poisoned");
         manager
             .dispatch_optimize(handle, &plan_json)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+}
+
+// 3.1.0 additive minor: the core imports `duckdb:extension/table-stream-host` to
+// drive a component's streaming + filter-pushdown table function. The host
+// PROVIDES it: `filterable-table-list` surfaces the declared filterable tables
+// (so the core registers a C++ TableFunction with filter_pushdown = true for
+// each), and ts-open-filtered / ts-next / ts-close route the pushed-down filter
+// set + cursor pulls to the owning component's `call-table-open-filtered` export.
+impl core_table_stream_host::Host for CoreStoreState {
+    fn filterable_table_list(&mut self) -> Vec<core_table_stream_host::FilterableTable> {
+        let manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .registered_filterable_tables()
+            .into_iter()
+            .map(|ft| core_table_stream_host::FilterableTable {
+                name: ft.name,
+                arguments: ft
+                    .arguments
+                    .into_iter()
+                    .map(|a| core_types::Columndef {
+                        name: a.name.unwrap_or_default(),
+                        logical: neutral_reg_logicaltype_to_core_types(a.logical),
+                    })
+                    .collect::<Vec<_>>()
+                    .into(),
+                columns: ft
+                    .columns
+                    .into_iter()
+                    .map(|c| core_types::Columndef {
+                        name: c.name,
+                        logical: neutral_reg_logicaltype_to_core_types(c.logical),
+                    })
+                    .collect::<Vec<_>>()
+                    .into(),
+                handle: ft.callback_handle,
+            })
+            .collect()
+    }
+
+    fn ts_open_filtered(
+        &mut self,
+        handle: u32,
+        args: BindgenVec<core_types::Duckvalue>,
+        projection: BindgenVec<u32>,
+        filters: BindgenVec<core_table_stream_host::TsFilter>,
+    ) -> Result<core_table_stream_host::TsOpenResult, core_types::Duckerror> {
+        let ext_args: Vec<_> = args
+            .into_iter()
+            .map(convert_core_duckvalue_to_extension)
+            .collect();
+        let proj: Vec<u32> = projection.into_iter().collect();
+        let ext_filters: Vec<_> = filters
+            .into_iter()
+            .map(convert_core_tsfilter_to_extension)
+            .collect();
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_table_open_filtered(handle, &ext_args, &proj, &ext_filters)
+            .map(|open| core_table_stream_host::TsOpenResult {
+                cursor: open.cursor,
+                columns: open
+                    .columns
+                    .into_iter()
+                    .map(convert_extension_columndef_to_core)
+                    .collect::<Vec<_>>()
+                    .into(),
+            })
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn ts_next(
+        &mut self,
+        handle: u32,
+        cursor: u32,
+        max_rows: u32,
+    ) -> Result<core_table_stream_host::Resultset, core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_table_next(handle, cursor, max_rows)
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|row| {
+                        row.into_iter()
+                            .map(convert_extension_duckvalue_to_core)
+                            .collect::<Vec<_>>()
+                            .into()
+                    })
+                    .collect::<Vec<_>>()
+                    .into()
+            })
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn ts_close(
+        &mut self,
+        handle: u32,
+        cursor: u32,
+    ) -> Result<bool, core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_table_close(handle, cursor)
             .map_err(convert_extension_duckerror_to_core)
     }
 }
@@ -1614,6 +1732,14 @@ struct ExtensionManager {
     // flattened plan via `optimizer-host.call-optimize`. Keyed by rule name ->
     // (extension, callback-handle).
     optimizers: HashMap<String, (String, u32)>,
+    // 3.1.0 additive minor: streaming + filter-pushdown table functions components
+    // have declared via `table-stream.register-filterable-table`. The core pulls
+    // this list (through `table-stream-host.filterable-table-list`), registers a
+    // real C++ streaming TableFunction (filter_pushdown = true) for each, and at
+    // scan time drives the owning component's `call-table-open-filtered` via
+    // `table-stream-host` (ts-open-filtered/next/close). Keyed by the global
+    // routable callback handle so dispatch routes back to the owning component.
+    filterable_tables: Vec<reg::FilterableTableReg>,
     // Function prefixes (PLAN-prefixes): the registry/index.json name ->
     // {prefix, expansion} map loaded at host start, used to namespace every
     // scalar/table/aggregate registration as `prefix__name`.
@@ -1692,6 +1818,7 @@ impl ExtensionManager {
             pragmas: HashMap::new(),
             parsers: HashMap::new(),
             optimizers: HashMap::new(),
+            filterable_tables: Vec::new(),
             prefix_registry,
             prefix_collisions: prefix::CollisionTracker::default(),
             prefix_recorded: std::collections::HashSet::new(),
@@ -2717,6 +2844,81 @@ impl ExtensionManager {
         instance.dispatch_table(entry.dispatcher_handle, args)
     }
 
+    // --- 3.1.0 additive minor: streaming + filter-pushdown table-fn dispatch ---
+    // Route the GLOBAL callback handle (carried in the C++ TableFunction) to the
+    // owning component instance + its component-local dispatcher handle, exactly
+    // like dispatch_table routes call-table.
+
+    fn registered_filterable_tables(&self) -> Vec<reg::FilterableTableReg> {
+        self.filterable_tables.clone()
+    }
+
+    fn dispatch_table_open_filtered(
+        &mut self,
+        handle: u32,
+        args: &[extension_types::Duckvalue],
+        projection: &[u32],
+        filters: &[ducklink_runtime::extension::TableFilter],
+    ) -> Result<ducklink_runtime::extension::TableOpenResult, extension_types::Duckerror> {
+        let entry = self
+            .lookup_callback(handle, CallbackKind::Table)
+            .ok_or_else(|| {
+                extension_types::Duckerror::Invalidstate(format!(
+                    "unknown filterable-table handle {handle}"
+                ))
+            })?;
+        let instance = self.extensions.get_mut(&*entry.extension).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!(
+                "extension {} is not loaded",
+                entry.extension
+            ))
+        })?;
+        instance.table_open_filtered(entry.dispatcher_handle, args, projection, filters)
+    }
+
+    fn dispatch_table_next(
+        &mut self,
+        handle: u32,
+        cursor: u32,
+        max_rows: u32,
+    ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
+        let entry = self
+            .lookup_callback(handle, CallbackKind::Table)
+            .ok_or_else(|| {
+                extension_types::Duckerror::Invalidstate(format!(
+                    "unknown filterable-table handle {handle}"
+                ))
+            })?;
+        let instance = self.extensions.get_mut(&*entry.extension).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!(
+                "extension {} is not loaded",
+                entry.extension
+            ))
+        })?;
+        instance.table_next(entry.dispatcher_handle, cursor, max_rows)
+    }
+
+    fn dispatch_table_close(
+        &mut self,
+        handle: u32,
+        cursor: u32,
+    ) -> Result<bool, extension_types::Duckerror> {
+        let entry = self
+            .lookup_callback(handle, CallbackKind::Table)
+            .ok_or_else(|| {
+                extension_types::Duckerror::Invalidstate(format!(
+                    "unknown filterable-table handle {handle}"
+                ))
+            })?;
+        let instance = self.extensions.get_mut(&*entry.extension).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!(
+                "extension {} is not loaded",
+                entry.extension
+            ))
+        })?;
+        instance.table_close(entry.dispatcher_handle, cursor)
+    }
+
     fn dispatch_aggregate(
         &mut self,
         handle: u32,
@@ -3012,6 +3214,21 @@ impl ExtensionManager {
             // can offer rejected statements to them (via parser-host).
             let parsers_captured = instance.take_pending_parsers();
             let optimizers_captured = instance.take_pending_optimizers();
+            // 3.1.0 additive minor: capture this extension's filterable streaming
+            // table functions, so the core can register a real filter-pushdown
+            // TableFunction (via table-stream-host.filterable-table-list) and route
+            // its open/next/close back to this component.
+            for ft in instance.take_pending_filterable_tables() {
+                eprintln!(
+                    "[extension-manager] filterable table fn '{}' -> extension '{}' (global-handle={}, args={}, cols={})",
+                    ft.name,
+                    ft.extension,
+                    ft.callback_handle,
+                    ft.arguments.len(),
+                    ft.columns.len()
+                );
+                self.filterable_tables.push(ft);
+            }
             for parser in &parsers_captured {
                 eprintln!(
                     "[extension-manager] parser '{}' -> extension '{}' (callback={})",
@@ -4154,6 +4371,69 @@ fn neutral_columndef_to_core(col: reg::ColumnDef) -> core_runtime_exports::Colum
     }
 }
 
+// 3.1.0 additive minor: a neutral `reg::LogicalType` -> the core `types`
+// Logicaltype (used by the host-import `table-stream-host.filterable-table` shape,
+// whose columndef carries `types.logicaltype`).
+fn neutral_reg_logicaltype_to_core_types(ty: reg::LogicalType) -> core_types::Logicaltype {
+    use core_types::Logicaltype as C;
+    match ty {
+        reg::LogicalType::Boolean => C::Boolean,
+        reg::LogicalType::Int64 => C::Int64,
+        reg::LogicalType::Uint64 => C::Uint64,
+        reg::LogicalType::Float64 => C::Float64,
+        reg::LogicalType::Text => C::Text,
+        reg::LogicalType::Blob => C::Blob,
+        reg::LogicalType::Int32 => C::Int32,
+        reg::LogicalType::Timestamp => C::Timestamp,
+        reg::LogicalType::Int8 => C::Int8,
+        reg::LogicalType::Int16 => C::Int16,
+        reg::LogicalType::Uint8 => C::Uint8,
+        reg::LogicalType::Uint16 => C::Uint16,
+        reg::LogicalType::Uint32 => C::Uint32,
+        reg::LogicalType::Float32 => C::Float32,
+        reg::LogicalType::Date => C::Date,
+        reg::LogicalType::Time => C::Time,
+        reg::LogicalType::Timestamptz => C::Timestamptz,
+        reg::LogicalType::Decimal => C::Decimal,
+        reg::LogicalType::Interval => C::Interval,
+        reg::LogicalType::Uuid => C::Uuid,
+        reg::LogicalType::Complex(expr) => C::Complex(expr),
+    }
+}
+
+// 3.1.0 additive minor: a pushed-down filter clause crossing from the core
+// (`table-stream-host.ts-filter`) to the component (`table-stream-dispatch.
+// table-filter`). Both are the neutral by-value descriptor (column index + op +
+// constant values); only the generated Rust types differ across the two bindgen
+// worlds.
+fn convert_core_tsfilter_to_extension(
+    f: core_table_stream_host::TsFilter,
+) -> ducklink_runtime::extension::TableFilter {
+    use core_table_stream_host::TsFilterOp as CoreOp;
+    use ducklink_runtime::extension::FilterOp as ExtOp;
+    let op = match f.op {
+        CoreOp::Eq => ExtOp::Eq,
+        CoreOp::Ne => ExtOp::Ne,
+        CoreOp::Lt => ExtOp::Lt,
+        CoreOp::Le => ExtOp::Le,
+        CoreOp::Gt => ExtOp::Gt,
+        CoreOp::Ge => ExtOp::Ge,
+        CoreOp::IsIn => ExtOp::IsIn,
+        CoreOp::IsNull => ExtOp::IsNull,
+        CoreOp::IsNotNull => ExtOp::IsNotNull,
+    };
+    ducklink_runtime::extension::TableFilter {
+        column: f.column,
+        op,
+        values: f
+            .values
+            .into_iter()
+            .map(convert_core_duckvalue_to_extension)
+            .collect::<Vec<_>>()
+            .into(),
+    }
+}
+
 fn convert_funcargs_to_loader(args: Vec<reg::FuncArg>) -> BindgenVec<core_extension_hooks::FuncArg> {
     args.into_iter()
         .map(|arg| core_extension_hooks::FuncArg {
@@ -4746,6 +5026,12 @@ fn instantiate_core(
         |state| state,
     )?;
     core_files_host::add_to_linker::<CoreStoreState, CoreStoreState>(
+        &mut linker,
+        |state| state,
+    )?;
+    // 3.1.0 additive minor: provide table-stream-host so the core can drive a
+    // component's streaming filter-pushdown table fn.
+    core_table_stream_host::add_to_linker::<CoreStoreState, CoreStoreState>(
         &mut linker,
         |state| state,
     )?;
