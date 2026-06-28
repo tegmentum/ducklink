@@ -48,7 +48,6 @@ jobs:
         with:
           repository: tegmentum/duckdb-wasm
           path: duckdb-wasm
-          token: ${{ secrets.DUCKDB_WASM_TOKEN }}
 
       - name: Install Rust + the wasip2 target
         uses: dtolnay/rust-toolchain@stable
