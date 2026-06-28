@@ -217,7 +217,12 @@ jobs:
             -p "SHA256SUMS" \
             -D /tmp/prebuilt \
             --clobber
-          tar xzf "/tmp/prebuilt/$DUCKLINK_COMPONENTS_TARBALL" -C artifacts/extensions
+          # --exclude '._*' drops any macOS AppleDouble resource-fork members a
+          # locally-built (BSD-tar) tarball may carry; on Linux they would extract
+          # as literal `._<name>.wasm` files and verify-catalog flags each as an
+          # orphan artifact. Belt-and-braces: prune any that slip through.
+          tar xzf "/tmp/prebuilt/$DUCKLINK_COMPONENTS_TARBALL" -C artifacts/extensions --exclude='._*'
+          find artifacts/extensions -name '._*' -delete
           echo "downloaded $(ls artifacts/extensions/*.wasm | wc -l) prebuilt component artifact(s)"
 
       # INTEGRITY GATE (fail-fast): every catalog-referenced artifact's sha256 must
