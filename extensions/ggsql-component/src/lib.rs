@@ -13,6 +13,10 @@
 use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 
+// VISUALIZE parse/rewrite logic lives in a wit-free module so the cargo-fuzz
+// target can drive it natively (never-panic contract; see parse.rs).
+mod parse;
+
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension-parser" });
 
 use duckdb::extension::{parser, types};
@@ -48,38 +52,13 @@ impl parser_dispatch::Guest for Extension {
         if handle != PARSER_HANDLE {
             return Ok(parser_dispatch::ParseOutcome::Declined);
         }
-        let q = query.to_string();
-        let trimmed = q.trim().trim_end_matches(';').trim();
-        // Case-insensitive `VISUALIZE` prefix check.
-        let mut chars = trimmed.char_indices();
-        let kw = "visualize";
-        let head: std::string::String = trimmed.chars().take(kw.len()).collect();
-        if head.to_ascii_lowercase() != kw {
-            // Not ours: let the next parser extension / the core error handle it.
-            return Ok(parser_dispatch::ParseOutcome::Declined);
+        // The wit-free, fuzzed parse/rewrite logic; map its outcome onto the WIT
+        // surface. See parse.rs for the never-panic contract.
+        match parse::parse_visualize(&query) {
+            parse::Outcome::Declined => Ok(parser_dispatch::ParseOutcome::Declined),
+            parse::Outcome::Invalid(msg) => Err(types::Duckerror::Invalidargument(msg.into())),
+            parse::Outcome::Rewrite(sql) => Ok(parser_dispatch::ParseOutcome::Rewrite(sql.into())),
         }
-        // Advance past the keyword.
-        let _ = chars.nth(kw.len().saturating_sub(1));
-        let inner = trimmed[kw.len()..].trim();
-        if inner.is_empty() {
-            return Err(types::Duckerror::Invalidargument(
-                "VISUALIZE requires a SELECT statement, e.g. VISUALIZE SELECT region, n FROM t"
-                    .into(),
-            ));
-        }
-        // Rewrite: wrap the inner select as a CTE and emit a (label, n, bar) rollup.
-        // The inner select is expected to project (label, value); we render a unit
-        // bar of '#' repeated by value. This desugars entirely to standard SQL --
-        // the whole point of the string->SQL rewrite form.
-        let rewritten = std::format!(
-            "WITH __viz AS ({inner}) \
-             SELECT CAST(label AS VARCHAR) AS label, \
-                    CAST(n AS BIGINT) AS n, \
-                    repeat('#', GREATEST(CAST(n AS BIGINT), 0)) AS bar \
-             FROM (SELECT * FROM __viz) AS t(label, n) \
-             ORDER BY n DESC"
-        );
-        Ok(parser_dispatch::ParseOutcome::Rewrite(rewritten.into()))
     }
 }
 
