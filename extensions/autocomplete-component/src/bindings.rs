@@ -632,7 +632,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]scalar-callback"]
                             fn drop(_: u32);
@@ -669,7 +669,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]table-callback"]
                             fn drop(_: u32);
@@ -706,7 +706,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]aggregate-callback"]
                             fn drop(_: u32);
@@ -743,7 +743,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]pragma-callback"]
                             fn drop(_: u32);
@@ -780,7 +780,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]cast-callback"]
                             fn drop(_: u32);
@@ -817,7 +817,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]scalar-registry"]
                             fn drop(_: u32);
@@ -854,7 +854,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]table-registry"]
                             fn drop(_: u32);
@@ -891,7 +891,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]aggregate-registry"]
                             fn drop(_: u32);
@@ -928,7 +928,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]pragma-registry"]
                             fn drop(_: u32);
@@ -965,7 +965,7 @@ pub mod duckdb {
                     unreachable!();
                     #[cfg(target_arch = "wasm32")]
                     {
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[resource-drop]macro-registry"]
                             fn drop(_: u32);
@@ -1010,7 +1010,7 @@ pub mod duckdb {
                 pub fn new(handle: u32) -> Self {
                     unsafe {
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[constructor]scalar-callback"]
                             fn wit_import0(_: i32) -> i32;
@@ -1218,7 +1218,7 @@ pub mod duckdb {
                         };
                         let ptr12 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]scalar-callback.call"]
                             fn wit_import13(
@@ -1588,7 +1588,7 @@ pub mod duckdb {
                 pub fn new(handle: u32) -> Self {
                     unsafe {
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[constructor]table-callback"]
                             fn wit_import0(_: i32) -> i32;
@@ -1785,7 +1785,7 @@ pub mod duckdb {
                         }
                         let ptr10 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]table-callback.call"]
                             fn wit_import11(_: i32, _: *mut u8, _: usize, _: *mut u8);
@@ -2177,7 +2177,7 @@ pub mod duckdb {
                 pub fn new(handle: u32) -> Self {
                     unsafe {
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[constructor]aggregate-callback"]
                             fn wit_import0(_: i32) -> i32;
@@ -2405,7 +2405,7 @@ pub mod duckdb {
                         }
                         let ptr11 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]aggregate-callback.call"]
                             fn wit_import12(_: i32, _: *mut u8, _: usize, _: *mut u8);
@@ -2758,7 +2758,7 @@ pub mod duckdb {
                 pub fn new(handle: u32) -> Self {
                     unsafe {
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[constructor]pragma-callback"]
                             fn wit_import0(_: i32) -> i32;
@@ -2957,7 +2957,7 @@ pub mod duckdb {
                         }
                         let ptr10 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]pragma-callback.call"]
                             fn wit_import11(_: i32, _: *mut u8, _: usize, _: *mut u8);
@@ -3315,7 +3315,7 @@ pub mod duckdb {
                 pub fn new(handle: u32) -> Self {
                     unsafe {
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[constructor]cast-callback"]
                             fn wit_import0(_: i32) -> i32;
@@ -3622,7 +3622,7 @@ pub mod duckdb {
                         };
                         let ptr10 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]cast-callback.call"]
                             fn wit_import11(
@@ -4273,7 +4273,7 @@ pub mod duckdb {
                         };
                         let ptr16 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]scalar-registry.register"]
                             fn wit_import17(
@@ -4867,7 +4867,7 @@ pub mod duckdb {
                         };
                         let ptr17 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]table-registry.register"]
                             fn wit_import18(
@@ -5350,7 +5350,7 @@ pub mod duckdb {
                         };
                         let ptr16 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]aggregate-registry.register"]
                             fn wit_import17(
@@ -5824,7 +5824,7 @@ pub mod duckdb {
                         };
                         let ptr15 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]pragma-registry.register-call"]
                             fn wit_import16(
@@ -6137,7 +6137,7 @@ pub mod duckdb {
                         };
                         let ptr10 = ret_area.0.as_mut_ptr().cast::<u8>();
                         #[cfg(target_arch = "wasm32")]
-                        #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                        #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                         unsafe extern "C" {
                             #[link_name = "[method]macro-registry.register-scalar"]
                             fn wit_import11(
@@ -6330,7 +6330,7 @@ pub mod duckdb {
                     let mut ret_area = RetArea([::core::mem::MaybeUninit::uninit(); 12]);
                     let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-capability"]
                         fn wit_import1(_: i32, _: *mut u8);
@@ -6409,7 +6409,7 @@ pub mod duckdb {
                     );
                     let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/runtime@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/runtime@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "list-capabilities"]
                         fn wit_import1(_: *mut u8);
@@ -6465,7 +6465,7 @@ pub mod duckdb {
                     );
                     let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/config@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "provider-version"]
                         fn wit_import1(_: *mut u8);
@@ -6510,7 +6510,7 @@ pub mod duckdb {
                     };
                     let ptr2 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/config@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "list-keys"]
                         fn wit_import3(_: i32, _: *mut u8, _: usize, _: *mut u8);
@@ -6574,7 +6574,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/config@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-string"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -6725,7 +6725,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/config@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-bool"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -6868,7 +6868,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/config@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-i64"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -7003,7 +7003,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/config@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-u64"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -7138,7 +7138,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/config@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-f64"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -7274,7 +7274,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/config@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-bytes"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -7422,7 +7422,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/config@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/config@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "get-string-list"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -7599,7 +7599,7 @@ pub mod duckdb {
                         None => (0i32, ::core::ptr::null_mut(), 0usize),
                     };
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/logging@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/logging@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "log"]
                         fn wit_import3(
@@ -7686,7 +7686,7 @@ pub mod duckdb {
                         }
                     }
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/logging@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/logging@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "log-fields"]
                         fn wit_import5(
@@ -7850,7 +7850,7 @@ pub mod duckdb {
                     let len2 = vec2.len();
                     let ptr3 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/catalog@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/catalog@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "register-logical-type"]
                         fn wit_import4(
@@ -7936,7 +7936,7 @@ pub mod duckdb {
                     let len2 = vec2.len();
                     let ptr3 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/catalog@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/catalog@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "register-cast"]
                         fn wit_import4(
@@ -8061,7 +8061,7 @@ pub mod duckdb {
                     let len5 = vec5.len();
                     let ptr6 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/catalog@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/catalog@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "register-macro"]
                         fn wit_import7(
@@ -8269,7 +8269,7 @@ pub mod duckdb {
                     }
                     let ptr3 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/files@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/files@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "register-replacement-scan"]
                         fn wit_import4(_: *mut u8, _: usize, _: i32, _: i32, _: *mut u8);
@@ -8352,7 +8352,7 @@ pub mod duckdb {
                     let len1 = vec1.len();
                     let ptr2 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/files@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/files@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "register-copy-handler"]
                         fn wit_import3(_: *mut u8, _: usize, _: i32, _: *mut u8);
@@ -8452,7 +8452,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:extension/query@2.2.0")]
+                    #[link(wasm_import_module = "duckdb:extension/query@3.0.0")]
                     unsafe extern "C" {
                         #[link_name = "query"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -9166,34 +9166,34 @@ pub mod exports {
                     fn shutdown() -> Result<bool, Duckerror>;
                 }
                 #[doc(hidden)]
-                macro_rules! __export_duckdb_extension_guest_2_2_0_cabi {
+                macro_rules! __export_duckdb_extension_guest_3_0_0_cabi {
                     ($ty:ident with_types_in $($path_to_types:tt)*) => {
                         const _ : () = { #[unsafe (export_name =
-                        "duckdb:extension/guest@2.2.0#load")] unsafe extern "C" fn
+                        "duckdb:extension/guest@3.0.0#load")] unsafe extern "C" fn
                         export_load() -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_load_cabi::<$ty > () } } #[unsafe (export_name =
-                        "cabi_post_duckdb:extension/guest@2.2.0#load")] unsafe extern "C"
+                        "cabi_post_duckdb:extension/guest@3.0.0#load")] unsafe extern "C"
                         fn _post_return_load(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_load::<$ty > (arg0) } }
                         #[unsafe (export_name =
-                        "duckdb:extension/guest@2.2.0#reconfigure")] unsafe extern "C" fn
+                        "duckdb:extension/guest@3.0.0#reconfigure")] unsafe extern "C" fn
                         export_reconfigure(arg0 : * mut u8, arg1 : usize,) -> * mut u8 {
                         unsafe { $($path_to_types)*:: _export_reconfigure_cabi::<$ty >
                         (arg0, arg1) } } #[unsafe (export_name =
-                        "cabi_post_duckdb:extension/guest@2.2.0#reconfigure")] unsafe
+                        "cabi_post_duckdb:extension/guest@3.0.0#reconfigure")] unsafe
                         extern "C" fn _post_return_reconfigure(arg0 : * mut u8,) { unsafe
                         { $($path_to_types)*:: __post_return_reconfigure::<$ty > (arg0) }
                         } #[unsafe (export_name =
-                        "duckdb:extension/guest@2.2.0#shutdown")] unsafe extern "C" fn
+                        "duckdb:extension/guest@3.0.0#shutdown")] unsafe extern "C" fn
                         export_shutdown() -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_shutdown_cabi::<$ty > () } } #[unsafe (export_name =
-                        "cabi_post_duckdb:extension/guest@2.2.0#shutdown")] unsafe extern
+                        "cabi_post_duckdb:extension/guest@3.0.0#shutdown")] unsafe extern
                         "C" fn _post_return_shutdown(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_shutdown::<$ty > (arg0) } } };
                     };
                 }
                 #[doc(hidden)]
-                pub(crate) use __export_duckdb_extension_guest_2_2_0_cabi;
+                pub(crate) use __export_duckdb_extension_guest_3_0_0_cabi;
                 #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
                 #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
                 struct _RetArea(
@@ -12845,71 +12845,71 @@ pub mod exports {
                     ) -> Result<Duckvalue, Duckerror>;
                 }
                 #[doc(hidden)]
-                macro_rules! __export_duckdb_extension_callback_dispatch_2_2_0_cabi {
+                macro_rules! __export_duckdb_extension_callback_dispatch_3_0_0_cabi {
                     ($ty:ident with_types_in $($path_to_types:tt)*) => {
                         const _ : () = { #[unsafe (export_name =
-                        "duckdb:extension/callback-dispatch@2.2.0#call-scalar")] unsafe
+                        "duckdb:extension/callback-dispatch@3.0.0#call-scalar")] unsafe
                         extern "C" fn export_call_scalar(arg0 : i32, arg1 : * mut u8,
                         arg2 : usize, arg3 : i32, arg4 : i64, arg5 : i32,) -> * mut u8 {
                         unsafe { $($path_to_types)*:: _export_call_scalar_cabi::<$ty >
                         (arg0, arg1, arg2, arg3, arg4, arg5) } } #[unsafe (export_name =
-                        "cabi_post_duckdb:extension/callback-dispatch@2.2.0#call-scalar")]
+                        "cabi_post_duckdb:extension/callback-dispatch@3.0.0#call-scalar")]
                         unsafe extern "C" fn _post_return_call_scalar(arg0 : * mut u8,) {
                         unsafe { $($path_to_types)*:: __post_return_call_scalar::<$ty >
                         (arg0) } } #[unsafe (export_name =
-                        "duckdb:extension/callback-dispatch@2.2.0#call-scalar-batch")]
+                        "duckdb:extension/callback-dispatch@3.0.0#call-scalar-batch")]
                         unsafe extern "C" fn export_call_scalar_batch(arg0 : i32, arg1 :
                         * mut u8, arg2 : usize, arg3 : i32, arg4 : i64, arg5 : i32,) -> *
                         mut u8 { unsafe { $($path_to_types)*::
                         _export_call_scalar_batch_cabi::<$ty > (arg0, arg1, arg2, arg3,
                         arg4, arg5) } } #[unsafe (export_name =
-                        "cabi_post_duckdb:extension/callback-dispatch@2.2.0#call-scalar-batch")]
+                        "cabi_post_duckdb:extension/callback-dispatch@3.0.0#call-scalar-batch")]
                         unsafe extern "C" fn _post_return_call_scalar_batch(arg0 : * mut
                         u8,) { unsafe { $($path_to_types)*::
                         __post_return_call_scalar_batch::<$ty > (arg0) } } #[unsafe
                         (export_name =
-                        "duckdb:extension/callback-dispatch@2.2.0#call-table")] unsafe
+                        "duckdb:extension/callback-dispatch@3.0.0#call-table")] unsafe
                         extern "C" fn export_call_table(arg0 : i32, arg1 : * mut u8, arg2
                         : usize,) -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_call_table_cabi::<$ty > (arg0, arg1, arg2) } } #[unsafe
                         (export_name =
-                        "cabi_post_duckdb:extension/callback-dispatch@2.2.0#call-table")]
+                        "cabi_post_duckdb:extension/callback-dispatch@3.0.0#call-table")]
                         unsafe extern "C" fn _post_return_call_table(arg0 : * mut u8,) {
                         unsafe { $($path_to_types)*:: __post_return_call_table::<$ty >
                         (arg0) } } #[unsafe (export_name =
-                        "duckdb:extension/callback-dispatch@2.2.0#call-aggregate")]
+                        "duckdb:extension/callback-dispatch@3.0.0#call-aggregate")]
                         unsafe extern "C" fn export_call_aggregate(arg0 : i32, arg1 : *
                         mut u8, arg2 : usize,) -> * mut u8 { unsafe {
                         $($path_to_types)*:: _export_call_aggregate_cabi::<$ty > (arg0,
                         arg1, arg2) } } #[unsafe (export_name =
-                        "cabi_post_duckdb:extension/callback-dispatch@2.2.0#call-aggregate")]
+                        "cabi_post_duckdb:extension/callback-dispatch@3.0.0#call-aggregate")]
                         unsafe extern "C" fn _post_return_call_aggregate(arg0 : * mut
                         u8,) { unsafe { $($path_to_types)*::
                         __post_return_call_aggregate::<$ty > (arg0) } } #[unsafe
                         (export_name =
-                        "duckdb:extension/callback-dispatch@2.2.0#call-pragma")] unsafe
+                        "duckdb:extension/callback-dispatch@3.0.0#call-pragma")] unsafe
                         extern "C" fn export_call_pragma(arg0 : i32, arg1 : * mut u8,
                         arg2 : usize,) -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_call_pragma_cabi::<$ty > (arg0, arg1, arg2) } } #[unsafe
                         (export_name =
-                        "cabi_post_duckdb:extension/callback-dispatch@2.2.0#call-pragma")]
+                        "cabi_post_duckdb:extension/callback-dispatch@3.0.0#call-pragma")]
                         unsafe extern "C" fn _post_return_call_pragma(arg0 : * mut u8,) {
                         unsafe { $($path_to_types)*:: __post_return_call_pragma::<$ty >
                         (arg0) } } #[unsafe (export_name =
-                        "duckdb:extension/callback-dispatch@2.2.0#call-cast")] unsafe
+                        "duckdb:extension/callback-dispatch@3.0.0#call-cast")] unsafe
                         extern "C" fn export_call_cast(arg0 : i32, arg1 : i32, arg2 :
                         ::core::mem::MaybeUninit::< u64 >, arg3 : i64, arg4 :
                         ::core::mem::MaybeUninit::< u64 >, arg5 : usize,) -> * mut u8 {
                         unsafe { $($path_to_types)*:: _export_call_cast_cabi::<$ty >
                         (arg0, arg1, arg2, arg3, arg4, arg5) } } #[unsafe (export_name =
-                        "cabi_post_duckdb:extension/callback-dispatch@2.2.0#call-cast")]
+                        "cabi_post_duckdb:extension/callback-dispatch@3.0.0#call-cast")]
                         unsafe extern "C" fn _post_return_call_cast(arg0 : * mut u8,) {
                         unsafe { $($path_to_types)*:: __post_return_call_cast::<$ty >
                         (arg0) } } };
                     };
                 }
                 #[doc(hidden)]
-                pub(crate) use __export_duckdb_extension_callback_dispatch_2_2_0_cabi;
+                pub(crate) use __export_duckdb_extension_callback_dispatch_3_0_0_cabi;
                 #[repr(align(8))]
                 struct _RetArea(
                     [::core::mem::MaybeUninit<
@@ -13182,10 +13182,10 @@ macro_rules! __export_duckdb_extension_impl {
     };
     ($ty:ident with_types_in $($path_to_types_root:tt)*) => {
         $($path_to_types_root)*::
-        exports::duckdb::extension::guest::__export_duckdb_extension_guest_2_2_0_cabi!($ty
+        exports::duckdb::extension::guest::__export_duckdb_extension_guest_3_0_0_cabi!($ty
         with_types_in $($path_to_types_root)*:: exports::duckdb::extension::guest);
         $($path_to_types_root)*::
-        exports::duckdb::extension::callback_dispatch::__export_duckdb_extension_callback_dispatch_2_2_0_cabi!($ty
+        exports::duckdb::extension::callback_dispatch::__export_duckdb_extension_callback_dispatch_3_0_0_cabi!($ty
         with_types_in $($path_to_types_root)*::
         exports::duckdb::extension::callback_dispatch);
     };
@@ -13194,7 +13194,7 @@ macro_rules! __export_duckdb_extension_impl {
 pub(crate) use __export_duckdb_extension_impl as export;
 #[cfg(target_arch = "wasm32")]
 #[unsafe(
-    link_section = "component-type:wit-bindgen:0.41.0:duckdb:extension@2.2.0:duckdb-extension:encoded world"
+    link_section = "component-type:wit-bindgen:0.41.0:duckdb:extension@3.0.0:duckdb-extension:encoded world"
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
@@ -13227,7 +13227,7 @@ configerror\x03\0#\x01m\x05\x05trace\x05debug\x04info\x04warn\x05error\x04\0\x08
 loglevel\x03\0%\x01r\x02\x03keys\x05values\x04\0\x08logfield\x03\0'\x01m\x07\x06\
 scalar\x05table\x09aggregate\x06pragma\x05macro\x07catalog\x0bfile-format\x04\0\x0e\
 capabilitykind\x03\0)\x01p*\x01r\x03\x04names\x07version\x0a\x08requires+\x04\0\x0a\
-loadresult\x03\0,\x03\0\x1cduckdb:extension/types@2.2.0\x05\0\x02\x03\0\0\x0ecap\
+loadresult\x03\0,\x03\0\x1cduckdb:extension/types@3.0.0\x05\0\x02\x03\0\0\x0ecap\
 abilitykind\x02\x03\0\0\x09duckerror\x02\x03\0\0\x09duckvalue\x02\x03\0\0\x07ext\
 opts\x02\x03\0\0\x07funcarg\x02\x03\0\0\x08funcopts\x02\x03\0\0\x0ainvokeinfo\x02\
 \x03\0\0\x0blogicaltype\x02\x03\0\0\x09resultset\x02\x03\0\0\x08rowbatch\x02\x03\
@@ -13267,7 +13267,7 @@ names\x09arguments\xc1\0\x07returns\x0f\x08callback6\x07options\xc7\0\0\xc3\0\x0
 \x01@\x05\x04self\xcd\0\x04names\x0aparameters\xce\0\x08body-sqls\x07options\xc7\
 \0\0\xcf\0\x04\0&[method]macro-registry.register-scalar\x01P\x01k&\x01@\x01\x04k\
 ind\x01\0\xd1\0\x04\0\x0eget-capability\x01R\x01p\x01\x01@\0\0\xd3\0\x04\0\x11li\
-st-capabilities\x01T\x03\0\x1educkdb:extension/runtime@2.2.0\x05\x0c\x02\x03\0\0\
+st-capabilities\x01T\x03\0\x1educkdb:extension/runtime@3.0.0\x05\x0c\x02\x03\0\0\
 \x0bconfigerror\x01B$\x02\x03\x02\x01\x0d\x04\0\x0bconfigerror\x03\0\0\x01@\0\0s\
 \x04\0\x10provider-version\x01\x02\x01ks\x01ps\x01@\x01\x06prefix\x03\0\x04\x04\0\
 \x09list-keys\x01\x05\x01j\x01\x03\x01\x01\x01@\x01\x04paths\0\x06\x04\0\x0aget-\
@@ -13277,12 +13277,12 @@ t-bool\x01\x0a\x01kx\x01j\x01\x0b\x01\x01\x01@\x01\x04paths\0\x0c\x04\0\x07get-i
 \x10\x01ku\x01j\x01\x11\x01\x01\x01@\x01\x04paths\0\x12\x04\0\x07get-f64\x01\x13\
 \x01p}\x01k\x14\x01j\x01\x15\x01\x01\x01@\x01\x04paths\0\x16\x04\0\x09get-bytes\x01\
 \x17\x01k\x04\x01j\x01\x18\x01\x01\x01@\x01\x04paths\0\x19\x04\0\x0fget-string-l\
-ist\x01\x1a\x03\0\x1dduckdb:extension/config@2.2.0\x05\x0e\x02\x03\0\0\x08logfie\
+ist\x01\x1a\x03\0\x1dduckdb:extension/config@3.0.0\x05\x0e\x02\x03\0\0\x08logfie\
 ld\x02\x03\0\0\x08loglevel\x01B\x0a\x02\x03\x02\x01\x0f\x04\0\x08logfield\x03\0\0\
 \x02\x03\x02\x01\x10\x04\0\x08loglevel\x03\0\x02\x01ks\x01@\x03\x05level\x03\x07\
 messages\x06target\x04\x01\0\x04\0\x03log\x01\x05\x01p\x01\x01@\x03\x05level\x03\
 \x07messages\x06fields\x06\x01\0\x04\0\x0alog-fields\x01\x07\x03\0\x1educkdb:ext\
-ension/logging@2.2.0\x05\x11\x02\x03\0\x01\x0dcast-callback\x01B\x16\x02\x03\x02\
+ension/logging@3.0.0\x05\x11\x02\x03\0\x01\x0dcast-callback\x01B\x16\x02\x03\x02\
 \x01\x12\x04\0\x0dcast-callback\x03\0\0\x01r\x02\x04names\x08physicals\x04\0\x0c\
 logical-type\x03\0\x02\x01y\x04\0\x13logical-type-handle\x03\0\x04\x01m\x03\x08i\
 mplicit\x0aassignment\x08explicit\x04\0\x09cast-kind\x03\0\x06\x01r\x03\x04froms\
@@ -13291,7 +13291,7 @@ mes\x0aparameters\x0a\x0edefinition-sqls\x04\0\x09macro-def\x03\0\x0b\x01j\x01\x
 \x01s\x01@\x01\x02ty\x03\0\x0d\x04\0\x15register-logical-type\x01\x0e\x01i\x01\x01\
 j\0\x01s\x01@\x02\x04spec\x09\x08callback\x0f\0\x10\x04\0\x0dregister-cast\x01\x11\
 \x01@\x01\x03def\x0c\0\x10\x04\0\x0eregister-macro\x01\x12\x03\0\x1educkdb:exten\
-sion/catalog@2.2.0\x05\x13\x01B\x15\x01y\x04\0\x15table-function-handle\x03\0\0\x01\
+sion/catalog@3.0.0\x05\x13\x01B\x15\x01y\x04\0\x15table-function-handle\x03\0\0\x01\
 y\x04\0\x14copy-function-handle\x03\0\x02\x01y\x04\0\x13replacement-scan-id\x03\0\
 \x04\x01y\x04\0\x0fcopy-handler-id\x03\0\x06\x01m\x02\x0eextension-only\x09signa\
 ture\x04\0\x0edetection-mode\x03\0\x08\x01ps\x01r\x03\x0aextensions\x0a\x0etable\
@@ -13299,13 +13299,13 @@ ture\x04\0\x0edetection-mode\x03\0\x08\x01ps\x01r\x03\x0aextensions\x0a\x0etable
 ions\x08function\x03\x04\0\x0ccopy-handler\x03\0\x0d\x01j\x01\x05\x01s\x01@\x01\x04\
 scan\x0c\0\x0f\x04\0\x19register-replacement-scan\x01\x10\x01j\x01\x07\x01s\x01@\
 \x01\x07handler\x0e\0\x11\x04\0\x15register-copy-handler\x01\x12\x03\0\x1cduckdb\
-:extension/files@2.2.0\x05\x14\x01B\x05\x01ps\x01p\0\x01j\x01\x01\x01s\x01@\x01\x03\
-sqls\0\x02\x04\0\x05query\x01\x03\x03\0\x1cduckdb:extension/query@2.2.0\x05\x15\x02\
+:extension/files@3.0.0\x05\x14\x01B\x05\x01ps\x01p\0\x01j\x01\x01\x01s\x01@\x01\x03\
+sqls\0\x02\x04\0\x05query\x01\x03\x03\0\x1cduckdb:extension/query@3.0.0\x05\x15\x02\
 \x03\0\0\x0aloadresult\x01B\x0d\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\0\0\x02\
 \x03\x02\x01\x16\x04\0\x0aloadresult\x03\0\x02\x01j\x01\x03\x01\x01\x01@\0\0\x04\
 \x04\0\x04load\x01\x05\x01ps\x01j\x01\x7f\x01\x01\x01@\x01\x04keys\x06\0\x07\x04\
 \0\x0breconfigure\x01\x08\x01@\0\0\x07\x04\0\x08shutdown\x01\x09\x04\0\x1cduckdb\
-:extension/guest@2.2.0\x05\x17\x01B\x1c\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\
+:extension/guest@3.0.0\x05\x17\x01B\x1c\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\
 \0\0\x02\x03\x02\x01\x03\x04\0\x09duckvalue\x03\0\x02\x02\x03\x02\x01\x07\x04\0\x0a\
 invokeinfo\x03\0\x04\x02\x03\x02\x01\x09\x04\0\x09resultset\x03\0\x06\x02\x03\x02\
 \x01\x0a\x04\0\x08rowbatch\x03\0\x08\x01p\x03\x01j\x01\x03\x01\x01\x01@\x03\x06h\
@@ -13315,8 +13315,8 @@ andley\x04args\x0a\x03ctx\x05\0\x0b\x04\0\x0bcall-scalar\x01\x0c\x01j\x01\x0a\x0
 l-table\x01\x10\x01@\x02\x06handley\x04rows\x09\0\x0b\x04\0\x0ecall-aggregate\x01\
 \x11\x01k\x03\x01j\x01\x12\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x13\x04\0\x0b\
 call-pragma\x01\x14\x01@\x02\x06handley\x05value\x03\0\x0b\x04\0\x09call-cast\x01\
-\x15\x04\0(duckdb:extension/callback-dispatch@2.2.0\x05\x18\x04\0'duckdb:extensi\
-on/duckdb-extension@2.2.0\x04\0\x0b\x16\x01\0\x10duckdb-extension\x03\0\0\0G\x09\
+\x15\x04\0(duckdb:extension/callback-dispatch@3.0.0\x05\x18\x04\0'duckdb:extensi\
+on/duckdb-extension@3.0.0\x04\0\x0b\x16\x01\0\x10duckdb-extension\x03\0\0\0G\x09\
 producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rus\
 t\x060.41.0";
 #[inline(never)]
