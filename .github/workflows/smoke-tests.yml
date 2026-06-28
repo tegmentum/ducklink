@@ -17,6 +17,12 @@ on:
 
 env:
   WASI_SDK_RELEASE: wasi-sdk-33
+  # See publish-r2.yml: the DuckDB source ref for duckdb.h (DUCKDB_SOURCE_DIR) and
+  # the duckdb-wasm release tag hosting the prebuilt libduckdb-wasi.a
+  # (DUCKDB_STATIC_LIB) — the gitignored artifacts a fresh runner can't otherwise
+  # obtain.
+  DUCKDB_SOURCE_REF: v1.5.4
+  DUCKDB_CORE_LIBS_TAG: core-libs-v1.5.4
 
 jobs:
   wasm-preview2-smoke:
@@ -32,7 +38,15 @@ jobs:
         with:
           repository: tegmentum/duckdb-wasm
           path: duckdb-wasm
-          token: ${{ secrets.DUCKDB_WASM_TOKEN }}
+
+      # The core build (libduckdb-sys/build.rs) needs duckdb.h via
+      # DUCKDB_SOURCE_DIR (= ducklink/external/duckdb by default). Public, no token.
+      - name: Checkout the DuckDB source (for duckdb.h / DUCKDB_SOURCE_DIR)
+        uses: actions/checkout@v4
+        with:
+          repository: duckdb/duckdb
+          ref: ${{ env.DUCKDB_SOURCE_REF }}
+          path: ducklink/external/duckdb
 
       - name: Install Rust + the wasip2 target
         uses: dtolnay/rust-toolchain@stable
@@ -64,6 +78,21 @@ jobs:
           mkdir -p "$HOME/wasi-sdk"
           tar xzf /tmp/wasi-sdk.tar.gz -C "$HOME/wasi-sdk" --strip-components=1
 
+      # Pull the gitignored ~100MB merged libduckdb-wasi.a (DUCKDB_STATIC_LIB) from
+      # the duckdb-wasm release into the path setup-env.sh expects.
+      - name: Download the prebuilt libduckdb-wasi.a (DUCKDB_STATIC_LIB)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p duckdb-wasm/artifacts
+          gh release download "$DUCKDB_CORE_LIBS_TAG" \
+            -R tegmentum/duckdb-wasm \
+            -p libduckdb-wasi.a \
+            -D duckdb-wasm/artifacts \
+            --clobber
+          ls -la duckdb-wasm/artifacts/libduckdb-wasi.a
+
       # The lean core embeds nothing optional (EMBED_EXTENSIONS="" default);
       # official functionality ships as loadable components (json autoloaded).
       - name: Build the lean DuckDB-wasm core
@@ -71,6 +100,8 @@ jobs:
         run: |
           set -euo pipefail
           export WASI_SDK_PREFIX="$HOME/wasi-sdk"
+          export DUCKDB_STATIC_LIB="$GITHUB_WORKSPACE/duckdb-wasm/artifacts/libduckdb-wasi.a"
+          export DUCKDB_SOURCE_DIR="$GITHUB_WORKSPACE/ducklink/external/duckdb"
           source scripts/setup-env.sh
           cargo component build -p duckdb-component-core --target wasm32-wasip2 --release --features wasi
           mkdir -p ../ducklink/target/wasm32-wasip2/release
@@ -81,6 +112,8 @@ jobs:
         run: |
           set -euo pipefail
           export WASI_SDK_PREFIX="$HOME/wasi-sdk"
+          export DUCKDB_STATIC_LIB="$GITHUB_WORKSPACE/duckdb-wasm/artifacts/libduckdb-wasi.a"
+          export DUCKDB_SOURCE_DIR="$GITHUB_WORKSPACE/ducklink/external/duckdb"
           source ../duckdb-wasm/scripts/setup-env.sh
           cargo build --release -p ducklink-host
           # --build rebuilds each component + copies its artifact, then smokes.
