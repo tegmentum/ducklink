@@ -1658,7 +1658,10 @@ impl ExtensionManager {
                 return Ok(extension_artifact_path(name));
             }
         };
-        let env = resolver::Env::default();
+        let env = resolver::Env {
+            available_components: resolver::available_components_from_env(),
+            ..resolver::Env::default()
+        };
         let canonical = self.canonical_suite_digest(name);
         match resolver::resolve(&entry, &env, &self.resolver_policy, canonical.as_deref()) {
             Ok(res) => {
@@ -1710,7 +1713,10 @@ impl ExtensionManager {
         match resolver::read_manifest_entry(&self.registry_index, name) {
             None => format!("'{name}': no manifest entry (backward-compat filename load)"),
             Some(entry) => {
-                let env = resolver::Env::default();
+                let env = resolver::Env {
+                    available_components: resolver::available_components_from_env(),
+                    ..resolver::Env::default()
+                };
                 let canonical = self.canonical_suite_digest(name);
                 match resolver::resolve(&entry, &env, &self.resolver_policy, canonical.as_deref()) {
                     Ok(res) => format!(

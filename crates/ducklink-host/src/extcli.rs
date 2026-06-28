@@ -265,6 +265,18 @@ fn policy(g: &GlobalOpts) -> ResolvePolicy {
     }
 }
 
+/// The resolver environment for CLI resolution: a wasm runtime is always
+/// present, and the component-dependency gate sees exactly the shared
+/// components the orchestrator can resolve at runtime (parsed from
+/// `DUCKLINK_PROVIDERS`). So `ext info`/`ext install` gate a dependent
+/// extension the same way a live load would.
+fn resolver_env() -> Env {
+    Env {
+        available_components: resolver::available_components_from_env(),
+        ..Env::default()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Small string + table helpers (duckbox-style)
 // ---------------------------------------------------------------------------
@@ -652,7 +664,7 @@ fn cmd_info(g: &GlobalOpts, pos: &[String]) -> Result<()> {
     let manifest = resolver::read_manifest_entry(&catalog.value, name);
     let canonical = canonical_suite_digest(&catalog, name);
     let resolution = manifest.as_ref().map(|m| {
-        resolver::resolve(m, &Env::default(), &policy(g), canonical.as_deref())
+        resolver::resolve(m, &resolver_env(), &policy(g), canonical.as_deref())
     });
 
     if g.json {
@@ -675,6 +687,7 @@ fn cmd_info(g: &GlobalOpts, pos: &[String]) -> Result<()> {
             "categories": entry.get("categories").cloned().unwrap_or(Value::Null),
             "exports": entry.get("exports").cloned().unwrap_or(Value::Null),
             "requires": entry.get("requires").cloned().unwrap_or(Value::Null),
+            "requires_components": entry.get("requires_components").cloned().unwrap_or(Value::Null),
             "wit_contract": s(entry, "wit_contract"),
             "wit_contract_version": s(entry, "wit_contract_version"),
             "source": s(entry, "source"),
@@ -717,6 +730,30 @@ fn cmd_info(g: &GlobalOpts, pos: &[String]) -> Result<()> {
     let requires = arr_join(entry, "requires", ", ");
     if !requires.is_empty() {
         println!("  Capabilities: {requires}");
+    }
+    // GENERAL component-dependency graph: the other components this one resolves
+    // at runtime via the orchestrator (resident, shared). Dependency + capability
+    // transparency for the marketplace.
+    let requires_components = arr_join(entry, "requires_components", ", ");
+    if !requires_components.is_empty() {
+        let available = resolver::available_components_from_env();
+        let status: Vec<String> = entry
+            .get("requires_components")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str())
+                    .map(|id| {
+                        if available.iter().any(|a| a == id) {
+                            format!("{id} (available)")
+                        } else {
+                            format!("{id} (ABSENT — set DUCKLINK_PROVIDERS={id}=…)")
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        println!("  Requires    : {} [components, runtime-resolved]", status.join(", "));
     }
 
     // Exports (the registered function/type names).
@@ -845,7 +882,7 @@ fn cmd_install(g: &GlobalOpts, pos: &[String]) -> Result<()> {
         anyhow!("extension `{name}` not found (or has no usable provider) in {}", catalog.source)
     })?;
     let canonical = canonical_suite_digest(&catalog, name);
-    let resolution = resolver::resolve(&manifest, &Env::default(), &policy(g), canonical.as_deref())
+    let resolution = resolver::resolve(&manifest, &resolver_env(), &policy(g), canonical.as_deref())
         .map_err(|err| {
             // Surface the resolver's friendly reasoning (uncertified /
             // contract-mismatch / forced-out / unavailable substrate).

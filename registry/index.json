@@ -13,6 +13,7 @@
     "fields": {
       "exports": "registered SQL function / type names",
       "requires": "capabilitykinds the extension uses (scalar/table/aggregate/pragma/macro/catalog/file-format)",
+      "requires_components": "GENERAL component-dependency graph: ids of OTHER components this one resolves at RUNTIME via the orchestrator (the compose:dynlink linker = ducklink_runtime::compose_dynlink) as single shared resident instances. Models ANY shared component dependency (pylon/GDAL/s3-endpoint/any shared lib component), NOT a provider-specific category and NOT pre-composed. The resolver GATES the extension unavailable if a required dep is absent (not resolvable/resident); the host loads + keeps each required shared component resident via DUCKLINK_PROVIDERS=<id>=… before the dependent component's load.",
       "crates": "upstream Rust crates wired in (see tooling/compat-registry.json)",
       "artifact": "path to the built component under artifacts/extensions/"
     }
@@ -5601,6 +5602,9 @@
       "requires": [
         "aggregate",
         "compose-dynlink"
+      ],
+      "requires_components": [
+        "pylon"
       ],
       "crates": [
         "rmp-serde",

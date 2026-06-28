@@ -96,6 +96,18 @@ pub struct ManifestEntry {
     /// THE semantic_contract digest (witcanon).
     pub wit_contract: String,
     pub providers: Vec<ProviderDescriptor>,
+    /// GENERAL component-dependency graph: the ids of OTHER components this
+    /// component resolves at RUNTIME via the orchestrator (the
+    /// `compose:dynlink` linker — a single shared resident instance per id).
+    /// Models ANY shared component dependency (pylon/GDAL/s3-endpoint/any shared
+    /// lib component), not a provider-specific category. Empty for a
+    /// self-contained extension. Read from the catalog `requires_components`
+    /// field. The resolver GATES the component unavailable if a required dep is
+    /// absent (not resolvable/resident); the host loads + keeps each required
+    /// shared component resident (via `DUCKLINK_PROVIDERS`) before the dependent
+    /// component's load. Distinct from the capability-kind `requires` field
+    /// (scalar/table/aggregate/...), which the host uses for capability grants.
+    pub requires_components: Vec<String>,
 }
 
 /// Environment inputs to availability/precedence.
@@ -105,6 +117,12 @@ pub struct Env {
     pub wasm_runtime: bool,
     /// Native `.duckdb_extension` loading allowed (this pass: always false).
     pub allow_native: bool,
+    /// The component ids resolvable/resident at runtime via the orchestrator
+    /// (the `compose:dynlink` linker), i.e. the providers declared in
+    /// `DUCKLINK_PROVIDERS`. A component whose `requires_components` are all in
+    /// this set can have its shared deps wired at runtime; a required dep that
+    /// is absent here GATES the dependent component as unavailable.
+    pub available_components: Vec<String>,
 }
 
 impl Default for Env {
@@ -112,7 +130,31 @@ impl Default for Env {
         Self {
             wasm_runtime: true,
             allow_native: false,
+            available_components: Vec::new(),
         }
+    }
+}
+
+/// Parse the component ids made resolvable/resident at runtime from a
+/// `DUCKLINK_PROVIDERS` spec string (the `id=path[:preopens]` comma list). Only
+/// the ids are extracted (the host owns the path/preopen wiring). Reused to
+/// build [`Env::available_components`] so the resolver's dependency gate sees
+/// exactly what the orchestrator can resolve at runtime.
+pub fn available_components_from_spec(spec: &str) -> Vec<String> {
+    spec.split(',')
+        .map(str::trim)
+        .filter(|e| !e.is_empty())
+        .filter_map(|entry| entry.split_once('=').map(|(id, _)| id.trim().to_string()))
+        .filter(|id| !id.is_empty())
+        .collect()
+}
+
+/// Build [`Env::available_components`] from the process `DUCKLINK_PROVIDERS`
+/// environment variable (the orchestrator's provider registry source).
+pub fn available_components_from_env() -> Vec<String> {
+    match std::env::var("DUCKLINK_PROVIDERS") {
+        Ok(s) if !s.trim().is_empty() => available_components_from_spec(&s),
+        _ => Vec::new(),
     }
 }
 
@@ -392,6 +434,37 @@ pub fn resolve(
     canonical_suite_digest: Option<&str>,
 ) -> Result<Resolution, ResolveError> {
     let mut reasoning: Vec<CandidateOutcome> = Vec::new();
+
+    // 0. COMPONENT-DEPENDENCY GATE (general, runs before provider selection).
+    // Every declared `requires_components` dep must be resolvable/resident via
+    // the orchestrator (present in `env.available_components`, i.e. declared in
+    // `DUCKLINK_PROVIDERS`). A missing required dep gates the WHOLE entry as
+    // unavailable with a clean, actionable reason — no provider is even
+    // considered, because none can run without its shared runtime dependency.
+    let missing: Vec<&String> = entry
+        .requires_components
+        .iter()
+        .filter(|dep| !env.available_components.iter().any(|a| a == *dep))
+        .collect();
+    if !missing.is_empty() {
+        let reasoning = missing
+            .iter()
+            .map(|dep| {
+                reject(
+                    &format!("requires:{dep}"),
+                    "dep",
+                    format!(
+                        "requires component '{dep}' — not present (set DUCKLINK_PROVIDERS={dep}=…)"
+                    ),
+                )
+            })
+            .collect();
+        return Err(ResolveError {
+            extension: entry.name.clone(),
+            reasoning,
+        });
+    }
+
     let mut admitted: Vec<(&ProviderDescriptor, String)> = Vec::new();
 
     for p in &entry.providers {
@@ -552,10 +625,26 @@ pub fn read_manifest_entry(index: &serde_json::Value, name: &str) -> Option<Mani
     if providers.is_empty() {
         return None;
     }
+
+    // GENERAL component-dependency graph: the `requires_components` field lists
+    // the ids of other components this one resolves at runtime via the
+    // orchestrator. Distinct from the capability-kind `requires` field.
+    let requires_components = entry
+        .get("requires_components")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+
     Some(ManifestEntry {
         name: name.to_string(),
         wit_contract,
         providers,
+        requires_components,
     })
 }
 
@@ -671,6 +760,7 @@ mod tests {
             name: "aba".to_string(),
             wit_contract: "90fdc46a585c".to_string(),
             providers,
+            requires_components: Vec::new(),
         }
     }
 
@@ -840,6 +930,85 @@ mod tests {
         // 64 hex chars (sha256).
         assert_eq!(d1.len(), 64);
         assert!(d1.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    // --- the GENERAL component-dependency gate -----------------------------
+
+    fn dep_entry(requires: &[&str]) -> ManifestEntry {
+        let mut e = entry(vec![wasm_ref("wasm-component")]);
+        e.requires_components = requires.iter().map(|s| s.to_string()).collect();
+        e
+    }
+
+    #[test]
+    fn required_component_absent_gates_unavailable_with_clean_reason() {
+        // No available components -> a `requires_components:[pylon]` entry is
+        // gated unavailable with the actionable DUCKLINK_PROVIDERS hint, and no
+        // provider is even considered.
+        let err = resolve(
+            &dep_entry(&["pylon"]),
+            &Env::default(),
+            &ResolvePolicy::default(),
+            None,
+        )
+        .unwrap_err();
+        let r = render_reasoning(&err.reasoning);
+        assert!(r.contains("requires component 'pylon'"), "got: {r}");
+        assert!(r.contains("DUCKLINK_PROVIDERS=pylon="), "got: {r}");
+        // The provider pipeline did not run (only the dep rejection is present).
+        assert_eq!(err.reasoning.len(), 1);
+    }
+
+    #[test]
+    fn required_component_present_resolves() {
+        // With pylon resolvable at runtime, the dep gate passes and the wasm
+        // reference provider is chosen as usual.
+        let env = Env {
+            available_components: vec!["pylon".into()],
+            ..Env::default()
+        };
+        let r = resolve(&dep_entry(&["pylon"]), &env, &ResolvePolicy::default(), None)
+            .expect("resolves when dep present");
+        assert_eq!(r.chosen_id, "wasm-component");
+    }
+
+    #[test]
+    fn missing_dep_listed_even_when_some_present() {
+        let env = Env {
+            available_components: vec!["pylon".into()],
+            ..Env::default()
+        };
+        let err = resolve(
+            &dep_entry(&["pylon", "gdal"]),
+            &env,
+            &ResolvePolicy::default(),
+            None,
+        )
+        .unwrap_err();
+        let r = render_reasoning(&err.reasoning);
+        assert!(r.contains("requires component 'gdal'"), "got: {r}");
+        assert!(!r.contains("requires component 'pylon'"), "got: {r}");
+    }
+
+    #[test]
+    fn available_components_parsed_from_spec() {
+        let ids = available_components_from_spec(
+            "pylon=/abs/pylon.wasm:/lib=/abs/Lib;/app=/abs/pylib, gdal=/abs/gdal.wasm",
+        );
+        assert_eq!(ids, vec!["pylon".to_string(), "gdal".to_string()]);
+    }
+
+    #[test]
+    fn requires_components_read_from_catalog() {
+        let index = serde_json::json!({
+            "extensions": [
+                { "name": "mlkmeans", "wit_contract": "abc", "wit_contract_version": "2.2.0",
+                  "artifact": "artifacts/extensions/mlkmeans.wasm",
+                  "requires_components": ["pylon"] }
+            ]
+        });
+        let e = read_manifest_entry(&index, "mlkmeans").expect("entry");
+        assert_eq!(e.requires_components, vec!["pylon".to_string()]);
     }
 
     #[test]
