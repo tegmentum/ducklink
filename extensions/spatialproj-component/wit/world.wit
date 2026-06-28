@@ -8,11 +8,16 @@ use catalog;
 use files;
 use guest;
 
-// spatialproj: a duckdb:extension component that ALSO imports another wasm
-// component's interface (gdal:core/srs), satisfied at composition time by the
-// prebuilt gdal.component.wasm. This proves inter-component composition: a
-// duckdb extension that depends on GDAL's coordinate-transformation API without
-// rebundling GDAL.
+// spatialproj: a duckdb:extension component that ALSO imports the
+// `compose:dynlink/linker` host capability. It registers a scalar
+// `ST_Transform(wkt, from_srid, to_srid) -> VARCHAR` whose body resolves the
+// shared, resident `gdal` provider and invokes its `transform` method
+// (SpatialRef::from_epsg + a coordinate Transform + a wkt/geo-types coordinate
+// walk), returning the reprojected WKT.
+//
+// GDAL/PROJ + proj.db live ONCE in the resident gdal-provider; the host loads
+// it once and shares it across every geo extension, instead of GDAL being
+// wac-inlined into each consumer at build time.
 world spatialproj {
   import runtime;
   import config;
@@ -20,8 +25,10 @@ world spatialproj {
   import catalog;
   import files;
 
-  // The composed dependency: GDAL's spatial-reference + coordinate-transform.
-  import gdal:core/srs@0.1.0;
+  // The shared-provider bridge: host-resolved, host-owned. Satisfied at
+  // exec time by ducklink-host's compose:dynlink/linker implementation,
+  // which forwards invoke() bytes to the resident gdal provider.
+  import compose:dynlink/linker@0.1.0;
 
   export guest;
   export callback-dispatch;

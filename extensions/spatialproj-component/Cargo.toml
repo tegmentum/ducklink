@@ -3,8 +3,8 @@ name = "spatialproj-component"
 version = "0.1.0"
 edition = "2021"
 description = """
-ST_Transform (coordinate reprojection) via the composed GDAL/PROJ component.
-Proves inter-component composition: a duckdb:extension that imports gdal:core/srs.
+ST_Transform (coordinate reprojection) via the single resident, shared
+compose:dynlink gdal provider (GDAL/PROJ + proj.db loaded once, not wac-inlined).
 """
 license = "MIT"
 publish = false
@@ -15,8 +15,8 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-wkt = "0.10"
-geo-types = "0.7"
+rmp-serde = "1"
+serde = { version = "1", features = ["derive"] }
 
 [package.metadata.component]
 package = "duckdb:extension"
@@ -25,7 +25,6 @@ package = "duckdb:extension"
 path = "./wit"
 world = "spatialproj"
 
-# The gdal:core WIT package is a target dependency: spatialproj imports
-# gdal:core/srs, which is satisfied at composition time by gdal.component.wasm.
 [package.metadata.component.target.dependencies]
-"gdal:core" = { path = "wit/deps/gdal.wit" }
+"compose:dynlink" = { path = "wit/deps/compose-dynlink.wit" }
+"sys:compose" = { path = "wit/deps/sys-compose.wit" }

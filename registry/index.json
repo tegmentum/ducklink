@@ -13,7 +13,7 @@
     "fields": {
       "exports": "registered SQL function / type names",
       "requires": "capabilitykinds the extension uses (scalar/table/aggregate/pragma/macro/catalog/file-format)",
-      "requires_components": "GENERAL component-dependency graph: ids of OTHER components this one resolves at RUNTIME via the orchestrator (the compose:dynlink linker = ducklink_runtime::compose_dynlink) as single shared resident instances. Models ANY shared component dependency (pylon/GDAL/s3-endpoint/any shared lib component), NOT a provider-specific category and NOT pre-composed. The resolver GATES the extension unavailable if a required dep is absent (not resolvable/resident); the host loads + keeps each required shared component resident via DUCKLINK_PROVIDERS=<id>=… before the dependent component's load.",
+      "requires_components": "GENERAL component-dependency graph: ids of OTHER components this one resolves at RUNTIME via the orchestrator (the compose:dynlink linker = ducklink_runtime::compose_dynlink) as single shared resident instances. Models ANY shared component dependency (pylon/GDAL/s3-endpoint/any shared lib component), NOT a provider-specific category and NOT pre-composed. The resolver GATES the extension unavailable if a required dep is absent (not resolvable/resident); the host loads + keeps each required shared component resident via DUCKLINK_PROVIDERS=<id>=\u2026 before the dependent component's load.",
       "crates": "upstream Rust crates wired in (see tooling/compat-registry.json)",
       "artifact": "path to the built component under artifacts/extensions/"
     }
@@ -6818,7 +6818,7 @@
     {
       "name": "spatialproj",
       "version": "0.1.0",
-      "description": "Coordinate reprojection via INTER-COMPONENT COMPOSITION: a thin duckdb:extension that imports gdal:core/srs, composed (wac) with the prebuilt gdal-wasm component (GDAL/PROJ, embedded proj.db). ST_Transform(wkt, from_srid, to_srid) -> reprojected WKT. Proves an extension can depend on another wasm component.",
+      "description": "Coordinate reprojection via the single resident, shared compose:dynlink gdal provider (runtime DI, not wac-composed): a thin duckdb:extension that resolves the resident gdal provider and invokes its transform method (GDAL/PROJ, embedded proj.db loaded ONCE). ST_Transform(wkt, from_srid, to_srid) -> reprojected WKT.",
       "license": "MIT",
       "authors": [
         "Tegmentum"
@@ -6835,17 +6835,21 @@
         "ST_Transform"
       ],
       "requires": [
-        "scalar"
+        "scalar",
+        "compose-dynlink"
+      ],
+      "requires_components": [
+        "gdal"
       ],
       "crates": [
-        "geo",
-        "wkt"
+        "rmp-serde",
+        "serde"
       ],
       "min_duckdb_version": "1.0.0",
       "prefix": "spatialproj",
       "expansion": "com.tegmentum.ducklink.spatialproj",
       "wit_contract_version": "2.2.0",
-      "content_digest": "7d6831340cd625034e0d2c1d4a1fdf1032d7e00cab8c2b6c452fbd46158a47e6"
+      "content_digest": "72ba8c5e17293634673e7a234e19b0609fd0890df2e34cc3790c0e6c8a68bc31"
     },
     {
       "name": "tpchgen",

@@ -82,7 +82,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **semver** | `semver_valid`, `semver_major`, `semver_minor`, `semver_patch`, `semver_compare` | semver |  |
 | **shapefile** | `read_shp` | shapefile |  |
 | **spatialfns** | `ST_Point`, `ST_GeomFromText`, `ST_AsText`, `ST_X`, `ST_Y`, `ST_Distance`, `ST_Area`, `ST_Length`, `ST_Centroid`, `ST_Contains`, `ST_Within`, `ST_Intersects`, `ST_Envelope`, `ST_AsGeoJSON` | geo, wkt, geojson |  |
-| **spatialproj** | `ST_Transform` | geo, wkt |  |
+| **spatialproj** | `ST_Transform` | rmp-serde, serde |  |
 | **timezone** | `tz_valid`, `tz_offset_seconds`, `tz_abbreviation` | chrono-tz, chrono |  |
 | **toml** | `toml_to_json`, `json_to_toml` | toml, serde_json |  |
 | **tsid** | `tsid_encode`, `tsid_decode`, `tsid_timestamp`, `tsid_from_timestamp` | hand-rolled |  |
