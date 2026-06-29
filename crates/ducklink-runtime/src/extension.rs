@@ -2157,8 +2157,6 @@ pub struct ExtensionInstance {
     // component instance, exactly like the 2.1.0 copy/secret/storage-write path.
     table_stream_bindings:
         Option<crate::duckdb_extension_table_stream_bindings::DuckdbExtensionTableStream>,
-    aggregate_incr_bindings:
-        Option<crate::duckdb_extension_aggregate_incr_bindings::DuckdbExtensionAggregateIncr>,
     conn_bindings: Option<crate::duckdb_extension_conn_bindings::DuckdbExtensionConn>,
     file_write_bindings:
         Option<crate::duckdb_extension_file_write_bindings::DuckdbExtensionFileWrite>,
@@ -2344,7 +2342,6 @@ impl ExtensionInstance {
             secret_bindings: None,
             storage_write_bindings: None,
             table_stream_bindings: None,
-            aggregate_incr_bindings: None,
             conn_bindings: None,
             file_write_bindings: None,
             index_write_bindings: None,
@@ -2992,86 +2989,6 @@ impl ExtensionInstance {
         let store = &mut self.store;
         guest
             .call_call_table_close(store.as_context_mut(), handle, cursor)
-            .map_err(map_extension_trap)?
-    }
-
-    // --- 2.2.0 (Item 6): aggregate-incr-dispatch re-entry ---
-    // Drives a registered incremental aggregate's init/update/combine/finalize
-    // state machine.
-
-    fn aggregate_incr_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_aggregate_incr_bindings::DuckdbExtensionAggregateIncr,
-        extension_types::Duckerror,
-    > {
-        if self.aggregate_incr_bindings.is_none() {
-            let built =
-                crate::duckdb_extension_aggregate_incr_bindings::DuckdbExtensionAggregateIncr::new(
-                    self.store.as_context_mut(),
-                    &self.instance,
-                )
-                .map_err(map_extension_trap)?;
-            self.aggregate_incr_bindings = Some(built);
-        }
-        Ok(self.aggregate_incr_bindings.as_ref().unwrap())
-    }
-
-    /// Allocate a fresh incremental-aggregate state; returns a state handle.
-    pub fn aggregate_init(&mut self, handle: u32) -> Result<u32, extension_types::Duckerror> {
-        self.aggregate_incr_bindings()?;
-        let bindings = self.aggregate_incr_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_aggregate_incr_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_call_aggregate_init(store.as_context_mut(), handle)
-            .map_err(map_extension_trap)?
-    }
-
-    /// Fold a batch of `rows` into the aggregation `state`.
-    pub fn aggregate_update(
-        &mut self,
-        handle: u32,
-        state: u32,
-        rows: &extension_runtime::Rowbatch,
-    ) -> Result<(), extension_types::Duckerror> {
-        self.aggregate_incr_bindings()?;
-        let bindings = self.aggregate_incr_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_aggregate_incr_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_call_aggregate_update(store.as_context_mut(), handle, state, rows)
-            .map_err(map_extension_trap)?
-    }
-
-    /// Merge the partial `source` state into `target` (parallel aggregation).
-    pub fn aggregate_combine(
-        &mut self,
-        handle: u32,
-        target: u32,
-        source: u32,
-    ) -> Result<(), extension_types::Duckerror> {
-        self.aggregate_incr_bindings()?;
-        let bindings = self.aggregate_incr_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_aggregate_incr_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_call_aggregate_combine(store.as_context_mut(), handle, target, source)
-            .map_err(map_extension_trap)?
-    }
-
-    /// Produce the final value from `state` and free it.
-    pub fn aggregate_finalize(
-        &mut self,
-        handle: u32,
-        state: u32,
-    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
-        self.aggregate_incr_bindings()?;
-        let bindings = self.aggregate_incr_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_aggregate_incr_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_call_aggregate_finalize(store.as_context_mut(), handle, state)
             .map_err(map_extension_trap)?
     }
 
