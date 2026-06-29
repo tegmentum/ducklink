@@ -76,24 +76,14 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("qopt: no scalar fns".into()))
     }
-    fn call_scalar_batch(
-        _h: u32,
-        _r: Vec<Vec<types::Duckvalue>>,
-        _c: types::Invokeinfo,
-    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("qopt: no scalar fns".into()))
-    }
+    // major-4 columnar dispatch: qopt is an optimizer-only component, so the
+    // three columnar hot methods are Unsupported stubs.
+    datalink_extcore::columnar_stub!();
     fn call_table(
         _h: u32,
         _a: Vec<types::Duckvalue>,
     ) -> Result<types::Resultset, types::Duckerror> {
         Err(types::Duckerror::Unsupported("qopt: no table fns".into()))
-    }
-    fn call_aggregate(
-        _h: u32,
-        _r: Vec<Vec<types::Duckvalue>>,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("qopt: no aggregates".into()))
     }
     fn call_pragma(
         _h: u32,
