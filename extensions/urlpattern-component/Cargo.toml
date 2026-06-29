@@ -18,6 +18,8 @@ urlpattern = "0.6"
 url = "2"
 regex = "1"
 serde_json = "1"
+# major-4 columnar bridge for hand-written components (colvec <-> row adapter).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"
