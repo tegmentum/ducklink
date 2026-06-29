@@ -14,6 +14,8 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
+# major-4 columnar bridge for hand-written components (colvec <-> row adapter).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 jaq-core = "3"
 jaq-std = "3"
 jaq-json = "2"
