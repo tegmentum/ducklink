@@ -22,10 +22,16 @@ wit_bindgen::generate!({
     world: "duckdb:extension/duckdb-extension",
 });
 
-use duckdb::extension::{runtime, types};
+use duckdb::extension::{column_types, runtime, types};
 use exports::duckdb::extension::{callback_dispatch, guest};
 
 use twox_hash::{XxHash32, XxHash3_64, XxHash64};
+
+// major-4 columnar bridge helpers (colvec <-> row), generated once. hashfuncs
+// returns UBIGINT (Uint64) which the neutral value model can't represent, so it
+// stays a hand-written component and wires the columnar scalar hot path by hand
+// rather than via the declare!-based pull-up.
+datalink_extcore::__columnar_bridge_conv!(types, column_types);
 
 struct Extension;
 
@@ -63,18 +69,27 @@ fn arg_bytes(args: &[types::Duckvalue], i: usize, fname: &str) -> Result<Arg, ty
 }
 
 impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(
+    // major-4 columnar hot path: bridge typed colvecs to the unchanged per-row
+    // `call_scalar` and rebuild the result column (preserves UBIGINT outputs).
+    fn call_scalar_batch_col(
         handle: u32,
-        rows: Vec<Vec<types::Duckvalue>>,
+        args: Vec<callback_dispatch::Colvec>,
         ctx: types::Invokeinfo,
-    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
+    ) -> Result<callback_dispatch::Colvec, types::Duckerror> {
         let base = ctx.rowindex.unwrap_or(0);
+        let rows = __bridge_colvecs_to_rows(&args);
         let mut out = Vec::with_capacity(rows.len());
-        for (i, args) in rows.into_iter().enumerate() {
+        for (i, row) in rows.into_iter().enumerate() {
             let row_ctx = types::Invokeinfo { rowindex: Some(base + i as u64), iswindow: ctx.iswindow };
-            out.push(Self::call_scalar(handle, args, row_ctx)?);
+            out.push(Self::call_scalar(handle, row, row_ctx)?);
         }
-        Ok(out)
+        Ok(__bridge_vals_to_colvec(out))
+    }
+    fn call_aggregate_col(_h: u32, _a: Vec<callback_dispatch::Colvec>) -> Result<types::Duckvalue, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("hashfuncs: no aggregates".into()))
+    }
+    fn call_cast_col(_h: u32, _a: callback_dispatch::Colvec) -> Result<callback_dispatch::Colvec, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("hashfuncs: no casts".into()))
     }
 
     fn call_scalar(
@@ -105,9 +120,6 @@ impl callback_dispatch::Guest for Extension {
 
     fn call_table(_h: u32, _a: Vec<types::Duckvalue>) -> Result<types::Resultset, types::Duckerror> {
         Err(types::Duckerror::Unsupported("hashfuncs: no table functions".into()))
-    }
-    fn call_aggregate(_h: u32, _r: types::Rowbatch) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("hashfuncs: no aggregates".into()))
     }
     fn call_pragma(_h: u32, _a: Vec<types::Duckvalue>) -> Result<Option<types::Duckvalue>, types::Duckerror> {
         Err(types::Duckerror::Unsupported("hashfuncs: no pragmas".into()))

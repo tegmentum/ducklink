@@ -14,8 +14,14 @@ use std::sync::{atomic::{AtomicU32, Ordering}, Mutex, OnceLock};
 use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension" });
-use duckdb::extension::{runtime, types};
+use duckdb::extension::{column_types, runtime, types};
 use exports::duckdb::extension::{callback_dispatch, guest};
+
+// major-4 columnar bridge helpers (colvec <-> row), generated once. ftsfns is a
+// hybrid (real scalars + a real create_fts_index PRAGMA), so it cannot use the
+// whole-impl `columnar_bridge!` (which would stub the pragma); instead it wires
+// the columnar scalar hot path by hand and keeps the pragma untouched.
+datalink_extcore::__columnar_bridge_conv!(types, column_types);
 
 mod core {
     //! Pure-Rust core logic, free of WIT types, so it can be unit tested natively.
@@ -194,13 +200,19 @@ fn f64_arg(args: &[types::Duckvalue], i: usize) -> Option<f64> {
     }
 }
 impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(h: u32, rows: Vec<Vec<types::Duckvalue>>, ctx: types::Invokeinfo) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        let base = ctx.rowindex.unwrap_or(0); let mut out = Vec::with_capacity(rows.len());
+    // major-4 columnar hot path: bridge the typed colvecs to the unchanged
+    // per-row `call_scalar` and rebuild the result column.
+    fn call_scalar_batch_col(h: u32, args: Vec<callback_dispatch::Colvec>, ctx: types::Invokeinfo) -> Result<callback_dispatch::Colvec, types::Duckerror> {
+        let base = ctx.rowindex.unwrap_or(0);
+        let rows = __bridge_colvecs_to_rows(&args);
+        let mut out = Vec::with_capacity(rows.len());
         for (i, a) in rows.into_iter().enumerate() {
             out.push(Self::call_scalar(h, a, types::Invokeinfo { rowindex: Some(base + i as u64), iswindow: ctx.iswindow })?);
         }
-        Ok(out)
+        Ok(__bridge_vals_to_colvec(out))
     }
+    fn call_aggregate_col(_h: u32, _args: Vec<callback_dispatch::Colvec>) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("ftsfns: no aggs".into())) }
+    fn call_cast_col(_h: u32, _arg: callback_dispatch::Colvec) -> Result<callback_dispatch::Colvec, types::Duckerror> { Err(types::Duckerror::Unsupported("ftsfns: no casts".into())) }
     fn call_scalar(handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
         let which = handlers().lock().unwrap().get(&handle).copied()
             .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
@@ -239,7 +251,6 @@ impl callback_dispatch::Guest for Extension {
         })
     }
     fn call_table(_h: u32, _a: Vec<types::Duckvalue>) -> Result<types::Resultset, types::Duckerror> { Err(types::Duckerror::Unsupported("ftsfns: no table fns".into())) }
-    fn call_aggregate(_h: u32, _r: types::Rowbatch) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("ftsfns: no aggs".into())) }
     // Item 4: `PRAGMA create_fts_index('<table>','<id>','<textcol>')`. The core
     // intercepts the PRAGMA, dispatches here mid-query, and we RETURN a SQL script
     // (we do NOT re-enter SQL ourselves) that the core then runs on the connection:

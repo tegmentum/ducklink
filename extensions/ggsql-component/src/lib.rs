@@ -77,24 +77,14 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("ggsql: no scalar fns".into()))
     }
-    fn call_scalar_batch(
-        _h: u32,
-        _r: Vec<Vec<types::Duckvalue>>,
-        _c: types::Invokeinfo,
-    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("ggsql: no scalar fns".into()))
-    }
+    // major-4 columnar hot path: ggsql is parser-only, so the three columnar
+    // methods are Unsupported stubs.
+    datalink_extcore::columnar_stub!();
     fn call_table(
         _h: u32,
         _a: Vec<types::Duckvalue>,
     ) -> Result<types::Resultset, types::Duckerror> {
         Err(types::Duckerror::Unsupported("ggsql: no table fns".into()))
-    }
-    fn call_aggregate(
-        _h: u32,
-        _r: Vec<Vec<types::Duckvalue>>,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("ggsql: no aggregates".into()))
     }
     fn call_pragma(
         _h: u32,

@@ -23,6 +23,8 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
+# major-4 columnar bridge stub (table-only component, no hot-path callbacks).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 # calamine is pure Rust (its zip backend is `zip` with a pure-Rust feature set:
 # deflate via flate2/miniz_oxide, no C codecs). Builds for wasm32-wasip2.
 calamine = "0.26"

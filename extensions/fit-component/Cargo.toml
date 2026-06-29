@@ -16,6 +16,8 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
+# major-4 columnar bridge stub (table-only component, no hot-path callbacks).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 fitparser = "0.11"
 
 [package.metadata.component]
