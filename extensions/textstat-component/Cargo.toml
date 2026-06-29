@@ -14,7 +14,9 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-# add your upstream crate deps here
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+textstat-core = { path = "../../../datalink/extensions/textstat-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"

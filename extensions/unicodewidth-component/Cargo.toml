@@ -14,8 +14,9 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-unicode-segmentation = "1.13"
-unicode-width = "*"
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+unicodewidth-core = { path = "../../../datalink/extensions/unicodewidth-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"
