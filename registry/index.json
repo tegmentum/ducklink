@@ -2758,7 +2758,7 @@
       "prefix": "checksums",
       "expansion": "com.tegmentum.ducklink.checksums",
       "wit_contract_version": "4.0.0",
-      "content_digest": "904e41103a01a8fbeae2f32501bdba96d6b0b73fed3a5fb09ae2cea63dd83643"
+      "content_digest": "6f526ddc9400e387b6f96d3d76f91068e859e234eb92ff262048783ed097709b"
     },
     {
       "name": "siphash",
@@ -2795,7 +2795,7 @@
       "prefix": "siphash",
       "expansion": "com.tegmentum.ducklink.siphash",
       "wit_contract_version": "4.0.0",
-      "content_digest": "81c4fac7af4ed9737ca675e384b8e99e89af3fbb11967367b60f1358e91ec2c7"
+      "content_digest": "61d8a888df0facb7abf91f589a7a44c4a31674efae42bceeb439f4bb34df03eb"
     },
     {
       "name": "tiktoken",
@@ -3891,7 +3891,7 @@
       "prefix": "idextra",
       "expansion": "com.tegmentum.ducklink.idextra",
       "wit_contract_version": "4.0.0",
-      "content_digest": "c8ff611e0adc30d6394f8afb45463a494d5d6b684689a5647cea53a85e25fe2e"
+      "content_digest": "dc85613c8303bd7082c695aa50dc452770e2f181db32100cbf2351ccd5e4c110"
     },
     {
       "name": "phonetic2",
@@ -4074,7 +4074,7 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "wit_contract_version": "4.0.0",
-      "content_digest": "2bf97cb59b2c68df351a2e5c519d19b0ea7144b834e627e802da469534474a60"
+      "content_digest": "e54b36bfb58a41da426ba0d8823c4bc85d0e6e436e3637fe1d73b6e38a9f0c54"
     },
     {
       "name": "pintest_b",
@@ -4108,7 +4108,7 @@
       "crates": [],
       "min_duckdb_version": "1.0.0",
       "wit_contract_version": "4.0.0",
-      "content_digest": "481f4eb3e6359aead3b6fe050d1025123caf9246099669eddd284e1da408b112"
+      "content_digest": "3768199fb35f13dd8253f1aba26ccfff98381bb4b07d560a3ac8e063d390f894"
     },
     {
       "name": "atbash",
@@ -4736,7 +4736,7 @@
       "prefix": "passphrase",
       "expansion": "com.tegmentum.ducklink.passphrase",
       "wit_contract_version": "4.0.0",
-      "content_digest": "9950cebe2dd2177ee6bf30bbdb678c7251ed49b89a4f17d33536cc94c16a40ce"
+      "content_digest": "1fcb4f1398d1fb8085a7fba5c997e0486038caba379a4ea9e5c4bee1cbc77037"
     },
     {
       "name": "h3",
