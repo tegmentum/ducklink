@@ -15,6 +15,8 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
+# major-4 columnar dispatch stub for hand-written components.
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 rustls = { version = "0.23", default-features = false, features = ["std", "tls12"] }
 rustls-rustcrypto = "0.0.2-alpha"
 webpki-roots = "0.26"

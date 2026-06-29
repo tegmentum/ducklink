@@ -22,6 +22,8 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
+# major-4 columnar dispatch stub for hand-written components.
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 # Pure-Rust JSON parser; builds clean for wasm32-wasip2 with no CC.
 serde_json = "1"
 
