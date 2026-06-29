@@ -15,7 +15,7 @@ use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension" });
 use duckdb::extension::{runtime, types};
-use exports::duckdb::extension::{callback_dispatch, guest};
+use exports::duckdb::extension::guest;
 use ipnetwork::IpNetwork;
 
 struct Extension;
@@ -98,15 +98,15 @@ fn contains(net: &Inet, ip: &Inet) -> Option<bool> {
     Some(cidr.contains(ip.addr))
 }
 
-impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(h: u32, rows: Vec<Vec<types::Duckvalue>>, ctx: types::Invokeinfo) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        let base = ctx.rowindex.unwrap_or(0); let mut out = Vec::with_capacity(rows.len());
-        for (i, a) in rows.into_iter().enumerate() {
-            out.push(Self::call_scalar(h, a, types::Invokeinfo { rowindex: Some(base + i as u64), iswindow: ctx.iswindow })?);
-        }
-        Ok(out)
-    }
-    fn call_scalar(handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
+datalink_extcore::columnar_bridge! {
+    types = duckdb::extension::types;
+    column_types = duckdb::extension::column_types;
+    callback_dispatch = exports::duckdb::extension::callback_dispatch;
+    target = Extension;
+    scalar = scalar;
+}
+
+fn scalar(handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
         let which = handlers().lock().unwrap().get(&handle).copied()
             .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
         Ok(match which {
@@ -147,11 +147,6 @@ impl callback_dispatch::Guest for Extension {
                 _ => types::Duckvalue::Null,
             },
         })
-    }
-    fn call_table(_h: u32, _a: Vec<types::Duckvalue>) -> Result<types::Resultset, types::Duckerror> { Err(types::Duckerror::Unsupported("inetfns: no table fns".into())) }
-    fn call_aggregate(_h: u32, _r: types::Rowbatch) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("inetfns: no aggs".into())) }
-    fn call_pragma(_h: u32, _a: Vec<types::Duckvalue>) -> Result<Option<types::Duckvalue>, types::Duckerror> { Err(types::Duckerror::Unsupported("inetfns: no pragmas".into())) }
-    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("inetfns: no casts".into())) }
 }
 export!(Extension);
 

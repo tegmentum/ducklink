@@ -14,9 +14,9 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-base32 = { version = "0.5", default-features = false }
-# compat-registry: features = ['alloc'] with default-features = false
-bs58 = { version = "0.5", default-features = false, features = ["alloc"] }
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+baseN-core = { path = "../../../datalink/extensions/baseN-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"

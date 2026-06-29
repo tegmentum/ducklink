@@ -18,6 +18,8 @@ wit-bindgen-rt = "0.41"
 geo = "0.29"
 wkt = "0.13"
 geojson = "0.24"
+# major-4 columnar bridge for hand-written components (colvec <-> row adapter).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"

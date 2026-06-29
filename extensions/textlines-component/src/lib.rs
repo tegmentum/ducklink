@@ -38,15 +38,9 @@ impl guest::Guest for Extension {
 }
 
 impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(
-        _handle: u32,
-        _rows: Vec<Vec<types::Duckvalue>>,
-        _ctx: types::Invokeinfo,
-    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        Err(types::Duckerror::Unsupported(
-            "textlines has no scalar functions".into(),
-        ))
-    }
+    // major-4 columnar dispatch: textlines is a table-only component, so the
+    // three columnar hot methods are Unsupported stubs.
+    datalink_extcore::columnar_stub!();
 
     fn call_scalar(
         _handle: u32,
@@ -106,15 +100,6 @@ impl callback_dispatch::Guest for Extension {
                 Ok(rows)
             }
         }
-    }
-
-    fn call_aggregate(
-        _handle: u32,
-        _rows: types::Rowbatch,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported(
-            "textlines has no aggregate functions".into(),
-        ))
     }
 
     fn call_pragma(
