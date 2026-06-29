@@ -14,7 +14,10 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-rand = "0.8"
+
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+passgen-core = { path = "../../../datalink/extensions/passgen-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"
