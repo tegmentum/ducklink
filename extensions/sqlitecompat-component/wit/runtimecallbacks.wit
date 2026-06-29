@@ -1,0 +1,27 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+interface runtime-callbacks {
+  use types.{duckerror, duckvalue, invokeinfo, resultset, rowbatch};
+
+  resource scalar-callback {
+    constructor(handle: u32);
+    call: func(args: list<duckvalue>, ctx: invokeinfo) -> result<duckvalue, duckerror>;
+  }
+
+  resource table-callback {
+    constructor(handle: u32);
+    call: func(args: list<duckvalue>) -> result<resultset, duckerror>;
+  }
+
+  resource aggregate-callback {
+    constructor(handle: u32);
+    call: func(rows: rowbatch) -> result<duckvalue, duckerror>;
+  }
+
+  resource pragma-callback {
+    constructor(handle: u32);
+    call: func(args: list<duckvalue>) -> result<option<duckvalue>, duckerror>;
+  }
+}

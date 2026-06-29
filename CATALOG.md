@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**192 component extensions** · **606 SQL functions** · 9 expose aggregates · 3 require network.
+**193 component extensions** · **611 SQL functions** · 9 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -195,7 +195,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **tdigest** | `tdigest`, `tdigest_quantile`, `tdigest_count` | tdigest, bincode | aggregate |
 | **vssfns** | `vec_l1_distance`, `vec_linf_distance`, `vec_normalize` | hand-rolled |  |
 
-## Utility (10)
+## Utility (11)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -207,6 +207,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **prql** | `prql_to_sql`, `prql_is_valid` | prqlc |  |
 | **prql_parser** | `prql` | prqlc |  |
 | **rhai** | `rhai_eval`, `rhai_eval_int`, `rhai_eval_double` | rhai |  |
+| **sqlitecompat** | `zeroblob`, `randomblob`, `likely`, `unlikely`, `likelihood` | hand-rolled |  |
 | **sys_compat** | `system_user`, `database`, `schema`, `collation` | hand-rolled |  |
 | **talib** | `sma`, `ema`, `rsi` | hand-rolled | aggregate |
 

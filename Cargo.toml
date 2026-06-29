@@ -52,6 +52,7 @@ members = [
     "extensions/iso-component",
     "extensions/geohash-component",
     "extensions/math-component",
+    "extensions/sqlitecompat-component",
     "extensions/text_utils-component",
     "extensions/chrono-component",
     "extensions/list-component",
