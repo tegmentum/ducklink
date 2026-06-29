@@ -17,6 +17,8 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
+# major-4 columnar bridge for hand-written scalars + casts (colvec <-> row adapter).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 geo = "0.29"
 wkt = "0.13"
 byteorder = "1"
