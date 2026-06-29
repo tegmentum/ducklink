@@ -15,17 +15,34 @@ extensions) layer on top of the WebAssembly-host scenarios.
 
 ### 1. Native DuckDB + the `ducklink` extension
 
-Native DuckDB loads the `ducklink` community extension
-(`native-extension/ducklink/`), which embeds the Wasmtime runtime and runs the
-component inside the native process. This lets a single portable component extend
-DuckDB on any platform without per-platform native extension builds — "embed
-WebAssembly into native DuckDB."
+Native DuckDB loads the `ducklink` extension (a loadable `.duckdb_extension`,
+**v0.4.0**), which embeds the Wasmtime runtime and runs the same
+[`@4.0.0`](../architecture/columnar-abi.md) component inside the native process.
+This lets a single portable component extend DuckDB on any platform without
+per-platform native extension builds — "embed WebAssembly into native DuckDB." It
+is built **only against DuckDB's stable C Extension API** (`duckdb_ext_api_v1`),
+so it is not version-locked to DuckDB internals.
 
-- Scalars (all logical types, any arity) and table functions bridge through the
-  DuckDB C API; aggregates register via the raw C aggregate API.
-- Verified by the Scenario-1 corpus harness
-  (`native-extension/ducklink/tests/scenario1_corpus.rs`), which loads each
-  extension in-process and diffs its `smoke.sql` output against `smoke.expected`.
+The native extension ships in **tiers**:
+
+- **Common tier (shipped).** Scalar (all logical types, any arity), table
+  functions (with projection pushdown), aggregates (via the raw C aggregate API),
+  and **window** over those aggregates — all bridge through the stable C API.
+- **Advanced tier (in progress).** Parser, general optimizer, and table-function
+  **filter** pushdown have **no stable C anchor** — they need DuckDB's internal
+  C++ ABI via a core C++ shim, a planned follow-on. They are **deferred** natively
+  today, so native does **not** yet have full parity with the wasm host.
+
+:::note Community-extensions status
+The community-extensions submission is **held pending full parity** — the native
+extension is not published to the DuckDB community-extensions registry, and native
+parity is incomplete (the advanced tier is deferred). Treat native as "common tier
+shipped, advanced tier in progress."
+:::
+
+- Verified by the Scenario-1 corpus harness (`tests/scenario1_corpus.rs`), which
+  loads each extension in-process and diffs its `smoke.sql` output against
+  `smoke.expected`.
 
 ### 2. Standalone WebAssembly DuckDB host
 

@@ -34,7 +34,10 @@ want into one large binary. ducklink inverts that:
   [composition](architecture/composition.md).
 - **They are version-independent.** The product contract is the **WIT interface +
   the wasm runtime**, not DuckDB's unstable C++ extension ABI. The DuckDB version
-  built against is an internal detail behind that boundary.
+  built against is an internal detail behind that boundary. That contract is now
+  [`duckdb:extension@4.0.0`](architecture/columnar-abi.md) — its hot dispatch path
+  is **columnar** (typed columns, one bulk transfer per fixed-width column), which
+  unlocks per-column SIMD kernels in the guest.
 
 The whole `duckdb:extension` capability surface — scalar / table / aggregate /
 cast / macro / collation / pragma / catalog (ATTACH) / files (FileSystem) /
@@ -103,9 +106,11 @@ For building the core and the components from source, see
   ATTACH catalog interface and the catalog/files/cast registrations.
 - **[Extension catalog](catalog.md)** — the working components by category.
 - **[Guides](guides/index.md)** — writing a component, building, embedding
-  tracking, function prefixes, the HTTP server, and deployment.
+  tracking, function prefixes, the HTTP server, the [JavaScript/TypeScript
+  APIs](guides/javascript.md), [extension distribution over R2](guides/distribution.md),
+  and deployment.
 - **[Reference](reference/index.md)** — official + community extension status,
-  and the Iceberg surface.
+  the Iceberg surface, and [performance](reference/performance.md).
 
 ## Acknowledgments
 

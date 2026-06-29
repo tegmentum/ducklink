@@ -34,6 +34,42 @@ family, float, text, blob, date/time/timestamp/timestamptz, interval, decimal,
 uuid). See [the type-contract evolution](type-contract.md) for how that type
 system is itself part of the contract.
 
+## Additive capabilities — the `@4.0.0` world set
+
+The shared base interfaces (`runtime` / `types` / `callback-dispatch`) stay
+byte-identical; each new capability is added as a **separate interface in an
+opt-in world** a capable component targets, so components that do not import it
+keep loading un-rebuilt (see [the type contract](type-contract.md#adding-a-type-is-a-contract-bump)).
+At [`@4.0.0`](columnar-abi.md) the world set is:
+
+| World | Adds | Status |
+|---|---|---|
+| `duckdb-extension` (base) | scalar / table / aggregate / cast / macro / collation / pragma over the rich type system | the hot path is [columnar](columnar-abi.md) |
+| `-query` | the live-query host import (catalog-name completion) | working |
+| `-storage` / `-storage-write` | `ATTACH (TYPE …)` backends with projection/filter [pushdown](../capabilities/storage-pushdown.md) (read + write) | working |
+| `-files` / `-file-write` | virtual filesystems / remote file backends (read + write/glob) | working |
+| `-index` / `-index-write` | `CREATE INDEX … USING <type>` custom indexes (HNSW, R-tree) | working |
+| `-table-stream` | table functions with **filter pushdown** (the `call-table-open-filtered` cursor) | working |
+| `-aggregate-incr` | incremental + **window** aggregates (`call-aggregate-window`) | working |
+| `-copy` / `-secret` / `-settings` / `-conn` | copy handlers, secrets, settings callbacks, connection lifecycle | working |
+
+Two further capabilities have their **interfaces** defined in the `@4.0.0`
+contract (so they are part of the [contract digest](columnar-abi.md#the-contract-identity-is-a-content-digest)),
+with their worlds built host-side:
+
+- **Parser extension** (`parser` / `parser-dispatch`) — a component rewrites
+  custom statement text into SQL. By design it is a **string → SQL rewrite** only
+  (the WIT recursion wall rules out exposing the live AST), not arbitrary plan
+  injection.
+- **Optimizer** (`optimizer` / `optimizer-dispatch`) — a planner rule a component
+  contributes. The landed keystone is the **index** rule (the planner rewriting
+  `ORDER BY array_distance(col, q) LIMIT k` into an HNSW index scan); the general
+  optimizer surface builds on the same wiring.
+
+Richer scalars (`runtime-ext`), custom types/enums (`types-ext`), coordinate
+systems, Arrow, text encodings, and compression codecs are additional `@4.0.0`
+interfaces in the same additive style.
+
 ## How registration is dispatched
 
 A component never calls into DuckDB directly. The path is always:

@@ -18,5 +18,8 @@ surface.
   reimplementing functionality as components.
 - **[Iceberg](iceberg.md)** — the Apache Iceberg surface on wasm: what works,
   what's deferred, and the upstream gaps.
+- **[Performance](performance.md)** — the measured native-vs-wasm overhead, what
+  the `@4.0.0` columnar ABI changed, and an honest read on what is not yet
+  measured.
 - **[Extension roadmap](extension-roadmap.md)** — the original batched roadmap of
   functionality to deliver as components.
