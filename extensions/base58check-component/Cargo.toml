@@ -14,6 +14,9 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+base58check-core = { path = "../../../datalink/extensions/base58check-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 # Use features = ['alloc'] with default-features = false
 bs58 = { version = "0.5", features = ["check"] }
 
