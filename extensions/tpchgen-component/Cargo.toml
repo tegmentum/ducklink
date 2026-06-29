@@ -20,6 +20,8 @@ crate-type = ["cdylib"]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
 tpchgen = "2.0"
+# major-4 columnar bridge for hand-written components (colvec <-> row adapter).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"
