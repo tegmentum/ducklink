@@ -7632,6 +7632,205 @@
           }
         }
       ]
+    },
+    {
+      "name": "minijinja",
+      "version": "0.1.0",
+      "description": "Jinja2-style templating: jinja_render(template, context_json) -> text, jinja_valid(template) -> boolean (minijinja crate).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "template",
+        "jinja",
+        "jinja2",
+        "minijinja",
+        "render"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/minijinja-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/minijinja.wasm",
+      "exports": [
+        "jinja_render",
+        "jinja_valid"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "minijinja"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "minijinja",
+      "expansion": "com.tegmentum.ducklink.minijinja",
+      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract_version": "4.0.0",
+      "content_digest": "5bcf0f740ea4d2a011c42a46449f7eaa29b2c0cbd082aecbf7781b77bdc1e9c1"
+    },
+    {
+      "name": "tera",
+      "version": "0.1.0",
+      "description": "Jinja2/Django-style templating: tera_render(template, context_json) -> text, tera_valid(template) -> boolean (tera crate).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "template",
+        "jinja",
+        "django",
+        "tera",
+        "render"
+      ],
+      "categories": [
+        "text-processing"
+      ],
+      "source": "extensions/tera-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/tera.wasm",
+      "exports": [
+        "tera_render",
+        "tera_valid"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "tera"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "tera",
+      "expansion": "com.tegmentum.ducklink.tera",
+      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract_version": "4.0.0",
+      "content_digest": "db7595a5e50d93981f64e555d4375ebdba4fb5efd4e3c619a5aedb3ffc036497"
+    },
+    {
+      "name": "pcap",
+      "version": "0.1.0",
+      "description": "Read PCAP/PCAPNG capture files: read_pcap(data BLOB) -> table(idx, ts_sec, ts_usec, caplen, origlen, data) one row per packet (pcap-parser crate).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "pcap",
+        "pcapng",
+        "network",
+        "capture",
+        "packet"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/pcap-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/pcap.wasm",
+      "exports": [
+        "read_pcap"
+      ],
+      "requires": [
+        "table"
+      ],
+      "crates": [
+        "pcap-parser"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "pcap",
+      "expansion": "com.tegmentum.ducklink.pcap",
+      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract_version": "4.0.0",
+      "content_digest": "1c996570bd3f08b24b060b6f07b0c8471819f9c9f5c4c191810fd6a592bae3ad"
+    },
+    {
+      "name": "a5",
+      "version": "0.1.0",
+      "description": "A5 pentagonal DGGS global geospatial index: a5_lonlat_to_cell(lat, lon, res), a5_cell_to_lat/lon, a5_cell_to_resolution, a5_cell_to_parent, a5_is_valid_cell, a5_cell_to_hex / a5_hex_to_cell (a5 crate).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "a5",
+        "dggs",
+        "geospatial",
+        "pentagon",
+        "index"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/a5-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/a5.wasm",
+      "exports": [
+        "a5_lonlat_to_cell",
+        "a5_cell_to_lat",
+        "a5_cell_to_lon",
+        "a5_cell_to_resolution",
+        "a5_cell_to_parent",
+        "a5_is_valid_cell",
+        "a5_cell_to_hex",
+        "a5_hex_to_cell"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "a5"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "a5",
+      "expansion": "com.tegmentum.ducklink.a5",
+      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract_version": "4.0.0",
+      "content_digest": "0024cf8c0713c19eb493e4b06a4d930982d803d09367c63b177092284e50d59f"
+    },
+    {
+      "name": "jsonata",
+      "version": "0.1.0",
+      "description": "JSONata query/transform: jsonata(expr, json) -> text. Evaluates a JSONata expression against a JSON document and returns the result as JSON (jsonata-core crate).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "jsonata",
+        "json",
+        "query",
+        "transform",
+        "jq"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/jsonata-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/jsonata.wasm",
+      "exports": [
+        "jsonata"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [
+        "jsonata-core"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "jsonata",
+      "expansion": "com.tegmentum.ducklink.jsonata",
+      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract_version": "4.0.0",
+      "content_digest": "fba7438634e75a279111d3a474b8e38771ad167fea442d1cec205716e2f64ec4"
     }
   ],
   "dotcmds": [

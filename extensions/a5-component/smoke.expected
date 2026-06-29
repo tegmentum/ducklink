@@ -1,0 +1,15 @@
+valid
+true
+res
+5
+lat
+40
+lon
+-73
+hex_roundtrip
+true
+# bad hex -> NULL
+bad_hex
+NULL
+parent_res
+5

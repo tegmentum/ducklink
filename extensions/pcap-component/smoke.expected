@@ -1,0 +1,13 @@
+# 2-packet classic PCAP fixture, ORDER BY idx.
+idx,ts_sec,ts_usec,caplen,origlen,data
+1,1,2,4,4,0xdeadbeef
+2,100,200,2,2,0xcafe
+# total packet count
+packets
+2
+# malformed blob -> 0 rows
+bad_rows
+0
+# empty blob -> 0 rows
+empty_rows
+0

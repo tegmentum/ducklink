@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**192 component extensions** · **606 SQL functions** · 9 expose aggregates · 3 require network.
+**197 component extensions** · **620 SQL functions** · 9 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -18,10 +18,11 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 - **Static embed (opt-in):** `ducklink compose --embed <name>` bakes an extension into the core at build time. Wired today for `isin` (`embed-isin` core feature); `ducklink compose --list` shows what's embeddable. Most extensions stay runtime-loaded by design.
 - **Network grant:** net extensions are denied by default; opt in with `--grant-network all` (or a name allowlist), equivalently the `DUCKLINK_NETWORK_GRANT` env var.
 
-## Data types & encoding (73)
+## Data types & encoding (76)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
+| **a5** | `a5_lonlat_to_cell`, `a5_cell_to_lat`, `a5_cell_to_lon`, `a5_cell_to_resolution`, `a5_cell_to_parent`, `a5_is_valid_cell`, `a5_cell_to_hex`, `a5_hex_to_cell` | a5 |  |
 | **aggstat** | `harmonic_mean` | hand-rolled | aggregate |
 | **ascii85** | `ascii85_encode`, `ascii85_decode` | ascii85 |  |
 | **base58check** | `base58check_encode`, `base58check_decode` | bs58 |  |
@@ -59,6 +60,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **iso** | `iso_country_name`, `iso_country_alpha3`, `iso_country_numeric` | rust_iso3166 |  |
 | **jaq** | `jq`, `jq_first` | jaq-core, jaq-std, jaq-json |  |
 | **json_schema** | `json_schema_valid`, `json_schema_errors` | jsonschema |  |
+| **jsonata** | `jsonata` | jsonata-core |  |
 | **jsonfns** | `json_valid`, `json_extract`, `json_extract_string`, `json_array_length`, `json_type`, `json_keys`, `json_contains`, `json_quote`, `to_json` | serde_json, serde_json_path |  |
 | **jsonschema** | `json_schema_valid` | jsonschema, serde_json |  |
 | **lindel** | `morton_encode`, `morton_decode_x`, `morton_decode_y`, `hilbert_encode`, `hilbert_decode_x`, `hilbert_decode_y` | hand-rolled |  |
@@ -70,6 +72,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **minhash** | `minhash`, `minhash_similarity` | hand-rolled | aggregate |
 | **money** | `format_money` | iso_currency |  |
 | **msgpack** | `msgpack_from_json`, `msgpack_to_json` | rmp-serde, serde_json, hex |  |
+| **pcap** | `read_pcap` | pcap-parser |  |
 | **petname** | `petname` | petname |  |
 | **plist** | `plist_to_json`, `plist_get` | plist |  |
 | **pluscode** | `pluscode_encode`, `pluscode_valid`, `pluscode_decode_lat`, `pluscode_decode_lon` | open-location-code, geo |  |
@@ -96,7 +99,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **yaml** | `yaml_to_json`, `json_to_yaml` | serde_yaml, serde_json |  |
 | **z85** | `z85_encode`, `z85_decode` | z85 |  |
 
-## Text & NLP (59)
+## Text & NLP (61)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -124,6 +127,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **luhngen** | `luhn_check_digit`, `luhn_append` | hand-rolled |  |
 | **mac** | `mac_valid`, `mac_normalize` | macaddr |  |
 | **markdown** | `md_to_html`, `md_to_text` | pulldown-cmark |  |
+| **minijinja** | `jinja_render`, `jinja_valid` | minijinja |  |
 | **morse** | `morse_encode`, `morse_decode` | hand-rolled |  |
 | **nato** | `nato` | hand-rolled |  |
 | **natsort** | `natsort_compare` | natord |  |
@@ -147,6 +151,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **stdsql** | `space`, `initcap`, `startsWith`, `endsWith`, `lengthUTF8`, `lowerUTF8`, `upperUTF8`, `toString`, `empty`, `notEmpty`, `replaceAll`, `positionUTF8`, `to_bin`, `to_oct`, `to_ascii`, `quote_ident`, `quote_literal`, `quote_nullable`, `get_byte`, `set_byte` | hand-rolled |  |
 | **stem** | `stem` | rust-stemmers |  |
 | **stopwords** | `is_stopword`, `remove_stopwords` | stop-words |  |
+| **tera** | `tera_render`, `tera_valid` | tera |  |
 | **text_utils** | `sql_normalize`, `insert`, `locate` | hand-rolled |  |
 | **textdiff** | `text_diff`, `diff_ratio`, `diff_changed_lines` | similar |  |
 | **textlines** | `split_lines` | hand-rolled |  |

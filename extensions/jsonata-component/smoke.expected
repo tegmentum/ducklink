@@ -1,0 +1,13 @@
+nav
+42
+total
+30
+# JSON string result "Laptop", CSV-escaped
+pick
+"""Laptop"""
+# invalid expression -> NULL
+bad_expr
+NULL
+# malformed JSON -> NULL
+bad_json
+NULL
