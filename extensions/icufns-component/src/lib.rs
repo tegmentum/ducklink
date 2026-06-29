@@ -49,7 +49,7 @@ fn casefold(text: &str) -> std::string::String {
 // ---- WIT glue ----
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension-collation" });
 use duckdb::extension::{collation, runtime, types};
-use exports::duckdb::extension::{callback_dispatch, guest};
+use exports::duckdb::extension::guest;
 struct Extension;
 impl guest::Guest for Extension {
     fn load() -> Result<types::Loadresult, types::Duckerror> {
@@ -62,15 +62,8 @@ impl guest::Guest for Extension {
 fn text_arg(args: &[types::Duckvalue], i: usize) -> Option<String> {
     match args.get(i) { Some(types::Duckvalue::Text(s)) => Some(s.clone()), _ => None }
 }
-impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(h: u32, rows: Vec<Vec<types::Duckvalue>>, ctx: types::Invokeinfo) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        let base = ctx.rowindex.unwrap_or(0); let mut out = Vec::with_capacity(rows.len());
-        for (i, a) in rows.into_iter().enumerate() {
-            out.push(Self::call_scalar(h, a, types::Invokeinfo { rowindex: Some(base + i as u64), iswindow: ctx.iswindow })?);
-        }
-        Ok(out)
-    }
-    fn call_scalar(handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
+// Per-row scalar logic, UNCHANGED from the major-3 hand-written impl.
+fn scalar(handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
         let which = handlers().lock().unwrap().get(&handle).copied()
             .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
         Ok(match which {
@@ -104,11 +97,13 @@ impl callback_dispatch::Guest for Extension {
                 None => types::Duckvalue::Null,
             },
         })
-    }
-    fn call_table(_h: u32, _a: Vec<types::Duckvalue>) -> Result<types::Resultset, types::Duckerror> { Err(types::Duckerror::Unsupported("icufns: no table fns".into())) }
-    fn call_aggregate(_h: u32, _r: types::Rowbatch) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("icufns: no aggs".into())) }
-    fn call_pragma(_h: u32, _a: Vec<types::Duckvalue>) -> Result<Option<types::Duckvalue>, types::Duckerror> { Err(types::Duckerror::Unsupported("icufns: no pragmas".into())) }
-    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("icufns: no casts".into())) }
+}
+datalink_extcore::columnar_bridge! {
+    types = duckdb::extension::types;
+    column_types = duckdb::extension::column_types;
+    callback_dispatch = exports::duckdb::extension::callback_dispatch;
+    target = Extension;
+    scalar = scalar;
 }
 export!(Extension);
 fn register_scalars() -> Result<(), types::Duckerror> {

@@ -18,6 +18,8 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
+# major-4 columnar dispatch stub for hand-written components.
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 icu_collator = "2"
 icu_locale_core = "2"
 caseless = "0.2"
