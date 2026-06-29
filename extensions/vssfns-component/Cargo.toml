@@ -25,9 +25,9 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-# Pure-Rust JSON: parse the "[1.0, 2.0, ...]" vector arguments, render the
-# normalized vector back out. No CC, builds clean for wasm32-wasip2.
-serde_json = "1"
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+vssfns-core = { path = "../../../datalink/extensions/vssfns-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"
