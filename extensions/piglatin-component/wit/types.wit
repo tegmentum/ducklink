@@ -1,4 +1,4 @@
-package duckdb:extension@3.1.0;
+package duckdb:extension@4.0.0;
 
 interface types {
   // ESCAPE-HATCH logical type. The `complex` arm carries a DuckDB type-expression

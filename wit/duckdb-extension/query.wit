@@ -1,4 +1,4 @@
-package duckdb:extension@3.1.0;
+package duckdb:extension@4.0.0;
 
 // A minimal live-query host import (v1.1 catalog completion). A component that
 // needs to read the live database catalog (e.g. autocomplete, to suggest table

@@ -1,0 +1,69 @@
+// LIVE major-4 columnar value model (duckdb:extension@4.0.0).
+//
+// The columnar counterpart of types.wit's row-major `duckvalue`. This is the
+// HOT-PATH transfer unit for scalar/aggregate/cast dispatch on major-4: the core
+// fills a `colvec` by memcpy-ing straight from `duckdb_vector_get_data` and the
+// guest lifts it as a bulk slice -- no per-cell tagged-variant marshalling.
+//
+// The win: a fixed-width `column` arm (e.g. `int64(list<s64>)`) crosses the
+// canonical ABI as a SINGLE bulk memcpy, vs the (now-removed) row-major
+// `list<list<duckvalue>>` which serialized a ~24-byte tagged variant per cell
+// plus a per-row inner-list realloc. Measured 82-110x on a 1M-row i64 scalar
+// (benches/columnar-abi-prototype).
+package duckdb:extension@4.0.0;
+
+interface column-types {
+  // Re-used flat records from the row-major model (identical layout).
+  record decimalvalue { lower: u64, upper: u64, width: u8, scale: u8 }
+  record intervalvalue { months: s32, days: s32, micros: s64 }
+  record uuidvalue { hi: u64, lo: u64 }
+  record complexvalue { type-expr: string, json: string }
+
+  // A typed, contiguous COLUMN: one buffer per DuckDB physical type. DuckDB
+  // vectors are ALREADY flat contiguous arrays, so the core fills these arms by
+  // memcpy-ing straight from `duckdb_vector_get_data` -- no per-cell read loop.
+  //
+  // Fixed-width arms (boolean..uuid) lower/lift as a bulk memcpy. The two
+  // variable-width arms (text/blob) stay element-wise -- unavoidable for
+  // var-len data, and identical in cost to the row-major path for those types.
+  // The escape hatch (`complex`) is also element-wise; FUTURE composite types
+  // ride it with no further contract bump, exactly as the row-major `complex`.
+  variant column {
+    boolean(list<bool>),
+    int64(list<s64>),
+    uint64(list<u64>),
+    float64(list<f64>),
+    int32(list<s32>),
+    timestamp(list<s64>),
+    int8(list<s8>),
+    int16(list<s16>),
+    uint8(list<u8>),
+    uint16(list<u16>),
+    uint32(list<u32>),
+    float32(list<f32>),
+    date(list<s32>),
+    time(list<s64>),
+    timestamptz(list<s64>),
+    decimal(list<decimalvalue>),
+    interval(list<intervalvalue>),
+    uuid(list<uuidvalue>),
+    text(list<string>),
+    blob(list<list<u8>>),
+    complex(list<complexvalue>),
+  }
+
+  // A column plus its validity + row count -- the unit of columnar transfer.
+  //
+  // `validity` is a packed little-endian bitmap (bit i set => row i valid),
+  // byte-for-byte the layout of DuckDB's own validity mask, so the core copies
+  // `duckdb_vector_get_validity` straight in. An EMPTY bitmap means "all rows
+  // valid" (the common fast path: zero allocation, mirroring DuckDB's null
+  // validity pointer). NULL is carried out-of-band here, so the data buffer
+  // stays a flat typed array -- NULL handling is identical to the row-major
+  // path (where a NULL is the `duckvalue.null` arm).
+  record colvec {
+    data: column,
+    validity: list<u8>,
+    rows: u32,
+  }
+}

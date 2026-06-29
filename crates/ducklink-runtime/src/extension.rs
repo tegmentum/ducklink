@@ -20,6 +20,7 @@ use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 
 use crate::duckdb_extension_bindings::duckdb::extension::{
     arrow_ext as extension_arrow_ext, catalog as extension_catalog,
+    column_types as extension_column_types,
     compression as extension_compression, config as extension_config,
     coordinate_system as extension_coordinate_system, encoding as extension_encoding,
     files as extension_files, collation as extension_collation, files_reg as extension_files_reg,
@@ -36,6 +37,204 @@ use crate::reg;
 use crate::{CallbackKind, CallbackRegistry};
 
 type BindgenVec<T> = wasmtime::component::__internal::Vec<T>;
+
+// ---------------------------------------------------------------------------
+// major-4 columnar adaptation (native host)
+// ---------------------------------------------------------------------------
+//
+// The major-4 dispatch ABI is columnar (`call-scalar-batch-col` /
+// `call-aggregate-col` / `call-cast-col` take/return `colvec`s). The native
+// host bridge still assembles row-major `Duckvalue`s from native DuckDB
+// vectors, so these helpers pivot row-major <-> columnar AT the wasmtime
+// boundary. This keeps the (large) native DuckDB-vector reading path unchanged
+// while speaking the columnar contract; the bulk-memcpy win is realized in the
+// wasm core (which reads DuckDB vectors directly into colvecs). Correctness +
+// NULL handling are identical to the row-major path.
+
+/// Build one columnar `colvec` from a column of row-major `Duckvalue`s. The arm
+/// is chosen from the first non-NULL value (a component column is homogeneous);
+/// NULLs become a typed placeholder plus a cleared validity bit.
+fn column_from_values(vals: &[&extension_types::Duckvalue]) -> extension_column_types::Colvec {
+    use extension_column_types::Column;
+    use extension_types::Duckvalue as D;
+    let n = vals.len();
+    let mut validity: Vec<u8> = Vec::new();
+    let mut mark_null = |row: usize, validity: &mut Vec<u8>| {
+        if validity.is_empty() {
+            *validity = vec![0xFFu8; (n + 7) / 8];
+        }
+        validity[row >> 3] &= !(1u8 << (row & 7));
+    };
+    // Representative non-null value picks the column arm.
+    let rep = vals.iter().find(|v| !matches!(v, D::Null));
+    macro_rules! build {
+        ($arm:ident, $default:expr, $pat:pat => $extract:expr) => {{
+            let mut out = Vec::with_capacity(n);
+            for (r, v) in vals.iter().enumerate() {
+                match v {
+                    $pat => out.push($extract),
+                    _ => {
+                        mark_null(r, &mut validity);
+                        out.push($default);
+                    }
+                }
+            }
+            Column::$arm(out)
+        }};
+    }
+    let data = match rep {
+        None => {
+            // all-NULL (or empty) column: emit an all-null int64 column.
+            for r in 0..n {
+                mark_null(r, &mut validity);
+            }
+            Column::Int64(vec![0i64; n])
+        }
+        Some(D::Boolean(_)) => build!(Boolean, false, D::Boolean(x) => *x),
+        Some(D::Int64(_)) => build!(Int64, 0i64, D::Int64(x) => *x),
+        Some(D::Uint64(_)) => build!(Uint64, 0u64, D::Uint64(x) => *x),
+        Some(D::Float64(_)) => build!(Float64, 0.0f64, D::Float64(x) => *x),
+        Some(D::Int32(_)) => build!(Int32, 0i32, D::Int32(x) => *x),
+        Some(D::Int16(_)) => build!(Int16, 0i16, D::Int16(x) => *x),
+        Some(D::Int8(_)) => build!(Int8, 0i8, D::Int8(x) => *x),
+        Some(D::Uint32(_)) => build!(Uint32, 0u32, D::Uint32(x) => *x),
+        Some(D::Uint16(_)) => build!(Uint16, 0u16, D::Uint16(x) => *x),
+        Some(D::Uint8(_)) => build!(Uint8, 0u8, D::Uint8(x) => *x),
+        Some(D::Float32(_)) => build!(Float32, 0.0f32, D::Float32(x) => *x),
+        Some(D::Timestamp(_)) => build!(Timestamp, 0i64, D::Timestamp(x) => *x),
+        Some(D::Time(_)) => build!(Time, 0i64, D::Time(x) => *x),
+        Some(D::Timestamptz(_)) => build!(Timestamptz, 0i64, D::Timestamptz(x) => *x),
+        Some(D::Date(_)) => build!(Date, 0i32, D::Date(x) => *x),
+        Some(D::Text(_)) => build!(Text, String::new(), D::Text(x) => x.clone()),
+        Some(D::Blob(_)) => build!(Blob, Vec::new(), D::Blob(x) => x.clone()),
+        Some(D::Decimal(_)) => {
+            let mut out = Vec::with_capacity(n);
+            for (r, v) in vals.iter().enumerate() {
+                match v {
+                    D::Decimal(d) => out.push(extension_column_types::Decimalvalue {
+                        lower: d.lower, upper: d.upper, width: d.width, scale: d.scale,
+                    }),
+                    _ => { mark_null(r, &mut validity); out.push(extension_column_types::Decimalvalue { lower: 0, upper: 0, width: 0, scale: 0 }); }
+                }
+            }
+            Column::Decimal(out)
+        }
+        Some(D::Interval(_)) => {
+            let mut out = Vec::with_capacity(n);
+            for (r, v) in vals.iter().enumerate() {
+                match v {
+                    D::Interval(d) => out.push(extension_column_types::Intervalvalue { months: d.months, days: d.days, micros: d.micros }),
+                    _ => { mark_null(r, &mut validity); out.push(extension_column_types::Intervalvalue { months: 0, days: 0, micros: 0 }); }
+                }
+            }
+            Column::Interval(out)
+        }
+        Some(D::Uuid(_)) => {
+            let mut out = Vec::with_capacity(n);
+            for (r, v) in vals.iter().enumerate() {
+                match v {
+                    D::Uuid(d) => out.push(extension_column_types::Uuidvalue { hi: d.hi, lo: d.lo }),
+                    _ => { mark_null(r, &mut validity); out.push(extension_column_types::Uuidvalue { hi: 0, lo: 0 }); }
+                }
+            }
+            Column::Uuid(out)
+        }
+        Some(D::Complex(_)) => {
+            let mut out = Vec::with_capacity(n);
+            for (r, v) in vals.iter().enumerate() {
+                match v {
+                    D::Complex(c) => out.push(extension_column_types::Complexvalue { type_expr: c.type_expr.clone(), json: c.json.clone() }),
+                    _ => { mark_null(r, &mut validity); out.push(extension_column_types::Complexvalue { type_expr: String::new(), json: "null".into() }); }
+                }
+            }
+            Column::Complex(out)
+        }
+        Some(D::Null) => unreachable!("rep is a non-null value"),
+    };
+    extension_column_types::Colvec { data, validity, rows: n as u32 }
+}
+
+/// Pivot a row-major batch to one `colvec` per argument column.
+fn rows_to_colvecs(
+    rows: &[Vec<extension_types::Duckvalue>],
+) -> Vec<extension_column_types::Colvec> {
+    let ncols = rows.first().map(|r| r.len()).unwrap_or(0);
+    (0..ncols)
+        .map(|j| {
+            let col: Vec<&extension_types::Duckvalue> = rows.iter().map(|r| &r[j]).collect();
+            column_from_values(&col)
+        })
+        .collect()
+}
+
+/// Lower a result `colvec` back to a row-major `Vec<Duckvalue>` (validity =>
+/// `Null`). The inverse of [`column_from_values`].
+fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::Duckvalue> {
+    use extension_column_types::Column;
+    use extension_types::Duckvalue as D;
+    let n = c.rows as usize;
+    let is_valid = |i: usize| -> bool {
+        c.validity.is_empty()
+            || (i >> 3 >= c.validity.len())
+            || (c.validity[i >> 3] >> (i & 7)) & 1 != 0
+    };
+    let mut out: Vec<D> = Vec::with_capacity(n);
+    macro_rules! emit {
+        ($v:expr, $ctor:expr) => {{
+            for (i, x) in $v.into_iter().enumerate() {
+                out.push(if is_valid(i) { $ctor(x) } else { D::Null });
+            }
+        }};
+    }
+    match c.data {
+        Column::Boolean(v) => emit!(v, D::Boolean),
+        Column::Int64(v) => emit!(v, D::Int64),
+        Column::Uint64(v) => emit!(v, D::Uint64),
+        Column::Float64(v) => emit!(v, D::Float64),
+        Column::Int32(v) => emit!(v, D::Int32),
+        Column::Int16(v) => emit!(v, D::Int16),
+        Column::Int8(v) => emit!(v, D::Int8),
+        Column::Uint32(v) => emit!(v, D::Uint32),
+        Column::Uint16(v) => emit!(v, D::Uint16),
+        Column::Uint8(v) => emit!(v, D::Uint8),
+        Column::Float32(v) => emit!(v, D::Float32),
+        Column::Timestamp(v) => emit!(v, D::Timestamp),
+        Column::Time(v) => emit!(v, D::Time),
+        Column::Timestamptz(v) => emit!(v, D::Timestamptz),
+        Column::Date(v) => emit!(v, D::Date),
+        Column::Text(v) => emit!(v, D::Text),
+        Column::Blob(v) => emit!(v, D::Blob),
+        Column::Decimal(v) => {
+            for (i, d) in v.into_iter().enumerate() {
+                out.push(if is_valid(i) {
+                    D::Decimal(extension_types::Decimalvalue { lower: d.lower, upper: d.upper, width: d.width, scale: d.scale })
+                } else { D::Null });
+            }
+        }
+        Column::Interval(v) => {
+            for (i, d) in v.into_iter().enumerate() {
+                out.push(if is_valid(i) {
+                    D::Interval(extension_types::Intervalvalue { months: d.months, days: d.days, micros: d.micros })
+                } else { D::Null });
+            }
+        }
+        Column::Uuid(v) => {
+            for (i, d) in v.into_iter().enumerate() {
+                out.push(if is_valid(i) {
+                    D::Uuid(extension_types::Uuidvalue { hi: d.hi, lo: d.lo })
+                } else { D::Null });
+            }
+        }
+        Column::Complex(v) => {
+            for (i, c) in v.into_iter().enumerate() {
+                out.push(if is_valid(i) {
+                    D::Complex(extension_types::Complexvalue { type_expr: c.type_expr, json: c.json })
+                } else { D::Null });
+            }
+        }
+    }
+    out
+}
 
 // ---------------------------------------------------------------------------
 // Service sink (the one direction-specific seam)
@@ -2193,11 +2392,14 @@ impl ExtensionInstance {
         rows: &Vec<Vec<extension_types::Duckvalue>>,
         ctx: extension_runtime::Invokeinfo,
     ) -> Result<Vec<extension_types::Duckvalue>, extension_types::Duckerror> {
+        // major-4: pivot to columnar, cross with call-scalar-batch-col, lower back.
+        let args = rows_to_colvecs(rows);
         let guest = self.bindings.duckdb_extension_callback_dispatch();
         let mut store = self.store.as_context_mut();
-        guest
-            .call_call_scalar_batch(&mut store, dispatcher_handle, rows, ctx)
-            .map_err(map_extension_trap)?
+        let out = guest
+            .call_call_scalar_batch_col(&mut store, dispatcher_handle, &args, ctx)
+            .map_err(map_extension_trap)?;
+        out.map(colvec_to_values)
     }
 
     pub fn dispatch_table(
@@ -2217,10 +2419,12 @@ impl ExtensionInstance {
         dispatcher_handle: u32,
         rows: &extension_runtime::Rowbatch,
     ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+        // major-4: pivot the buffered group to columns, cross with call-aggregate-col.
+        let args = rows_to_colvecs(rows);
         let guest = self.bindings.duckdb_extension_callback_dispatch();
         let mut store = self.store.as_context_mut();
         guest
-            .call_call_aggregate(&mut store, dispatcher_handle, rows)
+            .call_call_aggregate_col(&mut store, dispatcher_handle, &args)
             .map_err(map_extension_trap)?
     }
 
@@ -2241,11 +2445,19 @@ impl ExtensionInstance {
         dispatcher_handle: u32,
         value: &extension_types::Duckvalue,
     ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+        // major-4: a single value becomes a 1-row colvec for call-cast-col.
+        let arg = column_from_values(&[value]);
         let guest = self.bindings.duckdb_extension_callback_dispatch();
         let mut store = self.store.as_context_mut();
-        guest
-            .call_call_cast(&mut store, dispatcher_handle, value)
-            .map_err(map_extension_trap)?
+        let out = guest
+            .call_call_cast_col(&mut store, dispatcher_handle, &arg)
+            .map_err(map_extension_trap)?;
+        out.map(|c| {
+            colvec_to_values(c)
+                .into_iter()
+                .next()
+                .unwrap_or(extension_types::Duckvalue::Null)
+        })
     }
 
     pub fn drain_pending(&mut self) -> PendingRegistrationsData {
@@ -3615,31 +3827,25 @@ mod tests {
         )
     }
 
-    /// THE ADDITIVE-MINOR PROOF (3.1.0). The freeze policy's whole point: an
-    /// existing component built at the FROZEN @3.0.0 baseline loads UN-REBUILT on
-    /// the @3.1.0 host. The host now provides the new additive `table-stream`
-    /// import (CONTRACT_MINOR = 1); a @3.0.0 component imports a strict SUBSET of
-    /// what the host provides, so the wasmtime component linker semver-matches it
-    /// and `load()` runs. Only a component that OPTS INTO filter pushdown rebuilds.
-    ///
-    /// Loads the shipped @3.0.0 `aba` + `geohash` artifacts (scalar components that
-    /// do NOT import `table-stream`) against the 3.1.0 host. Skipped gracefully if
-    /// the artifacts are absent (the wasm toolchain-free CI subset).
+    /// THE MAJOR-4 BREAK PROOF. The columnar @4.0.0 contract is a DELIBERATE
+    /// clean break: every pre-existing @3.x component is REJECTED by design (the
+    /// row-major batch ABI it exports no longer exists). The on-disk
+    /// `artifacts/extensions/*.wasm` are the OLD @3.0.0 builds (not yet rebuilt at
+    /// @4.0.0), so the contract guard must reject them with the friendly
+    /// major-mismatch message. (After the coordinated @4.0.0 rebuild they load.)
+    /// Skipped gracefully if the artifacts are absent (toolchain-free CI subset).
     #[test]
-    fn additive_minor_loads_frozen_3_0_0_components_unrebuilt() {
+    fn major_4_rejects_frozen_3_0_0_components() {
         let manifest = env!("CARGO_MANIFEST_DIR");
         let aba = std::path::Path::new(manifest).join("../../artifacts/extensions/aba.wasm");
         if !aba.exists() {
-            eprintln!("skipping additive-load proof: artifacts/extensions/aba.wasm absent");
+            eprintln!("skipping major-4 break proof: artifacts/extensions/aba.wasm absent");
             return;
         }
 
-        // Sanity: this host is @3.MINOR with MINOR >= 1 (the additive bump landed).
-        assert_eq!(crate::CONTRACT_MAJOR, 3);
-        assert!(
-            crate::CONTRACT_MINOR >= 1,
-            "the additive minor must have bumped CONTRACT_MINOR to >= 1"
-        );
+        // This host is the major-4 columnar baseline.
+        assert_eq!(crate::CONTRACT_MAJOR, 4);
+        assert_eq!(crate::CONTRACT_MINOR, 0);
 
         let engine = test_engine();
         for name in ["aba", "geohash"] {
@@ -3652,24 +3858,20 @@ mod tests {
             let bytes = std::fs::read(&path).unwrap();
             let component = Component::new(&engine, &bytes).unwrap();
 
-            // The artifact is a FROZEN @3.0.0 component (minor 0).
+            // The on-disk artifact is still the @3.0.0 build (major 3).
             let ver = crate::component_contract_version(&engine, &component);
             assert_eq!(
-                ver,
-                Some((3, 0)),
-                "{name} must be the frozen @3.0.0 baseline (un-rebuilt)"
+                ver.map(|(maj, _)| maj),
+                Some(3),
+                "{name} on disk is expected to still be the @3.0.0 build pre-rebuild"
             );
 
-            // The contract guard ADMITS it on the 3.1.0 host (minor forward-compat).
-            crate::check_component_contract(&engine, &component, name)
-                .unwrap_or_else(|e| panic!("{name} rejected by the 3.1.0 contract guard: {e}"));
-
-            // And it INSTANTIATES + runs load() un-rebuilt against the 3.1.0 host
-            // linker (which now also provides the new `table-stream` import).
-            let inst = load_artifact(&engine, name)
-                .unwrap_or_else(|e| panic!("{name} failed to load on the 3.1.0 host: {e}"));
-            drop(inst);
-            eprintln!("[additive-load] @3.0.0 '{name}' loaded UN-REBUILT on the 3.1.0 host");
+            // The major-4 contract guard REJECTS it (the clean break by design).
+            assert!(
+                crate::check_component_contract(&engine, &component, name).is_err(),
+                "{name}: a @3.x component MUST be rejected by the major-4 host"
+            );
+            eprintln!("[major-4-break] @3.0.0 '{name}' correctly REJECTED by the @4.0.0 host");
         }
     }
 

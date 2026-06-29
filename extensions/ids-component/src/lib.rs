@@ -18,6 +18,7 @@ wit_bindgen::generate!({
 datalink_extcore::duckdb_shim! {
     core = ids_core::Core;
     types = duckdb::extension::types;
+    column_types = duckdb::extension::column_types;
     runtime = duckdb::extension::runtime;
     callback_dispatch = exports::duckdb::extension::callback_dispatch;
     guest = exports::duckdb::extension::guest;

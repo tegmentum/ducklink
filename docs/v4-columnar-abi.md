@@ -103,22 +103,47 @@ Major-4 is a TRUE break: it removes the row-major batch entries and bumps
    component end-to-end on the @4 host. THIS is the heavy, review-gated step;
    not done in the perf-pass branch.
 
-## 5. Landed vs deferred (this pass)
+## 5. Landed vs deferred
 
-LANDED (verifiable now, on `perf/columnar-abi` branches):
-- The columnar prototype + the 82-110x measured win (reproducible bench).
-- The neutral columnar value model (`NeutralColumn`/`NeutralColVec`) +
-  `datalink-extcore::scalar_batch_col` codegen primitive + correctness tests
-  (all-valid zero-alloc, scattered-NULL validity, empty chunk).
-- The `@4.0.0` WIT contract design (column-types + callback-dispatch-col).
-- This design doc + the core-path design.
+### Phase 1 — the @4.0.0 foundation (LANDED, branch `feat/wit-4.0.0`)
 
-DEFERRED (coordinated, review-gated — explicitly NOT merged without review):
-- Wiring `@4.0.0` into the live world + the core memcpy dispatch + the
-  190-component rebuild + re-stamp + conformance. (Needs the wasi-sdk core build
-  + the prebuilt libduckdb static lib + the full catalog rebuild — hours of wasm
-  compilation, and the user owns the merge/re-stamp.)
-- SIMD vectorized kernels per core (now POSSIBLE on the contiguous buffers) —
+- **@4.0.0 LIVE contract.** `column-types.wit` + the columnar `callback-dispatch`
+  (call-scalar-batch-col / call-aggregate-col / call-cast-col; cold singletons
+  row-major) are in the live world. `CONTRACT_MAJOR = 4`, `CONTRACT_MINOR = 0`,
+  `CONTRACT_VERSION = 4.0.0`, propagated across the tree (2397 WIT files).
+  New canonical digest **`a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40`**
+  (43 canonical files), confirmed emitted by `ducklink-runtime/build.rs`.
+- **Codegen columnar emission.** `datalink-extcore`'s `duckdb_shim!` /
+  `duckdb_agg_shim!` emit the columnar dispatch (colvec<->NeutralColVec bridge to
+  the per-row neutral `dispatch`/`dispatch_aggregate`) — ZERO per-core changes.
+  Verified: all **42 macro-based catalog components** (scalar + aggregate) build
+  @4.0.0 and export call-scalar-batch-col / call-aggregate-col / call-cast-col;
+  `datalink-extcore` columnar tests green.
+- **Core memcpy dispatch (source).** `duckdb-wasm` core `execute_scalar_function`
+  / `execute_cast` / aggregate finalize build colvecs by bulk memcpy from
+  `duckdb_vector_get_data` (+ validity), cross via the columnar funcs, and write
+  back by memcpy (`build_colvec` / `write_colvec_to_vector` /
+  `aggregate_rows_to_colvecs`). Columnar core bindings regenerated.
+- **Native runtime engine (`ducklink-runtime`) columnar dispatch** wired
+  (rows<->colvec at the wasmtime boundary); compiles; tests green incl. the new
+  `major_4_rejects_frozen_3_0_0_components` break proof (@3.x rejected by design).
+
+### Phase 2 — coordinated rebuild (DEFERRED, review-gated)
+
+- **The 168 hand-written components.** They predate the codegen and put logic in
+  varying methods (some in `call_scalar`, some in `call_scalar_batch`), so they
+  need per-component columnar migration (or pull-up onto `duckdb_shim!`) — NOT a
+  safe blind codemod. Catalog re-stamp (`gen-catalog`) + conformance + verify
+  follow once all artifacts are rebuilt.
+- **The wasm core build + `ducklink-host` build are BLOCKED by a PRE-EXISTING
+  (columnar-independent) drift**: `core/src/lib.rs` and `ducklink-host` reference
+  host interfaces (`storage-host`, `optimizer-host`, `parser-host`,
+  `table-stream-host`, `collation-host`, `files-host`, `pragma-host`) that are
+  absent from the trimmed core WIT on this branch (present in the stale committed
+  bindings only). These host-interface WIT files must be restored to the core
+  world before the core/host compile — the core-side half of the coordinated
+  rebuild. End-to-end conformance/e2e through native DuckDB depends on it.
+- **SIMD vectorized kernels per core** (now POSSIBLE on the contiguous buffers) —
   opt-in per core after the ABI lands.
 
 Non-ABI levers are already exhausted (see section 1); columnar is the gateway to

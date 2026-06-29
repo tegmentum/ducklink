@@ -1,19 +1,41 @@
-package duckdb:extension@3.1.0;
+package duckdb:extension@4.0.0;
 
 use types;
+use column-types;
 
+// major-4 COLUMNAR dispatch. The hot path (per-DataChunk scalar / aggregate /
+// cast) is now columnar: arguments cross the canonical ABI as typed `colvec`s
+// (one bulk memcpy per fixed-width column) instead of the row-major
+// `list<list<duckvalue>>` tagged-variant batch that major-3 used. The cold
+// singleton paths (call-scalar / call-table / call-pragma / call-cast) stay
+// row-major `duckvalue` for ergonomics -- they are off the hot path. See
+// column-types.wit and docs/v4-columnar-abi.md.
 interface callback-dispatch {
-  use types.{duckerror, duckvalue, invokeinfo, resultset, rowbatch};
+  use types.{duckerror, duckvalue, invokeinfo, resultset};
+  use column-types.{colvec};
 
-  call-scalar: func(handle: u32, args: list<duckvalue>, ctx: invokeinfo) -> result<duckvalue, duckerror>;
-  // Batched scalar dispatch: one call per DataChunk (<= 2048 rows) instead of
-  // one per row, amortizing the WIT boundary crossing. `rows` is the chunk's
-  // arguments (one inner list per row); `ctx.rowindex` is the first row's index
-  // (the i-th row is ctx.rowindex + i). Returns one result value per row, in
-  // order. Semantically identical to calling call-scalar per row.
-  call-scalar-batch: func(handle: u32, rows: rowbatch, ctx: invokeinfo) -> result<list<duckvalue>, duckerror>;
+  // HOT PATH: one columnar call per DataChunk. `args` is one colvec per
+  // argument column (all with the same `rows`); the result is a single colvec
+  // of the function's return type, same `rows`. Row i of every input column
+  // maps to row i of the output, validity preserved. Fixed-width columns cross
+  // as bulk memcpy. Semantically identical to a per-row call-scalar loop.
+  call-scalar-batch-col: func(handle: u32, args: list<colvec>, ctx: invokeinfo)
+    -> result<colvec, duckerror>;
+
+  // Columnar aggregate fold: the buffered group as columns (one colvec per
+  // argument). The guest folds in-vector (state never crosses the boundary, as
+  // in major-3) and returns the single finalized value.
+  call-aggregate-col: func(handle: u32, args: list<colvec>)
+    -> result<duckvalue, duckerror>;
+
+  // Columnar cast: one input column -> one output column.
+  call-cast-col: func(handle: u32, arg: colvec) -> result<colvec, duckerror>;
+
+  // --- cold singleton paths kept row-major (not on the hot path) ---
+  call-scalar: func(handle: u32, args: list<duckvalue>, ctx: invokeinfo)
+    -> result<duckvalue, duckerror>;
   call-table: func(handle: u32, args: list<duckvalue>) -> result<resultset, duckerror>;
-  call-aggregate: func(handle: u32, rows: rowbatch) -> result<duckvalue, duckerror>;
-  call-pragma: func(handle: u32, args: list<duckvalue>) -> result<option<duckvalue>, duckerror>;
+  call-pragma: func(handle: u32, args: list<duckvalue>)
+    -> result<option<duckvalue>, duckerror>;
   call-cast: func(handle: u32, value: duckvalue) -> result<duckvalue, duckerror>;
 }
