@@ -111,6 +111,85 @@ fn main() {
         let v = clone_duckvalue(black_box(&complex));
         black_box(v);
     });
+
+    // --- 3. expanded marshalling: the rich @3.x value arms -------------------
+    // The @3.1.0 surface widened `duckvalue` from the v1 closed set to 22 arms.
+    // These are the per-cell marshalling costs the new arms add (all fixed-width,
+    // so all in the cheap tier alongside Int64 -- confirming the rich types do not
+    // regress the hot path the way Text/Complex do).
+    let decimal = t::Duckvalue::Decimal(t::Decimalvalue {
+        lower: 0x0123_4567_89ab_cdef,
+        upper: 0,
+        width: 38,
+        scale: 4,
+    });
+    bench("marshal decimal (i128 fixed-width)", iters, || {
+        black_box(clone_duckvalue(black_box(&decimal)));
+    });
+    let uuid = t::Duckvalue::Uuid(t::Uuidvalue { hi: 1, lo: 2 });
+    bench("marshal uuid (2x u64 fixed-width)", iters, || {
+        black_box(clone_duckvalue(black_box(&uuid)));
+    });
+    let interval = t::Duckvalue::Interval(t::Intervalvalue {
+        months: 1,
+        days: 2,
+        micros: 3,
+    });
+    bench("marshal interval (fixed-width struct)", iters, || {
+        black_box(clone_duckvalue(black_box(&interval)));
+    });
+    let ts = t::Duckvalue::Timestamp(black_box(1_700_000_000_000_000));
+    bench("marshal timestamp (i64 fixed-width)", iters, || {
+        black_box(clone_duckvalue(black_box(&ts)));
+    });
+
+    println!();
+
+    // NOTE on the wasm-core scalar read hoist: `read_scalar_argument` now reads
+    // a per-column cached data + validity pointer (fetched ONCE per column in
+    // `execute_scalar_function`) and decodes the validity bitmap inline, instead
+    // of calling `duckdb_vector_get_data` + `duckdb_vector_get_validity` +
+    // `duckdb_validity_row_is_valid` (three FFI/boundary calls) per CELL. That
+    // win is the elimination of ~3 * rows * cols cross-module wasm calls per
+    // chunk; it is NOT representable on native (a native call to a trivial fn is
+    // ~1ns and swamped by noise), so it is deliberately NOT benched here -- it
+    // must be measured in-wasm (wasi-sdk build). The benches below isolate the
+    // costs that ARE native-measurable: per-row allocation, marshalling, and the
+    // window re-send.
+    const ROWS: usize = 2048;
+
+    // --- 4. aggregate / window rowbatch marshalling (new @3.1.0 dispatch) ----
+    // call-aggregate hands the WHOLE buffered group across once; call-aggregate-
+    // window hands the WHOLE partition across PER OUTPUT ROW (the frozen frame
+    // ABI). These bench the marshalling each pays so the window re-send cost is
+    // quantified (informs whether a 3.2.0 "send partition once" interface earns
+    // its keep).
+    let group: Vec<Vec<t::Duckvalue>> =
+        (0..ROWS as i64).map(|i| vec![t::Duckvalue::Int64(i)]).collect();
+    bench("aggregate: marshal 2048-row group once", 20_000, || {
+        let cloned: Vec<Vec<t::Duckvalue>> =
+            black_box(&group).iter().map(|r| r.clone()).collect();
+        black_box(cloned);
+    });
+
+    // window: a 256-row partition re-marshalled once PER output row = 256 sends.
+    const PART: usize = 256;
+    let partition: Vec<Vec<t::Duckvalue>> =
+        (0..PART as i64).map(|i| vec![t::Duckvalue::Int64(i)]).collect();
+    bench("window: re-marshal 256-part PER row x256", 2_000, || {
+        for _out_row in 0..PART {
+            let sent: Vec<Vec<t::Duckvalue>> =
+                black_box(&partition).iter().map(|r| r.clone()).collect();
+            black_box(sent);
+        }
+    });
+    bench("window: marshal 256-part ONCE (3.2.0 hypo)", 2_000, || {
+        let sent: Vec<Vec<t::Duckvalue>> =
+            black_box(&partition).iter().map(|r| r.clone()).collect();
+        for _out_row in 0..PART {
+            black_box(&sent);
+        }
+    });
 }
 
 /// Mirrors the structurally-identical enum reconstruction the host runs in
