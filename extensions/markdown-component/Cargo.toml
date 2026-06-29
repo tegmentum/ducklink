@@ -16,6 +16,8 @@ wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
 # Use features = ['html'] with default-features = false. NOTE: 0.12 changed Tag::Heading and Tag::Link to STRUCT variants (was tuple in 0.10/0.11); destructure with `{ field, .. }` syntax. Event::End takes TagEnd, not Tag.
 pulldown-cmark = "0.12"
+# major-4 columnar bridge for hand-written components (colvec <-> row adapter).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"

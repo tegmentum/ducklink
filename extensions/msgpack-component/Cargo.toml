@@ -14,9 +14,9 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-rmp-serde = "*"
-serde_json = "*"
-hex = "*"
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+msgpack-core = { path = "../../../datalink/extensions/msgpack-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"

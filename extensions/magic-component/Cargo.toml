@@ -15,7 +15,9 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-infer = { version = "0.16", default-features = false, features = ["alloc"] }
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+magic-core = { path = "../../../datalink/extensions/magic-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"

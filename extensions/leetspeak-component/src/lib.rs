@@ -1,51 +1,22 @@
-//! Leetspeak transform as a DuckDB scalar (hand-rolled):
-//!   to_leet(text) -> text (a->4, e->3, i->1, o->0, s->5, t->7, b->8, g->6,
-//!   l->1; other chars unchanged). NULL -> NULL.
-use wit_bindgen::rt::string::String;
-use wit_bindgen::rt::vec::Vec;
-wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension" });
-use duckdb::extension::{runtime, types};
-use exports::duckdb::extension::{callback_dispatch, guest};
-struct Extension;
-impl guest::Guest for Extension {
-    fn load() -> Result<types::Loadresult, types::Duckerror> {
-        register_scalars()?;
-        Ok(types::Loadresult { name: "leetspeak".into(), version: Some(env!("CARGO_PKG_VERSION").into()), requires: Vec::new().into() })
-    }
-    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> { Ok(false) }
-    fn shutdown() -> Result<bool, types::Duckerror> { Ok(false) }
-}
-fn to_leet(s: &str) -> std::string::String {
-    s.chars().map(|c| match c.to_ascii_lowercase() {
-        'a' => '4', 'e' => '3', 'i' => '1', 'o' => '0', 's' => '5', 't' => '7', 'b' => '8', 'g' => '6', 'l' => '1', _ => c,
-    }).collect()
-}
-impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(h: u32, rows: Vec<Vec<types::Duckvalue>>, ctx: types::Invokeinfo) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        let base = ctx.rowindex.unwrap_or(0); let mut out = Vec::with_capacity(rows.len());
-        for (i, a) in rows.into_iter().enumerate() {
-            out.push(Self::call_scalar(h, a, types::Invokeinfo { rowindex: Some(base + i as u64), iswindow: ctx.iswindow })?);
-        }
-        Ok(out)
-    }
-    fn call_scalar(_handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
-        match args.first() {
-            Some(types::Duckvalue::Text(s)) => Ok(types::Duckvalue::Text(to_leet(s).into())),
-            _ => Ok(types::Duckvalue::Null),
-        }
-    }
-    fn call_table(_h: u32, _a: Vec<types::Duckvalue>) -> Result<types::Resultset, types::Duckerror> { Err(types::Duckerror::Unsupported("leetspeak: no table fns".into())) }
-    fn call_aggregate(_h: u32, _r: types::Rowbatch) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("leetspeak: no aggs".into())) }
-    fn call_pragma(_h: u32, _a: Vec<types::Duckvalue>) -> Result<Option<types::Duckvalue>, types::Duckerror> { Err(types::Duckerror::Unsupported("leetspeak: no pragmas".into())) }
-    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("leetspeak: no casts".into())) }
-}
-export!(Extension);
-fn register_scalars() -> Result<(), types::Duckerror> {
-    let cap = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
-    let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
-    let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
-    reg.register("to_leet", &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
-        Some(&runtime::Funcopts { description: Some("leetspeak".into()), tags: vec!["text".into()], attributes: det }))?;
-    Ok(())
+//! Leetspeak transform as a DuckDB scalar (`to_leet`).
+//!
+//! THIN, GENERATED ducklink shim: a `wit_bindgen::generate!` block plus one
+//! `datalink_extcore::duckdb_shim!` invocation. All logic + the capability
+//! surface live ONCE in `leetspeak-core` (datalink); the registration ABI,
+//! handle table, the dispatch arms (incl. the major-4 columnar hot path), and
+//! the `Duckvalue` marshalling are derived from the core's declaration.
+
+wit_bindgen::generate!({
+    path: "./wit",
+    world: "duckdb:extension/duckdb-extension",
+});
+
+datalink_extcore::duckdb_shim! {
+    core = leetspeak_core::Core;
+    types = duckdb::extension::types;
+    column_types = duckdb::extension::column_types;
+    runtime = duckdb::extension::runtime;
+    callback_dispatch = exports::duckdb::extension::callback_dispatch;
+    guest = exports::duckdb::extension::guest;
+    export = export;
 }
