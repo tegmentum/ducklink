@@ -1,0 +1,211 @@
+{
+  "contract_label": "4.0.0-after",
+  "host": {
+    "platform": "darwin",
+    "cpu": "Apple M2 Max",
+    "wasmtime": "wasmtime 46.0.1 (823d1b8f2 2026-06-24)"
+  },
+  "configs": [
+    {
+      "id": "native",
+      "title": "NATIVE (bundled DuckDB + native ducklink ext)",
+      "kind": "native",
+      "aot": false,
+      "embedded": false,
+      "note": "Baseline. Native engine builds DataChunks; reg_duckdb marshals across WIT into the component (embedded wasmtime). The extension algorithm is still wasm."
+    },
+    {
+      "id": "wasm-dynamic-noaot",
+      "title": "WASM DYNAMIC, no-AOT",
+      "kind": "wasm",
+      "aot": false,
+      "embedded": false,
+      "note": "Core + extension as separate components, host-resolver/WIT-dispatched, Cranelift-compiled at instantiation. The current shipped wasm path."
+    }
+  ],
+  "workloads": [
+    {
+      "id": "aba_validate_1m",
+      "category": "a. dispatch-bound scalar",
+      "extension": "aba",
+      "rows": 1000000,
+      "cells": {
+        "native": {
+          "status": "ok",
+          "slope_ms_per_query": 205.74480208551643,
+          "fixed_cost_ms": 261.8753329967154,
+          "r2": 0.9999937106163084,
+          "rows_per_s": 4860390.103971408,
+          "slope_ms_p25": 205.44608572552013,
+          "slope_ms_p75": 211.88620695154117,
+          "overhead_vs_native_pct": 0.0,
+          "internal_ms_per_query_at_kmax": 205.6743057375
+        },
+        "wasm-dynamic-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 298.7463132771414,
+          "fixed_cost_ms": 677.9786497936584,
+          "r2": 0.9999577112775824,
+          "rows_per_s": 3347321.64233377,
+          "slope_ms_p25": 298.56034584010814,
+          "slope_ms_p75": 302.3919576858004,
+          "overhead_vs_native_pct": 45.20236246501601
+        }
+      }
+    },
+    {
+      "id": "fnv1a_64_1m",
+      "category": "b. light-compute scalar",
+      "extension": "checksums",
+      "rows": 1000000,
+      "cells": {
+        "native": {
+          "status": "ok",
+          "slope_ms_per_query": 88.19775642403069,
+          "fixed_cost_ms": 260.9663583978543,
+          "r2": 0.9999480937064011,
+          "rows_per_s": 11338156.893609328,
+          "slope_ms_p25": 86.97699493699474,
+          "slope_ms_p75": 88.14426093857037,
+          "overhead_vs_native_pct": 0.0,
+          "internal_ms_per_query_at_kmax": 88.3518698
+        },
+        "wasm-dynamic-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 204.13439833596513,
+          "fixed_cost_ms": 720.2723499969582,
+          "r2": 0.9999952389586481,
+          "rows_per_s": 4898733.423429187,
+          "slope_ms_p25": 204.02907548027412,
+          "slope_ms_p75": 205.7102544686391,
+          "overhead_vs_native_pct": 131.45078357157155
+        }
+      }
+    },
+    {
+      "id": "siphash_long_1m",
+      "category": "c. heavier-compute scalar (guest-dominated)",
+      "extension": "siphash",
+      "rows": 1000000,
+      "cells": {
+        "native": {
+          "status": "ok",
+          "slope_ms_per_query": 179.15366771069654,
+          "fixed_cost_ms": 419.17851679609174,
+          "r2": 0.9999675150453913,
+          "rows_per_s": 5581800.32135783,
+          "slope_ms_p25": 177.73647680982583,
+          "slope_ms_p75": 180.00219479664727,
+          "overhead_vs_native_pct": 0.0,
+          "internal_ms_per_query_at_kmax": 179.1130638125
+        },
+        "wasm-dynamic-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 364.1082199470215,
+          "fixed_cost_ms": 814.4980249926448,
+          "r2": 0.9999977313621564,
+          "rows_per_s": 2746436.211040504,
+          "slope_ms_p25": 364.11368898947586,
+          "slope_ms_p75": 364.79307190789507,
+          "overhead_vs_native_pct": 103.23793791093125
+        }
+      }
+    },
+    {
+      "id": "talib_sma_1m",
+      "category": "c. compute-heavy aggregate",
+      "extension": "talib",
+      "rows": 1000000,
+      "cells": {
+        "native": {
+          "status": "ok",
+          "slope_ms_per_query": 59.151766059970086,
+          "fixed_cost_ms": 110.5678753985555,
+          "r2": 0.9997445084195519,
+          "rows_per_s": 16905665.994590353,
+          "slope_ms_p25": 58.820475357351825,
+          "slope_ms_p75": 60.97428380283028,
+          "overhead_vs_native_pct": 0.0,
+          "internal_ms_per_query_at_kmax": 59.3684026
+        },
+        "wasm-dynamic-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 94.96114570718159,
+          "fixed_cost_ms": 453.92627500114014,
+          "r2": 0.9999508598197868,
+          "rows_per_s": 10530622.735782487,
+          "slope_ms_p25": 92.74860743869795,
+          "slope_ms_p75": 94.87916506456844,
+          "overhead_vs_native_pct": 60.53814117892393
+        }
+      }
+    },
+    {
+      "id": "aba_validate_10m",
+      "category": "d. large data (engine-scan scaling)",
+      "extension": "aba",
+      "rows": 10000000,
+      "cells": {
+        "native": {
+          "status": "ok",
+          "slope_ms_per_query": 1976.8491076692173,
+          "fixed_cost_ms": 2521.169508411549,
+          "r2": 0.999993719059011,
+          "rows_per_s": 5058555.031441116,
+          "slope_ms_p25": 1974.3890898144205,
+          "slope_ms_p75": 1981.9793815250575,
+          "overhead_vs_native_pct": 0.0,
+          "internal_ms_per_query_at_kmax": 1977.26702075
+        },
+        "wasm-dynamic-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 3082.4773566718377,
+          "fixed_cost_ms": 2314.5023243967453,
+          "r2": 0.9999690520118472,
+          "rows_per_s": 3244143.863167591,
+          "slope_ms_p25": 3022.0076601033466,
+          "slope_ms_p75": 3183.3871684407186,
+          "overhead_vs_native_pct": 55.928813418956366
+        }
+      }
+    }
+  ],
+  "deltas": {
+    "each_vs_native": {
+      "native": {
+        "geomean_ratio_vs_native": 1.0,
+        "geomean_overhead_pct": 0.0,
+        "n": 5
+      },
+      "wasm-dynamic-noaot": {
+        "geomean_ratio_vs_native": 1.7643646357787448,
+        "geomean_overhead_pct": 76.43646357787448,
+        "n": 5
+      }
+    },
+    "dynamic_vs_embedded": {
+      "noaot": {
+        "per_workload": {},
+        "geomean_dynamic_over_embedded": null
+      },
+      "aot": {
+        "per_workload": {},
+        "geomean_dynamic_over_embedded": null
+      }
+    },
+    "aot_vs_noaot": {
+      "dynamic": {
+        "per_workload": {},
+        "geomean_slope_ratio_aot_over_noaot": null,
+        "median_fixed_noaot_ms": null,
+        "median_fixed_aot_ms": null
+      },
+      "embedded": {
+        "per_workload": {},
+        "geomean_slope_ratio_aot_over_noaot": null,
+        "median_fixed_noaot_ms": null,
+        "median_fixed_aot_ms": null
+      }
+    }
+  }
+}
