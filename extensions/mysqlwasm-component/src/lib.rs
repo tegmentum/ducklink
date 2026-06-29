@@ -55,13 +55,10 @@ impl guest::Guest for Extension {
 // This backend has no functions; the callback-dispatch export is required by the
 // world but every entry is unsupported.
 impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(
-        _h: u32,
-        _r: Vec<Vec<types::Duckvalue>>,
-        _c: types::Invokeinfo,
-    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("mysql: no scalar fns".into()))
-    }
+    // major-4 columnar hot path: this storage backend has no scalar/aggregate/
+    // cast functions, so the three columnar methods are Unsupported stubs.
+    datalink_extcore::columnar_stub!();
+
     fn call_scalar(
         _h: u32,
         _a: Vec<types::Duckvalue>,
@@ -74,12 +71,6 @@ impl callback_dispatch::Guest for Extension {
         _args: Vec<types::Duckvalue>,
     ) -> Result<types::Resultset, types::Duckerror> {
         Err(types::Duckerror::Unsupported("mysql: no table fns".into()))
-    }
-    fn call_aggregate(
-        _h: u32,
-        _r: types::Rowbatch,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("mysql: no aggs".into()))
     }
     fn call_pragma(
         _h: u32,
