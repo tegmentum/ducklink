@@ -63,13 +63,10 @@ impl guest::Guest for Extension {
 // No functions; the callback-dispatch export is required by the world but every
 // entry is unsupported.
 impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(
-        _h: u32,
-        _r: Vec<Vec<types::Duckvalue>>,
-        _c: types::Invokeinfo,
-    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("unity: no scalar fns".into()))
-    }
+    // major-4 columnar dispatch: unityscan is a storage backend, so the three
+    // columnar hot methods are Unsupported stubs.
+    datalink_extcore::columnar_stub!();
+
     fn call_scalar(
         _h: u32,
         _a: Vec<types::Duckvalue>,
@@ -82,12 +79,6 @@ impl callback_dispatch::Guest for Extension {
         _args: Vec<types::Duckvalue>,
     ) -> Result<types::Resultset, types::Duckerror> {
         Err(types::Duckerror::Unsupported("unity: no table fns".into()))
-    }
-    fn call_aggregate(
-        _h: u32,
-        _r: types::Rowbatch,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("unity: no aggs".into()))
     }
     fn call_pragma(
         _h: u32,

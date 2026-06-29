@@ -27,7 +27,7 @@ use wit_bindgen::rt::vec::Vec;
 
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension" });
 
-use duckdb::extension::{runtime, types};
+use duckdb::extension::{column_types as col, runtime, types};
 use exports::duckdb::extension::{callback_dispatch, guest};
 
 use tpchgen::generators::{
@@ -67,17 +67,24 @@ impl guest::Guest for Extension {
     }
 }
 
+// major-4 colvec <-> row adapter (tpchgen keeps its hand-written scalar + table
+// fns; only the scalar HOT PATH is bridged to columnar).
+datalink_extcore::__columnar_bridge_conv!(types, col);
+
 impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(
-        h: u32,
-        rows: Vec<Vec<types::Duckvalue>>,
+    // major-4 columnar scalar hot path: bridge colvec -> rows, delegate per-row
+    // to the unchanged hand-written `call_scalar`, rebuild the result column.
+    fn call_scalar_batch_col(
+        handle: u32,
+        args: Vec<callback_dispatch::Colvec>,
         ctx: types::Invokeinfo,
-    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
+    ) -> Result<callback_dispatch::Colvec, types::Duckerror> {
         let base = ctx.rowindex.unwrap_or(0);
+        let rows = __bridge_colvecs_to_rows(&args);
         let mut out = Vec::with_capacity(rows.len());
         for (i, a) in rows.into_iter().enumerate() {
             out.push(Self::call_scalar(
-                h,
+                handle,
                 a,
                 types::Invokeinfo {
                     rowindex: Some(base + i as u64),
@@ -85,7 +92,21 @@ impl callback_dispatch::Guest for Extension {
                 },
             )?);
         }
-        Ok(out)
+        Ok(__bridge_vals_to_colvec(out))
+    }
+
+    fn call_aggregate_col(
+        _handle: u32,
+        _args: Vec<callback_dispatch::Colvec>,
+    ) -> Result<types::Duckvalue, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("tpchgen: no aggs".into()))
+    }
+
+    fn call_cast_col(
+        _handle: u32,
+        _arg: callback_dispatch::Colvec,
+    ) -> Result<callback_dispatch::Colvec, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("tpchgen: no casts".into()))
     }
 
     fn call_scalar(
@@ -135,12 +156,6 @@ impl callback_dispatch::Guest for Extension {
         Ok(rows.into())
     }
 
-    fn call_aggregate(
-        _h: u32,
-        _r: types::Rowbatch,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("tpchgen: no aggs".into()))
-    }
     fn call_pragma(
         _h: u32,
         _a: Vec<types::Duckvalue>,
