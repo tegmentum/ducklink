@@ -57,6 +57,7 @@ members = [
     "extensions/a5-component",
     "extensions/jsonata-component",
     "extensions/math-component",
+    "extensions/sqlitecompat-component",
     "extensions/text_utils-component",
     "extensions/chrono-component",
     "extensions/list-component",

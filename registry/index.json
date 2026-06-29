@@ -7831,6 +7831,56 @@
       "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
       "wit_contract_version": "4.0.0",
       "content_digest": "fba7438634e75a279111d3a474b8e38771ad167fea442d1cec205716e2f64ec4"
+    },
+    {
+      "name": "sqlitecompat",
+      "version": "0.1.0",
+      "description": "SQLite built-in scalars DuckDB lacks (#153 cross-compat, SQLite->DuckDB): zeroblob(n), randomblob(n), likely(x), unlikely(x), likelihood(x,prob). DuckDB ships instr/unicode/printf/hex/typeof itself; only the genuine gaps are exposed here.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "sqlite",
+        "compat",
+        "zeroblob",
+        "randomblob",
+        "likely"
+      ],
+      "categories": [
+        "utility"
+      ],
+      "source": "extensions/sqlitecompat-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/sqlitecompat.wasm",
+      "exports": [
+        "zeroblob",
+        "randomblob",
+        "likely",
+        "unlikely",
+        "likelihood"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "crates": [],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "sqlitecompat",
+      "expansion": "com.tegmentum.ducklink.sqlitecompat",
+      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract_version": "4.0.0",
+      "content_digest": "2018b46fef9fb17d0ea58fe2dabc08f163b4a0d635a56df7e0b9a46550551383",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@2.2.0",
+          "artifact": "artifacts/extensions/sqlitecompat.wasm",
+          "content_digest": "2018b46fef9fb17d0ea58fe2dabc08f163b4a0d635a56df7e0b9a46550551383"
+        }
+      ]
     }
   ],
   "dotcmds": [
