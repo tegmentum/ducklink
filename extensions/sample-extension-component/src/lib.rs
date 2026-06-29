@@ -13,7 +13,15 @@ wit_bindgen::generate!({
 });
 
 use duckdb::extension::{catalog, files, runtime, types};
+use duckdb::extension::column_types as __col;
 use exports::duckdb::extension::{callback_dispatch, guest};
+
+// major-4 colvec<->row adapter (the same one `datalink_extcore::columnar_bridge!`
+// emits). The sample extension exercises EVERY callback kind (scalar, table,
+// aggregate, cast, macro), so it can use neither pure macro: the columnar hot
+// methods below bridge colvec <-> row and delegate to the unchanged per-row
+// call_scalar / call_aggregate logic / call_cast, while call_table stays intact.
+datalink_extcore::__columnar_bridge_conv!(types, __col);
 
 struct SampleExtension;
 
@@ -43,23 +51,45 @@ impl guest::Guest for SampleExtension {
 }
 
 impl callback_dispatch::Guest for SampleExtension {
-    fn call_scalar_batch(
+    // major-4 columnar hot methods: bridge colvec <-> row and delegate to the
+    // unchanged per-row call_scalar / aggregate logic / call_cast.
+    fn call_scalar_batch_col(
         handle: u32,
-        rows: Vec<Vec<types::Duckvalue>>,
+        args: Vec<callback_dispatch::Colvec>,
         ctx: types::Invokeinfo,
-    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        // Batched dispatch: the host hands the whole chunk in one WIT call; loop
-        // the rows here in-wasm (row i's index is ctx.rowindex + i).
+    ) -> Result<callback_dispatch::Colvec, types::Duckerror> {
         let base = ctx.rowindex.unwrap_or(0);
+        let rows = __bridge_colvecs_to_rows(&args);
         let mut out = Vec::with_capacity(rows.len());
-        for (i, args) in rows.into_iter().enumerate() {
+        for (i, a) in rows.into_iter().enumerate() {
             let row_ctx = types::Invokeinfo {
                 rowindex: Some(base + i as u64),
                 iswindow: ctx.iswindow,
             };
-            out.push(Self::call_scalar(handle, args, row_ctx)?);
+            out.push(Self::call_scalar(handle, a, row_ctx)?);
         }
-        Ok(out)
+        Ok(__bridge_vals_to_colvec(out))
+    }
+
+    fn call_aggregate_col(
+        handle: u32,
+        args: Vec<callback_dispatch::Colvec>,
+    ) -> Result<types::Duckvalue, types::Duckerror> {
+        let rows = __bridge_colvecs_to_rows(&args);
+        Self::call_aggregate(handle, rows)
+    }
+
+    fn call_cast_col(
+        handle: u32,
+        arg: callback_dispatch::Colvec,
+    ) -> Result<callback_dispatch::Colvec, types::Duckerror> {
+        let rows = __bridge_colvecs_to_rows(std::slice::from_ref(&arg));
+        let mut out = Vec::with_capacity(rows.len());
+        for a in rows {
+            let v = a.into_iter().next().unwrap_or(types::Duckvalue::Null);
+            out.push(Self::call_cast(handle, v)?);
+        }
+        Ok(__bridge_vals_to_colvec(out))
     }
 
     fn call_scalar(
@@ -138,38 +168,6 @@ impl callback_dispatch::Guest for SampleExtension {
         }
     }
 
-    fn call_aggregate(
-        handle: u32,
-        rows: types::Rowbatch,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        let handler = aggregate_handlers()
-            .lock()
-            .expect("aggregate handler mutex poisoned")
-            .get(&handle)
-            .copied()
-            .ok_or_else(|| types::Duckerror::Internal("unknown aggregate handle".into()))?;
-
-        match handler {
-            AggregateHandler::SumIntegers => {
-                let mut total: i64 = 0;
-                for row in rows {
-                    match row.first() {
-                        Some(types::Duckvalue::Int64(value)) => {
-                            total = total.saturating_add(*value);
-                        }
-                        Some(types::Duckvalue::Null) | None => {}
-                        other => {
-                            return Err(types::Duckerror::Invalidargument(format!(
-                                "sample_sum expects INT64 input, saw {other:?}"
-                            )));
-                        }
-                    }
-                }
-                Ok(types::Duckvalue::Int64(total))
-            }
-        }
-    }
-
     fn call_pragma(
         _handle: u32,
         _args: Vec<types::Duckvalue>,
@@ -203,6 +201,43 @@ impl callback_dispatch::Guest for SampleExtension {
                     "sample_id cast expects VARCHAR, saw {other:?}"
                 ))),
             },
+        }
+    }
+}
+
+impl SampleExtension {
+    // major-4 removed the row-major `call-aggregate` from the trait; the buffered
+    // group now arrives columnar via `call_aggregate_col`, which bridges the
+    // columns to rows and delegates here (the original per-row aggregate logic).
+    fn call_aggregate(
+        handle: u32,
+        rows: Vec<Vec<types::Duckvalue>>,
+    ) -> Result<types::Duckvalue, types::Duckerror> {
+        let handler = aggregate_handlers()
+            .lock()
+            .expect("aggregate handler mutex poisoned")
+            .get(&handle)
+            .copied()
+            .ok_or_else(|| types::Duckerror::Internal("unknown aggregate handle".into()))?;
+
+        match handler {
+            AggregateHandler::SumIntegers => {
+                let mut total: i64 = 0;
+                for row in rows {
+                    match row.first() {
+                        Some(types::Duckvalue::Int64(value)) => {
+                            total = total.saturating_add(*value);
+                        }
+                        Some(types::Duckvalue::Null) | None => {}
+                        other => {
+                            return Err(types::Duckerror::Invalidargument(format!(
+                                "sample_sum expects INT64 input, saw {other:?}"
+                            )));
+                        }
+                    }
+                }
+                Ok(types::Duckvalue::Int64(total))
+            }
         }
     }
 }

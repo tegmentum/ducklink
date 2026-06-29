@@ -40,7 +40,15 @@ use wit_bindgen::rt::vec::Vec;
 
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension" });
 use duckdb::extension::{runtime, types};
+use duckdb::extension::column_types as __col;
 use exports::duckdb::extension::{callback_dispatch, guest};
+
+// major-4 colvec<->row adapter (the same one `datalink_extcore::columnar_bridge!`
+// emits). statsduck has BOTH scalars and table functions, so it can use neither
+// the whole-impl `columnar_bridge!` (would stub call_table) nor `columnar_stub!`
+// (would stub the scalar hot path); the columnar scalar method below bridges to
+// the unchanged per-row `call_scalar`, while `call_table` stays hand-written.
+datalink_extcore::__columnar_bridge_conv!(types, __col);
 
 use serde_json::Value;
 use statrs::distribution::{
@@ -145,24 +153,36 @@ fn fin(v: f64) -> types::Duckvalue {
 // ---- dispatch ---------------------------------------------------------------
 
 impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(
-        h: u32,
-        rows: Vec<Vec<types::Duckvalue>>,
+    // major-4 columnar scalar hot path: bridge colvec -> rows -> per-row
+    // call_scalar -> colvec. Aggregate / cast are unused -> Unsupported stubs.
+    fn call_scalar_batch_col(
+        handle: u32,
+        args: Vec<callback_dispatch::Colvec>,
         ctx: types::Invokeinfo,
-    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
+    ) -> Result<callback_dispatch::Colvec, types::Duckerror> {
         let base = ctx.rowindex.unwrap_or(0);
+        let rows = __bridge_colvecs_to_rows(&args);
         let mut out = Vec::with_capacity(rows.len());
         for (i, a) in rows.into_iter().enumerate() {
             out.push(Self::call_scalar(
-                h,
+                handle,
                 a,
-                types::Invokeinfo {
-                    rowindex: Some(base + i as u64),
-                    iswindow: ctx.iswindow,
-                },
+                types::Invokeinfo { rowindex: Some(base + i as u64), iswindow: ctx.iswindow },
             )?);
         }
-        Ok(out)
+        Ok(__bridge_vals_to_colvec(out))
+    }
+    fn call_aggregate_col(
+        _handle: u32,
+        _args: Vec<callback_dispatch::Colvec>,
+    ) -> Result<types::Duckvalue, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("statsduck: no aggregate".into()))
+    }
+    fn call_cast_col(
+        _handle: u32,
+        _arg: callback_dispatch::Colvec,
+    ) -> Result<callback_dispatch::Colvec, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("statsduck: no cast".into()))
     }
 
     fn call_scalar(
@@ -203,12 +223,6 @@ impl callback_dispatch::Guest for Extension {
             }
         };
         Ok(rows.into())
-    }
-    fn call_aggregate(
-        _h: u32,
-        _r: types::Rowbatch,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("statsduck: no aggs".into()))
     }
     fn call_pragma(
         _h: u32,

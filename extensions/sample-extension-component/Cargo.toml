@@ -9,6 +9,9 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
+# major-4 columnar scalar/aggregate/cast bridge (colvec <-> row) for the
+# full-surface sample (scalar + table + aggregate + cast + macro).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"

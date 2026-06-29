@@ -36,7 +36,14 @@ use wit_bindgen::rt::vec::Vec;
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension-index" });
 
 use duckdb::extension::{index, runtime, types};
+use duckdb::extension::column_types as __col;
 use exports::duckdb::extension::{callback_dispatch, guest, index_dispatch};
+
+// major-4 colvec<->row adapter (the same one `datalink_extcore::columnar_bridge!`
+// emits). rtreefns has BOTH a scalar (bbox4) and a table fn (rtree_search) plus
+// the index capability, so the columnar scalar method below bridges to the
+// unchanged per-row call_scalar while call_table / index_dispatch stay intact.
+datalink_extcore::__columnar_bridge_conv!(types, __col);
 
 use rstar::primitives::{GeomWithData, Rectangle};
 use rstar::{RTree, AABB};
@@ -277,24 +284,36 @@ fn search_named(
 // ---------------------------------------------------------------------------
 
 impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(
-        h: u32,
-        rows: Vec<Vec<types::Duckvalue>>,
+    // major-4 columnar scalar hot path: bridge colvec -> rows -> per-row
+    // call_scalar -> colvec. Aggregate / cast are unused -> Unsupported stubs.
+    fn call_scalar_batch_col(
+        handle: u32,
+        args: Vec<callback_dispatch::Colvec>,
         ctx: types::Invokeinfo,
-    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
+    ) -> Result<callback_dispatch::Colvec, types::Duckerror> {
         let base = ctx.rowindex.unwrap_or(0);
+        let rows = __bridge_colvecs_to_rows(&args);
         let mut out = Vec::with_capacity(rows.len());
         for (i, a) in rows.into_iter().enumerate() {
             out.push(Self::call_scalar(
-                h,
+                handle,
                 a,
-                types::Invokeinfo {
-                    rowindex: Some(base + i as u64),
-                    iswindow: ctx.iswindow,
-                },
+                types::Invokeinfo { rowindex: Some(base + i as u64), iswindow: ctx.iswindow },
             )?);
         }
-        Ok(out)
+        Ok(__bridge_vals_to_colvec(out))
+    }
+    fn call_aggregate_col(
+        _handle: u32,
+        _args: Vec<callback_dispatch::Colvec>,
+    ) -> Result<types::Duckvalue, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("rtreefns: no aggregate".into()))
+    }
+    fn call_cast_col(
+        _handle: u32,
+        _arg: callback_dispatch::Colvec,
+    ) -> Result<callback_dispatch::Colvec, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("rtreefns: no cast".into()))
     }
 
     fn call_scalar(
@@ -366,12 +385,6 @@ impl callback_dispatch::Guest for Extension {
         Ok(rows.into())
     }
 
-    fn call_aggregate(
-        _h: u32,
-        _r: types::Rowbatch,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("rtreefns: no aggs".into()))
-    }
     fn call_pragma(
         _h: u32,
         _a: Vec<types::Duckvalue>,

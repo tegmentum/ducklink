@@ -30,6 +30,8 @@ webpki-roots = "0.26"
 hmac = "0.12"
 sha2 = "0.10"
 hex = "0.4"
+# major-4 columnar bridge for the hand-written marker scalar (colvec <-> row).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"
