@@ -14,7 +14,10 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-num2words = "*"
+
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+numwords-core = { path = "../../../datalink/extensions/numwords-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"

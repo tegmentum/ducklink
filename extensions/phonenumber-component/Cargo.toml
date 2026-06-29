@@ -16,6 +16,8 @@ wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
 # ~2.6 MB component  the Google libphonenumber per-country metadata tables are the bulk
 phonenumber = "0.3"
+# major-4 columnar bridge for hand-written components (colvec <-> row adapter).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"

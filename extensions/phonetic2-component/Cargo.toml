@@ -14,7 +14,10 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-rphonetic = "*"
+
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+phonetic2-core = { path = "../../../datalink/extensions/phonetic2-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"
