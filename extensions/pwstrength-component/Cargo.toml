@@ -14,7 +14,9 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-passwords = "*"
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+pwstrength-core = { path = "../../../datalink/extensions/pwstrength-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"
