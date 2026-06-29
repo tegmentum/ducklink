@@ -230,6 +230,10 @@ impl table_stream_dispatch::Guest for Extension {
 // no scalar/whole-batch-table/aggregate/pragma/cast callbacks).
 // ---------------------------------------------------------------------------
 impl callback_dispatch::Guest for Extension {
+    // major-4 columnar dispatch: numstream streams via table-stream-dispatch and
+    // has no scalar/aggregate/cast, so the three columnar hot methods are stubs.
+    datalink_extcore::columnar_stub!();
+
     fn call_scalar(
         _handle: u32,
         _args: Vec<Duckvalue>,
@@ -237,20 +241,10 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<Duckvalue, Duckerror> {
         Err(Duckerror::Unsupported("numstream: no scalar fns".into()))
     }
-    fn call_scalar_batch(
-        _handle: u32,
-        _rows: Vec<Vec<Duckvalue>>,
-        _ctx: types::Invokeinfo,
-    ) -> Result<Vec<Duckvalue>, Duckerror> {
-        Err(Duckerror::Unsupported("numstream: no scalar fns".into()))
-    }
     fn call_table(_handle: u32, _args: Vec<Duckvalue>) -> Result<Resultset, Duckerror> {
         Err(Duckerror::Unsupported(
             "numstream: streams via table-stream-dispatch".into(),
         ))
-    }
-    fn call_aggregate(_handle: u32, _rows: Vec<Vec<Duckvalue>>) -> Result<Duckvalue, Duckerror> {
-        Err(Duckerror::Unsupported("numstream: no aggregates".into()))
     }
     fn call_pragma(
         _handle: u32,
