@@ -29,6 +29,8 @@ apache-avro = { version = "0.21", default-features = false }
 # Pure-Rust JSON renderer for nested Avro values (already a transitive dep of
 # apache-avro, so no new code is pulled). Used to render Record/Array/Map cells.
 serde_json = "1"
+# major-4 columnar bridge stub (the three columnar hot methods as Unsupported).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [dev-dependencies]
 apache-avro = { version = "0.21", default-features = false }

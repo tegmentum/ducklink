@@ -379,25 +379,11 @@ impl file_dispatch::Guest for Extension {
 }
 
 impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(
-        h: u32,
-        rows: WitVec<WitVec<types::Duckvalue>>,
-        ctx: types::Invokeinfo,
-    ) -> Result<WitVec<types::Duckvalue>, types::Duckerror> {
-        let base = ctx.rowindex.unwrap_or(0);
-        let mut out = WitVec::with_capacity(rows.len());
-        for (i, a) in rows.into_iter().enumerate() {
-            out.push(Self::call_scalar(
-                h,
-                a,
-                types::Invokeinfo {
-                    rowindex: Some(base + i as u64),
-                    iswindow: ctx.iswindow,
-                },
-            )?);
-        }
-        Ok(out)
-    }
+    // major-4 columnar dispatch: azfs is a filesystem component, so the three
+    // columnar hot methods are Unsupported stubs; the cold per-row `call_scalar`
+    // (the version marker) is retained below.
+    datalink_extcore::columnar_stub!();
+
     fn call_scalar(
         _h: u32,
         _args: WitVec<types::Duckvalue>,
@@ -410,12 +396,6 @@ impl callback_dispatch::Guest for Extension {
         _a: WitVec<types::Duckvalue>,
     ) -> Result<types::Resultset, types::Duckerror> {
         Err(types::Duckerror::Unsupported("azfs: no table fns".into()))
-    }
-    fn call_aggregate(
-        _h: u32,
-        _r: types::Rowbatch,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("azfs: no aggs".into()))
     }
     fn call_pragma(
         _h: u32,

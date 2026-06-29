@@ -64,18 +64,11 @@ impl guest::Guest for Extension {
 }
 
 impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(
-        _h: u32,
-        rows: Vec<Vec<types::Duckvalue>>,
-        _c: types::Invokeinfo,
-    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        // The only scalar fn is avro_record_count(data) -> BIGINT.
-        let mut out: std::vec::Vec<types::Duckvalue> = std::vec::Vec::with_capacity(rows.len());
-        for args in rows {
-            out.push(record_count_value(args.into_iter().next()));
-        }
-        Ok(out.into())
-    }
+    // major-4 columnar dispatch: avrofns is a table-centric component, so the
+    // three columnar hot methods are Unsupported stubs; the cold per-row
+    // `call_scalar` (avro_record_count) is retained below.
+    datalink_extcore::columnar_stub!();
+
     fn call_scalar(
         _h: u32,
         args: Vec<types::Duckvalue>,
@@ -110,12 +103,6 @@ impl callback_dispatch::Guest for Extension {
         Ok(rows.into())
     }
 
-    fn call_aggregate(
-        _h: u32,
-        _r: types::Rowbatch,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("avrofns: no aggs".into()))
-    }
     fn call_pragma(
         _h: u32,
         _a: Vec<types::Duckvalue>,

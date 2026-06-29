@@ -32,6 +32,8 @@ webpki-roots = "0.26"
 hmac = "0.12"
 sha2 = "0.10"
 base64 = "0.22"
+# major-4 columnar bridge stub (the three columnar hot methods as Unsupported).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"
