@@ -17,6 +17,9 @@ the machinery that makes that work.
   cast, macro, collation, pragma, catalog/ATTACH, files/FileSystem,
   index + optimizer, custom type) over a rich logical type system, and how each
   is dispatched.
+- **[The `@4.0.0` columnar ABI](columnar-abi.md)** — the columnar hot dispatch
+  path (typed columns, one memcpy per fixed-width column), what it unlocks
+  (per-column SIMD), and the contract-versioning / stability model.
 - **[The lean core + de-embed program](lean-core.md)** — why the core embeds
   almost nothing, and how official extensions move out of the core and into
   components.

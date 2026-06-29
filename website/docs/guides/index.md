@@ -20,5 +20,10 @@ Task-oriented guides for working with ducklink.
   function names.
 - **[The HTTP server (`ducklink serve`)](serve.md)** — serve SQL over HTTP/HTTPS
   with a database-driven router.
+- **[The JavaScript/TypeScript APIs](javascript.md)** — the `@tegmentum/ducklink`
+  / `sqlink` / `datalink-browser` packages: `create` / `connect` / `query` /
+  `load` and a typed `Result`.
+- **[Extension distribution (R2)](distribution.md)** — serving components from
+  Cloudflare R2, the `catalog.json` model, and how each client points at it.
 - **[Deployment scenarios](deployment.md)** — the same component across native,
   standalone, and browser hosts.
