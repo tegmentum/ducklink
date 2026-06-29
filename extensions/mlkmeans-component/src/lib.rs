@@ -21,8 +21,12 @@ use wit_bindgen::rt::vec::Vec;
 wit_bindgen::generate!({ path: "./wit", world: "mlkmeans", generate_all });
 
 use compose::dynlink::linker;
+use duckdb::extension::column_types as col;
 use duckdb::extension::{runtime, types};
 use exports::duckdb::extension::{callback_dispatch, guest};
+
+// major-4 columnar <-> row adapter (emits __bridge_colvecs_to_rows et al.).
+datalink_extcore::__columnar_bridge_conv!(types, col);
 
 struct Extension;
 
@@ -88,18 +92,34 @@ impl guest::Guest for Extension {
 }
 
 impl callback_dispatch::Guest for Extension {
+    // major-4 columnar hot path. mlkmeans has no scalar/cast, so those are
+    // stubs; the AGGREGATE is real and bridges the buffered group (colvecs)
+    // back to rows, delegating to the unchanged per-group fold below.
+    fn call_scalar_batch_col(
+        _handle: u32,
+        _args: Vec<callback_dispatch::Colvec>,
+        _ctx: types::Invokeinfo,
+    ) -> Result<callback_dispatch::Colvec, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("mlkmeans: no scalars".into()))
+    }
+    fn call_aggregate_col(
+        handle: u32,
+        args: Vec<callback_dispatch::Colvec>,
+    ) -> Result<types::Duckvalue, types::Duckerror> {
+        let rows = __bridge_colvecs_to_rows(&args);
+        Self::aggregate(handle, rows)
+    }
+    fn call_cast_col(
+        _handle: u32,
+        _arg: callback_dispatch::Colvec,
+    ) -> Result<callback_dispatch::Colvec, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("mlkmeans: no casts".into()))
+    }
     fn call_scalar(
         _h: u32,
         _a: Vec<types::Duckvalue>,
         _c: types::Invokeinfo,
     ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("mlkmeans: no scalars".into()))
-    }
-    fn call_scalar_batch(
-        _h: u32,
-        _r: Vec<Vec<types::Duckvalue>>,
-        _c: types::Invokeinfo,
-    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
         Err(types::Duckerror::Unsupported("mlkmeans: no scalars".into()))
     }
     fn call_table(
@@ -108,9 +128,24 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<types::Resultset, types::Duckerror> {
         Err(types::Duckerror::Unsupported("mlkmeans: no table fns".into()))
     }
-    fn call_aggregate(
+    fn call_pragma(
+        _h: u32,
+        _a: Vec<types::Duckvalue>,
+    ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("mlkmeans: no pragmas".into()))
+    }
+    fn call_cast(
+        _h: u32,
+        _v: types::Duckvalue,
+    ) -> Result<types::Duckvalue, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("mlkmeans: no casts".into()))
+    }
+}
+
+impl Extension {
+    fn aggregate(
         handle: u32,
-        rows: types::Rowbatch,
+        rows: Vec<Vec<types::Duckvalue>>,
     ) -> Result<types::Duckvalue, types::Duckerror> {
         if handle != ML_KMEANS_HANDLE {
             return Err(types::Duckerror::Internal(
@@ -198,18 +233,6 @@ impl callback_dispatch::Guest for Extension {
             }
         };
         Ok(types::Duckvalue::Text(json.into()))
-    }
-    fn call_pragma(
-        _h: u32,
-        _a: Vec<types::Duckvalue>,
-    ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("mlkmeans: no pragmas".into()))
-    }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("mlkmeans: no casts".into()))
     }
 }
 
