@@ -60,13 +60,9 @@ impl guest::Guest for Extension {
 }
 
 impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(
-        _h: u32,
-        _r: Vec<Vec<types::Duckvalue>>,
-        _c: types::Invokeinfo,
-    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("excelfns: no scalar fns".into()))
-    }
+    // major-4 columnar hot path: excelfns is table-only, so the three columnar
+    // methods are Unsupported stubs.
+    datalink_extcore::columnar_stub!();
     fn call_scalar(
         _h: u32,
         _a: Vec<types::Duckvalue>,
@@ -115,12 +111,6 @@ impl callback_dispatch::Guest for Extension {
         Ok(rows.into())
     }
 
-    fn call_aggregate(
-        _h: u32,
-        _r: types::Rowbatch,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("excelfns: no aggs".into()))
-    }
     fn call_pragma(
         _h: u32,
         _a: Vec<types::Duckvalue>,
