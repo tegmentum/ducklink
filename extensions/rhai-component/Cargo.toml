@@ -17,6 +17,8 @@ wit-bindgen-rt = "0.41"
 # Pure-Rust embedded scripting. Disable default features to drop anything that
 # pulls in std time / filesystem / threading; keep only the minimal evaluator.
 rhai = { version = "1", default-features = false, features = ["sync", "only_i64", "no_closure", "no_custom_syntax"] }
+# major-4 columnar bridge for hand-written scalar components (colvec <-> row).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"
