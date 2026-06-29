@@ -1,0 +1,66 @@
+{
+  "_comment": "Native-vs-wasm workload spectrum. Each workload runs the SAME wasm duckdb:extension component + SAME SQL + SAME data two ways: native DuckDB + native ducklink extension (native-runner) vs the wasm DuckDB core (ducklink host CLI). 'rows' is informational (throughput). k_values MUST start at 0 (the pure-fixed-cost anchor); the orchestrator fits time = intercept + slope*K and reports slope as the marginal per-query cost.",
+  "contract_label": "3.1.0-row-major",
+  "workloads": [
+    {
+      "id": "aba_validate_1m",
+      "category": "a. dispatch-bound scalar",
+      "extension": "aba",
+      "component": "aba.wasm",
+      "needs_raw": false,
+      "rows": 1000000,
+      "setup": "CREATE OR REPLACE TABLE t_aba AS SELECT lpad(((i*123457)%1000000000)::VARCHAR, 9, '0') AS s FROM range(1000000) tt(i);",
+      "query": "SELECT sum(CASE WHEN aba_validate(s) THEN 1 ELSE 0 END) FROM t_aba;",
+      "k_values": [0, 20, 40, 80],
+      "reps": 5
+    },
+    {
+      "id": "fnv1a_64_1m",
+      "category": "b. light-compute scalar",
+      "extension": "checksums",
+      "component": "checksums.wasm",
+      "needs_raw": false,
+      "rows": 1000000,
+      "setup": "CREATE OR REPLACE TABLE t_txt AS SELECT md5(i::VARCHAR) AS s FROM range(1000000) tt(i);",
+      "query": "SELECT sum(fnv1a_64(s)) FROM t_txt;",
+      "k_values": [0, 20, 40, 80],
+      "reps": 5
+    },
+    {
+      "id": "siphash_long_1m",
+      "category": "c. heavier-compute scalar (guest-dominated)",
+      "extension": "siphash",
+      "component": "siphash.wasm",
+      "needs_raw": false,
+      "rows": 1000000,
+      "setup": "CREATE OR REPLACE TABLE t_long AS SELECT repeat(md5(i::VARCHAR), 8) AS s FROM range(1000000) tt(i);",
+      "query": "SELECT sum(siphash(0, 0, s)) FROM t_long;",
+      "k_values": [0, 8, 16, 32],
+      "reps": 5
+    },
+    {
+      "id": "talib_sma_1m",
+      "category": "c. compute-heavy aggregate",
+      "extension": "talib",
+      "component": "talib.wasm",
+      "needs_raw": true,
+      "rows": 1000000,
+      "setup": "CREATE OR REPLACE TABLE prices AS SELECT i AS t, (sin(i/100.0)*50+100)::DOUBLE AS c FROM range(1000000) tt(i);",
+      "query": "SELECT sma(c) FROM prices;",
+      "k_values": [0, 20, 40, 80],
+      "reps": 5
+    },
+    {
+      "id": "aba_validate_10m",
+      "category": "d. large data (engine-scan scaling)",
+      "extension": "aba",
+      "component": "aba.wasm",
+      "needs_raw": false,
+      "rows": 10000000,
+      "setup": "CREATE OR REPLACE TABLE t_aba10 AS SELECT lpad(((i*123457)%1000000000)::VARCHAR, 9, '0') AS s FROM range(10000000) tt(i);",
+      "query": "SELECT sum(CASE WHEN aba_validate(s) THEN 1 ELSE 0 END) FROM t_aba10;",
+      "k_values": [0, 2, 4, 8],
+      "reps": 3
+    }
+  ]
+}

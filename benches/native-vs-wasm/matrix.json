@@ -1,0 +1,44 @@
+{
+  "_comment": "Configuration matrix for the native-vs-wasm benchmark. Each config runs the SAME workloads (workloads.json) so cells are directly comparable. The wasm configs vary along two axes: AOT (compile-at-instantiation .wasm vs wasmtime-precompiled .cwasm) and EMBEDDED (the extension dynamically loaded + host-dispatched, vs compiled INTO the core as a native scalar with no cross-component WIT dispatch). 'native' is the baseline. Artifact paths are resolved per config from the artifact roots passed via env (see run_matrix.py). A config whose artifacts are absent is reported as 'skipped' (not an error) so a partial matrix is still publishable.",
+  "contract_label": "3.1.0-row-major",
+  "configs": [
+    {
+      "id": "native",
+      "kind": "native",
+      "title": "NATIVE (bundled DuckDB + native ducklink ext)",
+      "note": "Baseline. Native engine builds DataChunks; reg_duckdb marshals across WIT into the component (embedded wasmtime). The extension algorithm is still wasm."
+    },
+    {
+      "id": "wasm-dynamic-noaot",
+      "kind": "wasm",
+      "aot": false,
+      "embedded": false,
+      "title": "WASM DYNAMIC, no-AOT",
+      "note": "Core + extension as separate components, host-resolver/WIT-dispatched, Cranelift-compiled at instantiation. The current shipped wasm path."
+    },
+    {
+      "id": "wasm-dynamic-aot",
+      "kind": "wasm",
+      "aot": true,
+      "embedded": false,
+      "title": "WASM DYNAMIC, AOT",
+      "note": "Same dynamic dispatch, but core + cli loaded from wasmtime-precompiled .cwasm (deserialize, no compile). Isolates the one-time compile cost from steady-state throughput."
+    },
+    {
+      "id": "wasm-embedded-noaot",
+      "kind": "wasm",
+      "aot": false,
+      "embedded": true,
+      "title": "WASM EMBEDDED, no-AOT",
+      "note": "Extension compiled INTO the core (embed framework: registered as a native scalar, no cross-component WIT dispatch boundary), compiled at instantiation."
+    },
+    {
+      "id": "wasm-embedded-aot",
+      "kind": "wasm",
+      "aot": true,
+      "embedded": true,
+      "title": "WASM EMBEDDED, AOT",
+      "note": "Embedded + precompiled .cwasm. The expected near-native upper bound once the columnar @4.0.0 ABI lands."
+    }
+  ]
+}
