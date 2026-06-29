@@ -1,0 +1,25 @@
+[package]
+name = "colbench-guest"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+
+[package.metadata.component]
+package = "bench:dispatch"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "dispatch"
+
+[profile.release]
+opt-level = 3
+lto = true
+
+[workspace]

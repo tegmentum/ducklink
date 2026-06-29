@@ -1,0 +1,82 @@
+package bench:dispatch;
+
+interface types {
+  // Faithful copy of duckdb:extension@3.1.0 types.duckvalue: the row-major
+  // tagged variant the current ABI crosses one-per-cell.
+  record decimalvalue { lower: u64, upper: u64, width: u8, scale: u8 }
+  record intervalvalue { months: s32, days: s32, micros: s64 }
+  record uuidvalue { hi: u64, lo: u64 }
+  record complexvalue { type-expr: string, json: string }
+
+  variant duckvalue {
+    null,
+    boolean(bool),
+    int64(s64),
+    uint64(u64),
+    float64(f64),
+    text(string),
+    blob(list<u8>),
+    int32(s32),
+    timestamp(s64),
+    int8(s8),
+    int16(s16),
+    uint8(u8),
+    uint16(u16),
+    uint32(u32),
+    float32(f32),
+    date(s32),
+    time(s64),
+    timestamptz(s64),
+    decimal(decimalvalue),
+    interval(intervalvalue),
+    uuid(uuidvalue),
+    complex(complexvalue),
+  }
+
+  // ---- Columnar ABI (proposed major-4) ----
+  // A typed column: one contiguous buffer per physical type. Fixed-width
+  // arms cross the canonical-ABI boundary as a single bulk memcpy; only the
+  // variable-width arms (text/blob) remain element-wise (unavoidable).
+  variant column {
+    boolean(list<u8>),
+    int64(list<s64>),
+    uint64(list<u64>),
+    float64(list<f64>),
+    int32(list<s32>),
+    int16(list<s16>),
+    int8(list<s8>),
+    uint32(list<u32>),
+    uint16(list<u16>),
+    uint8(list<u8>),
+    float32(list<f32>),
+    text(list<string>),
+    blob(list<list<u8>>),
+  }
+
+  // A column plus its validity bitmap (packed bits, bit i set = row i valid;
+  // empty list = all-valid, mirroring DuckDB's null validity pointer).
+  record colvec {
+    data: column,
+    validity: list<u8>,
+    rows: u32,
+  }
+
+  variant dispatcherror { failed(string) }
+}
+
+interface rowmajor {
+  use types.{duckvalue, dispatcherror};
+  // Current @3.1.0 shape: list<list<duckvalue>> in, list<duckvalue> out.
+  call-scalar-batch: func(rows: list<list<duckvalue>>) -> result<list<duckvalue>, dispatcherror>;
+}
+
+interface columnar {
+  use types.{colvec, dispatcherror};
+  // Proposed major-4 shape: typed columns in, typed column out.
+  call-scalar-batch-col: func(args: list<colvec>) -> result<colvec, dispatcherror>;
+}
+
+world dispatch {
+  export rowmajor;
+  export columnar;
+}

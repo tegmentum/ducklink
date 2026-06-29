@@ -1,0 +1,40 @@
+// PROPOSED major-4 columnar dispatch (duckdb:extension@4.0.0 draft).
+//
+// Replaces the row-major batch entries in callback-dispatch.wit. The major-4
+// break removes `call-scalar-batch(rows: list<list<duckvalue>>)` and
+// `call-aggregate(rows: list<list<duckvalue>>)` in favor of the columnar
+// equivalents below. Per-row `call-scalar` / `call-cast` (singletons used for
+// non-batched/edge paths) keep the row-major `duckvalue` for ergonomics; the
+// HOT path is fully columnar.
+package duckdb:extension@4.0.0;
+
+interface callback-dispatch-col {
+  use column-types.{colvec};
+  // reuse the existing row-major scalars for the cold singleton paths
+  use types.{duckerror, duckvalue, invokeinfo, resultset};
+
+  // HOT PATH: one columnar call per DataChunk. `args` is one colvec per
+  // argument column (all with the same `rows`); the result is a single colvec
+  // of the function's return type, same `rows`. Semantically identical to the
+  // row-major `call-scalar-batch`: row i of every input column maps to row i of
+  // the output, validity preserved. Fixed-width columns cross as bulk memcpy.
+  call-scalar-batch-col: func(handle: u32, args: list<colvec>, ctx: invokeinfo)
+    -> result<colvec, duckerror>;
+
+  // Columnar aggregate fold: the buffered group as columns (one colvec per
+  // argument). The guest folds in-vector (the state never crosses the boundary,
+  // as today) and returns the single finalized value.
+  call-aggregate-col: func(handle: u32, args: list<colvec>)
+    -> result<duckvalue, duckerror>;
+
+  // Columnar cast: one input column -> one output column.
+  call-cast-col: func(handle: u32, arg: colvec) -> result<colvec, duckerror>;
+
+  // --- cold singleton paths kept row-major (not on the hot path) ---
+  call-scalar: func(handle: u32, args: list<duckvalue>, ctx: invokeinfo)
+    -> result<duckvalue, duckerror>;
+  call-table: func(handle: u32, args: list<duckvalue>) -> result<resultset, duckerror>;
+  call-pragma: func(handle: u32, args: list<duckvalue>)
+    -> result<option<duckvalue>, duckerror>;
+  call-cast: func(handle: u32, value: duckvalue) -> result<duckvalue, duckerror>;
+}

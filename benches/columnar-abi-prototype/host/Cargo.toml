@@ -1,0 +1,15 @@
+[package]
+name = "colbench-host"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+wasmtime = { version = "46.0.1", features = ["component-model", "cache"] }
+wasmtime-wasi = "46.0.1"
+anyhow = "1"
+
+[profile.release]
+opt-level = 3
+
+[workspace]
