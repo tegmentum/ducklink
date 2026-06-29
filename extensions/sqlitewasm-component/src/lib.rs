@@ -53,13 +53,10 @@ impl guest::Guest for Extension {
 // ---------------------------------------------------------------------------
 
 impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(
-        _h: u32,
-        _r: Vec<Vec<types::Duckvalue>>,
-        _c: types::Invokeinfo,
-    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("sqlite: no scalar fns".into()))
-    }
+    // major-4 columnar dispatch: sqlitewasm is table-only, so the three columnar
+    // hot methods are Unsupported stubs; call_table stays hand-written.
+    datalink_extcore::columnar_stub!();
+
     fn call_scalar(
         _h: u32,
         _a: Vec<types::Duckvalue>,
@@ -112,12 +109,6 @@ impl callback_dispatch::Guest for Extension {
         Ok(scan_melted(&conn, &table)?.into())
     }
 
-    fn call_aggregate(
-        _h: u32,
-        _r: types::Rowbatch,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("sqlite: no aggs".into()))
-    }
     fn call_pragma(
         _h: u32,
         _a: Vec<types::Duckvalue>,
