@@ -7,7 +7,7 @@ use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension" });
 use duckdb::extension::{runtime, types};
-use exports::duckdb::extension::{callback_dispatch, guest};
+use exports::duckdb::extension::guest;
 struct Extension;
 impl guest::Guest for Extension {
     fn load() -> Result<types::Loadresult, types::Duckerror> {
@@ -20,24 +20,23 @@ impl guest::Guest for Extension {
 fn key(args: &[types::Duckvalue], i: usize) -> u64 {
     match args.get(i) { Some(types::Duckvalue::Int64(n)) => *n as u64, Some(types::Duckvalue::Uint64(n)) => *n, _ => 0 }
 }
-impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(h: u32, rows: Vec<Vec<types::Duckvalue>>, ctx: types::Invokeinfo) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        let base = ctx.rowindex.unwrap_or(0); let mut out = Vec::with_capacity(rows.len());
-        for (i, a) in rows.into_iter().enumerate() {
-            out.push(Self::call_scalar(h, a, types::Invokeinfo { rowindex: Some(base + i as u64), iswindow: ctx.iswindow })?);
-        }
-        Ok(out)
-    }
-    fn call_scalar(_handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
-        let text = match args.get(2) { Some(types::Duckvalue::Text(s)) => s.clone(), _ => return Ok(types::Duckvalue::Null) };
-        let mut hasher = SipHasher13::new_with_keys(key(&args, 0), key(&args, 1));
-        hasher.write(text.as_bytes());
-        Ok(types::Duckvalue::Uint64(hasher.finish()))
-    }
-    fn call_table(_h: u32, _a: Vec<types::Duckvalue>) -> Result<types::Resultset, types::Duckerror> { Err(types::Duckerror::Unsupported("siphash: no table fns".into())) }
-    fn call_aggregate(_h: u32, _r: types::Rowbatch) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("siphash: no aggs".into())) }
-    fn call_pragma(_h: u32, _a: Vec<types::Duckvalue>) -> Result<Option<types::Duckvalue>, types::Duckerror> { Err(types::Duckerror::Unsupported("siphash: no pragmas".into())) }
-    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("siphash: no casts".into())) }
+// Per-row scalar logic, UNCHANGED. NOTE: siphash returns UBIGINT
+// (Duckvalue::Uint64), which the neutral pull-up type set cannot express, so this
+// stays a hand-written component bridged to the major-4 columnar dispatch via
+// datalink_extcore::columnar_bridge!.
+fn scalar(_handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
+    let text = match args.get(2) { Some(types::Duckvalue::Text(s)) => s.clone(), _ => return Ok(types::Duckvalue::Null) };
+    let mut hasher = SipHasher13::new_with_keys(key(&args, 0), key(&args, 1));
+    hasher.write(text.as_bytes());
+    Ok(types::Duckvalue::Uint64(hasher.finish()))
+}
+
+datalink_extcore::columnar_bridge! {
+    types = duckdb::extension::types;
+    column_types = duckdb::extension::column_types;
+    callback_dispatch = exports::duckdb::extension::callback_dispatch;
+    target = Extension;
+    scalar = scalar;
 }
 export!(Extension);
 fn register_scalars() -> Result<(), types::Duckerror> {

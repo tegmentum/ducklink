@@ -14,7 +14,8 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-# add your upstream crate deps here
+# major-4 columnar bridge (UBIGINT return is outside the neutral pull-up types).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"

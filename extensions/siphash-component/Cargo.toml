@@ -15,6 +15,8 @@ crate-type = ["cdylib"]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
 siphasher = "*"
+# major-4 columnar bridge (UBIGINT return is outside the neutral pull-up types).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"
