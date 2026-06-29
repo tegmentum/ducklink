@@ -29,13 +29,10 @@ fn resolve(host: &str) -> Option<std::vec::Vec<std::string::String>> {
     if ips.is_empty() { None } else { Some(ips) }
 }
 impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(h: u32, rows: Vec<Vec<types::Duckvalue>>, ctx: types::Invokeinfo) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        let base = ctx.rowindex.unwrap_or(0); let mut out = Vec::with_capacity(rows.len());
-        for (i, a) in rows.into_iter().enumerate() {
-            out.push(Self::call_scalar(h, a, types::Invokeinfo { rowindex: Some(base + i as u64), iswindow: ctx.iswindow })?);
-        }
-        Ok(out)
-    }
+    // major-4 columnar dispatch: dns is nondeterministic network I/O, so the
+    // columnar hot path is Unsupported and the host falls back to the per-row
+    // call_scalar below (unchanged hand-written logic).
+    datalink_extcore::columnar_stub!();
     fn call_scalar(handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
         let host = match host_arg(&args) { Some(s) => s, None => return Ok(types::Duckvalue::Null) };
         let ips = match resolve(&host) { Some(v) => v, None => return Ok(types::Duckvalue::Null) };
@@ -47,7 +44,6 @@ impl callback_dispatch::Guest for Extension {
         })
     }
     fn call_table(_h: u32, _a: Vec<types::Duckvalue>) -> Result<types::Resultset, types::Duckerror> { Err(types::Duckerror::Unsupported("dns: no table fns".into())) }
-    fn call_aggregate(_h: u32, _r: types::Rowbatch) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("dns: no aggs".into())) }
     fn call_pragma(_h: u32, _a: Vec<types::Duckvalue>) -> Result<Option<types::Duckvalue>, types::Duckerror> { Err(types::Duckerror::Unsupported("dns: no pragmas".into())) }
     fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("dns: no casts".into())) }
 }

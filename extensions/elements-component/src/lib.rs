@@ -1,68 +1,22 @@
-//! Periodic-table lookups as DuckDB scalars (via `mendeleev`), keyed by symbol:
-//!   element_name(symbol) -> text, element_number(symbol) -> bigint,
-//!   element_weight(symbol) -> double. Unknown symbol / NULL -> NULL.
-use std::collections::HashMap;
-use std::sync::{atomic::{AtomicU32, Ordering}, Mutex, OnceLock};
-use mendeleev::Element;
-use wit_bindgen::rt::string::String;
-use wit_bindgen::rt::vec::Vec;
-wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension" });
-use duckdb::extension::{runtime, types};
-use exports::duckdb::extension::{callback_dispatch, guest};
-struct Extension;
-impl guest::Guest for Extension {
-    fn load() -> Result<types::Loadresult, types::Duckerror> {
-        register_scalars()?;
-        Ok(types::Loadresult { name: "elements".into(), version: Some(env!("CARGO_PKG_VERSION").into()), requires: Vec::new().into() })
-    }
-    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> { Ok(false) }
-    fn shutdown() -> Result<bool, types::Duckerror> { Ok(false) }
+//! Periodic-table lookups for DuckDB.
+//!
+//! THIN, GENERATED ducklink shim: a `wit_bindgen::generate!` block plus one
+//! `datalink_extcore::duckdb_shim!` invocation. All logic + the capability
+//! surface live ONCE in `elements-core` (datalink); the registration ABI, the
+//! dispatch arms (incl. the major-4 columnar hot path), and the `Duckvalue`
+//! marshalling are derived from the core's declaration.
+
+wit_bindgen::generate!({
+    path: "./wit",
+    world: "duckdb:extension/duckdb-extension",
+});
+
+datalink_extcore::duckdb_shim! {
+    core = elements_core::Core;
+    types = duckdb::extension::types;
+    column_types = duckdb::extension::column_types;
+    runtime = duckdb::extension::runtime;
+    callback_dispatch = exports::duckdb::extension::callback_dispatch;
+    guest = exports::duckdb::extension::guest;
+    export = export;
 }
-fn lookup(args: &[types::Duckvalue]) -> Option<Element> {
-    let sym = match args.first() { Some(types::Duckvalue::Text(s)) => s.trim().to_string(), _ => return None };
-    Element::iter().find(|e| e.symbol().eq_ignore_ascii_case(&sym))
-}
-impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(h: u32, rows: Vec<Vec<types::Duckvalue>>, ctx: types::Invokeinfo) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        let base = ctx.rowindex.unwrap_or(0); let mut out = Vec::with_capacity(rows.len());
-        for (i, a) in rows.into_iter().enumerate() {
-            out.push(Self::call_scalar(h, a, types::Invokeinfo { rowindex: Some(base + i as u64), iswindow: ctx.iswindow })?);
-        }
-        Ok(out)
-    }
-    fn call_scalar(handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
-        let which = handlers().lock().unwrap().get(&handle).copied()
-            .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
-        let e = match lookup(&args) { Some(e) => e, None => return Ok(types::Duckvalue::Null) };
-        Ok(match which {
-            F::Name => types::Duckvalue::Text(e.name().into()),
-            F::Number => types::Duckvalue::Int64(e.atomic_number() as i64),
-            F::Weight => types::Duckvalue::Float64(f64::from(e.atomic_weight())),
-        })
-    }
-    fn call_table(_h: u32, _a: Vec<types::Duckvalue>) -> Result<types::Resultset, types::Duckerror> { Err(types::Duckerror::Unsupported("elements: no table fns".into())) }
-    fn call_aggregate(_h: u32, _r: types::Rowbatch) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("elements: no aggs".into())) }
-    fn call_pragma(_h: u32, _a: Vec<types::Duckvalue>) -> Result<Option<types::Duckvalue>, types::Duckerror> { Err(types::Duckerror::Unsupported("elements: no pragmas".into())) }
-    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("elements: no casts".into())) }
-}
-export!(Extension);
-fn register_scalars() -> Result<(), types::Duckerror> {
-    let cap = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
-    let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
-    let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
-    one(&reg, "element_name", types::Logicaltype::Text, det, F::Name)?;
-    one(&reg, "element_number", types::Logicaltype::Int64, det, F::Number)?;
-    one(&reg, "element_weight", types::Logicaltype::Float64, det, F::Weight)?;
-    Ok(())
-}
-fn one(reg: &runtime::ScalarRegistry, name: &str, ret: types::Logicaltype, attr: types::Funcflags, f: F) -> Result<(), types::Duckerror> {
-    let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, f);
-    reg.register(name, &[runtime::Funcarg { name: Some("symbol".into()), logical: types::Logicaltype::Text }],
-        &ret, runtime::ScalarCallback::new(h),
-        Some(&runtime::Funcopts { description: Some("periodic table".into()), tags: vec!["chemistry".into()], attributes: attr }))?;
-    Ok(())
-}
-#[derive(Clone, Copy)] enum F { Name, Number, Weight }
-static NEXT: AtomicU32 = AtomicU32::new(1);
-static HANDLERS: OnceLock<Mutex<HashMap<u32, F>>> = OnceLock::new();
-fn handlers() -> &'static Mutex<HashMap<u32, F>> { HANDLERS.get_or_init(|| Mutex::new(HashMap::new())) }
