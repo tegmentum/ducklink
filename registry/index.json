@@ -177,7 +177,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/sample_extension.wasm",
-          "content_digest": "a42e97587eb6eda228ead6246fc43edd470efe43248b32eaef0725ecc9a71d45",
+          "content_digest": "5d2948655d769f74fca8d1acaba3bd69da993dbf7356448a70c7eef7b0f5fadf",
           "conformance": {
             "suite": "sample_extension@4",
             "suite_digest": "4c6fae795ef67612e82f4a4ea960848a039d25d11aa554139577db829d1694be",
@@ -233,7 +233,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/isin.wasm",
-          "content_digest": "534d5bd6b12f8651daa78f6eb4ffcbf151586893e843831fa56f41f30f44820d",
+          "content_digest": "ac1c0f86b660c823179bd54e1263c5d0b75da21410ea4ce2d15c64b6b1550e81",
           "conformance": {
             "suite": "isin@4",
             "suite_digest": "72d666116e2c6ea14bb52afb8a24b27521b25017803262b598c34a571727263b",
@@ -291,7 +291,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/baseN.wasm",
-          "content_digest": "04c06e66660e2241b2c26cf748d90d338111b90b4a2aad22401f64b3eb149ace",
+          "content_digest": "c367dbc4394512b441feb233782e29bbc039710e47595bcc213987001c6883c3",
           "conformance": {
             "suite": "baseN@4",
             "suite_digest": "82d734bb13c74c3686d45284b6e41a43bbc23a945759ba83ded926042336de70",
@@ -456,7 +456,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/aba.wasm",
-          "content_digest": "ae720ad9dd90c6b1f3c8d9abb6b25d44433910db21f3e085666918e0f0798092",
+          "content_digest": "068b47e3ea5df366637eb3726e7efaa6bfb4ddd00564bf75c821956572c76a15",
           "conformance": {
             "suite": "aba@4",
             "suite_digest": "e2833ab9fdc2e3b09994610b006002a54c0e37ce82f0964bee33e3fd17328dcc",
@@ -533,7 +533,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/creditcard.wasm",
-          "content_digest": "cdb02d9a7d30e5e9dd9c329fd319c796cd947522f427dce908408b6414a6518f",
+          "content_digest": "50a8587b411021abd9374b695274732970262f7380e0df94b0a471ccf2e713cd",
           "conformance": {
             "suite": "creditcard@4",
             "suite_digest": "6c0e5ed82a82412bc37faa293125f18440742a3afef5902839c4af70cd88282e",
@@ -633,7 +633,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/crypto.wasm",
-          "content_digest": "22921e1a963fa30ca90f2e487f1801787e7ef8a7b56d5c6570ae6d7e085c0203",
+          "content_digest": "22ddc5da4a42578e2775b682a28cb6bc149c059130dbee8624a1850b51e14c8d",
           "conformance": {
             "suite": "crypto@4",
             "suite_digest": "b11bf7ce1601360c5ab2e819c9980b35a35f3b402a2a68188e09d8c8b3b2e2a1",
@@ -891,7 +891,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/url.wasm",
-          "content_digest": "74ad8a17fd74eb053f7d9c883ba202875abb9db1e3e46a37f2026fce9c314a39",
+          "content_digest": "fea11001fb229c88c843c696df1044f43eba32c663ce3d46d58cb0f5a9611d83",
           "conformance": {
             "suite": "url@4",
             "suite_digest": "c5d3eb272b70cc5ec9b92c69ce76d1d3f2ebf0372a6128bea829bc5880428b21",
@@ -945,7 +945,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/email.wasm",
-          "content_digest": "06675d81d92aa9541ace7504383cd7731b4a1654786163ab4ddee93a2d876bc3",
+          "content_digest": "a50a4f9df7a7b09c61e4429ef2205d745ca921bf15d38192a916abe3050719cd",
           "conformance": {
             "suite": "email@4",
             "suite_digest": "894323cb99caa3ca6e83cac0b9c4fdc307786b324edbd302e976e6d7de4d0b22",
@@ -1001,7 +1001,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/semver.wasm",
-          "content_digest": "c5e8654113ec6a081c0e7213faa513211d6b013423e63ede5c765dd5136c364e",
+          "content_digest": "50191736e1f680214430b7657910f1b5fcb8dab5dda2e1f504ff0ce96683e9a2",
           "conformance": {
             "suite": "semver@4",
             "suite_digest": "49f6f5ab2bcf456ee94112167b48933ce1f731984560550560c791b9ee02ed6b",
@@ -1170,7 +1170,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/roman.wasm",
-          "content_digest": "9d61b15e7c2ed8d440af556acd83393dad51b3e248a8f4cc93fabd36ad93e9a2",
+          "content_digest": "2421cc60cf4e2bfe4b931f1e550cff56d0740015f6026cf448041a336c7f920b",
           "conformance": {
             "suite": "roman@4",
             "suite_digest": "512904f3cdd0188a81e32a429b712a908c385910da65f72d9e015e95f49e0c03",
@@ -1565,7 +1565,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/geohash.wasm",
-          "content_digest": "c37e1d766511c999bafe8024fdfd6d23fe02fd20baafd0c9d05e8c6d9c1643b4",
+          "content_digest": "5967073f257b52b358b4794504debc131a232c9706e08e75c5a30ece20ecb64f",
           "conformance": {
             "suite": "geohash@4",
             "suite_digest": "0c4a779da6606ebe682fbe3bf150d17d1a6aada4765fcfb96ba3e81ec2434841",
@@ -2221,7 +2221,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/ascii85.wasm",
-          "content_digest": "ea8e53745b1a9d533be2094d015956c9c0f399520404d64fd9ee9fde7b661b26",
+          "content_digest": "ca6b76cc023ffbeb586127c32240710a1603fd222ea8fad13eb1ab84aea7caf8",
           "conformance": {
             "suite": "ascii85@4",
             "suite_digest": "df35bc9afa52d8b746e0023d5077fad6823719269b03e3320b9cc3c776703420",
@@ -4151,7 +4151,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/atbash.wasm",
-          "content_digest": "9d80cccef2a8b9d51d14b25fe77ca57e48b64c383b584deb4cf04b0488db2bd4",
+          "content_digest": "da6ffb4f6f6f2a6075169002cce022e2df15443dc09077c42a870ee0803e2fd6",
           "conformance": {
             "suite": "atbash@4",
             "suite_digest": "618f290b2e4031a00c48453fbfbff5c9128d05f124adbfe12e71eb813493e719",
@@ -4422,7 +4422,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/aggstat.wasm",
-          "content_digest": "830f60e0e65365cef272034241c1c33a290753bc4edb61a8a03c225ec42e1a0b",
+          "content_digest": "cde65cb1e7f55d30a8e135c6a2110c57b4833c1760532279233cd11f3131e5be",
           "conformance": {
             "suite": "aggstat@4",
             "suite_digest": "14eec21dc0c9373b3c83730b7d2b0d11615595e2fafea5005828a9992a34093e",
@@ -4786,7 +4786,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/h3.wasm",
-          "content_digest": "1f120eeecd900c276aa24e42f39d3f53705af233a9477b92216557f20b8aa8cd",
+          "content_digest": "b1c79dd5c00dc0cea0ad2f34c20d7d77180a3d0a3967e68edc6d83cfb6a6957d",
           "conformance": {
             "suite": "h3@4",
             "suite_digest": "bdac7a0ab7cc22fe084b3064a14a558c6ad77ed08691726f94b24fc126fb63dc",
@@ -5291,7 +5291,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/base45.wasm",
-          "content_digest": "c3d32af7ba56773ac21c80777a2cea7d4dd071be3edb8525a193c873a310924e",
+          "content_digest": "d0695a6583a78e593cabfea345a18e98205993a898e19361d7087255ba4b77e8",
           "conformance": {
             "suite": "base45@4",
             "suite_digest": "e57aa548585622a8e25905b4c4ca03f1f27d95cda9e07ea49f2746a719b00a7b",
@@ -5570,7 +5570,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/tdigest.wasm",
-          "content_digest": "db714bda5194e6097111ea2f8cda7fe3463f71e21f56a6ec0b791abb26cfd2ca",
+          "content_digest": "761ace4462640df39e024c428a39dd17b3227ca7027070724b952a255babd06c",
           "conformance": {
             "suite": "tdigest@4",
             "suite_digest": "e46de89c85e237d8bf8f6b787c30e70ab800968243e67f4151234e40fd23348e",
@@ -7126,7 +7126,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/math.wasm",
-          "content_digest": "6ac0f75acafc0dba99a913ad10019a3845187e3fa70b2721c86a4c9fdff2c08e"
+          "content_digest": "143b4cce0ffabe1f3a3fb834072d560ee6cf8b5f2b185eeae8fe6672377648dd"
         }
       ]
     },
@@ -7174,7 +7174,7 @@
           "reference": true,
           "abi": "duckdb:extension@2.2.0",
           "artifact": "artifacts/extensions/text_utils.wasm",
-          "content_digest": "12c43b2e9d77b1027caea8770ec1e88baea3bb1c81df5713b1277934f5c3094f"
+          "content_digest": "4fe95fb99110150ec3df93faa1eded6939bd5673007368f27ad403b75cf76c62"
         }
       ]
     },
@@ -7480,7 +7480,7 @@
           "reference": true,
           "abi": "duckdb:extension@3.1.0",
           "artifact": "artifacts/extensions/ggsql.wasm",
-          "content_digest": "baad5d603a34ef4be6c24192dd7a959de529fe36f90cec3d99fdf55aa3e69d2c",
+          "content_digest": "90f8624ec31724fb9cc07475883dd57080817e64cbbf887dd2cbcf5eb2db861b",
           "conformance": {
             "suite": "ggsql@4",
             "suite_digest": "48ff6b2da8a744ab45ceae52faca754c7f854d65ec41f90965a859d21b5ca256",
@@ -7526,7 +7526,7 @@
           "reference": true,
           "abi": "duckdb:extension@3.1.0",
           "artifact": "artifacts/extensions/dplyr.wasm",
-          "content_digest": "e77896187ff52f05c6ca742256e97818e44d25f090dc713b6b830305f1a1fbee",
+          "content_digest": "1c0d3807e17815c07d31427bc035333b9b3bf383b8af53132b8553ca4fbc28ef",
           "conformance": {
             "suite": "dplyr@4",
             "suite_digest": "73c189bc18a13ad0eec6df00e3f872984b253d652cfa27e218d93f26578cce58",
@@ -7574,7 +7574,7 @@
           "reference": true,
           "abi": "duckdb:extension@3.1.0",
           "artifact": "artifacts/extensions/prql_parser.wasm",
-          "content_digest": "342c430ada463933f5937329ede6dcdd0170ecfdcd927637bc74ee5cb1a8ba07",
+          "content_digest": "181761c2db814b3fd895c9a4bcfeb98c50d0d3191d7bdb563485848104b95525",
           "conformance": {
             "suite": "prql_parser@4",
             "suite_digest": "6719bade3ff2cd734b77e63cbf2a57b88c7f586d76418eed00462f6148b4f235",
@@ -7623,7 +7623,7 @@
           "reference": true,
           "abi": "duckdb:extension@3.1.0",
           "artifact": "artifacts/extensions/talib.wasm",
-          "content_digest": "3091fc8fa99cc8743b9bd7d685e9a2ba4996777cf17be1c4ed38ee66726a9a5d",
+          "content_digest": "a0cc83241eb83f5304c61f63d1bbddef5f6e9c2d2aadfda1d8bcaa552d8446ee",
           "conformance": {
             "suite": "talib@4",
             "suite_digest": "c6c03904e744ec9bd6a98f510f8555077dc9ccb95c294ed9416ac9571db36990",
