@@ -23,6 +23,8 @@ wit-bindgen-rt = "0.41"
 # This shim only maps the core's neutral Outcome onto the duckdb:extension
 # parser-dispatch surface; the rewrite engine lives ONCE in the core.
 ggsql-core = { path = "../../../datalink/extensions/ggsql-core" }
+# major-4 columnar bridge stub (parser-only component, no hot-path callbacks).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"
