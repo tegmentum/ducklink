@@ -17,6 +17,8 @@ crate-type = ["cdylib"]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
 warc = { version = "0.4", default-features = false }
+# major-4 columnar bridge stub for hand-written table-only components.
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"
