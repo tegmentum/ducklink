@@ -39,12 +39,78 @@ fn scalar(handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Re
         C::Fnv64 => types::Duckvalue::Uint64(fnv1a_64(&b)),
     })
 }
+// TRUE column-at-a-time kernel for the columnar (@4.0.0) hot path. The generic
+// `columnar_bridge!` adapter would lift the input `colvec` into a
+// `Vec<Vec<Duckvalue>>` rowbatch (cloning every input string into a
+// `Duckvalue::Text`), call the per-row `scalar`, then gather the results back
+// into a column. For a 1M-row chunk that row-materialization dominates the
+// (cheap) checksum compute. This kernel reads the input Text column ONCE,
+// borrows each &str (no clone, no Duckvalue boxing), and writes the typed
+// output column directly. Byte-identical to `scalar`: same checksum bytes, same
+// NULL handling (an invalid input row -> NULL output, validity bit cleared).
+use duckdb::extension::column_types as col;
+fn scalar_batch_col(
+    handle: u32,
+    args: &[col::Colvec],
+    _ctx: types::Invokeinfo,
+) -> Result<col::Colvec, types::Duckerror> {
+    let which = handlers().lock().unwrap().get(&handle).copied()
+        .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
+    let arg = args.first()
+        .ok_or_else(|| types::Duckerror::Internal("checksums: missing argument".into()))?;
+    let n = arg.rows as usize;
+    let valid = |i: usize| -> bool {
+        arg.validity.is_empty()
+            || arg.validity.get(i / 8).map(|b| (b >> (i % 8)) & 1 == 1).unwrap_or(false)
+    };
+    // Input is the registered TEXT column; defensively treat any other variant
+    // as all-NULL (the per-row `scalar` returns NULL for a non-Text arg).
+    let texts: Option<&Vec<String>> = match &arg.data { col::Column::Text(v) => Some(v), _ => None };
+    let mut validity = vec![0u8; n.div_ceil(8)];
+    let mut any_null = false;
+    let data = match which {
+        C::Fnv64 => {
+            let mut out = Vec::with_capacity(n);
+            for i in 0..n {
+                match texts {
+                    Some(t) if valid(i) => { out.push(fnv1a_64(t[i].as_bytes())); validity[i / 8] |= 1 << (i % 8); }
+                    _ => { out.push(0u64); any_null = true; }
+                }
+            }
+            col::Column::Uint64(out)
+        }
+        _ => {
+            let mut out = Vec::with_capacity(n);
+            for i in 0..n {
+                match texts {
+                    Some(t) if valid(i) => {
+                        let b = t[i].as_bytes();
+                        let v = match which {
+                            C::Crc16 => CRC16.checksum(b) as i64,
+                            C::Adler32 => adler::adler32_slice(b) as i64,
+                            C::Fnv32 => fnv1a_32(b) as i64,
+                            C::Fnv64 => unreachable!(),
+                        };
+                        out.push(v);
+                        validity[i / 8] |= 1 << (i % 8);
+                    }
+                    _ => { out.push(0i64); any_null = true; }
+                }
+            }
+            col::Column::Int64(out)
+        }
+    };
+    let validity = if any_null { validity } else { Vec::new() };
+    Ok(col::Colvec { data, validity, rows: arg.rows })
+}
+
 datalink_extcore::columnar_bridge! {
     types = duckdb::extension::types;
     column_types = duckdb::extension::column_types;
     callback_dispatch = exports::duckdb::extension::callback_dispatch;
     target = Extension;
     scalar = scalar;
+    scalar_batch_col = scalar_batch_col;
 }
 export!(Extension);
 fn register_scalars() -> Result<(), types::Duckerror> {
