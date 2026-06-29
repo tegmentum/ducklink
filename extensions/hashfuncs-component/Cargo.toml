@@ -14,6 +14,8 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
+# major-4 columnar bridge helpers (hand-written scalars with UBIGINT outputs).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 twox-hash = { version = "2.1", default-features = false, features = ["xxhash32", "xxhash64", "xxhash3_64", "std"] }
 murmur3 = "0.5"
 
