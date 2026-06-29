@@ -53,6 +53,7 @@ use duckdb_cli_bindings::duckdb::extension::types as cli_types;
 use duckdb_core_bindings::duckdb::component::extension_loader_hooks as core_extension_hooks;
 use duckdb_core_bindings::duckdb::component::host_extension_loader as core_host_loader;
 use duckdb_core_bindings::duckdb::extension::callback_dispatch as core_callback_dispatch;
+use duckdb_core_bindings::duckdb::extension::column_types as core_column_types;
 use duckdb_core_bindings::duckdb::extension::storage_host as core_storage_host;
 use duckdb_core_bindings::duckdb::extension::index_host as core_index_host;
 use duckdb_core_bindings::duckdb::extension::collation_host as core_collation_host;
@@ -252,36 +253,24 @@ impl core_callback_dispatch::Host for CoreStoreState {
             .map_err(convert_extension_duckerror_to_core)
     }
 
-    fn call_scalar_batch(
+    fn call_scalar_batch_col(
         &mut self,
         handle: u32,
-        rows: core_callback_dispatch::Rowbatch,
+        args: BindgenVec<core_callback_dispatch::Colvec>,
         ctx: core_callback_dispatch::Invokeinfo,
-    ) -> Result<Vec<core_types::Duckvalue>, core_types::Duckerror> {
-        // The whole chunk crosses to the extension in ONE call; the extension
-        // loops internally. This removes the per-row host->extension wasmtime
-        // invocation overhead (the dominant share). Row i's index is
-        // ctx.rowindex + i, derived extension-side.
-        let converted_rows: Vec<Vec<_>> = rows
-            .into_iter()
-            .map(|row| {
-                row.into_iter()
-                    .map(convert_core_duckvalue_to_extension)
-                    .collect()
-            })
-            .collect();
+    ) -> Result<core_callback_dispatch::Colvec, core_types::Duckerror> {
+        // major-4 columnar: the core hands one colvec per arg; pivot to the
+        // extension manager's row-major dispatch (which re-pivots to the
+        // extension's colvec ABI), then rebuild the result column.
+        let ext_rows = core_colvecs_to_ext_rows(&args);
         let converted_ctx = convert_core_invokeinfo(ctx);
         let mut manager = self
             .extension_manager
             .lock()
             .expect("extension manager mutex poisoned");
         manager
-            .dispatch_scalar_batch(handle, &converted_rows, converted_ctx)
-            .map(|vals| {
-                vals.into_iter()
-                    .map(convert_extension_duckvalue_to_core)
-                    .collect()
-            })
+            .dispatch_scalar_batch(handle, &ext_rows, converted_ctx)
+            .map(ext_values_to_core_colvec)
             .map_err(convert_extension_duckerror_to_core)
     }
 
@@ -304,20 +293,47 @@ impl core_callback_dispatch::Host for CoreStoreState {
             .map_err(convert_extension_duckerror_to_core)
     }
 
-    fn call_aggregate(
+    fn call_aggregate_col(
         &mut self,
         handle: u32,
-        rows: core_callback_dispatch::Rowbatch,
+        args: BindgenVec<core_callback_dispatch::Colvec>,
     ) -> Result<core_types::Duckvalue, core_types::Duckerror> {
-        let converted_rows = convert_core_rowbatch_to_extension(rows);
+        // major-4 columnar aggregate: pivot the buffered group columns to rows.
+        let ext_rows = core_colvecs_to_ext_rows(&args);
         let mut manager = self
             .extension_manager
             .lock()
             .expect("extension manager mutex poisoned");
         manager
-            .dispatch_aggregate(handle, &converted_rows)
+            .dispatch_aggregate(handle, &ext_rows)
             .map(convert_extension_duckvalue_to_core)
             .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn call_cast_col(
+        &mut self,
+        handle: u32,
+        arg: core_callback_dispatch::Colvec,
+    ) -> Result<core_callback_dispatch::Colvec, core_types::Duckerror> {
+        // major-4 columnar cast: cast each row via the row-major dispatch_cast.
+        let ext_rows = core_colvecs_to_ext_rows(std::slice::from_ref(&arg));
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        let mut out = Vec::with_capacity(ext_rows.len());
+        for row in &ext_rows {
+            let v = row
+                .first()
+                .cloned()
+                .unwrap_or(extension_types::Duckvalue::Null);
+            out.push(
+                manager
+                    .dispatch_cast(handle, &v)
+                    .map_err(convert_extension_duckerror_to_core)?,
+            );
+        }
+        Ok(ext_values_to_core_colvec(out))
     }
 
     fn call_pragma(
@@ -5546,6 +5562,120 @@ fn convert_extension_duckvalue_to_core(value: extension_types::Duckvalue) -> cor
     }
 }
 
+// ---------------------------------------------------------------------------
+// major-4 columnar core<->extension bridge helpers
+// ---------------------------------------------------------------------------
+// The wasm core calls callback-dispatch columnar (colvecs of CORE bindgen
+// types). The host routes to the extension via the manager's row-major dispatch
+// (which re-pivots to the extension's colvec ABI), so these helpers pivot CORE
+// colvecs <-> CORE rows and convert CORE <-> EXTENSION values.
+
+/// Read row `r` of a CORE colvec as a CORE `Duckvalue` (validity-aware).
+fn core_colvec_value_at(c: &core_callback_dispatch::Colvec, r: usize) -> core_types::Duckvalue {
+    use core_column_types::Column;
+    let valid = c.validity.is_empty()
+        || (r >> 3 >= c.validity.len())
+        || (c.validity[r >> 3] >> (r & 7)) & 1 != 0;
+    if !valid {
+        return core_types::Duckvalue::Null;
+    }
+    match &c.data {
+        Column::Boolean(v) => core_types::Duckvalue::Boolean(v[r]),
+        Column::Int64(v) => core_types::Duckvalue::Int64(v[r]),
+        Column::Uint64(v) => core_types::Duckvalue::Uint64(v[r]),
+        Column::Float64(v) => core_types::Duckvalue::Float64(v[r]),
+        Column::Int32(v) => core_types::Duckvalue::Int32(v[r]),
+        Column::Int16(v) => core_types::Duckvalue::Int16(v[r]),
+        Column::Int8(v) => core_types::Duckvalue::Int8(v[r]),
+        Column::Uint32(v) => core_types::Duckvalue::Uint32(v[r]),
+        Column::Uint16(v) => core_types::Duckvalue::Uint16(v[r]),
+        Column::Uint8(v) => core_types::Duckvalue::Uint8(v[r]),
+        Column::Float32(v) => core_types::Duckvalue::Float32(v[r]),
+        Column::Timestamp(v) => core_types::Duckvalue::Timestamp(v[r]),
+        Column::Time(v) => core_types::Duckvalue::Time(v[r]),
+        Column::Timestamptz(v) => core_types::Duckvalue::Timestamptz(v[r]),
+        Column::Date(v) => core_types::Duckvalue::Date(v[r]),
+        Column::Text(v) => core_types::Duckvalue::Text(v[r].clone()),
+        Column::Blob(v) => core_types::Duckvalue::Blob(v[r].clone()),
+        Column::Decimal(v) => core_types::Duckvalue::Decimal(core_types::Decimalvalue {
+            lower: v[r].lower, upper: v[r].upper, width: v[r].width, scale: v[r].scale,
+        }),
+        Column::Interval(v) => core_types::Duckvalue::Interval(core_types::Intervalvalue {
+            months: v[r].months, days: v[r].days, micros: v[r].micros,
+        }),
+        Column::Uuid(v) => core_types::Duckvalue::Uuid(core_types::Uuidvalue { hi: v[r].hi, lo: v[r].lo }),
+        Column::Complex(v) => core_types::Duckvalue::Complex(core_types::Complexvalue {
+            type_expr: v[r].type_expr.clone(), json: v[r].json.clone(),
+        }),
+    }
+}
+
+/// Pivot CORE colvecs to EXTENSION row-major batch (for the manager dispatch).
+fn core_colvecs_to_ext_rows(
+    args: &[core_callback_dispatch::Colvec],
+) -> Vec<Vec<extension_types::Duckvalue>> {
+    let n = args.first().map(|c| c.rows as usize).unwrap_or(0);
+    (0..n)
+        .map(|r| {
+            args.iter()
+                .map(|c| convert_core_duckvalue_to_extension(core_colvec_value_at(c, r)))
+                .collect()
+        })
+        .collect()
+}
+
+/// Build a CORE colvec from EXTENSION result values (arm from the first non-null;
+/// NULLs cleared in the out-of-band validity bitmap).
+fn ext_values_to_core_colvec(vals: Vec<extension_types::Duckvalue>) -> core_callback_dispatch::Colvec {
+    use core_column_types::Column;
+    use core_types::Duckvalue as D;
+    let core_vals: Vec<D> = vals.into_iter().map(convert_extension_duckvalue_to_core).collect();
+    let n = core_vals.len();
+    let mut validity: Vec<u8> = Vec::new();
+    let mut mark_null = |row: usize, validity: &mut Vec<u8>| {
+        if validity.is_empty() {
+            *validity = vec![0xFFu8; (n + 7) / 8];
+        }
+        validity[row >> 3] &= !(1u8 << (row & 7));
+    };
+    let rep = core_vals.iter().find(|v| !matches!(v, D::Null));
+    macro_rules! build {
+        ($arm:ident, $default:expr, $pat:pat => $extract:expr) => {{
+            let mut out = Vec::with_capacity(n);
+            for (r, v) in core_vals.iter().enumerate() {
+                match v { $pat => out.push($extract), _ => { mark_null(r, &mut validity); out.push($default); } }
+            }
+            Column::$arm(out)
+        }};
+    }
+    let data = match rep {
+        None => { for r in 0..n { mark_null(r, &mut validity); } Column::Int64(vec![0i64; n]) }
+        Some(D::Boolean(_)) => build!(Boolean, false, D::Boolean(x) => *x),
+        Some(D::Int64(_)) => build!(Int64, 0i64, D::Int64(x) => *x),
+        Some(D::Uint64(_)) => build!(Uint64, 0u64, D::Uint64(x) => *x),
+        Some(D::Float64(_)) => build!(Float64, 0.0f64, D::Float64(x) => *x),
+        Some(D::Int32(_)) => build!(Int32, 0i32, D::Int32(x) => *x),
+        Some(D::Int16(_)) => build!(Int16, 0i16, D::Int16(x) => *x),
+        Some(D::Int8(_)) => build!(Int8, 0i8, D::Int8(x) => *x),
+        Some(D::Uint32(_)) => build!(Uint32, 0u32, D::Uint32(x) => *x),
+        Some(D::Uint16(_)) => build!(Uint16, 0u16, D::Uint16(x) => *x),
+        Some(D::Uint8(_)) => build!(Uint8, 0u8, D::Uint8(x) => *x),
+        Some(D::Float32(_)) => build!(Float32, 0.0f32, D::Float32(x) => *x),
+        Some(D::Timestamp(_)) => build!(Timestamp, 0i64, D::Timestamp(x) => *x),
+        Some(D::Time(_)) => build!(Time, 0i64, D::Time(x) => *x),
+        Some(D::Timestamptz(_)) => build!(Timestamptz, 0i64, D::Timestamptz(x) => *x),
+        Some(D::Date(_)) => build!(Date, 0i32, D::Date(x) => *x),
+        Some(D::Text(_)) => build!(Text, String::new(), D::Text(x) => x.clone()),
+        Some(D::Blob(_)) => build!(Blob, Vec::new(), D::Blob(x) => x.clone()),
+        Some(D::Decimal(_)) => build!(Decimal, core_column_types::Decimalvalue { lower: 0, upper: 0, width: 0, scale: 0 }, D::Decimal(d) => core_column_types::Decimalvalue { lower: d.lower, upper: d.upper, width: d.width, scale: d.scale }),
+        Some(D::Interval(_)) => build!(Interval, core_column_types::Intervalvalue { months: 0, days: 0, micros: 0 }, D::Interval(d) => core_column_types::Intervalvalue { months: d.months, days: d.days, micros: d.micros }),
+        Some(D::Uuid(_)) => build!(Uuid, core_column_types::Uuidvalue { hi: 0, lo: 0 }, D::Uuid(d) => core_column_types::Uuidvalue { hi: d.hi, lo: d.lo }),
+        Some(D::Complex(_)) => build!(Complex, core_column_types::Complexvalue { type_expr: String::new(), json: "null".into() }, D::Complex(c) => core_column_types::Complexvalue { type_expr: c.type_expr.clone(), json: c.json.clone() }),
+        Some(D::Null) => unreachable!(),
+    };
+    core_callback_dispatch::Colvec { data, validity, rows: n as u32 }
+}
+
 fn convert_core_invokeinfo(
     ctx: core_callback_dispatch::Invokeinfo,
 ) -> extension_runtime::Invokeinfo {
@@ -5563,19 +5693,6 @@ fn convert_extension_resultset_to_core(
         .map(|row| {
             row.into_iter()
                 .map(convert_extension_duckvalue_to_core)
-                .collect()
-        })
-        .collect()
-}
-
-fn convert_core_rowbatch_to_extension(
-    batch: core_callback_dispatch::Rowbatch,
-) -> extension_runtime::Rowbatch {
-    batch
-        .into_iter()
-        .map(|row| {
-            row.into_iter()
-                .map(convert_core_duckvalue_to_extension)
                 .collect()
         })
         .collect()
