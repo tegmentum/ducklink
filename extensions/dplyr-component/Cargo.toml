@@ -26,6 +26,8 @@ wit-bindgen-rt = "0.41"
 # only maps the core's neutral Outcome onto the duckdb:extension
 # parser-dispatch surface; the transpiler lives ONCE in the core.
 dplyr-core = { path = "../../../datalink/extensions/dplyr-core" }
+# major-4 columnar bridge for hand-written components (colvec <-> row adapter).
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"

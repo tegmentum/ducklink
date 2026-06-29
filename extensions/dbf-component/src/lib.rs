@@ -44,13 +44,9 @@ impl guest::Guest for Extension {
 }
 
 impl callback_dispatch::Guest for Extension {
-    fn call_scalar_batch(
-        _h: u32,
-        _r: Vec<Vec<types::Duckvalue>>,
-        _c: types::Invokeinfo,
-    ) -> Result<Vec<types::Duckvalue>, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("dbf: no scalar fns".into()))
-    }
+    // major-4 columnar dispatch: dbf is table-only, so the columnar hot methods
+    // are Unsupported stubs. The hand-written call_table below is unchanged.
+    datalink_extcore::columnar_stub!();
     fn call_scalar(
         _h: u32,
         _a: Vec<types::Duckvalue>,
@@ -86,12 +82,6 @@ impl callback_dispatch::Guest for Extension {
         Ok(melt(&bytes).into())
     }
 
-    fn call_aggregate(
-        _h: u32,
-        _r: types::Rowbatch,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("dbf: no aggs".into()))
-    }
     fn call_pragma(
         _h: u32,
         _a: Vec<types::Duckvalue>,
