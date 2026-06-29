@@ -14,8 +14,9 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-hocon = { version = "*", default-features = false, features = ["serde-support"] }
-serde_json = "*"
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+hocon-core = { path = "../../../datalink/extensions/hocon-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"
