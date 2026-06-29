@@ -225,7 +225,7 @@
       "prefix": "isin",
       "expansion": "com.tegmentum.ducklink.isin",
       "wit_contract_version": "4.0.0",
-      "content_digest": "87622c58aa0e53bbb858a0c1232690bf0064cbd065e71b4c1199deed46093632",
+      "content_digest": "ac1c0f86b660c823179bd54e1263c5d0b75da21410ea4ce2d15c64b6b1550e81",
       "providers": [
         {
           "id": "wasm-component",
@@ -335,7 +335,7 @@
       "prefix": "luhn",
       "expansion": "com.tegmentum.ducklink.luhn",
       "wit_contract_version": "4.0.0",
-      "content_digest": "ee95ff8b1290aa9fa68f66b3f68b513949417c62e2810f4c00daa3ada063e03b"
+      "content_digest": "531cc06687d18c091b4b81c7259e02126ff1342f8f58ca654a4bc821c8702caf"
     },
     {
       "name": "iban",
@@ -374,7 +374,7 @@
       "prefix": "iban",
       "expansion": "com.tegmentum.ducklink.iban",
       "wit_contract_version": "4.0.0",
-      "content_digest": "c925b52ee7efa958b6dbe8a2a47d7132d68220d998d5f7256ffbe1016e999002"
+      "content_digest": "c754998007649ae8927445a574450cd2ec7fff148377a6b232512d0a45dd7044"
     },
     {
       "name": "ean",
@@ -413,7 +413,7 @@
       "prefix": "ean",
       "expansion": "com.tegmentum.ducklink.ean",
       "wit_contract_version": "4.0.0",
-      "content_digest": "9deeefa09d6f823885b14bb5aa228707e3ed0510633a0610471a90e35bdde8da"
+      "content_digest": "6084c5d6ffbf32f317bdf6d35bc81141e9395e405ac362dbaf1a5f2fb2fbd443"
     },
     {
       "name": "aba",
@@ -525,7 +525,7 @@
       "prefix": "creditcard",
       "expansion": "com.tegmentum.ducklink.creditcard",
       "wit_contract_version": "4.0.0",
-      "content_digest": "50bddcd88d5e37e40cf88b09450d72e38b84a67722b1dd4f4e618bccb5f01184",
+      "content_digest": "50a8587b411021abd9374b695274732970262f7380e0df94b0a471ccf2e713cd",
       "providers": [
         {
           "id": "wasm-component",
@@ -579,7 +579,7 @@
       "prefix": "uuidx",
       "expansion": "com.tegmentum.ducklink.uuidx",
       "wit_contract_version": "4.0.0",
-      "content_digest": "3dc47678fdfdf47f707f011ed738d87855326d2656dddaf9dfc85941656807ce"
+      "content_digest": "3bf565af587c742156904cf905f016dd0355644abc00072c808154e950b6c12f"
     },
     {
       "name": "crypto",
@@ -679,7 +679,7 @@
       "prefix": "markdown",
       "expansion": "com.tegmentum.ducklink.markdown",
       "wit_contract_version": "4.0.0",
-      "content_digest": "98de5d38d4c4279aeb80fa0a24f5ca238c10c43ca7aaec7789dffaff68d66f95"
+      "content_digest": "e028996e5e6ab98cf10098904f20e3be32b099c0350b72bfe6906e06138207f7"
     },
     {
       "name": "hashfuncs",
@@ -721,7 +721,7 @@
       "prefix": "hashfuncs",
       "expansion": "com.tegmentum.ducklink.hashfuncs",
       "wit_contract_version": "4.0.0",
-      "content_digest": "e2cf3343f8b22ff24f4ea82efaf9f48c97c5e8fe4dd4f35d60311dd8541544ed"
+      "content_digest": "dabfd1bf114dde2d2c1e8e670696c805f0c087c7200c2a6b902e4a323b5a3cd3"
     },
     {
       "name": "rapidfuzz",
@@ -761,7 +761,7 @@
       "prefix": "rapidfuzz",
       "expansion": "com.tegmentum.ducklink.rapidfuzz",
       "wit_contract_version": "4.0.0",
-      "content_digest": "46fceb2bf7f25084898bad2faa6748c9ecd2e702148944e7d5790e053f9eb664"
+      "content_digest": "a134fe7240a63611fb6d205fd5cea29a9b090e070d0afb52dfbfe68d50362c80"
     },
     {
       "name": "casing",
@@ -804,7 +804,7 @@
       "prefix": "casing",
       "expansion": "com.tegmentum.ducklink.casing",
       "wit_contract_version": "4.0.0",
-      "content_digest": "d6a175400d56d5c30e0771007d1706ba81216994ca5a1f89f18ae7a518c6647b"
+      "content_digest": "48967200189a0ed1c1e12659e898618ce6a0bd1b7f97715eb4419142b97ff6f0"
     },
     {
       "name": "csscolor",
@@ -843,7 +843,7 @@
       "prefix": "csscolor",
       "expansion": "com.tegmentum.ducklink.csscolor",
       "wit_contract_version": "4.0.0",
-      "content_digest": "54225294953a51c289d81599ff091faae8acfc2af4ac2cf817a5650beb644784"
+      "content_digest": "d0b4c683c24088be793646cac9a8ac6c70a32c9af203fc7bb0818a78ab19588a"
     },
     {
       "name": "url",
@@ -883,7 +883,7 @@
       "prefix": "url",
       "expansion": "com.tegmentum.ducklink.url",
       "wit_contract_version": "4.0.0",
-      "content_digest": "ca638529c25448ab74c915b953d3dd18d881595d00816ac18f0ceb1f3344cf23",
+      "content_digest": "fea11001fb229c88c843c696df1044f43eba32c663ce3d46d58cb0f5a9611d83",
       "providers": [
         {
           "id": "wasm-component",
@@ -937,7 +937,7 @@
       "prefix": "email",
       "expansion": "com.tegmentum.ducklink.email",
       "wit_contract_version": "4.0.0",
-      "content_digest": "25e43d872c706e8cc26f4b0c90f9001bfaa2f9c5a4a4020b7e69690d1d297622",
+      "content_digest": "a50a4f9df7a7b09c61e4429ef2205d745ca921bf15d38192a916abe3050719cd",
       "providers": [
         {
           "id": "wasm-component",
@@ -993,7 +993,7 @@
       "prefix": "semver",
       "expansion": "com.tegmentum.ducklink.semver",
       "wit_contract_version": "4.0.0",
-      "content_digest": "c47634a2365a6d39c7f6a9c946e22559df596fdfaf305e0b05737388c6eee7aa",
+      "content_digest": "50191736e1f680214430b7657910f1b5fcb8dab5dda2e1f504ff0ce96683e9a2",
       "providers": [
         {
           "id": "wasm-component",
@@ -1045,7 +1045,7 @@
       "prefix": "slug",
       "expansion": "com.tegmentum.ducklink.slug",
       "wit_contract_version": "4.0.0",
-      "content_digest": "327c4876610d8be80c5fc81ead96278fe9a17c54f02afc72cf123aa81b7049f3"
+      "content_digest": "85562b4ab7f59afaff2c89acfaf7b1fa8e3ba74127c133ea7c1c32bff695b43e"
     },
     {
       "name": "escape",
@@ -1086,7 +1086,7 @@
       "prefix": "escape",
       "expansion": "com.tegmentum.ducklink.escape",
       "wit_contract_version": "4.0.0",
-      "content_digest": "56f796c912acc5a705fb2c98a6f7d4eaa3bed58f5ce5270c78b3889d7310bf01"
+      "content_digest": "d764e23603be77202a0977b921551902150cc7b67499ac57c60396b5b5627390"
     },
     {
       "name": "natsort",
@@ -1122,7 +1122,7 @@
       "prefix": "natsort",
       "expansion": "com.tegmentum.ducklink.natsort",
       "wit_contract_version": "4.0.0",
-      "content_digest": "5a01f386d85df949cd588cb71e6a48a3985c9e3ac800f9479f02a0a1edf4366e"
+      "content_digest": "9c4a84c7994a65355516a1b5e78cb2b91c8448008287e7089908a24657714c7f"
     },
     {
       "name": "roman",
@@ -1162,7 +1162,7 @@
       "prefix": "roman",
       "expansion": "com.tegmentum.ducklink.roman",
       "wit_contract_version": "4.0.0",
-      "content_digest": "7bdac11a6b427cc8ae3e1f037a4f41898593d9a25a6dd7da3e5482217138ec4d",
+      "content_digest": "2421cc60cf4e2bfe4b931f1e550cff56d0740015f6026cf448041a336c7f920b",
       "providers": [
         {
           "id": "wasm-component",
@@ -1215,7 +1215,7 @@
       "prefix": "humansize",
       "expansion": "com.tegmentum.ducklink.humansize",
       "wit_contract_version": "4.0.0",
-      "content_digest": "ed7285dd86951aafdd2ad24abfe4fa8cbbbd55dd0c7c84995ab8fa24c36ed05e"
+      "content_digest": "95732363ec9d5999f19118a03ea573c4e5eb9fdc6cc374bbfcbc6eb0e9c9e535"
     },
     {
       "name": "ids",
@@ -1255,7 +1255,7 @@
       "prefix": "ids",
       "expansion": "com.tegmentum.ducklink.ids",
       "wit_contract_version": "4.0.0",
-      "content_digest": "508cf9a68dd466cdf54f3874b5f445f8779068f2851e2031caba6ccd7a516b0b"
+      "content_digest": "461f8e0e1e67422a7723366001b7fc462bd944cb699b7ae6b84a665fe00f2fff"
     },
     {
       "name": "idna",
@@ -1293,7 +1293,7 @@
       "prefix": "idna",
       "expansion": "com.tegmentum.ducklink.idna",
       "wit_contract_version": "4.0.0",
-      "content_digest": "f09f55e05347e63e221f8024d6243ba284a759c269bd6eaa046331c1802a8cc5"
+      "content_digest": "ef5e813ff354d6bfd38b5113b22bd385e81335c4127cebd86224d5d5bded3949"
     },
     {
       "name": "mac",
@@ -1331,7 +1331,7 @@
       "prefix": "mac",
       "expansion": "com.tegmentum.ducklink.mac",
       "wit_contract_version": "4.0.0",
-      "content_digest": "d8826dbc175697332d68603911015994e41a7ff3b69b9cad1e10cba25f668044"
+      "content_digest": "f2ba422fcfaa359fb9ec6ce1b7e0c359be3e33969e59faf0d55dea4fe8d9ed94"
     },
     {
       "name": "isbn",
@@ -1367,7 +1367,7 @@
       "prefix": "isbn",
       "expansion": "com.tegmentum.ducklink.isbn",
       "wit_contract_version": "4.0.0",
-      "content_digest": "69c6e3f71733cfc8217a53d752f666c7077efdc966066724da66a18badc97249"
+      "content_digest": "c74ac740b432eb25de4a2325d20a6950b6d00cc7c216cad029b45dcc8eb5bd9f"
     },
     {
       "name": "humantime",
@@ -1405,7 +1405,7 @@
       "prefix": "humantime",
       "expansion": "com.tegmentum.ducklink.humantime",
       "wit_contract_version": "4.0.0",
-      "content_digest": "5d09222e55cd8756cbf32d40d226e53f66749ab9cfc4b978e7b0f5ad840ec91f"
+      "content_digest": "5d0a710735a2e7f3233b996d42d30ebfa06d52580ced6efc0b517af8c880a3d6"
     },
     {
       "name": "iso",
@@ -1444,7 +1444,7 @@
       "prefix": "iso",
       "expansion": "com.tegmentum.ducklink.iso",
       "wit_contract_version": "4.0.0",
-      "content_digest": "e80e3e25ee324fc0bd9d5501ce05982a5880fb9b0fa3e31f02c7fc6775ca79d5"
+      "content_digest": "4ffe1061aeb851e36002d69558a794487c1b5bad4bf4bf07dec995d677980b9e"
     },
     {
       "name": "morse",
@@ -1480,7 +1480,7 @@
       "prefix": "morse",
       "expansion": "com.tegmentum.ducklink.morse",
       "wit_contract_version": "4.0.0",
-      "content_digest": "235e7dd4ea13f3228c8937d9253c1c65818bac3cd0ef0e2ac965115ab69a4ed7"
+      "content_digest": "68fb4c3405b1ec9efd2d9e10d5eebd58bc130e5e9761816a3e2f41460a3618c0"
     },
     {
       "name": "color",
@@ -1518,7 +1518,7 @@
       "prefix": "color",
       "expansion": "com.tegmentum.ducklink.color",
       "wit_contract_version": "4.0.0",
-      "content_digest": "c984f005d2070dec96376aa06eda99759a8f1de12ad724af5f64a83d64ff06cc"
+      "content_digest": "78ace88e50f94945a773f9d02ffd2ca4283dd65d95a4e7efc2eab625e04a660d"
     },
     {
       "name": "geohash",
@@ -1557,7 +1557,7 @@
       "prefix": "geohash",
       "expansion": "com.tegmentum.ducklink.geohash",
       "wit_contract_version": "4.0.0",
-      "content_digest": "063f900619ab94c06abfc0b0ee14a19a490e8f9a08a350d31b5598e34218f5e8",
+      "content_digest": "5967073f257b52b358b4794504debc131a232c9706e08e75c5a30ece20ecb64f",
       "providers": [
         {
           "id": "wasm-component",
@@ -1612,7 +1612,7 @@
       "prefix": "parsertools",
       "expansion": "com.tegmentum.ducklink.parsertools",
       "wit_contract_version": "4.0.0",
-      "content_digest": "77add33b6221646042043b253554bcb3b044171838c3e24eccb344ddf2e20668"
+      "content_digest": "8c7dda2a318e85e028cf1d34bfdfabe8a67200c682e23fdcc15ff8506e44fda3"
     },
     {
       "name": "currency",
@@ -1652,7 +1652,7 @@
       "prefix": "currency",
       "expansion": "com.tegmentum.ducklink.currency",
       "wit_contract_version": "4.0.0",
-      "content_digest": "a84035e2ff7998f9abe087611ce99f3586da58cb36d35bc619ad8f9aecfa5425"
+      "content_digest": "6ecf48a0788874d9faed9bfb73fda4c7d8e05d99c038a3cdf596a1f39a260150"
     },
     {
       "name": "hmac",
@@ -1691,7 +1691,7 @@
       "prefix": "hmac",
       "expansion": "com.tegmentum.ducklink.hmac",
       "wit_contract_version": "4.0.0",
-      "content_digest": "3ab4a7dc2d9a6bb7d570f33bc31552bed12b0f936582495501e22068076dd6ec"
+      "content_digest": "3adcb12c03c9581b34171f27f41ede5c2c28bd163a908d84456d3410deb70aa7"
     },
     {
       "name": "phonetic",
@@ -1729,7 +1729,7 @@
       "prefix": "phonetic",
       "expansion": "com.tegmentum.ducklink.phonetic",
       "wit_contract_version": "4.0.0",
-      "content_digest": "5aedd46936949c0dfae79f859a064b6a7d4180260e8f1cbbe4e67de7a0b439d5"
+      "content_digest": "c38aff58e7a76f8c0283bf09d649247a014b6a79794f84e20b8fa5eaabcc7f21"
     },
     {
       "name": "jwt",
@@ -1767,7 +1767,7 @@
       "prefix": "jwt",
       "expansion": "com.tegmentum.ducklink.jwt",
       "wit_contract_version": "4.0.0",
-      "content_digest": "4c85086eabb373b4da669b4b29e5bd5f70c2ca0dc5ec6403f3f33de1a3aa643a"
+      "content_digest": "f3133ceac5ab2bd63293c72a5eb4b5ac08019deab381fd27acf0abd37dafd1cb"
     },
     {
       "name": "totp",
@@ -1806,7 +1806,7 @@
       "prefix": "totp",
       "expansion": "com.tegmentum.ducklink.totp",
       "wit_contract_version": "4.0.0",
-      "content_digest": "8d799f47e8222e77640b28749d655526da700dbe3a37846d6189bfa502c53e15"
+      "content_digest": "e38070b719620d8a5b82dca8704ef42a372b94d1de802c1fb78c483416a442e7"
     },
     {
       "name": "baseconv",
@@ -1841,7 +1841,7 @@
       "prefix": "baseconv",
       "expansion": "com.tegmentum.ducklink.baseconv",
       "wit_contract_version": "4.0.0",
-      "content_digest": "62d89698ff40c82c94550797e544f4adfc776bad52ca235df5ff28781d785576"
+      "content_digest": "476ec989af7478a2712903afbf395917c8d01ab6518bb3fd35eadbb3d4c81b5d"
     },
     {
       "name": "emoji",
@@ -1880,7 +1880,7 @@
       "prefix": "emoji",
       "expansion": "com.tegmentum.ducklink.emoji",
       "wit_contract_version": "4.0.0",
-      "content_digest": "a3d14dc991ff9737038ed72132bb9255373309bf049864f51838a730c84f5ff1"
+      "content_digest": "685c689cf2b98fbae76eaabd9a50b9d021a717e10f6e7a17c74ba4e70be1cdf7"
     },
     {
       "name": "whatlang",
@@ -1919,7 +1919,7 @@
       "prefix": "whatlang",
       "expansion": "com.tegmentum.ducklink.whatlang",
       "wit_contract_version": "4.0.0",
-      "content_digest": "1bb12be311eea681c96d0fa06ea3b7fdb48eeab28268d180a0f87f388678dfad"
+      "content_digest": "294a06a3ea12688ef33ecdfb54efd73e70da1ff77265c241534ebc97a479573b"
     },
     {
       "name": "ipaddr",
@@ -1956,7 +1956,7 @@
       "prefix": "ipaddr",
       "expansion": "com.tegmentum.ducklink.ipaddr",
       "wit_contract_version": "4.0.0",
-      "content_digest": "8edbde5e0932cda52557dd877743eaf616bf4aa7a858fb2cc0179a7e9bb0ccf6"
+      "content_digest": "38f257f8ad0010d74cd7ad663a81ed5a344065622b17228f17aa27cf3bb877ba"
     },
     {
       "name": "mime",
@@ -1994,7 +1994,7 @@
       "prefix": "mime",
       "expansion": "com.tegmentum.ducklink.mime",
       "wit_contract_version": "4.0.0",
-      "content_digest": "47356b29a061e89691b09a1eb95f09d35b2c3e39537249548ddc2e25107069ca"
+      "content_digest": "bc6731c074b10d98d8ffc47f7a83c74435ec320cb748341fec6435c046aac4bc"
     },
     {
       "name": "pluralize",
@@ -2032,7 +2032,7 @@
       "prefix": "pluralize",
       "expansion": "com.tegmentum.ducklink.pluralize",
       "wit_contract_version": "4.0.0",
-      "content_digest": "29f765b9558a462c8d83a843810750f50a78dff97657025c970213beb3e586de"
+      "content_digest": "159f7b87bff9e8547309cb53f565efe964e088165c7657f075178c63e1683c1b"
     },
     {
       "name": "haversine",
@@ -2068,7 +2068,7 @@
       "prefix": "haversine",
       "expansion": "com.tegmentum.ducklink.haversine",
       "wit_contract_version": "4.0.0",
-      "content_digest": "10f1e0851171ae1adf89259b9ed95e0f451349e67ba7dcdd0d5d43948b722834"
+      "content_digest": "84316d8a925d5f51d49e7ccc5e165845f238e2c04dbf4db0fd4525c8a2d22c40"
     },
     {
       "name": "numwords",
@@ -2106,7 +2106,7 @@
       "prefix": "numwords",
       "expansion": "com.tegmentum.ducklink.numwords",
       "wit_contract_version": "4.0.0",
-      "content_digest": "9ced8302e799a676dfc5b3eb1294be8b5f04991958a859b47cc8bf8db97bb2b1"
+      "content_digest": "a6f1dee126e207bcf998460c5a770570c0cb33f3561eebbb0f54d15e140cafc1"
     },
     {
       "name": "ordinal",
@@ -2141,7 +2141,7 @@
       "prefix": "ordinal",
       "expansion": "com.tegmentum.ducklink.ordinal",
       "wit_contract_version": "4.0.0",
-      "content_digest": "079dd05683e4f5518f8e9182a2cea85a12ec55de4f88449b7678c49904804fb2"
+      "content_digest": "ed9222bda1d7a33576333299f16ad573c8e3746ba8839c2cc0fe49980750037a"
     },
     {
       "name": "nato",
@@ -2176,7 +2176,7 @@
       "prefix": "nato",
       "expansion": "com.tegmentum.ducklink.nato",
       "wit_contract_version": "4.0.0",
-      "content_digest": "73a38bc16f04a5cc61a77bf9b2864aed538d4c518311e485a29439d4cad60104"
+      "content_digest": "76e341a3795fe1e04f243771a278767f80a366293ad4fbfb86dae943b38e3f3b"
     },
     {
       "name": "ascii85",
@@ -2213,7 +2213,7 @@
       "prefix": "ascii85",
       "expansion": "com.tegmentum.ducklink.ascii85",
       "wit_contract_version": "4.0.0",
-      "content_digest": "a9c7e33fc21f3ff97457624f6b365936ee66455c347fe885f2f7ac3b053185be",
+      "content_digest": "ca6b76cc023ffbeb586127c32240710a1603fd222ea8fad13eb1ab84aea7caf8",
       "providers": [
         {
           "id": "wasm-component",
@@ -2267,7 +2267,7 @@
       "prefix": "quotedprintable",
       "expansion": "com.tegmentum.ducklink.quotedprintable",
       "wit_contract_version": "4.0.0",
-      "content_digest": "ca03a37112fe08e616c0099a8365d316127598278156daf81f234223cb0eed5c"
+      "content_digest": "2099b3ea8093d09350d31ce272868b412656d295d12f1b0f6c88d5cd64dc70ed"
     },
     {
       "name": "unitconv",
@@ -2303,7 +2303,7 @@
       "prefix": "unitconv",
       "expansion": "com.tegmentum.ducklink.unitconv",
       "wit_contract_version": "4.0.0",
-      "content_digest": "6a3cdc249d0ae06832fbf30cb47efc763583f818f6ba06434efba015c193790f"
+      "content_digest": "c434ad05004919763d434a0242d1c30a297a865c6ab6e445e47a02bf19554cfa"
     },
     {
       "name": "wordwrap",
@@ -2340,7 +2340,7 @@
       "prefix": "wordwrap",
       "expansion": "com.tegmentum.ducklink.wordwrap",
       "wit_contract_version": "4.0.0",
-      "content_digest": "f65c5d9ea0b6515afaafa32c50da5db8db34b8b9587485d495315bcaad754df3"
+      "content_digest": "ee3e96bc7fc09e2102e80b77d8caf3b589daa0f9800dca8d752a1e34a3665c23"
     },
     {
       "name": "timezone",
@@ -2380,7 +2380,7 @@
       "prefix": "timezone",
       "expansion": "com.tegmentum.ducklink.timezone",
       "wit_contract_version": "4.0.0",
-      "content_digest": "977d6e3d81445c54345e185e4ae6ca5eda8e1c40e926b01fa3c018033c6613ef"
+      "content_digest": "6dc11928728453ecf5afeaa634f07e7bc760c6f257b51b34ee184f4056906cae"
     },
     {
       "name": "rot13",
@@ -2416,7 +2416,7 @@
       "prefix": "rot13",
       "expansion": "com.tegmentum.ducklink.rot13",
       "wit_contract_version": "4.0.0",
-      "content_digest": "d418c16b5cd562909c80590092fdc72f9a61ea22e9c1857383e122fadb9c673b"
+      "content_digest": "9b88cd4e7ca34d0a9868a5e4f3213d4fac57eea8bb4799f17560446f23f0d476"
     },
     {
       "name": "leetspeak",
@@ -2451,7 +2451,7 @@
       "prefix": "leetspeak",
       "expansion": "com.tegmentum.ducklink.leetspeak",
       "wit_contract_version": "4.0.0",
-      "content_digest": "fa9c38d85847ac59cdb7e6eeb058f08c1fc1daceb232cc4b337448ef003438fe"
+      "content_digest": "d2fb0fb5de0948cf1b1ce4db2ac31931c3f2922f31b8e0c3714f43697d91756f"
     },
     {
       "name": "dms",
@@ -2487,7 +2487,7 @@
       "prefix": "dms",
       "expansion": "com.tegmentum.ducklink.dms",
       "wit_contract_version": "4.0.0",
-      "content_digest": "e7a4f8ce0bec1fbc1700f64baefda9047b23047e4f158e3062177b9b8c15a5f5"
+      "content_digest": "d74608332dcafdfefe35abac811f4ce5d5c235323a1b9d331b5d25e50b56b1b6"
     },
     {
       "name": "cbor",
@@ -2527,7 +2527,7 @@
       "prefix": "cbor",
       "expansion": "com.tegmentum.ducklink.cbor",
       "wit_contract_version": "4.0.0",
-      "content_digest": "fc0a5cdb2d24904a2c3ca74942465dc2ea9189662011828c877ea36fe134be80"
+      "content_digest": "5d765ff8adfcf941dc6c7f9b28ee7ced2efc55ad4e46737d12189174125b4299"
     },
     {
       "name": "msgpack",
@@ -2567,7 +2567,7 @@
       "prefix": "msgpack",
       "expansion": "com.tegmentum.ducklink.msgpack",
       "wit_contract_version": "4.0.0",
-      "content_digest": "ac4e6ebac634e673ce809fcdd22b9c5a6cce69c43bc9c4961e9bf8220b96f2db"
+      "content_digest": "14a60d0dc7f6aaba2695bf3eeea4f2f89103cedbc7f071071916e3e90a6582fb"
     },
     {
       "name": "elements",
@@ -2606,7 +2606,7 @@
       "prefix": "elements",
       "expansion": "com.tegmentum.ducklink.elements",
       "wit_contract_version": "4.0.0",
-      "content_digest": "0f302c50782230b9001c8ced2f00bf335b14471e8e255cb09977fee47bbc60e2"
+      "content_digest": "35d2137f91a9709f11ec61b060d70c80c583e5ee289dd6e68e0eda0b96a8628e"
     },
     {
       "name": "vigenere",
@@ -2642,7 +2642,7 @@
       "prefix": "vigenere",
       "expansion": "com.tegmentum.ducklink.vigenere",
       "wit_contract_version": "4.0.0",
-      "content_digest": "3dd85f5e0021e534315f04e2b8e1ba35df0043b8cd44a4a9f571a18c6383bd62"
+      "content_digest": "74f00b669950b38cfd85a13458036216cd745298c40b65e1afc3633b4c888685"
     },
     {
       "name": "petname",
@@ -2679,7 +2679,7 @@
       "prefix": "petname",
       "expansion": "com.tegmentum.ducklink.petname",
       "wit_contract_version": "4.0.0",
-      "content_digest": "c32636bf6afcaa4a049d7fccdf6e6b408bfc9db93dc116eace9202c7632ff677"
+      "content_digest": "5519a3066ce209b3fae7fdb556663817ff4b686e5c94e562ee1952915fda24e2"
     },
     {
       "name": "base58check",
@@ -2717,7 +2717,7 @@
       "prefix": "base58check",
       "expansion": "com.tegmentum.ducklink.base58check",
       "wit_contract_version": "4.0.0",
-      "content_digest": "68cf15052f6857f3a1a3f412b4a3f913e77b94fa116928c2809794e37fce2ab8"
+      "content_digest": "08f4d1d8083c0e89260600994dce28ca138e4c8f50071650b764823653d93338"
     },
     {
       "name": "checksums",
@@ -2835,7 +2835,7 @@
       "prefix": "tiktoken",
       "expansion": "com.tegmentum.ducklink.tiktoken",
       "wit_contract_version": "4.0.0",
-      "content_digest": "b694c6719e13be50183e3df076c7bb022744d8cf443f31180927f66e7d6f893e"
+      "content_digest": "94ea70cc183bceacbe8a346a35d2c62c5b8c6cdd7f35984f41d109436450ccd6"
     },
     {
       "name": "bech32",
@@ -2875,7 +2875,7 @@
       "prefix": "bech32",
       "expansion": "com.tegmentum.ducklink.bech32",
       "wit_contract_version": "4.0.0",
-      "content_digest": "1d6c3a5e4a422534cf231a7534378fef064daf0c7cf3f2ab3c9d28ac773c98e1"
+      "content_digest": "dcf68ecfc692aa90135f37b35d2007bc8cb86364ef7db6330c399d6566fe267d"
     },
     {
       "name": "uuid5",
@@ -2913,7 +2913,7 @@
       "prefix": "uuid5",
       "expansion": "com.tegmentum.ducklink.uuid5",
       "wit_contract_version": "4.0.0",
-      "content_digest": "2d92911e67b4fc390f3a2d629065f4f005b540c20ae4093d8390d7a4b0a9aa25"
+      "content_digest": "537542a0565be59c61eff5981afbd66c14f7c7d8bc147a200335fdc59da783db"
     },
     {
       "name": "gravatar",
@@ -2951,7 +2951,7 @@
       "prefix": "gravatar",
       "expansion": "com.tegmentum.ducklink.gravatar",
       "wit_contract_version": "4.0.0",
-      "content_digest": "5cc174e01c19a7131b770132bce04382c1813fbcc86eda2f7f45716af85ba882"
+      "content_digest": "923be983601dd5ab5fb6e27849fdb65c9391beb81f1bfba6df5de7fb1ba61d84"
     },
     {
       "name": "html2text",
@@ -2988,7 +2988,7 @@
       "prefix": "html2text",
       "expansion": "com.tegmentum.ducklink.html2text",
       "wit_contract_version": "4.0.0",
-      "content_digest": "1b78dba5ff5e3a84355f988b4aef32fff28a6cd9e25458c3855c8c0711c17a53"
+      "content_digest": "fa89be624c678640f56fba211f617cce981f13f143a8242bb4ef5d93c78038b0"
     },
     {
       "name": "textstat",
@@ -3027,7 +3027,7 @@
       "prefix": "textstat",
       "expansion": "com.tegmentum.ducklink.textstat",
       "wit_contract_version": "4.0.0",
-      "content_digest": "414ec9cd139047086dba62fca84d288289929235ae4f72d1970b2ae5f12fd2af"
+      "content_digest": "67ad3c68d1ba52bd7fd9e5661a1575babbfe991013076573999c6306c069b840"
     },
     {
       "name": "hashids",
@@ -3065,7 +3065,7 @@
       "prefix": "hashids",
       "expansion": "com.tegmentum.ducklink.hashids",
       "wit_contract_version": "4.0.0",
-      "content_digest": "1e30a87407771f5657d6377deca27c1fed4e85a18e75e082acd446616273a519"
+      "content_digest": "ce3a2542aeeb0174911da243325fe85e8fbaa896aac7be4d5cf6d80c47f631ec"
     },
     {
       "name": "checkdigit",
@@ -3103,7 +3103,7 @@
       "prefix": "checkdigit",
       "expansion": "com.tegmentum.ducklink.checkdigit",
       "wit_contract_version": "4.0.0",
-      "content_digest": "7932ac38fec3f619ef4ca941491044b92bac634f1984324a59c088d5cd28b7a1"
+      "content_digest": "91bbc152ab777b5ef59b1f8572fb77f6451215f7d0dc1ce23c2179ecef509dcf"
     },
     {
       "name": "dice",
@@ -3142,7 +3142,7 @@
       "prefix": "dice",
       "expansion": "com.tegmentum.ducklink.dice",
       "wit_contract_version": "4.0.0",
-      "content_digest": "45d3004d76e3d712413fa5100ecb66f473b1345bb3b35ac0c2b91f7312173238"
+      "content_digest": "2e08d12ef99a0d426bfcfb6cc7dd9d3dd4180ca11cda7463641f01361e699385"
     },
     {
       "name": "graycode",
@@ -3178,7 +3178,7 @@
       "prefix": "graycode",
       "expansion": "com.tegmentum.ducklink.graycode",
       "wit_contract_version": "4.0.0",
-      "content_digest": "b8d717bdf7f9e61b012c66284f4f2ff0971210da96fa92961f7adb310ab2b420"
+      "content_digest": "932f2276c3ac44644502050730111b67227b829dc9c775e7f2b7eb6cf40cb856"
     },
     {
       "name": "cardtype",
@@ -3213,7 +3213,7 @@
       "prefix": "cardtype",
       "expansion": "com.tegmentum.ducklink.cardtype",
       "wit_contract_version": "4.0.0",
-      "content_digest": "4a60073a0ece27164d1b32c7fa377295b51e763335374bd19ae4362ccb456820"
+      "content_digest": "59db3a2e2c4004389adbd38af664c887e1da5eedd88a121b2d002abb76e86711"
     },
     {
       "name": "money",
@@ -3250,7 +3250,7 @@
       "prefix": "money",
       "expansion": "com.tegmentum.ducklink.money",
       "wit_contract_version": "4.0.0",
-      "content_digest": "faa35ec71b8067c79854e53d1fe1257c76df8e70863749633aacfe71a5f37bd6"
+      "content_digest": "03e096dc2a1f9897230d440636a252e48730c4732ed5c3462c34949c00d13261"
     },
     {
       "name": "ngrams",
@@ -3288,7 +3288,7 @@
       "prefix": "ngrams",
       "expansion": "com.tegmentum.ducklink.ngrams",
       "wit_contract_version": "4.0.0",
-      "content_digest": "182145af4ecf268f6e5a65ba4e6efae751dc4eea6dc541f4a11ca81de677d1b1"
+      "content_digest": "34722b0fc920e2a2e262baca694c7fd0954ea2363ea666e0ac5806621d045b38"
     },
     {
       "name": "stem",
@@ -3325,7 +3325,7 @@
       "prefix": "stem",
       "expansion": "com.tegmentum.ducklink.stem",
       "wit_contract_version": "4.0.0",
-      "content_digest": "4c8119f5833364b101d859ec164f26202be833688ad24e7a0bee941078de940c"
+      "content_digest": "c481c826058aea69054e9d3041d30ff0b6517a392f6dd85e5a116d4f0ad1b5e2"
     },
     {
       "name": "transliterate",
@@ -3362,7 +3362,7 @@
       "prefix": "transliterate",
       "expansion": "com.tegmentum.ducklink.transliterate",
       "wit_contract_version": "4.0.0",
-      "content_digest": "382a8dd31cac42191a9d54e7383e376679ba6d486cf64af9500ebcce1dd34a4c"
+      "content_digest": "026512c1590598fa2737b7aa0b3a8422aed3320d959fdd539f0057cc972e477e"
     },
     {
       "name": "pluscode",
@@ -3403,7 +3403,7 @@
       "prefix": "pluscode",
       "expansion": "com.tegmentum.ducklink.pluscode",
       "wit_contract_version": "4.0.0",
-      "content_digest": "60f81ade42b8608c6c92ada77394e12538ec88a4542552e4032d0ba558fb44bd"
+      "content_digest": "3c797495cc754c39297ec8fecb340dafb3546d2fe66bd773dfcf0e9d7916ac3c"
     },
     {
       "name": "rot47",
@@ -3438,7 +3438,7 @@
       "prefix": "rot47",
       "expansion": "com.tegmentum.ducklink.rot47",
       "wit_contract_version": "4.0.0",
-      "content_digest": "33b460d1feefb6947f58156fd681e8236ad4cb96fe44ddd821e3557eefcb726b"
+      "content_digest": "fddc88a0191b019b434ed71ccb9a78048d8a479d3e530980b78e04dd0d5cab52"
     },
     {
       "name": "stopwords",
@@ -3476,7 +3476,7 @@
       "prefix": "stopwords",
       "expansion": "com.tegmentum.ducklink.stopwords",
       "wit_contract_version": "4.0.0",
-      "content_digest": "974007426813d654fd8ac70929ef70d893209d07b8861ccb3b9fc13dfe68ae85"
+      "content_digest": "03492d94fc06905cdb7324df41dea442d22761d616e38f80f14f3c5ffb412285"
     },
     {
       "name": "isbnconv",
@@ -3512,7 +3512,7 @@
       "prefix": "isbnconv",
       "expansion": "com.tegmentum.ducklink.isbnconv",
       "wit_contract_version": "4.0.0",
-      "content_digest": "523854669c2aba449c5c8ab7a535fe7530d6d206063d1c9bbb35b898382f6c40"
+      "content_digest": "1e38ddd1bd100e1ed574ded66af53cb458ccb7e1b638018d05dd8b37579ec27e"
     },
     {
       "name": "passgen",
@@ -3550,7 +3550,7 @@
       "prefix": "passgen",
       "expansion": "com.tegmentum.ducklink.passgen",
       "wit_contract_version": "4.0.0",
-      "content_digest": "41e719173b694ce2d18ef20c9fdd12893c3e112a23ddfd327dbad228cbf0d2e6"
+      "content_digest": "5bf1e4e3c4a6036f2d3e9550590afbde1d93a1013e1d40a130fd7248a8c2f42e"
     },
     {
       "name": "braille",
@@ -3585,7 +3585,7 @@
       "prefix": "braille",
       "expansion": "com.tegmentum.ducklink.braille",
       "wit_contract_version": "4.0.0",
-      "content_digest": "0db50b85ac643eaf5d6cd05741effb4e03911ad2ea783f5b480d7d6eae2ba2de"
+      "content_digest": "66ddde696ba8818df0eab3451c3c0b90285170848c20fbdc68e5b8ea8ebecabb"
     },
     {
       "name": "toml",
@@ -3624,7 +3624,7 @@
       "prefix": "toml",
       "expansion": "com.tegmentum.ducklink.toml",
       "wit_contract_version": "4.0.0",
-      "content_digest": "efc025fc59ba2e1ad62ab6b677817d0485801a54e5e1a1ab5d022f3ae2dca2b6"
+      "content_digest": "147926ae9ade4302eed438d80f35c8e4bb53235656f3122f479d2ccdb1f09869"
     },
     {
       "name": "yaml",
@@ -3663,7 +3663,7 @@
       "prefix": "yaml",
       "expansion": "com.tegmentum.ducklink.yaml",
       "wit_contract_version": "4.0.0",
-      "content_digest": "69e25835322882540df8bbd5b207ffe07a4f32813d086bf721dc5b9812dbab3b"
+      "content_digest": "2446af404fc86f84ea758e4165c442a46329fbfa560b0326b1529f83c3c4607f"
     },
     {
       "name": "unicodenorm",
@@ -3703,7 +3703,7 @@
       "prefix": "unicodenorm",
       "expansion": "com.tegmentum.ducklink.unicodenorm",
       "wit_contract_version": "4.0.0",
-      "content_digest": "41f6e5a05f9b4a8391afe96c70b9906524eb80fc39320f2616ac38ba98df7dcb"
+      "content_digest": "093f45a4ecd63a2012a1a8aa779e5725e8c93973234a1ebfb649851f7dc9606b"
     },
     {
       "name": "unicodewidth",
@@ -3742,7 +3742,7 @@
       "prefix": "unicodewidth",
       "expansion": "com.tegmentum.ducklink.unicodewidth",
       "wit_contract_version": "4.0.0",
-      "content_digest": "b06f7fbdd9453103c1edba3a0b6cf67ae65dbf6691d69f4e27daf75c9610a31f"
+      "content_digest": "29ee6a9dfaa674bea2412b95aa9a809340339e82d6daed1c84a94d1ab452b919"
     },
     {
       "name": "colorconv",
@@ -3779,7 +3779,7 @@
       "prefix": "colorconv",
       "expansion": "com.tegmentum.ducklink.colorconv",
       "wit_contract_version": "4.0.0",
-      "content_digest": "f22fb4be81ba1fe2fe83ab6afa12edb1aa47c5e05c7a9c757475b3a58bb8d759"
+      "content_digest": "dc3fb9830b141b6e82396a8de3c832723a9c6d311b6f29c44f304c6ff38bc96a"
     },
     {
       "name": "jsonschema",
@@ -3816,7 +3816,7 @@
       "prefix": "jsonschema",
       "expansion": "com.tegmentum.ducklink.jsonschema",
       "wit_contract_version": "4.0.0",
-      "content_digest": "e9e747fc12c4fd8d2574e30203979836599cc391aea524a1e453ef5fa58fd262"
+      "content_digest": "b920068681e22ac01231d6289b0ad5812b9dad563139ead4e1ab4278b46e952c"
     },
     {
       "name": "simhash",
@@ -3852,7 +3852,7 @@
       "prefix": "simhash",
       "expansion": "com.tegmentum.ducklink.simhash",
       "wit_contract_version": "4.0.0",
-      "content_digest": "82791a9752fe1dc7e506d24b9a75ea9ff592b8b2d168672a76f2b8282789cb31"
+      "content_digest": "fa264596464f5811031a082c0a0b0b34420a4f0b21784a7e07ff73d576cf61bd"
     },
     {
       "name": "idextra",
@@ -3930,7 +3930,7 @@
       "prefix": "phonetic2",
       "expansion": "com.tegmentum.ducklink.phonetic2",
       "wit_contract_version": "4.0.0",
-      "content_digest": "628f8adfa4e594c64a7d562842b78abc5c77d5f4a91ffeb7dd6f5842af09e6ae"
+      "content_digest": "f0bf6207f8c32294b1f5b5cf6cc7bf17d11699c63cc338ae67d5c349fb8955f8"
     },
     {
       "name": "z85",
@@ -3968,7 +3968,7 @@
       "prefix": "z85",
       "expansion": "com.tegmentum.ducklink.z85",
       "wit_contract_version": "4.0.0",
-      "content_digest": "b9ef69ecc058cbc093726efa4868532790c00b78ba174b4772b8f64444474633"
+      "content_digest": "91cf984bcde740137802ca0760c47d0719671807ded37d8279e6e6b8a538ab5e"
     },
     {
       "name": "initials",
@@ -4004,7 +4004,7 @@
       "prefix": "initials",
       "expansion": "com.tegmentum.ducklink.initials",
       "wit_contract_version": "4.0.0",
-      "content_digest": "88ed21825bc77aaf4d6b0a4402a0b35ddbc43bddda3ac28dd5c5447c899a534d"
+      "content_digest": "ee3e5e71ab719fc72c8f0d2b2b345e0ff8136a6850323133fbac2ef1168ee68d"
     },
     {
       "name": "luhngen",
@@ -4040,7 +4040,7 @@
       "prefix": "luhngen",
       "expansion": "com.tegmentum.ducklink.luhngen",
       "wit_contract_version": "4.0.0",
-      "content_digest": "8c349467920b41d271aa6ad8e14ba21f02a88d1e30c16df3077604ef787b720c"
+      "content_digest": "f8ee7a1ba7ee12c16e83109e9a69103961c8fdead739eb8ef670ae2fce860b79"
     },
     {
       "name": "pintest_a",
@@ -4143,7 +4143,7 @@
       "prefix": "atbash",
       "expansion": "com.tegmentum.ducklink.atbash",
       "wit_contract_version": "4.0.0",
-      "content_digest": "a3a54210483f0e0f3c11f02659fecdfb1153a6ed22380aab9b9573fc60a95dac",
+      "content_digest": "da6ffb4f6f6f2a6075169002cce022e2df15443dc09077c42a870ee0803e2fd6",
       "providers": [
         {
           "id": "wasm-component",
@@ -4194,7 +4194,7 @@
       "prefix": "piglatin",
       "expansion": "com.tegmentum.ducklink.piglatin",
       "wit_contract_version": "4.0.0",
-      "content_digest": "777082d78d50100777dd0aaa7a7292391d2c12eff03151dd2f344958cf33fdb0"
+      "content_digest": "39e937afb02ed3a8fac17a4acd24d89b9fd03a8d023e87affdc5b80253d1f445"
     },
     {
       "name": "rle",
@@ -4230,7 +4230,7 @@
       "prefix": "rle",
       "expansion": "com.tegmentum.ducklink.rle",
       "wit_contract_version": "4.0.0",
-      "content_digest": "5511393832eeaae73ba56eaacdd0f9c9fd2ca945d32901d05c56760bf35f46af"
+      "content_digest": "16e45533a8cf02a3ba5a044280d5c5053d634136e6c9987acd347f16b5567df1"
     },
     {
       "name": "bbcode",
@@ -4265,7 +4265,7 @@
       "prefix": "bbcode",
       "expansion": "com.tegmentum.ducklink.bbcode",
       "wit_contract_version": "4.0.0",
-      "content_digest": "4506a13d0098eca3fb1536db66b624c38b41563f1b022d6b766553c720e9881d"
+      "content_digest": "6ff22f6b3ba698ecad8f08bed2b1befd359e2771d5f0dbfe8187b725378a9812"
     },
     {
       "name": "phonenumber",
@@ -4304,7 +4304,7 @@
       "prefix": "phonenumber",
       "expansion": "com.tegmentum.ducklink.phonenumber",
       "wit_contract_version": "4.0.0",
-      "content_digest": "cf6e1564768f7b57aa5325dda2dfc50fe07d5fb2dae797f0ecf7c4be9f292be6"
+      "content_digest": "fe8d6e914546ae738b682e9391c98e1dde4bebe6db591d398f3b6f47bda774d0"
     },
     {
       "name": "pwstrength",
@@ -4342,7 +4342,7 @@
       "prefix": "pwstrength",
       "expansion": "com.tegmentum.ducklink.pwstrength",
       "wit_contract_version": "4.0.0",
-      "content_digest": "ceebd1b666cdc3a1f1d5cf923eae3041272a7b3aab167d2cd435a8723b80a147"
+      "content_digest": "ba0abfd648d3f5b9ad374e4d3839e039a879c317914e9898d49b679dbc025502"
     },
     {
       "name": "qrcode",
@@ -4379,7 +4379,7 @@
       "prefix": "qrcode",
       "expansion": "com.tegmentum.ducklink.qrcode",
       "wit_contract_version": "4.0.0",
-      "content_digest": "fa2b39c95df22b3a0af7fcfae2a671be6cacdca964ab41199c1238f08054d312"
+      "content_digest": "76679efabfad700beb510375900d1c1f728c6eb47122439275de1ad8fe135994"
     },
     {
       "name": "aggstat",
@@ -4414,7 +4414,7 @@
       "prefix": "aggstat",
       "expansion": "com.tegmentum.ducklink.aggstat",
       "wit_contract_version": "4.0.0",
-      "content_digest": "6b4e69534571ac8c53f8cea12f47e02c193550b46402a309d4b289f418ace53e",
+      "content_digest": "cde65cb1e7f55d30a8e135c6a2110c57b4833c1760532279233cd11f3131e5be",
       "providers": [
         {
           "id": "wasm-component",
@@ -4467,7 +4467,7 @@
       "prefix": "bloom",
       "expansion": "com.tegmentum.ducklink.bloom",
       "wit_contract_version": "4.0.0",
-      "content_digest": "e6f1a2d6bc337554f79559e94ff4701c1e57320daa6e614e63c5519bee078bf6"
+      "content_digest": "ffc5528f8c0f81f99145d5d54eb6cf08ffad022901fbd9033077f7067c587bfb"
     },
     {
       "name": "minhash",
@@ -4504,7 +4504,7 @@
       "prefix": "minhash",
       "expansion": "com.tegmentum.ducklink.minhash",
       "wit_contract_version": "4.0.0",
-      "content_digest": "31f41ccb982223f28bd8a9d66bd4edc23dfa754196adf2956f0da2f9f53801cb"
+      "content_digest": "6b12e60021db92f754211cbeb8b29ecdc643f0e1c39883f8fc60a61dc8b1ba36"
     },
     {
       "name": "countmin",
@@ -4541,7 +4541,7 @@
       "prefix": "countmin",
       "expansion": "com.tegmentum.ducklink.countmin",
       "wit_contract_version": "4.0.0",
-      "content_digest": "f8a9e226b6fd9e447d61aafd2e3b21c8edb33d7220e40bb2c7e957f41a5fba74"
+      "content_digest": "a4f17308cd177afa7c9795df4fc955cf3bf0ca373a4b3aea567979e1ba10a6fb"
     },
     {
       "name": "dns",
@@ -4578,7 +4578,7 @@
       "prefix": "dns",
       "expansion": "com.tegmentum.ducklink.dns",
       "wit_contract_version": "4.0.0",
-      "content_digest": "a3a6416e01d38c7dfeca6958814e66f54e6eaf4adbce4832300399d4685b1837"
+      "content_digest": "84c62d4bbd738b4a9ee1d41d42926adfb4936eaffc387a01d27c380e0ed3a770"
     },
     {
       "name": "httpclient",
@@ -4620,7 +4620,7 @@
       "prefix": "httpclient",
       "expansion": "com.tegmentum.ducklink.httpclient",
       "wit_contract_version": "4.0.0",
-      "content_digest": "82f28c05d22565aa8ca45797b12dd911d517648a7ec8923dbc4a3492f902f0d2"
+      "content_digest": "5fc306269a96b434913f159075383e97649dd3b16bf69a67d21db24019bd3bf5"
     },
     {
       "name": "lorem",
@@ -4658,7 +4658,7 @@
       "prefix": "lorem",
       "expansion": "com.tegmentum.ducklink.lorem",
       "wit_contract_version": "4.0.0",
-      "content_digest": "248b31760ea2eb9b022e4230f5e924fb261927f1f6d1351abf0e88de365058ba"
+      "content_digest": "db119f3573aa8db6468c6ecf4438fc383544ea4f57fd5cfbb26b0955fe09fa46"
     },
     {
       "name": "faker",
@@ -4699,7 +4699,7 @@
       "prefix": "faker",
       "expansion": "com.tegmentum.ducklink.faker",
       "wit_contract_version": "4.0.0",
-      "content_digest": "ea4d157cc5925d47df1a1164ca3e8360c73af6245514bdc38726f83e7614eb98"
+      "content_digest": "6bcf7aec31c6adab1bd2c0a4122081461ed99fb31affddf9ee1dd46280526b7b"
     },
     {
       "name": "passphrase",
@@ -4778,7 +4778,7 @@
       "prefix": "h3",
       "expansion": "com.tegmentum.ducklink.h3",
       "wit_contract_version": "4.0.0",
-      "content_digest": "8e174549866d8169de55a664f0dae6e72410fe6b4935ffecb449ee9f2a3ec7ba",
+      "content_digest": "b1c79dd5c00dc0cea0ad2f34c20d7d77180a3d0a3967e68edc6d83cfb6a6957d",
       "providers": [
         {
           "id": "wasm-component",
@@ -4834,7 +4834,7 @@
       "prefix": "lindel",
       "expansion": "com.tegmentum.ducklink.lindel",
       "wit_contract_version": "4.0.0",
-      "content_digest": "30ab1d3bdd7fb389dbd42dc18db2885f655d37731bab8f6ff2a563164a2481d5"
+      "content_digest": "e83af9ebbb1d7ba6b06c04d80af14d114aec676d456c5cf66283e51e1984cc06"
     },
     {
       "name": "magic",
@@ -4874,7 +4874,7 @@
       "prefix": "magic",
       "expansion": "com.tegmentum.ducklink.magic",
       "wit_contract_version": "4.0.0",
-      "content_digest": "7d4045070487978865fb85d242a38c2ff8e3a722f383d386bb3b9f6ffa25dad3"
+      "content_digest": "c2a0d8dfc124d0d373a789dd4e325fa461e6ea0370ab5bd89b8844f80728ed8d"
     },
     {
       "name": "tsid",
@@ -4912,7 +4912,7 @@
       "prefix": "tsid",
       "expansion": "com.tegmentum.ducklink.tsid",
       "wit_contract_version": "4.0.0",
-      "content_digest": "c576427c8985274ddff268cd232b1c3e39a45857cd68b0c45cac60dad19cb6a6"
+      "content_digest": "d900348ea6b8263bffad39ed74d02443a4d6b760ab79ac19aa592229558f0f68"
     },
     {
       "name": "rhai",
@@ -4951,7 +4951,7 @@
       "prefix": "rhai",
       "expansion": "com.tegmentum.ducklink.rhai",
       "wit_contract_version": "4.0.0",
-      "content_digest": "1d07675868b0297ebc18332f802701787c6061c8852ef75d08c87630887e1e28"
+      "content_digest": "e86e9f36aecdb344eedc42e4dd5b6af2a387e3471d97bf7cec606d1ccc7b56ef"
     },
     {
       "name": "bitfilters",
@@ -4991,7 +4991,7 @@
       "prefix": "bitfilters",
       "expansion": "com.tegmentum.ducklink.bitfilters",
       "wit_contract_version": "4.0.0",
-      "content_digest": "70f1008b5b3f17d0e2cb22a4ad8a9aca23a2ed15f3431ae27bb76af31e2a23e8"
+      "content_digest": "08b0797c2dca186962ce2099d9370f9d20f6c05e93b2ed56341aa885f5086c6a"
     },
     {
       "name": "prql",
@@ -5023,7 +5023,7 @@
       "prefix": "prql",
       "expansion": "com.tegmentum.ducklink.prql",
       "wit_contract_version": "4.0.0",
-      "content_digest": "ff713cf3083416162d013747fcd6d1955aa7f5f39f1f05b5448cc8510a1be4b9"
+      "content_digest": "4be949b6c2cd8ee2d677193646f2951fefa1177319ee92b87bf71add0d1db93e"
     },
     {
       "name": "jaq",
@@ -5057,7 +5057,7 @@
       "prefix": "jaq",
       "expansion": "com.tegmentum.ducklink.jaq",
       "wit_contract_version": "4.0.0",
-      "content_digest": "e23fd44df18084ff834e660061fc7f230bd9dd195c0c1b78af5ce6de7dd52768"
+      "content_digest": "faa452af886d1aefb7e9b314b52bda4b54ca6b1ab5febbcda36b5313a527813c"
     },
     {
       "name": "cron",
@@ -5090,7 +5090,7 @@
       "prefix": "cron",
       "expansion": "com.tegmentum.ducklink.cron",
       "wit_contract_version": "4.0.0",
-      "content_digest": "3fefa73766fa0b03df9075a2aae79d77f306c1cd5760ca3d2a545d84b87e89f5"
+      "content_digest": "994a33a9588bef95ce1e5e0e282c59df32cf6540c40e12feba1a163e4adc0758"
     },
     {
       "name": "xml",
@@ -5123,7 +5123,7 @@
       "prefix": "xml",
       "expansion": "com.tegmentum.ducklink.xml",
       "wit_contract_version": "4.0.0",
-      "content_digest": "bb3e7aa03a2956e322228c024d3258f5cb31ac3d64c00d99e73c985e2c099606"
+      "content_digest": "7f630466cf86736e3d267596dc73012f6fbea7949425fe37c10d1ecf98bc7612"
     },
     {
       "name": "pinyin",
@@ -5156,7 +5156,7 @@
       "prefix": "pinyin",
       "expansion": "com.tegmentum.ducklink.pinyin",
       "wit_contract_version": "4.0.0",
-      "content_digest": "4b9a3a43f73baaaa5bbc077d10ff2ff35494cefe88f1a5f3b0c729464d9a11e0"
+      "content_digest": "43735b6ee494184519c15cf8f931e3c847b41c2d2e14f2b7ef926bc8e109afab"
     },
     {
       "name": "sqlformat",
@@ -5188,7 +5188,7 @@
       "prefix": "sqlformat",
       "expansion": "com.tegmentum.ducklink.sqlformat",
       "wit_contract_version": "4.0.0",
-      "content_digest": "18480a92fcbbd9462fcf3698b007d155ac155627c34031ee7a6327a13cb87495"
+      "content_digest": "26e3b882f7edc0e1f6b449d2fe78a8c5adb3e28529d9d2f1af13d282f79c9d78"
     },
     {
       "name": "bencode",
@@ -5220,7 +5220,7 @@
       "prefix": "bencode",
       "expansion": "com.tegmentum.ducklink.bencode",
       "wit_contract_version": "4.0.0",
-      "content_digest": "36fc372919837494026e5d8d63c9a6c4724dde51c78d4a1127cdc2008063b11a"
+      "content_digest": "252dce17cd1273ad08a350023a8d6fd2ad582e5b12d2b4c3ac9ab1022de7240a"
     },
     {
       "name": "maidenhead",
@@ -5251,7 +5251,7 @@
       "prefix": "maidenhead",
       "expansion": "com.tegmentum.ducklink.maidenhead",
       "wit_contract_version": "4.0.0",
-      "content_digest": "25f3d99be8db5e71fccc8fce6a31c6bc1fcb1b570c736b9a5f12914e57b0fae5"
+      "content_digest": "e5a6141b36895514eb951ed4127bba8c61b4fafea81072a2f302ec7ccd101b00"
     },
     {
       "name": "base45",
@@ -5283,7 +5283,7 @@
       "prefix": "base45",
       "expansion": "com.tegmentum.ducklink.base45",
       "wit_contract_version": "4.0.0",
-      "content_digest": "79331214d5eee5290b1c57814f67a7cbf7a5366eac39678f092cc14e7b0d4e2d",
+      "content_digest": "d0695a6583a78e593cabfea345a18e98205993a898e19361d7087255ba4b77e8",
       "providers": [
         {
           "id": "wasm-component",
@@ -5329,7 +5329,7 @@
       "prefix": "numfmt",
       "expansion": "com.tegmentum.ducklink.numfmt",
       "wit_contract_version": "4.0.0",
-      "content_digest": "dcd1460348757e1952653a18642fa5a41e98285092d52e3aea09b69d199ad8a8"
+      "content_digest": "aff1100fd0b85500e66ddc974b20b7124230cb6d1b3a67c302ad76b2eca25301"
     },
     {
       "name": "mailto",
@@ -5362,7 +5362,7 @@
       "prefix": "mailto",
       "expansion": "com.tegmentum.ducklink.mailto",
       "wit_contract_version": "4.0.0",
-      "content_digest": "7c7148e8c64f477657d9b5849f6ddf0f8212dff0b9279e95f059890adc4543c1"
+      "content_digest": "a2584490bf33ba5e38f3555962b6c7691cce830502f9ce7a8b3a34e91e96989f"
     },
     {
       "name": "hexdump",
@@ -5392,7 +5392,7 @@
       "prefix": "hexdump",
       "expansion": "com.tegmentum.ducklink.hexdump",
       "wit_contract_version": "4.0.0",
-      "content_digest": "80dbd6c65ff5bdf5ad59247d811332384c0c7977cff9aaac19ebb3dc85facc73"
+      "content_digest": "7aeedcb90fb4ff3ba0fc7dfdf86d6e02d34db4bda28ce1fb6baaf1d04d0a12f4"
     },
     {
       "name": "secp256k1",
@@ -5425,7 +5425,7 @@
       "prefix": "secp256k1",
       "expansion": "com.tegmentum.ducklink.secp256k1",
       "wit_contract_version": "4.0.0",
-      "content_digest": "f0702d555e9a7fdee1fbf8e5ea645c666cb1c76b3f7b0af09ed18c09a97cfcfa"
+      "content_digest": "01594daa67b476399fed79b6913770e9c7e7735f877facbe042c7fc2b5cef3ff"
     },
     {
       "name": "bibtex",
@@ -5458,7 +5458,7 @@
       "prefix": "bibtex",
       "expansion": "com.tegmentum.ducklink.bibtex",
       "wit_contract_version": "4.0.0",
-      "content_digest": "a6fc76ac812c9ea832bcd88a959adc29f4d8120507e0fe050cb773492e473f4d"
+      "content_digest": "502a8330618d5164e2d1c0c493b7ffb7783cd9645d723c853763e07a53284a74"
     },
     {
       "name": "useragent",
@@ -5493,7 +5493,7 @@
       "prefix": "useragent",
       "expansion": "com.tegmentum.ducklink.useragent",
       "wit_contract_version": "4.0.0",
-      "content_digest": "0dc309886e027d5c86b81daf6d20086a38add5971d17d28606e3ca92b8a5de3d"
+      "content_digest": "aac0093509957f896f49c89248a19f1760d6a40bef036ff0396b70ed7caad07f"
     },
     {
       "name": "ical",
@@ -5527,7 +5527,7 @@
       "prefix": "ical",
       "expansion": "com.tegmentum.ducklink.ical",
       "wit_contract_version": "4.0.0",
-      "content_digest": "c92bcd8e3766010ac23dbcb95c85054f514feb08eb90a318f552b628cde51912"
+      "content_digest": "1c1d138495d7fe6b8f8017e0f31f3f1ec670595b2ed74d956384137614fca459"
     },
     {
       "name": "tdigest",
@@ -5562,7 +5562,7 @@
       "prefix": "tdigest",
       "expansion": "com.tegmentum.ducklink.tdigest",
       "wit_contract_version": "4.0.0",
-      "content_digest": "3251f9d3dd80aa134d02340bc90faaab463f001d88a9074272c444fa5e58ce7e",
+      "content_digest": "761ace4462640df39e024c428a39dd17b3227ca7027070724b952a255babd06c",
       "providers": [
         {
           "id": "wasm-component",
@@ -5615,7 +5615,7 @@
       "prefix": "mlkmeans",
       "expansion": "com.tegmentum.ducklink.mlkmeans",
       "wit_contract_version": "4.0.0",
-      "content_digest": "2ddeb2e4c00acc12278cad49cd40c43e4406d86e5354f2445618a9449160dc50"
+      "content_digest": "445dda3ab2b030fb6c65fd84a87c1489aa3e98cf9a0ccca37b3514b25f0094f5"
     },
     {
       "name": "urlpattern",
@@ -5647,7 +5647,7 @@
       "prefix": "urlpattern",
       "expansion": "com.tegmentum.ducklink.urlpattern",
       "wit_contract_version": "4.0.0",
-      "content_digest": "7eb5bc1f4857fb347c2307186a0e0faa80adec7c3a9296b9af60c3e3482f319f"
+      "content_digest": "caa293c0656f5deba72a2635ee8eddabb16438930f131bec113161e12f136474"
     },
     {
       "name": "celestial",
@@ -5680,7 +5680,7 @@
       "prefix": "celestial",
       "expansion": "com.tegmentum.ducklink.celestial",
       "wit_contract_version": "4.0.0",
-      "content_digest": "de6742658f56c42faf2e45bf2fe2a3b49b554bf6443e02e2273eeb71a17508a0"
+      "content_digest": "aa74b1773c79857705be80586fd5ca1c332005ef917efd8fa1d836b9ff4cd2c5"
     },
     {
       "name": "textlines",
@@ -5743,7 +5743,7 @@
       "prefix": "netquack",
       "expansion": "com.tegmentum.ducklink.netquack",
       "wit_contract_version": "4.0.0",
-      "content_digest": "61003fea52a35bd16c861f31174cecf8c562abf909a060e4f82ff3f753032c19"
+      "content_digest": "5e339d4be300212726e832e5e9a9f0909b72854d44aa305d0b0dcb11d0f3a209"
     },
     {
       "name": "openprompt",
@@ -5777,7 +5777,7 @@
       "prefix": "openprompt",
       "expansion": "com.tegmentum.ducklink.openprompt",
       "wit_contract_version": "4.0.0",
-      "content_digest": "179b85ac0c23a56e8106a9cda5611c25394f3d8155ede0416fcd261389d1b8d5"
+      "content_digest": "902771b7fd6262f4ae661a24ad62b4b9be733641fe08fe67c4ba7254ff6a1fa3"
     },
     {
       "name": "dbf",
@@ -5808,7 +5808,7 @@
       "prefix": "dbf",
       "expansion": "com.tegmentum.ducklink.dbf",
       "wit_contract_version": "4.0.0",
-      "content_digest": "ef66d94e5586a25372a69e8c3f6bd5d764abebd1fc8b8e6de59379a1ca31a0e1"
+      "content_digest": "b0d19c69a0109d96b92713895d045b203f81fa51d881ccba2c4274ece5d9e3f4"
     },
     {
       "name": "shapefile",
@@ -5839,7 +5839,7 @@
       "prefix": "shapefile",
       "expansion": "com.tegmentum.ducklink.shapefile",
       "wit_contract_version": "4.0.0",
-      "content_digest": "101135788526d9129eb4c92df333f625063a024b6d6b88f99d58df8a6ef9f702"
+      "content_digest": "b964afa893bf39c0e3f992b1b088d3b5f645bc959f6c66e21e26a36b3bc7db5b"
     },
     {
       "name": "fit",
@@ -5870,7 +5870,7 @@
       "prefix": "fit",
       "expansion": "com.tegmentum.ducklink.fit",
       "wit_contract_version": "4.0.0",
-      "content_digest": "96032e19960eb44e340d6d755d1fe81eda99958e09b949307570ecce21ebf995"
+      "content_digest": "9d6f049bf088d1cf2ceef8acfecfb76582589cf771837f790aa2667f647654b6"
     },
     {
       "name": "warc",
@@ -5901,7 +5901,7 @@
       "prefix": "warc",
       "expansion": "com.tegmentum.ducklink.warc",
       "wit_contract_version": "4.0.0",
-      "content_digest": "3a83e11119b51beb67eb958094b48f37d8e998e082ca6384c8b7b6c7e6c6f332"
+      "content_digest": "78f4d52881c76e30bbf258a2c26f205558c763295e97c5e55085d666dbbca104"
     },
     {
       "name": "html",
@@ -5934,7 +5934,7 @@
       "prefix": "html",
       "expansion": "com.tegmentum.ducklink.html",
       "wit_contract_version": "4.0.0",
-      "content_digest": "6ec22f1d784ced92e87797070d80d90c9534962a781e8ed15a31aae96667c236"
+      "content_digest": "4d56f88567df0f548445f02a5c3dc692f19b90e423381fa6af4b6368f50fba0d"
     },
     {
       "name": "vcard",
@@ -5968,7 +5968,7 @@
       "prefix": "vcard",
       "expansion": "com.tegmentum.ducklink.vcard",
       "wit_contract_version": "4.0.0",
-      "content_digest": "63787aff03cda3f2bd937032d44072bac01bedb1ca8c73976cccbd6f5c581bb1"
+      "content_digest": "9b89c669357893840c357d0db58bef1c8cf11c248173502703f2572f5b7b094c"
     },
     {
       "name": "ini",
@@ -6002,7 +6002,7 @@
       "prefix": "ini",
       "expansion": "com.tegmentum.ducklink.ini",
       "wit_contract_version": "4.0.0",
-      "content_digest": "0c7af36ee2baad91d10b368607a719fc520a9f3a299b937f2e99492a47216419"
+      "content_digest": "17fac7c7620a2ca09cdc2acda8c01f5610617b9517d2aacc05df4774dfaa807a"
     },
     {
       "name": "plist",
@@ -6034,7 +6034,7 @@
       "prefix": "plist",
       "expansion": "com.tegmentum.ducklink.plist",
       "wit_contract_version": "4.0.0",
-      "content_digest": "818211524ffdc2e98c222920b2f01ee5b7186aa5dc018e7b8322e77d8d8998dc"
+      "content_digest": "f9a4f7f12eb34cc622f4b5f12d7e9a387ac331cdfc988bf5c1250fec114fd311"
     },
     {
       "name": "dotenv",
@@ -6065,7 +6065,7 @@
       "prefix": "dotenv",
       "expansion": "com.tegmentum.ducklink.dotenv",
       "wit_contract_version": "4.0.0",
-      "content_digest": "00e309210a476e862ef19194ed6d8200ffe8d5f77b67338c5764ebe7d6265bc1"
+      "content_digest": "b31f5ca830e39015193b0ae090c17aa7074e62193e1beb4229310e4f505ca29c"
     },
     {
       "name": "hocon",
@@ -6097,7 +6097,7 @@
       "prefix": "hocon",
       "expansion": "com.tegmentum.ducklink.hocon",
       "wit_contract_version": "4.0.0",
-      "content_digest": "c7dd2698207563a4aac21987b9a4254760ccedee42466363e4ee287d1ff065e1"
+      "content_digest": "68e884d4b59bb700a330ffcbfb27b4dde07355a34920b32d9bd1153c0c1a35fa"
     },
     {
       "name": "uuid7",
@@ -6130,7 +6130,7 @@
       "prefix": "uuid7",
       "expansion": "com.tegmentum.ducklink.uuid7",
       "wit_contract_version": "4.0.0",
-      "content_digest": "030d07c33d50e38c6062ef27a2d398ccafdc2ea8fade7ef2731c5ee5419a5f11"
+      "content_digest": "14504d06c8669828a1adc38601ae0be19f9fcc95be30ae3524ab5efb8029a3cb"
     },
     {
       "name": "textdiff",
@@ -6163,7 +6163,7 @@
       "prefix": "textdiff",
       "expansion": "com.tegmentum.ducklink.textdiff",
       "wit_contract_version": "4.0.0",
-      "content_digest": "a497a76479b36b8f01eb6e05be1d46ad59ae4d97c3057bace5b66fe5c6a7fbe1"
+      "content_digest": "29f1ade586fbd5fdfa5537f5471dd707f9f313ebdf133e052867ae25a951198b"
     },
     {
       "name": "polyline",
@@ -6195,7 +6195,7 @@
       "prefix": "polyline",
       "expansion": "com.tegmentum.ducklink.polyline",
       "wit_contract_version": "4.0.0",
-      "content_digest": "3ad674995752edc5e646fd238e5a7e8db2d3a3bd19c8553e558d2ae6d53668b8"
+      "content_digest": "418b07617f4c42fb0ab341d96a4f1a97ee7614a174ec43a0210e7fbc23d5ae11"
     },
     {
       "name": "json_schema",
@@ -6227,7 +6227,7 @@
       "prefix": "json_schema",
       "expansion": "com.tegmentum.ducklink.json_schema",
       "wit_contract_version": "4.0.0",
-      "content_digest": "279e9834e1d5848204e9a7cf3ec42a6c9eec29df4efd6bc132758339ab93a559"
+      "content_digest": "cd900d8cdd8a336320ed8d20df427c5bcbe8e559b03c46d69fd968057f8ff4c6"
     },
     {
       "name": "stochastic",
@@ -6264,7 +6264,7 @@
       "prefix": "stochastic",
       "expansion": "com.tegmentum.ducklink.stochastic",
       "wit_contract_version": "4.0.0",
-      "content_digest": "d2c0ecead02b50387d9e4adb04db7b8cd8d5069837cf72c5e009bd0eed71bb5a"
+      "content_digest": "9430466901d442e89f6b575e824ffa02d42bc913d7ee65aaeee08a0b2e7e6775"
     },
     {
       "name": "ion",
@@ -6297,7 +6297,7 @@
       "prefix": "ion",
       "expansion": "com.tegmentum.ducklink.ion",
       "wit_contract_version": "4.0.0",
-      "content_digest": "f3364f7c42c72169ace2d78466a82c18e2a32da87c0d0b8eab0736bafdd653de"
+      "content_digest": "c9f5b697cd30afec0a58bb0af2bbd9eb728c62279b16839eb77fa5df73f4b61c"
     },
     {
       "name": "textplot",
@@ -6330,7 +6330,7 @@
       "prefix": "textplot",
       "expansion": "com.tegmentum.ducklink.textplot",
       "wit_contract_version": "4.0.0",
-      "content_digest": "8504da4be49c5d755bdadd23d7971e83b955833b47efba3c0e5a426dee8f4324"
+      "content_digest": "c3ca280a03fe6df93581b1029b2df3bf4f9745c72c2bf8fabd5a289a88b01432"
     },
     {
       "name": "marisa",
@@ -6363,7 +6363,7 @@
       "prefix": "marisa",
       "expansion": "com.tegmentum.ducklink.marisa",
       "wit_contract_version": "4.0.0",
-      "content_digest": "9e5aa8126725a7d7127f667e485a2be276330b616bd20257e8c9b5e704f12ac0"
+      "content_digest": "97b09f554a769828d962f523857e6c32332866b92ef52b076dd0e5187f413526"
     },
     {
       "name": "frequentitems",
@@ -6393,7 +6393,7 @@
       "prefix": "frequentitems",
       "expansion": "com.tegmentum.ducklink.frequentitems",
       "wit_contract_version": "4.0.0",
-      "content_digest": "6995c02207e9b795652f0f3c7c4367ba59e107d00b864970bc419b72372d6318"
+      "content_digest": "2a7df199a162576535bb36e628dfb8c03fdf427bb1a53dea1d912b2d4aa15ee2"
     },
     {
       "name": "sqlitewasm",
@@ -6425,7 +6425,7 @@
       "prefix": "sqlitewasm",
       "expansion": "com.tegmentum.ducklink.sqlitewasm",
       "wit_contract_version": "4.0.0",
-      "content_digest": "dbfcf56d245c527deb2598861b7bf6490b6c8cfd7609ed895f24302c014c62bf"
+      "content_digest": "2343406b43bddd815501c9e5a7705217060d8ca166e465dec9810260c70d7c38"
     },
     {
       "name": "jsonfns",
@@ -6465,7 +6465,7 @@
       ],
       "min_duckdb_version": "1.0.0",
       "wit_contract_version": "4.0.0",
-      "content_digest": "8051acf4d72b12ebd2430de34433ece4734bf24eea63d3bf466e13c109943e21"
+      "content_digest": "0159b0fcecb4b425042d2b10aaaa390cf296c0827e1a9e0194422daf66571402"
     },
     {
       "name": "inetfns",
@@ -6501,7 +6501,7 @@
       ],
       "min_duckdb_version": "1.0.0",
       "wit_contract_version": "4.0.0",
-      "content_digest": "87b5aa5c45a4fc99447ad296d4343ba8df08f06d7814789ef4ca39962bf2665b"
+      "content_digest": "fb28a8a372b5ecc8d438bf3278309d5a1902aee8973c7f30738613a428b861d2"
     },
     {
       "name": "excelfns",
@@ -6534,7 +6534,7 @@
       "prefix": "excelfns",
       "expansion": "com.tegmentum.ducklink.excelfns",
       "wit_contract_version": "4.0.0",
-      "content_digest": "2097272d6085352391ade1055111ce9dcb4a7ceaf878ff5abc54560fa9824bd0"
+      "content_digest": "381db22df235a613af0c4a4196f8b692e83b68d19bb7f2149f05ee989074afdd"
     },
     {
       "name": "avrofns",
@@ -6568,7 +6568,7 @@
       "prefix": "avrofns",
       "expansion": "com.tegmentum.ducklink.avrofns",
       "wit_contract_version": "4.0.0",
-      "content_digest": "c6ced79eeff8d07c0d9382f957973faaf4af8bf3bb0a721088bb13935b89bd3b"
+      "content_digest": "9c991c331d0ac8d4621caf35e8f3c3280386c6ec62ab4ec8333340af5683f8d0"
     },
     {
       "name": "spatialfns",
@@ -6614,7 +6614,7 @@
       ],
       "min_duckdb_version": "1.0.0",
       "wit_contract_version": "4.0.0",
-      "content_digest": "7ebecbd1f19b91bdb2182c898e61146e66974b7cc7845e4d63bc9d8611fdce0c"
+      "content_digest": "b2da9bd6abc3df807c5fea7680513398d9cddf6d6c17ba6b9de7b207c4bebdae"
     },
     {
       "name": "ftsfns",
@@ -6649,7 +6649,7 @@
       "prefix": "ftsfns",
       "expansion": "com.tegmentum.ducklink.ftsfns",
       "wit_contract_version": "4.0.0",
-      "content_digest": "809c47c47fac5c79c7e0120a4168cfa3fd8c7fef6ad7f6b5b6fcd6be573c7976"
+      "content_digest": "edca625b1ca897f74f3ac3cb1cdb7c9538aa8c93aa09a3661a08e05d2c64d10b"
     },
     {
       "name": "icufns",
@@ -6682,7 +6682,7 @@
       "prefix": "icufns",
       "expansion": "com.tegmentum.ducklink.icufns",
       "wit_contract_version": "4.0.0",
-      "content_digest": "7bea26a6c6e96dd4ea6ba0ffdaaa74bc63b6f0082a26eec21256bb26a2ed0ba2"
+      "content_digest": "c3b2a4b67c1f5d0e24ece51698eb43badff981e844db7cdb9c3c349c493b38b1"
     },
     {
       "name": "vssfns",
@@ -6713,7 +6713,7 @@
       "prefix": "vssfns",
       "expansion": "com.tegmentum.ducklink.vssfns",
       "wit_contract_version": "4.0.0",
-      "content_digest": "f3c0904b97538823882c8b1ef4ff8d83ffcf55bd620f4d6ae28ca73ae8ca5137"
+      "content_digest": "4e7d9f12249e764ca05f028001c896cb9e766b3dffa60d2dbe5947802edf139a"
     },
     {
       "name": "rtreefns",
@@ -6747,7 +6747,7 @@
       "prefix": "rtreefns",
       "expansion": "com.tegmentum.ducklink.rtreefns",
       "wit_contract_version": "4.0.0",
-      "content_digest": "902d635e408d83d960d2f7af61220579a004cb20c18faf2c105b5c355d36ddd8"
+      "content_digest": "755683a81d477a245dcbc71fe9bade057bf0bb8ef3bc319c6fe16124b7f3fa54"
     },
     {
       "name": "hnswfns",
@@ -6779,7 +6779,7 @@
       "prefix": "hnswfns",
       "expansion": "com.tegmentum.ducklink.hnswfns",
       "wit_contract_version": "4.0.0",
-      "content_digest": "5f43410351bacf8c74a7d8e66ee927945c7ddd233f5a7d78b2bc75311285f6cf"
+      "content_digest": "f3dc9e67ff48809b67e4a491cd9a3334ef4b6300b2562d08f288a911a4677139"
     },
     {
       "name": "geomtype",
@@ -6813,7 +6813,7 @@
       "prefix": "geomtype",
       "expansion": "com.tegmentum.ducklink.geomtype",
       "wit_contract_version": "4.0.0",
-      "content_digest": "ac70cba1eef0ecffd79f9d41840e02a1b5d69bb3bada43c9baeb9fb0a349ef6f"
+      "content_digest": "3e5d49a8cffa73c38067ea2852000eb9f3deecd8d4e27cc471ea1dde481705ef"
     },
     {
       "name": "spatialproj",
@@ -6849,7 +6849,7 @@
       "prefix": "spatialproj",
       "expansion": "com.tegmentum.ducklink.spatialproj",
       "wit_contract_version": "4.0.0",
-      "content_digest": "8fe297e67109feedd2b30d4a633d195b0575ff379ea0874d741c510c2807d0eb"
+      "content_digest": "249eeb88ee79d7fb2c123acec9b98ecb2544f326246bf493dfb529c3d49799a2"
     },
     {
       "name": "tpchgen",
@@ -6889,7 +6889,7 @@
       "prefix": "tpchgen",
       "expansion": "com.tegmentum.ducklink.tpchgen",
       "wit_contract_version": "4.0.0",
-      "content_digest": "a74c2e0b3857502a7d3130aece3185c076031c7fd050b67c731c1491441a49b5"
+      "content_digest": "48361ffb0e41097be21d86bb17d88788f1a3b18f99d534c718577d2ce3ff09f3"
     },
     {
       "name": "tpcdsgen",
@@ -6919,7 +6919,7 @@
       "prefix": "tpcdsgen",
       "expansion": "com.tegmentum.ducklink.tpcdsgen",
       "wit_contract_version": "4.0.0",
-      "content_digest": "2fb1f97c978ab40f053c95b326704997199b5d48c21b03d9181f90f794028458"
+      "content_digest": "81dc4e59a3ff69a4be80471f4f75fd1e4b04956f3e16def35062e937d6dfa731"
     },
     {
       "name": "deltascan",
@@ -6951,7 +6951,7 @@
       "prefix": "deltascan",
       "expansion": "com.tegmentum.ducklink.deltascan",
       "wit_contract_version": "4.0.0",
-      "content_digest": "2559f6b197f166bd2f9e7269c67e187036c01d4b001105b0db8d4494a9461d5b"
+      "content_digest": "debeada3f1214f467bb6055b19dfd60035f9420a4172cb4b9dba46735e23b9d6"
     },
     {
       "name": "icebergscan",
@@ -6984,7 +6984,7 @@
       "prefix": "icebergscan",
       "expansion": "com.tegmentum.ducklink.icebergscan",
       "wit_contract_version": "4.0.0",
-      "content_digest": "b0966ab471bdf85b3b4983f566c8d1896e18e3e29505dd02050c0fb118767b1f"
+      "content_digest": "66d36995361ebfe1759580ff40654f9ad71256c3fdb4b62e49dd95ccff836c54"
     },
     {
       "name": "autocomplete",
@@ -7014,7 +7014,7 @@
       "prefix": "autocomplete",
       "expansion": "com.tegmentum.ducklink.autocomplete",
       "wit_contract_version": "4.0.0",
-      "content_digest": "916111d8edc7ee34cfaf74b441495a5061ca0780ebd137f6651861b56d9ebb91"
+      "content_digest": "3f8b490994d38d8f04a2dfe527b081ba188bcb8f365fd8804883d9a565e7da84"
     },
     {
       "name": "statsduck",
@@ -7076,7 +7076,7 @@
       "prefix": "statsduck",
       "expansion": "com.tegmentum.ducklink.stats",
       "wit_contract_version": "4.0.0",
-      "content_digest": "0ddc93d0c374b49d93a2ead93b40dd11e68808cc1da0fb018de445103e4d8ede"
+      "content_digest": "a1ce3f407070dd39e2bdb57243a281f25c09ebdaab881d1bcd11dce4c80c0498"
     },
     {
       "name": "math",
@@ -7118,7 +7118,7 @@
       "prefix": "math",
       "expansion": "com.tegmentum.ducklink.math",
       "wit_contract_version": "4.0.0",
-      "content_digest": "6ac0f75acafc0dba99a913ad10019a3845187e3fa70b2721c86a4c9fdff2c08e",
+      "content_digest": "143b4cce0ffabe1f3a3fb834072d560ee6cf8b5f2b185eeae8fe6672377648dd",
       "providers": [
         {
           "id": "wasm-component",
@@ -7166,7 +7166,7 @@
       "prefix": "text_utils",
       "expansion": "com.tegmentum.ducklink.text_utils",
       "wit_contract_version": "4.0.0",
-      "content_digest": "12c43b2e9d77b1027caea8770ec1e88baea3bb1c81df5713b1277934f5c3094f",
+      "content_digest": "4fe95fb99110150ec3df93faa1eded6939bd5673007368f27ad403b75cf76c62",
       "providers": [
         {
           "id": "wasm-component",
@@ -7260,7 +7260,7 @@
       "expansion": "com.tegmentum.ducklink.chrono",
       "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
       "wit_contract_version": "4.0.0",
-      "content_digest": "6f25e7a29cfa66cd9da28a13f346c0c3a333b11e061d50ae873ca52ece3c7aa2"
+      "content_digest": "0cfe3da4634b8073c0a79e256b035eeb88ffa2136c340535ce79878fe009de59"
     },
     {
       "name": "list",
@@ -7312,7 +7312,7 @@
       "expansion": "com.tegmentum.ducklink.list",
       "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
       "wit_contract_version": "4.0.0",
-      "content_digest": "4ebb1a2ef5e7848861f9b853b34671baabbed99bfa0ed653f97055bb800f7c11"
+      "content_digest": "1f67507d83a385771f4b2b80abf525ab3d4fb5170f07763522f6a5659807c7e5"
     },
     {
       "name": "stdsql",
@@ -7367,7 +7367,7 @@
       "expansion": "com.tegmentum.ducklink.stdsql",
       "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
       "wit_contract_version": "4.0.0",
-      "content_digest": "4b5bed045ddf3252ddea00e20e72cb220885738083578f25390c05ca68a4ef33"
+      "content_digest": "61a8cef5d5e3972532e0bcd3702f4fcf3d25b3abc18a680ce896ac929424fad2"
     },
     {
       "name": "stats",
@@ -7404,7 +7404,7 @@
       "expansion": "com.tegmentum.ducklink.stats",
       "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
       "wit_contract_version": "4.0.0",
-      "content_digest": "64365bcb9bca6c353b2fe122043c504d185d68072c73b27ef9d4bf9c3bc2285c"
+      "content_digest": "03a4a4f6a8f59ac25f839d6986ddad5d33f24b6768f5fd2b804ae2993b3ab61e"
     },
     {
       "name": "sys_compat",
@@ -7442,7 +7442,7 @@
       "expansion": "com.tegmentum.ducklink.sys_compat",
       "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
       "wit_contract_version": "4.0.0",
-      "content_digest": "1167a9f7508693b0b4e4b72a7c9f5b6200f2d017c6b97997648858fab41ecf41"
+      "content_digest": "f3ea0982b0384b55362c380569bebc76a9c3a930e4f03001d5df356f7dbdae2e"
     },
     {
       "name": "ggsql",
@@ -7472,7 +7472,7 @@
       "artifact": "artifacts/extensions/ggsql.wasm",
       "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
       "wit_contract_version": "4.0.0",
-      "content_digest": "951efcb75ba929023b96fd943c8f2b124a01dc5e9608b051efbf94a787defcf1",
+      "content_digest": "90f8624ec31724fb9cc07475883dd57080817e64cbbf887dd2cbcf5eb2db861b",
       "providers": [
         {
           "id": "wasm-component",
@@ -7518,7 +7518,7 @@
       "artifact": "artifacts/extensions/dplyr.wasm",
       "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
       "wit_contract_version": "4.0.0",
-      "content_digest": "949d15193d805a86838a5477dc8e05d61c87b96a2e18590388c3cb362ca4af21",
+      "content_digest": "1c0d3807e17815c07d31427bc035333b9b3bf383b8af53132b8553ca4fbc28ef",
       "providers": [
         {
           "id": "wasm-component",
@@ -7566,7 +7566,7 @@
       "artifact": "artifacts/extensions/prql_parser.wasm",
       "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
       "wit_contract_version": "4.0.0",
-      "content_digest": "a408583dfccebdbac426c3404b5bf5f61d3f3ad70428150a37b19273001e60e5",
+      "content_digest": "181761c2db814b3fd895c9a4bcfeb98c50d0d3191d7bdb563485848104b95525",
       "providers": [
         {
           "id": "wasm-component",
