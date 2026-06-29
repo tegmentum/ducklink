@@ -28,6 +28,8 @@ wit-bindgen-rt = "0.41"
 # wraps prqlc). This shim only maps the core's neutral Outcome onto the
 # duckdb:extension parser-dispatch surface; the compiler lives ONCE in the core.
 prql-core = { path = "../../../datalink/extensions/prql-core" }
+# major-4 columnar stub for hand-written non-scalar components.
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
 [package.metadata.component]
 package = "duckdb:extension"
