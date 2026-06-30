@@ -11,10 +11,12 @@ clap = { version = "4.5", features = ["derive"] }
 wasmtime = { version = "46.0.1", features = ["component-model", "cache"] }
 wasmtime-wasi = "46.0.1"
 # Tiered Virtual Memory: host-owned regions back DuckDB's >4 GiB spill tier.
-# tvm-core is wasmtime-free, so it works with this host's pinned wasmtime (39)
-# even though tvm-wasmtime targets 45; the manager/bytes host traits are
-# implemented in this crate against this host's bindgen.
-tvm-core = { path = "../../../tvm-wasm/crates/tvm-core" }
+# tvm-core is wasmtime-free; the manager/bytes host traits are implemented in
+# this crate against this host's bindgen. Sourced via a pinned git rev of
+# tvm-wasm (not a local path) so ducklink builds standalone AND so ChimeraDB's
+# in-process build (which links ducklink-host + sqlink-host) resolves a SINGLE
+# tvm-core source — sqlink-host pins the same rev. See chimeradb/PLAN-inprocess.md PR1.
+tvm-core = { git = "https://github.com/tegmentum/tvm-wasm.git", rev = "6f3bae38fad4addd4de1837ab151f4ac871d1dd4" }
 # TLS for `ducklink serve` (the httpd). Blocking rustls over the accept
 # loop's TcpStream; rcgen mints the --tls-self-signed cert. Mirrors the
 # sqlite-wasm-httpd stack.
