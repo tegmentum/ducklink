@@ -56,17 +56,45 @@ fi
 
 built=0
 failed=()
+
+# libname <crate-name>: the wasm artifact cargo-component emits is named after
+# the crate's [lib] name, NOT the package name. 28 of the ~198 crates set a
+# custom [lib] name that drops the `-component` suffix (e.g. httpclient,
+# jsonfns), so we MUST read it rather than guess pkg.replace('-','_').
+# crate_meta <registry-name>: prints "<package-name>\t<lib-wasm-name>".
+# The cargo PACKAGE name and the [lib] name can BOTH differ from the registry
+# entry name: e.g. pintest_a (registry) lives in extensions/pintest_a-component/
+# but its package is `pintest-a-component` (hyphen); httpclient's [lib] is just
+# `httpclient`. Read both from Cargo.toml rather than guessing.
+crate_meta() {
+  python3 - "$1" <<'PY'
+import re, sys, pathlib
+n = sys.argv[1]
+txt = pathlib.Path(f"extensions/{n}-component/Cargo.toml").read_text()
+pkg = re.search(r'^\s*name\s*=\s*"([^"]+)"', txt, re.M).group(1)
+m = re.search(r'\[lib\][^\[]*?name\s*=\s*"([^"]+)"', txt, re.S)
+lib = m.group(1) if m else pkg.replace('-', '_')
+print(f"{pkg}\t{lib}")
+PY
+}
+
 for n in "${names[@]}"; do
-  pkg="${n}-component"
-  # cargo-component derives the underscore artifact name from the crate name.
-  underscore="${pkg//-/_}"
+  meta="$(crate_meta "$n")"
+  pkg="${meta%%$'\t'*}"
   echo ">> det-build $n ($pkg)"
-  if cargo component build -p "$pkg" --target "$TARGET" --release >/dev/null 2>&1; then
-    src="$TARGET_DIR/$TARGET/release/${underscore}.wasm"
-    wasm-tools strip --all "$src" -o "$ART_DIR/${n}.wasm"
-    built=$((built + 1))
+  ok=1
+  cargo component build -p "$pkg" --target "$TARGET" --release >/dev/null 2>&1 || ok=0
+  if [ "$ok" = 1 ]; then
+    lib="${meta##*$'\t'}"
+    src="$TARGET_DIR/$TARGET/release/${lib}.wasm"
+    if [ -f "$src" ] && wasm-tools strip --all "$src" -o "$ART_DIR/${n}.wasm" 2>/dev/null; then
+      built=$((built + 1))
+    else
+      echo "   FAILED: $pkg (no artifact $src or strip error)" >&2
+      failed+=("$n")
+    fi
   else
-    echo "   FAILED: $pkg" >&2
+    echo "   FAILED: $pkg (build)" >&2
     failed+=("$n")
   fi
 done
