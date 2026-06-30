@@ -3024,6 +3024,23 @@ impl ExtensionInstance {
         Ok(self.aggregate_incr_bindings.as_ref().unwrap())
     }
 
+    /// DORMANT: alternative window-aggregate dispatch path.
+    ///
+    /// DuckDB-core currently registers all aggregates (window-flagged or not) via
+    /// the vanilla C aggregate API; DuckDB's window engine drives them through
+    /// the existing init/update/combine/finalize callbacks. The 10 postgis window
+    /// functions (#661) execute end-to-end via this path with no new wiring.
+    ///
+    /// This wrapper is preparation for the alternative `call-aggregate-window`
+    /// contract entry -- for future DuckDB-core integrations that register custom
+    /// `WindowFunction` types via the C++ window API. When that lands, host-side
+    /// dispatch (currently absent in ducklink-host) can route partition + frame
+    /// events through this wrapper.
+    ///
+    /// Per duckdb-wasm/docs/v3-core-shim-plan.md: WINDOW executes via the
+    /// aggregate path; this is an alternative, not the primary path. Tracked as
+    /// #662.
+    ///
     /// Compute one window-aggregate value over `partition` rows for the half-
     /// open frame `[frame_start, frame_end)`. `handle` is the aggregate-callback
     /// handle the bridge registered for this window function (windows ride the
