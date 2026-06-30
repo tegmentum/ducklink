@@ -6148,7 +6148,6 @@ pub fn run_cli_with_stdio(
     args: &[impl AsRef<str>],
     preopens: &[(&Path, &str)],
 ) -> Result<Result<(), ()>> {
-    let engine = build_engine()?;
     let owned_preopens = resolve_preopens_with_default(preopens)?;
     let preopen_refs: Vec<(&Path, &str)> = owned_preopens
         .iter()
@@ -6156,6 +6155,50 @@ pub fn run_cli_with_stdio(
         .collect();
     let args_vec: Vec<String> = args.iter().map(|s| s.as_ref().to_owned()).collect();
     let cli_wasi = build_wasi_ctx_inherit(&args_vec, &preopen_refs)?;
+    run_cli_inner(artifacts, owned_preopens, cli_wasi)
+}
+
+/// Like `run_cli_with_stdio`, but drives the CLI with in-memory stdio: `stdin`
+/// is fed `stdin_bytes` (e.g. a SQL script) and the CLI's stdout is captured and
+/// returned. For in-process query execution (no subprocess). Host-side log lines
+/// (extension loading, etc.) still go to the process's real stderr via
+/// `eprintln`, not through this captured pipe.
+pub fn run_cli_capture(
+    artifacts: &ComponentArtifacts,
+    args: &[impl AsRef<str>],
+    preopens: &[(&Path, &str)],
+    stdin_bytes: &[u8],
+) -> Result<String> {
+    let owned_preopens = resolve_preopens_with_default(preopens)?;
+    let preopen_refs: Vec<(&Path, &str)> = owned_preopens
+        .iter()
+        .map(|(host, guest)| (host.as_path(), guest.as_str()))
+        .collect();
+    let args_vec: Vec<String> = args.iter().map(|s| s.as_ref().to_owned()).collect();
+    let stdin = MemoryInputPipe::new(stdin_bytes.to_vec());
+    let stdout = MemoryOutputPipe::new(usize::MAX);
+    let stderr = MemoryOutputPipe::new(usize::MAX);
+    let cli_wasi =
+        build_wasi_ctx_with_pipes(&args_vec, &preopen_refs, stdin, stdout.clone(), stderr)?;
+    // The CLI's own exit Result is irrelevant here; we want its captured output.
+    let _ = run_cli_inner(artifacts, owned_preopens, cli_wasi)?;
+    Ok(String::from_utf8_lossy(&stdout.contents()).into_owned())
+}
+
+/// Shared core of the CLI run path: instantiate the composed core + dotcmd
+/// registry, wire the linker, and drive the CLI component's `wasi:cli/run`.
+/// `cli_wasi` carries the CLI's stdio — inherited (`run_cli_with_stdio`) or
+/// in-memory pipes (`run_cli_capture`).
+fn run_cli_inner(
+    artifacts: &ComponentArtifacts,
+    owned_preopens: Vec<(PathBuf, String)>,
+    cli_wasi: WasiCtx,
+) -> Result<Result<(), ()>> {
+    let engine = build_engine()?;
+    let preopen_refs: Vec<(&Path, &str)> = owned_preopens
+        .iter()
+        .map(|(host, guest)| (host.as_path(), guest.as_str()))
+        .collect();
     let core_wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &preopen_refs)?;
 
     let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
