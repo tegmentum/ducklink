@@ -445,6 +445,24 @@ pub mod duckdb_extension_table_stream_bindings {
     });
 }
 
+/// Bindings for the incremental-aggregate world (`duckdb-extension-aggregate-incr`,
+/// 2.2.0, Item 6), which additionally exports `aggregate-incr-dispatch`. The
+/// 4-method incremental-state surface (init/update/combine/finalize) is unused
+/// today (no component registers an incremental aggregate); the live arm is
+/// `call-aggregate-window` -- the postgis cluster surface (#661) backs DuckDB's
+/// custom WINDOW aggregate dispatch through it. Built lazily from an already-
+/// loaded instance.
+pub mod duckdb_extension_aggregate_incr_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-aggregate-incr",
+        require_store_data_send: true,
+        with: {
+            "duckdb:extension/types@4.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+        },
+    });
+}
+
 /// Bindings for the connection-lifecycle world (`duckdb-extension-conn`, 2.2.0,
 /// Item 7), which additionally exports `conn-dispatch`. Only components that
 /// subscribed to connection callbacks satisfy this; built lazily.

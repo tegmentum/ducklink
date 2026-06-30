@@ -2157,6 +2157,12 @@ pub struct ExtensionInstance {
     // component instance, exactly like the 2.1.0 copy/secret/storage-write path.
     table_stream_bindings:
         Option<crate::duckdb_extension_table_stream_bindings::DuckdbExtensionTableStream>,
+    // #661: lazily-built aggregate-incr-dispatch bindings. Backs custom WINDOW
+    // aggregate dispatch (call-aggregate-window) for components that classify a
+    // window function; the 4 incremental-state arms (init/update/combine/finalize)
+    // are stubs on the component side today.
+    aggregate_incr_bindings:
+        Option<crate::duckdb_extension_aggregate_incr_bindings::DuckdbExtensionAggregateIncr>,
     conn_bindings: Option<crate::duckdb_extension_conn_bindings::DuckdbExtensionConn>,
     file_write_bindings:
         Option<crate::duckdb_extension_file_write_bindings::DuckdbExtensionFileWrite>,
@@ -2342,6 +2348,7 @@ impl ExtensionInstance {
             secret_bindings: None,
             storage_write_bindings: None,
             table_stream_bindings: None,
+            aggregate_incr_bindings: None,
             conn_bindings: None,
             file_write_bindings: None,
             index_write_bindings: None,
@@ -2989,6 +2996,63 @@ impl ExtensionInstance {
         let store = &mut self.store;
         guest
             .call_call_table_close(store.as_context_mut(), handle, cursor)
+            .map_err(map_extension_trap)?
+    }
+
+    // --- 2.3.0 (#661): aggregate-incr-dispatch re-entry (WINDOW path) ---
+    // Drives the `call-aggregate-window` arm of a component's exported
+    // `aggregate-incr-dispatch`. The 4 state-machine arms (init/update/combine/
+    // finalize) have zero callers today -- the postgis pilot is whole-partition
+    // compute, so only the window arm is wrapped. A future incremental-aggregate
+    // surface restores wrappers for the other 4 here.
+
+    fn aggregate_incr_bindings(
+        &mut self,
+    ) -> Result<
+        &crate::duckdb_extension_aggregate_incr_bindings::DuckdbExtensionAggregateIncr,
+        extension_types::Duckerror,
+    > {
+        if self.aggregate_incr_bindings.is_none() {
+            let built =
+                crate::duckdb_extension_aggregate_incr_bindings::DuckdbExtensionAggregateIncr::new(
+                    self.store.as_context_mut(),
+                    &self.instance,
+                )
+                .map_err(map_extension_trap)?;
+            self.aggregate_incr_bindings = Some(built);
+        }
+        Ok(self.aggregate_incr_bindings.as_ref().unwrap())
+    }
+
+    /// Compute one window-aggregate value over `partition` rows for the half-
+    /// open frame `[frame_start, frame_end)`. `handle` is the aggregate-callback
+    /// handle the bridge registered for this window function (windows ride the
+    /// aggregate-registry surface -- the @4.0.0 contract has no separate window
+    /// registry; the engine treats window=aggregate+frame).
+    ///
+    /// The host calls this once per output row of a SQL window expression. The
+    /// component MAY cache `partition` keyed by `handle` across calls within
+    /// one partition (the engine passes the same rows for every frame of a
+    /// partition); an empty `partition` signals the component to drop cached
+    /// partition state.
+    pub fn aggregate_window(
+        &mut self,
+        handle: u32,
+        partition: &Vec<Vec<extension_types::Duckvalue>>,
+        frame_start: u64,
+        frame_end: u64,
+    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+        self.aggregate_incr_bindings()?;
+        let bindings = self.aggregate_incr_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_aggregate_incr_dispatch();
+        let frame =
+            crate::duckdb_extension_aggregate_incr_bindings::exports::duckdb::extension::aggregate_incr_dispatch::WindowFrame {
+                start: frame_start,
+                end: frame_end,
+            };
+        let store = &mut self.store;
+        guest
+            .call_call_aggregate_window(store.as_context_mut(), handle, partition, frame)
             .map_err(map_extension_trap)?
     }
 
