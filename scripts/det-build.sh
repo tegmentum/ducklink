@@ -36,6 +36,47 @@ mkdir -p "$ART_DIR"
 export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1577836800}"
 export RUSTFLAGS="--remap-path-prefix=$HOME=/home --remap-path-prefix=$TARGET_DIR=/target -C debuginfo=0${RUSTFLAGS:+ $RUSTFLAGS}"
 
+# --- C cross-compile sysroot (for crates with native C deps) ------------------
+# A handful of components pull a C dependency through a `-sys` crate built by
+# cc-rs (e.g. sqlitewasm -> libsqlite3-sys -> sqlite3.c). cc-rs invokes the
+# host `clang` with `--target=wasm32-wasip1` but NO sysroot, so the C headers
+# (`stdio.h`, ...) are unresolved -> build fails. We point cc-rs at a real WASI
+# sysroot + the wasi-sdk clang/llvm-ar.
+#
+# NOTE on the target name: `cargo component build` compiles the guest as
+# wasm32-WASIP1 under the hood and then adapts it to wasip2, so cc-rs sees the
+# wasip1 target. We set BOTH the wasip1 and wasip2 env triples so the C build is
+# wired regardless of which cargo-component picks.
+#
+# DETERMINISM: clang embeds __FILE__ / debug paths into the C objects exactly
+# like rustc does for Rust. -ffile-prefix-map collapses the two machine-specific
+# prefixes ($HOME, the build dir) to stable tokens and -g0 drops debuginfo;
+# SOURCE_DATE_EPOCH (set above) covers any timestamp the toolchain would embed.
+# Result: the C objects -- and thus the final component -- are byte-identical
+# across machines / checkouts / target dirs.
+#
+# WASI_SDK auto-detection: prefer an env override, then a ducklink-local deps
+# dir, then sqlink's wasi-sdk (same upstream toolchain). Only wired if found; a
+# pure-Rust build does not need it.
+if [ -z "${WASI_SDK:-}" ]; then
+  for cand in "$HERE/deps/wasi-sdk" "$HOME/git/sqlink/deps/wasi-sdk"; do
+    if [ -x "$cand/bin/clang" ]; then WASI_SDK="$cand"; break; fi
+  done
+fi
+if [ -n "${WASI_SDK:-}" ] && [ -x "$WASI_SDK/bin/clang" ]; then
+  WASI_SYSROOT="${WASI_SYSROOT:-$WASI_SDK/share/wasi-sysroot}"
+  _det_cflags="--sysroot=$WASI_SYSROOT -ffile-prefix-map=$HOME=/home -ffile-prefix-map=$HERE=/build -g0"
+  export CC_wasm32_wasip1="$WASI_SDK/bin/clang"
+  export AR_wasm32_wasip1="$WASI_SDK/bin/llvm-ar"
+  export CFLAGS_wasm32_wasip1="--target=wasm32-wasip1 $_det_cflags"
+  export CC_wasm32_wasip2="$WASI_SDK/bin/clang"
+  export AR_wasm32_wasip2="$WASI_SDK/bin/llvm-ar"
+  export CFLAGS_wasm32_wasip2="--target=wasm32-wasip2 $_det_cflags"
+  echo "det-build: C cross-compile wired via WASI_SDK=$WASI_SDK" >&2
+else
+  echo "det-build: no WASI_SDK found (pure-Rust builds unaffected; C-dep builds will fail)" >&2
+fi
+
 names=()
 if [ "${1:-}" = "--all" ]; then
   # every registry entry's bare name (the python is stdlib-only)

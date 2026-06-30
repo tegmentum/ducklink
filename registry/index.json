@@ -6425,7 +6425,7 @@
       "prefix": "sqlitewasm",
       "expansion": "com.tegmentum.ducklink.sqlitewasm",
       "wit_contract_version": "4.0.0",
-      "content_digest": "2343406b43bddd815501c9e5a7705217060d8ca166e465dec9810260c70d7c38"
+      "content_digest": "337eda726d77b77ebfc0cf8cfbb7cdfc4ed8b14df711ebead87e5973d2723acd"
     },
     {
       "name": "jsonfns",
