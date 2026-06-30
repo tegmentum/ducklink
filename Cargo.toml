@@ -212,6 +212,7 @@ members = [
     "extensions/icebergscan-component",
     "extensions/autocomplete-component",
     "extensions/statsduck-component",
+    "tools/catalog-sig-extract",
 ]
 
 # talib-component carries its own `[workspace]` table (an independent lockfile —

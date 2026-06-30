@@ -1,0 +1,21 @@
+[package]
+name = "catalog-sig-extract"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Load each catalog component and emit its full SQL function signatures (catalog `functions` enrichment)"
+
+[[bin]]
+name = "catalog-sig-extract"
+path = "src/main.rs"
+
+[dependencies]
+# The shared wasm-component-loading engine: load_component + the neutral reg::*
+# capture model. Same loader the Direction-1 host and the Direction-2 native
+# extension use, so signatures match what gets registered.
+ducklink-runtime = { path = "../../crates/ducklink-runtime" }
+wasmtime = { version = "46.0.1", features = ["component-model", "cache"] }
+wasmtime-wasi = "46.0.1"
+anyhow = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
