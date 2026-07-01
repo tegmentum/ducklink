@@ -17,10 +17,18 @@ A module artifact is uniquely keyed by **(contract-generation, duckdb-version, p
 - The **WIT contract MAJOR is the generation**. ducklink (the host extension)
   shares it: **ducklink `4.x` speaks contract `@4`**, and modules built for it are
   generation 4.
-- **User-facing rule:** host major *N* runs module generations **≤ N** — newer
-  hosts are **backward-compatible** with older generations (verified across
-  scalar/table/aggregate for the @2→@4 transition). A user just needs a host whose
-  generation ≥ the module's.
+- **User-facing rule:** host major *N* runs module generation *N* — **strict
+  within-major; cross-major is REJECTED.** A user needs a host whose major MATCHES
+  the module's generation.
+- **DECIDED 2026-07-01 — one uniform model across ALL hosts.** The
+  `ducklink-runtime` CLI + the browser/demo cores already enforce within-major
+  forward-compat and reject cross-major (`ducklink-runtime/src/lib.rs:84-94,
+  141-157`); the **native extension is being tightened to match** (v4.0.1),
+  removing its earlier lenient "runs generations ≤ N" cross-major loading. This
+  supersedes the earlier backward-compat verification — backward-compat is NOT a
+  guarantee; the model is strict same-major. (Tightening requires the extension's
+  bundled snapshot to be gen-4, so offline name-resolution/loads aren't rejected —
+  shipped together in v4.0.1.)
 - **Implementation (decoupled):** each module keeps its **own semver**; the catalog
   `providers[].abi` records the contract generation each provider blob was built
   for. The host resolves by selecting the **newest provider whose generation ≤ the
