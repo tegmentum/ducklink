@@ -106,5 +106,16 @@ A module artifact is uniquely keyed by **(contract-generation, duckdb-version, p
   let one common-tier binary span DuckDB versions). Not required for old-version
   support — self-publishing to a `custom_extension_repository` already covers
   that; revisit only as a convenience if the per-version build matrix becomes
-  painful. Precondition kept on file: audit that the common tier links nothing
-  outside the stable `v1.2.0` set.
+  painful.
+- **Symbol audit DONE (2026-06-30):** the common tier is stable-`v1.2.0`-clean
+  EXCEPT that `duckdb-rs` executes all SQL over the UNSTABLE Arrow C-API
+  (`Connection::execute` → `duckdb_execute_prepared_arrow` / `duckdb_query_arrow_schema` /
+  `duckdb_arrow_rows_changed`). ducklink's own code hits it in exactly TWO spots:
+  the `COMMENT ON FUNCTION` (`src/lib.rs:310`) and the `ducklink.*` view creation
+  (`src/reg_duckdb.rs:1610`). All registration / vector I/O / dispatch / aggregates
+  are stable; the suspected client-context / bind-result-column / vector-create
+  helpers are NOT reached. So a stable-portable common tier = (1) a `libduckdb-sys`
+  stable-build mode (drop the forced `-DDUCKDB_EXTENSION_API_VERSION_UNSTABLE`,
+  `build.rs:624`) + (2) re-plumb those two `con.execute` calls onto stable
+  `duckdb_prepare` + `duckdb_execute_prepared` + `duckdb_fetch_chunk`. Small and
+  scoped, not a rewrite. Advanced tier is unaffected (inherently version-locked).
