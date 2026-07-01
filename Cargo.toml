@@ -212,6 +212,12 @@ members = [
     "extensions/icebergscan-component",
     "extensions/autocomplete-component",
     "extensions/statsduck-component",
+    "extensions/a5-component",
+    "extensions/jsonata-component",
+    "extensions/minijinja-component",
+    "extensions/tera-component",
+    "extensions/pcap-component",
+    "extensions/sqlitecompat-component",
     "tools/catalog-sig-extract",
 ]
 

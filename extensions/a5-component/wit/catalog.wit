@@ -1,0 +1,42 @@
+package duckdb:extension@4.0.0;
+
+interface catalog {
+  use runtime.{cast-callback};
+
+  record logical-type {
+    name: string,
+    // TODO: narrow this once we know which physical types we support
+    physical: string,
+  }
+
+  type logical-type-handle = u32;
+
+  enum cast-kind {
+    implicit,
+    assignment,
+    explicit,
+  }
+
+  record cast-spec {
+    %from: string,
+    to: string,
+    kind: cast-kind,
+  }
+
+  record macro-def {
+    schema: string,
+    name: string,
+    parameters: list<string>,
+    definition-sql: string,
+  }
+
+  /// Register a logical type by name.
+  register-logical-type: func(ty: logical-type) -> result<logical-type-handle, string>;
+
+  /// Register a cast between logical types. The callback transforms one source
+  /// value into a target value.
+  register-cast: func(spec: cast-spec, callback: cast-callback) -> result<_, string>;
+
+  /// Register a default macro.
+  register-macro: func(def: macro-def) -> result<_, string>;
+}

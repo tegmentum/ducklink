@@ -1,0 +1,16 @@
+greeting
+Hello World!
+loop
+123
+filter
+HI
+# invalid template -> NULL
+bad_tmpl
+NULL
+# malformed JSON -> NULL
+bad_json
+NULL
+ok
+true
+broken
+false
