@@ -17,12 +17,20 @@ A module artifact is uniquely keyed by **(contract-generation, duckdb-version, p
 - The **WIT contract MAJOR is the generation**. ducklink (the host extension)
   shares it: **ducklink `4.x` speaks contract `@4`**, and modules built for it are
   generation 4.
-- **User-facing rule:** host major *N* loads module generation *N*.
+- **User-facing rule:** host major *N* runs module generations **≤ N** — newer
+  hosts are **backward-compatible** with older generations (verified across
+  scalar/table/aggregate for the @2→@4 transition). A user just needs a host whose
+  generation ≥ the module's.
 - **Implementation (decoupled):** each module keeps its **own semver**; the catalog
   `providers[].abi` records the contract generation each provider blob was built
-  for. The host resolves by selecting the provider whose contract major == the
-  host's. This gives the simple "match on major" signal *without* overloading a
-  module's own semver (so a module's independent breaking change still has room).
+  for. The host resolves by selecting the **newest provider whose generation ≤ the
+  host's**, falling back to the entry's top-level `content_digest`. This gives the
+  simple "match on major" signal *without* overloading a module's own semver (so a
+  module's independent breaking change still has room).
+- **Backward-compat is not guaranteed forever.** The @2→@4 transition preserved it
+  (old components still instantiate on the new host), so today's effective rule is
+  "host runs generations ≤ N." A future breaking generation only requires revising
+  two centralized spots — `select_provider` and the `runnable` predicate.
 - **Coupling is MAJOR-only.** Additive contract changes (`@4.0 → @4.1`) are
   backward-compatible — a gen-4.0 module runs on a 4.1 host; no module rebuild is
   forced.
