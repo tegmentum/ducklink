@@ -47,8 +47,8 @@ A module artifact is uniquely keyed by **(contract-generation, duckdb-version, p
 ## Multi-generation support window
 
 - Support **current + previous generation (N and N-1)**.
-- When N+1 ships: N-1 → `deprecated`; **EOL after one release cycle** (or a fixed
-  window — TBD, proposed 6 months).
+- When N+1 ships: N-1 → `deprecated`; **EOL 6 months after deprecation** (one
+  DuckDB release cycle).
 - Each supported generation = a full, reproducible blob set (deterministic build
   pipeline) + catalog providers for that generation.
 - Blobs are **content-addressed and immutable**, so generations coexist at ~zero
@@ -61,9 +61,13 @@ A module artifact is uniquely keyed by **(contract-generation, duckdb-version, p
 - DuckDB distributes extensions per **(duckdb-version, platform)**.
   community-extensions rebuilds for **latest-stable + next** on each DuckDB
   release; **old binaries are frozen**, not updated.
-- **Consequence:** you **cannot** ship bugfixes to users on *old* DuckDB versions
-  through community-extensions — new work only flows forward. Users on an old
-  DuckDB keep the frozen binary until they upgrade DuckDB.
+- **Consequence (community channel only):** through **community-extensions** you
+  cannot ship bugfixes to users on *old* DuckDB versions — its pipeline builds
+  only latest-stable + next, and old binaries are frozen. This limit is specific
+  to the community channel. **We can still support old versions ourselves** by
+  publishing our own builds to a `custom_extension_repository` (see escape
+  hatches) — we control exactly which DuckDB versions we build and patch for. The
+  trade-off vs. community is ours to run (build matrix + users set the repo).
 - **Escape hatches:**
   - **Self-host** via `custom_extension_repository` — you own the build matrix and
     can target any DuckDB versions.
@@ -84,11 +88,15 @@ A module artifact is uniquely keyed by **(contract-generation, duckdb-version, p
 | **Common** | `ducklink_load`, `ducklink.*` views | stable C API (currently pinned by `libduckdb-sys`) | portable *if* moved to stable ABI; else per-version | all |
 | **Advanced** | `LOAD WASM` | internal C++ ABI | **hard-locked** to exact DuckDB version | osx/linux only |
 
-## Open items
+## Decisions & open items
 
-- Implement **host provider-selection-by-contract-major** (client resolves the
-  top-level `content_digest` today, not a per-generation provider).
-- Add `providers[].status` + a `ducklink.versions` view.
-- Decide the **EOL window** duration (proposed: 6 months / one DuckDB cycle).
-- Upstream: propose a **stable-ABI build mode** to duckdb-rs / `libduckdb-sys`;
-  audit that the common tier links nothing outside the stable `v1.2.0` set.
+- **EOL window: 6 months** after deprecation (one DuckDB cycle). ✓ decided.
+- **In progress:** host provider-selection-by-generation + `providers[].status`
+  + a `ducklink.versions` view (client resolves the top-level `content_digest`
+  today, not a per-generation provider).
+- **On hold:** the stable-ABI build-mode ask to duckdb-rs / `libduckdb-sys` (would
+  let one common-tier binary span DuckDB versions). Not required for old-version
+  support — self-publishing to a `custom_extension_repository` already covers
+  that; revisit only as a convenience if the per-version build matrix becomes
+  painful. Precondition kept on file: audit that the common tier links nothing
+  outside the stable `v1.2.0` set.
