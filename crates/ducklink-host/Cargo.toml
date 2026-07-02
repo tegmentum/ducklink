@@ -49,8 +49,8 @@ dirs = "5"
 #     adapter (allow-all / deny-all / per-name); behavior is unchanged.
 #   - datalink-prefix: the prefix__name resolution algorithm + the
 #     collision/pin model behind a PrefixStore trait, backed in-memory here.
-datalink-policy = { git = "https://github.com/tegmentum/datalink.git", rev = "88782655415e22bb67c4cb3575a10fc1938b14e0" }
-datalink-prefix = { git = "https://github.com/tegmentum/datalink.git", rev = "88782655415e22bb67c4cb3575a10fc1938b14e0" }
+datalink-policy = { git = "https://github.com/tegmentum/datalink.git", rev = "80010adf7c9ec3d07674bba12585c787328217f5" }
+datalink-prefix = { git = "https://github.com/tegmentum/datalink.git", rev = "80010adf7c9ec3d07674bba12585c787328217f5" }
 
 [dev-dependencies]
 tempfile = "3"
