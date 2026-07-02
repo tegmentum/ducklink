@@ -1,0 +1,13 @@
+# Staged, version-pinned wasm artifact sets (core/cli/extensions + .cwasm).
+# These are large binaries reproduced from prebuilt artifacts -- not committed.
+artifacts-*/
+*.wasm
+*.cwasm
+
+# Logs (the result JSON + REPORT.md / MATRIX.md are committed; raw logs are not).
+results/*.log
+*.log
+
+# Python
+__pycache__/
+*.pyc

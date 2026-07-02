@@ -1,0 +1,81 @@
+{
+  "contract_label": "4.0.0-before",
+  "host": {
+    "platform": "darwin",
+    "cpu": "Apple M2 Max",
+    "wasmtime": "wasmtime 46.0.1 (823d1b8f2 2026-06-24)"
+  },
+  "configs": [
+    {
+      "id": "wasm-dynamic-noaot",
+      "title": "WASM DYNAMIC, no-AOT",
+      "kind": "wasm",
+      "aot": false,
+      "embedded": false,
+      "note": "Core + extension as separate components, host-resolver/WIT-dispatched, Cranelift-compiled at instantiation. The current shipped wasm path."
+    }
+  ],
+  "workloads": [
+    {
+      "id": "fnv1a_64_1m",
+      "category": "b. light-compute scalar",
+      "extension": "checksums",
+      "rows": 1000000,
+      "cells": {
+        "wasm-dynamic-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 323.2027684513845,
+          "fixed_cost_ms": 747.074208204868,
+          "r2": 0.9999998113465844,
+          "rows_per_s": 3094032.903218829,
+          "slope_ms_p25": 323.58434541583324,
+          "slope_ms_p75": 324.0748034516582
+        }
+      }
+    },
+    {
+      "id": "siphash_long_1m",
+      "category": "c. heavier-compute scalar (guest-dominated)",
+      "extension": "siphash",
+      "rows": 1000000,
+      "cells": {
+        "wasm-dynamic-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 502.628444657395,
+          "fixed_cost_ms": 828.634024789789,
+          "r2": 0.9999843538980886,
+          "rows_per_s": 1989541.2021132763,
+          "slope_ms_p25": 502.4643711432872,
+          "slope_ms_p75": 506.5362793280136
+        }
+      }
+    }
+  ],
+  "deltas": {
+    "each_vs_native": {},
+    "dynamic_vs_embedded": {
+      "noaot": {
+        "per_workload": {},
+        "geomean_dynamic_over_embedded": null
+      },
+      "aot": {
+        "per_workload": {},
+        "geomean_dynamic_over_embedded": null
+      }
+    },
+    "aot_vs_noaot": {
+      "dynamic": {
+        "per_workload": {},
+        "geomean_slope_ratio_aot_over_noaot": null,
+        "median_fixed_noaot_ms": null,
+        "median_fixed_aot_ms": null
+      },
+      "embedded": {
+        "per_workload": {},
+        "geomean_slope_ratio_aot_over_noaot": null,
+        "median_fixed_noaot_ms": null,
+        "median_fixed_aot_ms": null
+      }
+    }
+  }
+}

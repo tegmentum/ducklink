@@ -1,0 +1,349 @@
+{
+  "contract_label": "4.0.0-columnar",
+  "host": {
+    "platform": "darwin",
+    "cpu": "Apple M2 Max",
+    "wasmtime": "wasmtime 46.0.1 (823d1b8f2 2026-06-24)"
+  },
+  "configs": [
+    {
+      "id": "native",
+      "title": "NATIVE (bundled DuckDB + native ducklink ext)",
+      "kind": "native",
+      "aot": false,
+      "embedded": false,
+      "note": "Baseline. Native engine builds DataChunks; reg_duckdb marshals across WIT into the component (embedded wasmtime). The extension algorithm is still wasm."
+    },
+    {
+      "id": "wasm-dynamic-noaot",
+      "title": "WASM DYNAMIC, no-AOT",
+      "kind": "wasm",
+      "aot": false,
+      "embedded": false,
+      "note": "Core + extension as separate components, host-resolver/WIT-dispatched, Cranelift-compiled at instantiation. The current shipped wasm path."
+    },
+    {
+      "id": "wasm-dynamic-aot",
+      "title": "WASM DYNAMIC, AOT",
+      "kind": "wasm",
+      "aot": true,
+      "embedded": false,
+      "note": "Same dynamic dispatch, but core + cli loaded from wasmtime-precompiled .cwasm (deserialize, no compile). Isolates the one-time compile cost from steady-state throughput."
+    },
+    {
+      "id": "wasm-embedded-noaot",
+      "title": "WASM EMBEDDED, no-AOT",
+      "kind": "wasm",
+      "aot": false,
+      "embedded": true,
+      "note": "Extension compiled INTO the core (embed framework: registered as a native scalar, no cross-component WIT dispatch boundary), compiled at instantiation."
+    },
+    {
+      "id": "wasm-embedded-aot",
+      "title": "WASM EMBEDDED, AOT",
+      "kind": "wasm",
+      "aot": true,
+      "embedded": true,
+      "note": "Embedded + precompiled .cwasm. The expected near-native upper bound once the columnar @4.0.0 ABI lands."
+    }
+  ],
+  "workloads": [
+    {
+      "id": "aba_validate_1m",
+      "category": "a. dispatch-bound scalar",
+      "extension": "aba",
+      "rows": 1000000,
+      "cells": {
+        "native": {
+          "status": "ok",
+          "slope_ms_per_query": 203.60101495144463,
+          "fixed_cost_ms": 193.38721620006183,
+          "r2": 0.999898272439099,
+          "rows_per_s": 4911566.871307017,
+          "slope_ms_p25": 196.9657976828447,
+          "slope_ms_p75": 203.92014917999404,
+          "overhead_vs_native_pct": 0.0,
+          "internal_ms_per_query_at_kmax": 203.1920833375
+        },
+        "wasm-dynamic-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 305.1474091700064,
+          "fixed_cost_ms": 556.6670747994067,
+          "r2": 0.9999797891381963,
+          "rows_per_s": 3277104.6712144003,
+          "slope_ms_p25": 298.6222177942857,
+          "slope_ms_p75": 305.9013393471521,
+          "overhead_vs_native_pct": 49.87519057445704
+        },
+        "wasm-dynamic-aot": {
+          "status": "skipped",
+          "reason": "artifacts absent (no core)"
+        },
+        "wasm-embedded-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 98.77543554713546,
+          "fixed_cost_ms": 601.5138496004511,
+          "r2": 0.9999964280520095,
+          "rows_per_s": 10123974.594096342,
+          "slope_ms_p25": 98.01367416857829,
+          "slope_ms_p75": 101.95232696430269,
+          "overhead_vs_native_pct": -51.48578430677679
+        },
+        "wasm-embedded-aot": {
+          "status": "skipped",
+          "reason": "artifacts absent (no core)"
+        }
+      }
+    },
+    {
+      "id": "fnv1a_64_1m",
+      "category": "b. light-compute scalar",
+      "extension": "checksums",
+      "rows": 1000000,
+      "cells": {
+        "native": {
+          "status": "ok",
+          "slope_ms_per_query": 86.18406731715108,
+          "fixed_cost_ms": 248.82205039939453,
+          "r2": 0.9999958335289234,
+          "rows_per_s": 11603072.715517974,
+          "slope_ms_p25": 86.04260434571448,
+          "slope_ms_p75": 86.19504637857192,
+          "overhead_vs_native_pct": 0.0,
+          "internal_ms_per_query_at_kmax": 86.1697458375
+        },
+        "wasm-dynamic-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 205.34277643142298,
+          "fixed_cost_ms": 689.3362833998253,
+          "r2": 0.9999876618713016,
+          "rows_per_s": 4869905.907471566,
+          "slope_ms_p25": 204.78051184573425,
+          "slope_ms_p75": 205.67388030287734,
+          "overhead_vs_native_pct": 138.2607166540151
+        },
+        "wasm-dynamic-aot": {
+          "status": "skipped",
+          "reason": "artifacts absent (no core)"
+        },
+        "wasm-embedded-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 99.77127898856581,
+          "fixed_cost_ms": 680.1765163996607,
+          "r2": 0.9999069728231265,
+          "rows_per_s": 10022924.534370296,
+          "slope_ms_p25": 95.61523738429709,
+          "slope_ms_p75": 99.93097147000299,
+          "overhead_vs_native_pct": 15.76534050245597
+        },
+        "wasm-embedded-aot": {
+          "status": "skipped",
+          "reason": "artifacts absent (no core)"
+        }
+      }
+    },
+    {
+      "id": "siphash_long_1m",
+      "category": "c. heavier-compute scalar (guest-dominated)",
+      "extension": "siphash",
+      "rows": 1000000,
+      "cells": {
+        "native": {
+          "status": "ok",
+          "slope_ms_per_query": 174.66864478574928,
+          "fixed_cost_ms": 405.98769199932593,
+          "r2": 0.9999967652333112,
+          "rows_per_s": 5725126.002017205,
+          "slope_ms_p25": 174.22265595713336,
+          "slope_ms_p75": 174.96824421069246,
+          "overhead_vs_native_pct": 0.0,
+          "internal_ms_per_query_at_kmax": 174.7170260625
+        },
+        "wasm-dynamic-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 373.8916812214029,
+          "fixed_cost_ms": 804.337983400182,
+          "r2": 0.9999994995698542,
+          "rows_per_s": 2674571.407240917,
+          "slope_ms_p25": 373.34871606427834,
+          "slope_ms_p75": 378.4514863250414,
+          "overhead_vs_native_pct": 114.05769860985816
+        },
+        "wasm-dynamic-aot": {
+          "status": "skipped",
+          "reason": "artifacts absent (no core)"
+        },
+        "wasm-embedded-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 168.80248465355572,
+          "fixed_cost_ms": 805.4106836003481,
+          "r2": 0.9999933221577519,
+          "rows_per_s": 5924083.416499259,
+          "slope_ms_p25": 168.80039046785507,
+          "slope_ms_p75": 169.13433943564738,
+          "overhead_vs_native_pct": -3.3584505904817985
+        },
+        "wasm-embedded-aot": {
+          "status": "skipped",
+          "reason": "artifacts absent (no core)"
+        }
+      }
+    },
+    {
+      "id": "talib_sma_1m",
+      "category": "c. compute-heavy aggregate",
+      "extension": "talib",
+      "rows": 1000000,
+      "cells": {
+        "native": {
+          "status": "ok",
+          "slope_ms_per_query": 57.93900678429314,
+          "fixed_cost_ms": 112.31507480006275,
+          "r2": 0.9999631288420631,
+          "rows_per_s": 17259529.55533047,
+          "slope_ms_p25": 57.391227867150775,
+          "slope_ms_p75": 59.05441494856859,
+          "overhead_vs_native_pct": 0.0,
+          "internal_ms_per_query_at_kmax": 57.86157865
+        },
+        "wasm-dynamic-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 91.93302423570069,
+          "fixed_cost_ms": 462.59764099995635,
+          "r2": 0.9999932637029798,
+          "rows_per_s": 10877483.997874035,
+          "slope_ms_p25": 91.52635469858069,
+          "slope_ms_p75": 92.84726929715231,
+          "overhead_vs_native_pct": 58.67207489069883
+        },
+        "wasm-dynamic-aot": {
+          "status": "skipped",
+          "reason": "artifacts absent (no core)"
+        },
+        "wasm-embedded-noaot": {
+          "status": "skipped",
+          "reason": "artifacts absent (no core)"
+        },
+        "wasm-embedded-aot": {
+          "status": "skipped",
+          "reason": "artifacts absent (no core)"
+        }
+      }
+    },
+    {
+      "id": "aba_validate_10m",
+      "category": "d. large data (engine-scan scaling)",
+      "extension": "aba",
+      "rows": 10000000,
+      "cells": {
+        "native": {
+          "status": "ok",
+          "slope_ms_per_query": 1947.8552362429973,
+          "fixed_cost_ms": 2556.981058399833,
+          "r2": 0.9999440118058509,
+          "rows_per_s": 5133851.743155151,
+          "slope_ms_p25": 1935.5186697571166,
+          "slope_ms_p75": 2127.2202773712966,
+          "overhead_vs_native_pct": 0.0,
+          "internal_ms_per_query_at_kmax": 1951.117864625
+        },
+        "wasm-dynamic-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 2960.910158842775,
+          "fixed_cost_ms": 2288.241891799771,
+          "r2": 0.9999824201985876,
+          "rows_per_s": 3377339.893321296,
+          "slope_ms_p25": 2952.137002942826,
+          "slope_ms_p75": 2984.290958842991,
+          "overhead_vs_native_pct": 52.00873780300776
+        },
+        "wasm-dynamic-aot": {
+          "status": "skipped",
+          "reason": "artifacts absent (no core)"
+        },
+        "wasm-embedded-noaot": {
+          "status": "ok",
+          "slope_ms_per_query": 983.0392559571919,
+          "fixed_cost_ms": 2252.205708399561,
+          "r2": 0.9999875952027671,
+          "rows_per_s": 10172533.741048757,
+          "slope_ms_p25": 942.305114742859,
+          "slope_ms_p75": 1021.2162453144109,
+          "overhead_vs_native_pct": -49.53222202214228
+        },
+        "wasm-embedded-aot": {
+          "status": "skipped",
+          "reason": "artifacts absent (no core)"
+        }
+      }
+    }
+  ],
+  "deltas": {
+    "each_vs_native": {
+      "native": {
+        "geomean_ratio_vs_native": 1.0,
+        "geomean_overhead_pct": 0.0,
+        "n": 5
+      },
+      "wasm-dynamic-noaot": {
+        "geomean_ratio_vs_native": 1.7911684032254829,
+        "geomean_overhead_pct": 79.11684032254828,
+        "n": 5
+      },
+      "wasm-embedded-noaot": {
+        "geomean_ratio_vs_native": 0.7234464819589835,
+        "geomean_overhead_pct": -27.655351804101645,
+        "n": 4
+      }
+    },
+    "dynamic_vs_embedded": {
+      "noaot": {
+        "per_workload": {
+          "aba_validate_10m": {
+            "dynamic_ms": 2960.910158842775,
+            "embedded_ms": 983.0392559571919,
+            "dynamic_over_embedded": 3.0119958495042165,
+            "dispatch_boundary_pct_of_dynamic": 66.7994230415489
+          },
+          "aba_validate_1m": {
+            "dynamic_ms": 305.1474091700064,
+            "embedded_ms": 98.77543554713546,
+            "dynamic_over_embedded": 3.089304617891466,
+            "dispatch_boundary_pct_of_dynamic": 67.63025587672455
+          },
+          "fnv1a_64_1m": {
+            "dynamic_ms": 205.34277643142298,
+            "embedded_ms": 99.77127898856581,
+            "dynamic_over_embedded": 2.058135151850224,
+            "dispatch_boundary_pct_of_dynamic": 51.41232590575895
+          },
+          "siphash_long_1m": {
+            "dynamic_ms": 373.8916812214029,
+            "embedded_ms": 168.80248465355572,
+            "dynamic_over_embedded": 2.21496550829074,
+            "dispatch_boundary_pct_of_dynamic": 54.852570107437614
+          }
+        },
+        "geomean_dynamic_over_embedded": 2.552048891082485
+      },
+      "aot": {
+        "per_workload": {},
+        "geomean_dynamic_over_embedded": null
+      }
+    },
+    "aot_vs_noaot": {
+      "dynamic": {
+        "per_workload": {},
+        "geomean_slope_ratio_aot_over_noaot": null,
+        "median_fixed_noaot_ms": null,
+        "median_fixed_aot_ms": null
+      },
+      "embedded": {
+        "per_workload": {},
+        "geomean_slope_ratio_aot_over_noaot": null,
+        "median_fixed_noaot_ms": null,
+        "median_fixed_aot_ms": null
+      }
+    }
+  }
+}
