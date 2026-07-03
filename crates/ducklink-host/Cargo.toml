@@ -38,7 +38,7 @@ hex = "0.4"
 # trust-gated CompileCache. Used here to HMAC-authenticate the precompiled
 # `.cwasm` (a `.cwasm` deserializes to runnable machine code, so it must be
 # trusted). compose-core is wasmtime-free and sqlite-free.
-compose-core = { git = "https://github.com/tegmentum/webassembly-component-orchestration.git", branch = "main" }
+compose-core = { git = "https://github.com/tegmentum/webassembly-component-orchestration.git", rev = "416226921cc166e98016f534a73bd6c9b7dcb33c" }
 # Home-dir resolution for the per-machine HMAC key + FsBlobStore cache root.
 dirs = "5"
 # Shared, db-agnostic crates (also consumed by the sqlink host). datalink is
