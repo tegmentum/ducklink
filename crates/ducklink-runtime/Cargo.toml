@@ -36,4 +36,13 @@ datalink-dynlink = { git = "https://github.com/tegmentum/datalink.git", rev = "8
 sha2 = "0.10"
 hex = "0.4"
 
+[dev-dependencies]
+# #823 dedup smoke test (tests/dedup_postgis_provider.rs): encodes and
+# decodes the compose:dynlink/endpoint CBOR envelope end-to-end against
+# a real postgis-composed-provider artifact (mirrors the datafission
+# reference at crates/df-plugin-loader/tests/dedup_postgis_provider.rs).
+ciborium = "0.2"
+serde_bytes = "0.11"
+serde = { version = "1", features = ["derive"] }
+
 [lib]
