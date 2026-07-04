@@ -1,0 +1,27 @@
+package duckdb:extension@4.0.0;
+
+// Host -> core pragma pull (Item 4). The DuckDB-compiled-to-wasm core IMPORTS
+// this interface; the native host PROVIDES it, returning the pragmas that
+// components have declared (via the existing `runtime.pragma-registry.register-call`
+// WIT call). This mirrors `collation-host.collation-list` / `storage-host.storage-list-types`.
+//
+// KEY DESIGN (avoids re-entrancy): a PRAGMA callback runs MID-QUERY, so the
+// component must NOT call back into SQL during the callback. Instead the core
+// intercepts `PRAGMA <name>(...)` in its query path, dispatches the pragma
+// (callback-dispatch.call-pragma -> the component), and the component RETURNS a
+// SQL script as a text value. The core then runs that script on the same
+// connection. The component never re-enters SQL.
+//
+// `callback-handle` is the host-side handle the core passes to
+// `callback-dispatch.call-pragma` to dispatch this pragma to the owning component.
+interface pragma-host {
+  // One pragma a component declared: the PRAGMA name the user types
+  // (`PRAGMA <name>(...)`) and the dispatch handle for callback-dispatch.call-pragma.
+  record pragma-spec {
+    name: string,
+    callback-handle: u32,
+  }
+
+  // Enumerate the pragmas components have declared so far this session.
+  pragma-list: func() -> list<pragma-spec>;
+}

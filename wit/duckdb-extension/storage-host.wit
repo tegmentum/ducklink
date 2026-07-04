@@ -1,0 +1,63 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> core storage callbacks. The DuckDB-compiled-to-wasm core IMPORTS this
+// interface; the native host PROVIDES it and routes each call to the storage
+// component (e.g. sqlitewasm) that registered an ATTACH backend, driving that
+// component's `storage-dispatch` export. This mirrors how the core imports
+// `callback-dispatch` (call-table etc.) for function dispatch.
+//
+// M2a needs only attach + table/column enumeration; scan-open/next/close are
+// declared for M2b but the core may not call them yet.
+interface storage-host {
+  use types.{duckerror, columndef, duckvalue};
+
+  type resultset = list<list<duckvalue>>;
+
+  // Comparison pushed into a scan as an AND-ed predicate. Mirrors the backing
+  // component's storage.compare-op.
+  enum compare-op {
+    eq, ne, lt, le, gt, ge, is-null, is-not-null,
+  }
+
+  // One predicate. `column` indexes the table's FULL column list (not the
+  // projection). Pushdown is best-effort: the engine re-applies every filter.
+  record scan-filter {
+    column: u32,
+    op: compare-op,
+    value: duckvalue,        // ignored for is-null / is-not-null
+  }
+
+  // What the engine asks a scan to produce. Mirrors the component's
+  // storage.scan-request.
+  record scan-request {
+    table: string,
+    projection: list<u32>,   // column indices to emit, in order; empty = all
+    filters: list<scan-filter>,
+    limit: option<u64>,      // best-effort row cap
+  }
+
+  // Enumerate the ATTACH `TYPE` names that components have registered (via
+  // `register-storage`) so far this session. The core calls this lazily (before
+  // running queries) and registers a wasm StorageExtension for each type it has
+  // not yet seen, so `ATTACH ... (TYPE <name>)` can dispatch to that component.
+  // This replaces the previous hardcoded "sqlitewasm" registration at DB-open.
+  storage-list-types: func() -> list<string>;
+
+  // Open the foreign catalog named by an ATTACH DSN (a host file path for the
+  // native host). The host stages the file bytes into the backing component and
+  // returns the component-side catalog handle.
+  storage-attach: func(dsn: string) -> result<u32, duckerror>;
+
+  // Enumerate the catalog's base tables.
+  storage-list-tables: func(catalog: u32) -> result<list<string>, duckerror>;
+
+  // Enumerate one table's columns (name + duckdb logical type).
+  storage-table-columns: func(catalog: u32, table: string) -> result<list<columndef>, duckerror>;
+
+  // M2b scan surface: engine-driven projection + filter pushdown.
+  storage-scan-open: func(catalog: u32, request: scan-request) -> result<u32, duckerror>;
+  storage-scan-next: func(scan: u32, max-rows: u32) -> result<resultset, duckerror>;
+  storage-scan-close: func(scan: u32) -> result<bool, duckerror>;
+}

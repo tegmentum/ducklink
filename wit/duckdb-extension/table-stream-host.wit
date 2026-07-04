@@ -1,0 +1,69 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> core callbacks for a STREAMING + FILTER-PUSHDOWN table function (3.1.0,
+// the first additive MINOR off the frozen major-3 baseline). The DuckDB-compiled-
+// to-wasm core IMPORTS this interface; the host PROVIDES it and routes each call
+// (by the global callback-handle the function was registered with) to the owning
+// component's `table-stream-dispatch` export (open-filtered / next / close).
+// Mirrors `storage-host` (the proven by-value-safe filter-pushdown bridge), but
+// for a NAMED table function with bound argument values instead of a catalog.
+interface table-stream-host {
+  use types.{duckerror, columndef, duckvalue};
+
+  type resultset = list<list<duckvalue>>;
+
+  // A streaming + filter-pushdown-capable table function a component declared
+  // (via the component-facing `table-stream.register-filterable-table` marker).
+  // The core pulls this list lazily (before queries, like collation/optimizer
+  // sync) and registers a real C++ streaming TableFunction (filter_pushdown =
+  // true) for each not-yet-seen entry. `arguments` are the positional argument
+  // types (name informational); `columns` is the emitted schema; `handle` is the
+  // global routable callback-handle threaded into ts-open-filtered/next/close.
+  record filterable-table {
+    name: string,
+    arguments: list<columndef>,
+    columns: list<columndef>,
+    handle: u32,
+  }
+
+  // Enumerate the filterable streaming table functions declared so far.
+  filterable-table-list: func() -> list<filterable-table>;
+
+  // The pushed-down comparator. Mirrors table-stream-dispatch.filter-op.
+  enum ts-filter-op {
+    eq, ne, lt, le, gt, ge, is-in, is-null, is-not-null,
+  }
+
+  // One pushed-down clause. `column` indexes the EMITTED (post-projection)
+  // schema; `values` carries the constant operand(s) (empty for is-null/
+  // is-not-null, one for the scalar comparators, many for is-in). The full filter
+  // is the AND of all clauses. Best-effort: the engine re-applies every filter.
+  record ts-filter {
+    column: u32,
+    op: ts-filter-op,
+    values: list<duckvalue>,
+  }
+
+  // Opening a streaming cursor returns an opaque cursor handle plus the emitted
+  // column schema (after projection).
+  record ts-open-result {
+    cursor: u32,
+    columns: list<columndef>,
+  }
+
+  // Open a streaming cursor for the registered table function `handle` with the
+  // bound `args`, a `projection` (emitted column indices; empty = all), and the
+  // conjunctive pushed-down `filters`.
+  ts-open-filtered: func(handle: u32,
+                         args: list<duckvalue>,
+                         projection: list<u32>,
+                         filters: list<ts-filter>) -> result<ts-open-result, duckerror>;
+
+  // Pull up to `max-rows` from the cursor; an empty resultset signals EOF.
+  ts-next: func(handle: u32, cursor: u32, max-rows: u32) -> result<resultset, duckerror>;
+
+  // Close the cursor and free its state.
+  ts-close: func(handle: u32, cursor: u32) -> result<bool, duckerror>;
+}

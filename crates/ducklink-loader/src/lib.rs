@@ -16,7 +16,12 @@ use bindings::exports::duckdb::component::extension_loader_hooks::{
 };
 use bindings::exports::duckdb::component::host_extension_loader::Guest as LoaderGuest;
 use bindings::exports::duckdb::extension::callback_dispatch::{
-    Duckerror, Duckvalue, Guest as DispatchGuest, Invokeinfo, Resultset, Rowbatch,
+    Colvec, Duckerror, Duckvalue, Guest as DispatchGuest, Invokeinfo, Resultset,
+};
+// The eight host->core callback interfaces (extension-registered backends).
+use bindings::exports::duckdb::extension::{
+    collation_host, files_host, index_host, optimizer_host, parser_host, pragma_host,
+    storage_host, table_stream_host,
 };
 use bindings::exports::tvm::memory::bytes::Guest as TvmBytesGuest;
 use bindings::exports::tvm::memory::manager::{
@@ -59,19 +64,25 @@ impl DispatchGuest for Component {
         Err(unreachable_dispatch())
     }
 
-    fn call_scalar_batch(
+    // HOT PATH: columnar scalar/aggregate/cast (major-4). Unreachable in a
+    // standalone build (nothing registers a handle), but must type-check.
+    fn call_scalar_batch_col(
         _handle: u32,
-        _rows: Rowbatch,
+        _args: Vec<Colvec>,
         _ctx: Invokeinfo,
-    ) -> Result<Vec<Duckvalue>, Duckerror> {
+    ) -> Result<Colvec, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+
+    fn call_aggregate_col(_handle: u32, _args: Vec<Colvec>) -> Result<Duckvalue, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+
+    fn call_cast_col(_handle: u32, _arg: Colvec) -> Result<Colvec, Duckerror> {
         Err(unreachable_dispatch())
     }
 
     fn call_table(_handle: u32, _args: Vec<Duckvalue>) -> Result<Resultset, Duckerror> {
-        Err(unreachable_dispatch())
-    }
-
-    fn call_aggregate(_handle: u32, _rows: Rowbatch) -> Result<Duckvalue, Duckerror> {
         Err(unreachable_dispatch())
     }
 
@@ -83,6 +94,146 @@ impl DispatchGuest for Component {
     }
 
     fn call_cast(_handle: u32, _value: Duckvalue) -> Result<Duckvalue, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+}
+
+// --- Host->core backend callbacks (major-4). ---------------------------------
+// The core imports these so extension-registered backends can service ATTACH
+// storage, vector indexes, collations, pragmas, parsers, optimizer rules, remote
+// files, and filtered table streams. A standalone registers no backends, so each
+// `*-list` enumerator returns empty (the core registers nothing and its built-in
+// local/in-memory functionality is unaffected) and every per-handle operation is
+// unreachable — nothing ever hands out a handle to call back on.
+
+impl storage_host::Guest for Component {
+    fn storage_list_types() -> Vec<String> {
+        Vec::new()
+    }
+    fn storage_attach(_dsn: String) -> Result<u32, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+    fn storage_list_tables(_catalog: u32) -> Result<Vec<String>, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+    fn storage_table_columns(
+        _catalog: u32,
+        _table: String,
+    ) -> Result<Vec<storage_host::Columndef>, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+    fn storage_scan_open(
+        _catalog: u32,
+        _request: storage_host::ScanRequest,
+    ) -> Result<u32, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+    fn storage_scan_next(
+        _scan: u32,
+        _max_rows: u32,
+    ) -> Result<storage_host::Resultset, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+    fn storage_scan_close(_scan: u32) -> Result<bool, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+}
+
+impl index_host::Guest for Component {
+    fn index_type_list() -> Vec<String> {
+        Vec::new()
+    }
+    fn index_create(
+        _type_name: String,
+        _index_name: String,
+        _dims: u32,
+    ) -> Result<u32, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+    fn index_append(
+        _handle: u32,
+        _rowids: Vec<i64>,
+        _vectors: Vec<Vec<f32>>,
+    ) -> Result<(), Duckerror> {
+        Err(unreachable_dispatch())
+    }
+    fn index_build(_handle: u32) -> Result<(), Duckerror> {
+        Err(unreachable_dispatch())
+    }
+    fn index_search(
+        _handle: u32,
+        _query: Vec<f32>,
+        _k: u32,
+    ) -> Result<Vec<index_host::IndexHit>, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+    fn index_drop(_handle: u32) -> Result<(), Duckerror> {
+        Err(unreachable_dispatch())
+    }
+}
+
+impl collation_host::Guest for Component {
+    fn collation_list() -> Vec<collation_host::CollationSpec> {
+        Vec::new()
+    }
+}
+
+impl pragma_host::Guest for Component {
+    fn pragma_list() -> Vec<pragma_host::PragmaSpec> {
+        Vec::new()
+    }
+}
+
+impl parser_host::Guest for Component {
+    fn parser_list() -> Vec<parser_host::ParserSpec> {
+        Vec::new()
+    }
+    fn call_parse(_handle: u32, _query: String) -> Result<Option<String>, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+}
+
+impl optimizer_host::Guest for Component {
+    fn optimizer_list() -> Vec<optimizer_host::OptimizerSpec> {
+        Vec::new()
+    }
+    fn call_optimize(_handle: u32, _plan_json: String) -> Result<Option<String>, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+}
+
+impl files_host::Guest for Component {
+    fn file_open(_url: String) -> Result<files_host::FileOpenResult, String> {
+        Err("standalone build has no files backend".to_string())
+    }
+    fn file_read(_handle: u32, _offset: u64, _len: u32) -> Result<Vec<u8>, String> {
+        Err("standalone build has no files backend".to_string())
+    }
+    fn file_close(_handle: u32) -> Result<(), String> {
+        Err("standalone build has no files backend".to_string())
+    }
+}
+
+impl table_stream_host::Guest for Component {
+    fn filterable_table_list() -> Vec<table_stream_host::FilterableTable> {
+        Vec::new()
+    }
+    fn ts_open_filtered(
+        _handle: u32,
+        _args: Vec<table_stream_host::Duckvalue>,
+        _projection: Vec<u32>,
+        _filters: Vec<table_stream_host::TsFilter>,
+    ) -> Result<table_stream_host::TsOpenResult, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+    fn ts_next(
+        _handle: u32,
+        _cursor: u32,
+        _max_rows: u32,
+    ) -> Result<table_stream_host::Resultset, Duckerror> {
+        Err(unreachable_dispatch())
+    }
+    fn ts_close(_handle: u32, _cursor: u32) -> Result<bool, Duckerror> {
         Err(unreachable_dispatch())
     }
 }
