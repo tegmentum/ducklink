@@ -41,6 +41,11 @@ hex = "0.4"
 # `.cwasm` (a `.cwasm` deserializes to runnable machine code, so it must be
 # trusted). compose-core is wasmtime-free and sqlite-free.
 compose-core = { git = "https://github.com/tegmentum/webassembly-component-orchestration.git", rev = "416226921cc166e98016f534a73bd6c9b7dcb33c" }
+# Ergonomic error enum for the sub-ext loader (Phase D). The rest of the
+# crate uses anyhow at the boundary; internally SubExtError is a `thiserror`
+# enum so callers can pattern-match on `SubExtError::PlanMissing` vs a compose
+# failure without stringly parsing.
+thiserror = "1"
 # Home-dir resolution for the per-machine HMAC key + FsBlobStore cache root.
 dirs = "5"
 # Shared, db-agnostic crates (also consumed by the sqlink host). datalink is

@@ -117,6 +117,13 @@ pub mod compose_dynlink_test_support {
 mod delta_rewrite;
 mod plan_shape;
 mod prefix;
+/// Phase D: per-sub-extension `compose:dynlink` bridge + composed-provider
+/// loader (`postgis_core -> {plan, bridge, derived-from}` maps and the
+/// `materialize_sub_ext_provider` composer). Public so downstream host
+/// embedders (and this crate's tests) can configure it directly instead of
+/// going through env vars.
+pub mod sub_ext;
+pub use sub_ext::{sub_ext_provider_id, SubExtError, SubExtLoader};
 
 /// Defensive guard for a parser extension's returned rewrite (v3 @3.0.0
 /// parser-dispatch boundary). The core RE-PLANS the rewrite, so a bad component
@@ -1818,6 +1825,16 @@ struct ExtensionManager {
     registry_index: Arc<serde_json::Value>,
     resolver_policy: resolver::ResolvePolicy,
     last_resolutions: HashMap<String, String>,
+    // Phase D: per-sub-extension `compose:dynlink` bridge + composed-provider
+    // loader. Holds the `sub_ext -> {plan, bridge, derived-from}` maps and the
+    // materialize-on-first-LOAD composer. `ensure_extension_loaded` consults
+    // `sub_ext_loader.has_bridge(name)` BEFORE the flat
+    // `<extensions-dir>/<name>.wasm` shortcut and, when it matches, composes
+    // + registers the sub-ext's provider (once) and loads the bridge wasm
+    // instead. Registered against the process-global `ProviderRegistry` so
+    // one composed provider serves every bridge that plugs it (the
+    // postgis + mobilitydb dedup path).
+    sub_ext_loader: sub_ext::SubExtLoader,
 }
 
 impl ExtensionManager {
@@ -1845,6 +1862,13 @@ impl ExtensionManager {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+        // Phase D: the sub-ext loader shares the process-global
+        // `ProviderRegistry` (built lazily against `engine`) so a composed
+        // provider registered here on first LOAD resolves through the same
+        // registry as the `DUCKLINK_PROVIDERS`-declared ones and every
+        // bridge component sees it.
+        let sub_ext_loader =
+            sub_ext::SubExtLoader::from_env(dynlink_provider_registry(&engine).clone());
         Self {
             engine,
             core: None,
@@ -1872,6 +1896,7 @@ impl ExtensionManager {
                 denied,
             },
             last_resolutions: HashMap::new(),
+            sub_ext_loader,
         }
     }
 
@@ -3051,23 +3076,68 @@ impl ExtensionManager {
             return Ok(true);
         }
 
-        // Multi-provider resolution (design A): pick a certified provider via the
-        // resolver candidate pipeline instead of the bare filename shortcut. An
-        // extension absent from the manifest falls back to the filename.
-        let artifact = match self.resolve_provider_artifact(&sanitized) {
-            Ok(p) => p,
-            Err(reason) => {
-                eprintln!("[resolver] no admissible provider for '{sanitized}': {reason}");
+        // Phase D: per-sub-extension `compose:dynlink` bridge branch. If the
+        // requested name is present in `sub_ext_loader.sub_ext_bridge_paths`,
+        // materialize the composed provider (once) and load the configured
+        // bridge wasm instead of taking the flat resolver path. This runs
+        // BEFORE `resolve_provider_artifact` so a sub-ext bridge stored
+        // outside `<extensions-dir>` (e.g. under a `postgis-core-ducklink-bridge`
+        // checkout) doesn't need to be symlinked into the extensions dir.
+        // Falls through to the standard resolver when neither the bridge map
+        // nor a plan is configured for `sanitized` — preserves the existing
+        // LOAD semantics for every non-sub-ext extension bit-identically.
+        let artifact = if self.sub_ext_loader.has_bridge(&sanitized) {
+            // Compose + register the composed provider under
+            // `<sanitized>-composed`. Idempotent; a re-issued LOAD hits the
+            // materialized guard and no-ops.
+            match self.sub_ext_loader.materialize_sub_ext_provider(&sanitized) {
+                Ok(provider_id) => eprintln!(
+                    "[sub-ext] '{sanitized}' composed provider registered as '{provider_id}'"
+                ),
+                Err(err) => {
+                    eprintln!(
+                        "[sub-ext] '{sanitized}' materialization failed: {err}; skipping load request"
+                    );
+                    return Ok(false);
+                }
+            }
+            let bridge = self
+                .sub_ext_loader
+                .bridge_path(&sanitized)
+                .expect("has_bridge guarded above")
+                .to_path_buf();
+            if !bridge.exists() {
+                eprintln!(
+                    "[sub-ext] bridge wasm for '{sanitized}' not found at {}; skipping load request",
+                    bridge.display()
+                );
                 return Ok(false);
             }
-        };
-        if !artifact.exists() {
             eprintln!(
-                "[extension-manager] resolved artifact for '{sanitized}' not found at {}; skipping load request",
-                artifact.display()
+                "[sub-ext] '{sanitized}' bridge wasm: {}",
+                bridge.display()
             );
-            return Ok(false);
-        }
+            bridge
+        } else {
+            // Multi-provider resolution (design A): pick a certified provider via the
+            // resolver candidate pipeline instead of the bare filename shortcut. An
+            // extension absent from the manifest falls back to the filename.
+            let artifact = match self.resolve_provider_artifact(&sanitized) {
+                Ok(p) => p,
+                Err(reason) => {
+                    eprintln!("[resolver] no admissible provider for '{sanitized}': {reason}");
+                    return Ok(false);
+                }
+            };
+            if !artifact.exists() {
+                eprintln!(
+                    "[extension-manager] resolved artifact for '{sanitized}' not found at {}; skipping load request",
+                    artifact.display()
+                );
+                return Ok(false);
+            }
+            artifact
+        };
 
         let core = match self.core.as_ref() {
             Some(core) => core.clone(),
