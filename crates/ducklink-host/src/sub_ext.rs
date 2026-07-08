@@ -22,13 +22,25 @@
 //!      `load_component_with_dynlink` path; the bridge's `resolve-by-id`
 //!      import routes to the newly-registered composed provider.
 //!
-//! Config comes from three env vars — parallel to `DUCKLINK_PROVIDERS`:
+//! Config comes from four env vars — parallel to `DUCKLINK_PROVIDERS`:
 //!
 //! ```text
 //! DUCKLINK_SUB_EXT_PLANS=<name>=<path>:<name>=<path>...
 //! DUCKLINK_SUB_EXT_BRIDGES=<name>=<path>:<name>=<path>...
 //! DUCKLINK_SUB_EXT_DERIVED=<component-id>=<upstream-sub-ext>:<component-id>=<upstream-sub-ext>...
+//! DUCKLINK_SUB_EXT_PREBUILT=<name>=<path>:<name>=<path>...
 //! ```
+//!
+//! `DUCKLINK_SUB_EXT_PREBUILT` (short-circuit path — Phase D / Option B):
+//! when a sub-ext has a prebuilt, self-contained composed wasm on disk
+//! (e.g. the ~126 MB `postgis-composed.wasm` monolith produced by
+//! `postgis-wasm/scripts/compose.sh`), register that wasm directly under
+//! `<sub_ext>-composed` and skip the plan-driven compose entirely. Used
+//! when the plan-driven sub-composed artifact would leak unresolved
+//! sibling-wasm imports (see recon: 19 imports on `postgis-core-composed`
+//! because `postgis_wasm.wasm` statically imports all 30+ external
+//! instances). A prebuilt entry takes precedence over a plan entry for
+//! the same sub-ext.
 //!
 //! `:` is the entry separator (matches datafission's convention and dodges
 //! the `,` that DuckDB users habitually stuff into env vars for other reasons).
@@ -132,6 +144,17 @@ pub struct SubExtLoader {
     /// into an in-memory clone of the current plan.
     pub sub_ext_derived_from: BTreeMap<String, String>,
 
+    /// `sub_ext -> prebuilt-composed-wasm-path`. Short-circuits the
+    /// plan-driven compose: if an entry exists for `sub_ext`, the loader
+    /// registers the prebuilt wasm directly under `sub_ext_provider_id`
+    /// and skips reading/parsing/composing the plan JSON entirely. Used
+    /// when the plan-driven per-sub-ext composed artifact would leak
+    /// unresolved sibling-wasm imports (the `postgis-core-composed`
+    /// 19-import gap) and the application ships a self-contained
+    /// monolithic composed wasm as a fallback. Takes precedence over
+    /// `sub_ext_plan_paths` for the same key.
+    pub sub_ext_prebuilt_paths: BTreeMap<String, PathBuf>,
+
     /// Blob CAS root (default `<cwd>/.compose/blobs`). Every plan
     /// component's digest must resolve to a blob under this root — the
     /// application layer (postgis-wasm's `plans/verify.sh` or an
@@ -164,6 +187,7 @@ impl SubExtLoader {
             sub_ext_plan_paths: BTreeMap::new(),
             sub_ext_bridge_paths: BTreeMap::new(),
             sub_ext_derived_from: BTreeMap::new(),
+            sub_ext_prebuilt_paths: BTreeMap::new(),
             blob_cas_path: PathBuf::from(".compose/blobs"),
             compose_cache_path: PathBuf::from(".compose/cache"),
             materialized_sub_exts: HashSet::new(),
@@ -184,6 +208,7 @@ impl SubExtLoader {
             .into_iter()
             .map(|(k, v)| (k, v.to_string_lossy().into_owned()))
             .collect();
+        this.sub_ext_prebuilt_paths = parse_map_env("DUCKLINK_SUB_EXT_PREBUILT");
         if let Ok(p) = std::env::var("DUCKLINK_COMPOSE_BLOB_CAS") {
             if !p.trim().is_empty() {
                 this.blob_cas_path = PathBuf::from(p.trim());
@@ -233,6 +258,50 @@ impl SubExtLoader {
         let provider_id = sub_ext_provider_id(sub_ext);
 
         if self.materialized_sub_exts.contains(sub_ext) {
+            return Ok(provider_id);
+        }
+
+        // Phase D / Option B short-circuit: if the sub-ext has a
+        // prebuilt, self-contained composed wasm on disk, register that
+        // directly and skip the plan-driven compose entirely. This is
+        // the escape hatch for when the plan-driven per-sub-ext composed
+        // artifact would leak unresolved sibling-wasm imports (e.g. the
+        // `postgis-core-composed` 19-import gap) and the application
+        // ships a monolithic composed wasm as a self-contained fallback.
+        //
+        // Preemption order:
+        //   1. materialized guard (above) — no-op on repeat LOAD
+        //   2. prebuilt shortcut (here) — register file, done
+        //   3. plan-driven compose (below) — the normal path
+        if let Some(prebuilt) = self.sub_ext_prebuilt_paths.get(sub_ext).cloned() {
+            if !prebuilt.exists() {
+                return Err(SubExtError::mat(
+                    sub_ext,
+                    &prebuilt,
+                    format!("prebuilt provider wasm not found at {}", prebuilt.display()),
+                ));
+            }
+            self.registry
+                .register_provider(provider_id.clone(), &prebuilt)
+                .map_err(|reason| SubExtError::ProviderRegistration {
+                    id: provider_id.clone(),
+                    path: prebuilt.clone(),
+                    reason,
+                })?;
+            eprintln!(
+                "[sub-ext] '{sub_ext}' short-circuit: registered prebuilt monolith \
+                 {} as provider '{provider_id}'; skipping plan-driven compose",
+                prebuilt.display()
+            );
+            let digest = {
+                use sha2::{Digest, Sha256};
+                let bytes = std::fs::read(&prebuilt).map_err(|e| {
+                    SubExtError::mat(sub_ext, &prebuilt, format!("digest read: {e}"))
+                })?;
+                Sha256::digest(&bytes).to_vec()
+            };
+            self.composed_digests.insert(sub_ext.to_string(), digest);
+            self.materialized_sub_exts.insert(sub_ext.to_string());
             return Ok(provider_id);
         }
 
@@ -412,6 +481,49 @@ mod tests {
         assert!(!is_zero_digest(&[]));
         assert!(is_zero_digest(&[0u8; 32]));
         assert!(!is_zero_digest(&[0u8, 0, 1, 0]));
+    }
+
+    #[test]
+    fn prebuilt_shortcut_registers_wasm_and_skips_compose() {
+        use wasmtime::{Config, Engine};
+
+        // A minimal valid WebAssembly component (magic + component version).
+        // Enough for `Component::from_binary` to succeed at registration
+        // time; the resolve-by-id path never fires in this unit test so
+        // the exports don't matter.
+        let component_bytes: Vec<u8> = vec![
+            0x00, 0x61, 0x73, 0x6d, // \0asm
+            0x0d, 0x00, 0x01, 0x00, // component version
+        ];
+        let tmp = tempfile::tempdir().unwrap();
+        let prebuilt = tmp.path().join("postgis-composed.wasm");
+        std::fs::write(&prebuilt, &component_bytes).unwrap();
+
+        let mut cfg = Config::new();
+        cfg.wasm_component_model(true);
+        let engine = Engine::new(&cfg).unwrap();
+        let registry = ProviderRegistry::new(engine);
+        let mut loader = SubExtLoader::new(registry.clone());
+
+        // Register prebuilt but no plan; materialize must register-then-return.
+        loader
+            .sub_ext_prebuilt_paths
+            .insert("postgis_core".to_string(), prebuilt.clone());
+
+        let id = loader
+            .materialize_sub_ext_provider("postgis_core")
+            .expect("prebuilt shortcut must succeed with no plan");
+        assert_eq!(id, "postgis_core-composed");
+        assert!(loader.is_materialized("postgis_core"));
+
+        // Second call is a no-op via the materialized guard.
+        assert_eq!(
+            loader.materialize_sub_ext_provider("postgis_core").unwrap(),
+            id
+        );
+
+        // Provider is registered (compile-time only, no resident instance).
+        assert_eq!(registry.resident_count(&id), 0);
     }
 
     #[test]
