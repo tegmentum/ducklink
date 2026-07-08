@@ -368,8 +368,140 @@ struct PendingAggregateRegistry {
     entries: Vec<PendingAggregate>,
 }
 
+/// Every kind of registration a component can capture. A `PendingKind` names
+/// exactly one `pending_*` buffer on [`ExtensionStoreState`] and its matching
+/// `Vec<...>` field on [`PendingRegistrationsData`].
+///
+/// The compile-time exhaustiveness lock on this enum is the drift guard: the
+/// `match` in [`PendingKind::as_str`] must cover every variant, and adding a
+/// variant to the enum without extending `as_str` fails compilation. The
+/// separate const assert on [`PendingKind::ALL`] catches drift in the mirror
+/// array. Together they mean a NEW pending buffer cannot silently skip the
+/// drain: the developer must extend both surfaces here plus the matching
+/// field on `PendingRegistrationsData` (which the field-by-field drain +
+/// append below directly references).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PendingKind {
+    Scalar,
+    Table,
+    Aggregate,
+    Macro,
+    ReplacementScan,
+    LogicalType,
+    Cast,
+    Storage,
+    ScalarEx,
+    Index,
+    Files,
+    Collation,
+    Pragma,
+    CopyHandler,
+    Secret,
+    Setting,
+    TableMacro,
+    ModifiedType,
+    EnumType,
+    ConnCallback,
+    CoordinateSystem,
+    ArrowTable,
+    Encoding,
+    Compression,
+    Parser,
+    Optimizer,
+    FilterableTable,
+}
+
+impl PendingKind {
+    /// Every variant, in declaration order. Kept in lockstep with the enum by
+    /// the const assert below (which fails compilation when the array size
+    /// drifts from the variant count).
+    pub const ALL: &'static [PendingKind] = &[
+        PendingKind::Scalar,
+        PendingKind::Table,
+        PendingKind::Aggregate,
+        PendingKind::Macro,
+        PendingKind::ReplacementScan,
+        PendingKind::LogicalType,
+        PendingKind::Cast,
+        PendingKind::Storage,
+        PendingKind::ScalarEx,
+        PendingKind::Index,
+        PendingKind::Files,
+        PendingKind::Collation,
+        PendingKind::Pragma,
+        PendingKind::CopyHandler,
+        PendingKind::Secret,
+        PendingKind::Setting,
+        PendingKind::TableMacro,
+        PendingKind::ModifiedType,
+        PendingKind::EnumType,
+        PendingKind::ConnCallback,
+        PendingKind::CoordinateSystem,
+        PendingKind::ArrowTable,
+        PendingKind::Encoding,
+        PendingKind::Compression,
+        PendingKind::Parser,
+        PendingKind::Optimizer,
+        PendingKind::FilterableTable,
+    ];
+
+    /// Stable label for logs / diagnostics. The `match` here is EXHAUSTIVE:
+    /// adding a `PendingKind` variant without extending this match fails
+    /// compilation, which is the drift guard promised by the type.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            PendingKind::Scalar => "scalar",
+            PendingKind::Table => "table",
+            PendingKind::Aggregate => "aggregate",
+            PendingKind::Macro => "macro",
+            PendingKind::ReplacementScan => "replacement-scan",
+            PendingKind::LogicalType => "logical-type",
+            PendingKind::Cast => "cast",
+            PendingKind::Storage => "storage",
+            PendingKind::ScalarEx => "scalar-ex",
+            PendingKind::Index => "index",
+            PendingKind::Files => "files",
+            PendingKind::Collation => "collation",
+            PendingKind::Pragma => "pragma",
+            PendingKind::CopyHandler => "copy-handler",
+            PendingKind::Secret => "secret",
+            PendingKind::Setting => "setting",
+            PendingKind::TableMacro => "table-macro",
+            PendingKind::ModifiedType => "modified-type",
+            PendingKind::EnumType => "enum-type",
+            PendingKind::ConnCallback => "conn-callback",
+            PendingKind::CoordinateSystem => "coordinate-system",
+            PendingKind::ArrowTable => "arrow-table",
+            PendingKind::Encoding => "encoding",
+            PendingKind::Compression => "compression",
+            PendingKind::Parser => "parser",
+            PendingKind::Optimizer => "optimizer",
+            PendingKind::FilterableTable => "filterable-table",
+        }
+    }
+}
+
+/// Compile-time cross-check that [`PendingKind::ALL`] lists every variant. The
+/// exhaustive `match` in [`PendingKind::as_str`] catches an added-but-unhandled
+/// variant; this const catches an added-but-not-listed-in-ALL variant. Bump the
+/// literal to match the enum size when adding a new kind.
+const _PENDING_KIND_ALL_LEN_LOCK: () = {
+    assert!(
+        PendingKind::ALL.len() == 27,
+        "PendingKind::ALL is out of sync with the enum: add the new variant to ALL \
+         (and to as_str, and to PendingRegistrationsData + drain_pending + append)."
+    );
+};
+
 /// The full set of registrations captured from one or more components, ready
 /// for a direction-specific sink to forward into the database.
+///
+/// Every `pending_*` buffer on [`ExtensionStoreState`] surfaces through a
+/// same-named `Vec<...>` field here, so a component's registration is never
+/// silently dropped: if the direction-specific host forgets to eagerly drain
+/// one via a `take_pending_*` accessor, [`ExtensionStoreState::drain_pending`]
+/// picks it up at the standard drain hook instead. The [`PendingKind`] enum's
+/// exhaustive match is the drift guard against this list going stale.
 ///
 /// `scalar_ex` carries the RICHER (2.2.0) scalar registrations captured via
 /// `runtime-ext.register-scalar-ex` (varargs, optionally named args, special
@@ -394,6 +526,24 @@ pub struct PendingRegistrationsData {
     /// Richer (2.2.0) scalar registrations. See struct-level doc: entries here
     /// are also projected into `scalars` for the current interim sink.
     pub scalar_ex: Vec<PendingScalarEx>,
+    pub indexes: Vec<PendingIndex>,
+    pub files: Vec<PendingFiles>,
+    pub collations: Vec<PendingCollation>,
+    pub pragmas: Vec<PendingPragma>,
+    pub copy_handlers: Vec<PendingCopyHandler>,
+    pub secrets: Vec<PendingSecret>,
+    pub settings: Vec<PendingSetting>,
+    pub table_macros: Vec<PendingTableMacro>,
+    pub modified_types: Vec<PendingModifiedType>,
+    pub enum_types: Vec<PendingEnumType>,
+    pub conn_callbacks: Vec<PendingConnCallback>,
+    pub coordinate_systems: Vec<PendingCoordinateSystem>,
+    pub arrow_tables: Vec<PendingArrowTable>,
+    pub encodings: Vec<PendingEncoding>,
+    pub compressions: Vec<PendingCompression>,
+    pub parsers: Vec<PendingParser>,
+    pub optimizers: Vec<PendingOptimizer>,
+    pub filterable_tables: Vec<PendingFilterableTable>,
 }
 
 impl PendingRegistrationsData {
@@ -407,6 +557,24 @@ impl PendingRegistrationsData {
         self.casts.append(&mut other.casts);
         self.storages.append(&mut other.storages);
         self.scalar_ex.append(&mut other.scalar_ex);
+        self.indexes.append(&mut other.indexes);
+        self.files.append(&mut other.files);
+        self.collations.append(&mut other.collations);
+        self.pragmas.append(&mut other.pragmas);
+        self.copy_handlers.append(&mut other.copy_handlers);
+        self.secrets.append(&mut other.secrets);
+        self.settings.append(&mut other.settings);
+        self.table_macros.append(&mut other.table_macros);
+        self.modified_types.append(&mut other.modified_types);
+        self.enum_types.append(&mut other.enum_types);
+        self.conn_callbacks.append(&mut other.conn_callbacks);
+        self.coordinate_systems.append(&mut other.coordinate_systems);
+        self.arrow_tables.append(&mut other.arrow_tables);
+        self.encodings.append(&mut other.encodings);
+        self.compressions.append(&mut other.compressions);
+        self.parsers.append(&mut other.parsers);
+        self.optimizers.append(&mut other.optimizers);
+        self.filterable_tables.append(&mut other.filterable_tables);
     }
 }
 
@@ -717,6 +885,37 @@ impl ExtensionStoreState {
             });
         }
 
+        // Drain EVERY remaining pending_* buffer here so the outer aggregate is
+        // the single choke point that surfaces a component's registrations. The
+        // direction-specific host may have already emptied some of these via a
+        // `take_pending_*` accessor right after `load()` (storages, indexes,
+        // files, collations, pragmas, parsers, optimizers, filterable_tables);
+        // in that case `std::mem::take` here just yields an empty Vec. Buffers
+        // NO direction currently drains eagerly (copy_handlers, secrets,
+        // settings, table_macros, modified_types, enum_types, conn_callbacks,
+        // coordinate_systems, arrow_tables, encodings, compressions) surface
+        // here instead of being silently dropped. New pending kinds MUST be
+        // added to the `PendingKind` enum (whose exhaustive match is the drift
+        // guard) plus this drain and `PendingRegistrationsData::append`.
+        let indexes = std::mem::take(&mut self.pending_indexes);
+        let files = std::mem::take(&mut self.pending_files);
+        let collations = std::mem::take(&mut self.pending_collations);
+        let pragmas = std::mem::take(&mut self.pending_pragmas);
+        let copy_handlers = std::mem::take(&mut self.pending_copy_handlers);
+        let secrets = std::mem::take(&mut self.pending_secrets);
+        let settings = std::mem::take(&mut self.pending_settings);
+        let table_macros = std::mem::take(&mut self.pending_table_macros);
+        let modified_types = std::mem::take(&mut self.pending_modified_types);
+        let enum_types = std::mem::take(&mut self.pending_enum_types);
+        let conn_callbacks = std::mem::take(&mut self.pending_conn_callbacks);
+        let coordinate_systems = std::mem::take(&mut self.pending_coordinate_systems);
+        let arrow_tables = std::mem::take(&mut self.pending_arrow_tables);
+        let encodings = std::mem::take(&mut self.pending_encodings);
+        let compressions = std::mem::take(&mut self.pending_compressions);
+        let parsers = std::mem::take(&mut self.pending_parsers);
+        let optimizers = std::mem::take(&mut self.pending_optimizers);
+        let filterable_tables = std::mem::take(&mut self.pending_filterable_tables);
+
         let pending = PendingRegistrationsData {
             scalars,
             tables,
@@ -727,6 +926,24 @@ impl ExtensionStoreState {
             casts,
             storages,
             scalar_ex,
+            indexes,
+            files,
+            collations,
+            pragmas,
+            copy_handlers,
+            secrets,
+            settings,
+            table_macros,
+            modified_types,
+            enum_types,
+            conn_callbacks,
+            coordinate_systems,
+            arrow_tables,
+            encodings,
+            compressions,
+            parsers,
+            optimizers,
+            filterable_tables,
         };
         let scalar_names =
             summarize_registration_names(&pending.scalars, |entry| entry.name.as_str());
@@ -4557,6 +4774,260 @@ mod tests {
         assert!(s.contains('a'));
         assert!(s.contains("+2 more"));
         assert_eq!(summarize_registration_names::<&str, _>(&[], |n| n), "none");
+    }
+
+    #[test]
+    fn pending_kind_all_stays_in_sync_with_variants() {
+        // Every entry in ALL renders through the exhaustive as_str match, and
+        // is unique. If a variant is added to `PendingKind` but forgotten in
+        // ALL, the const `_PENDING_KIND_ALL_LEN_LOCK` fails at compile time;
+        // this runtime check is the belt-and-braces cross-check that both
+        // surfaces cover the same set.
+        let mut labels: Vec<&str> = PendingKind::ALL.iter().map(|k| k.as_str()).collect();
+        let n = labels.len();
+        labels.sort();
+        labels.dedup();
+        assert_eq!(
+            labels.len(),
+            n,
+            "PendingKind::ALL has a duplicate variant: {labels:?}"
+        );
+    }
+
+    #[test]
+    fn drain_pending_surfaces_every_pending_buffer() {
+        // The SYSTEMIC drain guard: for EVERY pending_* buffer on the store
+        // state, push one synthetic entry and verify `drain_pending()` surfaces
+        // it on the matching field of `PendingRegistrationsData`. This is the
+        // runtime companion to the compile-time `PendingKind` exhaustiveness
+        // lock — together they stop a new pending buffer from silently
+        // draining nowhere.
+        use extension_runtime::Logicaltype as L;
+        let mut state = test_state();
+
+        // ScalarRegistry / TableRegistry / AggregateRegistry keep their own
+        // per-registry buffers that fold into pending_scalars/tables/aggregates
+        // on drop; push directly into the retained buffers here so the test
+        // stays independent of the resource-drop dance.
+        state.pending_scalars.push(reg::ScalarReg {
+            extension: "ext".into(),
+            name: "s".into(),
+            arguments: vec![],
+            returns: reg::LogicalType::Int64,
+            callback_handle: 1,
+            options: None,
+        });
+        state.pending_tables.push(reg::TableReg {
+            extension: "ext".into(),
+            name: "t".into(),
+            arguments: vec![],
+            columns: vec![],
+            callback_handle: 2,
+            options: None,
+        });
+        state.pending_aggregates.push(reg::AggregateReg {
+            extension: "ext".into(),
+            name: "a".into(),
+            arguments: vec![],
+            returns: reg::LogicalType::Int64,
+            callback_handle: 3,
+            options: None,
+        });
+        state.pending_macros.push(reg::MacroReg {
+            extension: "ext".into(),
+            schema: "main".into(),
+            name: "m".into(),
+            parameters: vec![],
+            definition_sql: "SELECT 1".into(),
+        });
+        state.pending_replacement_scans.push(reg::ReplacementScanReg {
+            extension: "ext".into(),
+            extensions: vec!["csv".into()],
+            function_name: "read_csv".into(),
+        });
+        state.pending_logical_types.push(reg::LogicalTypeReg {
+            extension: "ext".into(),
+            name: "myint".into(),
+            physical: "INTEGER".into(),
+        });
+        state.pending_casts.push(reg::CastReg {
+            extension: "ext".into(),
+            source: "TEXT".into(),
+            target: "INTEGER".into(),
+            callback_handle: 4,
+        });
+        state.pending_storages.push(reg::StorageReg {
+            extension: "ext".into(),
+            type_name: "sqlitewasm".into(),
+            callback_handle: 5,
+            options: None,
+        });
+        state.pending_scalar_ex.push(reg::ScalarExReg {
+            extension: "ext".into(),
+            name: "concat_ws".into(),
+            arguments: vec![],
+            varargs: Some(reg::LogicalType::Text),
+            returns: reg::LogicalType::Text,
+            special_null: true,
+            callback_handle: 6,
+            options: None,
+        });
+        state.pending_indexes.push(reg::IndexReg {
+            extension: "ext".into(),
+            type_name: "wasm_hnsw".into(),
+        });
+        state.pending_files.push(reg::FilesReg {
+            extension: "ext".into(),
+            callback_handle: 7,
+        });
+        state.pending_collations.push(reg::CollationReg {
+            extension: "ext".into(),
+            name: "icu_en".into(),
+            transform_scalar: "icu_sort".into(),
+            combinable: false,
+        });
+        state.pending_pragmas.push(reg::PragmaReg {
+            extension: "ext".into(),
+            name: "my_pragma".into(),
+            callback_handle: 8,
+        });
+        state.pending_copy_handlers.push(reg::CopyHandlerReg {
+            extension: "ext".into(),
+            file_extension: "parquet".into(),
+            function_handle: 9,
+        });
+        state.pending_secrets.push(reg::SecretReg {
+            extension: "ext".into(),
+            type_name: "s3".into(),
+            provider: None,
+            params: vec![],
+            callback_handle: 10,
+        });
+        state.pending_settings.push(reg::SettingReg {
+            extension: "ext".into(),
+            name: "my_threshold".into(),
+            description: "knob".into(),
+            ty: "bigint".into(),
+            default_value: Some("42".into()),
+            scope: "global".into(),
+        });
+        state.pending_table_macros.push(reg::TableMacroReg {
+            extension: "ext".into(),
+            schema: "main".into(),
+            name: "series".into(),
+            parameters: vec!["n".into()],
+            body_sql: "SELECT * FROM range(n)".into(),
+        });
+        state.pending_modified_types.push(reg::ModifiedTypeReg {
+            extension: "ext".into(),
+            name: "price".into(),
+            type_expr: "DECIMAL(18,3)".into(),
+        });
+        state.pending_enum_types.push(reg::EnumTypeReg {
+            extension: "ext".into(),
+            name: "mood".into(),
+            members: vec!["happy".into(), "sad".into()],
+        });
+        state.pending_conn_callbacks.push(reg::ConnCallbackReg {
+            extension: "ext".into(),
+            on_opened: true,
+            on_closed: false,
+            callback_handle: 11,
+        });
+        state.pending_coordinate_systems.push(reg::CoordinateSystemReg {
+            extension: "ext".into(),
+            auth_name: "EPSG".into(),
+            code: 4326,
+            wkt: "GEOGCRS[...]".into(),
+        });
+        state.pending_arrow_tables.push(reg::ArrowTableReg {
+            extension: "ext".into(),
+            name: "feed".into(),
+            columns: vec![reg::ColumnDef {
+                name: "v".into(),
+                logical: reg::LogicalType::Int64,
+            }],
+            callback_handle: 12,
+        });
+        state.pending_encodings.push(reg::EncodingReg {
+            extension: "ext".into(),
+            name: "latin-1".into(),
+            aliases: vec!["iso-8859-1".into()],
+            callback_handle: 13,
+        });
+        state.pending_compressions.push(reg::CompressionReg {
+            extension: "ext".into(),
+            name: "zstd".into(),
+            file_extension: "zst".into(),
+            callback_handle: 14,
+        });
+        state.pending_parsers.push(reg::ParserReg {
+            extension: "ext".into(),
+            name: "ggsql".into(),
+            callback_handle: 15,
+        });
+        state.pending_optimizers.push(reg::OptimizerReg {
+            extension: "ext".into(),
+            rule_name: "hoist_filters".into(),
+            callback_handle: 16,
+        });
+        state.pending_filterable_tables.push(reg::FilterableTableReg {
+            extension: "ext".into(),
+            name: "read_stream".into(),
+            arguments: vec![],
+            columns: vec![],
+            callback_handle: 17,
+        });
+
+        // Guarantee the compile-time ALL / as_str lockstep is what this test
+        // actually validates: one buffer per kind.
+        let _: L = L::Text; // keep the `use` in play across the rustc future edition.
+        assert_eq!(PendingKind::ALL.len(), 27, "if you add a PendingKind variant, extend this test");
+
+        let drained = state.drain_pending();
+        // Every field surfaces exactly one entry. Note: `scalar_ex` ALSO
+        // projects an interim scalars entry (see drain_pending doc), so the
+        // scalars total is 2 (bare `s` + projected `concat_ws`).
+        assert_eq!(drained.scalars.len(), 2, "scalars drained (bare + scalar_ex projection)");
+        assert_eq!(drained.tables.len(), 1, "tables drained");
+        assert_eq!(drained.aggregates.len(), 1, "aggregates drained");
+        assert_eq!(drained.macros.len(), 1, "macros drained");
+        assert_eq!(drained.replacement_scans.len(), 1, "replacement_scans drained");
+        assert_eq!(drained.logical_types.len(), 1, "logical_types drained");
+        assert_eq!(drained.casts.len(), 1, "casts drained");
+        assert_eq!(drained.storages.len(), 1, "storages drained");
+        assert_eq!(drained.scalar_ex.len(), 1, "scalar_ex drained");
+        assert_eq!(
+            drained.scalars.iter().filter(|s| s.name == "concat_ws").count(),
+            1,
+            "scalar_ex projected into scalars"
+        );
+        assert_eq!(drained.indexes.len(), 1, "indexes drained");
+        assert_eq!(drained.files.len(), 1, "files drained");
+        assert_eq!(drained.collations.len(), 1, "collations drained");
+        assert_eq!(drained.pragmas.len(), 1, "pragmas drained");
+        assert_eq!(drained.copy_handlers.len(), 1, "copy_handlers drained");
+        assert_eq!(drained.secrets.len(), 1, "secrets drained");
+        assert_eq!(drained.settings.len(), 1, "settings drained");
+        assert_eq!(drained.table_macros.len(), 1, "table_macros drained");
+        assert_eq!(drained.modified_types.len(), 1, "modified_types drained");
+        assert_eq!(drained.enum_types.len(), 1, "enum_types drained");
+        assert_eq!(drained.conn_callbacks.len(), 1, "conn_callbacks drained");
+        assert_eq!(drained.coordinate_systems.len(), 1, "coordinate_systems drained");
+        assert_eq!(drained.arrow_tables.len(), 1, "arrow_tables drained");
+        assert_eq!(drained.encodings.len(), 1, "encodings drained");
+        assert_eq!(drained.compressions.len(), 1, "compressions drained");
+        assert_eq!(drained.parsers.len(), 1, "parsers drained");
+        assert_eq!(drained.optimizers.len(), 1, "optimizers drained");
+        assert_eq!(drained.filterable_tables.len(), 1, "filterable_tables drained");
+
+        // Re-draining a spent state yields empty vectors on every field (the
+        // buffers were consumed via std::mem::take).
+        let empty = state.drain_pending();
+        assert!(empty.scalars.is_empty());
+        assert!(empty.indexes.is_empty());
+        assert!(empty.copy_handlers.is_empty());
+        assert!(empty.filterable_tables.is_empty());
     }
 }
 

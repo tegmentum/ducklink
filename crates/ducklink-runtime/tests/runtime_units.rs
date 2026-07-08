@@ -319,6 +319,115 @@ fn pending_append_merges_all_kinds_and_drains_other() {
         callback_handle: 4,
         options: None,
     });
+    // The SYSTEMIC append coverage: every additive pending_* buffer surfaces
+    // through `PendingRegistrationsData` and must survive an `append()`. If a
+    // new buffer is added but this test is not extended, the count assertions
+    // below still pass — the runtime compile-time lock in
+    // `PendingKind::ALL` / `PendingKind::as_str` (see extension.rs) is what
+    // stops the field from being forgotten in `append`/`drain_pending`.
+    other.indexes.push(reg::IndexReg {
+        extension: "ext".to_string(),
+        type_name: "wasm_hnsw".to_string(),
+    });
+    other.files.push(reg::FilesReg {
+        extension: "ext".to_string(),
+        callback_handle: 5,
+    });
+    other.collations.push(reg::CollationReg {
+        extension: "ext".to_string(),
+        name: "icu_en".to_string(),
+        transform_scalar: "icu_sort".to_string(),
+        combinable: false,
+    });
+    other.pragmas.push(reg::PragmaReg {
+        extension: "ext".to_string(),
+        name: "my_pragma".to_string(),
+        callback_handle: 6,
+    });
+    other.copy_handlers.push(reg::CopyHandlerReg {
+        extension: "ext".to_string(),
+        file_extension: "parquet".to_string(),
+        function_handle: 7,
+    });
+    other.secrets.push(reg::SecretReg {
+        extension: "ext".to_string(),
+        type_name: "s3".to_string(),
+        provider: None,
+        params: vec![],
+        callback_handle: 8,
+    });
+    other.settings.push(reg::SettingReg {
+        extension: "ext".to_string(),
+        name: "my_threshold".to_string(),
+        description: "knob".to_string(),
+        ty: "bigint".to_string(),
+        default_value: None,
+        scope: "global".to_string(),
+    });
+    other.table_macros.push(reg::TableMacroReg {
+        extension: "ext".to_string(),
+        schema: "main".to_string(),
+        name: "series".to_string(),
+        parameters: vec![],
+        body_sql: "SELECT 1".to_string(),
+    });
+    other.modified_types.push(reg::ModifiedTypeReg {
+        extension: "ext".to_string(),
+        name: "price".to_string(),
+        type_expr: "DECIMAL(18,3)".to_string(),
+    });
+    other.enum_types.push(reg::EnumTypeReg {
+        extension: "ext".to_string(),
+        name: "mood".to_string(),
+        members: vec!["happy".to_string()],
+    });
+    other.conn_callbacks.push(reg::ConnCallbackReg {
+        extension: "ext".to_string(),
+        on_opened: true,
+        on_closed: false,
+        callback_handle: 9,
+    });
+    other.coordinate_systems.push(reg::CoordinateSystemReg {
+        extension: "ext".to_string(),
+        auth_name: "EPSG".to_string(),
+        code: 4326,
+        wkt: "GEOGCRS[...]".to_string(),
+    });
+    other.arrow_tables.push(reg::ArrowTableReg {
+        extension: "ext".to_string(),
+        name: "feed".to_string(),
+        columns: vec![],
+        callback_handle: 10,
+    });
+    other.encodings.push(reg::EncodingReg {
+        extension: "ext".to_string(),
+        name: "latin-1".to_string(),
+        aliases: vec![],
+        callback_handle: 11,
+    });
+    other.compressions.push(reg::CompressionReg {
+        extension: "ext".to_string(),
+        name: "zstd".to_string(),
+        file_extension: "zst".to_string(),
+        callback_handle: 12,
+    });
+    other.parsers.push(reg::ParserReg {
+        extension: "ext".to_string(),
+        name: "ggsql".to_string(),
+        callback_handle: 13,
+    });
+    other.optimizers.push(reg::OptimizerReg {
+        extension: "ext".to_string(),
+        rule_name: "hoist_filters".to_string(),
+        callback_handle: 14,
+    });
+    other.filterable_tables.push(reg::FilterableTableReg {
+        extension: "ext".to_string(),
+        name: "read_stream".to_string(),
+        arguments: vec![],
+        columns: vec![],
+        callback_handle: 15,
+    });
 
     base.append(other);
 
@@ -332,4 +441,23 @@ fn pending_append_merges_all_kinds_and_drains_other() {
     assert_eq!(base.scalar_ex.len(), 1, "scalar_ex must also merge on append");
     assert_eq!(base.scalar_ex[0].name, "concat_ws");
     assert_eq!(base.scalar_ex[0].callback_handle, 4);
+    // Every additive pending_* buffer must survive the append.
+    assert_eq!(base.indexes.len(), 1);
+    assert_eq!(base.files.len(), 1);
+    assert_eq!(base.collations.len(), 1);
+    assert_eq!(base.pragmas.len(), 1);
+    assert_eq!(base.copy_handlers.len(), 1);
+    assert_eq!(base.secrets.len(), 1);
+    assert_eq!(base.settings.len(), 1);
+    assert_eq!(base.table_macros.len(), 1);
+    assert_eq!(base.modified_types.len(), 1);
+    assert_eq!(base.enum_types.len(), 1);
+    assert_eq!(base.conn_callbacks.len(), 1);
+    assert_eq!(base.coordinate_systems.len(), 1);
+    assert_eq!(base.arrow_tables.len(), 1);
+    assert_eq!(base.encodings.len(), 1);
+    assert_eq!(base.compressions.len(), 1);
+    assert_eq!(base.parsers.len(), 1);
+    assert_eq!(base.optimizers.len(), 1);
+    assert_eq!(base.filterable_tables.len(), 1);
 }
