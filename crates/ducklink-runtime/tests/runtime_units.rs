@@ -309,6 +309,16 @@ fn pending_append_merges_all_kinds_and_drains_other() {
         target: "b".to_string(),
         callback_handle: 3,
     });
+    other.scalar_ex.push(reg::ScalarExReg {
+        extension: "ext".to_string(),
+        name: "concat_ws".to_string(),
+        arguments: vec![],
+        varargs: Some(reg::LogicalType::Text),
+        returns: reg::LogicalType::Text,
+        special_null: true,
+        callback_handle: 4,
+        options: None,
+    });
 
     base.append(other);
 
@@ -319,4 +329,7 @@ fn pending_append_merges_all_kinds_and_drains_other() {
     assert_eq!(base.macros.len(), 1);
     assert_eq!(base.casts.len(), 1);
     assert_eq!(base.aggregates.len(), 0);
+    assert_eq!(base.scalar_ex.len(), 1, "scalar_ex must also merge on append");
+    assert_eq!(base.scalar_ex[0].name, "concat_ws");
+    assert_eq!(base.scalar_ex[0].callback_handle, 4);
 }

@@ -370,6 +370,17 @@ struct PendingAggregateRegistry {
 
 /// The full set of registrations captured from one or more components, ready
 /// for a direction-specific sink to forward into the database.
+///
+/// `scalar_ex` carries the RICHER (2.2.0) scalar registrations captured via
+/// `runtime-ext.register-scalar-ex` (varargs, optionally named args, special
+/// NULL-handling). Until the wasm-core `pending-registrations` WIT record
+/// grows a matching `scalar-ex` arm and the C++ core-shim consumes it, every
+/// `scalar_ex` entry is ALSO projected down into `scalars` at drain time
+/// (see [`ExtensionStoreState::drain_pending`]) so LOAD at least surfaces
+/// the function by name through the existing base-scalar WIT sink. That
+/// projection drops `varargs` and `special_null` — it is temporary. Once
+/// the core sink lands, the interim projection must be removed to avoid
+/// double-registration.
 #[derive(Default)]
 pub struct PendingRegistrationsData {
     pub scalars: Vec<PendingScalar>,
@@ -380,6 +391,9 @@ pub struct PendingRegistrationsData {
     pub logical_types: Vec<PendingLogicalType>,
     pub casts: Vec<PendingCast>,
     pub storages: Vec<PendingStorage>,
+    /// Richer (2.2.0) scalar registrations. See struct-level doc: entries here
+    /// are also projected into `scalars` for the current interim sink.
+    pub scalar_ex: Vec<PendingScalarEx>,
 }
 
 impl PendingRegistrationsData {
@@ -392,6 +406,7 @@ impl PendingRegistrationsData {
         self.logical_types.append(&mut other.logical_types);
         self.casts.append(&mut other.casts);
         self.storages.append(&mut other.storages);
+        self.scalar_ex.append(&mut other.scalar_ex);
     }
 }
 
@@ -682,6 +697,26 @@ impl ExtensionStoreState {
         let logical_types = std::mem::take(&mut self.pending_logical_types);
         let casts = std::mem::take(&mut self.pending_casts);
         let storages = std::mem::take(&mut self.pending_storages);
+
+        // 2.2.0 (Item 6): drain register-scalar-ex captures. Until the wasm-core
+        // `pending-registrations` WIT record grows a `scalar-ex` arm and the
+        // C++ core-shim consumes it, every `scalar-ex` entry is ALSO PROJECTED
+        // DOWN into `scalars` (dropping `varargs` and `special_null`) so LOAD
+        // surfaces the function name through the existing base-scalar sink.
+        // TEMPORARY: remove this projection when the core scalar-ex sink lands
+        // (otherwise a future direct consumer of `scalar_ex` will double-register).
+        let scalar_ex = std::mem::take(&mut self.pending_scalar_ex);
+        for entry in &scalar_ex {
+            scalars.push(PendingScalar {
+                extension: entry.extension.clone(),
+                name: entry.name.clone(),
+                arguments: entry.arguments.clone(),
+                returns: entry.returns.clone(),
+                callback_handle: entry.callback_handle,
+                options: entry.options.clone(),
+            });
+        }
+
         let pending = PendingRegistrationsData {
             scalars,
             tables,
@@ -691,6 +726,7 @@ impl ExtensionStoreState {
             logical_types,
             casts,
             storages,
+            scalar_ex,
         };
         let scalar_names =
             summarize_registration_names(&pending.scalars, |entry| entry.name.as_str());
@@ -700,13 +736,16 @@ impl ExtensionStoreState {
             summarize_registration_names(&pending.aggregates, |entry| entry.name.as_str());
         let macro_names =
             summarize_registration_names(&pending.macros, |entry| entry.name.as_str());
+        let scalar_ex_names =
+            summarize_registration_names(&pending.scalar_ex, |entry| entry.name.as_str());
         eprintln!(
-            "[extension-runtime:{}] draining pending registrations: scalars={} ({scalar_names}), tables={} ({table_names}), aggregates={} ({aggregate_names}), macros={} ({macro_names})",
+            "[extension-runtime:{}] draining pending registrations: scalars={} ({scalar_names}), tables={} ({table_names}), aggregates={} ({aggregate_names}), macros={} ({macro_names}), scalar_ex={} ({scalar_ex_names})",
             self.extension_name,
             pending.scalars.len(),
             pending.tables.len(),
             pending.aggregates.len(),
-            pending.macros.len()
+            pending.macros.len(),
+            pending.scalar_ex.len()
         );
         pending
     }
@@ -4457,6 +4496,58 @@ mod tests {
         assert!(drained.aggregates.is_empty());
         assert!(drained.macros.is_empty());
         assert!(drained.logical_types.is_empty());
+        assert!(drained.scalar_ex.is_empty());
+    }
+
+    #[test]
+    fn drain_pending_carries_scalar_ex_and_projects_into_scalars() {
+        // 2.2.0 (Item 6) scalar-ex registrations must reach the drain output.
+        // Since the wasm-core WIT `pending-registrations` record has no
+        // `scalar-ex` arm yet, `drain_pending` PROJECTS each entry down into
+        // `scalars` (dropping varargs / special_null) so LOAD surfaces the
+        // function name through the existing base-scalar sink. The raw entry
+        // is also preserved on the new `scalar_ex` field for future direct
+        // consumers. This test locks that dual behavior in until the interim
+        // projection is retired.
+        use extension_runtime::Logicaltype as L;
+        let mut state = test_state();
+
+        extension_runtime_ext::Host::register_scalar_ex(
+            &mut state,
+            "concat_ws".to_string(),
+            vec![extension_runtime_ext::Funcarg {
+                name: Some("sep".to_string()),
+                logical: L::Text,
+            }]
+            .into(),
+            Some(L::Text),
+            L::Text,
+            extension_runtime_ext::NullHandling::Special,
+            77,
+            None,
+        )
+        .expect("register_scalar_ex");
+
+        let drained = state.drain_pending();
+
+        // Raw scalar-ex entry preserved.
+        assert_eq!(drained.scalar_ex.len(), 1, "scalar_ex must be drained");
+        assert_eq!(drained.scalar_ex[0].name, "concat_ws");
+        assert_eq!(drained.scalar_ex[0].callback_handle, 77);
+        assert!(drained.scalar_ex[0].special_null);
+        assert_eq!(drained.scalar_ex[0].varargs, Some(reg::LogicalType::Text));
+
+        // Interim projection: same entry surfaces as a base scalar so the
+        // existing WIT `pending-registrations.scalars` sink registers the
+        // function by name.
+        assert_eq!(
+            drained.scalars.len(),
+            1,
+            "scalar_ex must be projected into scalars for LOAD"
+        );
+        assert_eq!(drained.scalars[0].name, "concat_ws");
+        assert_eq!(drained.scalars[0].callback_handle, 77);
+        assert_eq!(drained.scalars[0].returns, reg::LogicalType::Text);
     }
 
     #[test]
