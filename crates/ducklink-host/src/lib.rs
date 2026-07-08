@@ -2120,6 +2120,46 @@ impl ExtensionManager {
         }
         data.aggregates.extend(qualified_aggregates);
 
+        // SCALAR_EX (2.2.0 rich scalars): same NAME-KEYED `{prefix}__{name}`
+        // namespacing as base scalars. Prefixing here means the QUALIFIED form
+        // of a scalar_ex registration surfaces on `data.scalar_ex` too — so a
+        // future direct consumer of `scalar_ex` (once the interim projection
+        // in `drain_pending` is retired) still sees prefixed shadows without
+        // any extra wiring. Today the base-scalar projection makes the SCALARS
+        // block above also prefix the projected copy; the double-record is a
+        // no-op because `note_prefix_registration` dedups on
+        // (expansion, name, shape, n_args), and the retained-def slot ends up
+        // storing a `ScalarEx` variant (which wins over the earlier `Scalar`
+        // insert for the same key). Once the projection is removed, SCALARS
+        // skips the scalar_ex entries entirely and this block is the only
+        // path that prefixes them.
+        let mut qualified_scalar_ex: Vec<reg::ScalarExReg> = Vec::new();
+        for entry in &data.scalar_ex {
+            let n_args = entry.arguments.len() as i32;
+            let info = self.prefix_registry.resolve(&entry.extension);
+            self.note_prefix_registration(
+                &entry.extension,
+                &entry.name,
+                Shape::Scalar,
+                n_args,
+                &info,
+            );
+            self.prefix_retained.insert(
+                &info.expansion,
+                &info.prefix,
+                &entry.name,
+                Shape::Scalar,
+                n_args,
+                prefix::RetainedDef::ScalarEx(entry.clone()),
+            );
+            if let Some(qname) = prefix::qualified_name(&info.prefix, &entry.name) {
+                let mut dup = entry.clone();
+                dup.name = qname;
+                qualified_scalar_ex.push(dup);
+            }
+        }
+        data.scalar_ex.extend(qualified_scalar_ex);
+
         // MACROS (v1.1): a macro is dispatched by NAME (it becomes a DuckDB
         // CREATE MACRO), so `{prefix}__{name}` namespacing applies identically.
         // Arity is the parameter count.
@@ -2307,6 +2347,7 @@ impl ExtensionManager {
         // are skipped (a macro can't forward an unknown arity).
         let params = match def {
             prefix::RetainedDef::Scalar(r) => Some(macro_param_names(&r.arguments)),
+            prefix::RetainedDef::ScalarEx(r) => Some(macro_param_names(&r.arguments)),
             prefix::RetainedDef::Aggregate(r) => Some(macro_param_names(&r.arguments)),
             prefix::RetainedDef::Table(_) => None, // table macros differ; skip
             prefix::RetainedDef::Macro(r) => Some(r.parameters.clone()),
@@ -6386,6 +6427,69 @@ mod tests {
         assert!(validate_parser_rewrite("ggsql", "  VISUALIZE x  ", "VISUALIZE x").is_err());
         // A genuine rewrite to different SQL is accepted (the core then binds it).
         assert!(validate_parser_rewrite("ggsql", "VISUALIZE x", "SELECT 1").is_ok());
+    }
+
+    #[test]
+    fn apply_function_prefixes_surfaces_bare_and_prefixed_scalar_ex() {
+        // A `register-scalar-ex` registration must reach the prefixed-dispatch
+        // surface: the SCALAR_EX arm in `apply_function_prefixes` prefixes it
+        // just like a base scalar, so a `{prefix}__{name}` copy is appended to
+        // `data.scalar_ex` and the retained-def slot stores a `ScalarEx` arm.
+        // This locks the fix in against a regression when the interim
+        // `drain_pending` projection into `scalars` is retired.
+        let engine = build_engine().expect("engine");
+        let mut manager = ExtensionManager::new(engine);
+        let mut data = PendingRegistrationsData::default();
+        data.scalar_ex.push(reg::ScalarExReg {
+            extension: "myext".to_string(),
+            name: "concat_ws".to_string(),
+            arguments: vec![reg::FuncArg {
+                name: Some("sep".to_string()),
+                logical: reg::LogicalType::Text,
+            }],
+            varargs: Some(reg::LogicalType::Text),
+            returns: reg::LogicalType::Text,
+            special_null: true,
+            callback_handle: 77,
+            options: None,
+        });
+
+        manager.apply_function_prefixes(&mut data);
+
+        // The raw scalar_ex slot carries BOTH the bare name and a
+        // `{prefix}__concat_ws` shadow.
+        let names: Vec<&str> = data.scalar_ex.iter().map(|e| e.name.as_str()).collect();
+        assert!(
+            names.iter().any(|n| *n == "concat_ws"),
+            "bare scalar_ex name preserved; got {names:?}"
+        );
+        assert_eq!(
+            names.len(),
+            2,
+            "prefixed shadow appended to scalar_ex; got {names:?}"
+        );
+        let prefixed = names.iter().find(|n| n.contains("__concat_ws")).copied();
+        assert!(
+            prefixed.is_some(),
+            "{{prefix}}__concat_ws shadow missing; got {names:?}"
+        );
+
+        // Retained-def slot carries the ScalarEx arm (not a projection to
+        // Scalar) — the pin machinery must see the richer shape.
+        let expansion = prefixed
+            .and_then(|q| q.split_once("__").map(|(p, _)| p.to_string()))
+            .expect("prefixed name has expansion prefix");
+        // The retained key uses the resolver's expansion (not the SQL prefix
+        // string), which for an unknown extension falls back to
+        // `ducklink-internal://<extension>`. Look up via that fallback.
+        let fallback_expansion = format!("ducklink-internal://{expansion}");
+        let retained = manager
+            .prefix_retained
+            .get("concat_ws", prefix::Shape::Scalar, 1, &fallback_expansion);
+        assert!(
+            matches!(retained, Some(prefix::RetainedDef::ScalarEx(_))),
+            "retained-def slot must be a ScalarEx arm (got {retained:?})"
+        );
     }
 
     #[test]

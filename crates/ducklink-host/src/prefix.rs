@@ -405,6 +405,14 @@ pub enum RetainedDef {
     Collation(String, String, bool),
     /// (name, extension, callback_handle)
     Pragma(String, String, u32),
+    /// A 2.2.0 richer scalar (`register-scalar-ex`) — varargs, optionally named
+    /// args, special NULL-handling. Retained separately from `Scalar` so a pin
+    /// against a scalar_ex registration keeps its richer shape even after the
+    /// interim `drain_pending` projection into `scalars` is retired. Currently
+    /// pin-wrapped like `Scalar` (a macro alias forwards positional args to the
+    /// prefixed form); the wrapper is fine because scalar_ex still dispatches
+    /// through the base scalar sink today.
+    ScalarEx(reg::ScalarExReg),
 }
 
 /// Identity of a retained def: bare name + shape + arity + expansion. The
