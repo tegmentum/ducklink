@@ -222,16 +222,34 @@ impl SubExtLoader {
         this
     }
 
-    /// True if `sub_ext` has an associated bridge wasm path. `LOAD`'s
-    /// sub-ext branch takes the bridge from this map instead of resolving
-    /// through the flat `<extensions-dir>/<name>.wasm` shortcut.
+    /// True if `sub_ext` has an associated bridge wasm path OR a prebuilt
+    /// monolith registered under it. `LOAD`'s sub-ext branch takes the
+    /// bridge from these maps instead of resolving through the flat
+    /// `<extensions-dir>/<name>.wasm` shortcut.
+    ///
+    /// A prebuilt entry alone is enough to route through the sub-ext
+    /// branch — the pure-monolith mode ships a single wasm that answers
+    /// both the composed-provider slot (via `compose:dynlink/endpoint`)
+    /// and the extension bridge slot, so a user configuring only
+    /// `DUCKLINK_SUB_EXT_PREBUILT` should still hit materialization + get
+    /// the prebuilt path back as the bridge to load.
+    /// [`SubExtLoader::bridge_path`] mirrors this fallback so
+    /// `has_bridge` ⇔ `bridge_path.is_some()` remains an invariant.
     pub fn has_bridge(&self, sub_ext: &str) -> bool {
-        self.sub_ext_bridge_paths.contains_key(sub_ext)
+        self.sub_ext_prebuilt_paths.contains_key(sub_ext)
+            || self.sub_ext_bridge_paths.contains_key(sub_ext)
     }
 
-    /// Bridge wasm path for `sub_ext`, if configured.
+    /// Bridge wasm path for `sub_ext`, if configured. Prefers an explicit
+    /// `sub_ext_bridge_paths` entry (the plan-driven path's dedicated
+    /// bridge wasm), falls back to the prebuilt monolith path so the
+    /// pure-monolith mode (only `DUCKLINK_SUB_EXT_PREBUILT` set) still
+    /// returns a wasm the LOAD path can instantiate.
     pub fn bridge_path(&self, sub_ext: &str) -> Option<&Path> {
-        self.sub_ext_bridge_paths.get(sub_ext).map(PathBuf::as_path)
+        self.sub_ext_bridge_paths
+            .get(sub_ext)
+            .or_else(|| self.sub_ext_prebuilt_paths.get(sub_ext))
+            .map(PathBuf::as_path)
     }
 
     /// Whether this sub-ext has already been composed + registered.

@@ -185,3 +185,30 @@ fn has_bridge_and_bridge_path_wire_the_load_time_branch() {
     assert!(!loader.has_bridge("mobilitydb"));
     assert_eq!(loader.bridge_path("mobilitydb"), None);
 }
+
+#[test]
+fn prebuilt_only_config_routes_through_sub_ext_branch() {
+    // In the pure-monolith mode the user sets DUCKLINK_SUB_EXT_PREBUILT
+    // alone (per the postgis-wasm README). `has_bridge` must still return
+    // true for that sub-ext so LOAD takes the sub-ext branch instead of
+    // the flat resolver, and `bridge_path` must fall back to the prebuilt
+    // wasm so the .expect() in ExtensionManager doesn't panic.
+    let engine = test_engine();
+    let registry = ProviderRegistry::new(engine);
+    let mut loader = SubExtLoader::new(registry);
+    let prebuilt = PathBuf::from("/tmp/postgis-monolith-provider.wasm");
+    loader
+        .sub_ext_prebuilt_paths
+        .insert("postgis_core".to_string(), prebuilt.clone());
+    assert!(loader.has_bridge("postgis_core"));
+    assert_eq!(loader.bridge_path("postgis_core"), Some(prebuilt.as_path()));
+    // Explicit bridge still wins when both are set.
+    let bridge = PathBuf::from("/tmp/postgis_core_bridge.wasm");
+    loader
+        .sub_ext_bridge_paths
+        .insert("postgis_core".to_string(), bridge.clone());
+    assert_eq!(loader.bridge_path("postgis_core"), Some(bridge.as_path()));
+}
+
+// (mixed_mode_prebuilt_upstream_seeds_cas_for_derived_plan test lives in a
+// follow-up commit that pairs with the CAS-write fix.)
