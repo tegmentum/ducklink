@@ -30,6 +30,11 @@ datalink-contract = { git = "https://github.com/tegmentum/datalink.git", rev = "
 # compose_dynlink module is now a thin adapter over this; the resolve/invoke
 # bridge + bindings live here, shared with the other wasm-component hosts.
 datalink-dynlink = { git = "https://github.com/tegmentum/datalink.git", rev = "80010adf7c9ec3d07674bba12585c787328217f5" }
+# `PendingKind::iter()` is derived via `EnumIter` so `PendingKind::all()` stays
+# in lockstep with the enum without a hand-maintained mirror array or a
+# hardcoded variant-count assert. `strum` is stable-Rust (no nightly required)
+# and pulls in `strum_macros` transitively via its `derive` feature.
+strum = { version = "0.26", features = ["derive"] }
 
 [build-dependencies]
 # Same witcanon scheme, used in build.rs to hash the canonical WIT into a const.

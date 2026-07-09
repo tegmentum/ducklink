@@ -322,9 +322,9 @@ fn pending_append_merges_all_kinds_and_drains_other() {
     // The SYSTEMIC append coverage: every additive pending_* buffer surfaces
     // through `PendingRegistrationsData` and must survive an `append()`. If a
     // new buffer is added but this test is not extended, the count assertions
-    // below still pass — the runtime compile-time lock in
-    // `PendingKind::ALL` / `PendingKind::as_str` (see extension.rs) is what
-    // stops the field from being forgotten in `append`/`drain_pending`.
+    // below still pass — the exhaustive `PendingKind::as_str` match plus the
+    // `strum::EnumIter`-derived `PendingKind::all()` (see extension.rs) is
+    // what stops the field from being forgotten in `append`/`drain_pending`.
     other.indexes.push(reg::IndexReg {
         extension: "ext".to_string(),
         type_name: "wasm_hnsw".to_string(),

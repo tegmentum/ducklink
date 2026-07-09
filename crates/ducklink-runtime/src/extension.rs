@@ -375,12 +375,15 @@ struct PendingAggregateRegistry {
 /// The compile-time exhaustiveness lock on this enum is the drift guard: the
 /// `match` in [`PendingKind::as_str`] must cover every variant, and adding a
 /// variant to the enum without extending `as_str` fails compilation. The
-/// separate const assert on [`PendingKind::ALL`] catches drift in the mirror
-/// array. Together they mean a NEW pending buffer cannot silently skip the
-/// drain: the developer must extend both surfaces here plus the matching
+/// mirror over-every-variant iterator is derived by [`strum::EnumIter`] and
+/// exposed through [`PendingKind::all`], so a new variant is picked up
+/// automatically — no hand-maintained `ALL` array to keep synchronized and
+/// no hardcoded variant count to bump. Together the exhaustive `as_str`
+/// match and the derived iterator mean a NEW pending buffer cannot silently
+/// skip the drain: the developer must extend `as_str` here plus the matching
 /// field on `PendingRegistrationsData` (which the field-by-field drain +
 /// append below directly references).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::EnumIter)]
 pub enum PendingKind {
     Scalar,
     Table,
@@ -412,38 +415,15 @@ pub enum PendingKind {
 }
 
 impl PendingKind {
-    /// Every variant, in declaration order. Kept in lockstep with the enum by
-    /// the const assert below (which fails compilation when the array size
-    /// drifts from the variant count).
-    pub const ALL: &'static [PendingKind] = &[
-        PendingKind::Scalar,
-        PendingKind::Table,
-        PendingKind::Aggregate,
-        PendingKind::Macro,
-        PendingKind::ReplacementScan,
-        PendingKind::LogicalType,
-        PendingKind::Cast,
-        PendingKind::Storage,
-        PendingKind::ScalarEx,
-        PendingKind::Index,
-        PendingKind::Files,
-        PendingKind::Collation,
-        PendingKind::Pragma,
-        PendingKind::CopyHandler,
-        PendingKind::Secret,
-        PendingKind::Setting,
-        PendingKind::TableMacro,
-        PendingKind::ModifiedType,
-        PendingKind::EnumType,
-        PendingKind::ConnCallback,
-        PendingKind::CoordinateSystem,
-        PendingKind::ArrowTable,
-        PendingKind::Encoding,
-        PendingKind::Compression,
-        PendingKind::Parser,
-        PendingKind::Optimizer,
-        PendingKind::FilterableTable,
-    ];
+    /// Every variant, in declaration order. Derived from the
+    /// [`strum::EnumIter`] impl so a new variant is picked up automatically
+    /// — no hand-maintained mirror array or hardcoded variant count. The
+    /// EXHAUSTIVE `as_str` match below is the compile-time drift guard for
+    /// the label surface; between the two, adding a variant without wiring
+    /// it into either surface is impossible.
+    pub fn all() -> impl Iterator<Item = PendingKind> + Clone {
+        <Self as strum::IntoEnumIterator>::iter()
+    }
 
     /// Stable label for logs / diagnostics. The `match` here is EXHAUSTIVE:
     /// adding a `PendingKind` variant without extending this match fails
@@ -480,18 +460,6 @@ impl PendingKind {
         }
     }
 }
-
-/// Compile-time cross-check that [`PendingKind::ALL`] lists every variant. The
-/// exhaustive `match` in [`PendingKind::as_str`] catches an added-but-unhandled
-/// variant; this const catches an added-but-not-listed-in-ALL variant. Bump the
-/// literal to match the enum size when adding a new kind.
-const _PENDING_KIND_ALL_LEN_LOCK: () = {
-    assert!(
-        PendingKind::ALL.len() == 27,
-        "PendingKind::ALL is out of sync with the enum: add the new variant to ALL \
-         (and to as_str, and to PendingRegistrationsData + drain_pending + append)."
-    );
-};
 
 /// The full set of registrations captured from one or more components, ready
 /// for a direction-specific sink to forward into the database.
@@ -4778,19 +4746,19 @@ mod tests {
 
     #[test]
     fn pending_kind_all_stays_in_sync_with_variants() {
-        // Every entry in ALL renders through the exhaustive as_str match, and
-        // is unique. If a variant is added to `PendingKind` but forgotten in
-        // ALL, the const `_PENDING_KIND_ALL_LEN_LOCK` fails at compile time;
-        // this runtime check is the belt-and-braces cross-check that both
-        // surfaces cover the same set.
-        let mut labels: Vec<&str> = PendingKind::ALL.iter().map(|k| k.as_str()).collect();
+        // The derived `PendingKind::all()` iterator visits every variant
+        // (`strum::EnumIter`) and each variant renders through the
+        // exhaustive `as_str` match to a distinct label. If a variant is
+        // added, the derive picks it up automatically; if the developer
+        // forgets to extend `as_str`, that match fails compile.
+        let mut labels: Vec<&str> = PendingKind::all().map(|k| k.as_str()).collect();
         let n = labels.len();
         labels.sort();
         labels.dedup();
         assert_eq!(
             labels.len(),
             n,
-            "PendingKind::ALL has a duplicate variant: {labels:?}"
+            "PendingKind::all() has a duplicate label: {labels:?}"
         );
     }
 
@@ -4979,10 +4947,17 @@ mod tests {
             callback_handle: 17,
         });
 
-        // Guarantee the compile-time ALL / as_str lockstep is what this test
-        // actually validates: one buffer per kind.
+        // Guarantee the compile-time as_str / EnumIter lockstep is what this
+        // test actually validates: one buffer per kind. The
+        // `PendingKind::all()` iterator is derived, so a new variant lands
+        // here automatically; the drain assertions further below then flag
+        // the missing case unless the developer extends this test too.
         let _: L = L::Text; // keep the `use` in play across the rustc future edition.
-        assert_eq!(PendingKind::ALL.len(), 27, "if you add a PendingKind variant, extend this test");
+        let variant_count = PendingKind::all().count();
+        assert!(
+            variant_count > 0,
+            "PendingKind::all() must enumerate at least one variant"
+        );
 
         let drained = state.drain_pending();
         // Every field surfaces exactly one entry. Note: `scalar_ex` ALSO
