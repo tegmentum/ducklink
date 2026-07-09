@@ -1,0 +1,54 @@
+# ducklink-native — curated bundle of perf-sensitive natives for DuckDB.
+#
+# Companion to the `ducklink` extension. Where `ducklink` embeds wasmtime to
+# run ANY of the 216 datalink components dynamically as WASM, this ships a
+# CURATED subset compiled directly against duckdb-rs — same pure-logic
+# crates, native-DuckDB speed, no sandbox. Users install one or the other
+# (or both) depending on whether they need dynamic loading or throughput.
+#
+# Curation filter: perf-sensitive + no existing native community extension
+# equivalent. Anything already covered by a native DuckDB extension stays
+# WASM-only via ducklink; anything I/O-bound or rarely-called doesn't
+# benefit enough from the native build to be worth the bundle bloat.
+[package]
+name = "ducklink-native"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Curated native DuckDB extension: perf-sensitive scalars from the ducklink component catalog"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "ducklink_native"
+
+[features]
+default = ["loadable"]
+duckdb-api = ["dep:duckdb", "duckdb/vscalar"]
+loadable = [
+    "duckdb-api",
+    "duckdb/loadable-extension",
+    "dep:libduckdb-sys",
+    "libduckdb-sys/loadable-extension",
+]
+bundled = ["duckdb-api", "duckdb/bundled"]
+
+[dependencies]
+# Pure-logic crates from datalink — one source of truth, shared with each
+# component's ducklink WASM version. Bundle grows as more perf-sensitive
+# capabilities warrant inclusion.
+aba-core = { path = "../../../datalink/extensions/aba-core" }
+iban-core = { path = "../../../datalink/extensions/iban-core" }
+isbn-core = { path = "../../../datalink/extensions/isbn-core" }
+luhn-core = { path = "../../../datalink/extensions/luhn-core" }
+creditcard-core = { path = "../../../datalink/extensions/creditcard-core" }
+
+# DuckDB C Extension API. Pinned to the community-extensions CI's DuckDB version.
+duckdb = { version = "1.10504.0", optional = true, default-features = false }
+libduckdb-sys = { version = "1.10504.0", features = ["loadable-extension"], optional = true }
+
+[profile.release]
+lto = true
+strip = true
+
+[workspace]

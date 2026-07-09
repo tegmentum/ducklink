@@ -1,0 +1,56 @@
+# DuckDB community-extensions manifest.
+extension:
+  name: ducklink_native
+  description: Curated native DuckDB scalars from the ducklink component catalog (validators, encoders, transforms)
+  version: 0.1.0
+  language: Rust
+  build: cargo
+  license: MIT
+  maintainers:
+    - tegmentum
+  requires_toolchains: "rust;python3"
+
+repo:
+  github: tegmentum/ducklink-native
+  ref: v0.1.0
+
+docs:
+  hello_world: |
+    LOAD ducklink_native;
+    SELECT aba_validate('021000021');       -- true
+    SELECT iban_validate('DE89370400440532013000');  -- true
+    SELECT cc_type('4111111111111111');     -- Visa
+  extended_description: |
+    Companion to the `ducklink` extension. Where `ducklink` embeds a
+    wasmtime host to run any of ~216 datalink components dynamically as
+    portable WebAssembly (sandboxed, catalog-driven), `ducklink_native`
+    ships a CURATED subset of perf-sensitive scalars compiled directly
+    against DuckDB's C Extension API. Same pure-logic crates as the WASM
+    versions; native execution speed (~20× faster than WASM on
+    tight-loop scalars); no sandbox.
+
+    Bundled today (15 scalars, 5 domains):
+
+      * aba_validate / aba_frb_district / aba_fed_region
+          US ABA / bank routing-number checks.
+
+      * iban_validate / iban_country / iban_bban
+          International bank account number (ISO 13616) checks.
+
+      * isbn_valid / isbn_normalize
+          ISBN-10 / ISBN-13 checksum + normalize.
+
+      * luhn_validate / luhn_check_digit
+          Luhn checksum (credit-card family, national IDs, ...).
+
+      * cc_validate / cc_network / cc_type / cc_mask / cc_last4
+        / cc_bin / cc_normalize
+          Credit-card validation + brand detection + masking.
+
+    Use ducklink_native when you're running these functions over many
+    rows in tight loops. Use ducklink's WASM versions of the SAME
+    capabilities when sandboxing / portability / dynamic-load matter
+    more than raw throughput. Or install both — the two extensions
+    coexist; ducklink's WASM aba_validate and ducklink_native's aba_validate
+    are just SQL functions with the same signature registered at different
+    times (whichever loaded last wins).
