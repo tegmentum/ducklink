@@ -311,13 +311,31 @@ impl SubExtLoader {
                  {} as provider '{provider_id}'; skipping plan-driven compose",
                 prebuilt.display()
             );
-            let digest = {
-                use sha2::{Digest, Sha256};
-                let bytes = std::fs::read(&prebuilt).map_err(|e| {
-                    SubExtError::mat(sub_ext, &prebuilt, format!("digest read: {e}"))
+            // Read the prebuilt once and write it into the compose CAS so a
+            // DOWNSTREAM sub-ext (plan-driven, derived-from this one) can
+            // splice the digest into its plan and have the bytes waiting at
+            // `blobs.get(digest)` where compose-core expects them. Without
+            // this write, mixed mode (postgis_core prebuilt + postgis_raster
+            // plan-driven → postgis_core) fails with `BlobNotFound` when the
+            // raster compose walks the derived-from chain.
+            let bytes = std::fs::read(&prebuilt).map_err(|e| {
+                SubExtError::mat(sub_ext, &prebuilt, format!("digest read: {e}"))
+            })?;
+            let blobs =
+                BlobStore::new(self.blob_cas_path.clone(), COMPOSE_MAX_BLOB_SIZE).map_err(|e| {
+                    SubExtError::mat(
+                        sub_ext,
+                        &prebuilt,
+                        format!("open blob CAS at {}: {e}", self.blob_cas_path.display()),
+                    )
                 })?;
-                Sha256::digest(&bytes).to_vec()
-            };
+            let digest = blobs.put(&bytes).map_err(|e| {
+                SubExtError::mat(
+                    sub_ext,
+                    &prebuilt,
+                    format!("CAS put for prebuilt shortcut: {e}"),
+                )
+            })?;
             self.composed_digests.insert(sub_ext.to_string(), digest);
             self.materialized_sub_exts.insert(sub_ext.to_string());
             return Ok(provider_id);
@@ -522,6 +540,10 @@ mod tests {
         let engine = Engine::new(&cfg).unwrap();
         let registry = ProviderRegistry::new(engine);
         let mut loader = SubExtLoader::new(registry.clone());
+        // Point the CAS at the tempdir so the shortcut's `blobs.put` write
+        // (added to keep the mixed-mode chain's compose invariant intact)
+        // doesn't pollute the working tree with a `.compose/` dir.
+        loader.blob_cas_path = tmp.path().join("blobs");
 
         // Register prebuilt but no plan; materialize must register-then-return.
         loader

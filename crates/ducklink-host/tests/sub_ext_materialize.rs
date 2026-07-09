@@ -210,5 +210,87 @@ fn prebuilt_only_config_routes_through_sub_ext_branch() {
     assert_eq!(loader.bridge_path("postgis_core"), Some(bridge.as_path()));
 }
 
-// (mixed_mode_prebuilt_upstream_seeds_cas_for_derived_plan test lives in a
-// follow-up commit that pairs with the CAS-write fix.)
+#[test]
+fn mixed_mode_prebuilt_upstream_seeds_cas_for_derived_plan() {
+    // The regression this pins: postgis_core registered as prebuilt +
+    // postgis_raster driven by a plan that has a zero-digest placeholder
+    // component derived from postgis_core. Before the fix the prebuilt
+    // shortcut cached sha256(prebuilt) in composed_digests but never
+    // wrote the bytes into the CAS, so the raster compose walked the
+    // derived-from chain, spliced the prebuilt digest into the raster
+    // plan, then failed with BlobNotFound when compose-core tried to
+    // read those bytes back from the CAS.
+    let workdir = tempfile::tempdir().expect("tempdir");
+    let cas = workdir.path().join("blobs");
+    let cache = workdir.path().join("cache");
+    std::fs::create_dir_all(&cas).unwrap();
+    std::fs::create_dir_all(&cache).unwrap();
+
+    // Prebuilt monolith for postgis_core. Contents are the minimal valid
+    // component blob so wasmtime accepts them at registration time.
+    let prebuilt = workdir.path().join("postgis-monolith-provider.wasm");
+    std::fs::write(&prebuilt, minimal_component_bytes()).unwrap();
+
+    // Plan for postgis_raster: one component with an all-zero digest
+    // that will be spliced via sub_ext_derived_from -> postgis_core.
+    // A single-component plan composes as a passthrough — the result
+    // digest equals the spliced input digest — so we don't need to
+    // model raster-specific bytes here.
+    let raster_plan = PlanV1 {
+        version: "1".to_string(),
+        root: "root".to_string(),
+        components: vec![ComponentSpec {
+            id: "root".to_string(),
+            digest: vec![0u8; 32],
+            source: None,
+        }],
+        bindings: vec![],
+        secrets: vec![],
+        policy: Policy::default(),
+        linkage: Default::default(),
+        explicit_exports: vec![],
+    };
+    let raster_plan_path = workdir.path().join("postgis-raster.plan.json");
+    std::fs::write(
+        &raster_plan_path,
+        serde_json::to_vec_pretty(&raster_plan).unwrap(),
+    )
+    .unwrap();
+
+    let engine = test_engine();
+    let registry = ProviderRegistry::new(engine);
+    let mut loader = SubExtLoader::new(registry);
+    loader.blob_cas_path = cas.clone();
+    loader.compose_cache_path = cache;
+    loader
+        .sub_ext_prebuilt_paths
+        .insert("postgis_core".to_string(), prebuilt.clone());
+    loader
+        .sub_ext_plan_paths
+        .insert("postgis_raster".to_string(), raster_plan_path);
+    loader
+        .sub_ext_derived_from
+        .insert("root".to_string(), "postgis_core".to_string());
+
+    // Materialize the downstream. This recurses into postgis_core (which
+    // hits the prebuilt shortcut), splices the resolved digest into the
+    // raster plan, then composes. Without the CAS-write fix, the compose
+    // step returns BlobNotFound for the spliced digest.
+    let raster_id = loader
+        .materialize_sub_ext_provider("postgis_raster")
+        .expect("mixed-mode chain must resolve prebuilt upstream via CAS");
+    assert_eq!(raster_id, "postgis_raster-composed");
+    assert!(loader.is_materialized("postgis_core"));
+    assert!(loader.is_materialized("postgis_raster"));
+
+    // The prebuilt's bytes are readable from the compose CAS at the
+    // digest cached under postgis_core — this is the invariant every
+    // downstream compose relies on.
+    let blobs = BlobStore::new(cas, 1 << 20).expect("open CAS");
+    let prebuilt_bytes = std::fs::read(&prebuilt).unwrap();
+    let digest = compose_core::blobs::compute_digest(&prebuilt_bytes);
+    let round_trip = blobs
+        .get(&digest)
+        .expect("prebuilt bytes must be present in CAS after shortcut");
+    assert_eq!(round_trip, prebuilt_bytes);
+}
