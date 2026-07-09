@@ -1,0 +1,6 @@
+/target
+/build
+/configure/venv
+/configure/platform.txt
+/configure/extension_version.txt
+Cargo.lock
