@@ -155,6 +155,24 @@ pub struct SubExtLoader {
     /// `sub_ext_plan_paths` for the same key.
     pub sub_ext_prebuilt_paths: BTreeMap<String, PathBuf>,
 
+    /// `sub_ext -> upstream-sub-ext-id` — Phase 9.1 shared-shim alias.
+    /// Sub-exts whose composed provider IS an upstream sub-ext's provider
+    /// (rather than a distinct shim) route through this map instead of
+    /// materializing their own. Example: `postgis_topology`,
+    /// `postgis_3d`, `postgis_metadata`, `postgis_clustering` all share
+    /// the `postgis_core-composed` provider — one 30 MB wasm instead of
+    /// four independent registrations. Bridges for aliased subs are
+    /// emitted with `--provider-id <upstream>-composed` so their
+    /// `resolve-by-id` import lands on the shared registration.
+    ///
+    /// When `LOAD <sub>` fires against a key in this map,
+    /// `materialize_sub_ext_provider` recurses into the upstream, marks
+    /// both entries materialized (idempotence guard covers repeat LOADs
+    /// of either the upstream or any of its aliased children), and
+    /// returns the UPSTREAM provider id. Populated from
+    /// `DUCKLINK_SUB_EXT_ALIAS` env var.
+    pub sub_ext_shim_alias: BTreeMap<String, String>,
+
     /// Blob CAS root (default `<cwd>/.compose/blobs`). Every plan
     /// component's digest must resolve to a blob under this root — the
     /// application layer (postgis-wasm's `plans/verify.sh` or an
@@ -188,6 +206,7 @@ impl SubExtLoader {
             sub_ext_bridge_paths: BTreeMap::new(),
             sub_ext_derived_from: BTreeMap::new(),
             sub_ext_prebuilt_paths: BTreeMap::new(),
+            sub_ext_shim_alias: BTreeMap::new(),
             blob_cas_path: PathBuf::from(".compose/blobs"),
             compose_cache_path: PathBuf::from(".compose/cache"),
             materialized_sub_exts: HashSet::new(),
@@ -209,6 +228,13 @@ impl SubExtLoader {
             .map(|(k, v)| (k, v.to_string_lossy().into_owned()))
             .collect();
         this.sub_ext_prebuilt_paths = parse_map_env("DUCKLINK_SUB_EXT_PREBUILT");
+        // Phase 9.1 shared-shim aliases. Same PathBuf-valued parse form
+        // as `_DERIVED`, but the value is an id string not a path (the
+        // upstream sub-ext name) — reuse the parser + convert.
+        this.sub_ext_shim_alias = parse_map_env("DUCKLINK_SUB_EXT_ALIAS")
+            .into_iter()
+            .map(|(k, v)| (k, v.to_string_lossy().into_owned()))
+            .collect();
         if let Ok(p) = std::env::var("DUCKLINK_COMPOSE_BLOB_CAS") {
             if !p.trim().is_empty() {
                 this.blob_cas_path = PathBuf::from(p.trim());
@@ -277,6 +303,29 @@ impl SubExtLoader {
 
         if self.materialized_sub_exts.contains(sub_ext) {
             return Ok(provider_id);
+        }
+
+        // Phase 9.1 shared-shim alias branch. Sub-exts whose composed
+        // provider IS an upstream sub-ext's provider (e.g.
+        // postgis_topology / _3d / _metadata / _clustering → postgis_core)
+        // recurse into the upstream's materialization instead of
+        // registering a fresh provider under `<sub_ext>-composed`.
+        //
+        // Order matters: alias takes precedence over both the
+        // prebuilt shortcut AND the plan-driven compose so aliased subs
+        // NEVER register their own provider id. The upstream's
+        // registration (idempotent by id in ProviderRegistry) is what
+        // the aliased bridge's `resolve-by-id(<upstream>-composed)`
+        // baked-in provider id will find at instantiate time.
+        if let Some(upstream) = self.sub_ext_shim_alias.get(sub_ext).cloned() {
+            let upstream_id = self.materialize_sub_ext_provider(&upstream)?;
+            // Mark THIS sub-ext materialized too so a repeat LOAD is a
+            // no-op (returns the same upstream id without re-recursing).
+            self.materialized_sub_exts.insert(sub_ext.to_string());
+            eprintln!(
+                "[sub-ext] '{sub_ext}' aliased to '{upstream}' — using shared provider '{upstream_id}'"
+            );
+            return Ok(upstream_id);
         }
 
         // Phase D / Option B short-circuit: if the sub-ext has a
@@ -564,6 +613,64 @@ mod tests {
 
         // Provider is registered (compile-time only, no resident instance).
         assert_eq!(registry.resident_count(&id), 0);
+    }
+
+    #[test]
+    fn shim_alias_recurses_to_upstream_and_shares_provider_id() {
+        use wasmtime::{Config, Engine};
+
+        let component_bytes: Vec<u8> = vec![
+            0x00, 0x61, 0x73, 0x6d, // \0asm
+            0x0d, 0x00, 0x01, 0x00, // component version
+        ];
+        let tmp = tempfile::tempdir().unwrap();
+        let prebuilt = tmp.path().join("postgis-core-composed.wasm");
+        std::fs::write(&prebuilt, &component_bytes).unwrap();
+
+        let mut cfg = Config::new();
+        cfg.wasm_component_model(true);
+        let engine = Engine::new(&cfg).unwrap();
+        let registry = ProviderRegistry::new(engine);
+        let mut loader = SubExtLoader::new(registry.clone());
+        loader.blob_cas_path = tmp.path().join("blobs");
+
+        // postgis_core has a real prebuilt; postgis_topology and
+        // postgis_3d alias into it — no prebuilt or plan of their own.
+        loader
+            .sub_ext_prebuilt_paths
+            .insert("postgis_core".into(), prebuilt.clone());
+        loader
+            .sub_ext_shim_alias
+            .insert("postgis_topology".into(), "postgis_core".into());
+        loader
+            .sub_ext_shim_alias
+            .insert("postgis_3d".into(), "postgis_core".into());
+
+        // Materialize the aliased sub — must return the UPSTREAM
+        // provider id, not `postgis_topology-composed`.
+        let topology_id = loader
+            .materialize_sub_ext_provider("postgis_topology")
+            .expect("alias must resolve to upstream materialization");
+        assert_eq!(topology_id, "postgis_core-composed");
+
+        // Both aliased AND upstream marked materialized so repeat LOADs
+        // are no-ops.
+        assert!(loader.is_materialized("postgis_topology"));
+        assert!(loader.is_materialized("postgis_core"));
+
+        // Second aliased sub also resolves to the same shared upstream —
+        // proves one shim answers all N aliased children.
+        let threed_id = loader
+            .materialize_sub_ext_provider("postgis_3d")
+            .expect("second alias must reuse upstream provider");
+        assert_eq!(threed_id, "postgis_core-composed");
+
+        // Registry has exactly ONE registration under
+        // `postgis_core-composed`. Neither `postgis_topology-composed`
+        // nor `postgis_3d-composed` was ever registered.
+        assert_eq!(registry.resident_count("postgis_core-composed"), 0);
+        assert_eq!(registry.resident_count("postgis_topology-composed"), 0);
+        assert_eq!(registry.resident_count("postgis_3d-composed"), 0);
     }
 
     #[test]
