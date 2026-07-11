@@ -262,8 +262,23 @@ impl SubExtLoader {
     /// [`SubExtLoader::bridge_path`] mirrors this fallback so
     /// `has_bridge` ⇔ `bridge_path.is_some()` remains an invariant.
     pub fn has_bridge(&self, sub_ext: &str) -> bool {
-        self.sub_ext_prebuilt_paths.contains_key(sub_ext)
+        // A prebuilt/bridge entry on the sub-ext directly, OR an alias
+        // entry (Phase 9.1) whose upstream has a prebuilt/bridge. Aliased
+        // subs still need their OWN bridge_paths entry (so the aliased
+        // bridge wasm gets loaded), but the composed-provider path comes
+        // from the upstream — so a sub-ext that ONLY has a bridge_paths
+        // entry and points at an alias upstream via sub_ext_shim_alias
+        // must still return true here.
+        if self.sub_ext_prebuilt_paths.contains_key(sub_ext)
             || self.sub_ext_bridge_paths.contains_key(sub_ext)
+        {
+            return true;
+        }
+        if let Some(upstream) = self.sub_ext_shim_alias.get(sub_ext) {
+            return self.sub_ext_prebuilt_paths.contains_key(upstream)
+                || self.sub_ext_bridge_paths.contains_key(upstream);
+        }
+        false
     }
 
     /// Bridge wasm path for `sub_ext`, if configured. Prefers an explicit
