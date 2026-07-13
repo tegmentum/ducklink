@@ -1,0 +1,12 @@
+package boundary-test:write@0.1.0;
+
+use duckdb:extension/types@2.0.0;
+use duckdb:extension/storage-write-dispatch@2.0.0;
+
+// Host-side world for the write-boundary integration test. Mirrors the
+// synthetic ducklink writer bridge's `synthetic:writer/writer` world: exports
+// only storage-write-dispatch@2.0.0. No imports (the bridge is a plain writer
+// component that does not call any host-side interfaces).
+world write-boundary-test {
+  export duckdb:extension/storage-write-dispatch@2.0.0;
+}

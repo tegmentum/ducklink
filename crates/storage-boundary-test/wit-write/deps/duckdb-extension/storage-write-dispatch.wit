@@ -1,0 +1,48 @@
+package duckdb:extension@2.0.0;
+
+use types;
+
+// Host -> component callbacks for the WRITABLE half of a storage backend
+// (additive, 2.1.0). The read-only `storage-dispatch` (attach/list/scan) is left
+// INTACT; this adds the mutating path -- transactions, DDL, and DML -- for
+// storage backends that can write through. Exported by writable storage
+// components via the separate `duckdb-extension-storage-write` world.
+//
+// Every call carries `handle` = the callback-handle the component passed to
+// storage.register-storage; `catalog` is the catalog handle from
+// storage-dispatch.storage-attach.
+interface storage-write-dispatch {
+  use types.{duckerror, duckvalue, columndef};
+
+  // Begin a transaction on `catalog`; returns a transaction handle.
+  begin-transaction: func(handle: u32, catalog: u32) -> result<u32, duckerror>;
+
+  commit-transaction: func(handle: u32, txn: u32) -> result<_, duckerror>;
+  rollback-transaction: func(handle: u32, txn: u32) -> result<_, duckerror>;
+
+  // CREATE TABLE within `txn`.
+  create-table: func(handle: u32,
+                     txn: u32,
+                     table: string,
+                     columns: list<columndef>) -> result<_, duckerror>;
+
+  // Append rows; returns the number inserted.
+  insert-rows: func(handle: u32,
+                    txn: u32,
+                    table: string,
+                    rows: list<list<duckvalue>>) -> result<u64, duckerror>;
+
+  // Delete rows by row-id; returns the number deleted.
+  delete-rows: func(handle: u32,
+                    txn: u32,
+                    table: string,
+                    rowids: list<s64>) -> result<u64, duckerror>;
+
+  // Update rows by row-id (parallel `rowids` / `rows`); returns the number
+  // updated.
+  update-rows: func(handle: u32,
+                    txn: u32,
+                    table: string,
+                    rowids: list<s64>,
+                    rows: list<list<duckvalue>>) -> result<u64, duckerror>;
+}
