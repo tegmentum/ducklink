@@ -498,6 +498,128 @@ impl core_storage_host::Host for CoreStoreState {
             .dispatch_storage_scan_close(scan)
             .map_err(convert_extension_duckerror_to_core)
     }
+
+    // M2c write surface: transactions + DDL + DML. The core imports these
+    // through `storage-host`; the host resolves the (ext, callback-handle)
+    // via the same `resolve_storage_backend` picker the read side uses and
+    // routes to the writable component's `storage-write-dispatch` export
+    // through the ExtensionInstance's `storage_*` trampolines.
+    fn storage_begin_transaction(
+        &mut self,
+        catalog: u32,
+    ) -> Result<u32, core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_begin_transaction(catalog)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_commit_transaction(&mut self, txn: u32) -> Result<(), core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_commit_transaction(txn)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_rollback_transaction(
+        &mut self,
+        txn: u32,
+    ) -> Result<(), core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_rollback_transaction(txn)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_create_table(
+        &mut self,
+        txn: u32,
+        table: String,
+        columns: Vec<core_types::Columndef>,
+    ) -> Result<(), core_types::Duckerror> {
+        let ext_columns: Vec<extension_types::Columndef> = columns
+            .into_iter()
+            .map(convert_core_columndef_to_extension)
+            .collect();
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_create_table(txn, &table, &ext_columns)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_insert_rows(
+        &mut self,
+        txn: u32,
+        table: String,
+        rows: Vec<Vec<core_types::Duckvalue>>,
+    ) -> Result<u64, core_types::Duckerror> {
+        let ext_rows: Vec<Vec<extension_types::Duckvalue>> = rows
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(convert_core_duckvalue_to_extension)
+                    .collect()
+            })
+            .collect();
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_insert_rows(txn, &table, &ext_rows)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_delete_rows(
+        &mut self,
+        txn: u32,
+        table: String,
+        rowids: Vec<i64>,
+    ) -> Result<u64, core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_delete_rows(txn, &table, &rowids)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_update_rows(
+        &mut self,
+        txn: u32,
+        table: String,
+        rowids: Vec<i64>,
+        rows: Vec<Vec<core_types::Duckvalue>>,
+    ) -> Result<u64, core_types::Duckerror> {
+        let ext_rows: Vec<Vec<extension_types::Duckvalue>> = rows
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(convert_core_duckvalue_to_extension)
+                    .collect()
+            })
+            .collect();
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_update_rows(txn, &table, &rowids, &ext_rows)
+            .map_err(convert_extension_duckerror_to_core)
+    }
 }
 
 // Item 3 / M2a: the core imports `duckdb:extension/index-host` for custom-index
@@ -2632,6 +2754,100 @@ impl ExtensionManager {
             extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
         })?;
         instance.storage_scan_close(handle, scan)
+    }
+
+    // --- M2c write surface: transactions + DDL + DML ---
+    //
+    // Each method resolves the (ext, handle) pair the storage backend
+    // registered (same picker as the read-side scan) and forwards to the
+    // ExtensionInstance's `storage_*` write trampoline
+    // (ducklink-runtime/src/extension.rs). Errors bubble up as
+    // `extension_types::Duckerror` which the core-side impl re-maps.
+
+    fn dispatch_storage_begin_transaction(
+        &mut self,
+        catalog: u32,
+    ) -> Result<u32, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_begin_transaction(handle, catalog)
+    }
+
+    fn dispatch_storage_commit_transaction(
+        &mut self,
+        txn: u32,
+    ) -> Result<(), extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_commit_transaction(handle, txn)
+    }
+
+    fn dispatch_storage_rollback_transaction(
+        &mut self,
+        txn: u32,
+    ) -> Result<(), extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_rollback_transaction(handle, txn)
+    }
+
+    fn dispatch_storage_create_table(
+        &mut self,
+        txn: u32,
+        table: &str,
+        columns: &[extension_types::Columndef],
+    ) -> Result<(), extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_create_table(handle, txn, table, columns)
+    }
+
+    fn dispatch_storage_insert_rows(
+        &mut self,
+        txn: u32,
+        table: &str,
+        rows: &[Vec<extension_types::Duckvalue>],
+    ) -> Result<u64, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_insert_rows(handle, txn, table, rows)
+    }
+
+    fn dispatch_storage_delete_rows(
+        &mut self,
+        txn: u32,
+        table: &str,
+        rowids: &[i64],
+    ) -> Result<u64, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_delete_rows(handle, txn, table, rowids)
+    }
+
+    fn dispatch_storage_update_rows(
+        &mut self,
+        txn: u32,
+        table: &str,
+        rowids: &[i64],
+        rows: &[Vec<extension_types::Duckvalue>],
+    ) -> Result<u64, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_update_rows(handle, txn, table, rowids, rows)
     }
 
     // --- Item 3 / M2a: custom index (build + search) routing ---
@@ -5866,6 +6082,44 @@ fn convert_extension_columndef_to_core(col: extension_types::Columndef) -> core_
     core_types::Columndef {
         name: col.name,
         logical: convert_extension_logicaltype_to_core(col.logical),
+    }
+}
+
+// M2c: inverse mapping used by the write-side storage-host imports (create-table,
+// insert-rows, update-rows) to hand the core -> extension trampoline the same
+// Logicaltype / Columndef shape ExtensionInstance expects.
+fn convert_core_logicaltype_to_extension(
+    ty: core_types::Logicaltype,
+) -> extension_types::Logicaltype {
+    match ty {
+        core_types::Logicaltype::Boolean => extension_types::Logicaltype::Boolean,
+        core_types::Logicaltype::Int64 => extension_types::Logicaltype::Int64,
+        core_types::Logicaltype::Uint64 => extension_types::Logicaltype::Uint64,
+        core_types::Logicaltype::Float64 => extension_types::Logicaltype::Float64,
+        core_types::Logicaltype::Text => extension_types::Logicaltype::Text,
+        core_types::Logicaltype::Blob => extension_types::Logicaltype::Blob,
+        core_types::Logicaltype::Int32 => extension_types::Logicaltype::Int32,
+        core_types::Logicaltype::Timestamp => extension_types::Logicaltype::Timestamp,
+        core_types::Logicaltype::Int8 => extension_types::Logicaltype::Int8,
+        core_types::Logicaltype::Int16 => extension_types::Logicaltype::Int16,
+        core_types::Logicaltype::Uint8 => extension_types::Logicaltype::Uint8,
+        core_types::Logicaltype::Uint16 => extension_types::Logicaltype::Uint16,
+        core_types::Logicaltype::Uint32 => extension_types::Logicaltype::Uint32,
+        core_types::Logicaltype::Float32 => extension_types::Logicaltype::Float32,
+        core_types::Logicaltype::Date => extension_types::Logicaltype::Date,
+        core_types::Logicaltype::Time => extension_types::Logicaltype::Time,
+        core_types::Logicaltype::Timestamptz => extension_types::Logicaltype::Timestamptz,
+        core_types::Logicaltype::Decimal => extension_types::Logicaltype::Decimal,
+        core_types::Logicaltype::Interval => extension_types::Logicaltype::Interval,
+        core_types::Logicaltype::Uuid => extension_types::Logicaltype::Uuid,
+        core_types::Logicaltype::Complex(expr) => extension_types::Logicaltype::Complex(expr),
+    }
+}
+
+fn convert_core_columndef_to_extension(col: core_types::Columndef) -> extension_types::Columndef {
+    extension_types::Columndef {
+        name: col.name,
+        logical: convert_core_logicaltype_to_extension(col.logical),
     }
 }
 
