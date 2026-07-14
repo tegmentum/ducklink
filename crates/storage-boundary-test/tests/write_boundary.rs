@@ -31,6 +31,25 @@ use bindings::duckdb::extension as ext;
 use bindings::WriteBoundaryTest;
 use ext::types::Duckvalue;
 
+// The v0.2.0 bridge's `guest.load()` calls storage.register-storage;
+// wasmtime instantiation refuses to bind a component that imports an
+// interface the linker cannot satisfy, so provide a no-op host impl for
+// every interface the bridge world imports. The write-boundary test never
+// actually calls guest.load() -- it drives the storage-write-dispatch
+// export directly -- so the host impls are only there so the LINKER's
+// satisfaction check passes at instantiate-time.
+impl ext::types::Host for State {}
+impl ext::storage::Host for State {
+    fn register_storage(
+        &mut self,
+        _type_name: String,
+        _callback_handle: u32,
+        _options: Option<ext::storage::Extopts>,
+    ) -> Result<u32, ext::types::Duckerror> {
+        Ok(0)
+    }
+}
+
 /// Store state. The writer bridge's `writer` world imports nothing from the
 /// `duckdb:extension` package, but the wasip2 stdlib pulls in `wasi:io` /
 /// `wasi:cli` / `wasi:filesystem` implicitly (Mutex + OnceLock allocate,
@@ -124,11 +143,18 @@ fn setup() -> (Store<State>, WriteBoundaryTest) {
     config.wasm_component_model(true);
     let engine = Engine::new(&config).expect("engine");
 
-    // The `writer` world imports nothing from duckdb:extension, but the
-    // wasip2 stdlib the bridge is built against imports wasi:io / wasi:cli /
-    // wasi:filesystem. Satisfy them with the standard wasi linker.
+    // The v0.2.0 bridge's `writer` world imports `duckdb:extension/storage`
+    // (needed by guest.load's register-storage call) plus the wasip2 stdlib's
+    // wasi:io / wasi:cli / wasi:filesystem. Bind both: WriteBoundaryTest's
+    // bindgen-generated add_to_linker wires the storage host trait we
+    // implemented above, and wasmtime_wasi covers the wasi side.
     let mut linker: Linker<State> = Linker::new(&engine);
     wasmtime_wasi::p2::add_to_linker_sync(&mut linker).expect("wasi add_to_linker");
+    WriteBoundaryTest::add_to_linker::<State, wasmtime::component::HasSelf<State>>(
+        &mut linker,
+        |s| s,
+    )
+    .expect("write-boundary add_to_linker");
     let mut store = Store::new(&engine, State::default());
 
     let wasm_path = locate_writer_bridge_wasm();

@@ -1,12 +1,26 @@
-package boundary-test:write@0.1.0;
+package boundary-test:write@0.2.0;
 
-use duckdb:extension/types@2.0.0;
-use duckdb:extension/storage-write-dispatch@2.0.0;
+use duckdb:extension/types@4.0.0;
+use duckdb:extension/storage-write-dispatch@4.0.0;
 
-// Host-side world for the write-boundary integration test. Mirrors the
-// synthetic ducklink writer bridge's `synthetic:writer/writer` world: exports
-// only storage-write-dispatch@2.0.0. No imports (the bridge is a plain writer
-// component that does not call any host-side interfaces).
+// Host-side world for the write-boundary integration test. Binds against the
+// storage-write-dispatch@4.0.0 export of the synthetic ducklink storage
+// bridge (`synthetic:writer/writer` v0.2.0). We only bind the write side --
+// the bridge's guest / callback-dispatch / storage-dispatch exports are
+// unused by this test and are ignored by wasmtime bindgen because they are
+// not listed in this world.
+//
+// This test still exercises the storage-write-dispatch calls directly
+// without going through a `guest.load()` register-storage handshake; that
+// path is covered end-to-end by the `synthetic-mutating-ducklink` shim-
+// bridge-smoke case.
 world write-boundary-test {
-  export duckdb:extension/storage-write-dispatch@2.0.0;
+  // The bridge is now full-stack: guest.load() calls storage.register-storage,
+  // so wasmtime's instantiation fails if the linker cannot satisfy the storage
+  // import. Bind it here (see State::register_storage for the no-op impl) so
+  // this test can still instantiate the bridge and drive the write-side
+  // trampolines directly without going through a real LOAD.
+  import duckdb:extension/storage@4.0.0;
+
+  export duckdb:extension/storage-write-dispatch@4.0.0;
 }
