@@ -111,7 +111,7 @@ Major-4 is a TRUE break: it removes the row-major batch entries and bumps
   (call-scalar-batch-col / call-aggregate-col / call-cast-col; cold singletons
   row-major) are in the live world. `CONTRACT_MAJOR = 4`, `CONTRACT_MINOR = 0`,
   `CONTRACT_VERSION = 4.0.0`, propagated across the tree (2397 WIT files).
-  New canonical digest **`a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40`**
+  New canonical digest **`3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854`**
   (43 canonical files), confirmed emitted by `ducklink-runtime/build.rs`.
 - **Codegen columnar emission.** `datalink-extcore`'s `duckdb_shim!` /
   `duckdb_agg_shim!` emit the columnar dispatch (colvec<->NeutralColVec bridge to

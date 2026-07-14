@@ -148,7 +148,7 @@
       "source": "builtin",
       "status": "working",
       "artifact": "artifacts/extensions/sample_extension.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "sample_plus_one",
         "sample_emit_sequence",
@@ -181,7 +181,7 @@
           "conformance": {
             "suite": "sample_extension@4",
             "suite_digest": "4c6fae795ef67612e82f4a4ea960848a039d25d11aa554139577db829d1694be",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -266,7 +266,7 @@
       "source": "extensions/isin-component",
       "status": "working",
       "artifact": "artifacts/extensions/isin.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "isin_validate",
         "isin_check_digit",
@@ -293,7 +293,7 @@
           "conformance": {
             "suite": "isin@4",
             "suite_digest": "72d666116e2c6ea14bb52afb8a24b27521b25017803262b598c34a571727263b",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -367,7 +367,7 @@
       "source": "extensions/baseN-component",
       "status": "working",
       "artifact": "artifacts/extensions/baseN.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "base32_encode",
         "base32_decode",
@@ -397,7 +397,7 @@
           "conformance": {
             "suite": "baseN@4",
             "suite_digest": "82d734bb13c74c3686d45284b6e41a43bbc23a945759ba83ded926042336de70",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -492,7 +492,7 @@
       "source": "extensions/luhn-component",
       "status": "working",
       "artifact": "artifacts/extensions/luhn.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "luhn_validate",
         "luhn_check_digit"
@@ -554,7 +554,7 @@
       "source": "extensions/iban-component",
       "status": "working",
       "artifact": "artifacts/extensions/iban.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "iban_validate",
         "iban_country",
@@ -627,7 +627,7 @@
       "source": "extensions/ean-component",
       "status": "working",
       "artifact": "artifacts/extensions/ean.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "ean_validate",
         "ean_check_digit",
@@ -711,7 +711,7 @@
       "source": "extensions/aba-component",
       "status": "working",
       "artifact": "artifacts/extensions/aba.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "aba_validate"
       ],
@@ -735,7 +735,7 @@
           "conformance": {
             "suite": "aba@4",
             "suite_digest": "e2833ab9fdc2e3b09994610b006002a54c0e37ce82f0964bee33e3fd17328dcc",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         },
@@ -755,7 +755,7 @@
           "conformance": {
             "suite": "aba@4",
             "suite_digest": "e2833ab9fdc2e3b09994610b006002a54c0e37ce82f0964bee33e3fd17328dcc",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -817,7 +817,7 @@
       "source": "extensions/creditcard-component",
       "status": "working",
       "artifact": "artifacts/extensions/creditcard.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "cc_validate",
         "cc_network",
@@ -847,7 +847,7 @@
           "conformance": {
             "suite": "creditcard@4",
             "suite_digest": "6c0e5ed82a82412bc37faa293125f18440742a3afef5902839c4af70cd88282e",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -958,7 +958,7 @@
       "repository": "https://github.com/tegmentum/ducklink",
       "source": "extensions/uuidx-component",
       "artifact": "artifacts/extensions/uuidx.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "keywords": [
         "uuid",
         "v7",
@@ -1032,7 +1032,7 @@
       "repository": "https://github.com/tegmentum/ducklink",
       "source": "extensions/crypto-component",
       "artifact": "artifacts/extensions/crypto.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "keywords": [
         "crypto",
         "hash",
@@ -1056,7 +1056,7 @@
           "conformance": {
             "suite": "crypto@4",
             "suite_digest": "b11bf7ce1601360c5ab2e819c9980b35a35f3b402a2a68188e09d8c8b3b2e2a1",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -1140,7 +1140,7 @@
       "source": "extensions/markdown-component",
       "status": "working",
       "artifact": "artifacts/extensions/markdown.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "md_to_html",
         "md_to_text"
@@ -1203,7 +1203,7 @@
       "source": "extensions/hashfuncs-component",
       "status": "working",
       "artifact": "artifacts/extensions/hashfuncs.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "xxh32",
         "xxh64",
@@ -1290,7 +1290,7 @@
       "source": "extensions/rapidfuzz-component",
       "status": "working",
       "artifact": "artifacts/extensions/rapidfuzz.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "fuzz_ratio",
         "damerau_levenshtein",
@@ -1393,7 +1393,7 @@
       "source": "extensions/casing-component",
       "status": "working",
       "artifact": "artifacts/extensions/casing.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "to_snake_case",
         "to_camel_case",
@@ -1503,7 +1503,7 @@
       "source": "extensions/csscolor-component",
       "status": "working",
       "artifact": "artifacts/extensions/csscolor.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "css_to_hex",
         "css_to_rgb",
@@ -1576,7 +1576,7 @@
       "source": "extensions/url-component",
       "status": "working",
       "artifact": "artifacts/extensions/url.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "url_scheme",
         "url_host",
@@ -1606,7 +1606,7 @@
           "conformance": {
             "suite": "url@4",
             "suite_digest": "c5d3eb272b70cc5ec9b92c69ce76d1d3f2ebf0372a6128bea829bc5880428b21",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -1689,7 +1689,7 @@
       "source": "extensions/email-component",
       "status": "working",
       "artifact": "artifacts/extensions/email.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "email_validate",
         "email_domain",
@@ -1717,7 +1717,7 @@
           "conformance": {
             "suite": "email@4",
             "suite_digest": "894323cb99caa3ca6e83cac0b9c4fdc307786b324edbd302e976e6d7de4d0b22",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -1778,7 +1778,7 @@
       "source": "extensions/semver-component",
       "status": "working",
       "artifact": "artifacts/extensions/semver.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "semver_valid",
         "semver_major",
@@ -1808,7 +1808,7 @@
           "conformance": {
             "suite": "semver@4",
             "suite_digest": "49f6f5ab2bcf456ee94112167b48933ce1f731984560550560c791b9ee02ed6b",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -1895,7 +1895,7 @@
       "source": "extensions/slug-component",
       "status": "working",
       "artifact": "artifacts/extensions/slug.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "slugify"
       ],
@@ -1945,7 +1945,7 @@
       "source": "extensions/escape-component",
       "status": "working",
       "artifact": "artifacts/extensions/escape.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "html_escape",
         "html_unescape",
@@ -2031,7 +2031,7 @@
       "source": "extensions/natsort-component",
       "status": "working",
       "artifact": "artifacts/extensions/natsort.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "natsort_compare"
       ],
@@ -2084,7 +2084,7 @@
       "source": "extensions/roman-component",
       "status": "working",
       "artifact": "artifacts/extensions/roman.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "to_roman",
         "from_roman",
@@ -2114,7 +2114,7 @@
           "conformance": {
             "suite": "roman@4",
             "suite_digest": "512904f3cdd0188a81e32a429b712a908c385910da65f72d9e015e95f49e0c03",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -2197,7 +2197,7 @@
       "source": "extensions/humansize-component",
       "status": "working",
       "artifact": "artifacts/extensions/humansize.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "humansize",
         "humansize_binary"
@@ -2259,7 +2259,7 @@
       "source": "extensions/ids-component",
       "status": "working",
       "artifact": "artifacts/extensions/ids.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "ulid",
         "nanoid",
@@ -2324,7 +2324,7 @@
       "source": "extensions/idna-component",
       "status": "working",
       "artifact": "artifacts/extensions/idna.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "idna_to_ascii",
         "idna_to_unicode"
@@ -2386,7 +2386,7 @@
       "source": "extensions/mac-component",
       "status": "working",
       "artifact": "artifacts/extensions/mac.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "mac_valid",
         "mac_normalize"
@@ -2448,7 +2448,7 @@
       "source": "extensions/isbn-component",
       "status": "working",
       "artifact": "artifacts/extensions/isbn.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "isbn_valid",
         "isbn_normalize"
@@ -2508,7 +2508,7 @@
       "source": "extensions/humantime-component",
       "status": "working",
       "artifact": "artifacts/extensions/humantime.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "humantime_parse",
         "humantime_format"
@@ -2570,7 +2570,7 @@
       "source": "extensions/iso-component",
       "status": "working",
       "artifact": "artifacts/extensions/iso.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "iso_country_name",
         "iso_country_alpha3",
@@ -2644,7 +2644,7 @@
       "source": "extensions/morse-component",
       "status": "working",
       "artifact": "artifacts/extensions/morse.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "morse_encode",
         "morse_decode"
@@ -2704,7 +2704,7 @@
       "source": "extensions/color-component",
       "status": "working",
       "artifact": "artifacts/extensions/color.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "color_luminance",
         "color_contrast"
@@ -2770,7 +2770,7 @@
       "source": "extensions/geohash-component",
       "status": "working",
       "artifact": "artifacts/extensions/geohash.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "geohash_encode",
         "geohash_decode_lat",
@@ -2798,7 +2798,7 @@
           "conformance": {
             "suite": "geohash@4",
             "suite_digest": "0c4a779da6606ebe682fbe3bf150d17d1a6aada4765fcfb96ba3e81ec2434841",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -2868,7 +2868,7 @@
       "source": "extensions/parsertools-component",
       "status": "working",
       "artifact": "artifacts/extensions/parsertools.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "sql_tables",
         "sql_is_valid",
@@ -2942,7 +2942,7 @@
       "source": "extensions/currency-component",
       "status": "working",
       "artifact": "artifacts/extensions/currency.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "currency_name",
         "currency_symbol",
@@ -3028,7 +3028,7 @@
       "source": "extensions/hmac-component",
       "status": "working",
       "artifact": "artifacts/extensions/hmac.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "hmac_sha256",
         "hmac_sha512"
@@ -3099,7 +3099,7 @@
       "source": "extensions/phonetic-component",
       "status": "working",
       "artifact": "artifacts/extensions/phonetic.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "soundex",
         "metaphone"
@@ -3161,7 +3161,7 @@
       "source": "extensions/jwt-component",
       "status": "working",
       "artifact": "artifacts/extensions/jwt.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "jwt_header",
         "jwt_payload"
@@ -3223,7 +3223,7 @@
       "source": "extensions/totp-component",
       "status": "working",
       "artifact": "artifacts/extensions/totp.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "totp"
       ],
@@ -3287,7 +3287,7 @@
       "source": "extensions/baseconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/baseconv.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "from_base"
       ],
@@ -3339,7 +3339,7 @@
       "source": "extensions/emoji-component",
       "status": "working",
       "artifact": "artifacts/extensions/emoji.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "emoji_name",
         "emoji_shortcode",
@@ -3413,7 +3413,7 @@
       "source": "extensions/whatlang-component",
       "status": "working",
       "artifact": "artifacts/extensions/whatlang.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "detect_language",
         "detect_language_name",
@@ -3487,7 +3487,7 @@
       "source": "extensions/ipaddr-component",
       "status": "working",
       "artifact": "artifacts/extensions/ipaddr.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "ip_valid",
         "ip_version",
@@ -3559,7 +3559,7 @@
       "source": "extensions/mime-component",
       "status": "working",
       "artifact": "artifacts/extensions/mime.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "mime_type",
         "mime_from_ext"
@@ -3621,7 +3621,7 @@
       "source": "extensions/pluralize-component",
       "status": "working",
       "artifact": "artifacts/extensions/pluralize.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "pluralize",
         "singularize"
@@ -3683,7 +3683,7 @@
       "source": "extensions/haversine-component",
       "status": "working",
       "artifact": "artifacts/extensions/haversine.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "haversine_km",
         "haversine_mi"
@@ -3767,7 +3767,7 @@
       "source": "extensions/numwords-component",
       "status": "working",
       "artifact": "artifacts/extensions/numwords.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "num_to_words",
         "num_to_ordinal_words"
@@ -3829,7 +3829,7 @@
       "source": "extensions/ordinal-component",
       "status": "working",
       "artifact": "artifacts/extensions/ordinal.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "ordinal"
       ],
@@ -3877,7 +3877,7 @@
       "source": "extensions/nato-component",
       "status": "working",
       "artifact": "artifacts/extensions/nato.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "nato"
       ],
@@ -3924,7 +3924,7 @@
       "source": "extensions/ascii85-component",
       "status": "working",
       "artifact": "artifacts/extensions/ascii85.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "ascii85_encode",
         "ascii85_decode"
@@ -3951,7 +3951,7 @@
           "conformance": {
             "suite": "ascii85@4",
             "suite_digest": "df35bc9afa52d8b746e0023d5077fad6823719269b03e3320b9cc3c776703420",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -4002,7 +4002,7 @@
       "source": "extensions/quotedprintable-component",
       "status": "working",
       "artifact": "artifacts/extensions/quotedprintable.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "qp_encode",
         "qp_decode"
@@ -4065,7 +4065,7 @@
       "source": "extensions/unitconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/unitconv.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "unit_convert"
       ],
@@ -4121,7 +4121,7 @@
       "source": "extensions/wordwrap-component",
       "status": "working",
       "artifact": "artifacts/extensions/wordwrap.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "word_wrap"
       ],
@@ -4175,7 +4175,7 @@
       "source": "extensions/timezone-component",
       "status": "working",
       "artifact": "artifacts/extensions/timezone.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "tz_valid",
         "tz_offset_seconds",
@@ -4258,7 +4258,7 @@
       "source": "extensions/rot13-component",
       "status": "working",
       "artifact": "artifacts/extensions/rot13.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "rot13",
         "caesar"
@@ -4322,7 +4322,7 @@
       "source": "extensions/leetspeak-component",
       "status": "working",
       "artifact": "artifacts/extensions/leetspeak.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "to_leet"
       ],
@@ -4370,7 +4370,7 @@
       "source": "extensions/dms-component",
       "status": "working",
       "artifact": "artifacts/extensions/dms.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "dms_to_decimal",
         "decimal_to_dms"
@@ -4438,7 +4438,7 @@
       "source": "extensions/cbor-component",
       "status": "working",
       "artifact": "artifacts/extensions/cbor.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "cbor_from_json",
         "cbor_to_json"
@@ -4502,7 +4502,7 @@
       "source": "extensions/msgpack-component",
       "status": "working",
       "artifact": "artifacts/extensions/msgpack.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "msgpack_from_json",
         "msgpack_to_json"
@@ -4566,7 +4566,7 @@
       "source": "extensions/elements-component",
       "status": "working",
       "artifact": "artifacts/extensions/elements.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "element_name",
         "element_number",
@@ -4640,7 +4640,7 @@
       "source": "extensions/vigenere-component",
       "status": "working",
       "artifact": "artifacts/extensions/vigenere.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "vigenere_encrypt",
         "vigenere_decrypt"
@@ -4708,7 +4708,7 @@
       "source": "extensions/petname-component",
       "status": "working",
       "artifact": "artifacts/extensions/petname.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "petname"
       ],
@@ -4762,7 +4762,7 @@
       "source": "extensions/base58check-component",
       "status": "working",
       "artifact": "artifacts/extensions/base58check.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "base58check_encode",
         "base58check_decode"
@@ -4824,7 +4824,7 @@
       "source": "extensions/checksums-component",
       "status": "working",
       "artifact": "artifacts/extensions/checksums.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "crc16",
         "adler32",
@@ -4911,7 +4911,7 @@
       "source": "extensions/siphash-component",
       "status": "working",
       "artifact": "artifacts/extensions/siphash.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "siphash"
       ],
@@ -4970,7 +4970,7 @@
       "source": "extensions/tiktoken-component",
       "status": "working",
       "artifact": "artifacts/extensions/tiktoken.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "tiktoken_count",
         "tiktoken_encode",
@@ -5056,7 +5056,7 @@
       "source": "extensions/bech32-component",
       "status": "working",
       "artifact": "artifacts/extensions/bech32.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "bech32_encode",
         "bech32_hrp",
@@ -5146,7 +5146,7 @@
       "source": "extensions/uuid5-component",
       "status": "working",
       "artifact": "artifacts/extensions/uuid5.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "uuid_v5",
         "uuid_v3"
@@ -5216,7 +5216,7 @@
       "source": "extensions/gravatar-component",
       "status": "working",
       "artifact": "artifacts/extensions/gravatar.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "gravatar_hash",
         "gravatar_url"
@@ -5278,7 +5278,7 @@
       "source": "extensions/html2text-component",
       "status": "working",
       "artifact": "artifacts/extensions/html2text.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "html_to_text"
       ],
@@ -5328,7 +5328,7 @@
       "source": "extensions/textstat-component",
       "status": "working",
       "artifact": "artifacts/extensions/textstat.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "word_count",
         "sentence_count",
@@ -5424,7 +5424,7 @@
       "source": "extensions/hashids-component",
       "status": "working",
       "artifact": "artifacts/extensions/hashids.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "hashids_encode",
         "hashids_decode"
@@ -5494,7 +5494,7 @@
       "source": "extensions/checkdigit-component",
       "status": "working",
       "artifact": "artifacts/extensions/checkdigit.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "verhoeff_validate",
         "verhoeff_append",
@@ -5578,7 +5578,7 @@
       "source": "extensions/dice-component",
       "status": "working",
       "artifact": "artifacts/extensions/dice.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "dice_roll",
         "dice_min",
@@ -5652,7 +5652,7 @@
       "source": "extensions/graycode-component",
       "status": "working",
       "artifact": "artifacts/extensions/graycode.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "gray_encode",
         "gray_decode"
@@ -5712,7 +5712,7 @@
       "source": "extensions/cardtype-component",
       "status": "working",
       "artifact": "artifacts/extensions/cardtype.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "card_brand"
       ],
@@ -5760,7 +5760,7 @@
       "source": "extensions/money-component",
       "status": "working",
       "artifact": "artifacts/extensions/money.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "format_money"
       ],
@@ -5814,7 +5814,7 @@
       "source": "extensions/ngrams-component",
       "status": "working",
       "artifact": "artifacts/extensions/ngrams.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "char_ngrams",
         "word_ngrams"
@@ -5884,7 +5884,7 @@
       "source": "extensions/stem-component",
       "status": "working",
       "artifact": "artifacts/extensions/stem.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "stem"
       ],
@@ -5938,7 +5938,7 @@
       "source": "extensions/transliterate-component",
       "status": "working",
       "artifact": "artifacts/extensions/transliterate.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "deunicode"
       ],
@@ -5988,7 +5988,7 @@
       "source": "extensions/pluscode-component",
       "status": "working",
       "artifact": "artifacts/extensions/pluscode.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "pluscode_encode",
         "pluscode_valid",
@@ -6083,7 +6083,7 @@
       "source": "extensions/rot47-component",
       "status": "working",
       "artifact": "artifacts/extensions/rot47.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "rot47"
       ],
@@ -6131,7 +6131,7 @@
       "source": "extensions/stopwords-component",
       "status": "working",
       "artifact": "artifacts/extensions/stopwords.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "is_stopword",
         "remove_stopwords"
@@ -6201,7 +6201,7 @@
       "source": "extensions/isbnconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/isbnconv.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "isbn10_to_13",
         "isbn13_to_10"
@@ -6261,7 +6261,7 @@
       "source": "extensions/passgen-component",
       "status": "working",
       "artifact": "artifacts/extensions/passgen.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "gen_password",
         "gen_password_alnum"
@@ -6323,7 +6323,7 @@
       "source": "extensions/braille-component",
       "status": "working",
       "artifact": "artifacts/extensions/braille.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "to_braille"
       ],
@@ -6371,7 +6371,7 @@
       "source": "extensions/toml-component",
       "status": "working",
       "artifact": "artifacts/extensions/toml.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "toml_to_json",
         "json_to_toml"
@@ -6434,7 +6434,7 @@
       "source": "extensions/yaml-component",
       "status": "working",
       "artifact": "artifacts/extensions/yaml.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "yaml_to_json",
         "json_to_yaml"
@@ -6497,7 +6497,7 @@
       "source": "extensions/unicodenorm-component",
       "status": "working",
       "artifact": "artifacts/extensions/unicodenorm.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "nfc",
         "nfd",
@@ -6583,7 +6583,7 @@
       "source": "extensions/unicodewidth-component",
       "status": "working",
       "artifact": "artifacts/extensions/unicodewidth.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "grapheme_count",
         "display_width"
@@ -6646,7 +6646,7 @@
       "source": "extensions/colorconv-component",
       "status": "working",
       "artifact": "artifacts/extensions/colorconv.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "hex_to_hsl",
         "hex_to_hsv",
@@ -6725,7 +6725,7 @@
       "source": "extensions/jsonschema-component",
       "status": "working",
       "artifact": "artifacts/extensions/jsonschema.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "json_schema_valid"
       ],
@@ -6780,7 +6780,7 @@
       "source": "extensions/simhash-component",
       "status": "working",
       "artifact": "artifacts/extensions/simhash.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "simhash",
         "simhash_distance"
@@ -6844,7 +6844,7 @@
       "source": "extensions/idextra-component",
       "status": "working",
       "artifact": "artifacts/extensions/idextra.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "ksuid",
         "cuid2"
@@ -6897,7 +6897,7 @@
       "source": "extensions/phonetic2-component",
       "status": "working",
       "artifact": "artifacts/extensions/phonetic2.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "nysiis",
         "refined_soundex",
@@ -6971,7 +6971,7 @@
       "source": "extensions/z85-component",
       "status": "working",
       "artifact": "artifacts/extensions/z85.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "z85_encode",
         "z85_decode"
@@ -7033,7 +7033,7 @@
       "source": "extensions/initials-component",
       "status": "working",
       "artifact": "artifacts/extensions/initials.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "initials",
         "initials_dotted"
@@ -7093,7 +7093,7 @@
       "source": "extensions/luhngen-component",
       "status": "working",
       "artifact": "artifacts/extensions/luhngen.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "luhn_check_digit",
         "luhn_append"
@@ -7154,7 +7154,7 @@
       "source": "extensions/pintest-a-component",
       "status": "working",
       "artifact": "artifacts/extensions/pintest_a.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "pin_probe"
       ],
@@ -7196,7 +7196,7 @@
       "source": "extensions/pintest-b-component",
       "status": "working",
       "artifact": "artifacts/extensions/pintest_b.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "pin_probe"
       ],
@@ -7237,7 +7237,7 @@
       "source": "extensions/atbash-component",
       "status": "working",
       "artifact": "artifacts/extensions/atbash.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "atbash"
       ],
@@ -7261,7 +7261,7 @@
           "conformance": {
             "suite": "atbash@4",
             "suite_digest": "618f290b2e4031a00c48453fbfbff5c9128d05f124adbfe12e71eb813493e719",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -7301,7 +7301,7 @@
       "source": "extensions/piglatin-component",
       "status": "working",
       "artifact": "artifacts/extensions/piglatin.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "to_pig_latin"
       ],
@@ -7349,7 +7349,7 @@
       "source": "extensions/rle-component",
       "status": "working",
       "artifact": "artifacts/extensions/rle.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "rle_encode",
         "rle_decode"
@@ -7409,7 +7409,7 @@
       "source": "extensions/bbcode-component",
       "status": "working",
       "artifact": "artifacts/extensions/bbcode.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "bbcode_to_html"
       ],
@@ -7457,7 +7457,7 @@
       "source": "extensions/phonenumber-component",
       "status": "working",
       "artifact": "artifacts/extensions/phonenumber.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "phone_valid",
         "phone_format",
@@ -7547,7 +7547,7 @@
       "source": "extensions/pwstrength-component",
       "status": "working",
       "artifact": "artifacts/extensions/pwstrength.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "password_score",
         "password_strength"
@@ -7609,7 +7609,7 @@
       "source": "extensions/qrcode-component",
       "status": "working",
       "artifact": "artifacts/extensions/qrcode.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "qr_svg"
       ],
@@ -7659,7 +7659,7 @@
       "source": "extensions/aggstat-component",
       "status": "working",
       "artifact": "artifacts/extensions/aggstat.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "harmonic_mean"
       ],
@@ -7683,7 +7683,7 @@
           "conformance": {
             "suite": "aggstat@4",
             "suite_digest": "14eec21dc0c9373b3c83730b7d2b0d11615595e2fafea5005828a9992a34093e",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -7723,7 +7723,7 @@
       "source": "extensions/bloom-component",
       "status": "working",
       "artifact": "artifacts/extensions/bloom.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "bloom_filter",
         "bloom_contains"
@@ -7788,7 +7788,7 @@
       "source": "extensions/minhash-component",
       "status": "working",
       "artifact": "artifacts/extensions/minhash.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "minhash",
         "minhash_similarity"
@@ -7853,7 +7853,7 @@
       "source": "extensions/countmin-component",
       "status": "working",
       "artifact": "artifacts/extensions/countmin.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "count_min",
         "cms_estimate"
@@ -7918,7 +7918,7 @@
       "source": "extensions/dns-component",
       "status": "working",
       "artifact": "artifacts/extensions/dns.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "dns_lookup",
         "dns_resolve_all"
@@ -7979,7 +7979,7 @@
       "source": "extensions/httpclient-component",
       "status": "working",
       "artifact": "artifacts/extensions/httpclient.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "http_get",
         "http_status",
@@ -8060,7 +8060,7 @@
       "source": "extensions/lorem-component",
       "status": "working",
       "artifact": "artifacts/extensions/lorem.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "lorem_words",
         "lorem_title"
@@ -8117,7 +8117,7 @@
       "source": "extensions/faker-component",
       "status": "working",
       "artifact": "artifacts/extensions/faker.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "fake_name",
         "fake_email",
@@ -8190,7 +8190,7 @@
       "source": "extensions/passphrase-component",
       "status": "working",
       "artifact": "artifacts/extensions/passphrase.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "passphrase"
       ],
@@ -8235,7 +8235,7 @@
       "source": "extensions/h3-component",
       "status": "working",
       "artifact": "artifacts/extensions/h3.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "h3_latlng_to_cell",
         "h3_cell_to_lat",
@@ -8266,7 +8266,7 @@
           "conformance": {
             "suite": "h3@4",
             "suite_digest": "bdac7a0ab7cc22fe084b3064a14a558c6ad77ed08691726f94b24fc126fb63dc",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -8377,7 +8377,7 @@
       "source": "extensions/lindel-component",
       "status": "working",
       "artifact": "artifacts/extensions/lindel.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "morton_encode",
         "morton_decode_x",
@@ -8493,7 +8493,7 @@
       "source": "extensions/magic-component",
       "status": "working",
       "artifact": "artifacts/extensions/magic.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "magic_mime",
         "magic_extension",
@@ -8579,7 +8579,7 @@
       "source": "extensions/tsid-component",
       "status": "working",
       "artifact": "artifacts/extensions/tsid.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "tsid_encode",
         "tsid_decode",
@@ -8663,7 +8663,7 @@
       "source": "extensions/rhai-component",
       "status": "working",
       "artifact": "artifacts/extensions/rhai.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "rhai_eval",
         "rhai_eval_int",
@@ -8737,7 +8737,7 @@
       "source": "extensions/bitfilters-component",
       "status": "working",
       "artifact": "artifacts/extensions/bitfilters.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "xor_filter",
         "xor_filter_contains"
@@ -8799,7 +8799,7 @@
       "source": "extensions/prql-component",
       "status": "working",
       "artifact": "artifacts/extensions/prql.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "prql_to_sql",
         "prql_is_valid"
@@ -8855,7 +8855,7 @@
       "source": "extensions/jaq-component",
       "status": "working",
       "artifact": "artifacts/extensions/jaq.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "jq",
         "jq_first"
@@ -8921,7 +8921,7 @@
       "source": "extensions/cron-component",
       "status": "working",
       "artifact": "artifacts/extensions/cron.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "cron_is_valid",
         "cron_next",
@@ -8997,7 +8997,7 @@
       "source": "extensions/xml-component",
       "status": "working",
       "artifact": "artifacts/extensions/xml.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "xml_valid",
         "xml_extract",
@@ -9073,7 +9073,7 @@
       "source": "extensions/pinyin-component",
       "status": "working",
       "artifact": "artifacts/extensions/pinyin.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "to_pinyin",
         "to_pinyin_plain",
@@ -9141,7 +9141,7 @@
       "source": "extensions/sqlformat-component",
       "status": "working",
       "artifact": "artifacts/extensions/sqlformat.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "sql_format",
         "sql_format_compact"
@@ -9197,7 +9197,7 @@
       "source": "extensions/bencode-component",
       "status": "working",
       "artifact": "artifacts/extensions/bencode.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "bencode_to_json",
         "bencode_is_valid"
@@ -9253,7 +9253,7 @@
       "source": "extensions/maidenhead-component",
       "status": "working",
       "artifact": "artifacts/extensions/maidenhead.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "to_maidenhead",
         "maidenhead_lat",
@@ -9327,7 +9327,7 @@
       "source": "extensions/base45-component",
       "status": "working",
       "artifact": "artifacts/extensions/base45.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "base45_encode",
         "base45_decode"
@@ -9354,7 +9354,7 @@
           "conformance": {
             "suite": "base45@4",
             "suite_digest": "e57aa548585622a8e25905b4c4ca03f1f27d95cda9e07ea49f2746a719b00a7b",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -9399,7 +9399,7 @@
       "source": "extensions/numfmt-component",
       "status": "working",
       "artifact": "artifacts/extensions/numfmt.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "num_group",
         "num_si"
@@ -9457,7 +9457,7 @@
       "source": "extensions/mailto-component",
       "status": "working",
       "artifact": "artifacts/extensions/mailto.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "mailto_to",
         "mailto_field",
@@ -9529,7 +9529,7 @@
       "source": "extensions/hexdump-component",
       "status": "working",
       "artifact": "artifacts/extensions/hexdump.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "hexdump",
         "hex_pretty"
@@ -9583,7 +9583,7 @@
       "source": "extensions/secp256k1-component",
       "status": "working",
       "artifact": "artifacts/extensions/secp256k1.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "secp256k1_pubkey",
         "secp256k1_sign",
@@ -9663,7 +9663,7 @@
       "source": "extensions/bibtex-component",
       "status": "working",
       "artifact": "artifacts/extensions/bibtex.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "bibtex_count",
         "bibtex_to_json",
@@ -9731,7 +9731,7 @@
       "source": "extensions/useragent-component",
       "status": "working",
       "artifact": "artifacts/extensions/useragent.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "ua_browser",
         "ua_browser_version",
@@ -9823,7 +9823,7 @@
       "source": "extensions/ical-component",
       "status": "working",
       "artifact": "artifacts/extensions/ical.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "ical_event_count",
         "ical_to_json",
@@ -9892,7 +9892,7 @@
       "source": "extensions/tdigest-component",
       "status": "working",
       "artifact": "artifacts/extensions/tdigest.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "tdigest",
         "tdigest_quantile",
@@ -9922,7 +9922,7 @@
           "conformance": {
             "suite": "tdigest@4",
             "suite_digest": "e46de89c85e237d8bf8f6b787c30e70ab800968243e67f4151234e40fd23348e",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -9982,7 +9982,7 @@
       "source": "extensions/mlkmeans-component",
       "status": "working",
       "artifact": "artifacts/extensions/mlkmeans.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "ml_kmeans"
       ],
@@ -10040,7 +10040,7 @@
       "source": "extensions/urlpattern-component",
       "status": "working",
       "artifact": "artifacts/extensions/urlpattern.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "url_pattern_test",
         "url_pattern_match"
@@ -10104,7 +10104,7 @@
       "source": "extensions/celestial-component",
       "status": "working",
       "artifact": "artifacts/extensions/celestial.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "equatorial_to_galactic_l",
         "equatorial_to_galactic_b",
@@ -10230,7 +10230,7 @@
       "source": "extensions/textlines-component",
       "status": "working",
       "artifact": "artifacts/extensions/textlines.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "split_lines"
       ],
@@ -10281,7 +10281,7 @@
       "source": "extensions/netquack-component",
       "status": "working",
       "artifact": "artifacts/extensions/netquack.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "registrable_domain",
         "public_suffix",
@@ -10361,7 +10361,7 @@
       "source": "extensions/openprompt-component",
       "status": "working",
       "artifact": "artifacts/extensions/openprompt.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "prompt",
         "prompt_model"
@@ -10423,7 +10423,7 @@
       "source": "extensions/dbf-component",
       "status": "working",
       "artifact": "artifacts/extensions/dbf.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "read_dbf"
       ],
@@ -10480,7 +10480,7 @@
       "source": "extensions/shapefile-component",
       "status": "working",
       "artifact": "artifacts/extensions/shapefile.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "read_shp"
       ],
@@ -10537,7 +10537,7 @@
       "source": "extensions/fit-component",
       "status": "working",
       "artifact": "artifacts/extensions/fit.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "read_fit"
       ],
@@ -10598,7 +10598,7 @@
       "source": "extensions/warc-component",
       "status": "working",
       "artifact": "artifacts/extensions/warc.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "read_warc"
       ],
@@ -10663,7 +10663,7 @@
       "source": "extensions/html-component",
       "status": "working",
       "artifact": "artifacts/extensions/html.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "html_extract",
         "html_extract_all",
@@ -10747,7 +10747,7 @@
       "source": "extensions/vcard-component",
       "status": "working",
       "artifact": "artifacts/extensions/vcard.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "vcard_count",
         "vcard_to_json",
@@ -10816,7 +10816,7 @@
       "source": "extensions/ini-component",
       "status": "working",
       "artifact": "artifacts/extensions/ini.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "ini_to_json",
         "ini_get",
@@ -10893,7 +10893,7 @@
       "source": "extensions/plist-component",
       "status": "working",
       "artifact": "artifacts/extensions/plist.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "plist_to_json",
         "plist_get"
@@ -10953,7 +10953,7 @@
       "source": "extensions/dotenv-component",
       "status": "working",
       "artifact": "artifacts/extensions/dotenv.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "dotenv_to_json",
         "dotenv_get",
@@ -11023,7 +11023,7 @@
       "source": "extensions/hocon-component",
       "status": "working",
       "artifact": "artifacts/extensions/hocon.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "hocon_to_json",
         "hocon_get"
@@ -11083,7 +11083,7 @@
       "source": "extensions/uuid7-component",
       "status": "working",
       "artifact": "artifacts/extensions/uuid7.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "uuid7_build",
         "uuid7_timestamp",
@@ -11155,7 +11155,7 @@
       "source": "extensions/textdiff-component",
       "status": "working",
       "artifact": "artifacts/extensions/textdiff.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "text_diff",
         "diff_ratio",
@@ -11235,7 +11235,7 @@
       "source": "extensions/polyline-component",
       "status": "working",
       "artifact": "artifacts/extensions/polyline.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "polyline_encode",
         "polyline_decode"
@@ -11299,7 +11299,7 @@
       "source": "extensions/json_schema-component",
       "status": "working",
       "artifact": "artifacts/extensions/json_schema.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "json_schema_valid",
         "json_schema_errors"
@@ -11363,7 +11363,7 @@
       "source": "extensions/stochastic-component",
       "status": "working",
       "artifact": "artifacts/extensions/stochastic.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "normal_cdf",
         "normal_pdf",
@@ -11527,7 +11527,7 @@
       "source": "extensions/ion-component",
       "status": "working",
       "artifact": "artifacts/extensions/ion.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "ion_to_json",
         "ion_from_json",
@@ -11599,7 +11599,7 @@
       "source": "extensions/textplot-component",
       "status": "working",
       "artifact": "artifacts/extensions/textplot.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "plot_sparkline",
         "plot_bars",
@@ -11671,7 +11671,7 @@
       "source": "extensions/marisa-component",
       "status": "working",
       "artifact": "artifacts/extensions/marisa.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "fst_contains",
         "fst_prefix",
@@ -11747,7 +11747,7 @@
       "source": "extensions/frequentitems-component",
       "status": "working",
       "artifact": "artifacts/extensions/frequentitems.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "top_k",
         "top_k_value"
@@ -11809,7 +11809,7 @@
       "source": "extensions/sqlitewasm-component",
       "status": "working",
       "artifact": "artifacts/extensions/sqlitewasm.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "sqlite_blob_scan"
       ],
@@ -11873,7 +11873,7 @@
       "source": "extensions/jsonfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/jsonfns.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "json_valid",
         "json_extract",
@@ -12071,7 +12071,7 @@
       "source": "extensions/inetfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/inetfns.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "host",
         "family",
@@ -12177,7 +12177,7 @@
       "source": "extensions/excelfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/excelfns.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "xlsx_sheets",
         "read_xlsx",
@@ -12280,7 +12280,7 @@
       "source": "extensions/avrofns-component",
       "status": "working",
       "artifact": "artifacts/extensions/avrofns.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "avro_schema",
         "read_avro",
@@ -12373,7 +12373,7 @@
       "source": "extensions/spatialfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/spatialfns.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "ST_Point",
         "ST_GeomFromText",
@@ -12593,7 +12593,7 @@
       "source": "extensions/ftsfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/ftsfns.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "fts_tokenize",
         "fts_stem",
@@ -12709,7 +12709,7 @@
       "source": "extensions/icufns-component",
       "status": "working",
       "artifact": "artifacts/extensions/icufns.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "icu_sort_key",
         "icu_compare",
@@ -12822,7 +12822,7 @@
       "source": "extensions/vssfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/vssfns.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "vec_l1_distance",
         "vec_linf_distance",
@@ -12896,7 +12896,7 @@
       "source": "extensions/rtreefns-component",
       "status": "working",
       "artifact": "artifacts/extensions/rtreefns.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "rtree_search",
         "bbox4"
@@ -12967,7 +12967,7 @@
       "source": "extensions/hnswfns-component",
       "status": "working",
       "artifact": "artifacts/extensions/hnswfns.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "hnsw_search"
       ],
@@ -13029,7 +13029,7 @@
       "source": "extensions/geomtype-component",
       "status": "working",
       "artifact": "artifacts/extensions/geomtype.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "geom_area",
         "geom_astext"
@@ -13087,7 +13087,7 @@
       "source": "extensions/spatialproj-component",
       "status": "working",
       "artifact": "artifacts/extensions/spatialproj.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "ST_Transform"
       ],
@@ -13144,7 +13144,7 @@
       "source": "extensions/tpchgen-component",
       "status": "working",
       "artifact": "artifacts/extensions/tpchgen.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "tpch_region",
         "tpch_nation",
@@ -13527,7 +13527,7 @@
       "source": "extensions/tpcdsgen-component",
       "status": "working",
       "artifact": "artifacts/extensions/tpcdsgen.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "tpcds_income_band",
         "tpcds_date_dim_sample"
@@ -13605,7 +13605,7 @@
       "source": "extensions/deltascan-component",
       "status": "working",
       "artifact": "artifacts/extensions/deltascan.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "delta_log_info",
         "delta_schema"
@@ -13687,7 +13687,7 @@
       "source": "extensions/icebergscan-component",
       "status": "working",
       "artifact": "artifacts/extensions/icebergscan.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "iceberg_metadata",
         "iceberg_schema",
@@ -13798,7 +13798,7 @@
       "source": "extensions/autocomplete-component",
       "status": "working",
       "artifact": "artifacts/extensions/autocomplete.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "sql_complete"
       ],
@@ -13850,7 +13850,7 @@
       "source": "extensions/statsduck-component",
       "status": "working",
       "artifact": "artifacts/extensions/statsduck.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "adjust_p",
         "anderson_darling",
@@ -14527,7 +14527,7 @@
       "source": "extensions/math-component",
       "status": "working",
       "artifact": "artifacts/extensions/math.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "exp2",
         "e",
@@ -14645,7 +14645,7 @@
       "source": "extensions/text_utils-component",
       "status": "working",
       "artifact": "artifacts/extensions/text_utils.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "exports": [
         "sql_normalize",
         "insert",
@@ -14821,7 +14821,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "chrono",
       "expansion": "com.tegmentum.ducklink.chrono",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "wit_contract_version": "4.0.0",
       "content_digest": "0cfe3da4634b8073c0a79e256b035eeb88ffa2136c340535ce79878fe009de59",
       "functions": [
@@ -15533,7 +15533,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "list",
       "expansion": "com.tegmentum.ducklink.list",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "wit_contract_version": "4.0.0",
       "content_digest": "1f67507d83a385771f4b2b80abf525ab3d4fb5170f07763522f6a5659807c7e5",
       "functions": [
@@ -15775,7 +15775,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "stdsql",
       "expansion": "com.tegmentum.ducklink.stdsql",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "wit_contract_version": "4.0.0",
       "content_digest": "61a8cef5d5e3972532e0bcd3702f4fcf3d25b3abc18a680ce896ac929424fad2",
       "functions": [
@@ -16066,7 +16066,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "stats",
       "expansion": "com.tegmentum.ducklink.stats",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "wit_contract_version": "4.0.0",
       "content_digest": "03a4a4f6a8f59ac25f839d6986ddad5d33f24b6768f5fd2b804ae2993b3ab61e",
       "functions": [
@@ -16151,7 +16151,7 @@
       "min_duckdb_version": "1.0.0",
       "prefix": "sys_compat",
       "expansion": "com.tegmentum.ducklink.sys_compat",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "wit_contract_version": "4.0.0",
       "content_digest": "f3ea0982b0384b55362c380569bebc76a9c3a930e4f03001d5df356f7dbdae2e",
       "functions": [
@@ -16212,7 +16212,7 @@
       "prefix": "ggsql",
       "expansion": "com.tegmentum.ducklink.ggsql",
       "artifact": "artifacts/extensions/ggsql.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "wit_contract_version": "4.0.0",
       "content_digest": "90f8624ec31724fb9cc07475883dd57080817e64cbbf887dd2cbcf5eb2db861b",
       "providers": [
@@ -16226,7 +16226,7 @@
           "conformance": {
             "suite": "ggsql@4",
             "suite_digest": "48ff6b2da8a744ab45ceae52faca754c7f854d65ec41f90965a859d21b5ca256",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -16259,7 +16259,7 @@
       "prefix": "dplyr",
       "expansion": "com.tegmentum.ducklink.dplyr",
       "artifact": "artifacts/extensions/dplyr.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "wit_contract_version": "4.0.0",
       "content_digest": "1c0d3807e17815c07d31427bc035333b9b3bf383b8af53132b8553ca4fbc28ef",
       "providers": [
@@ -16273,7 +16273,7 @@
           "conformance": {
             "suite": "dplyr@4",
             "suite_digest": "73c189bc18a13ad0eec6df00e3f872984b253d652cfa27e218d93f26578cce58",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -16308,7 +16308,7 @@
       "prefix": "prql_parser",
       "expansion": "com.tegmentum.ducklink.prql_parser",
       "artifact": "artifacts/extensions/prql_parser.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "wit_contract_version": "4.0.0",
       "content_digest": "181761c2db814b3fd895c9a4bcfeb98c50d0d3191d7bdb563485848104b95525",
       "providers": [
@@ -16322,7 +16322,7 @@
           "conformance": {
             "suite": "prql_parser@4",
             "suite_digest": "6719bade3ff2cd734b77e63cbf2a57b88c7f586d76418eed00462f6148b4f235",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
@@ -16358,7 +16358,7 @@
       "prefix": "talib",
       "expansion": "com.tegmentum.ducklink.talib",
       "artifact": "artifacts/extensions/talib.wasm",
-      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
       "wit_contract_version": "4.0.0",
       "content_digest": "a0cc83241eb83f5304c61f63d1bbddef5f6e9c2d2aadfda1d8bcaa552d8446ee",
       "providers": [
@@ -16372,7 +16372,7 @@
           "conformance": {
             "suite": "talib@4",
             "suite_digest": "c6c03904e744ec9bd6a98f510f8555077dc9ccb95c294ed9416ac9571db36990",
-            "at": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+            "at": "3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854",
             "passed": true
           }
         }
