@@ -7985,6 +7985,92 @@
           "content_digest": "d9eaca0d9740a7ab0f9a138cd2e96eaa4292fb047b74d05bfe7ed83277a2e5ee"
         }
       ]
+    },
+    {
+      "name": "mobilitydb_temporal_core",
+      "version": "1.2.0",
+      "description": "MobilityDB 1.2.0 temporal-core scalar surface (~1350 scalars: bitemporal/temporal tint/tfloat/tbool/ttext, spans, spansets, sets \u2014 the non-spatial temporal foundation) as a duckdb:extension component. Thin compose:dynlink shim (~900KB) that routes each temporal-scalar dispatch to the single, resident, shared mobilitydb_core-composed provider (~15MB, loaded once via DUCKLINK_PROVIDERS=mobilitydb_core-composed=\u2026).",
+      "license": "Apache-2.0",
+      "authors": [
+        "Tegmentum",
+        "MobilityDB Project"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "mobilitydb",
+        "temporal",
+        "bitemporal",
+        "tint",
+        "tfloat"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/mobilitydb_temporal_core-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/mobilitydb_temporal_core.wasm",
+      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract_version": "4.0.0",
+      "exports": [
+        "bitemporal_bool_eq",
+        "bitemporal_bool_cmp",
+        "bitemporal_bool_current",
+        "bitemporal_bool_as_of",
+        "bitemporal_bool_from_ewkt",
+        "bitemporal_bool_to_ewkt",
+        "tint_at_ts",
+        "tint_before_ts",
+        "tint_after_ts",
+        "tint_value_split",
+        "tint_time_split",
+        "tfloat_at_ts",
+        "tfloat_before_ts",
+        "tfloat_after_ts",
+        "tbool_count_changes",
+        "tbool_at_ts",
+        "ttext_at_ts",
+        "ttext_before_ts",
+        "floatset_intersection",
+        "floatset_union",
+        "intspan_contains",
+        "intspan_intersection",
+        "period_contains",
+        "period_overlaps",
+        "periodset_contains",
+        "periodset_intersection",
+        "temporal_lt",
+        "temporal_le",
+        "temporal_eq",
+        "temporal_ge",
+        "temporal_gt"
+      ],
+      "requires": [
+        "scalar",
+        "compose-dynlink"
+      ],
+      "requires_components": [
+        "mobilitydb_core-composed"
+      ],
+      "crates": [
+        "ciborium",
+        "serde",
+        "serde_json",
+        "wit-bindgen"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "mobilitydb_temporal_core",
+      "expansion": "com.tegmentum.ducklink.mobilitydb_temporal_core",
+      "content_digest": "d95a96de494cef94ac8b44c6500a8c37242714fe53b2bbfb3edae58106a53c9e",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@4.0.0",
+          "artifact": "artifacts/extensions/mobilitydb_temporal_core.wasm",
+          "content_digest": "d95a96de494cef94ac8b44c6500a8c37242714fe53b2bbfb3edae58106a53c9e"
+        }
+      ]
     }
   ],
   "dotcmds": [

@@ -1,0 +1,136 @@
+package sys:compose@1.0.0;
+
+/// Common types shared across interfaces
+interface types {
+  /// Content-addressed digest (SHA-256)
+  type digest = list<u8>;
+
+  /// Opaque secret token handle
+  type secret-token = string;
+
+  /// Tenant identifier for multi-tenancy
+  type tenant-id = string;
+
+  /// Component or package identifier
+  type component-id = string;
+
+  /// Hierarchical error codes
+  variant error-code {
+  // Plan errors
+  plan-invalid-schema,
+  plan-invalid-cbor,
+  plan-missing-field,
+  plan-invalid-graph,
+  plan-cycle-detected,
+
+  // Emit errors
+  emit-missing-blob,
+  emit-invalid-digest,
+  emit-composition-failed,
+  emit-link-error,
+
+  // Exec errors
+  exec-trap,
+  exec-timeout,
+  exec-resource-exhausted,
+  exec-capability-denied,
+  exec-missing-export,
+
+  // Blob errors
+  blob-not-found,
+  blob-digest-mismatch,
+  blob-io-error,
+
+  // Trust errors
+  trust-verification-failed,
+  trust-signature-invalid,
+  trust-certificate-expired,
+  trust-untrusted-source,
+
+  // Secret errors
+  secret-not-found,
+  secret-access-denied,
+  secret-backend-error,
+
+  // Generic errors
+  invalid-input,
+  internal-error,
+  not-implemented,
+}
+
+/// Structured error with context
+record error {
+  code: error-code,
+  message: string,
+  /// Optional structured context (JSON-serializable)
+  context: option<string>,
+}
+
+/// Event severity levels
+enum event-level {
+  trace,
+  info,
+  warn,
+  error,
+}
+
+/// Structured event record
+record event {
+  level: event-level,
+  timestamp: u64,
+  message: string,
+  /// Optional structured context (JSON-serializable)
+  context: option<string>,
+}
+
+/// Resource limit specification
+record resource-limits {
+  /// CPU time in milliseconds
+  cpu-ms: option<u64>,
+  /// Memory in bytes
+  memory-bytes: option<u64>,
+  /// IO operations
+  io-ops: option<u64>,
+}
+
+/// Capability requirement level
+enum capability-level {
+  required,
+  optional,
+}
+
+/// Capability specification
+record capability {
+  name: string,
+  level: capability-level,
+}
+
+/// How a plan's component imports are linked.
+enum linkage-mode {
+  /// Imports merged into one sealed artifact at emit time (the default).
+  /// (`static` is a WIT keyword, hence the `%` escape.)
+  %static,
+  /// Imports bound at exec time via the compose:dynlink bridge.
+  runtime,
+}
+
+/// Determinism mode
+enum determinism-mode {
+  /// Strict deterministic execution required
+  strict,
+  /// Audit non-deterministic operations
+  audit,
+  /// Allow non-deterministic operations
+  relaxed,
+}
+
+  /// Policy configuration
+  record policy {
+    determinism: determinism-mode,
+    capabilities: list<capability>,
+    /// Tenant scope for isolation
+    tenant: option<tenant-id>,
+    /// Resource limits
+    limits: resource-limits,
+  }
+}
