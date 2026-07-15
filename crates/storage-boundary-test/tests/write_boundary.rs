@@ -202,7 +202,10 @@ fn write_dispatch_crosses_wit_boundary() {
     assert_eq!(inserted, 2, "insert returned {inserted}, want 2");
 
     // update_rows across the boundary. The bridge assigns rowids 1..=N in
-    // monotonic order; update rowid 1 in place, count=1.
+    // monotonic order; update rowid 1 in place, count=1. The v4.0.1 wire
+    // carries `updated_columns` alongside the SET cells (partial-row
+    // semantic): here we SET both kv_store columns (schema indices 0 and
+    // 1), matching a `UPDATE ... SET key=?, value=?` shape.
     let update_row = vec![row("alpha", "one")];
     let updated = wd
         .call_update_rows(
@@ -211,6 +214,7 @@ fn write_dispatch_crosses_wit_boundary() {
             txn,
             "kv_store",
             &[1_i64],
+            &[0_u32, 1_u32],
             &update_row,
         )
         .expect("update_rows host call")

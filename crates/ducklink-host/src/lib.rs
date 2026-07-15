@@ -602,6 +602,7 @@ impl core_storage_host::Host for CoreStoreState {
         txn: u32,
         table: String,
         rowids: Vec<i64>,
+        updated_columns: Vec<u32>,
         rows: Vec<Vec<core_types::Duckvalue>>,
     ) -> Result<u64, core_types::Duckerror> {
         let ext_rows: Vec<Vec<extension_types::Duckvalue>> = rows
@@ -617,7 +618,7 @@ impl core_storage_host::Host for CoreStoreState {
             .lock()
             .expect("extension manager mutex poisoned");
         manager
-            .dispatch_storage_update_rows(txn, &table, &rowids, &ext_rows)
+            .dispatch_storage_update_rows(txn, &table, &rowids, &updated_columns, &ext_rows)
             .map_err(convert_extension_duckerror_to_core)
     }
 }
@@ -2841,13 +2842,14 @@ impl ExtensionManager {
         txn: u32,
         table: &str,
         rowids: &[i64],
+        updated_columns: &[u32],
         rows: &[Vec<extension_types::Duckvalue>],
     ) -> Result<u64, extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
             extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
         })?;
-        instance.storage_update_rows(handle, txn, table, rowids, rows)
+        instance.storage_update_rows(handle, txn, table, rowids, updated_columns, rows)
     }
 
     // --- Item 3 / M2a: custom index (build + search) routing ---
@@ -6201,6 +6203,11 @@ fn convert_core_scan_request_to_storage(
             })
             .collect(),
         limit: request.limit,
+        // M2c: forward the wants-rowid flag verbatim to the guest's
+        // storage-dispatch scan-open. The read side (SELECT) leaves this
+        // false; UPDATE/DELETE plans set it via the C++ WasmScanInitGlobal
+        // so the guest appends rowid trailers to each row.
+        wants_rowid: request.wants_rowid,
     }
 }
 

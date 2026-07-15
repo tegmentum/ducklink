@@ -3115,6 +3115,7 @@ impl ExtensionInstance {
         txn: u32,
         table: &str,
         rowids: &[i64],
+        updated_columns: &[u32],
         rows: &[Vec<extension_types::Duckvalue>],
     ) -> Result<u64, extension_types::Duckerror> {
         self.storage_write_bindings()?;
@@ -3122,7 +3123,15 @@ impl ExtensionInstance {
         let guest = bindings.duckdb_extension_storage_write_dispatch();
         let store = &mut self.store;
         guest
-            .call_update_rows(store.as_context_mut(), handle, txn, table, rowids, rows)
+            .call_update_rows(
+                store.as_context_mut(),
+                handle,
+                txn,
+                table,
+                rowids,
+                updated_columns,
+                rows,
+            )
             .map_err(map_extension_trap)?
     }
 

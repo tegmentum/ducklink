@@ -436,6 +436,7 @@ fn pushdown_crosses_wit_boundary() {
             value: Duckvalue::Int64(1),
         }],
         limit: None,
+        wants_rowid: false,
     };
     let scan = sd
         .call_storage_scan_open(&mut store, HANDLE, cat, &req)
@@ -462,6 +463,7 @@ fn pushdown_crosses_wit_boundary() {
         projection: vec![],
         filters: vec![],
         limit: None,
+        wants_rowid: false,
     };
     let scan2 = sd
         .call_storage_scan_open(&mut store, HANDLE, cat, &full)

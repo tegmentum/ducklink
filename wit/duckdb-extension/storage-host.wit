@@ -31,11 +31,21 @@ interface storage-host {
 
   // What the engine asks a scan to produce. Mirrors the component's
   // storage.scan-request.
+  //
+  // When `wants-rowid` is true the guest must append a stable per-row s64
+  // rowid as the FINAL cell of every row returned by `storage-scan-next`
+  // (in addition to the projected column cells). DuckDB's UPDATE/DELETE
+  // physical plans project `COLUMN_IDENTIFIER_ROW_ID` alongside the touched
+  // columns; the C++ WasmScanInitGlobal detects those slots, strips them
+  // from `projection` (which stays exclusively real table column indices),
+  // and sets this flag. `storage-scan-open` on the storage-dispatch side
+  // carries the same semantic across the host->guest dispatch layer.
   record scan-request {
     table: string,
     projection: list<u32>,   // column indices to emit, in order; empty = all
     filters: list<scan-filter>,
     limit: option<u64>,      // best-effort row cap
+    wants-rowid: bool,       // append s64 rowid as trailing cell of each row
   }
 
   // Enumerate the ATTACH `TYPE` names that components have registered (via
@@ -95,9 +105,22 @@ interface storage-host {
   storage-delete-rows: func(txn: u32, table: string,
                             rowids: list<s64>) -> result<u64, duckerror>;
 
-  // Update rows by rowid (parallel `rowids` and `rows`); returns the number
-  // updated. Each `rows[i]` carries the full replacement row (the C++ Update
-  // operator flattens the child DataChunk and drops the trailing rowid column).
-  storage-update-rows: func(txn: u32, table: string, rowids: list<s64>,
+  // Update rows by rowid (parallel `rowids` and `rows`). Each `rows[i]` is a
+  // PARTIAL row carrying only the values for the columns being SET; the
+  // schema-index of each cell is given by the parallel-indexed entry in
+  // `updated-columns`, so `rows[i][j]` sets the schema column
+  // `updated-columns[j]` on the row identified by `rowids[i]`.
+  //
+  // DuckDB's `LogicalUpdate::columns` is the plan-time list of physical
+  // schema indices that appear in the `SET` clause; the C++ WasmPhysicalUpdate
+  // captures those at plan time and forwards them here alongside the child
+  // DataChunk's SET cells (whose column count is always `updated-columns.len`;
+  // the trailing chunk column is the row identifier — captured out-of-band as
+  // `rowids`). The guest may reject an `updated-columns` entry it doesn't
+  // know how to project on (e.g. a virtual column). Returns the number of
+  // rows successfully updated.
+  storage-update-rows: func(txn: u32, table: string,
+                            rowids: list<s64>,
+                            updated-columns: list<u32>,
                             rows: list<list<duckvalue>>) -> result<u64, duckerror>;
 }
