@@ -237,6 +237,7 @@ exclude = [
     "extensions/talib-component",
     "extensions/postgis_core-component",
     "extensions/mobilitydb_temporal_core-component",
+    "extensions/timescale_time_bucket-component",
 ]
 
 resolver = "2"

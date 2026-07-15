@@ -1,0 +1,26 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Coordinate-reference-system (CRS) registration surface (additive, 2.2.0,
+// Item 7). A spatial component declares the CRSs it knows in load() (authority +
+// code + WKT2 definition); the host captures them so the core can resolve
+// `ST_Transform`/geometry SRIDs against component-provided definitions.
+//
+// Kept SEPARATE (additive) so existing components' frozen WIT copies stay
+// structurally unchanged. This is registration only -- actual reprojection
+// (GDAL/PROJ ST_Transform) is OUT OF SCOPE for 2.2.0.
+interface coordinate-system {
+  use types.{duckerror};
+
+  // One coordinate reference system: the authority (e.g. "EPSG"), its numeric
+  // `code` (e.g. 4326), and the WKT2 `wkt` definition string.
+  record crs-def {
+    auth-name: string,
+    code: u32,
+    wkt: string,
+  }
+
+  // Register a coordinate reference system the component can resolve.
+  register-coordinate-system: func(crs: crs-def) -> result<u32, duckerror>;
+}

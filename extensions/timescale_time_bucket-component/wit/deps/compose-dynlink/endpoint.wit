@@ -1,0 +1,27 @@
+package compose:dynlink@0.1.0;
+
+/// The uniform message endpoint that every dynamically-loadable
+/// provider exports.
+///
+/// Runtime linking deliberately does NOT marshal typed WIT values
+/// across the boundary (see `compose:host/invoker.call-with-cbor` for
+/// the typed-CBOR approach, which this package supersedes). Instead a
+/// provider exposes a single opaque method: the host forwards `payload`
+/// bytes verbatim and never interprets them. The encoding is an
+/// application concern; the recommended convention is a CBOR envelope
+/// carrying a schema/version tag.
+///
+/// Because only bytes cross the boundary, resource handles never
+/// transit and the nominal-resource type-identity problem that blocks
+/// cross-instance typed linking does not arise. The cost is that there
+/// is no host-side type checking: a malformed call surfaces as a
+/// decoding error inside the guest, and providers must be written as
+/// plugins that speak this contract.
+interface endpoint {
+  use sys:compose/types@1.0.0.{error};
+
+  /// Handle one message. `method` selects an operation; `payload` is an
+  /// opaque, application-encoded request body. The result is an opaque,
+  /// application-encoded response body.
+  handle: func(method: string, payload: list<u8>) -> result<list<u8>, error>;
+}

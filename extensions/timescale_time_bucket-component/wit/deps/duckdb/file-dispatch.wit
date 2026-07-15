@@ -1,0 +1,27 @@
+package duckdb:extension@4.0.0;
+
+// httpfs M2. Host -> component callbacks for a registered files backend.
+// Exported by files-capable components (analogous to storage-dispatch for
+// ATTACH catalogs). The host drives a simple open/read/close protocol; the
+// component fetches the whole resource once at open over wasi:sockets, caches
+// it, and serves byte ranges.
+//
+// Every call carries `handle` = the callback-handle the component passed to
+// files-reg.register-files.
+interface file-dispatch {
+  // The component-side file handle plus the total size discovered at open.
+  record file-open-result {
+    handle: u32,
+    size: u64,
+  }
+
+  // Fetch + cache the resource named by `url`; return a file handle + total size.
+  file-open: func(handle: u32, url: string) -> result<file-open-result, string>;
+
+  // Return up to `len` bytes from the cached resource starting at `offset`.
+  // A short read at EOF is allowed.
+  file-read: func(handle: u32, file: u32, offset: u64, len: u32) -> result<list<u8>, string>;
+
+  // Drop the cache entry for `file`.
+  file-close: func(handle: u32, file: u32) -> result<_, string>;
+}
