@@ -344,7 +344,13 @@ fn run_repl(conn: &duckdb::Connection) -> Result<(), String> {
 
         statement.push_str(trimmed);
         if !trimmed.ends_with(';') {
-            statement.push(' ');
+            // Preserve line breaks between joined input lines so DuckDB's
+            // parser correctly terminates SQL line comments (`-- ...`) at
+            // end-of-line. Joining with a single space instead caused
+            // `-- comment\nSELECT 1;` to become `-- comment SELECT 1;`,
+            // which the parser reads as one giant line comment that
+            // swallows the following statement.
+            statement.push('\n');
             write_continuation_prompt(&out)?;
             continue;
         }
