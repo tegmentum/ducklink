@@ -1,0 +1,47 @@
+package duckdb:extension@4.0.0;
+
+use types;
+use storage;
+
+// Host -> component callbacks for a registered storage backend. Exported by
+// storage-capable components (analogous to callback-dispatch for functions).
+// The host drives a chunked PULL cursor, so no streaming resource is needed and
+// the protocol stays plain-WIT and resumable.
+//
+// Every call carries `handle` = the callback-handle the component passed to
+// storage.register-storage, so one component can back several backends.
+interface storage-dispatch {
+  use types.{duckerror, columndef, resultset};
+  use storage.{scan-request};
+
+  // Open a catalog from an ATTACH DSN. For sqlite-over-BLOB the bytes are
+  // staged separately (see attach-blob); `dsn` names the staged blob and
+  // `options` carries key=value ATTACH params. Returns a catalog-handle.
+  storage-attach: func(handle: u32, dsn: string,
+                       options: list<tuple<string, string>>)
+                       -> result<u32, duckerror>;
+
+  // Stage raw database bytes for a subsequent attach keyed by `dsn`. Lets the
+  // host hand a foreign DB to the component as a BLOB with no shared FS.
+  attach-blob: func(handle: u32, dsn: string, bytes: list<u8>)
+                    -> result<_, duckerror>;
+
+  storage-list-tables: func(handle: u32, catalog: u32)
+                            -> result<list<string>, duckerror>;
+
+  storage-table-columns: func(handle: u32, catalog: u32, table: string)
+                              -> result<list<columndef>, duckerror>;
+
+  // Open a scan cursor for one (catalog, table) honoring the request's
+  // projection + filters + limit. Returns a scan-handle.
+  storage-scan-open: func(handle: u32, catalog: u32, request: scan-request)
+                          -> result<u32, duckerror>;
+
+  // Pull up to max-rows. An empty resultset signals EOF. Columns are emitted in
+  // projection order (or natural order if the projection was empty).
+  storage-scan-next: func(handle: u32, scan: u32, max-rows: u32)
+                          -> result<resultset, duckerror>;
+
+  storage-scan-close: func(handle: u32, scan: u32) -> result<bool, duckerror>;
+  storage-detach: func(handle: u32, catalog: u32) -> result<bool, duckerror>;
+}

@@ -1,0 +1,50 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> core custom-index callbacks (Item 3 / M2a). The DuckDB-compiled-to-wasm
+// core IMPORTS this interface; the native host PROVIDES it and routes each call
+// to the index component (e.g. hnswfns) that registered a custom index type,
+// driving that component's `index-dispatch` export. This mirrors how the core
+// imports `storage-host` for ATTACH backends.
+//
+// The lifecycle is BUILD-then-SEARCH, in memory for M2a (persistence later):
+//   index-type-list -> register a DuckDB IndexType per declared type
+//   index-create / index-append / index-build  (the CREATE INDEX build pipeline)
+//   index-search  (explicit kNN; the optimizer auto-rewrite is M2b)
+//   index-drop
+interface index-host {
+  use types.{duckerror};
+
+  // One nearest-neighbour result mirroring index-dispatch.index-hit.
+  record index-hit {
+    rowid: s64,
+    distance: f32,
+  }
+
+  // Enumerate the custom index TYPE names components have registered (via
+  // `register-index-type`). The core calls this lazily (before running queries)
+  // and registers a wasm IndexType for each not-yet-seen name, so
+  // `CREATE INDEX ... USING <name>` dispatches to that component. This replaces
+  // the M1 hardcoded "wasm_hnsw" registration.
+  index-type-list: func() -> list<string>;
+
+  // Allocate an empty index builder for `(type-name, index-name)` whose key is a
+  // FLOAT[dims] vector. Returns a component-side index-handle, 0 on error.
+  index-create: func(type-name: string, index-name: string, dims: u32)
+                     -> result<u32, duckerror>;
+
+  // Accumulate a batch of (rowid, vector) rows into the builder.
+  index-append: func(handle: u32, rowids: list<s64>, vectors: list<list<f32>>)
+                     -> result<_, duckerror>;
+
+  // Finalize: build the ANN map from every appended row.
+  index-build: func(handle: u32) -> result<_, duckerror>;
+
+  // k nearest neighbours of `query`, closest first.
+  index-search: func(handle: u32, query: list<f32>, k: u32)
+                     -> result<list<index-hit>, duckerror>;
+
+  // Free the index + handle.
+  index-drop: func(handle: u32) -> result<_, duckerror>;
+}

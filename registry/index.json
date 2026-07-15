@@ -7881,6 +7881,110 @@
           "content_digest": "db3d3e63918ae782de46fb0074e50689d2ca7e6dfa00939d7c9e9443bd758b8b"
         }
       ]
+    },
+    {
+      "name": "postgis_core",
+      "version": "3.6.4",
+      "description": "PostGIS 3.6.4 core 2D geometry surface (~726 scalars: constructors, accessors, predicates, measurements, processing) as a duckdb:extension component. Thin compose:dynlink shim (~720KB) that routes each ST_* dispatch to the single, resident, shared postgis_core-composed provider (~32MB, loaded once via DUCKLINK_PROVIDERS=postgis_core-composed=\u2026) \u2014 instead of wac-inlining GEOS/GDAL/PROJ into every consumer at build time.",
+      "license": "Apache-2.0",
+      "authors": [
+        "Tegmentum",
+        "PostGIS Project"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "postgis",
+        "geometry",
+        "spatial",
+        "st",
+        "geo"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/postgis_core-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/postgis_core.wasm",
+      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract_version": "4.0.0",
+      "exports": [
+        "st_point",
+        "st_makepoint",
+        "st_geomfromtext",
+        "st_geomfromwkb",
+        "st_astext",
+        "st_asbinary",
+        "st_asgeojson",
+        "st_x",
+        "st_y",
+        "st_z",
+        "st_m",
+        "st_srid",
+        "st_setsrid",
+        "st_distance",
+        "st_distancesphere",
+        "st_dwithin",
+        "st_dfullywithin",
+        "st_area",
+        "st_length",
+        "st_perimeter",
+        "st_centroid",
+        "st_envelope",
+        "st_contains",
+        "st_within",
+        "st_intersects",
+        "st_touches",
+        "st_crosses",
+        "st_overlaps",
+        "st_equals",
+        "st_disjoint",
+        "st_union",
+        "st_intersection",
+        "st_difference",
+        "st_symdifference",
+        "st_buffer",
+        "st_convexhull",
+        "st_simplify",
+        "st_simplifypreservetopology",
+        "st_transform",
+        "st_translate",
+        "st_scale",
+        "st_rotate",
+        "st_geometrytype",
+        "st_isvalid",
+        "st_isempty",
+        "st_issimple",
+        "st_npoints",
+        "st_numgeometries",
+        "st_geometryn"
+      ],
+      "requires": [
+        "scalar",
+        "compose-dynlink"
+      ],
+      "requires_components": [
+        "postgis_core-composed"
+      ],
+      "crates": [
+        "ciborium",
+        "serde",
+        "serde_json",
+        "wit-bindgen"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "postgis_core",
+      "expansion": "com.tegmentum.ducklink.postgis_core",
+      "content_digest": "d9eaca0d9740a7ab0f9a138cd2e96eaa4292fb047b74d05bfe7ed83277a2e5ee",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@4.0.0",
+          "artifact": "artifacts/extensions/postgis_core.wasm",
+          "content_digest": "d9eaca0d9740a7ab0f9a138cd2e96eaa4292fb047b74d05bfe7ed83277a2e5ee"
+        }
+      ]
     }
   ],
   "dotcmds": [
