@@ -1,0 +1,27 @@
+package duckdb:extension@4.0.0;
+
+// Host -> core collation pull. The DuckDB-compiled-to-wasm core IMPORTS this
+// interface; the native host PROVIDES it, returning the collations that
+// components have declared (via the `collation.register-collation` WIT call).
+// This mirrors how the core pulls ATTACH `TYPE` names via
+// `storage-host.storage-list-types`.
+//
+// A collation reuses an already-registered scalar (text -> sort-key text) as
+// its transform. The core looks the scalar up by name in the catalog and wraps
+// it in a DuckDB collation (CreateCollationInfo), so `ORDER BY x COLLATE name`
+// resolves to it. Registration is dynamic (mid-session): the core pulls this
+// list lazily before each query and registers each collation it has not yet
+// seen, dedup-guarded.
+interface collation-host {
+  // One collation a component declared: its catalog name, the already-registered
+  // scalar that performs the (text -> sort-key text) transform, and whether the
+  // collation can be combined with other collations.
+  record collation-spec {
+    name: string,
+    transform-scalar: string,
+    combinable: bool,
+  }
+
+  // Enumerate the collations components have declared so far this session.
+  collation-list: func() -> list<collation-spec>;
+}

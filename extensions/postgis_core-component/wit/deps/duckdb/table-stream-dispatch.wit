@@ -1,0 +1,81 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> component callbacks for a STREAMING + pushdown table function
+// (additive, 2.2.0, Item 6). The existing `runtime.table-callback.call` returns a
+// whole resultset at once; this adds an open/next/close cursor so a component can
+// stream large results in bounded chunks and accept a projection pushdown,
+// reusing the storage-dispatch chunked PULL-cursor shape.
+//
+// Every call carries `handle` = the callback-handle the component registered for
+// the streaming table function.
+interface table-stream-dispatch {
+  use types.{duckerror, duckvalue, columndef, resultset};
+
+  // Result of opening a streaming table cursor: an opaque cursor handle plus the
+  // column schema the scan will emit (after the requested projection).
+  record table-open-result {
+    cursor: u32,
+    columns: list<columndef>,
+  }
+
+  // Open a streaming cursor for the table function `handle` with the bound `args`
+  // and a `projection` (column indices to emit, in order; empty = all columns).
+  call-table-open: func(handle: u32,
+                        args: list<duckvalue>,
+                        projection: list<u32>) -> result<table-open-result, duckerror>;
+
+  // Pull up to `max-rows` from the cursor; an empty resultset signals EOF.
+  call-table-next: func(handle: u32,
+                        cursor: u32,
+                        max-rows: u32) -> result<resultset, duckerror>;
+
+  // Close the cursor and free its state.
+  call-table-close: func(handle: u32, cursor: u32) -> result<bool, duckerror>;
+
+  // --- FILTER pushdown (additive, 2.3.0 / v3) ---
+  //
+  // Projection pushdown already rides `call-table-open`'s `projection`. This adds
+  // FILTER pushdown: a NEUTRAL, FLATTENED descriptor of the conjunctive filters
+  // the optimizer pushed to the scan, so a streaming table function can skip rows
+  // at the source. Like the rest of the boundary it is by-value-safe -- the filter
+  // is described as column index + comparator + constant value(s), never a
+  // by-value DuckDB `TableFilter`/`Expression` tree.
+
+  // A single pushed-down comparison against one projected column.
+  enum filter-op {
+    eq,
+    ne,
+    lt,
+    le,
+    gt,
+    ge,
+    // The column value is one of `values` (a flattened IN-list).
+    is-in,
+    is-null,
+    is-not-null,
+  }
+
+  // One filter clause: `column` indexes the emitted (post-projection) schema; `op`
+  // is the comparator; `values` carries the constant operand(s) (empty for
+  // is-null/is-not-null, one for the scalar comparators, many for is-in). The full
+  // filter is the AND (conjunction) of all clauses -- DuckDB pushes a conjunction;
+  // disjunctions stay above the scan.
+  record table-filter {
+    column: u32,
+    op: filter-op,
+    values: list<duckvalue>,
+  }
+
+  // Open a streaming cursor WITH pushed-down filters, otherwise identical to
+  // `call-table-open`. A component that does not implement filter pushdown can
+  // ignore `filters` (the core re-checks every filter above the scan, so dropping
+  // them only forgoes the optimization -- never correctness). Kept as a SEPARATE
+  // function so the original `call-table-open` signature stays frozen.
+  call-table-open-filtered: func(handle: u32,
+                                 args: list<duckvalue>,
+                                 projection: list<u32>,
+                                 filters: list<table-filter>)
+                                 -> result<table-open-result, duckerror>;
+}

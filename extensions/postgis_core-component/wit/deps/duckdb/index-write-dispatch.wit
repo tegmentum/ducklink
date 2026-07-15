@@ -1,0 +1,37 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> component callbacks for a GENERAL (non-ANN) custom index (additive,
+// 2.2.0, Item 7). The existing `index-dispatch` covers the ANN build/search
+// lifecycle; this adds the general secondary-index operations a B-tree-like index
+// needs: ranged scan, delete, unique-constraint check, and serialization for
+// persistence. Exported by index backends via the separate
+// `duckdb-extension-index-write` world.
+//
+// Every call carries `handle` = the component's index callback routing id;
+// `index` is the index-handle from index-dispatch.index-create.
+interface index-write-dispatch {
+  use types.{duckerror, duckvalue};
+
+  // Range scan: return the row-ids whose key is within [low, high] (inclusive).
+  // An empty `low`/`high` means unbounded on that side.
+  index-scan: func(handle: u32,
+                   index: u32,
+                   low: list<duckvalue>,
+                   high: list<duckvalue>) -> result<list<s64>, duckerror>;
+
+  // Delete the given `rowids` from the index; returns the number removed.
+  index-delete: func(handle: u32,
+                     index: u32,
+                     rowids: list<s64>) -> result<u64, duckerror>;
+
+  // Unique-constraint check: returns true iff inserting `keys` would VIOLATE a
+  // uniqueness constraint on the index.
+  index-constraint: func(handle: u32,
+                         index: u32,
+                         keys: list<duckvalue>) -> result<bool, duckerror>;
+
+  // Serialize the built index to bytes for persistence.
+  index-serialize: func(handle: u32, index: u32) -> result<list<u8>, duckerror>;
+}

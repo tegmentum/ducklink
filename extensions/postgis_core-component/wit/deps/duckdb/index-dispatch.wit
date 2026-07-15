@@ -1,0 +1,48 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> component callbacks for a registered custom index (Item 3 / M2a).
+// Exported by index-capable components (analogous to storage-dispatch). The core
+// drives a BUILD-then-SEARCH lifecycle over plain WIT:
+//
+//   index-create(type, name, dims) -> handle   (allocate an empty builder)
+//   index-append(handle, rowids, vectors)       (accumulate rows, repeatable)
+//   index-build(handle)                          (finalize: build the ANN map)
+//   index-search(handle, query, k) -> hits       (kNN over the built map)
+//   index-drop(handle)                           (free)
+//
+// The component keeps its index state keyed by INDEX NAME so a table function
+// (e.g. hnsw_search) can reach the SAME built index the core-driven build path
+// populated.
+interface index-dispatch {
+  use types.{duckerror};
+
+  // One nearest-neighbour result: a table row-id and its distance to the query.
+  record index-hit {
+    rowid: s64,
+    distance: f32,
+  }
+
+  // Allocate an empty index builder for a `CREATE INDEX ... USING <type-name>`
+  // over an `index-name` whose key is a FLOAT[dims] vector. Returns an opaque
+  // index-handle the core threads through append/build/search/drop.
+  index-create: func(type-name: string, index-name: string, dims: u32)
+                     -> result<u32, duckerror>;
+
+  // Accumulate a batch of rows: parallel `rowids` and `vectors` (each vector is
+  // `dims` floats). Called repeatedly as the build pipeline feeds DataChunks.
+  index-append: func(handle: u32, rowids: list<s64>, vectors: list<list<f32>>)
+                     -> result<_, duckerror>;
+
+  // Finalize: build the ANN map from every appended row. After this the index is
+  // searchable.
+  index-build: func(handle: u32) -> result<_, duckerror>;
+
+  // k nearest neighbours of `query` (a `dims`-float vector), closest first.
+  index-search: func(handle: u32, query: list<f32>, k: u32)
+                     -> result<list<index-hit>, duckerror>;
+
+  // Free the index and its handle.
+  index-drop: func(handle: u32) -> result<_, duckerror>;
+}

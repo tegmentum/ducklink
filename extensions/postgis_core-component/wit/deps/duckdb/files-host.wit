@@ -1,0 +1,28 @@
+package duckdb:extension@4.0.0;
+
+// httpfs M2. Host -> core file I/O callbacks. The DuckDB-compiled-to-wasm core
+// IMPORTS this interface; the native host PROVIDES it and routes each call to
+// the files-backend component (e.g. webfs) that registered a files backend,
+// driving that component's `file-dispatch` export. This mirrors how the core
+// imports `storage-host` for ATTACH foreign-catalog dispatch.
+//
+// Simple + robust M2 contract (no HTTP Range): the component, on file-open,
+// does a single GET of the whole file, caches the bytes, and returns its size.
+// file-read slices the cache; file-close drops it.
+interface files-host {
+  // The component-side file handle plus the total size discovered at open.
+  record file-open-result {
+    handle: u32,
+    size: u64,
+  }
+
+  // Fetch + cache the resource named by `url`; return a file handle + total size.
+  file-open: func(url: string) -> result<file-open-result, string>;
+
+  // Return up to `len` bytes from the cached resource starting at `offset`.
+  // A short read at EOF is allowed (returns fewer bytes than requested).
+  file-read: func(handle: u32, offset: u64, len: u32) -> result<list<u8>, string>;
+
+  // Drop the cache entry for `handle`.
+  file-close: func(handle: u32) -> result<_, string>;
+}

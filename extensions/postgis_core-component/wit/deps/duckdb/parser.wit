@@ -1,0 +1,30 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Parser-extension registration surface (additive, 2.3.0 / v3). A component that
+// wants to intercept SQL the built-in parser rejects declares a parser extension
+// here in load(); the host wires a DuckDB `ParserExtension` that forwards the
+// unrecognized statement text to the component via the separate `parser-dispatch`
+// export.
+//
+// CONSTRAINED-BY-DESIGN: the component CANNOT return a bound parse tree across the
+// by-value WIT boundary (a `SQLStatement` / `LogicalOperator` tree is recursive +
+// DuckDB-internal -- the WIT recursion wall, see types.wit `complexvalue`). The
+// complete tractable form is a string->SQL REWRITE: the component claims the
+// statement and returns ordinary DuckDB SQL the core parses + runs in its place.
+// This covers custom statement syntax that DESUGARS to standard SQL (e.g.
+// `VISUALIZE <q>`, `SHOW`-like statements, DDL sugar).
+//
+// Kept as a SEPARATE interface (additive, like `secret` / `settings`) so existing
+// components' frozen WIT copies stay structurally unchanged. Only parser-capable
+// components import it via the `duckdb-extension-parser` world.
+interface parser {
+  use types.{duckerror};
+
+  // Declare a parser extension named `name`. `callback-handle` is the opaque id
+  // the host threads back into every `parser-dispatch` call so one component can
+  // back several parser extensions. Returns a registration id.
+  register-parser-extension: func(name: string,
+                                  callback-handle: u32) -> result<u32, duckerror>;
+}

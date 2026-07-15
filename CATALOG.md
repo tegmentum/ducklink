@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**185 component extensions** · **598 SQL functions** · 9 expose aggregates · 3 require network.
+**186 component extensions** · **647 SQL functions** · 9 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -18,7 +18,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 - **Static embed (opt-in):** `ducklink compose --embed <name>` bakes an extension into the core at build time. Wired today for `isin` (`embed-isin` core feature); `ducklink compose --list` shows what's embeddable. Most extensions stay runtime-loaded by design.
 - **Network grant:** net extensions are denied by default; opt in with `--grant-network all` (or a name allowlist), equivalently the `DUCKLINK_NETWORK_GRANT` env var.
 
-## Data types & encoding (72)
+## Data types & encoding (73)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -74,6 +74,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **plist** | `plist_to_json`, `plist_get` | plist |  |
 | **pluscode** | `pluscode_encode`, `pluscode_valid`, `pluscode_decode_lat`, `pluscode_decode_lon` | open-location-code, geo |  |
 | **polyline** | `polyline_encode`, `polyline_decode` | polyline |  |
+| **postgis_core** | `st_point`, `st_makepoint`, `st_geomfromtext`, `st_geomfromwkb`, `st_astext`, `st_asbinary`, `st_asgeojson`, `st_x`, `st_y`, `st_z`, `st_m`, `st_srid`, `st_setsrid`, `st_distance`, `st_distancesphere`, `st_dwithin`, `st_dfullywithin`, `st_area`, `st_length`, `st_perimeter`, `st_centroid`, `st_envelope`, `st_contains`, `st_within`, `st_intersects`, `st_touches`, `st_crosses`, `st_overlaps`, `st_equals`, `st_disjoint`, `st_union`, `st_intersection`, `st_difference`, `st_symdifference`, `st_buffer`, `st_convexhull`, `st_simplify`, `st_simplifypreservetopology`, `st_transform`, `st_translate`, `st_scale`, `st_rotate`, `st_geometrytype`, `st_isvalid`, `st_isempty`, `st_issimple`, `st_npoints`, `st_numgeometries`, `st_geometryn` | ciborium, serde, serde_json, wit-bindgen |  |
 | **qrcode** | `qr_svg` | qrcode |  |
 | **quotedprintable** | `qp_encode`, `qp_decode` | quoted_printable |  |
 | **rle** | `rle_encode`, `rle_decode` | hand-rolled |  |

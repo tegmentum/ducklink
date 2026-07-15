@@ -1,0 +1,38 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Extension settings/option registration surface (additive, 2.1.0). Separate from
+// the read-only `config` interface: `config` lets a component READ host
+// configuration, whereas `settings` lets a component DECLARE a configuration
+// option DuckDB should expose (`SET <name> = ...` / `PRAGMA <name>`), with a name,
+// description, type, default, and scope. The declared options are captured by the
+// host and surfaced to the core; reading their values still flows through `config`.
+//
+// Kept as a SEPARATE interface (additive) so existing components' frozen WIT
+// copies stay structurally unchanged.
+interface settings {
+  use types.{duckerror};
+
+  // Where an option may be set.
+  enum setting-scope {
+    local,
+    global,
+  }
+
+  // The value type of an option (mirrors DuckDB's option value kinds).
+  enum setting-type {
+    boolean,
+    varchar,
+    bigint,
+    double,
+  }
+
+  // Declare a configuration option. `default-value` is the option's default
+  // rendered as text (none = no default).
+  register-option: func(name: string,
+                        description: string,
+                        ty: setting-type,
+                        default-value: option<string>,
+                        scope: setting-scope) -> result<_, duckerror>;
+}
