@@ -113,7 +113,7 @@ content-addressed digest over the canonical WIT bytes (`witcanon:1`,
 contract digest is:
 
 ```
-3767a37476d93949d4fd0e724456ac1bed4608674e66214e019160698daab854
+b24dc901568e38e5b05fc0dc535ebaec3c93a9a44c772bb105686032e45e16b3
 ```
 
 Every catalog entry records the digest it was built against (`wit_contract` +
