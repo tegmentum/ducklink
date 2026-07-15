@@ -8494,6 +8494,15 @@ pub mod duckdb {
                 }
             }
             /// What the engine asks a scan to produce.
+            ///
+            /// `wants-rowid`, when true, tells the guest to emit a stable per-row s64
+            /// rowid as the FINAL cell of every row returned by `storage-scan-next`
+            /// (after the projected column cells, which stay in projection order). The
+            /// ducklink CLI's WasmPhysicalUpdate/WasmPhysicalDelete plans project
+            /// `COLUMN_IDENTIFIER_ROW_ID` alongside the touched columns; the C++
+            /// WasmScanInitGlobal strips those rowid slots from `projection` and sets
+            /// this flag so the guest supplies the rowid values the sink then round-
+            /// trips into `storage-write-dispatch.update-rows` / `.delete-rows`.
             #[derive(Clone)]
             pub struct ScanRequest {
                 pub table: _rt::String,
@@ -8501,6 +8510,8 @@ pub mod duckdb {
                 /// column indices to emit, in order; empty = all
                 pub filters: _rt::Vec<ScanFilter>,
                 pub limit: Option<u64>,
+                /// best-effort row cap
+                pub wants_rowid: bool,
             }
             impl ::core::fmt::Debug for ScanRequest {
                 fn fmt(
@@ -8512,6 +8523,7 @@ pub mod duckdb {
                         .field("projection", &self.projection)
                         .field("filters", &self.filters)
                         .field("limit", &self.limit)
+                        .field("wants-rowid", &self.wants_rowid)
                         .finish()
                 }
             }
@@ -16382,6 +16394,7 @@ pub mod exports {
                     arg7: usize,
                     arg8: i32,
                     arg9: i64,
+                    arg10: i32,
                 ) -> *mut u8 {
                     #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
                     let len0 = arg3;
@@ -16638,6 +16651,7 @@ pub mod exports {
                                 }
                                 _ => _rt::invalid_enum_discriminant(),
                             },
+                            wants_rowid: _rt::bool_lift(arg10 as u8),
                         },
                     );
                     let ptr44 = (&raw mut _RET_AREA.0).cast::<u8>();
@@ -17665,10 +17679,11 @@ pub mod exports {
                         "duckdb:extension/storage-dispatch@4.0.0#storage-scan-open")]
                         unsafe extern "C" fn export_storage_scan_open(arg0 : i32, arg1 :
                         i32, arg2 : * mut u8, arg3 : usize, arg4 : * mut u8, arg5 :
-                        usize, arg6 : * mut u8, arg7 : usize, arg8 : i32, arg9 : i64,) ->
-                        * mut u8 { unsafe { $($path_to_types)*::
+                        usize, arg6 : * mut u8, arg7 : usize, arg8 : i32, arg9 : i64,
+                        arg10 : i32,) -> * mut u8 { unsafe { $($path_to_types)*::
                         _export_storage_scan_open_cabi::<$ty > (arg0, arg1, arg2, arg3,
-                        arg4, arg5, arg6, arg7, arg8, arg9) } } #[unsafe (export_name =
+                        arg4, arg5, arg6, arg7, arg8, arg9, arg10) } } #[unsafe
+                        (export_name =
                         "cabi_post_duckdb:extension/storage-dispatch@4.0.0#storage-scan-open")]
                         unsafe extern "C" fn _post_return_storage_scan_open(arg0 : * mut
                         u8,) { unsafe { $($path_to_types)*::
@@ -17999,8 +18014,8 @@ pub(crate) use __export_duckdb_extension_storage_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 6757] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xd63\x01A\x02\x01A(\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 6770] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xe33\x01A\x02\x01A(\x01\
 B.\x01q\x15\x07boolean\0\0\x05int64\0\0\x06uint64\0\0\x07float64\0\0\x04text\0\0\
 \x04blob\0\0\x05int32\0\0\x09timestamp\0\0\x04int8\0\0\x05int16\0\0\x05uint8\0\0\
 \x06uint16\0\0\x06uint32\0\0\x07float32\0\0\x04date\0\0\x04time\0\0\x0btimestamp\
@@ -18104,55 +18119,55 @@ scan\x0c\0\x0f\x04\0\x19register-replacement-scan\x01\x10\x01j\x01\x07\x01s\x01@
 \0\0\x02\x03\x02\x01\x03\x04\0\x09duckvalue\x03\0\x02\x02\x03\x02\x01\x04\x04\0\x07\
 extopts\x03\0\x04\x01m\x08\x02eq\x02ne\x02lt\x02le\x02gt\x02ge\x07is-null\x0bis-\
 not-null\x04\0\x0acompare-op\x03\0\x06\x01r\x03\x06columny\x02op\x07\x05value\x03\
-\x04\0\x0bscan-filter\x03\0\x08\x01py\x01p\x09\x01kw\x01r\x04\x05tables\x0aproje\
-ction\x0a\x07filters\x0b\x05limit\x0c\x04\0\x0cscan-request\x03\0\x0d\x01k\x05\x01\
-j\x01y\x01\x01\x01@\x03\x09type-names\x0fcallback-handley\x07options\x0f\0\x10\x04\
-\0\x10register-storage\x01\x11\x03\0\x1educkdb:extension/storage@4.0.0\x05\x15\x01\
-B\x1d\x01r\x04\x05lowerw\x05upperw\x05width}\x05scale}\x04\0\x0cdecimalvalue\x03\
-\0\0\x01r\x03\x06monthsz\x04daysz\x06microsx\x04\0\x0dintervalvalue\x03\0\x02\x01\
-r\x02\x02hiw\x02low\x04\0\x09uuidvalue\x03\0\x04\x01r\x02\x09type-exprs\x04jsons\
-\x04\0\x0ccomplexvalue\x03\0\x06\x01p\x7f\x01px\x01pw\x01pu\x01pz\x01p~\x01p|\x01\
-p}\x01p{\x01py\x01pv\x01p\x01\x01p\x03\x01p\x05\x01ps\x01p\x0f\x01p\x07\x01q\x15\
-\x07boolean\x01\x08\0\x05int64\x01\x09\0\x06uint64\x01\x0a\0\x07float64\x01\x0b\0\
-\x05int32\x01\x0c\0\x09timestamp\x01\x09\0\x04int8\x01\x0d\0\x05int16\x01\x0e\0\x05\
-uint8\x01\x0f\0\x06uint16\x01\x10\0\x06uint32\x01\x11\0\x07float32\x01\x12\0\x04\
-date\x01\x0c\0\x04time\x01\x09\0\x0btimestamptz\x01\x09\0\x07decimal\x01\x13\0\x08\
-interval\x01\x14\0\x04uuid\x01\x15\0\x04text\x01\x16\0\x04blob\x01\x17\0\x07comp\
-lex\x01\x18\0\x04\0\x06column\x03\0\x19\x01r\x03\x04data\x1a\x08validity\x0f\x04\
-rowsy\x04\0\x06colvec\x03\0\x1b\x03\0#duckdb:extension/column-types@4.0.0\x05\x16\
-\x02\x03\0\0\x0aloadresult\x01B\x0d\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\0\
-\0\x02\x03\x02\x01\x17\x04\0\x0aloadresult\x03\0\x02\x01j\x01\x03\x01\x01\x01@\0\
-\0\x04\x04\0\x04load\x01\x05\x01ps\x01j\x01\x7f\x01\x01\x01@\x01\x04keys\x06\0\x07\
-\x04\0\x0breconfigure\x01\x08\x01@\0\0\x07\x04\0\x08shutdown\x01\x09\x04\0\x1cdu\
-ckdb:extension/guest@4.0.0\x05\x18\x02\x03\0\x07\x06colvec\x01B\x1f\x02\x03\x02\x01\
-\x02\x04\0\x09duckerror\x03\0\0\x02\x03\x02\x01\x03\x04\0\x09duckvalue\x03\0\x02\
-\x02\x03\x02\x01\x07\x04\0\x0ainvokeinfo\x03\0\x04\x02\x03\x02\x01\x09\x04\0\x09\
-resultset\x03\0\x06\x02\x03\x02\x01\x19\x04\0\x06colvec\x03\0\x08\x01p\x09\x01j\x01\
-\x09\x01\x01\x01@\x03\x06handley\x04args\x0a\x03ctx\x05\0\x0b\x04\0\x15call-scal\
-ar-batch-col\x01\x0c\x01j\x01\x03\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x0d\x04\
-\0\x12call-aggregate-col\x01\x0e\x01@\x02\x06handley\x03arg\x09\0\x0b\x04\0\x0dc\
-all-cast-col\x01\x0f\x01p\x03\x01@\x03\x06handley\x04args\x10\x03ctx\x05\0\x0d\x04\
-\0\x0bcall-scalar\x01\x11\x01j\x01\x07\x01\x01\x01@\x02\x06handley\x04args\x10\0\
-\x12\x04\0\x0acall-table\x01\x13\x01k\x03\x01j\x01\x14\x01\x01\x01@\x02\x06handl\
-ey\x04args\x10\0\x15\x04\0\x0bcall-pragma\x01\x16\x01@\x02\x06handley\x05value\x03\
-\0\x0d\x04\0\x09call-cast\x01\x17\x04\0(duckdb:extension/callback-dispatch@4.0.0\
-\x05\x1a\x02\x03\0\x06\x0cscan-request\x01B#\x02\x03\x02\x01\x02\x04\0\x09ducker\
-ror\x03\0\0\x02\x03\x02\x01\x0b\x04\0\x09columndef\x03\0\x02\x02\x03\x02\x01\x09\
-\x04\0\x09resultset\x03\0\x04\x02\x03\x02\x01\x1b\x04\0\x0cscan-request\x03\0\x06\
-\x01o\x02ss\x01p\x08\x01j\x01y\x01\x01\x01@\x03\x06handley\x03dsns\x07options\x09\
-\0\x0a\x04\0\x0estorage-attach\x01\x0b\x01p}\x01j\0\x01\x01\x01@\x03\x06handley\x03\
-dsns\x05bytes\x0c\0\x0d\x04\0\x0battach-blob\x01\x0e\x01ps\x01j\x01\x0f\x01\x01\x01\
-@\x02\x06handley\x07catalogy\0\x10\x04\0\x13storage-list-tables\x01\x11\x01p\x03\
-\x01j\x01\x12\x01\x01\x01@\x03\x06handley\x07catalogy\x05tables\0\x13\x04\0\x15s\
-torage-table-columns\x01\x14\x01@\x03\x06handley\x07catalogy\x07request\x07\0\x0a\
-\x04\0\x11storage-scan-open\x01\x15\x01j\x01\x05\x01\x01\x01@\x03\x06handley\x04\
-scany\x08max-rowsy\0\x16\x04\0\x11storage-scan-next\x01\x17\x01j\x01\x7f\x01\x01\
-\x01@\x02\x06handley\x04scany\0\x18\x04\0\x12storage-scan-close\x01\x19\x01@\x02\
-\x06handley\x07catalogy\0\x18\x04\0\x0estorage-detach\x01\x1a\x04\0'duckdb:exten\
-sion/storage-dispatch@4.0.0\x05\x1c\x04\0/duckdb:extension/duckdb-extension-stor\
-age@4.0.0\x04\0\x0b\x1e\x01\0\x18duckdb-extension-storage\x03\0\0\0G\x09producer\
-s\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x060.4\
-1.0";
+\x04\0\x0bscan-filter\x03\0\x08\x01py\x01p\x09\x01kw\x01r\x05\x05tables\x0aproje\
+ction\x0a\x07filters\x0b\x05limit\x0c\x0bwants-rowid\x7f\x04\0\x0cscan-request\x03\
+\0\x0d\x01k\x05\x01j\x01y\x01\x01\x01@\x03\x09type-names\x0fcallback-handley\x07\
+options\x0f\0\x10\x04\0\x10register-storage\x01\x11\x03\0\x1educkdb:extension/st\
+orage@4.0.0\x05\x15\x01B\x1d\x01r\x04\x05lowerw\x05upperw\x05width}\x05scale}\x04\
+\0\x0cdecimalvalue\x03\0\0\x01r\x03\x06monthsz\x04daysz\x06microsx\x04\0\x0dinte\
+rvalvalue\x03\0\x02\x01r\x02\x02hiw\x02low\x04\0\x09uuidvalue\x03\0\x04\x01r\x02\
+\x09type-exprs\x04jsons\x04\0\x0ccomplexvalue\x03\0\x06\x01p\x7f\x01px\x01pw\x01\
+pu\x01pz\x01p~\x01p|\x01p}\x01p{\x01py\x01pv\x01p\x01\x01p\x03\x01p\x05\x01ps\x01\
+p\x0f\x01p\x07\x01q\x15\x07boolean\x01\x08\0\x05int64\x01\x09\0\x06uint64\x01\x0a\
+\0\x07float64\x01\x0b\0\x05int32\x01\x0c\0\x09timestamp\x01\x09\0\x04int8\x01\x0d\
+\0\x05int16\x01\x0e\0\x05uint8\x01\x0f\0\x06uint16\x01\x10\0\x06uint32\x01\x11\0\
+\x07float32\x01\x12\0\x04date\x01\x0c\0\x04time\x01\x09\0\x0btimestamptz\x01\x09\
+\0\x07decimal\x01\x13\0\x08interval\x01\x14\0\x04uuid\x01\x15\0\x04text\x01\x16\0\
+\x04blob\x01\x17\0\x07complex\x01\x18\0\x04\0\x06column\x03\0\x19\x01r\x03\x04da\
+ta\x1a\x08validity\x0f\x04rowsy\x04\0\x06colvec\x03\0\x1b\x03\0#duckdb:extension\
+/column-types@4.0.0\x05\x16\x02\x03\0\0\x0aloadresult\x01B\x0d\x02\x03\x02\x01\x02\
+\x04\0\x09duckerror\x03\0\0\x02\x03\x02\x01\x17\x04\0\x0aloadresult\x03\0\x02\x01\
+j\x01\x03\x01\x01\x01@\0\0\x04\x04\0\x04load\x01\x05\x01ps\x01j\x01\x7f\x01\x01\x01\
+@\x01\x04keys\x06\0\x07\x04\0\x0breconfigure\x01\x08\x01@\0\0\x07\x04\0\x08shutd\
+own\x01\x09\x04\0\x1cduckdb:extension/guest@4.0.0\x05\x18\x02\x03\0\x07\x06colve\
+c\x01B\x1f\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\0\0\x02\x03\x02\x01\x03\x04\
+\0\x09duckvalue\x03\0\x02\x02\x03\x02\x01\x07\x04\0\x0ainvokeinfo\x03\0\x04\x02\x03\
+\x02\x01\x09\x04\0\x09resultset\x03\0\x06\x02\x03\x02\x01\x19\x04\0\x06colvec\x03\
+\0\x08\x01p\x09\x01j\x01\x09\x01\x01\x01@\x03\x06handley\x04args\x0a\x03ctx\x05\0\
+\x0b\x04\0\x15call-scalar-batch-col\x01\x0c\x01j\x01\x03\x01\x01\x01@\x02\x06han\
+dley\x04args\x0a\0\x0d\x04\0\x12call-aggregate-col\x01\x0e\x01@\x02\x06handley\x03\
+arg\x09\0\x0b\x04\0\x0dcall-cast-col\x01\x0f\x01p\x03\x01@\x03\x06handley\x04arg\
+s\x10\x03ctx\x05\0\x0d\x04\0\x0bcall-scalar\x01\x11\x01j\x01\x07\x01\x01\x01@\x02\
+\x06handley\x04args\x10\0\x12\x04\0\x0acall-table\x01\x13\x01k\x03\x01j\x01\x14\x01\
+\x01\x01@\x02\x06handley\x04args\x10\0\x15\x04\0\x0bcall-pragma\x01\x16\x01@\x02\
+\x06handley\x05value\x03\0\x0d\x04\0\x09call-cast\x01\x17\x04\0(duckdb:extension\
+/callback-dispatch@4.0.0\x05\x1a\x02\x03\0\x06\x0cscan-request\x01B#\x02\x03\x02\
+\x01\x02\x04\0\x09duckerror\x03\0\0\x02\x03\x02\x01\x0b\x04\0\x09columndef\x03\0\
+\x02\x02\x03\x02\x01\x09\x04\0\x09resultset\x03\0\x04\x02\x03\x02\x01\x1b\x04\0\x0c\
+scan-request\x03\0\x06\x01o\x02ss\x01p\x08\x01j\x01y\x01\x01\x01@\x03\x06handley\
+\x03dsns\x07options\x09\0\x0a\x04\0\x0estorage-attach\x01\x0b\x01p}\x01j\0\x01\x01\
+\x01@\x03\x06handley\x03dsns\x05bytes\x0c\0\x0d\x04\0\x0battach-blob\x01\x0e\x01\
+ps\x01j\x01\x0f\x01\x01\x01@\x02\x06handley\x07catalogy\0\x10\x04\0\x13storage-l\
+ist-tables\x01\x11\x01p\x03\x01j\x01\x12\x01\x01\x01@\x03\x06handley\x07catalogy\
+\x05tables\0\x13\x04\0\x15storage-table-columns\x01\x14\x01@\x03\x06handley\x07c\
+atalogy\x07request\x07\0\x0a\x04\0\x11storage-scan-open\x01\x15\x01j\x01\x05\x01\
+\x01\x01@\x03\x06handley\x04scany\x08max-rowsy\0\x16\x04\0\x11storage-scan-next\x01\
+\x17\x01j\x01\x7f\x01\x01\x01@\x02\x06handley\x04scany\0\x18\x04\0\x12storage-sc\
+an-close\x01\x19\x01@\x02\x06handley\x07catalogy\0\x18\x04\0\x0estorage-detach\x01\
+\x1a\x04\0'duckdb:extension/storage-dispatch@4.0.0\x05\x1c\x04\0/duckdb:extensio\
+n/duckdb-extension-storage@4.0.0\x04\0\x0b\x1e\x01\0\x18duckdb-extension-storage\
+\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10\
+wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {
