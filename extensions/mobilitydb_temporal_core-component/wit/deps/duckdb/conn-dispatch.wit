@@ -1,0 +1,18 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> component connection-lifecycle callbacks (additive, 2.2.0, Item 7).
+// Exported by components that subscribed via `lifecycle.register-connection-callback`.
+// The host notifies the component when a DuckDB connection is opened or closed so
+// it can set up / tear down per-connection state.
+//
+// Every call carries `handle` = the callback-handle from
+// lifecycle.register-connection-callback; `connection-id` identifies the
+// connection.
+interface conn-dispatch {
+  use types.{duckerror};
+
+  on-connection-opened: func(handle: u32, connection-id: u64) -> result<_, duckerror>;
+  on-connection-closed: func(handle: u32, connection-id: u64) -> result<_, duckerror>;
+}

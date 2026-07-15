@@ -1,0 +1,17 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> component callback for an extension option being SET (additive, 2.2.0,
+// Item 7, optional). A component that declared an option via
+// `settings.register-option` can also export this so it is notified when a user
+// runs `SET <name> = <value>` -- letting it react (e.g. re-tune internal state)
+// rather than only being read back through `config`.
+//
+// `handle` = the callback-handle the component associates with its option; the
+// value is rendered as text (the component parses per the declared setting-type).
+interface settings-dispatch {
+  use types.{duckerror};
+
+  on-setting-set: func(handle: u32, name: string, value: string) -> result<_, duckerror>;
+}

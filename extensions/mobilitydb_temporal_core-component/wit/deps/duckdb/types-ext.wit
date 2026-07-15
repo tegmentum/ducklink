@@ -1,0 +1,27 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Logical-type extension surface (additive, 2.1.0). The existing
+// `catalog.register-logical-type` aliases a name over a flat physical type; this
+// adds two richer registrations that ride the existing type-expression escape
+// hatch (no new `logicaltype` arm, so `types` stays FROZEN):
+//
+//   * a MODIFIED logical type: a name aliased over a full DuckDB type-expression
+//     carrying modifiers (e.g. "DECIMAL(18,3)", "VARCHAR", "INTEGER[]").
+//   * an ENUM type: a name with an explicit ordered member list.
+//
+// Kept SEPARATE from `catalog` so existing components' frozen `catalog` copy stays
+// structurally unchanged.
+interface types-ext {
+  use types.{duckerror};
+
+  // Register a logical type `name` aliased over the DuckDB type-expression
+  // `type-expr` (the core resolves modifiers like width/scale/element type).
+  register-logical-type-modified: func(name: string,
+                                       type-expr: string) -> result<u32, duckerror>;
+
+  // Register an ENUM type `name` with the given ordered `members`.
+  register-enum: func(name: string,
+                      members: list<string>) -> result<u32, duckerror>;
+}

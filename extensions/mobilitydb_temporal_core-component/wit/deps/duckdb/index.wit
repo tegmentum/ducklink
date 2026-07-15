@@ -1,0 +1,24 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Custom-index registration surface (Item 3 / M2a). A component that wants to
+// back a `CREATE INDEX ... USING <type>` custom index registers an index TYPE
+// here in load(), then implements the `index-dispatch` export the core drives to
+// BUILD the index (create -> append rows -> build) and SEARCH it (kNN).
+//
+// The HNSW (or other ANN/spatial) library that does the actual indexing is
+// compiled to wasm INSIDE the component, behind this stable boundary -- exactly
+// like the storage capability wraps SQLite.
+//
+// Kept as a SEPARATE interface (additive, like `storage` / `collation`) so
+// existing components' frozen WIT copies stay structurally unchanged.
+interface index {
+  use types.{duckerror};
+
+  // Called by the component in load() to declare a custom index TYPE name (e.g.
+  // "wasm_hnsw"). The core pulls the registered type names (via
+  // index-host.index-type-list) and registers a DuckDB IndexType for each, so
+  // `CREATE INDEX ... USING <type-name>` routes to the component's build path.
+  register-index-type: func(type-name: string) -> result<_, duckerror>;
+}

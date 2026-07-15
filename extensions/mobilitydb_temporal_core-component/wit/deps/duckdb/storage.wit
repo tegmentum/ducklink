@@ -1,0 +1,44 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Storage / catalog backend surface. A component that wants to back an
+// ATTACH-able catalog (a DB scanner) registers a backend here in load(), then
+// implements the `storage-dispatch` export the host calls to enumerate and
+// scan. The native library that reads the foreign store (e.g. SQLite) is
+// compiled to wasm INSIDE the component, behind this stable boundary.
+//
+// Kept as a SEPARATE interface (not folded into runtime's capability variant)
+// so existing components' frozen WIT copies stay structurally unchanged.
+interface storage {
+  use types.{duckerror, duckvalue, extopts};
+
+  // Comparison pushed into a scan as an AND-ed predicate.
+  enum compare-op {
+    eq, ne, lt, le, gt, ge, is-null, is-not-null,
+  }
+
+  // One predicate. `column` indexes the table's FULL column list (not the
+  // projection). Pushdown is best-effort: the engine re-applies every filter,
+  // so a backend may ignore any predicate it cannot evaluate.
+  record scan-filter {
+    column: u32,
+    op: compare-op,
+    value: duckvalue,        // ignored for is-null / is-not-null
+  }
+
+  // What the engine asks a scan to produce.
+  record scan-request {
+    table: string,
+    projection: list<u32>,   // column indices to emit, in order; empty = all
+    filters: list<scan-filter>,
+    limit: option<u64>,      // best-effort row cap
+  }
+
+  // Called by the component in load() to declare a backend keyed by an ATTACH
+  // TYPE name (e.g. "sqlite"). `callback-handle` is an opaque id the host
+  // passes back to every storage-dispatch call so the component can route it.
+  register-storage: func(type-name: string,
+                         callback-handle: u32,
+                         options: option<extopts>) -> result<u32, duckerror>;
+}

@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**186 component extensions** · **647 SQL functions** · 9 expose aggregates · 3 require network.
+**187 component extensions** · **678 SQL functions** · 9 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -18,7 +18,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 - **Static embed (opt-in):** `ducklink compose --embed <name>` bakes an extension into the core at build time. Wired today for `isin` (`embed-isin` core feature); `ducklink compose --list` shows what's embeddable. Most extensions stay runtime-loaded by design.
 - **Network grant:** net extensions are denied by default; opt in with `--grant-network all` (or a name allowlist), equivalently the `DUCKLINK_NETWORK_GRANT` env var.
 
-## Data types & encoding (73)
+## Data types & encoding (74)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -68,6 +68,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **marisa** | `fst_contains`, `fst_prefix`, `fst_count` | fst |  |
 | **mime** | `mime_type`, `mime_from_ext` | mime_guess |  |
 | **minhash** | `minhash`, `minhash_similarity` | hand-rolled | aggregate |
+| **mobilitydb_temporal_core** | `bitemporal_bool_eq`, `bitemporal_bool_cmp`, `bitemporal_bool_current`, `bitemporal_bool_as_of`, `bitemporal_bool_from_ewkt`, `bitemporal_bool_to_ewkt`, `tint_at_ts`, `tint_before_ts`, `tint_after_ts`, `tint_value_split`, `tint_time_split`, `tfloat_at_ts`, `tfloat_before_ts`, `tfloat_after_ts`, `tbool_count_changes`, `tbool_at_ts`, `ttext_at_ts`, `ttext_before_ts`, `floatset_intersection`, `floatset_union`, `intspan_contains`, `intspan_intersection`, `period_contains`, `period_overlaps`, `periodset_contains`, `periodset_intersection`, `temporal_lt`, `temporal_le`, `temporal_eq`, `temporal_ge`, `temporal_gt` | ciborium, serde, serde_json, wit-bindgen |  |
 | **money** | `format_money` | iso_currency |  |
 | **msgpack** | `msgpack_from_json`, `msgpack_to_json` | rmp-serde, serde_json, hex |  |
 | **petname** | `petname` | petname |  |
