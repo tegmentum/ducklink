@@ -1,0 +1,62 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> component callbacks for an INCREMENTAL aggregate (additive, 2.2.0,
+// Item 6). The existing `runtime.aggregate-callback.call` takes the whole row set
+// at once; this adds the classic init/update/combine/finalize state machine so a
+// component can aggregate in bounded memory and parallelize via combine (the
+// engine merges partial states).
+//
+// Every call carries `handle` = the callback-handle the component registered for
+// the incremental aggregate. `state` handles are opaque ids the component
+// allocates in `call-aggregate-init` and frees in `call-aggregate-finalize`.
+interface aggregate-incr-dispatch {
+  use types.{duckerror, duckvalue, rowbatch};
+
+  // Allocate a fresh aggregation state; returns an opaque state handle.
+  call-aggregate-init: func(handle: u32) -> result<u32, duckerror>;
+
+  // Fold a batch of rows into `state`.
+  call-aggregate-update: func(handle: u32,
+                              state: u32,
+                              rows: rowbatch) -> result<_, duckerror>;
+
+  // Merge the partial `source` state into `target` (parallel aggregation).
+  call-aggregate-combine: func(handle: u32,
+                               target: u32,
+                               source: u32) -> result<_, duckerror>;
+
+  // Produce the final value from `state` and free it.
+  call-aggregate-finalize: func(handle: u32,
+                                state: u32) -> result<duckvalue, duckerror>;
+
+  // --- WINDOW (aggregate + frame) variant (additive, 2.3.0 / v3) ---
+  //
+  // Custom WINDOW functions are the aggregate surface plus FRAME access: for an
+  // `OVER (... ROWS/RANGE BETWEEN ...)` window, the engine evaluates the aggregate
+  // over a sliding frame per row. The by-value-safe form: the host hands the
+  // component the WHOLE partition's rows once, then asks for the aggregate over an
+  // explicit `[frame-start, frame-end)` row range for each output row. No engine
+  // window-state struct crosses the boundary -- only the partition rows + integer
+  // frame bounds in, one value out.
+
+  // A half-open frame range over the current partition's rows (0-based row
+  // indices; `end` is exclusive). The engine has already resolved the
+  // ROWS/RANGE/GROUPS frame to concrete row offsets.
+  record window-frame {
+    start: u64,
+    end: u64,
+  }
+
+  // Compute the window aggregate over `partition` rows for the frame `frame`,
+  // returning the single value for the row this frame belongs to. `handle` is the
+  // aggregate's callback handle. The component MAY cache `partition` keyed by
+  // `handle` across calls within one partition (the engine passes the same rows
+  // for every frame of a partition); an empty `partition` signals the component to
+  // drop any cached partition state. This reuses the registered aggregate's
+  // semantics -- it is the frame-aware companion to the init/update/finalize path.
+  call-aggregate-window: func(handle: u32,
+                              partition: rowbatch,
+                              frame: window-frame) -> result<duckvalue, duckerror>;
+}

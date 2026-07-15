@@ -1,0 +1,19 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Table-macro registration surface (additive, 2.1.0). The existing
+// `runtime.macro-registry.register-scalar` covers SCALAR macros (an expression
+// body); this adds TABLE macros (a SQL body that returns a relation, usable in
+// the FROM clause). Kept SEPARATE from `runtime` so existing components' frozen
+// `runtime` copy stays structurally unchanged.
+interface macro-ext {
+  use types.{duckerror};
+
+  // Declare a table macro `schema.name(parameters...)` whose body is `body-sql`
+  // (a SELECT/relation). `schema` empty = the default schema.
+  register-table-macro: func(schema: string,
+                             name: string,
+                             parameters: list<string>,
+                             body-sql: string) -> result<_, duckerror>;
+}

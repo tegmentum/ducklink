@@ -1,0 +1,38 @@
+package duckdb-bridge:timescale-time-bucket@0.1.0;
+
+/// Phase A dynlink-mode duckdb bridge.
+///
+/// The bridge imports `compose:dynlink/linker` for outbound
+/// dispatch to a resident provider and exports the canonical
+/// duckdb:extension@4.0.0 guest + callback-dispatch pair (the
+/// same shape every DuckDB extension component declares). Only
+/// `callback-dispatch::call-scalar` is wired to the provider at
+/// Phase A scope; every other method returns
+/// `duckerror::unsupported` so the composite world instantiates
+/// against `duckdb-loader` without a missing-export failure.
+world bridge {
+    import compose:dynlink/linker@0.1.0;
+
+    // Minimal contract-side imports — the guest needs `runtime`
+    // to register its scalars during `load`. The default path uses
+    // `runtime.scalar-registry.register` with per-fn arity + per-arg
+    // logicaltypes derived from the sibling shim-interface DB (see
+    // `emit_dynlink::load_scalar_sigs`). `runtime-ext` stays imported
+    // for a future variadic opt-in surface (`register-scalar-ex`);
+    // the emitted lib.rs currently doesn't call it at the default
+    // register site, but the import is retained so a Phase B commit
+    // can wire per-arm variadic registrations without a WIT churn.
+    import duckdb:extension/runtime@4.0.0;
+    import duckdb:extension/runtime-ext@4.0.0;
+    import duckdb:extension/logging@4.0.0;
+
+    // #64 / #67: `catalog.register-logical-type` + `register-cast`
+    // are how the bridge announces spatial types (GEOMETRY /
+    // GEOGRAPHY / RASTER / TOPOLOGY) to the DuckDB binder so
+    // callers can write `'x'::GEOGRAPHY` and typed scalars can
+    // overload-resolve against BLOB-signature registrations.
+    import duckdb:extension/catalog@4.0.0;
+
+    export duckdb:extension/guest@4.0.0;
+    export duckdb:extension/callback-dispatch@4.0.0;
+}

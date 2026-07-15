@@ -1,0 +1,34 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> component callbacks for the WRITABLE + GLOB half of a files backend
+// (additive, 2.2.0, Item 7). The read-only `file-dispatch` (open/read/size) is
+// left INTACT; this adds write-through, directory globbing, and stat for files
+// backends that support them. Exported by files backends via the separate
+// `duckdb-extension-file-write` world.
+//
+// Every call carries `handle` = the callback-handle the component passed to
+// files-reg.register-files.
+interface file-write-dispatch {
+  use types.{duckerror};
+
+  // Metadata for one path.
+  record file-info {
+    path: string,
+    size: u64,
+    is-directory: bool,
+  }
+
+  // Write `data` at `offset` in `path`; returns the number of bytes written.
+  file-write: func(handle: u32,
+                   path: string,
+                   offset: u64,
+                   data: list<u8>) -> result<u64, duckerror>;
+
+  // Expand a glob `pattern` to the matching paths.
+  file-glob: func(handle: u32, pattern: string) -> result<list<string>, duckerror>;
+
+  // Stat a single `path`.
+  file-stat: func(handle: u32, path: string) -> result<file-info, duckerror>;
+}

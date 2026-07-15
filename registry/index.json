@@ -8071,6 +8071,64 @@
           "content_digest": "d95a96de494cef94ac8b44c6500a8c37242714fe53b2bbfb3edae58106a53c9e"
         }
       ]
+    },
+    {
+      "name": "timescale_time_bucket",
+      "version": "2.19.0",
+      "description": "TimescaleDB 2.19.0 time-bucketing primitives (time_bucket, time_bucket_range, time_bucket_gapfill) as a duckdb:extension component. Thin compose:dynlink shim (~175KB) that routes each scalar dispatch to the single, resident, shared timescale_core-composed provider (~2.3MB, loaded once via DUCKLINK_PROVIDERS=timescale_core-composed=\u2026). The smallest timescaledb slice \u2014 the canonical time-series bucketing primitives.",
+      "license": "Apache-2.0",
+      "authors": [
+        "Tegmentum",
+        "TimescaleDB Project"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "timescale",
+        "timescaledb",
+        "time_bucket",
+        "time-series",
+        "gapfill"
+      ],
+      "categories": [
+        "data-types"
+      ],
+      "source": "extensions/timescale_time_bucket-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/timescale_time_bucket.wasm",
+      "wit_contract": "a2ad9764ac971345d6a650b92edbda034b160980acf148d354126f7e6f92ba40",
+      "wit_contract_version": "4.0.0",
+      "exports": [
+        "time_bucket",
+        "time_bucket_range",
+        "time_bucket_gapfill"
+      ],
+      "requires": [
+        "scalar",
+        "compose-dynlink"
+      ],
+      "requires_components": [
+        "timescale_core-composed"
+      ],
+      "crates": [
+        "ciborium",
+        "serde",
+        "serde_json",
+        "wit-bindgen"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "timescale_time_bucket",
+      "expansion": "com.tegmentum.ducklink.timescale_time_bucket",
+      "content_digest": "91a21c44496e86ee01d371c51c68841d789bfcb3697f0bb6c1b1a3a31f23af33",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@4.0.0",
+          "artifact": "artifacts/extensions/timescale_time_bucket.wasm",
+          "content_digest": "91a21c44496e86ee01d371c51c68841d789bfcb3697f0bb6c1b1a3a31f23af33"
+        }
+      ]
     }
   ],
   "dotcmds": [
