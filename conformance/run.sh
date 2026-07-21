@@ -65,26 +65,39 @@ for script in "${SCRIPTS[@]}"; do
     actual="$ACTUALS_DIR/$name.out"
     expected="$EXPECTED_DIR/$name.out"
 
-    # Wrap the script: redirect output to the actuals file, run the
-    # script, restore output. The CLI does not have a batch-mode flag,
-    # so we build a driver script that uses `.read` + `.output` and
-    # exits cleanly.
-    driver="$(mktemp -t ducklink-conformance.XXXXXX)"
-    trap 'rm -f "$driver"' EXIT
-    cat > "$driver" <<EOF
-.output $actual
-.read $script
-.output
-.exit
-EOF
+    # Preprocess: strip `LOAD ducklink;` lines. The scripts include it
+    # for portability across hosts (some hosts load ducklink as a real
+    # extension), but this workspace's DuckDB is compiled without
+    # external extension loading — the ducklink surface is expected to
+    # be BAKED IN by ducklink-host, not loaded. This mirrors what the
+    # extension repo's Rust runner does.
+    #
+    # Everything the wasm CLI touches has to live under a WASI preopen.
+    # Keep the preprocessed script + actuals under $ROOT (which we
+    # preopen as `/conf`) so a single preopen mapping covers all I/O.
+    tmp_dir="$ROOT/.tmp"
+    mkdir -p "$tmp_dir"
+    preprocessed="$tmp_dir/$name.sql"
+    grep -viE '^\s*LOAD\s+ducklink\s*;?\s*$' "$script" > "$preprocessed"
 
-    # Every ducklink test starts from a fresh in-memory DB. The CLI's
-    # default is :memory: too, so no path is needed.
-    if ! "$DUCKLINK_CLI" -- -init "$driver" 2>/dev/null; then
+    # Build a driver. Paths are the GUEST-visible mapping of `--dir
+    # $ROOT::/conf`, so a `.read /conf/.tmp/NN.sql` inside the wasm
+    # sandbox resolves to `$ROOT/.tmp/NN.sql` on the host.
+    driver_sql=".output /conf/actuals/$name.out
+.read /conf/.tmp/$name.sql
+.output
+.exit"
+
+    if ! "$DUCKLINK_CLI" \
+            --dir "$ROOT::/conf" \
+            -- -c "$driver_sql" \
+            > /dev/null 2>&1; then
+        rm -f "$preprocessed"
         echo "FAIL $name — CLI exited non-zero"
         FAILED=$((FAILED + 1))
         continue
     fi
+    rm -f "$preprocessed"
 
     if [ "$BLESS" -eq 1 ]; then
         mkdir -p "$EXPECTED_DIR"
