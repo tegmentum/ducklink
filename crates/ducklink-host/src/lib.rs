@@ -3605,6 +3605,137 @@ impl HostState {
                 Err(trap) => eprintln!("[autoload] skipped '{name}': {trap}"),
             }
         }
+        // Bring up the `ducklink.*` discovery schema on the freshly-opened
+        // connection. Runs after the autoload pass so a `SELECT * FROM
+        // ducklink.modules` in the very first user statement resolves.
+        self.create_ducklink_schema(&handle);
+    }
+
+    /// Create the public `ducklink.*` discovery schema (STABILITY.md § 1.2) on
+    /// `handle`. Mirrors the extension's `create_ducklink_schema` shape-for-
+    /// shape (same view names, same column names, same column types, same
+    /// column order). Idempotent (`CREATE SCHEMA IF NOT EXISTS`, `CREATE OR
+    /// REPLACE VIEW`); run once at connection open.
+    ///
+    /// Each view is a zero-row projection of typed NULLs. The workspace host
+    /// does not yet expose the runtime state the native extension's `WasmXxx`
+    /// TFs read from (loaded-component list, catalog, on-disk cache, event
+    /// log), so an honest zero-row view of the correct SHAPE is what we can
+    /// commit to today — enough to make `SELECT * FROM ducklink.<name>`
+    /// resolve and to satisfy the shape assertions in the cross-host
+    /// conformance suite (`conformance/scripts/02-*.sql`).
+    ///
+    /// `ducklink.prefixes` is intentionally omitted: it's a persistent TABLE
+    /// (not a view) added by the parallel `ducklink_prefix` port with its own
+    /// persistence semantics.
+    ///
+    /// Non-fatal: DDL failures are logged and skipped rather than aborting
+    /// the connection.
+    fn create_ducklink_schema(&mut self, handle: &ResourceAny) {
+        // `ducklink.search(query)` is a MACRO (takes a bound query argument)
+        // — the other eight are VIEWs. Statements are executed one at a time
+        // because the CLI's `execute` boundary is a single-statement call.
+        const DDL: &[&str] = &[
+            "CREATE SCHEMA IF NOT EXISTS ducklink",
+            // modules — 11 cols
+            "CREATE OR REPLACE VIEW ducklink.modules AS \
+             SELECT CAST(NULL AS VARCHAR) AS name, \
+                    CAST(NULL AS VARCHAR) AS version, \
+                    CAST(NULL AS VARCHAR) AS description, \
+                    CAST(NULL AS VARCHAR) AS categories, \
+                    CAST(NULL AS BOOLEAN) AS loaded, \
+                    CAST(NULL AS BOOLEAN) AS native_available, \
+                    CAST(NULL AS INTEGER) AS scalars, \
+                    CAST(NULL AS INTEGER) AS tables, \
+                    CAST(NULL AS INTEGER) AS aggregates, \
+                    CAST(NULL AS VARCHAR) AS capabilities, \
+                    CAST(NULL AS BOOLEAN) AS compatible \
+             WHERE FALSE",
+            // functions — 6 cols
+            "CREATE OR REPLACE VIEW ducklink.functions AS \
+             SELECT CAST(NULL AS VARCHAR) AS module, \
+                    CAST(NULL AS VARCHAR) AS name, \
+                    CAST(NULL AS VARCHAR) AS kind, \
+                    CAST(NULL AS VARCHAR) AS arguments, \
+                    CAST(NULL AS VARCHAR) AS returns, \
+                    CAST(NULL AS BOOLEAN) AS loaded \
+             WHERE FALSE",
+            // host — 2 cols (single-row in the extension; zero-row placeholder here)
+            "CREATE OR REPLACE VIEW ducklink.host AS \
+             SELECT CAST(NULL AS VARCHAR) AS wasm_abi, \
+                    CAST(NULL AS VARCHAR) AS duckdb_version \
+             WHERE FALSE",
+            // host_capabilities — 3 cols
+            "CREATE OR REPLACE VIEW ducklink.host_capabilities AS \
+             SELECT CAST(NULL AS VARCHAR) AS name, \
+                    CAST(NULL AS BOOLEAN) AS available, \
+                    CAST(NULL AS VARCHAR) AS detail \
+             WHERE FALSE",
+            // cache — 5 cols
+            "CREATE OR REPLACE VIEW ducklink.cache AS \
+             SELECT CAST(NULL AS VARCHAR) AS digest, \
+                    CAST(NULL AS VARCHAR) AS name, \
+                    CAST(NULL AS BIGINT) AS bytes, \
+                    CAST(NULL AS TIMESTAMP) AS modified, \
+                    CAST(NULL AS VARCHAR) AS path \
+             WHERE FALSE",
+            // module_compatibility — 6 cols
+            "CREATE OR REPLACE VIEW ducklink.module_compatibility AS \
+             SELECT CAST(NULL AS VARCHAR) AS module, \
+                    CAST(NULL AS VARCHAR) AS module_generation, \
+                    CAST(NULL AS VARCHAR) AS host_generation, \
+                    CAST(NULL AS VARCHAR) AS lifecycle, \
+                    CAST(NULL AS BOOLEAN) AS runnable, \
+                    CAST(NULL AS BOOLEAN) AS selected \
+             WHERE FALSE",
+            // events — 5 cols
+            "CREATE OR REPLACE VIEW ducklink.events AS \
+             SELECT CAST(NULL AS BIGINT) AS seq, \
+                    CAST(NULL AS TIMESTAMP) AS ts, \
+                    CAST(NULL AS VARCHAR) AS kind, \
+                    CAST(NULL AS VARCHAR) AS module, \
+                    CAST(NULL AS VARCHAR) AS detail \
+             WHERE FALSE",
+            // docs — 9 cols
+            "CREATE OR REPLACE VIEW ducklink.docs AS \
+             SELECT CAST(NULL AS VARCHAR) AS module, \
+                    CAST(NULL AS VARCHAR) AS function, \
+                    CAST(NULL AS VARCHAR) AS kind, \
+                    CAST(NULL AS VARCHAR) AS signature, \
+                    CAST(NULL AS VARCHAR) AS summary, \
+                    CAST(NULL AS VARCHAR) AS description, \
+                    CAST(NULL AS VARCHAR) AS example, \
+                    CAST(NULL AS VARCHAR) AS tags, \
+                    CAST(NULL AS BOOLEAN) AS loaded \
+             WHERE FALSE",
+            // search(query) — 7 cols, MACRO (takes a bound query argument)
+            "CREATE OR REPLACE MACRO ducklink.search(query) AS TABLE \
+             SELECT CAST(NULL AS VARCHAR) AS module, \
+                    CAST(NULL AS VARCHAR) AS function, \
+                    CAST(NULL AS VARCHAR) AS kind, \
+                    CAST(NULL AS VARCHAR) AS signature, \
+                    CAST(NULL AS VARCHAR) AS summary, \
+                    CAST(NULL AS VARCHAR) AS tags, \
+                    CAST(NULL AS BIGINT) AS score \
+             WHERE FALSE",
+        ];
+        for sql in DDL {
+            let res = self.with_core(|core| {
+                core.with_database(|guest, store| guest.call_execute(store, handle.clone(), sql))
+            });
+            match res {
+                Ok(Ok(_)) => {}
+                Ok(Err(err)) => eprintln!(
+                    "[ducklink] discovery-view DDL failed: {}: {}",
+                    sql,
+                    core_duckerror_message(err)
+                ),
+                Err(trap) => eprintln!(
+                    "[ducklink] discovery-view DDL trapped: {}: {}",
+                    sql, trap
+                ),
+            }
+        }
     }
 
     fn with_core<F, R>(&self, f: F) -> R
