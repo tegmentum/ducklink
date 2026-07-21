@@ -104,6 +104,17 @@ for script in "${SCRIPTS[@]}"; do
     fi
     rm -f "$preprocessed"
 
+    # Strip a leading blank line if the CLI added one. The workspace
+    # CLI's dotcommand-driven output can emit a leading empty line
+    # before the first `.mode csv`-formatted result; the extension's
+    # Rust runner (the byte reference) doesn't. Normalize here so the
+    # SQL scripts + expected files stay identical across hosts. Uses
+    # a portable sed in-place (macOS BSD + GNU compatible via `-i.bak`
+    # + cleanup).
+    if [ -s "$actual" ] && [ -z "$(head -n1 "$actual")" ]; then
+        sed -i.bak '1d' "$actual" && rm -f "$actual.bak"
+    fi
+
     if [ "$BLESS" -eq 1 ]; then
         mkdir -p "$EXPECTED_DIR"
         cp "$actual" "$expected"

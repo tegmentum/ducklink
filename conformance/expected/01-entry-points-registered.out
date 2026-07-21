@@ -5,4 +5,3 @@ ducklink_load,table
 ducklink_prefix,scalar
 ducklink_prefix,table
 ducklink_version,scalar
-
