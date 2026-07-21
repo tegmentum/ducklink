@@ -88,7 +88,14 @@ fn run_cli() -> Result<(), String> {
     autoload_persisted_extensions(&connection);
 
     if let Some(sql) = command {
-        dispatch_statement(&connection, &sql)?;
+        // `-c` accepts a MULTI-statement payload — a script rather than a
+        // single statement — so any driver that combines `.output`, `.read`,
+        // and `.exit` works. The original single-statement dispatch dropped
+        // every statement after the first, which stripped every `.read` in a
+        // conformance driver (see `conformance/run.sh`). `run_script`
+        // preserves comment handling and dot-command dispatch identically to
+        // `.read`.
+        run_script(&connection, &sql)?;
         duckdb::close(connection);
         return Ok(());
     }

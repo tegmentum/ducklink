@@ -83,7 +83,12 @@ for script in "${SCRIPTS[@]}"; do
     # Build a driver. Paths are the GUEST-visible mapping of `--dir
     # $ROOT::/conf`, so a `.read /conf/.tmp/NN.sql` inside the wasm
     # sandbox resolves to `$ROOT/.tmp/NN.sql` on the host.
-    driver_sql=".output /conf/actuals/$name.out
+    #
+    # `.mode csv` matches what the extension repo's Rust runner
+    # produces (see ducklink-extension/tests/conformance.rs); both
+    # hosts diff against the same `expected/*.out` files.
+    driver_sql=".mode csv
+.output /conf/actuals/$name.out
 .read /conf/.tmp/$name.sql
 .output
 .exit"
