@@ -3824,7 +3824,13 @@ impl HostState {
         // component, auto-loaded by default. Override with DUCKLINK_AUTOLOAD
         // (set it empty to disable, or to a different/longer list). On a fat core
         // the jsonfns LOAD collides with embedded json and is skipped harmlessly.
-        let spec = std::env::var("DUCKLINK_AUTOLOAD").unwrap_or_else(|_| String::from("jsonfns"));
+        // `ducklink-scalars` ships the two always-available scalars
+        // committed in `ducklink-extension/STABILITY.md § 1.1`
+        // (`ducklink_version`, `ducklink_help`). Autoloading it matches
+        // the extension's behaviour and satisfies the two rows the
+        // conformance suite expects for those names.
+        let spec = std::env::var("DUCKLINK_AUTOLOAD")
+            .unwrap_or_else(|_| String::from("jsonfns,ducklink_scalars"));
         // Run `LOAD <name>` as SQL on the freshly-opened connection so the core's
         // normal load orchestration applies the component's registrations to the
         // connection (calling ensure_extension_loaded directly only buffers them).

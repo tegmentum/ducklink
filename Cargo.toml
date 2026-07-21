@@ -127,6 +127,7 @@ members = [
     "extensions/pintest_a-component",
     "extensions/pintest_b-component",
     "extensions/atbash-component",
+    "extensions/ducklink-scalars-component",
     "extensions/piglatin-component",
     "extensions/rle-component",
     "extensions/bbcode-component",
