@@ -273,6 +273,28 @@ fn run_meta_command(conn: &duckdb::Connection, rest: &str) -> Result<(), String>
                 }
             }
         }
+        "print" => {
+            // `.print [args...]` writes the remainder of the line to the
+            // current output stream, followed by a newline. Mirrors the
+            // sqlite/duckdb REPL convention. Whitespace between `.print` and
+            // its argument is normalised to a single space; the raw remainder
+            // (everything after the command token) is used as-is otherwise.
+            let payload = rest
+                .trim_start()
+                .strip_prefix("print")
+                .unwrap_or("")
+                .trim_start()
+                .trim_end();
+            let mut line = payload.to_string();
+            line.push('\n');
+            OUTPUT_FILE.with(|cell| {
+                let target = cell.borrow();
+                match target.as_ref() {
+                    Some(file) => write_all(&file.stream, line.as_bytes()),
+                    None => write_all(&stdout::get_stdout(), line.as_bytes()),
+                }
+            })
+        }
         other => {
             // Unknown built-in: fall through to a pluggable dot-command
             // component (host-mediated). `args` is everything after the name.
@@ -625,6 +647,7 @@ fn print_help() {
          .read FILE          Execute SQL statements from a file\n  \
          .mode FORMAT        Set output format: table, csv, or json\n  \
          .output [FILE]      Redirect output to FILE (no arg / stdout resets)\n  \
+         .print [ARGS...]    Write ARGS followed by a newline to the current output\n  \
          .help               Show this help\n  \
          .exit, .quit        Leave the shell",
     );
@@ -729,30 +752,76 @@ fn json_string(value: &str) -> String {
 /// Execute a multi-statement SQL/meta-command script (used by `.read`),
 /// splitting on `;` like the REPL and dispatching each statement. Errors abort
 /// the script.
+///
+/// Continuation lines are joined with `\n`, NOT a space. Joining with a space
+/// causes `-- comment\nSELECT 1;` to become `-- comment SELECT 1;`, which the
+/// SQL parser reads as one giant line comment that swallows the SELECT — the
+/// same class of bug that was fixed on the REPL path. `run_script` now mirrors
+/// that behaviour so `.read`-ing a file with `--` comments works identically
+/// to typing the same content at the REPL.
+///
+/// A `.`-prefixed line is treated as a meta-command whenever the accumulator
+/// so far has no SQL content — bare `--` comment lines count as "no SQL
+/// content", so `.print` and friends still fire correctly when preceded by
+/// comment blocks.
 fn run_script(conn: &duckdb::Connection, script: &str) -> Result<(), String> {
     let mut statement = String::new();
     for line in script.lines() {
         let trimmed = line.trim();
-        if statement.trim().is_empty() && trimmed.starts_with('.') {
+        // Meta-command: fires when nothing "real" is pending. Comment-only
+        // accumulators count as nothing pending — DuckDB would parse them as
+        // empty, so dispatch them first (as a no-op) then the meta-command.
+        if trimmed.starts_with('.') && has_no_sql(&statement) {
+            if !statement.trim().is_empty() {
+                statement.clear();
+            }
             dispatch_statement(conn, trimmed)?;
             continue;
         }
+        // A blank line INSIDE an accumulating statement still needs to
+        // preserve the newline so a preceding `--` comment terminates.
+        // Between statements it's a no-op.
         if trimmed.is_empty() {
+            if !statement.is_empty() {
+                statement.push('\n');
+            }
             continue;
-        }
-        if !statement.is_empty() {
-            statement.push(' ');
         }
         statement.push_str(trimmed);
         if trimmed.ends_with(';') {
             dispatch_statement(conn, &statement)?;
             statement.clear();
+        } else {
+            statement.push('\n');
         }
     }
-    if !statement.trim().is_empty() {
+    if !statement.trim().is_empty() && !has_no_sql(&statement) {
         dispatch_statement(conn, &statement)?;
     }
     Ok(())
+}
+
+/// True when `s` is empty or contains only whitespace and `-- …` line
+/// comments — i.e., DuckDB would parse it as an empty script. Used by
+/// `run_script` to decide whether a `.`-prefixed line is a fresh
+/// meta-command or a stray `.` inside a pending SQL statement.
+///
+/// Handles `--` line comments only — the common shape in DuckLink `.read`
+/// scripts. `/* … */` block comments aren't recognised; anything containing
+/// a `/*` is treated as SQL to stay on the safe side (meta-commands are
+/// suppressed rather than firing mid-statement).
+fn has_no_sql(s: &str) -> bool {
+    for line in s.lines() {
+        let t = line.trim();
+        if t.is_empty() {
+            continue;
+        }
+        if t.starts_with("--") {
+            continue;
+        }
+        return false;
+    }
+    true
 }
 
 fn format_duckvalue(value: duckdb::Duckvalue) -> String {
