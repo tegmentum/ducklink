@@ -177,6 +177,31 @@ pub const RESOLVER_SET_HANDLE: u32 = 0xFFFF_FFFE;
 /// the core registers under a chosen function name; the host handles
 /// dispatch instead of routing to a resident extension.
 pub const DUCKLINK_LOAD_HANDLE: u32 = 0xFFFF_FFFD;
+
+/// Sentinel callback handles for the `ducklink_prefix(alias, namespace)`
+/// entry points committed in ducklink-extension's `STABILITY.md § 1.1`.
+///
+/// Same rationale as [`DUCKLINK_LOAD_HANDLE`]: the workspace host has no
+/// way for a wasm component to synthesize new `CREATE OR REPLACE MACRO`
+/// DDL against the connection that called it (a callback runs inside the
+/// core wasm store mid-call — re-entering `call_execute` would deadlock
+/// the core mutex and violate wasmtime store re-entrancy). So
+/// `drain_pending_registrations` injects synthetic [`reg::TableReg`] +
+/// [`reg::ScalarReg`] entries under these sentinels and
+/// [`ExtensionManager::dispatch_table`] / `dispatch_scalar[_batch]`
+/// intercept them to run natively.
+///
+/// The native handlers cannot themselves re-enter the core to emit the
+/// per-namespace `CREATE MACRO` shapes (same wasm store re-entrancy
+/// constraint as [`native_ducklink_load`]), so they only VALIDATE the
+/// (alias, namespace) pair and stash it in
+/// `ExtensionManager::deferred_prefix_declarations`. On the user's next
+/// `HostState::execute` boundary the stash is drained and the actual DDL
+/// (`duckdb_functions()` scan, `CREATE OR REPLACE MACRO <alias>.<name>`
+/// per function, `INSERT OR REPLACE INTO ducklink.prefixes`) runs on the
+/// then-idle core.
+pub const DUCKLINK_PREFIX_TABLE_HANDLE: u32 = 0xFFFF_FFFC;
+pub const DUCKLINK_PREFIX_SCALAR_HANDLE: u32 = 0xFFFF_FFFB;
 pub use ui_server::{serve_ui, UiMode};
 mod quack_server;
 pub use quack_server::serve_quack;
@@ -1854,6 +1879,21 @@ struct ExtensionManager {
     // registered. Subsequent drains skip re-injection — the catalog entry is
     // process-lived.
     injected_ducklink_load: bool,
+    // Same one-shot guard as [`injected_ducklink_load`], but for the
+    // synthetic `ducklink_prefix(alias, namespace)` TF + scalar surfaced
+    // through the [`DUCKLINK_PREFIX_TABLE_HANDLE`] +
+    // [`DUCKLINK_PREFIX_SCALAR_HANDLE`] sentinels. Two entries flip on
+    // the same bool because they're always injected together.
+    injected_ducklink_prefix: bool,
+    // `(alias, namespace)` pairs the native `ducklink_prefix` handler
+    // validated and queued for deferred DDL. The handler runs INSIDE a
+    // `dispatch_scalar`/`dispatch_table` callback, i.e. the core wasm
+    // store is mid-call — so the actual `duckdb_functions()` scan +
+    // per-function `CREATE OR REPLACE MACRO` + `INSERT INTO
+    // ducklink.prefixes` cannot happen in-band. Drained by
+    // [`HostState::flush_deferred_prefix_declarations`] on the next
+    // execute boundary (when the core is idle again).
+    deferred_prefix_declarations: Vec<(String, String)>,
     // Names loaded by `ducklink_load(name)` awaiting a core-side drain.
     //
     // The native `ducklink_load` handler runs *inside* a `call_table`, i.e.
@@ -1933,6 +1973,8 @@ impl ExtensionManager {
             last_resolutions: HashMap::new(),
             sub_ext_loader,
             injected_ducklink_load: false,
+            injected_ducklink_prefix: false,
+            deferred_prefix_declarations: Vec::new(),
             deferred_drain_names: Vec::new(),
             deferred_registrations: PendingRegistrationsData::default(),
         }
@@ -2553,6 +2595,12 @@ impl ExtensionManager {
         args: &[extension_types::Duckvalue],
         ctx: extension_runtime::Invokeinfo,
     ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+        // `ducklink_prefix` sentinel (scalar form): see
+        // [`DUCKLINK_PREFIX_SCALAR_HANDLE`]. Same handler as the table
+        // form but wraps its result as a VARCHAR summary.
+        if handle == DUCKLINK_PREFIX_SCALAR_HANDLE {
+            return self.native_ducklink_prefix_scalar(args);
+        }
         // Per-row hot path: borrow the entry under the registry lock (no
         // `CallbackEntry` clone) and copy out only the Copy `dispatcher_handle`
         // plus an `Arc<str>` refcount-bump of the extension name. The historical
@@ -2608,6 +2656,17 @@ impl ExtensionManager {
         rows: &Vec<Vec<extension_types::Duckvalue>>,
         ctx: extension_runtime::Invokeinfo,
     ) -> Result<Vec<extension_types::Duckvalue>, extension_types::Duckerror> {
+        // `ducklink_prefix` scalar sentinel: the core batches scalar calls
+        // through this columnar entry point. Handle it per-row via the
+        // shared native handler so the deferred queue reflects each
+        // (alias, namespace) pair the batch declared.
+        if handle == DUCKLINK_PREFIX_SCALAR_HANDLE {
+            let mut out = Vec::with_capacity(rows.len());
+            for row in rows {
+                out.push(self.native_ducklink_prefix_scalar(row.as_slice())?);
+            }
+            return Ok(out);
+        }
         // Resolver observability functions ride the SAME direct call-scalar-batch
         // import (no new contract): the shell-glue registers `extension_provider`
         // / `set_extension_provider` scalars with sentinel handles, which route to
@@ -2665,6 +2724,18 @@ impl ExtensionManager {
         // resolver observability scalars in `dispatch_scalar_batch` above.
         if handle == DUCKLINK_LOAD_HANDLE {
             return self.native_ducklink_load(args);
+        }
+        // `ducklink_prefix` sentinel (table form): see
+        // [`DUCKLINK_PREFIX_TABLE_HANDLE`]. Validates + queues the
+        // (alias, namespace) pair; the actual DDL runs on the next
+        // execute boundary. Returns one row
+        // `(alias, namespace, macros=<count>)` where `macros` is 0 for
+        // now because the drain hasn't run yet — the extension's real
+        // count is a same-call return only because that host can run
+        // DDL synchronously on its own connection, which the wasm core
+        // can't do from inside a callback.
+        if handle == DUCKLINK_PREFIX_TABLE_HANDLE {
+            return self.native_ducklink_prefix_table(args);
         }
         let entry = match self.lookup_callback(handle, CallbackKind::Table) {
             Some(entry) => entry,
@@ -2846,6 +2917,120 @@ impl ExtensionManager {
     /// stashed `deferred_registrations` reach the DuckDB catalog.
     fn take_deferred_drain_names(&mut self) -> Vec<String> {
         std::mem::take(&mut self.deferred_drain_names)
+    }
+
+    /// Shared body of the `ducklink_prefix(alias, namespace)` sentinel
+    /// intercepts. Validates the identifiers and queues the pair for the
+    /// next-execute deferred drain. Returns the sanitized `(alias,
+    /// namespace)` pair so the caller can shape its own return row.
+    ///
+    /// The extension's [`run_ducklink_prefix`] runs the DDL synchronously
+    /// on its own connection and returns a real macros-created count. The
+    /// workspace host can't: this native handler runs inside a
+    /// `dispatch_scalar`/`dispatch_table` callback and the core wasm store
+    /// is mid-call — re-entering `call_execute` would deadlock the core
+    /// mutex and violate wasmtime store re-entrancy (same shape as the
+    /// `native_ducklink_load` deferred-drain rationale). The macros count
+    /// is therefore surfaced as 0 from the same call; the real DDL runs
+    /// on the next `HostState::execute` boundary
+    /// ([`HostState::flush_deferred_prefix_declarations`]) so `<alias>.<fn>`
+    /// resolves in every subsequent statement.
+    fn native_ducklink_prefix_common(
+        &mut self,
+        args: &[extension_types::Duckvalue],
+    ) -> Result<(String, String), extension_types::Duckerror> {
+        let alias = match args.first() {
+            Some(extension_types::Duckvalue::Text(s)) => s.clone(),
+            Some(extension_types::Duckvalue::Null) | None => {
+                return Err(extension_types::Duckerror::Invalidargument(
+                    "ducklink_prefix: missing required VARCHAR argument 'alias'".into(),
+                ));
+            }
+            Some(_) => {
+                return Err(extension_types::Duckerror::Invalidargument(
+                    "ducklink_prefix: first argument (alias) must be VARCHAR".into(),
+                ));
+            }
+        };
+        let namespace = match args.get(1) {
+            Some(extension_types::Duckvalue::Text(s)) => s.clone(),
+            Some(extension_types::Duckvalue::Null) | None => {
+                return Err(extension_types::Duckerror::Invalidargument(
+                    "ducklink_prefix: missing required VARCHAR argument 'namespace'".into(),
+                ));
+            }
+            Some(_) => {
+                return Err(extension_types::Duckerror::Invalidargument(
+                    "ducklink_prefix: second argument (namespace) must be VARCHAR".into(),
+                ));
+            }
+        };
+        if !is_safe_prefix_identifier(&alias) || !is_safe_prefix_identifier(&namespace) {
+            return Err(extension_types::Duckerror::Invalidargument(format!(
+                "ducklink_prefix: alias and namespace must match [A-Za-z0-9_]+ \
+                 (got alias='{alias}', namespace='{namespace}')"
+            )));
+        }
+        // Dedup within the pending queue — repeated
+        // `ducklink_prefix('c','main')` calls in the same statement
+        // shouldn't pile up N replays on the next execute.
+        if !self
+            .deferred_prefix_declarations
+            .iter()
+            .any(|(a, n)| a == &alias && n == &namespace)
+        {
+            self.deferred_prefix_declarations
+                .push((alias.clone(), namespace.clone()));
+        }
+        eprintln!(
+            "[extension-manager] ducklink_prefix('{alias}', '{namespace}') queued \
+             (deferred drain scheduled on next execute)"
+        );
+        Ok((alias, namespace))
+    }
+
+    /// Native handler for `FROM ducklink_prefix('alias','namespace')` —
+    /// invoked by `dispatch_table` on the [`DUCKLINK_PREFIX_TABLE_HANDLE`]
+    /// sentinel. Returns one row `(alias, namespace, macros BIGINT)`. The
+    /// `macros` count is 0 for this call — see
+    /// [`native_ducklink_prefix_common`] for the deferred-execution
+    /// rationale; a subsequent query against `information_schema.tables`
+    /// or `duckdb_functions()` will show the created macros once the
+    /// next `HostState::execute` boundary drains the queue.
+    fn native_ducklink_prefix_table(
+        &mut self,
+        args: &[extension_types::Duckvalue],
+    ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
+        let (alias, namespace) = self.native_ducklink_prefix_common(args)?;
+        let row: Vec<extension_types::Duckvalue> = vec![
+            extension_types::Duckvalue::Text(alias),
+            extension_types::Duckvalue::Text(namespace),
+            extension_types::Duckvalue::Int64(0),
+        ];
+        Ok(vec![row])
+    }
+
+    /// Native handler for `SELECT ducklink_prefix('alias','namespace')` —
+    /// invoked by `dispatch_scalar` / `dispatch_scalar_batch` on the
+    /// [`DUCKLINK_PREFIX_SCALAR_HANDLE`] sentinel. Returns a VARCHAR
+    /// summary shaped like the extension's:
+    /// `"alias='c' namespace='main' macros=0 (deferred)"`.
+    fn native_ducklink_prefix_scalar(
+        &mut self,
+        args: &[extension_types::Duckvalue],
+    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+        let (alias, namespace) = self.native_ducklink_prefix_common(args)?;
+        Ok(extension_types::Duckvalue::Text(format!(
+            "alias='{alias}' namespace='{namespace}' macros=0 (deferred)"
+        )))
+    }
+
+    /// Move the pending `(alias, namespace)` pairs out so
+    /// [`HostState::flush_deferred_prefix_declarations`] can drive the
+    /// DDL on the idle core without holding the extension-manager lock
+    /// across `call_execute`.
+    fn take_deferred_prefix_declarations(&mut self) -> Vec<(String, String)> {
+        std::mem::take(&mut self.deferred_prefix_declarations)
     }
 
     // --- 3.1.0 additive minor: streaming + filter-pushdown table-fn dispatch ---
@@ -3417,6 +3602,76 @@ impl ExtensionManager {
             );
         }
 
+        // One-shot: append the synthetic `ducklink_prefix` TF + scalar
+        // (STABILITY.md § 1.1). Both are backed by the same native handler
+        // (`native_ducklink_prefix_common`) which validates the args and
+        // queues the work for the next-execute deferred drain. See the
+        // sentinel-handle docs on [`DUCKLINK_PREFIX_TABLE_HANDLE`] for why
+        // the DDL cannot run in-band.
+        if !self.injected_ducklink_prefix {
+            self.injected_ducklink_prefix = true;
+            // Table form: `FROM ducklink_prefix('c','main')` yields one row
+            // `(alias, namespace, macros BIGINT)` mirroring the extension's
+            // `DucklinkPrefix` VTab.
+            aggregated.tables.push(reg::TableReg {
+                extension: "ducklink".to_string(),
+                name: "ducklink_prefix".to_string(),
+                arguments: vec![
+                    reg::FuncArg {
+                        name: Some("alias".to_string()),
+                        logical: reg::LogicalType::Text,
+                    },
+                    reg::FuncArg {
+                        name: Some("namespace".to_string()),
+                        logical: reg::LogicalType::Text,
+                    },
+                ],
+                columns: vec![
+                    reg::ColumnDef {
+                        name: "alias".to_string(),
+                        logical: reg::LogicalType::Text,
+                    },
+                    reg::ColumnDef {
+                        name: "namespace".to_string(),
+                        logical: reg::LogicalType::Text,
+                    },
+                    reg::ColumnDef {
+                        name: "macros".to_string(),
+                        logical: reg::LogicalType::Int64,
+                    },
+                ],
+                callback_handle: DUCKLINK_PREFIX_TABLE_HANDLE,
+                options: None,
+            });
+            // Scalar form: `SELECT ducklink_prefix('c','main')` returns a
+            // VARCHAR summary. Same name as the TF — DuckDB's binder
+            // disambiguates by call site (`SELECT foo(...)` vs `FROM
+            // foo(...)`), matching the extension's dual-registration.
+            aggregated.scalars.push(reg::ScalarReg {
+                extension: "ducklink".to_string(),
+                name: "ducklink_prefix".to_string(),
+                arguments: vec![
+                    reg::FuncArg {
+                        name: Some("alias".to_string()),
+                        logical: reg::LogicalType::Text,
+                    },
+                    reg::FuncArg {
+                        name: Some("namespace".to_string()),
+                        logical: reg::LogicalType::Text,
+                    },
+                ],
+                returns: reg::LogicalType::Text,
+                callback_handle: DUCKLINK_PREFIX_SCALAR_HANDLE,
+                options: None,
+            });
+            eprintln!(
+                "[extension-manager] injected synthetic `ducklink_prefix` TF+scalar \
+                 (STABILITY.md § 1.1) via sentinel handles \
+                 table={DUCKLINK_PREFIX_TABLE_HANDLE:#x} \
+                 scalar={DUCKLINK_PREFIX_SCALAR_HANDLE:#x}"
+            );
+        }
+
         let scalar_names =
             summarize_registration_names(&aggregated.scalars, |entry| entry.name.as_str());
         let table_names =
@@ -3625,9 +3880,15 @@ impl HostState {
     /// resolve and to satisfy the shape assertions in the cross-host
     /// conformance suite (`conformance/scripts/02-*.sql`).
     ///
-    /// `ducklink.prefixes` is intentionally omitted: it's a persistent TABLE
-    /// (not a view) added by the parallel `ducklink_prefix` port with its own
-    /// persistence semantics.
+    /// `ducklink.prefixes` is a persistent TABLE (not a view) minted here
+    /// as part of the discovery schema so `information_schema.tables
+    /// WHERE table_schema='ducklink'` surfaces it (conformance script 02)
+    /// and so [`HostState::flush_deferred_prefix_declarations`] has a place
+    /// to `INSERT OR REPLACE` each `ducklink_prefix(alias, namespace)`
+    /// declaration. `PREFIX(alias, namespace)` is registered here too so
+    /// `SELECT PREFIX(...)` binds through DuckDB's macro path to the
+    /// `ducklink_prefix` scalar sentinel — the extension registers it the
+    /// same way in `reg_duckdb.rs`.
     ///
     /// Non-fatal: DDL failures are logged and skipped rather than aborting
     /// the connection.
@@ -3637,6 +3898,18 @@ impl HostState {
         // because the CLI's `execute` boundary is a single-statement call.
         const DDL: &[&str] = &[
             "CREATE SCHEMA IF NOT EXISTS ducklink",
+            // prefixes — persistent table (NOT a view). Populated by
+            // `HostState::flush_deferred_prefix_declarations` after each
+            // `ducklink_prefix(alias, namespace)` call.
+            "CREATE TABLE IF NOT EXISTS ducklink.prefixes ( \
+                alias VARCHAR PRIMARY KEY, \
+                namespace VARCHAR NOT NULL)",
+            // PREFIX(alias, namespace) — shorter macro that delegates to
+            // the `ducklink_prefix` scalar sentinel (STABILITY.md § 1.1).
+            // Mirrors the extension's `reg_duckdb.rs` registration at
+            // `ducklink_load(name)` time.
+            "CREATE OR REPLACE MACRO PREFIX(alias, namespace) AS \
+             ducklink_prefix(alias, namespace)",
             // modules — 11 cols
             "CREATE OR REPLACE VIEW ducklink.modules AS \
              SELECT CAST(NULL AS VARCHAR) AS name, \
@@ -3794,6 +4067,178 @@ impl HostState {
                     "[ducklink_load] deferred drain LOAD for '{name}' trapped: {trap}"
                 ),
             }
+        }
+    }
+
+    /// Drain the `(alias, namespace)` pairs the native
+    /// `ducklink_prefix(...)` handler queued and, for each, run the
+    /// same set of DDL statements the ducklink-extension's
+    /// [`create_prefix_aliases`] + [`persist_prefix`] pair does:
+    ///
+    ///   1. `CREATE SCHEMA IF NOT EXISTS <alias>`
+    ///   2. For every function reachable in schema `<namespace>` (per
+    ///      `duckdb_functions()`, of a macro-shapeable type), emit a
+    ///      `CREATE OR REPLACE MACRO <alias>.<name>(...) AS
+    ///      <namespace>.<name>(...)`. See [`build_prefix_alias_macro`]
+    ///      for the per-function shape.
+    ///   3. `INSERT OR REPLACE INTO ducklink.prefixes(alias, namespace)`
+    ///      so a subsequent host boot (or an explicit replay) can
+    ///      restore the alias schema.
+    ///
+    /// The same rationale as [`flush_deferred_ducklink_loads`]: the
+    /// handler itself runs inside a `dispatch_scalar`/`dispatch_table`
+    /// callback (wasm store mid-call) and cannot re-enter
+    /// `call_execute` — everything above has to happen here on the
+    /// idle-core path before the user's next statement runs.
+    ///
+    /// Best-effort: any per-statement DDL error is logged and the pass
+    /// continues, so a single bad function shape doesn't abort the
+    /// user's next SQL.
+    fn flush_deferred_prefix_declarations(&mut self, conn: ResourceAny) {
+        let pairs = {
+            let mut manager = self
+                .extension_manager
+                .lock()
+                .expect("extension manager mutex poisoned");
+            manager.take_deferred_prefix_declarations()
+        };
+        for (alias, namespace) in pairs {
+            // Re-check hygiene at the SQL boundary: the sentinel handler
+            // already ran `is_safe_prefix_identifier`, but the value is
+            // spliced directly into DDL here so a defense-in-depth check
+            // catches any regression that skipped the sentinel gate.
+            if !is_safe_prefix_identifier(&alias) || !is_safe_prefix_identifier(&namespace) {
+                eprintln!(
+                    "[ducklink_prefix] refusing to flush ('{alias}', '{namespace}') \
+                     — identifiers must match [A-Za-z0-9_]+"
+                );
+                continue;
+            }
+            match self.apply_prefix_declaration(conn.clone(), &alias, &namespace) {
+                Ok(macros) => eprintln!(
+                    "[ducklink_prefix] deferred flush: alias='{alias}' \
+                     namespace='{namespace}' macros={macros}"
+                ),
+                Err(err) => eprintln!(
+                    "[ducklink_prefix] deferred flush for ('{alias}', '{namespace}') \
+                     failed: {err}"
+                ),
+            }
+        }
+    }
+
+    /// Apply a single `(alias, namespace)` declaration: scan
+    /// `duckdb_functions()` for aliasable functions in `namespace`,
+    /// emit the mirrored `CREATE OR REPLACE MACRO`s under `alias`, and
+    /// persist the mapping in `ducklink.prefixes`. Returns the number
+    /// of macros successfully created. Mirrors the extension's
+    /// `create_prefix_aliases` + `persist_prefix` pair.
+    fn apply_prefix_declaration(
+        &mut self,
+        conn: ResourceAny,
+        alias: &str,
+        namespace: &str,
+    ) -> Result<usize, String> {
+        // 1. Ensure the alias schema exists.
+        let create_schema = format!("CREATE SCHEMA IF NOT EXISTS {alias}");
+        self.run_prefix_ddl(conn.clone(), &create_schema)?;
+
+        // 2. Enumerate every aliasable function in the source namespace.
+        //    (Same filter set the extension uses in `create_prefix_aliases`.)
+        let scan_sql = format!(
+            "SELECT DISTINCT function_name, function_type, \
+                    COALESCE(array_to_string(parameters, ','), '') AS param_csv \
+             FROM duckdb_functions() \
+             WHERE schema_name = '{namespace}' \
+             AND function_type IN ('scalar','aggregate','table_macro','scalar_macro','macro','table')"
+        );
+        let rows = self.run_prefix_query(conn.clone(), &scan_sql)?;
+        let mut created = 0usize;
+        // Dedup per (name, arity) so overloaded scalar signatures don't
+        // race each other for the same LHS — matches the extension's
+        // `done_arities` HashSet in `create_prefix_aliases`.
+        let mut done_arities: std::collections::HashSet<(String, usize)> =
+            std::collections::HashSet::new();
+        for row in rows {
+            let name = row.first().cloned().unwrap_or_default();
+            let ftype = row.get(1).cloned().unwrap_or_default();
+            let csv = row.get(2).cloned().unwrap_or_default();
+            if !is_safe_prefix_identifier(&name) {
+                continue;
+            }
+            let params: Vec<String> = if csv.is_empty() {
+                Vec::new()
+            } else {
+                csv.split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            };
+            if !done_arities.insert((name.clone(), params.len())) {
+                continue;
+            }
+            let Some(macro_sql) = build_prefix_alias_macro(&ftype, alias, &name, namespace, &params)
+            else {
+                continue;
+            };
+            match self.run_prefix_ddl(conn.clone(), &macro_sql) {
+                Ok(_) => created += 1,
+                Err(err) => eprintln!(
+                    "[ducklink_prefix] alias '{alias}.{name}' skipped: {err}"
+                ),
+            }
+        }
+
+        // 3. Persist the declaration so a follow-up port can replay it.
+        //    Identifiers already gated above; the values themselves are
+        //    string literals in SQL, so single-quotes need to be escaped.
+        let alias_sql = alias.replace('\'', "''");
+        let namespace_sql = namespace.replace('\'', "''");
+        let insert = format!(
+            "INSERT OR REPLACE INTO ducklink.prefixes (alias, namespace) \
+             VALUES ('{alias_sql}', '{namespace_sql}')"
+        );
+        if let Err(err) = self.run_prefix_ddl(conn, &insert) {
+            eprintln!(
+                "[ducklink_prefix] persist ('{alias}', '{namespace}') failed: {err} \
+                 (session aliases succeeded; reconnect won't restore)"
+            );
+        }
+        Ok(created)
+    }
+
+    /// `call_execute` wrapper for one-shot DDL that returns no rows. Maps
+    /// wasmtime traps + duckerrors to a single `String` for logging.
+    fn run_prefix_ddl(&self, conn: ResourceAny, sql: &str) -> Result<(), String> {
+        let res = self.with_core(|core| {
+            core.with_database(|guest, store| guest.call_execute(store, conn, sql))
+        });
+        match res {
+            Ok(Ok(_)) => Ok(()),
+            Ok(Err(err)) => Err(core_duckerror_message(err)),
+            Err(trap) => Err(format!("trap: {trap}")),
+        }
+    }
+
+    /// `call_execute` wrapper for a query whose rows we need. Returns
+    /// each row as `Vec<String>` (stringified via `spi_value_text`, so
+    /// NULL becomes "").
+    fn run_prefix_query(
+        &self,
+        conn: ResourceAny,
+        sql: &str,
+    ) -> Result<Vec<Vec<String>>, String> {
+        let res = self.with_core(|core| {
+            core.with_database(|guest, store| guest.call_execute(store, conn, sql))
+        });
+        match res {
+            Ok(Ok(qr)) => Ok(qr
+                .rows
+                .iter()
+                .map(|row| row.iter().map(spi_value_text).collect())
+                .collect()),
+            Ok(Err(err)) => Err(core_duckerror_message(err)),
+            Err(trap) => Err(format!("trap: {trap}")),
         }
     }
 
@@ -4244,6 +4689,14 @@ impl cli_db::Host for HostState {
         // `get_pending_registrations`, which drains our `deferred_registrations`
         // into the DuckDB catalog. The user's actual SQL runs after.
         self.flush_deferred_ducklink_loads(entry_handle.clone());
+        // Same deferral rationale as `ducklink_load`: the native
+        // `ducklink_prefix(alias, namespace)` sentinel handler validates
+        // + queues the pair but can't run the associated `CREATE SCHEMA
+        // / CREATE OR REPLACE MACRO / INSERT INTO ducklink.prefixes` DDL
+        // in-band (mid-callback re-entry into `call_execute` deadlocks
+        // the core mutex). Drain the queue here — the core is idle again
+        // — so `<alias>.<fn>` resolves for the user's next statement.
+        self.flush_deferred_prefix_declarations(entry_handle.clone());
         // One-query `delta_scan('dir')`: the wasm core can't take a subquery-
         // valued table-fn arg, so the host reads the table's _delta_log off the
         // real filesystem, resolves the active files (add minus remove), and
@@ -5700,6 +6153,81 @@ fn extension_artifact_path(name: &str) -> PathBuf {
 /// First 12 hex chars of a contract digest (for human-readable resolver logs).
 fn short_digest(digest: &str) -> String {
     digest.chars().take(12).collect()
+}
+
+/// Belt-and-braces identifier gate for the `ducklink_prefix(alias,
+/// namespace)` sentinel handlers. Mirrors ducklink-extension's
+/// `catalog::is_safe_identifier`: non-empty and ASCII `[A-Za-z0-9_]+`.
+///
+/// Both the alias and the namespace get spliced directly into DDL
+/// (`CREATE SCHEMA {alias}`, `CREATE OR REPLACE MACRO {alias}.{name}(...)
+/// AS {namespace}.{name}(...)`, and the `INSERT OR REPLACE INTO
+/// ducklink.prefixes` string), so this check MUST pass before either
+/// value reaches the deferred DDL builder.
+fn is_safe_prefix_identifier(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Build the `CREATE OR REPLACE MACRO` DDL that aliases the namespace
+/// function `<namespace>.<name>` under `<alias>.<name>`. Mirrors the
+/// ducklink-extension's `catalog::build_alias_macro` (the extension's
+/// shared alias-DDL builder) with the workspace-relevant subset:
+///
+/// * `scalar` / `scalar_macro` / `macro` — direct scalar-form macro.
+/// * `table` / `table_macro` — table-macro that re-selects from the
+///   underlying TF.
+/// * `aggregate` (single-arg only) — `list_aggregate(list(x), 'ns.name')`
+///   scalar-macro wrap. Multi-arg aggregates are skipped (users can call
+///   the namespace-qualified form directly).
+///
+/// Any other type returns `None` (skipped). Non-identifier parameter
+/// names are replaced with positional `_a{i}` so the macro binds even if
+/// the underlying function reports weird parameter labels.
+///
+/// Callers MUST validate `alias`, `name`, and `namespace` through
+/// [`is_safe_prefix_identifier`] first — this builder splices them
+/// straight into DDL.
+fn build_prefix_alias_macro(
+    ftype: &str,
+    alias: &str,
+    name: &str,
+    namespace: &str,
+    params: &[String],
+) -> Option<String> {
+    let arg_names: Vec<String> = params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            if is_safe_prefix_identifier(p) {
+                p.clone()
+            } else {
+                format!("_a{i}")
+            }
+        })
+        .collect();
+    let arg_list = arg_names.join(", ");
+    match ftype {
+        "scalar" | "scalar_macro" | "macro" => Some(format!(
+            "CREATE OR REPLACE MACRO {alias}.{name}({arg_list}) AS \
+             {namespace}.{name}({arg_list})"
+        )),
+        "table" | "table_macro" => Some(format!(
+            "CREATE OR REPLACE MACRO {alias}.{name}({arg_list}) AS TABLE \
+             SELECT * FROM {namespace}.{name}({arg_list})"
+        )),
+        "aggregate" => {
+            if arg_names.len() != 1 {
+                None
+            } else {
+                let arg = &arg_names[0];
+                Some(format!(
+                    "CREATE OR REPLACE MACRO {alias}.{name}({arg}) AS \
+                     list_aggregate(list({arg}), '{namespace}.{name}')"
+                ))
+            }
+        }
+        _ => None,
+    }
 }
 
 fn sanitize_extension_name(raw: &str) -> String {
