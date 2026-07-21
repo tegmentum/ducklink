@@ -160,6 +160,24 @@ mod ui_server;
 /// (which start at 1 and increment).
 pub const RESOLVER_EXPLAIN_HANDLE: u32 = 0xFFFF_FFFF;
 pub const RESOLVER_SET_HANDLE: u32 = 0xFFFF_FFFE;
+
+/// Sentinel callback handle for the `ducklink_load(name [, kind])` table
+/// function committed in ducklink-extension's `STABILITY.md § 1.1`.
+///
+/// The workspace host has no non-component route from SQL into its extension
+/// load orchestration: loading happens only on `LOAD <name>;` via the wasm
+/// DuckDB core's `host-extension-loader` import, and SQL callables in the
+/// current WIT surface have no way to trigger a peer LOAD without a
+/// contract-breaking new import. `drain_pending_registrations` therefore
+/// injects a synthetic [`reg::TableReg`] whose `callback_handle` is this
+/// sentinel and [`ExtensionManager::dispatch_table`] intercepts the sentinel
+/// to run the load orchestration natively — no wasm component backs it.
+///
+/// Follows the [`RESOLVER_EXPLAIN_HANDLE`] / [`RESOLVER_SET_HANDLE`] pattern
+/// used for the resolver observability scalars: a well-known callback handle
+/// the core registers under a chosen function name; the host handles
+/// dispatch instead of routing to a resident extension.
+pub const DUCKLINK_LOAD_HANDLE: u32 = 0xFFFF_FFFD;
 pub use ui_server::{serve_ui, UiMode};
 mod quack_server;
 pub use quack_server::serve_quack;
@@ -1958,6 +1976,37 @@ struct ExtensionManager {
     // one composed provider serves every bridge that plugs it (the
     // postgis + mobilitydb dedup path).
     sub_ext_loader: sub_ext::SubExtLoader,
+    // One-shot guard for the synthetic `ducklink_load` table-fn registration
+    // (surfaced through the [`DUCKLINK_LOAD_HANDLE`] sentinel). The first
+    // `drain_pending_registrations` after startup appends a hand-built
+    // [`reg::TableReg`] to the drain output so the core catalog acquires
+    // `ducklink_load` alongside whatever the freshly loaded extension
+    // registered. Subsequent drains skip re-injection — the catalog entry is
+    // process-lived.
+    injected_ducklink_load: bool,
+    // Names loaded by `ducklink_load(name)` awaiting a core-side drain.
+    //
+    // The native `ducklink_load` handler runs *inside* a `call_table`, i.e.
+    // the wasm core store is mid-call — we cannot re-enter `call_execute` to
+    // issue `LOAD <name>;` and trigger the standard post-LOAD drain (the same
+    // re-entrancy shape the live-query import respects in `query`). So the
+    // handler stashes what it loaded here and [`HostState::execute`] issues
+    // an idempotent `LOAD <name>;` on the user's next statement — the second
+    // LOAD lands `ensure_extension_loaded` on its fast path (already in
+    // `self.extensions`) and the core then drains `deferred_registrations`
+    // into its catalog.
+    deferred_drain_names: Vec<String>,
+    // Registrations captured out of `ExtensionInstance`s loaded via
+    // `ducklink_load(name)` but not yet handed to the core (see
+    // `deferred_drain_names`).
+    //
+    // The native handler drains the just-loaded instance so it can count
+    // scalars/tables/aggregates for its return row; that drain empties the
+    // instance's own queue, so the next `drain_pending_registrations` won't
+    // find them there. Instead we prepend `deferred_registrations` to the
+    // core's next drain output so the registrations still reach the DuckDB
+    // catalog on the deferred `LOAD`.
+    deferred_registrations: PendingRegistrationsData,
 }
 
 impl ExtensionManager {
@@ -2020,6 +2069,9 @@ impl ExtensionManager {
             },
             last_resolutions: HashMap::new(),
             sub_ext_loader,
+            injected_ducklink_load: false,
+            deferred_drain_names: Vec::new(),
+            deferred_registrations: PendingRegistrationsData::default(),
         }
     }
 
@@ -3129,6 +3181,16 @@ impl ExtensionManager {
         handle: u32,
         args: &[extension_types::Duckvalue],
     ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
+        // `ducklink_load` sentinel: STABILITY.md § 1.1's `ducklink_load(name
+        // [, kind])` is surfaced as a table function registered under
+        // [`DUCKLINK_LOAD_HANDLE`] in `drain_pending_registrations`. No wasm
+        // component backs it — the handler runs the load orchestration
+        // natively (see `native_ducklink_load` for why the standard
+        // component-callback route can't work here). Analogous to the
+        // resolver observability scalars in `dispatch_scalar_batch` above.
+        if handle == DUCKLINK_LOAD_HANDLE {
+            return self.native_ducklink_load(args);
+        }
         let entry = match self.lookup_callback(handle, CallbackKind::Table) {
             Some(entry) => entry,
             None => {
@@ -3154,6 +3216,161 @@ impl ExtensionManager {
             }
         };
         instance.dispatch_table(entry.dispatcher_handle, args)
+    }
+
+    /// Native handler for `ducklink_load(name [, kind])` — invoked by
+    /// `dispatch_table` when it sees the [`DUCKLINK_LOAD_HANDLE`] sentinel.
+    ///
+    /// Argument parsing:
+    ///   * `args[0]` (positional, VARCHAR, required): extension name.
+    ///   * `args[1]` (positional or named `kind`, VARCHAR, optional):
+    ///     `'wasm'` (default) or `'native'`. The workspace host has only the
+    ///     wasm loader path today; `'native'` returns a clean
+    ///     `Duckerror::Unsupported` so the caller sees a legible message
+    ///     rather than a silent no-op. Once the workspace grows a native
+    ///     tier this arm becomes the same "prefer community-signed" pick
+    ///     `ducklink-extension`'s `native_load_dispatch` implements.
+    ///
+    /// Load orchestration:
+    ///   * `ensure_extension_loaded(name)` — idempotent; a re-load of a name
+    ///     already in `self.extensions` short-circuits, and the returned
+    ///     counts are all zero (matter-of-fact "nothing new happened").
+    ///   * A `false` return means the multi-provider resolver declined,
+    ///     which is surfaced as `Invalidargument` — the exact contract the
+    ///     conformance suite exercises (`FROM ducklink_load('does-not-exist')`
+    ///     must error cleanly).
+    ///
+    /// Deferred drain:
+    ///   * The instance's freshly captured pending registrations are drained
+    ///     here so the return-row counts are accurate. The drained data is
+    ///     stashed in `self.deferred_registrations`; the extension name is
+    ///     pushed to `self.deferred_drain_names`. `HostState::execute`
+    ///     replays a `LOAD <name>;` on the user's next statement (which
+    ///     triggers the core's normal post-LOAD `get_pending_registrations`
+    ///     path and applies the deferred data to the DuckDB catalog).
+    ///
+    /// Return shape mirrors ducklink-extension's `WasmLoadBind`:
+    /// `(name VARCHAR, path VARCHAR, scalars BIGINT, tables BIGINT,
+    ///  aggregates BIGINT)`. The `path` column is NULL — the workspace
+    /// resolver's on-disk path is not surfaced here yet (parity is a follow-up).
+    fn native_ducklink_load(
+        &mut self,
+        args: &[extension_types::Duckvalue],
+    ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
+        // Positional/named arg 0: extension name (VARCHAR). DuckDB passes named
+        // args in order, so the first VARCHAR is the name regardless of whether
+        // the caller wrote `ducklink_load('jsonfns')` or
+        // `ducklink_load(name := 'jsonfns')`.
+        let name = match args.first() {
+            Some(extension_types::Duckvalue::Text(s)) => s.clone(),
+            Some(extension_types::Duckvalue::Null) | None => {
+                return Err(extension_types::Duckerror::Invalidargument(
+                    "ducklink_load: missing required VARCHAR argument 'name'".into(),
+                ));
+            }
+            Some(_) => {
+                return Err(extension_types::Duckerror::Invalidargument(
+                    "ducklink_load: first argument must be VARCHAR".into(),
+                ));
+            }
+        };
+        // Optional second arg: kind (VARCHAR). Matches STABILITY.md § 1.1's
+        // `kind => 'wasm' | 'native'` shape; a NULL / missing value defaults
+        // to 'wasm'.
+        let kind = match args.get(1) {
+            Some(extension_types::Duckvalue::Text(s)) => s.to_ascii_lowercase(),
+            Some(extension_types::Duckvalue::Null) | None => "wasm".to_string(),
+            Some(_) => {
+                return Err(extension_types::Duckerror::Invalidargument(
+                    "ducklink_load: second argument (kind) must be VARCHAR".into(),
+                ));
+            }
+        };
+        match kind.as_str() {
+            "wasm" => {}
+            "native" => {
+                return Err(extension_types::Duckerror::Unsupported(
+                    "ducklink_load(kind='native'): the workspace host has no native \
+                     provider path yet — use kind='wasm' (the default)"
+                        .into(),
+                ));
+            }
+            other => {
+                return Err(extension_types::Duckerror::Invalidargument(format!(
+                    "ducklink_load: kind must be 'wasm' or 'native', got '{other}'"
+                )));
+            }
+        }
+
+        // `ensure_extension_loaded` returns Ok(true) on success (either fresh
+        // load or already-loaded fast path), Ok(false) when the resolver
+        // declined (no provider), or Err on load-time trap.
+        let sanitized = sanitize_extension_name(&name);
+        let loaded_ok = self.ensure_extension_loaded(&sanitized).map_err(|err| {
+            extension_types::Duckerror::Internal(format!(
+                "ducklink_load: failed to load '{name}': {err}"
+            ))
+        })?;
+        if !loaded_ok {
+            return Err(extension_types::Duckerror::Invalidargument(format!(
+                "ducklink_load: no admissible provider for '{name}' — no manifest \
+                 entry, no <extensions-dir>/{sanitized}.wasm shortcut, or the \
+                 resolver declined the candidates"
+            )));
+        }
+
+        // Drain what the freshly-loaded instance queued so we can report
+        // scalar/table/aggregate counts in the summary row. For an
+        // already-loaded ext this drain is empty (idempotent fast path
+        // returned above), which is the correct "nothing new happened"
+        // signal in the return row.
+        let (scalars, tables, aggregates) = match self.extensions.get_mut(&sanitized) {
+            Some(instance) => {
+                let drained = instance.drain_pending();
+                let counts = (
+                    drained.scalars.len(),
+                    drained.tables.len(),
+                    drained.aggregates.len(),
+                );
+                // Stash for the deferred core-side drain (see
+                // `deferred_registrations` field doc + `HostState::execute`).
+                self.deferred_registrations.append(drained);
+                counts
+            }
+            None => (0, 0, 0),
+        };
+
+        // Schedule an idempotent `LOAD <name>;` on the next user statement.
+        // Dedup: multiple `ducklink_load('x')` calls before a drain shouldn't
+        // pile up N LOAD-x driver statements.
+        if !self.deferred_drain_names.iter().any(|n| n == &sanitized) {
+            self.deferred_drain_names.push(sanitized.clone());
+        }
+
+        eprintln!(
+            "[extension-manager] ducklink_load('{sanitized}') -> \
+             scalars={scalars}, tables={tables}, aggregates={aggregates} \
+             (deferred core drain scheduled)"
+        );
+        let row: Vec<extension_types::Duckvalue> = vec![
+            extension_types::Duckvalue::Text(sanitized),
+            // `path` is intentionally NULL — the workspace resolver's
+            // artifact path isn't surfaced through this API yet (parity
+            // with ducklink-extension's `path` column is a follow-up).
+            extension_types::Duckvalue::Null,
+            extension_types::Duckvalue::Int64(scalars as i64),
+            extension_types::Duckvalue::Int64(tables as i64),
+            extension_types::Duckvalue::Int64(aggregates as i64),
+        ];
+        Ok(vec![row])
+    }
+
+    /// Consumes any pending `ducklink_load(name)` drain requests. Called by
+    /// [`HostState::execute`] before running the user's next statement so an
+    /// idempotent `LOAD <name>;` triggers the core's post-LOAD drain and the
+    /// stashed `deferred_registrations` reach the DuckDB catalog.
+    fn take_deferred_drain_names(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.deferred_drain_names)
     }
 
     // --- 3.1.0 additive minor: streaming + filter-pushdown table-fn dispatch ---
@@ -3651,6 +3868,14 @@ impl ExtensionManager {
 
     fn drain_pending_registrations(&mut self) -> PendingRegistrationsData {
         let mut aggregated = PendingRegistrationsData::default();
+        // Prepend anything the native `ducklink_load(name)` handler stashed
+        // in a prior call: those registrations belong to an extension already
+        // in `self.extensions`, but the handler drained them off the instance
+        // to count them for its return row. Draining here from the same
+        // instance would find nothing; this prepend delivers them to the
+        // core catalog on the deferred `LOAD <name>;` that `HostState::execute`
+        // replays. See `deferred_registrations` field doc.
+        aggregated.append(std::mem::take(&mut self.deferred_registrations));
         for instance in self.extensions.values_mut() {
             aggregated.append(instance.drain_pending());
         }
@@ -3678,6 +3903,64 @@ impl ExtensionManager {
         // a wrapper macro (`apply_pins`) that shadows ANY later bare-scalar
         // re-registration, so load-order independence is automatic. The pinned
         // owner keeps winning the bare name even after this fresh load.
+
+        // One-shot: append the synthetic `ducklink_load` table function
+        // (STABILITY.md § 1.1) AFTER `apply_function_prefixes` runs so the
+        // committed bare name isn't shadowed by a `prefix__ducklink_load`
+        // duplicate. The `callback_handle` is the reserved
+        // [`DUCKLINK_LOAD_HANDLE`] sentinel; `dispatch_table` intercepts it
+        // and calls `native_ducklink_load` instead of routing to a component.
+        if !self.injected_ducklink_load {
+            self.injected_ducklink_load = true;
+            aggregated.tables.push(reg::TableReg {
+                extension: "ducklink".to_string(),
+                name: "ducklink_load".to_string(),
+                // The `duckdb-wasi` core registers every `funcarg` as a
+                // POSITIONAL required parameter (`duckdb_table_function_add_parameter`
+                // — no distinction between named + optional). Only the
+                // required `name` argument is surfaced today so
+                // `FROM ducklink_load('jsonfns')` binds. STABILITY.md § 1.1
+                // still commits `kind => 'wasm' | 'native'`; the wasm-core
+                // table-fn registration WIT needs a `named_parameters` field
+                // before we can surface it here without turning
+                // `ducklink_load('jsonfns')` into a bind error. Tracked as a
+                // follow-up — the intercept in `native_ducklink_load`
+                // already handles a second VARCHAR arg once the core
+                // starts forwarding it.
+                arguments: vec![reg::FuncArg {
+                    name: Some("name".to_string()),
+                    logical: reg::LogicalType::Text,
+                }],
+                columns: vec![
+                    reg::ColumnDef {
+                        name: "name".to_string(),
+                        logical: reg::LogicalType::Text,
+                    },
+                    reg::ColumnDef {
+                        name: "path".to_string(),
+                        logical: reg::LogicalType::Text,
+                    },
+                    reg::ColumnDef {
+                        name: "scalars".to_string(),
+                        logical: reg::LogicalType::Int64,
+                    },
+                    reg::ColumnDef {
+                        name: "tables".to_string(),
+                        logical: reg::LogicalType::Int64,
+                    },
+                    reg::ColumnDef {
+                        name: "aggregates".to_string(),
+                        logical: reg::LogicalType::Int64,
+                    },
+                ],
+                callback_handle: DUCKLINK_LOAD_HANDLE,
+                options: None,
+            });
+            eprintln!(
+                "[extension-manager] injected synthetic `ducklink_load` table function \
+                 (STABILITY.md § 1.1) via sentinel handle {DUCKLINK_LOAD_HANDLE:#x}"
+            );
+        }
 
         let scalar_names =
             summarize_registration_names(&aggregated.scalars, |entry| entry.name.as_str());
@@ -3875,6 +4158,57 @@ impl HostState {
     {
         let mut core = self.core.lock().unwrap_or_else(|e| e.into_inner());
         f(&mut core)
+    }
+
+    /// If a prior `ducklink_load(name)` table-fn call queued an
+    /// already-loaded extension for a core-side drain, replay an idempotent
+    /// `LOAD <name>;` here so `ensure_extension_loaded` short-circuits and
+    /// the core's post-LOAD `get_pending_registrations` picks up the
+    /// manager's `deferred_registrations`. Best-effort: a trap or duckerror
+    /// on the driver LOAD is logged and skipped rather than surfacing on
+    /// the user's actual statement.
+    ///
+    /// See [`ExtensionManager::native_ducklink_load`] for why the drain has
+    /// to be deferred (dispatch runs inside the core's callback path — the
+    /// wasm store is mid-call and can't re-enter `call_execute`).
+    fn flush_deferred_ducklink_loads(&mut self, conn: ResourceAny) {
+        let names = {
+            let mut manager = self
+                .extension_manager
+                .lock()
+                .expect("extension manager mutex poisoned");
+            manager.take_deferred_drain_names()
+        };
+        for name in names {
+            // Basic identifier hygiene: `ducklink_load` already sanitizes the
+            // caller's arg through `sanitize_extension_name`, but re-check
+            // here — the value is embedded directly into SQL. Anything
+            // non-`[A-Za-z0-9_-]` at this point would be a bug in the
+            // sanitizer.
+            if !name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+            {
+                eprintln!("[ducklink_load] refusing to replay LOAD for '{name}' (bad identifier)");
+                continue;
+            }
+            let sql = format!("LOAD {name};");
+            let res = self.with_core(|core| {
+                core.with_database(|guest, store| guest.call_execute(store, conn.clone(), &sql))
+            });
+            match res {
+                Ok(Ok(_)) => eprintln!(
+                    "[ducklink_load] deferred drain flushed via idempotent `{sql}`"
+                ),
+                Ok(Err(err)) => eprintln!(
+                    "[ducklink_load] deferred drain LOAD for '{name}' returned duckerror: {}",
+                    core_duckerror_message(err)
+                ),
+                Err(trap) => eprintln!(
+                    "[ducklink_load] deferred drain LOAD for '{name}' trapped: {trap}"
+                ),
+            }
+        }
     }
 
     fn drain_pending_resource_drops(&mut self) -> Result<(), cli_types::Duckerror> {
@@ -4308,10 +4642,22 @@ impl cli_db::Host for HostState {
         conn: Resource<cli_db::Connection>,
         sql: CliString,
     ) -> Result<cli_db::QueryResult, cli_types::Duckerror> {
-        let entry = self
+        let entry_handle = self
             .connections
             .get(&conn.rep())
-            .ok_or_else(|| cli_types::Duckerror::Internal("unknown connection".into()))?;
+            .ok_or_else(|| cli_types::Duckerror::Internal("unknown connection".into()))?
+            .handle
+            .clone();
+        // `ducklink_load(name)` deferred drain: if the user's PREVIOUS
+        // statement went through `dispatch_table`'s native `ducklink_load`
+        // path, an extension was loaded but its pending registrations are
+        // stashed in the manager (that path can't re-enter `call_execute`
+        // from a wasm-store-mid-call callback). Replay an idempotent
+        // `LOAD <name>;` here — `ensure_extension_loaded` short-circuits
+        // (already in `self.extensions`) and the core then calls
+        // `get_pending_registrations`, which drains our `deferred_registrations`
+        // into the DuckDB catalog. The user's actual SQL runs after.
+        self.flush_deferred_ducklink_loads(entry_handle.clone());
         // One-query `delta_scan('dir')`: the wasm core can't take a subquery-
         // valued table-fn arg, so the host reads the table's _delta_log off the
         // real filesystem, resolves the active files (add minus remove), and
@@ -4321,7 +4667,7 @@ impl cli_db::Host for HostState {
         let result = self
             .with_core(|core| {
                 core.with_database(|guest, store| {
-                    guest.call_execute(store, entry.handle.clone(), &sql)
+                    guest.call_execute(store, entry_handle, &sql)
                 })
             })
             .map_err(convert_trap_to_duckerror)?;
