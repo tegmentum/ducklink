@@ -66,6 +66,9 @@ macro_rules! unreachable_import {
 // ---- types (marker trait: no functions) ----
 impl ext::types::Host for State {}
 
+// ---- column-types (marker trait: no functions, major-4 columnar model) ----
+impl ext::column_types::Host for State {}
+
 // ---- logging ----
 impl ext::logging::Host for State {
     fn log(&mut self, _level: ext::types::Loglevel, _message: String, _target: Option<String>) {
@@ -433,6 +436,7 @@ fn pushdown_crosses_wit_boundary() {
             value: Duckvalue::Int64(1),
         }],
         limit: None,
+        wants_rowid: false,
     };
     let scan = sd
         .call_storage_scan_open(&mut store, HANDLE, cat, &req)
@@ -459,6 +463,7 @@ fn pushdown_crosses_wit_boundary() {
         projection: vec![],
         filters: vec![],
         limit: None,
+        wants_rowid: false,
     };
     let scan2 = sd
         .call_storage_scan_open(&mut store, HANDLE, cat, &full)

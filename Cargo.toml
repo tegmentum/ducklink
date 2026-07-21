@@ -13,7 +13,6 @@ members = [
     "extensions/greet-dotcmd",
     "extensions/core-dotcmd",
     "extensions/bundle-dotcmd",
-    "extensions/prefix-dotcmd",
     "extensions/duckdb-utils-schema",
     "extensions/duckdb-utils-data",
     "extensions/duckdb-utils-fts",
@@ -133,6 +132,7 @@ members = [
     "extensions/pintest_a-component",
     "extensions/pintest_b-component",
     "extensions/atbash-component",
+    "extensions/ducklink-scalars-component",
     "extensions/piglatin-component",
     "extensions/rle-component",
     "extensions/bbcode-component",
@@ -218,6 +218,7 @@ members = [
     "extensions/icebergscan-component",
     "extensions/autocomplete-component",
     "extensions/statsduck-component",
+    "tools/catalog-sig-extract",
 ]
 
 # talib-component carries its own `[workspace]` table (an independent lockfile —

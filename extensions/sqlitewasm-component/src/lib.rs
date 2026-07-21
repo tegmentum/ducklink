@@ -770,6 +770,7 @@ mod tests {
                 value: types::Duckvalue::Int64(1),
             }],
             limit: None,
+            wants_rowid: false,
         };
         let rows = run_scan(&conn, &req).unwrap();
         assert_eq!(rows.len(), 1);

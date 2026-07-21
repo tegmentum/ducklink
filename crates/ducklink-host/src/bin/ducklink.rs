@@ -839,7 +839,17 @@ fn main() -> Result<()> {
         .map(|entry| (entry.host.as_path(), entry.guest.as_str()))
         .collect();
 
-    let status = run_cli_with_stdio(&artifacts, &opts.cli_args, &preopen_refs)?;
+    // Prepend argv[0] = program name, matching the convention every
+    // POSIX-shaped CLI expects. The wasm CLI does `iter.skip(1)` on
+    // `environment::get_arguments()`, so without an argv[0] the first
+    // user-supplied flag would be dropped and its value bound as the
+    // database path. `ducklink -- -c "SELECT 1"` was silently becoming
+    // `open_database("SELECT 1")` before this. The run-tool path at
+    // line ~417 already does the same prepend.
+    let mut argv = Vec::with_capacity(opts.cli_args.len() + 1);
+    argv.push("ducklink".to_string());
+    argv.extend(opts.cli_args.iter().cloned());
+    let status = run_cli_with_stdio(&artifacts, &argv, &preopen_refs)?;
     if status.is_err() {
         std::process::exit(1);
     }

@@ -1,0 +1,6 @@
+[package]
+name = "boundary-test:write"
+version = "0.2.0"
+
+[dependencies]
+"duckdb:extension" = { path = "deps/duckdb-extension" }

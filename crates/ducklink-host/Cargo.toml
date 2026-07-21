@@ -11,10 +11,12 @@ clap = { version = "4.5", features = ["derive"] }
 wasmtime = { version = "46.0.1", features = ["component-model", "cache"] }
 wasmtime-wasi = "46.0.1"
 # Tiered Virtual Memory: host-owned regions back DuckDB's >4 GiB spill tier.
-# tvm-core is wasmtime-free, so it works with this host's pinned wasmtime (39)
-# even though tvm-wasmtime targets 45; the manager/bytes host traits are
-# implemented in this crate against this host's bindgen.
-tvm-core = { path = "../../../tvm-wasm/crates/tvm-core" }
+# tvm-core is wasmtime-free; the manager/bytes host traits are implemented in
+# this crate against this host's bindgen. Sourced via a pinned git rev of
+# tvm-wasm (not a local path) so ducklink builds standalone AND so ChimeraDB's
+# in-process build (which links ducklink-host + sqlink-host) resolves a SINGLE
+# tvm-core source — sqlink-host pins the same rev. See chimeradb/PLAN-inprocess.md PR1.
+tvm-core = { git = "https://github.com/tegmentum/tvm-wasm.git", rev = "6f3bae38fad4addd4de1837ab151f4ac871d1dd4" }
 # TLS for `ducklink serve` (the httpd). Blocking rustls over the accept
 # loop's TcpStream; rcgen mints the --tls-self-signed cert. Mirrors the
 # sqlite-wasm-httpd stack.
@@ -39,6 +41,11 @@ hex = "0.4"
 # `.cwasm` (a `.cwasm` deserializes to runnable machine code, so it must be
 # trusted). compose-core is wasmtime-free and sqlite-free.
 compose-core = { git = "https://github.com/tegmentum/webassembly-component-orchestration.git", rev = "416226921cc166e98016f534a73bd6c9b7dcb33c" }
+# Ergonomic error enum for the sub-ext loader (Phase D). The rest of the
+# crate uses anyhow at the boundary; internally SubExtError is a `thiserror`
+# enum so callers can pattern-match on `SubExtError::PlanMissing` vs a compose
+# failure without stringly parsing.
+thiserror = "1"
 # Home-dir resolution for the per-machine HMAC key + FsBlobStore cache root.
 dirs = "5"
 # Shared, db-agnostic crates (also consumed by the sqlink host). datalink is
@@ -47,10 +54,9 @@ dirs = "5"
 #   - datalink-policy: canonical capability-grant types. The coarse
 #     DUCKLINK_NETWORK_GRANT env is compiled into a canonical Policy via an
 #     adapter (allow-all / deny-all / per-name); behavior is unchanged.
-#   - datalink-prefix: the prefix__name resolution algorithm + the
-#     collision/pin model behind a PrefixStore trait, backed in-memory here.
+#     (datalink-prefix was retired here in commit a048b7a — workspace now
+#     adopts the extension v5.0.0 prefix.name model via ducklink_prefix.)
 datalink-policy = { git = "https://github.com/tegmentum/datalink.git", rev = "80010adf7c9ec3d07674bba12585c787328217f5" }
-datalink-prefix = { git = "https://github.com/tegmentum/datalink.git", rev = "80010adf7c9ec3d07674bba12585c787328217f5" }
 
 [dev-dependencies]
 tempfile = "3"

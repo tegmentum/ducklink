@@ -116,7 +116,13 @@ pub mod compose_dynlink_test_support {
 }
 mod delta_rewrite;
 mod plan_shape;
-mod prefix;
+/// Phase D: per-sub-extension `compose:dynlink` bridge + composed-provider
+/// loader (`postgis_core -> {plan, bridge, derived-from}` maps and the
+/// `materialize_sub_ext_provider` composer). Public so downstream host
+/// embedders (and this crate's tests) can configure it directly instead of
+/// going through env vars.
+pub mod sub_ext;
+pub use sub_ext::{sub_ext_provider_id, SubExtError, SubExtLoader};
 
 /// Defensive guard for a parser extension's returned rewrite (v3 @3.0.0
 /// parser-dispatch boundary). The core RE-PLANS the rewrite, so a bad component
@@ -153,6 +159,49 @@ mod ui_server;
 /// (which start at 1 and increment).
 pub const RESOLVER_EXPLAIN_HANDLE: u32 = 0xFFFF_FFFF;
 pub const RESOLVER_SET_HANDLE: u32 = 0xFFFF_FFFE;
+
+/// Sentinel callback handle for the `ducklink_load(name [, kind])` table
+/// function committed in ducklink-extension's `STABILITY.md § 1.1`.
+///
+/// The workspace host has no non-component route from SQL into its extension
+/// load orchestration: loading happens only on `LOAD <name>;` via the wasm
+/// DuckDB core's `host-extension-loader` import, and SQL callables in the
+/// current WIT surface have no way to trigger a peer LOAD without a
+/// contract-breaking new import. `drain_pending_registrations` therefore
+/// injects a synthetic [`reg::TableReg`] whose `callback_handle` is this
+/// sentinel and [`ExtensionManager::dispatch_table`] intercepts the sentinel
+/// to run the load orchestration natively — no wasm component backs it.
+///
+/// Follows the [`RESOLVER_EXPLAIN_HANDLE`] / [`RESOLVER_SET_HANDLE`] pattern
+/// used for the resolver observability scalars: a well-known callback handle
+/// the core registers under a chosen function name; the host handles
+/// dispatch instead of routing to a resident extension.
+pub const DUCKLINK_LOAD_HANDLE: u32 = 0xFFFF_FFFD;
+
+/// Sentinel callback handles for the `ducklink_prefix(alias, namespace)`
+/// entry points committed in ducklink-extension's `STABILITY.md § 1.1`.
+///
+/// Same rationale as [`DUCKLINK_LOAD_HANDLE`]: the workspace host has no
+/// way for a wasm component to synthesize new `CREATE OR REPLACE MACRO`
+/// DDL against the connection that called it (a callback runs inside the
+/// core wasm store mid-call — re-entering `call_execute` would deadlock
+/// the core mutex and violate wasmtime store re-entrancy). So
+/// `drain_pending_registrations` injects synthetic [`reg::TableReg`] +
+/// [`reg::ScalarReg`] entries under these sentinels and
+/// [`ExtensionManager::dispatch_table`] / `dispatch_scalar[_batch]`
+/// intercept them to run natively.
+///
+/// The native handlers cannot themselves re-enter the core to emit the
+/// per-namespace `CREATE MACRO` shapes (same wasm store re-entrancy
+/// constraint as [`native_ducklink_load`]), so they only VALIDATE the
+/// (alias, namespace) pair and stash it in
+/// `ExtensionManager::deferred_prefix_declarations`. On the user's next
+/// `HostState::execute` boundary the stash is drained and the actual DDL
+/// (`duckdb_functions()` scan, `CREATE OR REPLACE MACRO <alias>.<name>`
+/// per function, `INSERT OR REPLACE INTO ducklink.prefixes`) runs on the
+/// then-idle core.
+pub const DUCKLINK_PREFIX_TABLE_HANDLE: u32 = 0xFFFF_FFFC;
+pub const DUCKLINK_PREFIX_SCALAR_HANDLE: u32 = 0xFFFF_FFFB;
 pub use ui_server::{serve_ui, UiMode};
 mod quack_server;
 pub use quack_server::serve_quack;
@@ -489,6 +538,129 @@ impl core_storage_host::Host for CoreStoreState {
             .expect("extension manager mutex poisoned");
         manager
             .dispatch_storage_scan_close(scan)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    // M2c write surface: transactions + DDL + DML. The core imports these
+    // through `storage-host`; the host resolves the (ext, callback-handle)
+    // via the same `resolve_storage_backend` picker the read side uses and
+    // routes to the writable component's `storage-write-dispatch` export
+    // through the ExtensionInstance's `storage_*` trampolines.
+    fn storage_begin_transaction(
+        &mut self,
+        catalog: u32,
+    ) -> Result<u32, core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_begin_transaction(catalog)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_commit_transaction(&mut self, txn: u32) -> Result<(), core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_commit_transaction(txn)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_rollback_transaction(
+        &mut self,
+        txn: u32,
+    ) -> Result<(), core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_rollback_transaction(txn)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_create_table(
+        &mut self,
+        txn: u32,
+        table: String,
+        columns: Vec<core_types::Columndef>,
+    ) -> Result<(), core_types::Duckerror> {
+        let ext_columns: Vec<extension_types::Columndef> = columns
+            .into_iter()
+            .map(convert_core_columndef_to_extension)
+            .collect();
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_create_table(txn, &table, &ext_columns)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_insert_rows(
+        &mut self,
+        txn: u32,
+        table: String,
+        rows: Vec<Vec<core_types::Duckvalue>>,
+    ) -> Result<u64, core_types::Duckerror> {
+        let ext_rows: Vec<Vec<extension_types::Duckvalue>> = rows
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(convert_core_duckvalue_to_extension)
+                    .collect()
+            })
+            .collect();
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_insert_rows(txn, &table, &ext_rows)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_delete_rows(
+        &mut self,
+        txn: u32,
+        table: String,
+        rowids: Vec<i64>,
+    ) -> Result<u64, core_types::Duckerror> {
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_delete_rows(txn, &table, &rowids)
+            .map_err(convert_extension_duckerror_to_core)
+    }
+
+    fn storage_update_rows(
+        &mut self,
+        txn: u32,
+        table: String,
+        rowids: Vec<i64>,
+        updated_columns: Vec<u32>,
+        rows: Vec<Vec<core_types::Duckvalue>>,
+    ) -> Result<u64, core_types::Duckerror> {
+        let ext_rows: Vec<Vec<extension_types::Duckvalue>> = rows
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(convert_core_duckvalue_to_extension)
+                    .collect()
+            })
+            .collect();
+        let mut manager = self
+            .extension_manager
+            .lock()
+            .expect("extension manager mutex poisoned");
+        manager
+            .dispatch_storage_update_rows(txn, &table, &rowids, &updated_columns, &ext_rows)
             .map_err(convert_extension_duckerror_to_core)
     }
 }
@@ -1187,8 +1359,10 @@ struct DotcmdState {
     /// The core (for spi SQL execution) and the CLI's live connection handle.
     core: Arc<Mutex<CoreExecution>>,
     current_connection: Arc<Mutex<Option<ResourceAny>>>,
-    /// PLAN-prefixes: lets `spi.query` flush staged __ducklink_prefix* rows onto
-    /// the live connection before each dotcmd query (so `.prefix` sees them).
+    // Retained on the store data even though the surviving `spi.query` no
+    // longer reads it — a follow-up dotcmd feature (e.g. the schema-qualified
+    // prefix model migration) is expected to route through the manager again.
+    #[allow(dead_code)]
     extension_manager: Arc<Mutex<ExtensionManager>>,
     /// compose:dynlink/linker bridge state. A `DynLinkBridge` is present
     /// ONLY when this dot-command component imports `compose:dynlink/linker`
@@ -1313,33 +1487,7 @@ impl dotcmd_bindings::duckdb::dotcmd::spi::Host for DotcmdState {
             .unwrap_or_else(|e| e.into_inner())
             .clone()
             .ok_or_else(|| "spi: no active database connection".to_string())?;
-
-        // v1.1 THE PIN — the dotcmd<->host hook. `.prefix prefer/unprefer` writes
-        // the pin row via SQL then issues this sentinel so the host APPLIES the
-        // pins immediately (re-registers the pinned bare owners against the
-        // core). The sentinel never reaches the core SQL parser.
-        if sql.trim() == PREFIX_APPLY_PINS_SENTINEL {
-            return self.apply_prefix_pins(handle);
-        }
-
-        // PLAN-prefixes: flush any staged __ducklink_prefix* rows onto the live
-        // connection (ensures the tables exist + are populated before .prefix
-        // reads them). Cheap + idempotent: only does work when rows are pending.
-        let flush_sql = {
-            let mut manager = self
-                .extension_manager
-                .lock()
-                .expect("extension manager mutex poisoned");
-            manager.take_prefix_table_sql()
-        };
         let mut core = self.core.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(flush_sql) = flush_sql {
-            if let Err(trap) =
-                core.with_database(|guest, store| guest.call_execute(store, handle.clone(), &flush_sql))
-            {
-                eprintln!("[prefix] WARNING: failed to flush prefix tables: {trap}");
-            }
-        }
         let result = core
             .with_database(|guest, store| guest.call_execute(store, handle, &sql))
             .map_err(|trap| format!("spi query trapped: {trap}"))?;
@@ -1347,87 +1495,6 @@ impl dotcmd_bindings::duckdb::dotcmd::spi::Host for DotcmdState {
             Ok(qr) => Ok(spi_render_rows(qr)),
             Err(err) => Err(core_duckerror_message(err)),
         }
-    }
-}
-
-/// v1.1 THE PIN — the dotcmd issues this exact string via `spi.query` after
-/// writing the pin row; the host intercepts it (it never reaches the core SQL
-/// parser) and runs the apply-pins pass.
-const PREFIX_APPLY_PINS_SENTINEL: &str = "-- ducklink:prefix apply-pins";
-
-impl DotcmdState {
-    /// v1.1 THE PIN — the apply-pins pass driven from the spi sentinel. Reads
-    /// `__ducklink_prefix_pin` off the live connection, hands the rows to the
-    /// ExtensionManager (which refreshes its in-memory pin cache + stages
-    /// re-registrations of the pinned owners), then triggers a core pending pull
-    /// via `LOAD <a-loaded-extension>` so the staged re-registrations land.
-    fn apply_prefix_pins(&mut self, handle: ResourceAny) -> Result<String, String> {
-        let mut core = self.core.lock().unwrap_or_else(|e| e.into_inner());
-        // Read the pin table from the live connection.
-        let read = core
-            .with_database(|guest, store| {
-                guest.call_execute(
-                    store,
-                    handle.clone(),
-                    "SELECT function_name, shape, n_args, expansion FROM __ducklink_prefix_pin",
-                )
-            })
-            .map_err(|trap| format!("apply-pins read trapped: {trap}"))?;
-        let pins: Vec<(String, prefix::Shape, i32, String)> = match read {
-            Ok(qr) => qr
-                .rows
-                .iter()
-                .filter_map(|row| {
-                    let name = match row.first() {
-                        Some(core_types::Duckvalue::Text(s)) => s.clone(),
-                        _ => return None,
-                    };
-                    let shape_s = match row.get(1) {
-                        Some(core_types::Duckvalue::Text(s)) => s.clone(),
-                        _ => return None,
-                    };
-                    let shape = prefix::Shape::from_str(&shape_s)?;
-                    let n_args = match row.get(2) {
-                        Some(core_types::Duckvalue::Int32(n)) => *n,
-                        Some(core_types::Duckvalue::Int64(n)) => *n as i32,
-                        _ => return None,
-                    };
-                    let expansion = match row.get(3) {
-                        Some(core_types::Duckvalue::Text(s)) => s.clone(),
-                        _ => return None,
-                    };
-                    Some((name, shape, n_args, expansion))
-                })
-                .collect(),
-            Err(err) => return Err(core_duckerror_message(err)),
-        };
-
-        // Hand the pins to the manager: refresh the cache + compute the wrapper
-        // macro DDL (CREATE OR REPLACE for pins, DROP for unprefers).
-        let statements = {
-            let mut manager = self
-                .extension_manager
-                .lock()
-                .expect("extension manager mutex poisoned");
-            manager.apply_pins(&pins)
-        };
-
-        // Run the wrapper-macro DDL on the live connection so the pin takes
-        // effect IMMEDIATELY (and survives later extension loads — a macro
-        // shadows a same-name scalar in DuckDB resolution).
-        for stmt in statements {
-            match core.with_database(|guest, store| guest.call_execute(store, handle.clone(), &stmt)) {
-                Ok(Ok(_)) => {}
-                Ok(Err(err)) => {
-                    return Err(format!(
-                        "apply-pins: '{stmt}' failed: {}",
-                        core_duckerror_message(err)
-                    ))
-                }
-                Err(trap) => return Err(format!("apply-pins: '{stmt}' trapped: {trap}")),
-            }
-        }
-        Ok(String::new())
     }
 }
 
@@ -1779,30 +1846,6 @@ struct ExtensionManager {
     // `table-stream-host` (ts-open-filtered/next/close). Keyed by the global
     // routable callback handle so dispatch routes back to the owning component.
     filterable_tables: Vec<reg::FilterableTableReg>,
-    // Function prefixes (PLAN-prefixes): the registry/index.json name ->
-    // {prefix, expansion} map loaded at host start, used to namespace every
-    // scalar/table/aggregate registration as `prefix__name`.
-    prefix_registry: prefix::PrefixRegistry,
-    // Cross-component bare-name collision tracker; drives the load-time warning.
-    prefix_collisions: prefix::CollisionTracker,
-    // The function rows recorded into __ducklink_prefix_function so far this
-    // session, so the host only emits each INSERT once:
-    // (expansion, function_name, shape, n_args).
-    prefix_recorded: std::collections::HashSet<(String, String, &'static str, i32)>,
-    // Staged prefix rows awaiting a flush to the live connection (built during
-    // the pure registration drain; written by `flush_prefix_tables`).
-    pending_prefix_rows: Vec<prefix::PrefixRow>,
-    // v1.1 THE PIN: every bare registration def seen this session, keyed by
-    // (name, shape, n_args, expansion). Lets the host RE-REGISTER a specific
-    // extension's bare function on demand (`.prefix prefer`) and revert to the
-    // default last-loaded owner (`.prefix unprefer`).
-    prefix_retained: prefix::RetainedDefs,
-    // v1.1 THE PIN: in-memory mirror of __ducklink_prefix_pin, refreshed by the
-    // spi `apply_pins` pass. (name, shape, n_args) -> pinned expansion. Drives
-    // the unprefer diff (which wrapper macros to DROP). Load-order independence
-    // is automatic — the wrapper macro shadows any later bare-scalar
-    // re-registration — so no mid-drain honor pass is needed.
-    pin_cache: HashMap<(String, prefix::Shape, i32), String>,
     // v1.1 live-query host import: the CLI's live connection, shared so a
     // query-capable component's `query` import (catalog completion) runs on the
     // same connection the user is on. Cloned into each component's CoreServices.
@@ -1818,12 +1861,67 @@ struct ExtensionManager {
     registry_index: Arc<serde_json::Value>,
     resolver_policy: resolver::ResolvePolicy,
     last_resolutions: HashMap<String, String>,
+    // Phase D: per-sub-extension `compose:dynlink` bridge + composed-provider
+    // loader. Holds the `sub_ext -> {plan, bridge, derived-from}` maps and the
+    // materialize-on-first-LOAD composer. `ensure_extension_loaded` consults
+    // `sub_ext_loader.has_bridge(name)` BEFORE the flat
+    // `<extensions-dir>/<name>.wasm` shortcut and, when it matches, composes
+    // + registers the sub-ext's provider (once) and loads the bridge wasm
+    // instead. Registered against the process-global `ProviderRegistry` so
+    // one composed provider serves every bridge that plugs it (the
+    // postgis + mobilitydb dedup path).
+    sub_ext_loader: sub_ext::SubExtLoader,
+    // One-shot guard for the synthetic `ducklink_load` table-fn registration
+    // (surfaced through the [`DUCKLINK_LOAD_HANDLE`] sentinel). The first
+    // `drain_pending_registrations` after startup appends a hand-built
+    // [`reg::TableReg`] to the drain output so the core catalog acquires
+    // `ducklink_load` alongside whatever the freshly loaded extension
+    // registered. Subsequent drains skip re-injection — the catalog entry is
+    // process-lived.
+    injected_ducklink_load: bool,
+    // Same one-shot guard as [`injected_ducklink_load`], but for the
+    // synthetic `ducklink_prefix(alias, namespace)` TF + scalar surfaced
+    // through the [`DUCKLINK_PREFIX_TABLE_HANDLE`] +
+    // [`DUCKLINK_PREFIX_SCALAR_HANDLE`] sentinels. Two entries flip on
+    // the same bool because they're always injected together.
+    injected_ducklink_prefix: bool,
+    // `(alias, namespace)` pairs the native `ducklink_prefix` handler
+    // validated and queued for deferred DDL. The handler runs INSIDE a
+    // `dispatch_scalar`/`dispatch_table` callback, i.e. the core wasm
+    // store is mid-call — so the actual `duckdb_functions()` scan +
+    // per-function `CREATE OR REPLACE MACRO` + `INSERT INTO
+    // ducklink.prefixes` cannot happen in-band. Drained by
+    // [`HostState::flush_deferred_prefix_declarations`] on the next
+    // execute boundary (when the core is idle again).
+    deferred_prefix_declarations: Vec<(String, String)>,
+    // Names loaded by `ducklink_load(name)` awaiting a core-side drain.
+    //
+    // The native `ducklink_load` handler runs *inside* a `call_table`, i.e.
+    // the wasm core store is mid-call — we cannot re-enter `call_execute` to
+    // issue `LOAD <name>;` and trigger the standard post-LOAD drain (the same
+    // re-entrancy shape the live-query import respects in `query`). So the
+    // handler stashes what it loaded here and [`HostState::execute`] issues
+    // an idempotent `LOAD <name>;` on the user's next statement — the second
+    // LOAD lands `ensure_extension_loaded` on its fast path (already in
+    // `self.extensions`) and the core then drains `deferred_registrations`
+    // into its catalog.
+    deferred_drain_names: Vec<String>,
+    // Registrations captured out of `ExtensionInstance`s loaded via
+    // `ducklink_load(name)` but not yet handed to the core (see
+    // `deferred_drain_names`).
+    //
+    // The native handler drains the just-loaded instance so it can count
+    // scalars/tables/aggregates for its return row; that drain empties the
+    // instance's own queue, so the next `drain_pending_registrations` won't
+    // find them there. Instead we prepend `deferred_registrations` to the
+    // core's next drain output so the registrations still reach the DuckDB
+    // catalog on the deferred `LOAD`.
+    deferred_registrations: PendingRegistrationsData,
 }
 
 impl ExtensionManager {
     fn new(engine: Engine) -> Self {
         let index_path = workspace_root().join("registry/index.json");
-        let prefix_registry = prefix::PrefixRegistry::load_from_index(&index_path);
         let registry_index = Arc::new(
             std::fs::read_to_string(&index_path)
                 .ok()
@@ -1845,6 +1943,13 @@ impl ExtensionManager {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
+        // Phase D: the sub-ext loader shares the process-global
+        // `ProviderRegistry` (built lazily against `engine`) so a composed
+        // provider registered here on first LOAD resolves through the same
+        // registry as the `DUCKLINK_PROVIDERS`-declared ones and every
+        // bridge component sees it.
+        let sub_ext_loader =
+            sub_ext::SubExtLoader::from_env(dynlink_provider_registry(&engine).clone());
         Self {
             engine,
             core: None,
@@ -1858,12 +1963,6 @@ impl ExtensionManager {
             parsers: HashMap::new(),
             optimizers: HashMap::new(),
             filterable_tables: Vec::new(),
-            prefix_registry,
-            prefix_collisions: prefix::CollisionTracker::default(),
-            prefix_recorded: std::collections::HashSet::new(),
-            pending_prefix_rows: Vec::new(),
-            prefix_retained: prefix::RetainedDefs::default(),
-            pin_cache: HashMap::new(),
             current_connection: Arc::new(Mutex::new(None)),
             catalog_snapshot: Arc::new(Mutex::new(CatalogSnapshot::default())),
             registry_index,
@@ -1872,6 +1971,12 @@ impl ExtensionManager {
                 denied,
             },
             last_resolutions: HashMap::new(),
+            sub_ext_loader,
+            injected_ducklink_load: false,
+            injected_ducklink_prefix: false,
+            deferred_prefix_declarations: Vec::new(),
+            deferred_drain_names: Vec::new(),
+            deferred_registrations: PendingRegistrationsData::default(),
         }
     }
 
@@ -1999,353 +2104,6 @@ impl ExtensionManager {
             self.resolver_policy.forced_provider = Some(id.to_string());
             format!("extension_provider forced to '{id}'")
         }
-    }
-
-    /// PLAN-prefixes core: for every scalar/table/aggregate registration, also
-    /// emit a duplicate under the qualified name `{prefix}__{name}` (same
-    /// callback handle, same args/returns/options) so the function is callable
-    /// both ways. Bare names keep DuckDB's last-registered-wins behavior; the
-    /// qualified form is always unique. Warns on cross-component bare-name
-    /// collisions and stages the __ducklink_prefix* rows for a later flush.
-    fn apply_function_prefixes(&mut self, data: &mut PendingRegistrationsData) {
-        use prefix::Shape;
-
-        // SCALARS
-        let mut qualified_scalars: Vec<reg::ScalarReg> = Vec::new();
-        for entry in &data.scalars {
-            let n_args = entry.arguments.len() as i32;
-            let info = self.prefix_registry.resolve(&entry.extension);
-            self.note_prefix_registration(
-                &entry.extension,
-                &entry.name,
-                Shape::Scalar,
-                n_args,
-                &info,
-            );
-            // Retain the bare def so a pin can resurrect THIS expansion's impl.
-            self.prefix_retained.insert(
-                &info.expansion,
-                &info.prefix,
-                &entry.name,
-                Shape::Scalar,
-                n_args,
-                prefix::RetainedDef::Scalar(entry.clone()),
-            );
-            if let Some(qname) = prefix::qualified_name(&info.prefix, &entry.name) {
-                let mut dup = entry.clone();
-                dup.name = qname;
-                qualified_scalars.push(dup);
-            }
-        }
-        data.scalars.extend(qualified_scalars);
-
-        // TABLES
-        let mut qualified_tables: Vec<reg::TableReg> = Vec::new();
-        for entry in &data.tables {
-            let n_args = entry.arguments.len() as i32;
-            let info = self.prefix_registry.resolve(&entry.extension);
-            self.note_prefix_registration(
-                &entry.extension,
-                &entry.name,
-                Shape::Table,
-                n_args,
-                &info,
-            );
-            self.prefix_retained.insert(
-                &info.expansion,
-                &info.prefix,
-                &entry.name,
-                Shape::Table,
-                n_args,
-                prefix::RetainedDef::Table(entry.clone()),
-            );
-            if let Some(qname) = prefix::qualified_name(&info.prefix, &entry.name) {
-                let mut dup = entry.clone();
-                dup.name = qname;
-                qualified_tables.push(dup);
-            }
-        }
-        data.tables.extend(qualified_tables);
-
-        // AGGREGATES
-        let mut qualified_aggregates: Vec<reg::AggregateReg> = Vec::new();
-        for entry in &data.aggregates {
-            let n_args = entry.arguments.len() as i32;
-            let info = self.prefix_registry.resolve(&entry.extension);
-            self.note_prefix_registration(
-                &entry.extension,
-                &entry.name,
-                Shape::Aggregate,
-                n_args,
-                &info,
-            );
-            self.prefix_retained.insert(
-                &info.expansion,
-                &info.prefix,
-                &entry.name,
-                Shape::Aggregate,
-                n_args,
-                prefix::RetainedDef::Aggregate(entry.clone()),
-            );
-            if let Some(qname) = prefix::qualified_name(&info.prefix, &entry.name) {
-                let mut dup = entry.clone();
-                dup.name = qname;
-                qualified_aggregates.push(dup);
-            }
-        }
-        data.aggregates.extend(qualified_aggregates);
-
-        // MACROS (v1.1): a macro is dispatched by NAME (it becomes a DuckDB
-        // CREATE MACRO), so `{prefix}__{name}` namespacing applies identically.
-        // Arity is the parameter count.
-        let mut qualified_macros: Vec<reg::MacroReg> = Vec::new();
-        for entry in &data.macros {
-            let n_args = entry.parameters.len() as i32;
-            let info = self.prefix_registry.resolve(&entry.extension);
-            self.note_prefix_registration(
-                &entry.extension,
-                &entry.name,
-                Shape::Macro,
-                n_args,
-                &info,
-            );
-            self.prefix_retained.insert(
-                &info.expansion,
-                &info.prefix,
-                &entry.name,
-                Shape::Macro,
-                n_args,
-                prefix::RetainedDef::Macro(entry.clone()),
-            );
-            if let Some(qname) = prefix::qualified_name(&info.prefix, &entry.name) {
-                let mut dup = entry.clone();
-                dup.name = qname;
-                qualified_macros.push(dup);
-            }
-        }
-        data.macros.extend(qualified_macros);
-
-        // --- DELIBERATELY OUT OF SCOPE for prefix namespacing ---
-        // CAST is keyed by (from_type, to_type), NOT called by a name, so there
-        // is no `prefix__name` call surface — a `jsonfns__<cast>` is
-        // meaningless. STORAGE / FILES / INDEX are keyed by an ATTACH TYPE name
-        // / URL scheme / index-type name; those collide on TYPE/scheme strings,
-        // not on a function name, and `prefix__sqlitewasm` as an ATTACH TYPE is
-        // nonsensical. These shapes need a different collision surface and are
-        // intentionally NOT prefixed here. (See PLAN-prefixes "Out of scope".)
-    }
-
-    /// Record one registration into the collision tracker (warning on a
-    /// cross-component bare-name clash) and stage its __ducklink_prefix* rows.
-    fn note_prefix_registration(
-        &mut self,
-        extension: &str,
-        bare_name: &str,
-        shape: prefix::Shape,
-        n_args: i32,
-        info: &prefix::PrefixInfo,
-    ) {
-        let report = self.prefix_collisions.record(
-            extension,
-            &info.expansion,
-            info,
-            bare_name,
-            shape,
-            n_args,
-        );
-        if report.is_collision {
-            eprintln!("{}", prefix::format_collision_warning(&report));
-        }
-        let dedup_key = (
-            info.expansion.clone(),
-            bare_name.to_string(),
-            shape.as_str(),
-            n_args,
-        );
-        if self.prefix_recorded.insert(dedup_key) {
-            self.pending_prefix_rows.push(prefix::PrefixRow {
-                prefix: info.prefix.clone(),
-                expansion: info.expansion.clone(),
-                extension: extension.to_string(),
-                function_name: bare_name.to_string(),
-                shape: shape.as_str(),
-                n_args,
-            });
-        }
-    }
-
-    /// v1.1: for each captured collation, also register a qualified
-    /// `{prefix}__{name}` collation into the `collations` map (the core pulls it
-    /// by name), track collisions, stage prefix rows, and retain the bare def.
-    /// Collations carry no call args, so the arity key is 0.
-    fn prefix_collations(&mut self, collations: &[reg::CollationReg]) {
-        use prefix::Shape;
-        let mut qualified: Vec<(String, (String, bool))> = Vec::new();
-        for c in collations {
-            let info = self.prefix_registry.resolve(&c.extension);
-            self.note_prefix_registration(&c.extension, &c.name, Shape::Collation, 0, &info);
-            self.prefix_retained.insert(
-                &info.expansion,
-                &info.prefix,
-                &c.name,
-                Shape::Collation,
-                0,
-                prefix::RetainedDef::Collation(c.name.clone(), c.transform_scalar.clone(), c.combinable),
-            );
-            if let Some(qname) = prefix::qualified_name(&info.prefix, &c.name) {
-                qualified.push((qname, (c.transform_scalar.clone(), c.combinable)));
-            }
-        }
-        for (qname, val) in qualified {
-            self.collations.insert(qname, val);
-        }
-    }
-
-    /// v1.1: for each captured pragma, also register a qualified
-    /// `{prefix}__{name}` pragma into the `pragmas` map (the core intercepts the
-    /// qualified name too), track collisions, stage prefix rows, and retain the
-    /// bare def. Pragmas are variadic, so the arity key is -1.
-    fn prefix_pragmas(&mut self, pragmas: &[reg::PragmaReg]) {
-        use prefix::Shape;
-        let mut qualified: Vec<(String, (String, u32))> = Vec::new();
-        for p in pragmas {
-            let info = self.prefix_registry.resolve(&p.extension);
-            self.note_prefix_registration(&p.extension, &p.name, Shape::Pragma, -1, &info);
-            self.prefix_retained.insert(
-                &info.expansion,
-                &info.prefix,
-                &p.name,
-                Shape::Pragma,
-                -1,
-                prefix::RetainedDef::Pragma(p.name.clone(), p.extension.clone(), p.callback_handle),
-            );
-            if let Some(qname) = prefix::qualified_name(&info.prefix, &p.name) {
-                qualified.push((qname, (p.extension.clone(), p.callback_handle)));
-            }
-        }
-        for (qname, val) in qualified {
-            self.pragmas.insert(qname, val);
-        }
-    }
-
-    /// v1.1 THE PIN — re-register the pinned expansion's bare def for one
-    /// (name, shape, n_args), making that impl own the bare name NOW.
-    ///
-    /// THE MECHANISM (host-only, no core rebuild): the qualified form
-    /// `{prefix}__{name}` is ALWAYS registered (additive v1 behavior), so we
-    /// make the BARE name dispatch to the pinned impl by creating a wrapper
-    /// `CREATE OR REPLACE MACRO {name}(args) AS ({prefix}__{name}(args))`. A
-    /// macro shadows a same-name scalar/aggregate/macro in DuckDB resolution, so
-    /// this:
-    ///   * takes effect immediately on the connection,
-    ///   * SURVIVES a later extension loading + re-registering the bare scalar
-    ///     (the macro still shadows it) — load-order independence for free,
-    ///   * reverts cleanly on `DROP MACRO` (the bare scalar resurfaces).
-    /// (DuckDB's ALTER_ON_CONFLICT means a re-forwarded bare *function*
-    /// registration would also last-wins, but the core only re-pulls
-    /// registrations on a FRESH `LOAD`, which DuckDB short-circuits for an
-    /// already-loaded extension — so the macro wrapper is the reliable
-    /// host-side lever.)
-    ///
-    /// Returns the SQL to run, or `None` if the pinned (name,shape,arity,
-    /// expansion) has no retained def (extension not loaded) — logged + ignored.
-    /// Collation/pragma pins are recorded but not macro-wrappable (they are not
-    /// called as `name(args)`); for those the pin row stands and the qualified
-    /// `prefix__name` form is the disambiguation surface.
-    fn pin_macro_sql(
-        &self,
-        name: &str,
-        shape: prefix::Shape,
-        n_args: i32,
-        expansion: &str,
-    ) -> Option<String> {
-        if matches!(shape, prefix::Shape::Collation | prefix::Shape::Pragma) {
-            // Not call-by-`name(args)`: no macro wrapper. The qualified form is
-            // the disambiguation surface; the pin row is advisory.
-            return None;
-        }
-        let def = match self.prefix_retained.get(name, shape, n_args, expansion) {
-            Some(d) => d,
-            None => {
-                eprintln!(
-                    "[prefix] WARNING: pin for '{name}' ({}/{n_args}-arg) -> '{expansion}' has no retained def (extension not loaded?); ignored",
-                    shape.as_str()
-                );
-                return None;
-            }
-        };
-        let prefix = self.prefix_retained.prefix_for(expansion)?;
-        let qname = prefix::qualified_name(prefix, name)
-            .unwrap_or_else(|| format!("{prefix}__{name}"));
-        // Build the macro parameter list. Use the retained def's declared arg
-        // names when present, else positional p0..pN. Variadic (-1) wrappers
-        // are skipped (a macro can't forward an unknown arity).
-        let params = match def {
-            prefix::RetainedDef::Scalar(r) => Some(macro_param_names(&r.arguments)),
-            prefix::RetainedDef::Aggregate(r) => Some(macro_param_names(&r.arguments)),
-            prefix::RetainedDef::Table(_) => None, // table macros differ; skip
-            prefix::RetainedDef::Macro(r) => Some(r.parameters.clone()),
-            _ => None,
-        }?;
-        let param_list = params.join(", ");
-        eprintln!(
-            "[prefix] PIN: bare '{name}' ({}/{n_args}-arg) -> '{expansion}' via macro alias -> {qname}",
-            shape.as_str()
-        );
-        Some(format!(
-            "CREATE OR REPLACE MACRO {name}({param_list}) AS ({qname}({param_list}));"
-        ))
-    }
-
-    /// v1.1 THE PIN — the apply-pins pass. Given the CURRENT rows of
-    /// `__ducklink_prefix_pin` (function_name, shape, n_args, expansion),
-    /// returns the SQL the caller runs on the live connection:
-    ///   * `CREATE OR REPLACE MACRO` for each pinned key (the pin wins now);
-    ///   * `DROP MACRO IF EXISTS` for any key that WAS pinned but is no longer
-    ///     in the table (an `unprefer`) — the bare scalar/aggregate resurfaces.
-    /// Refreshes the in-memory `pin_cache` to the new set (also read at
-    /// load-time by `drain_pending_registrations` for the honor pass).
-    fn apply_pins(&mut self, pins: &[(String, prefix::Shape, i32, String)]) -> Vec<String> {
-        let mut sql: Vec<String> = Vec::new();
-        let new_set: HashMap<(String, prefix::Shape, i32), String> = pins
-            .iter()
-            .map(|(name, shape, n_args, expansion)| {
-                ((name.clone(), *shape, *n_args), expansion.clone())
-            })
-            .collect();
-        // Unpinned keys -> drop the wrapper macro to revert to the bare scalar.
-        let removed: Vec<(String, prefix::Shape, i32)> = self
-            .pin_cache
-            .keys()
-            .filter(|k| !new_set.contains_key(*k))
-            .cloned()
-            .collect();
-        for (name, shape, _n_args) in removed {
-            if matches!(shape, prefix::Shape::Collation | prefix::Shape::Pragma) {
-                continue;
-            }
-            eprintln!("[prefix] UNPIN: dropping wrapper macro for bare '{name}' (revert to last-loaded)");
-            sql.push(format!("DROP MACRO IF EXISTS {name};"));
-        }
-        // Pinned keys -> (re)create the wrapper macro.
-        for (name, shape, n_args, expansion) in pins {
-            if let Some(stmt) = self.pin_macro_sql(name, *shape, *n_args, expansion) {
-                sql.push(stmt);
-            }
-        }
-        self.pin_cache = new_set;
-        sql
-    }
-
-    /// Drain the staged __ducklink_prefix* rows as the SQL needed to upsert
-    /// them. The caller runs this against the live connection (a safe point,
-    /// outside the core's registration hook). Empty when nothing is pending.
-    fn take_prefix_table_sql(&mut self) -> Option<String> {
-        if self.pending_prefix_rows.is_empty() {
-            return None;
-        }
-        let rows = std::mem::take(&mut self.pending_prefix_rows);
-        Some(prefix::build_prefix_table_sql(&rows))
     }
 
     /// Item 2: the collations components have declared (via `register-collation`),
@@ -2568,6 +2326,101 @@ impl ExtensionManager {
         instance.storage_scan_close(handle, scan)
     }
 
+    // --- M2c write surface: transactions + DDL + DML ---
+    //
+    // Each method resolves the (ext, handle) pair the storage backend
+    // registered (same picker as the read-side scan) and forwards to the
+    // ExtensionInstance's `storage_*` write trampoline
+    // (ducklink-runtime/src/extension.rs). Errors bubble up as
+    // `extension_types::Duckerror` which the core-side impl re-maps.
+
+    fn dispatch_storage_begin_transaction(
+        &mut self,
+        catalog: u32,
+    ) -> Result<u32, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_begin_transaction(handle, catalog)
+    }
+
+    fn dispatch_storage_commit_transaction(
+        &mut self,
+        txn: u32,
+    ) -> Result<(), extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_commit_transaction(handle, txn)
+    }
+
+    fn dispatch_storage_rollback_transaction(
+        &mut self,
+        txn: u32,
+    ) -> Result<(), extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_rollback_transaction(handle, txn)
+    }
+
+    fn dispatch_storage_create_table(
+        &mut self,
+        txn: u32,
+        table: &str,
+        columns: &[extension_types::Columndef],
+    ) -> Result<(), extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_create_table(handle, txn, table, columns)
+    }
+
+    fn dispatch_storage_insert_rows(
+        &mut self,
+        txn: u32,
+        table: &str,
+        rows: &[Vec<extension_types::Duckvalue>],
+    ) -> Result<u64, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_insert_rows(handle, txn, table, rows)
+    }
+
+    fn dispatch_storage_delete_rows(
+        &mut self,
+        txn: u32,
+        table: &str,
+        rowids: &[i64],
+    ) -> Result<u64, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_delete_rows(handle, txn, table, rowids)
+    }
+
+    fn dispatch_storage_update_rows(
+        &mut self,
+        txn: u32,
+        table: &str,
+        rowids: &[i64],
+        updated_columns: &[u32],
+        rows: &[Vec<extension_types::Duckvalue>],
+    ) -> Result<u64, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_update_rows(handle, txn, table, rowids, updated_columns, rows)
+    }
+
     // --- Item 3 / M2a: custom index (build + search) routing ---
 
     /// The custom index TYPE names every component has registered (via
@@ -2742,6 +2595,12 @@ impl ExtensionManager {
         args: &[extension_types::Duckvalue],
         ctx: extension_runtime::Invokeinfo,
     ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+        // `ducklink_prefix` sentinel (scalar form): see
+        // [`DUCKLINK_PREFIX_SCALAR_HANDLE`]. Same handler as the table
+        // form but wraps its result as a VARCHAR summary.
+        if handle == DUCKLINK_PREFIX_SCALAR_HANDLE {
+            return self.native_ducklink_prefix_scalar(args);
+        }
         // Per-row hot path: borrow the entry under the registry lock (no
         // `CallbackEntry` clone) and copy out only the Copy `dispatcher_handle`
         // plus an `Arc<str>` refcount-bump of the extension name. The historical
@@ -2797,6 +2656,17 @@ impl ExtensionManager {
         rows: &Vec<Vec<extension_types::Duckvalue>>,
         ctx: extension_runtime::Invokeinfo,
     ) -> Result<Vec<extension_types::Duckvalue>, extension_types::Duckerror> {
+        // `ducklink_prefix` scalar sentinel: the core batches scalar calls
+        // through this columnar entry point. Handle it per-row via the
+        // shared native handler so the deferred queue reflects each
+        // (alias, namespace) pair the batch declared.
+        if handle == DUCKLINK_PREFIX_SCALAR_HANDLE {
+            let mut out = Vec::with_capacity(rows.len());
+            for row in rows {
+                out.push(self.native_ducklink_prefix_scalar(row.as_slice())?);
+            }
+            return Ok(out);
+        }
         // Resolver observability functions ride the SAME direct call-scalar-batch
         // import (no new contract): the shell-glue registers `extension_provider`
         // / `set_extension_provider` scalars with sentinel handles, which route to
@@ -2845,6 +2715,28 @@ impl ExtensionManager {
         handle: u32,
         args: &[extension_types::Duckvalue],
     ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
+        // `ducklink_load` sentinel: STABILITY.md § 1.1's `ducklink_load(name
+        // [, kind])` is surfaced as a table function registered under
+        // [`DUCKLINK_LOAD_HANDLE`] in `drain_pending_registrations`. No wasm
+        // component backs it — the handler runs the load orchestration
+        // natively (see `native_ducklink_load` for why the standard
+        // component-callback route can't work here). Analogous to the
+        // resolver observability scalars in `dispatch_scalar_batch` above.
+        if handle == DUCKLINK_LOAD_HANDLE {
+            return self.native_ducklink_load(args);
+        }
+        // `ducklink_prefix` sentinel (table form): see
+        // [`DUCKLINK_PREFIX_TABLE_HANDLE`]. Validates + queues the
+        // (alias, namespace) pair; the actual DDL runs on the next
+        // execute boundary. Returns one row
+        // `(alias, namespace, macros=<count>)` where `macros` is 0 for
+        // now because the drain hasn't run yet — the extension's real
+        // count is a same-call return only because that host can run
+        // DDL synchronously on its own connection, which the wasm core
+        // can't do from inside a callback.
+        if handle == DUCKLINK_PREFIX_TABLE_HANDLE {
+            return self.native_ducklink_prefix_table(args);
+        }
         let entry = match self.lookup_callback(handle, CallbackKind::Table) {
             Some(entry) => entry,
             None => {
@@ -2870,6 +2762,275 @@ impl ExtensionManager {
             }
         };
         instance.dispatch_table(entry.dispatcher_handle, args)
+    }
+
+    /// Native handler for `ducklink_load(name [, kind])` — invoked by
+    /// `dispatch_table` when it sees the [`DUCKLINK_LOAD_HANDLE`] sentinel.
+    ///
+    /// Argument parsing:
+    ///   * `args[0]` (positional, VARCHAR, required): extension name.
+    ///   * `args[1]` (positional or named `kind`, VARCHAR, optional):
+    ///     `'wasm'` (default) or `'native'`. The workspace host has only the
+    ///     wasm loader path today; `'native'` returns a clean
+    ///     `Duckerror::Unsupported` so the caller sees a legible message
+    ///     rather than a silent no-op. Once the workspace grows a native
+    ///     tier this arm becomes the same "prefer community-signed" pick
+    ///     `ducklink-extension`'s `native_load_dispatch` implements.
+    ///
+    /// Load orchestration:
+    ///   * `ensure_extension_loaded(name)` — idempotent; a re-load of a name
+    ///     already in `self.extensions` short-circuits, and the returned
+    ///     counts are all zero (matter-of-fact "nothing new happened").
+    ///   * A `false` return means the multi-provider resolver declined,
+    ///     which is surfaced as `Invalidargument` — the exact contract the
+    ///     conformance suite exercises (`FROM ducklink_load('does-not-exist')`
+    ///     must error cleanly).
+    ///
+    /// Deferred drain:
+    ///   * The instance's freshly captured pending registrations are drained
+    ///     here so the return-row counts are accurate. The drained data is
+    ///     stashed in `self.deferred_registrations`; the extension name is
+    ///     pushed to `self.deferred_drain_names`. `HostState::execute`
+    ///     replays a `LOAD <name>;` on the user's next statement (which
+    ///     triggers the core's normal post-LOAD `get_pending_registrations`
+    ///     path and applies the deferred data to the DuckDB catalog).
+    ///
+    /// Return shape mirrors ducklink-extension's `WasmLoadBind`:
+    /// `(name VARCHAR, path VARCHAR, scalars BIGINT, tables BIGINT,
+    ///  aggregates BIGINT)`. The `path` column is NULL — the workspace
+    /// resolver's on-disk path is not surfaced here yet (parity is a follow-up).
+    fn native_ducklink_load(
+        &mut self,
+        args: &[extension_types::Duckvalue],
+    ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
+        // Positional/named arg 0: extension name (VARCHAR). DuckDB passes named
+        // args in order, so the first VARCHAR is the name regardless of whether
+        // the caller wrote `ducklink_load('jsonfns')` or
+        // `ducklink_load(name := 'jsonfns')`.
+        let name = match args.first() {
+            Some(extension_types::Duckvalue::Text(s)) => s.clone(),
+            Some(extension_types::Duckvalue::Null) | None => {
+                return Err(extension_types::Duckerror::Invalidargument(
+                    "ducklink_load: missing required VARCHAR argument 'name'".into(),
+                ));
+            }
+            Some(_) => {
+                return Err(extension_types::Duckerror::Invalidargument(
+                    "ducklink_load: first argument must be VARCHAR".into(),
+                ));
+            }
+        };
+        // Optional second arg: kind (VARCHAR). Matches STABILITY.md § 1.1's
+        // `kind => 'wasm' | 'native'` shape; a NULL / missing value defaults
+        // to 'wasm'.
+        let kind = match args.get(1) {
+            Some(extension_types::Duckvalue::Text(s)) => s.to_ascii_lowercase(),
+            Some(extension_types::Duckvalue::Null) | None => "wasm".to_string(),
+            Some(_) => {
+                return Err(extension_types::Duckerror::Invalidargument(
+                    "ducklink_load: second argument (kind) must be VARCHAR".into(),
+                ));
+            }
+        };
+        match kind.as_str() {
+            "wasm" => {}
+            "native" => {
+                return Err(extension_types::Duckerror::Unsupported(
+                    "ducklink_load(kind='native'): the workspace host has no native \
+                     provider path yet — use kind='wasm' (the default)"
+                        .into(),
+                ));
+            }
+            other => {
+                return Err(extension_types::Duckerror::Invalidargument(format!(
+                    "ducklink_load: kind must be 'wasm' or 'native', got '{other}'"
+                )));
+            }
+        }
+
+        // `ensure_extension_loaded` returns Ok(true) on success (either fresh
+        // load or already-loaded fast path), Ok(false) when the resolver
+        // declined (no provider), or Err on load-time trap.
+        let sanitized = sanitize_extension_name(&name);
+        let loaded_ok = self.ensure_extension_loaded(&sanitized).map_err(|err| {
+            extension_types::Duckerror::Internal(format!(
+                "ducklink_load: failed to load '{name}': {err}"
+            ))
+        })?;
+        if !loaded_ok {
+            return Err(extension_types::Duckerror::Invalidargument(format!(
+                "ducklink_load: no admissible provider for '{name}' — no manifest \
+                 entry, no <extensions-dir>/{sanitized}.wasm shortcut, or the \
+                 resolver declined the candidates"
+            )));
+        }
+
+        // Drain what the freshly-loaded instance queued so we can report
+        // scalar/table/aggregate counts in the summary row. For an
+        // already-loaded ext this drain is empty (idempotent fast path
+        // returned above), which is the correct "nothing new happened"
+        // signal in the return row.
+        let (scalars, tables, aggregates) = match self.extensions.get_mut(&sanitized) {
+            Some(instance) => {
+                let drained = instance.drain_pending();
+                let counts = (
+                    drained.scalars.len(),
+                    drained.tables.len(),
+                    drained.aggregates.len(),
+                );
+                // Stash for the deferred core-side drain (see
+                // `deferred_registrations` field doc + `HostState::execute`).
+                self.deferred_registrations.append(drained);
+                counts
+            }
+            None => (0, 0, 0),
+        };
+
+        // Schedule an idempotent `LOAD <name>;` on the next user statement.
+        // Dedup: multiple `ducklink_load('x')` calls before a drain shouldn't
+        // pile up N LOAD-x driver statements.
+        if !self.deferred_drain_names.iter().any(|n| n == &sanitized) {
+            self.deferred_drain_names.push(sanitized.clone());
+        }
+
+        eprintln!(
+            "[extension-manager] ducklink_load('{sanitized}') -> \
+             scalars={scalars}, tables={tables}, aggregates={aggregates} \
+             (deferred core drain scheduled)"
+        );
+        let row: Vec<extension_types::Duckvalue> = vec![
+            extension_types::Duckvalue::Text(sanitized),
+            // `path` is intentionally NULL — the workspace resolver's
+            // artifact path isn't surfaced through this API yet (parity
+            // with ducklink-extension's `path` column is a follow-up).
+            extension_types::Duckvalue::Null,
+            extension_types::Duckvalue::Int64(scalars as i64),
+            extension_types::Duckvalue::Int64(tables as i64),
+            extension_types::Duckvalue::Int64(aggregates as i64),
+        ];
+        Ok(vec![row])
+    }
+
+    /// Consumes any pending `ducklink_load(name)` drain requests. Called by
+    /// [`HostState::execute`] before running the user's next statement so an
+    /// idempotent `LOAD <name>;` triggers the core's post-LOAD drain and the
+    /// stashed `deferred_registrations` reach the DuckDB catalog.
+    fn take_deferred_drain_names(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.deferred_drain_names)
+    }
+
+    /// Shared body of the `ducklink_prefix(alias, namespace)` sentinel
+    /// intercepts. Validates the identifiers and queues the pair for the
+    /// next-execute deferred drain. Returns the sanitized `(alias,
+    /// namespace)` pair so the caller can shape its own return row.
+    ///
+    /// The extension's [`run_ducklink_prefix`] runs the DDL synchronously
+    /// on its own connection and returns a real macros-created count. The
+    /// workspace host can't: this native handler runs inside a
+    /// `dispatch_scalar`/`dispatch_table` callback and the core wasm store
+    /// is mid-call — re-entering `call_execute` would deadlock the core
+    /// mutex and violate wasmtime store re-entrancy (same shape as the
+    /// `native_ducklink_load` deferred-drain rationale). The macros count
+    /// is therefore surfaced as 0 from the same call; the real DDL runs
+    /// on the next `HostState::execute` boundary
+    /// ([`HostState::flush_deferred_prefix_declarations`]) so `<alias>.<fn>`
+    /// resolves in every subsequent statement.
+    fn native_ducklink_prefix_common(
+        &mut self,
+        args: &[extension_types::Duckvalue],
+    ) -> Result<(String, String), extension_types::Duckerror> {
+        let alias = match args.first() {
+            Some(extension_types::Duckvalue::Text(s)) => s.clone(),
+            Some(extension_types::Duckvalue::Null) | None => {
+                return Err(extension_types::Duckerror::Invalidargument(
+                    "ducklink_prefix: missing required VARCHAR argument 'alias'".into(),
+                ));
+            }
+            Some(_) => {
+                return Err(extension_types::Duckerror::Invalidargument(
+                    "ducklink_prefix: first argument (alias) must be VARCHAR".into(),
+                ));
+            }
+        };
+        let namespace = match args.get(1) {
+            Some(extension_types::Duckvalue::Text(s)) => s.clone(),
+            Some(extension_types::Duckvalue::Null) | None => {
+                return Err(extension_types::Duckerror::Invalidargument(
+                    "ducklink_prefix: missing required VARCHAR argument 'namespace'".into(),
+                ));
+            }
+            Some(_) => {
+                return Err(extension_types::Duckerror::Invalidargument(
+                    "ducklink_prefix: second argument (namespace) must be VARCHAR".into(),
+                ));
+            }
+        };
+        if !is_safe_prefix_identifier(&alias) || !is_safe_prefix_identifier(&namespace) {
+            return Err(extension_types::Duckerror::Invalidargument(format!(
+                "ducklink_prefix: alias and namespace must match [A-Za-z0-9_]+ \
+                 (got alias='{alias}', namespace='{namespace}')"
+            )));
+        }
+        // Dedup within the pending queue — repeated
+        // `ducklink_prefix('c','main')` calls in the same statement
+        // shouldn't pile up N replays on the next execute.
+        if !self
+            .deferred_prefix_declarations
+            .iter()
+            .any(|(a, n)| a == &alias && n == &namespace)
+        {
+            self.deferred_prefix_declarations
+                .push((alias.clone(), namespace.clone()));
+        }
+        eprintln!(
+            "[extension-manager] ducklink_prefix('{alias}', '{namespace}') queued \
+             (deferred drain scheduled on next execute)"
+        );
+        Ok((alias, namespace))
+    }
+
+    /// Native handler for `FROM ducklink_prefix('alias','namespace')` —
+    /// invoked by `dispatch_table` on the [`DUCKLINK_PREFIX_TABLE_HANDLE`]
+    /// sentinel. Returns one row `(alias, namespace, macros BIGINT)`. The
+    /// `macros` count is 0 for this call — see
+    /// [`native_ducklink_prefix_common`] for the deferred-execution
+    /// rationale; a subsequent query against `information_schema.tables`
+    /// or `duckdb_functions()` will show the created macros once the
+    /// next `HostState::execute` boundary drains the queue.
+    fn native_ducklink_prefix_table(
+        &mut self,
+        args: &[extension_types::Duckvalue],
+    ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
+        let (alias, namespace) = self.native_ducklink_prefix_common(args)?;
+        let row: Vec<extension_types::Duckvalue> = vec![
+            extension_types::Duckvalue::Text(alias),
+            extension_types::Duckvalue::Text(namespace),
+            extension_types::Duckvalue::Int64(0),
+        ];
+        Ok(vec![row])
+    }
+
+    /// Native handler for `SELECT ducklink_prefix('alias','namespace')` —
+    /// invoked by `dispatch_scalar` / `dispatch_scalar_batch` on the
+    /// [`DUCKLINK_PREFIX_SCALAR_HANDLE`] sentinel. Returns a VARCHAR
+    /// summary shaped like the extension's:
+    /// `"alias='c' namespace='main' macros=0 (deferred)"`.
+    fn native_ducklink_prefix_scalar(
+        &mut self,
+        args: &[extension_types::Duckvalue],
+    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+        let (alias, namespace) = self.native_ducklink_prefix_common(args)?;
+        Ok(extension_types::Duckvalue::Text(format!(
+            "alias='{alias}' namespace='{namespace}' macros=0 (deferred)"
+        )))
+    }
+
+    /// Move the pending `(alias, namespace)` pairs out so
+    /// [`HostState::flush_deferred_prefix_declarations`] can drive the
+    /// DDL on the idle core without holding the extension-manager lock
+    /// across `call_execute`.
+    fn take_deferred_prefix_declarations(&mut self) -> Vec<(String, String)> {
+        std::mem::take(&mut self.deferred_prefix_declarations)
     }
 
     // --- 3.1.0 additive minor: streaming + filter-pushdown table-fn dispatch ---
@@ -3051,23 +3212,68 @@ impl ExtensionManager {
             return Ok(true);
         }
 
-        // Multi-provider resolution (design A): pick a certified provider via the
-        // resolver candidate pipeline instead of the bare filename shortcut. An
-        // extension absent from the manifest falls back to the filename.
-        let artifact = match self.resolve_provider_artifact(&sanitized) {
-            Ok(p) => p,
-            Err(reason) => {
-                eprintln!("[resolver] no admissible provider for '{sanitized}': {reason}");
+        // Phase D: per-sub-extension `compose:dynlink` bridge branch. If the
+        // requested name is present in `sub_ext_loader.sub_ext_bridge_paths`,
+        // materialize the composed provider (once) and load the configured
+        // bridge wasm instead of taking the flat resolver path. This runs
+        // BEFORE `resolve_provider_artifact` so a sub-ext bridge stored
+        // outside `<extensions-dir>` (e.g. under a `postgis-core-ducklink-bridge`
+        // checkout) doesn't need to be symlinked into the extensions dir.
+        // Falls through to the standard resolver when neither the bridge map
+        // nor a plan is configured for `sanitized` — preserves the existing
+        // LOAD semantics for every non-sub-ext extension bit-identically.
+        let artifact = if self.sub_ext_loader.has_bridge(&sanitized) {
+            // Compose + register the composed provider under
+            // `<sanitized>-composed`. Idempotent; a re-issued LOAD hits the
+            // materialized guard and no-ops.
+            match self.sub_ext_loader.materialize_sub_ext_provider(&sanitized) {
+                Ok(provider_id) => eprintln!(
+                    "[sub-ext] '{sanitized}' composed provider registered as '{provider_id}'"
+                ),
+                Err(err) => {
+                    eprintln!(
+                        "[sub-ext] '{sanitized}' materialization failed: {err}; skipping load request"
+                    );
+                    return Ok(false);
+                }
+            }
+            let bridge = self
+                .sub_ext_loader
+                .bridge_path(&sanitized)
+                .expect("has_bridge guarded above")
+                .to_path_buf();
+            if !bridge.exists() {
+                eprintln!(
+                    "[sub-ext] bridge wasm for '{sanitized}' not found at {}; skipping load request",
+                    bridge.display()
+                );
                 return Ok(false);
             }
-        };
-        if !artifact.exists() {
             eprintln!(
-                "[extension-manager] resolved artifact for '{sanitized}' not found at {}; skipping load request",
-                artifact.display()
+                "[sub-ext] '{sanitized}' bridge wasm: {}",
+                bridge.display()
             );
-            return Ok(false);
-        }
+            bridge
+        } else {
+            // Multi-provider resolution (design A): pick a certified provider via the
+            // resolver candidate pipeline instead of the bare filename shortcut. An
+            // extension absent from the manifest falls back to the filename.
+            let artifact = match self.resolve_provider_artifact(&sanitized) {
+                Ok(p) => p,
+                Err(reason) => {
+                    eprintln!("[resolver] no admissible provider for '{sanitized}': {reason}");
+                    return Ok(false);
+                }
+            };
+            if !artifact.exists() {
+                eprintln!(
+                    "[extension-manager] resolved artifact for '{sanitized}' not found at {}; skipping load request",
+                    artifact.display()
+                );
+                return Ok(false);
+            }
+            artifact
+        };
 
         let core = match self.core.as_ref() {
             Some(core) => core.clone(),
@@ -3192,11 +3398,6 @@ impl ExtensionManager {
         }
         let loaded_name = sanitized.clone();
         self.extensions.insert(sanitized, instance);
-        // v1.1: collation/pragma defs taken inside the `instance` borrow below,
-        // then handed to `prefix_collations`/`prefix_pragmas` AFTER the borrow
-        // ends (those methods borrow `self` whole).
-        let mut collations_captured: Vec<reg::CollationReg> = Vec::new();
-        let mut pragmas_captured: Vec<reg::PragmaReg> = Vec::new();
         // M2a: capture this extension's storage backends NOW (right after load),
         // so an `ATTACH ... (TYPE <name>)` can route to it without waiting for the
         // core's function-registration drain. Only the storage registrations are
@@ -3236,8 +3437,8 @@ impl ExtensionManager {
             // Item 2: capture this extension's collations NOW (right after load),
             // so the core can register them (via collation-host.collation-list)
             // before the first query that uses `COLLATE <name>`.
-            collations_captured = instance.take_pending_collations();
-            pragmas_captured = instance.take_pending_pragmas();
+            let collations_captured = instance.take_pending_collations();
+            let pragmas_captured = instance.take_pending_pragmas();
             // 2.3.0 / v3: capture this extension's parser extensions, so the core
             // can offer rejected statements to them (via parser-host).
             let parsers_captured = instance.take_pending_parsers();
@@ -3301,14 +3502,6 @@ impl ExtensionManager {
                 );
             }
         }
-        // v1.1: collation/pragma are dispatched by NAME, so `{prefix}__{name}`
-        // namespacing applies identically — register the qualified form into the
-        // same map (the core pulls it by name), track cross-component collisions,
-        // stage __ducklink_prefix_function rows, and retain the bare def. Run
-        // OUTSIDE the `instance` borrow above (these methods borrow `self` whole).
-        // Collation arity = 0 (no call args); pragma arity = -1 (variadic).
-        self.prefix_collations(&collations_captured);
-        self.prefix_pragmas(&pragmas_captured);
         eprintln!(
             "[extension-manager] extension '{loaded_name}' loaded successfully and ready for registrations"
         );
@@ -3322,6 +3515,14 @@ impl ExtensionManager {
 
     fn drain_pending_registrations(&mut self) -> PendingRegistrationsData {
         let mut aggregated = PendingRegistrationsData::default();
+        // Prepend anything the native `ducklink_load(name)` handler stashed
+        // in a prior call: those registrations belong to an extension already
+        // in `self.extensions`, but the handler drained them off the instance
+        // to count them for its return row. Draining here from the same
+        // instance would find nothing; this prepend delivers them to the
+        // core catalog on the deferred `LOAD <name>;` that `HostState::execute`
+        // replays. See `deferred_registrations` field doc.
+        aggregated.append(std::mem::take(&mut self.deferred_registrations));
         for instance in self.extensions.values_mut() {
             aggregated.append(instance.drain_pending());
         }
@@ -3339,16 +3540,137 @@ impl ExtensionManager {
                 (storage.extension.clone(), storage.callback_handle),
             );
         }
-        // PLAN-prefixes: namespace every scalar/table/aggregate registration as
-        // `prefix__name` (additive — bare name keeps working), warn on
-        // cross-component bare-name collisions, and stage the per-db
-        // __ducklink_prefix_function rows. Pure (no SQL / no core re-entry); the
-        // staged rows are flushed lazily on the live connection.
-        self.apply_function_prefixes(&mut aggregated);
-        // v1.1 THE PIN — no mid-drain honor pass is needed: a pin is effected by
-        // a wrapper macro (`apply_pins`) that shadows ANY later bare-scalar
-        // re-registration, so load-order independence is automatic. The pinned
-        // owner keeps winning the bare name even after this fresh load.
+        // One-shot: append the synthetic `ducklink_load` table function
+        // (STABILITY.md § 1.1). The `callback_handle` is the reserved
+        // [`DUCKLINK_LOAD_HANDLE`] sentinel; `dispatch_table` intercepts it
+        // and calls `native_ducklink_load` instead of routing to a component.
+        //
+        // The `apply_function_prefixes`-plus-PIN shadowing that used to live
+        // right before this block is gone with the prefix__name retirement
+        // (workspace commit a048b7a). If/when the schema-based prefix.name
+        // model lands, this injection stays where it is; the model runs
+        // out-of-band via `ducklink_prefix(...)`.
+        if !self.injected_ducklink_load {
+            self.injected_ducklink_load = true;
+            aggregated.tables.push(reg::TableReg {
+                extension: "ducklink".to_string(),
+                name: "ducklink_load".to_string(),
+                // The `duckdb-wasi` core registers every `funcarg` as a
+                // POSITIONAL required parameter (`duckdb_table_function_add_parameter`
+                // — no distinction between named + optional). Only the
+                // required `name` argument is surfaced today so
+                // `FROM ducklink_load('jsonfns')` binds. STABILITY.md § 1.1
+                // still commits `kind => 'wasm' | 'native'`; the wasm-core
+                // table-fn registration WIT needs a `named_parameters` field
+                // before we can surface it here without turning
+                // `ducklink_load('jsonfns')` into a bind error. Tracked as a
+                // follow-up — the intercept in `native_ducklink_load`
+                // already handles a second VARCHAR arg once the core
+                // starts forwarding it.
+                arguments: vec![reg::FuncArg {
+                    name: Some("name".to_string()),
+                    logical: reg::LogicalType::Text,
+                }],
+                columns: vec![
+                    reg::ColumnDef {
+                        name: "name".to_string(),
+                        logical: reg::LogicalType::Text,
+                    },
+                    reg::ColumnDef {
+                        name: "path".to_string(),
+                        logical: reg::LogicalType::Text,
+                    },
+                    reg::ColumnDef {
+                        name: "scalars".to_string(),
+                        logical: reg::LogicalType::Int64,
+                    },
+                    reg::ColumnDef {
+                        name: "tables".to_string(),
+                        logical: reg::LogicalType::Int64,
+                    },
+                    reg::ColumnDef {
+                        name: "aggregates".to_string(),
+                        logical: reg::LogicalType::Int64,
+                    },
+                ],
+                callback_handle: DUCKLINK_LOAD_HANDLE,
+                options: None,
+            });
+            eprintln!(
+                "[extension-manager] injected synthetic `ducklink_load` table function \
+                 (STABILITY.md § 1.1) via sentinel handle {DUCKLINK_LOAD_HANDLE:#x}"
+            );
+        }
+
+        // One-shot: append the synthetic `ducklink_prefix` TF + scalar
+        // (STABILITY.md § 1.1). Both are backed by the same native handler
+        // (`native_ducklink_prefix_common`) which validates the args and
+        // queues the work for the next-execute deferred drain. See the
+        // sentinel-handle docs on [`DUCKLINK_PREFIX_TABLE_HANDLE`] for why
+        // the DDL cannot run in-band.
+        if !self.injected_ducklink_prefix {
+            self.injected_ducklink_prefix = true;
+            // Table form: `FROM ducklink_prefix('c','main')` yields one row
+            // `(alias, namespace, macros BIGINT)` mirroring the extension's
+            // `DucklinkPrefix` VTab.
+            aggregated.tables.push(reg::TableReg {
+                extension: "ducklink".to_string(),
+                name: "ducklink_prefix".to_string(),
+                arguments: vec![
+                    reg::FuncArg {
+                        name: Some("alias".to_string()),
+                        logical: reg::LogicalType::Text,
+                    },
+                    reg::FuncArg {
+                        name: Some("namespace".to_string()),
+                        logical: reg::LogicalType::Text,
+                    },
+                ],
+                columns: vec![
+                    reg::ColumnDef {
+                        name: "alias".to_string(),
+                        logical: reg::LogicalType::Text,
+                    },
+                    reg::ColumnDef {
+                        name: "namespace".to_string(),
+                        logical: reg::LogicalType::Text,
+                    },
+                    reg::ColumnDef {
+                        name: "macros".to_string(),
+                        logical: reg::LogicalType::Int64,
+                    },
+                ],
+                callback_handle: DUCKLINK_PREFIX_TABLE_HANDLE,
+                options: None,
+            });
+            // Scalar form: `SELECT ducklink_prefix('c','main')` returns a
+            // VARCHAR summary. Same name as the TF — DuckDB's binder
+            // disambiguates by call site (`SELECT foo(...)` vs `FROM
+            // foo(...)`), matching the extension's dual-registration.
+            aggregated.scalars.push(reg::ScalarReg {
+                extension: "ducklink".to_string(),
+                name: "ducklink_prefix".to_string(),
+                arguments: vec![
+                    reg::FuncArg {
+                        name: Some("alias".to_string()),
+                        logical: reg::LogicalType::Text,
+                    },
+                    reg::FuncArg {
+                        name: Some("namespace".to_string()),
+                        logical: reg::LogicalType::Text,
+                    },
+                ],
+                returns: reg::LogicalType::Text,
+                callback_handle: DUCKLINK_PREFIX_SCALAR_HANDLE,
+                options: None,
+            });
+            eprintln!(
+                "[extension-manager] injected synthetic `ducklink_prefix` TF+scalar \
+                 (STABILITY.md § 1.1) via sentinel handles \
+                 table={DUCKLINK_PREFIX_TABLE_HANDLE:#x} \
+                 scalar={DUCKLINK_PREFIX_SCALAR_HANDLE:#x}"
+            );
+        }
 
         let scalar_names =
             summarize_registration_names(&aggregated.scalars, |entry| entry.name.as_str());
@@ -3495,7 +3817,13 @@ impl HostState {
         // component, auto-loaded by default. Override with DUCKLINK_AUTOLOAD
         // (set it empty to disable, or to a different/longer list). On a fat core
         // the jsonfns LOAD collides with embedded json and is skipped harmlessly.
-        let spec = std::env::var("DUCKLINK_AUTOLOAD").unwrap_or_else(|_| String::from("jsonfns"));
+        // `ducklink-scalars` ships the two always-available scalars
+        // committed in `ducklink-extension/STABILITY.md § 1.1`
+        // (`ducklink_version`, `ducklink_help`). Autoloading it matches
+        // the extension's behaviour and satisfies the two rows the
+        // conformance suite expects for those names.
+        let spec = std::env::var("DUCKLINK_AUTOLOAD")
+            .unwrap_or_else(|_| String::from("jsonfns,ducklink_scalars"));
         // Run `LOAD <name>` as SQL on the freshly-opened connection so the core's
         // normal load orchestration applies the component's registrations to the
         // connection (calling ensure_extension_loaded directly only buffers them).
@@ -3532,6 +3860,155 @@ impl HostState {
                 Err(trap) => eprintln!("[autoload] skipped '{name}': {trap}"),
             }
         }
+        // Bring up the `ducklink.*` discovery schema on the freshly-opened
+        // connection. Runs after the autoload pass so a `SELECT * FROM
+        // ducklink.modules` in the very first user statement resolves.
+        self.create_ducklink_schema(&handle);
+    }
+
+    /// Create the public `ducklink.*` discovery schema (STABILITY.md § 1.2) on
+    /// `handle`. Mirrors the extension's `create_ducklink_schema` shape-for-
+    /// shape (same view names, same column names, same column types, same
+    /// column order). Idempotent (`CREATE SCHEMA IF NOT EXISTS`, `CREATE OR
+    /// REPLACE VIEW`); run once at connection open.
+    ///
+    /// Each view is a zero-row projection of typed NULLs. The workspace host
+    /// does not yet expose the runtime state the native extension's `WasmXxx`
+    /// TFs read from (loaded-component list, catalog, on-disk cache, event
+    /// log), so an honest zero-row view of the correct SHAPE is what we can
+    /// commit to today — enough to make `SELECT * FROM ducklink.<name>`
+    /// resolve and to satisfy the shape assertions in the cross-host
+    /// conformance suite (`conformance/scripts/02-*.sql`).
+    ///
+    /// `ducklink.prefixes` is a persistent TABLE (not a view) minted here
+    /// as part of the discovery schema so `information_schema.tables
+    /// WHERE table_schema='ducklink'` surfaces it (conformance script 02)
+    /// and so [`HostState::flush_deferred_prefix_declarations`] has a place
+    /// to `INSERT OR REPLACE` each `ducklink_prefix(alias, namespace)`
+    /// declaration. `PREFIX(alias, namespace)` is registered here too so
+    /// `SELECT PREFIX(...)` binds through DuckDB's macro path to the
+    /// `ducklink_prefix` scalar sentinel — the extension registers it the
+    /// same way in `reg_duckdb.rs`.
+    ///
+    /// Non-fatal: DDL failures are logged and skipped rather than aborting
+    /// the connection.
+    fn create_ducklink_schema(&mut self, handle: &ResourceAny) {
+        // `ducklink.search(query)` is a MACRO (takes a bound query argument)
+        // — the other eight are VIEWs. Statements are executed one at a time
+        // because the CLI's `execute` boundary is a single-statement call.
+        const DDL: &[&str] = &[
+            "CREATE SCHEMA IF NOT EXISTS ducklink",
+            // prefixes — persistent table (NOT a view). Populated by
+            // `HostState::flush_deferred_prefix_declarations` after each
+            // `ducklink_prefix(alias, namespace)` call.
+            "CREATE TABLE IF NOT EXISTS ducklink.prefixes ( \
+                alias VARCHAR PRIMARY KEY, \
+                namespace VARCHAR NOT NULL)",
+            // PREFIX(alias, namespace) — shorter macro that delegates to
+            // the `ducklink_prefix` scalar sentinel (STABILITY.md § 1.1).
+            // Mirrors the extension's `reg_duckdb.rs` registration at
+            // `ducklink_load(name)` time.
+            "CREATE OR REPLACE MACRO PREFIX(alias, namespace) AS \
+             ducklink_prefix(alias, namespace)",
+            // modules — 11 cols
+            "CREATE OR REPLACE VIEW ducklink.modules AS \
+             SELECT CAST(NULL AS VARCHAR) AS name, \
+                    CAST(NULL AS VARCHAR) AS version, \
+                    CAST(NULL AS VARCHAR) AS description, \
+                    CAST(NULL AS VARCHAR) AS categories, \
+                    CAST(NULL AS BOOLEAN) AS loaded, \
+                    CAST(NULL AS BOOLEAN) AS native_available, \
+                    CAST(NULL AS INTEGER) AS scalars, \
+                    CAST(NULL AS INTEGER) AS tables, \
+                    CAST(NULL AS INTEGER) AS aggregates, \
+                    CAST(NULL AS VARCHAR) AS capabilities, \
+                    CAST(NULL AS BOOLEAN) AS compatible \
+             WHERE FALSE",
+            // functions — 6 cols
+            "CREATE OR REPLACE VIEW ducklink.functions AS \
+             SELECT CAST(NULL AS VARCHAR) AS module, \
+                    CAST(NULL AS VARCHAR) AS name, \
+                    CAST(NULL AS VARCHAR) AS kind, \
+                    CAST(NULL AS VARCHAR) AS arguments, \
+                    CAST(NULL AS VARCHAR) AS returns, \
+                    CAST(NULL AS BOOLEAN) AS loaded \
+             WHERE FALSE",
+            // host — 2 cols (single-row in the extension; zero-row placeholder here)
+            "CREATE OR REPLACE VIEW ducklink.host AS \
+             SELECT CAST(NULL AS VARCHAR) AS wasm_abi, \
+                    CAST(NULL AS VARCHAR) AS duckdb_version \
+             WHERE FALSE",
+            // host_capabilities — 3 cols
+            "CREATE OR REPLACE VIEW ducklink.host_capabilities AS \
+             SELECT CAST(NULL AS VARCHAR) AS name, \
+                    CAST(NULL AS BOOLEAN) AS available, \
+                    CAST(NULL AS VARCHAR) AS detail \
+             WHERE FALSE",
+            // cache — 5 cols
+            "CREATE OR REPLACE VIEW ducklink.cache AS \
+             SELECT CAST(NULL AS VARCHAR) AS digest, \
+                    CAST(NULL AS VARCHAR) AS name, \
+                    CAST(NULL AS BIGINT) AS bytes, \
+                    CAST(NULL AS TIMESTAMP) AS modified, \
+                    CAST(NULL AS VARCHAR) AS path \
+             WHERE FALSE",
+            // module_compatibility — 6 cols
+            "CREATE OR REPLACE VIEW ducklink.module_compatibility AS \
+             SELECT CAST(NULL AS VARCHAR) AS module, \
+                    CAST(NULL AS VARCHAR) AS module_generation, \
+                    CAST(NULL AS VARCHAR) AS host_generation, \
+                    CAST(NULL AS VARCHAR) AS lifecycle, \
+                    CAST(NULL AS BOOLEAN) AS runnable, \
+                    CAST(NULL AS BOOLEAN) AS selected \
+             WHERE FALSE",
+            // events — 5 cols
+            "CREATE OR REPLACE VIEW ducklink.events AS \
+             SELECT CAST(NULL AS BIGINT) AS seq, \
+                    CAST(NULL AS TIMESTAMP) AS ts, \
+                    CAST(NULL AS VARCHAR) AS kind, \
+                    CAST(NULL AS VARCHAR) AS module, \
+                    CAST(NULL AS VARCHAR) AS detail \
+             WHERE FALSE",
+            // docs — 9 cols
+            "CREATE OR REPLACE VIEW ducklink.docs AS \
+             SELECT CAST(NULL AS VARCHAR) AS module, \
+                    CAST(NULL AS VARCHAR) AS function, \
+                    CAST(NULL AS VARCHAR) AS kind, \
+                    CAST(NULL AS VARCHAR) AS signature, \
+                    CAST(NULL AS VARCHAR) AS summary, \
+                    CAST(NULL AS VARCHAR) AS description, \
+                    CAST(NULL AS VARCHAR) AS example, \
+                    CAST(NULL AS VARCHAR) AS tags, \
+                    CAST(NULL AS BOOLEAN) AS loaded \
+             WHERE FALSE",
+            // search(query) — 7 cols, MACRO (takes a bound query argument)
+            "CREATE OR REPLACE MACRO ducklink.search(query) AS TABLE \
+             SELECT CAST(NULL AS VARCHAR) AS module, \
+                    CAST(NULL AS VARCHAR) AS function, \
+                    CAST(NULL AS VARCHAR) AS kind, \
+                    CAST(NULL AS VARCHAR) AS signature, \
+                    CAST(NULL AS VARCHAR) AS summary, \
+                    CAST(NULL AS VARCHAR) AS tags, \
+                    CAST(NULL AS BIGINT) AS score \
+             WHERE FALSE",
+        ];
+        for sql in DDL {
+            let res = self.with_core(|core| {
+                core.with_database(|guest, store| guest.call_execute(store, handle.clone(), sql))
+            });
+            match res {
+                Ok(Ok(_)) => {}
+                Ok(Err(err)) => eprintln!(
+                    "[ducklink] discovery-view DDL failed: {}: {}",
+                    sql,
+                    core_duckerror_message(err)
+                ),
+                Err(trap) => eprintln!(
+                    "[ducklink] discovery-view DDL trapped: {}: {}",
+                    sql, trap
+                ),
+            }
+        }
     }
 
     fn with_core<F, R>(&self, f: F) -> R
@@ -3540,6 +4017,229 @@ impl HostState {
     {
         let mut core = self.core.lock().unwrap_or_else(|e| e.into_inner());
         f(&mut core)
+    }
+
+    /// If a prior `ducklink_load(name)` table-fn call queued an
+    /// already-loaded extension for a core-side drain, replay an idempotent
+    /// `LOAD <name>;` here so `ensure_extension_loaded` short-circuits and
+    /// the core's post-LOAD `get_pending_registrations` picks up the
+    /// manager's `deferred_registrations`. Best-effort: a trap or duckerror
+    /// on the driver LOAD is logged and skipped rather than surfacing on
+    /// the user's actual statement.
+    ///
+    /// See [`ExtensionManager::native_ducklink_load`] for why the drain has
+    /// to be deferred (dispatch runs inside the core's callback path — the
+    /// wasm store is mid-call and can't re-enter `call_execute`).
+    fn flush_deferred_ducklink_loads(&mut self, conn: ResourceAny) {
+        let names = {
+            let mut manager = self
+                .extension_manager
+                .lock()
+                .expect("extension manager mutex poisoned");
+            manager.take_deferred_drain_names()
+        };
+        for name in names {
+            // Basic identifier hygiene: `ducklink_load` already sanitizes the
+            // caller's arg through `sanitize_extension_name`, but re-check
+            // here — the value is embedded directly into SQL. Anything
+            // non-`[A-Za-z0-9_-]` at this point would be a bug in the
+            // sanitizer.
+            if !name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+            {
+                eprintln!("[ducklink_load] refusing to replay LOAD for '{name}' (bad identifier)");
+                continue;
+            }
+            let sql = format!("LOAD {name};");
+            let res = self.with_core(|core| {
+                core.with_database(|guest, store| guest.call_execute(store, conn.clone(), &sql))
+            });
+            match res {
+                Ok(Ok(_)) => eprintln!(
+                    "[ducklink_load] deferred drain flushed via idempotent `{sql}`"
+                ),
+                Ok(Err(err)) => eprintln!(
+                    "[ducklink_load] deferred drain LOAD for '{name}' returned duckerror: {}",
+                    core_duckerror_message(err)
+                ),
+                Err(trap) => eprintln!(
+                    "[ducklink_load] deferred drain LOAD for '{name}' trapped: {trap}"
+                ),
+            }
+        }
+    }
+
+    /// Drain the `(alias, namespace)` pairs the native
+    /// `ducklink_prefix(...)` handler queued and, for each, run the
+    /// same set of DDL statements the ducklink-extension's
+    /// [`create_prefix_aliases`] + [`persist_prefix`] pair does:
+    ///
+    ///   1. `CREATE SCHEMA IF NOT EXISTS <alias>`
+    ///   2. For every function reachable in schema `<namespace>` (per
+    ///      `duckdb_functions()`, of a macro-shapeable type), emit a
+    ///      `CREATE OR REPLACE MACRO <alias>.<name>(...) AS
+    ///      <namespace>.<name>(...)`. See [`build_prefix_alias_macro`]
+    ///      for the per-function shape.
+    ///   3. `INSERT OR REPLACE INTO ducklink.prefixes(alias, namespace)`
+    ///      so a subsequent host boot (or an explicit replay) can
+    ///      restore the alias schema.
+    ///
+    /// The same rationale as [`flush_deferred_ducklink_loads`]: the
+    /// handler itself runs inside a `dispatch_scalar`/`dispatch_table`
+    /// callback (wasm store mid-call) and cannot re-enter
+    /// `call_execute` — everything above has to happen here on the
+    /// idle-core path before the user's next statement runs.
+    ///
+    /// Best-effort: any per-statement DDL error is logged and the pass
+    /// continues, so a single bad function shape doesn't abort the
+    /// user's next SQL.
+    fn flush_deferred_prefix_declarations(&mut self, conn: ResourceAny) {
+        let pairs = {
+            let mut manager = self
+                .extension_manager
+                .lock()
+                .expect("extension manager mutex poisoned");
+            manager.take_deferred_prefix_declarations()
+        };
+        for (alias, namespace) in pairs {
+            // Re-check hygiene at the SQL boundary: the sentinel handler
+            // already ran `is_safe_prefix_identifier`, but the value is
+            // spliced directly into DDL here so a defense-in-depth check
+            // catches any regression that skipped the sentinel gate.
+            if !is_safe_prefix_identifier(&alias) || !is_safe_prefix_identifier(&namespace) {
+                eprintln!(
+                    "[ducklink_prefix] refusing to flush ('{alias}', '{namespace}') \
+                     — identifiers must match [A-Za-z0-9_]+"
+                );
+                continue;
+            }
+            match self.apply_prefix_declaration(conn.clone(), &alias, &namespace) {
+                Ok(macros) => eprintln!(
+                    "[ducklink_prefix] deferred flush: alias='{alias}' \
+                     namespace='{namespace}' macros={macros}"
+                ),
+                Err(err) => eprintln!(
+                    "[ducklink_prefix] deferred flush for ('{alias}', '{namespace}') \
+                     failed: {err}"
+                ),
+            }
+        }
+    }
+
+    /// Apply a single `(alias, namespace)` declaration: scan
+    /// `duckdb_functions()` for aliasable functions in `namespace`,
+    /// emit the mirrored `CREATE OR REPLACE MACRO`s under `alias`, and
+    /// persist the mapping in `ducklink.prefixes`. Returns the number
+    /// of macros successfully created. Mirrors the extension's
+    /// `create_prefix_aliases` + `persist_prefix` pair.
+    fn apply_prefix_declaration(
+        &mut self,
+        conn: ResourceAny,
+        alias: &str,
+        namespace: &str,
+    ) -> Result<usize, String> {
+        // 1. Ensure the alias schema exists.
+        let create_schema = format!("CREATE SCHEMA IF NOT EXISTS {alias}");
+        self.run_prefix_ddl(conn.clone(), &create_schema)?;
+
+        // 2. Enumerate every aliasable function in the source namespace.
+        //    (Same filter set the extension uses in `create_prefix_aliases`.)
+        let scan_sql = format!(
+            "SELECT DISTINCT function_name, function_type, \
+                    COALESCE(array_to_string(parameters, ','), '') AS param_csv \
+             FROM duckdb_functions() \
+             WHERE schema_name = '{namespace}' \
+             AND function_type IN ('scalar','aggregate','table_macro','scalar_macro','macro','table')"
+        );
+        let rows = self.run_prefix_query(conn.clone(), &scan_sql)?;
+        let mut created = 0usize;
+        // Dedup per (name, arity) so overloaded scalar signatures don't
+        // race each other for the same LHS — matches the extension's
+        // `done_arities` HashSet in `create_prefix_aliases`.
+        let mut done_arities: std::collections::HashSet<(String, usize)> =
+            std::collections::HashSet::new();
+        for row in rows {
+            let name = row.first().cloned().unwrap_or_default();
+            let ftype = row.get(1).cloned().unwrap_or_default();
+            let csv = row.get(2).cloned().unwrap_or_default();
+            if !is_safe_prefix_identifier(&name) {
+                continue;
+            }
+            let params: Vec<String> = if csv.is_empty() {
+                Vec::new()
+            } else {
+                csv.split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            };
+            if !done_arities.insert((name.clone(), params.len())) {
+                continue;
+            }
+            let Some(macro_sql) = build_prefix_alias_macro(&ftype, alias, &name, namespace, &params)
+            else {
+                continue;
+            };
+            match self.run_prefix_ddl(conn.clone(), &macro_sql) {
+                Ok(_) => created += 1,
+                Err(err) => eprintln!(
+                    "[ducklink_prefix] alias '{alias}.{name}' skipped: {err}"
+                ),
+            }
+        }
+
+        // 3. Persist the declaration so a follow-up port can replay it.
+        //    Identifiers already gated above; the values themselves are
+        //    string literals in SQL, so single-quotes need to be escaped.
+        let alias_sql = alias.replace('\'', "''");
+        let namespace_sql = namespace.replace('\'', "''");
+        let insert = format!(
+            "INSERT OR REPLACE INTO ducklink.prefixes (alias, namespace) \
+             VALUES ('{alias_sql}', '{namespace_sql}')"
+        );
+        if let Err(err) = self.run_prefix_ddl(conn, &insert) {
+            eprintln!(
+                "[ducklink_prefix] persist ('{alias}', '{namespace}') failed: {err} \
+                 (session aliases succeeded; reconnect won't restore)"
+            );
+        }
+        Ok(created)
+    }
+
+    /// `call_execute` wrapper for one-shot DDL that returns no rows. Maps
+    /// wasmtime traps + duckerrors to a single `String` for logging.
+    fn run_prefix_ddl(&self, conn: ResourceAny, sql: &str) -> Result<(), String> {
+        let res = self.with_core(|core| {
+            core.with_database(|guest, store| guest.call_execute(store, conn, sql))
+        });
+        match res {
+            Ok(Ok(_)) => Ok(()),
+            Ok(Err(err)) => Err(core_duckerror_message(err)),
+            Err(trap) => Err(format!("trap: {trap}")),
+        }
+    }
+
+    /// `call_execute` wrapper for a query whose rows we need. Returns
+    /// each row as `Vec<String>` (stringified via `spi_value_text`, so
+    /// NULL becomes "").
+    fn run_prefix_query(
+        &self,
+        conn: ResourceAny,
+        sql: &str,
+    ) -> Result<Vec<Vec<String>>, String> {
+        let res = self.with_core(|core| {
+            core.with_database(|guest, store| guest.call_execute(store, conn, sql))
+        });
+        match res {
+            Ok(Ok(qr)) => Ok(qr
+                .rows
+                .iter()
+                .map(|row| row.iter().map(spi_value_text).collect())
+                .collect()),
+            Ok(Err(err)) => Err(core_duckerror_message(err)),
+            Err(trap) => Err(format!("trap: {trap}")),
+        }
     }
 
     fn drain_pending_resource_drops(&mut self) -> Result<(), cli_types::Duckerror> {
@@ -3973,10 +4673,30 @@ impl cli_db::Host for HostState {
         conn: Resource<cli_db::Connection>,
         sql: CliString,
     ) -> Result<cli_db::QueryResult, cli_types::Duckerror> {
-        let entry = self
+        let entry_handle = self
             .connections
             .get(&conn.rep())
-            .ok_or_else(|| cli_types::Duckerror::Internal("unknown connection".into()))?;
+            .ok_or_else(|| cli_types::Duckerror::Internal("unknown connection".into()))?
+            .handle
+            .clone();
+        // `ducklink_load(name)` deferred drain: if the user's PREVIOUS
+        // statement went through `dispatch_table`'s native `ducklink_load`
+        // path, an extension was loaded but its pending registrations are
+        // stashed in the manager (that path can't re-enter `call_execute`
+        // from a wasm-store-mid-call callback). Replay an idempotent
+        // `LOAD <name>;` here — `ensure_extension_loaded` short-circuits
+        // (already in `self.extensions`) and the core then calls
+        // `get_pending_registrations`, which drains our `deferred_registrations`
+        // into the DuckDB catalog. The user's actual SQL runs after.
+        self.flush_deferred_ducklink_loads(entry_handle.clone());
+        // Same deferral rationale as `ducklink_load`: the native
+        // `ducklink_prefix(alias, namespace)` sentinel handler validates
+        // + queues the pair but can't run the associated `CREATE SCHEMA
+        // / CREATE OR REPLACE MACRO / INSERT INTO ducklink.prefixes` DDL
+        // in-band (mid-callback re-entry into `call_execute` deadlocks
+        // the core mutex). Drain the queue here — the core is idle again
+        // — so `<alias>.<fn>` resolves for the user's next statement.
+        self.flush_deferred_prefix_declarations(entry_handle.clone());
         // One-query `delta_scan('dir')`: the wasm core can't take a subquery-
         // valued table-fn arg, so the host reads the table's _delta_log off the
         // real filesystem, resolves the active files (add minus remove), and
@@ -3986,7 +4706,7 @@ impl cli_db::Host for HostState {
         let result = self
             .with_core(|core| {
                 core.with_database(|guest, store| {
-                    guest.call_execute(store, entry.handle.clone(), &sql)
+                    guest.call_execute(store, entry_handle, &sql)
                 })
             })
             .map_err(convert_trap_to_duckerror)?;
@@ -5422,24 +6142,6 @@ pub fn set_extension_root<P: Into<PathBuf>>(path: P) {
     }
 }
 
-/// v1.1 THE PIN — macro parameter names for a wrapper alias. Uses each arg's
-/// declared name when present (and a valid identifier), else positional
-/// `p0..pN`. A nameless or duplicate set is normalized to positional to keep
-/// the generated `CREATE MACRO` well-formed.
-fn macro_param_names(args: &[reg::FuncArg]) -> Vec<String> {
-    let mut out: Vec<String> = Vec::with_capacity(args.len());
-    let mut seen = std::collections::HashSet::new();
-    for (i, a) in args.iter().enumerate() {
-        let candidate = a
-            .name
-            .as_deref()
-            .and_then(prefix::sanitize_prefix)
-            .filter(|n| seen.insert(n.clone()));
-        out.push(candidate.unwrap_or_else(|| format!("p{i}")));
-    }
-    out
-}
-
 fn extension_artifact_path(name: &str) -> PathBuf {
     let root = EXTENSION_ROOT
         .get()
@@ -5451,6 +6153,81 @@ fn extension_artifact_path(name: &str) -> PathBuf {
 /// First 12 hex chars of a contract digest (for human-readable resolver logs).
 fn short_digest(digest: &str) -> String {
     digest.chars().take(12).collect()
+}
+
+/// Belt-and-braces identifier gate for the `ducklink_prefix(alias,
+/// namespace)` sentinel handlers. Mirrors ducklink-extension's
+/// `catalog::is_safe_identifier`: non-empty and ASCII `[A-Za-z0-9_]+`.
+///
+/// Both the alias and the namespace get spliced directly into DDL
+/// (`CREATE SCHEMA {alias}`, `CREATE OR REPLACE MACRO {alias}.{name}(...)
+/// AS {namespace}.{name}(...)`, and the `INSERT OR REPLACE INTO
+/// ducklink.prefixes` string), so this check MUST pass before either
+/// value reaches the deferred DDL builder.
+fn is_safe_prefix_identifier(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Build the `CREATE OR REPLACE MACRO` DDL that aliases the namespace
+/// function `<namespace>.<name>` under `<alias>.<name>`. Mirrors the
+/// ducklink-extension's `catalog::build_alias_macro` (the extension's
+/// shared alias-DDL builder) with the workspace-relevant subset:
+///
+/// * `scalar` / `scalar_macro` / `macro` — direct scalar-form macro.
+/// * `table` / `table_macro` — table-macro that re-selects from the
+///   underlying TF.
+/// * `aggregate` (single-arg only) — `list_aggregate(list(x), 'ns.name')`
+///   scalar-macro wrap. Multi-arg aggregates are skipped (users can call
+///   the namespace-qualified form directly).
+///
+/// Any other type returns `None` (skipped). Non-identifier parameter
+/// names are replaced with positional `_a{i}` so the macro binds even if
+/// the underlying function reports weird parameter labels.
+///
+/// Callers MUST validate `alias`, `name`, and `namespace` through
+/// [`is_safe_prefix_identifier`] first — this builder splices them
+/// straight into DDL.
+fn build_prefix_alias_macro(
+    ftype: &str,
+    alias: &str,
+    name: &str,
+    namespace: &str,
+    params: &[String],
+) -> Option<String> {
+    let arg_names: Vec<String> = params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+            if is_safe_prefix_identifier(p) {
+                p.clone()
+            } else {
+                format!("_a{i}")
+            }
+        })
+        .collect();
+    let arg_list = arg_names.join(", ");
+    match ftype {
+        "scalar" | "scalar_macro" | "macro" => Some(format!(
+            "CREATE OR REPLACE MACRO {alias}.{name}({arg_list}) AS \
+             {namespace}.{name}({arg_list})"
+        )),
+        "table" | "table_macro" => Some(format!(
+            "CREATE OR REPLACE MACRO {alias}.{name}({arg_list}) AS TABLE \
+             SELECT * FROM {namespace}.{name}({arg_list})"
+        )),
+        "aggregate" => {
+            if arg_names.len() != 1 {
+                None
+            } else {
+                let arg = &arg_names[0];
+                Some(format!(
+                    "CREATE OR REPLACE MACRO {alias}.{name}({arg}) AS \
+                     list_aggregate(list({arg}), '{namespace}.{name}')"
+                ))
+            }
+        }
+        _ => None,
+    }
 }
 
 fn sanitize_extension_name(raw: &str) -> String {
@@ -5758,6 +6535,44 @@ fn convert_extension_columndef_to_core(col: extension_types::Columndef) -> core_
     }
 }
 
+// M2c: inverse mapping used by the write-side storage-host imports (create-table,
+// insert-rows, update-rows) to hand the core -> extension trampoline the same
+// Logicaltype / Columndef shape ExtensionInstance expects.
+fn convert_core_logicaltype_to_extension(
+    ty: core_types::Logicaltype,
+) -> extension_types::Logicaltype {
+    match ty {
+        core_types::Logicaltype::Boolean => extension_types::Logicaltype::Boolean,
+        core_types::Logicaltype::Int64 => extension_types::Logicaltype::Int64,
+        core_types::Logicaltype::Uint64 => extension_types::Logicaltype::Uint64,
+        core_types::Logicaltype::Float64 => extension_types::Logicaltype::Float64,
+        core_types::Logicaltype::Text => extension_types::Logicaltype::Text,
+        core_types::Logicaltype::Blob => extension_types::Logicaltype::Blob,
+        core_types::Logicaltype::Int32 => extension_types::Logicaltype::Int32,
+        core_types::Logicaltype::Timestamp => extension_types::Logicaltype::Timestamp,
+        core_types::Logicaltype::Int8 => extension_types::Logicaltype::Int8,
+        core_types::Logicaltype::Int16 => extension_types::Logicaltype::Int16,
+        core_types::Logicaltype::Uint8 => extension_types::Logicaltype::Uint8,
+        core_types::Logicaltype::Uint16 => extension_types::Logicaltype::Uint16,
+        core_types::Logicaltype::Uint32 => extension_types::Logicaltype::Uint32,
+        core_types::Logicaltype::Float32 => extension_types::Logicaltype::Float32,
+        core_types::Logicaltype::Date => extension_types::Logicaltype::Date,
+        core_types::Logicaltype::Time => extension_types::Logicaltype::Time,
+        core_types::Logicaltype::Timestamptz => extension_types::Logicaltype::Timestamptz,
+        core_types::Logicaltype::Decimal => extension_types::Logicaltype::Decimal,
+        core_types::Logicaltype::Interval => extension_types::Logicaltype::Interval,
+        core_types::Logicaltype::Uuid => extension_types::Logicaltype::Uuid,
+        core_types::Logicaltype::Complex(expr) => extension_types::Logicaltype::Complex(expr),
+    }
+}
+
+fn convert_core_columndef_to_extension(col: core_types::Columndef) -> extension_types::Columndef {
+    extension_types::Columndef {
+        name: col.name,
+        logical: convert_core_logicaltype_to_extension(col.logical),
+    }
+}
+
 // M2b: convert a core-WIT scan-request into the storage-interface scan-request
 // the backing component's storage-dispatch expects.
 fn convert_core_compare_op_to_storage(op: core_storage_host::CompareOp) -> storage_scan::CompareOp {
@@ -5836,6 +6651,11 @@ fn convert_core_scan_request_to_storage(
             })
             .collect(),
         limit: request.limit,
+        // M2c: forward the wants-rowid flag verbatim to the guest's
+        // storage-dispatch scan-open. The read side (SELECT) leaves this
+        // false; UPDATE/DELETE plans set it via the C++ WasmScanInitGlobal
+        // so the guest appends rowid trailers to each row.
+        wants_rowid: request.wants_rowid,
     }
 }
 
@@ -6148,7 +6968,6 @@ pub fn run_cli_with_stdio(
     args: &[impl AsRef<str>],
     preopens: &[(&Path, &str)],
 ) -> Result<Result<(), ()>> {
-    let engine = build_engine()?;
     let owned_preopens = resolve_preopens_with_default(preopens)?;
     let preopen_refs: Vec<(&Path, &str)> = owned_preopens
         .iter()
@@ -6156,6 +6975,50 @@ pub fn run_cli_with_stdio(
         .collect();
     let args_vec: Vec<String> = args.iter().map(|s| s.as_ref().to_owned()).collect();
     let cli_wasi = build_wasi_ctx_inherit(&args_vec, &preopen_refs)?;
+    run_cli_inner(artifacts, owned_preopens, cli_wasi)
+}
+
+/// Like `run_cli_with_stdio`, but drives the CLI with in-memory stdio: `stdin`
+/// is fed `stdin_bytes` (e.g. a SQL script) and the CLI's stdout is captured and
+/// returned. For in-process query execution (no subprocess). Host-side log lines
+/// (extension loading, etc.) still go to the process's real stderr via
+/// `eprintln`, not through this captured pipe.
+pub fn run_cli_capture(
+    artifacts: &ComponentArtifacts,
+    args: &[impl AsRef<str>],
+    preopens: &[(&Path, &str)],
+    stdin_bytes: &[u8],
+) -> Result<String> {
+    let owned_preopens = resolve_preopens_with_default(preopens)?;
+    let preopen_refs: Vec<(&Path, &str)> = owned_preopens
+        .iter()
+        .map(|(host, guest)| (host.as_path(), guest.as_str()))
+        .collect();
+    let args_vec: Vec<String> = args.iter().map(|s| s.as_ref().to_owned()).collect();
+    let stdin = MemoryInputPipe::new(stdin_bytes.to_vec());
+    let stdout = MemoryOutputPipe::new(usize::MAX);
+    let stderr = MemoryOutputPipe::new(usize::MAX);
+    let cli_wasi =
+        build_wasi_ctx_with_pipes(&args_vec, &preopen_refs, stdin, stdout.clone(), stderr)?;
+    // The CLI's own exit Result is irrelevant here; we want its captured output.
+    let _ = run_cli_inner(artifacts, owned_preopens, cli_wasi)?;
+    Ok(String::from_utf8_lossy(&stdout.contents()).into_owned())
+}
+
+/// Shared core of the CLI run path: instantiate the composed core + dotcmd
+/// registry, wire the linker, and drive the CLI component's `wasi:cli/run`.
+/// `cli_wasi` carries the CLI's stdio — inherited (`run_cli_with_stdio`) or
+/// in-memory pipes (`run_cli_capture`).
+fn run_cli_inner(
+    artifacts: &ComponentArtifacts,
+    owned_preopens: Vec<(PathBuf, String)>,
+    cli_wasi: WasiCtx,
+) -> Result<Result<(), ()>> {
+    let engine = build_engine()?;
+    let preopen_refs: Vec<(&Path, &str)> = owned_preopens
+        .iter()
+        .map(|(host, guest)| (host.as_path(), guest.as_str()))
+        .collect();
     let core_wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &preopen_refs)?;
 
     let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
@@ -7080,46 +7943,6 @@ mod tests {
             has_cell(&stdout, "answer") && has_cell(&stdout, "42"),
             "expected scalar callback output, got:\n{}",
             stdout
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn cli_function_prefix_qualified_form_works() -> Result<()> {
-        // PLAN-prefixes killer demo (host smoke): a component scalar is callable
-        // BOTH as bare `name(...)` and as `prefix__name(...)`. sample_extension
-        // has no registry prefix/expansion, so the host's deprecation fallback
-        // gives it prefix=`sample_extension`; both forms must return 42.
-        ensure_sample_extension_artifact()?;
-
-        let args = [
-            "duckdb-cli",
-            ":memory:",
-            "--load-extension",
-            "sample_extension",
-            "-c",
-            "select sample_plus_one(41) as bare, \
-                    sample_extension__sample_plus_one(41) as qualified;",
-        ];
-
-        let mut harness = CliHarness::new(&args, &[])?;
-        let status = harness.run()?;
-        assert!(
-            status.is_ok(),
-            "CLI reported failure invoking the qualified form: {:?}",
-            harness.stderr().ok()
-        );
-
-        let stdout = harness.stdout()?;
-        assert!(
-            has_cell(&stdout, "bare") && has_cell(&stdout, "qualified"),
-            "expected both bare + qualified columns, got:\n{stdout}"
-        );
-        // Both columns hold 42 (the qualified form shares the same callback).
-        assert!(
-            stdout.matches("42").count() >= 2,
-            "expected the qualified form to also return 42, got:\n{stdout}"
         );
 
         Ok(())
