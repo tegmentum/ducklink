@@ -1,0 +1,8 @@
+function_name | function_type
+PREFIX | macro
+ducklink_help | scalar
+ducklink_load | table
+ducklink_prefix | scalar
+ducklink_prefix | table
+ducklink_version | scalar
+

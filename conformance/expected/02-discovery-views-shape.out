@@ -1,0 +1,12 @@
+name | kind
+cache | view/table
+docs | view/table
+events | view/table
+functions | view/table
+host | view/table
+host_capabilities | view/table
+module_compatibility | view/table
+modules | view/table
+prefixes | view/table
+search | macro
+
