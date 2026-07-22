@@ -1,0 +1,56 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> component callbacks for a registered COPY handler (additive, 2.1.0).
+// Exported by copy-capable components. A component registers a copy handler in
+// load() via `files.register-copy-handler` (returning a copy-function-handle);
+// the host then drives COPY TO and COPY FROM through this export, reusing the
+// storage-dispatch chunked PULL-cursor shape so the protocol stays plain-WIT and
+// resumable.
+//
+// Every call carries `handle` = the copy-function-handle from
+// files.register-copy-handler.
+interface copy-dispatch {
+  use types.{duckerror, duckvalue, columndef, resultset};
+
+  // Result of binding a COPY FROM reader: a reader handle plus the discovered
+  // column schema.
+  record copy-from-bind-result {
+    reader: u32,
+    columns: list<columndef>,
+  }
+
+  // --- COPY TO <path> ---
+
+  // Bind a writer for `path` given the source `columns` and key=value `options`.
+  // Returns an opaque writer handle.
+  copy-to-bind: func(handle: u32,
+                     path: string,
+                     columns: list<columndef>,
+                     options: list<tuple<string, string>>) -> result<u32, duckerror>;
+
+  // Sink a batch of rows to the writer (repeatable as DataChunks arrive).
+  copy-to-sink: func(handle: u32,
+                     writer: u32,
+                     rows: list<list<duckvalue>>) -> result<_, duckerror>;
+
+  // Finalize + close the writer; returns the total number of rows written.
+  copy-to-finalize: func(handle: u32, writer: u32) -> result<u64, duckerror>;
+
+  // --- COPY FROM <path> ---
+
+  // Bind a reader for `path` with key=value `options`; returns a reader handle +
+  // the column schema the scan will emit.
+  copy-from-bind: func(handle: u32,
+                       path: string,
+                       options: list<tuple<string, string>>)
+                       -> result<copy-from-bind-result, duckerror>;
+
+  // Pull up to `max-rows`; an empty resultset signals EOF.
+  copy-from-scan: func(handle: u32, reader: u32, max-rows: u32)
+                       -> result<resultset, duckerror>;
+
+  // Close the reader.
+  copy-from-close: func(handle: u32, reader: u32) -> result<bool, duckerror>;
+}

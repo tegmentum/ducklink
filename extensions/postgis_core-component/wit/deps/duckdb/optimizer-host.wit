@@ -1,0 +1,30 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> core optimizer pull + dispatch (2.3.0 / v3, additive within major-three).
+// The DuckDB-compiled-to-wasm core IMPORTS this; the native host PROVIDES it.
+// Mirrors `parser-host`: at optimize time the core flattens the bound logical plan
+// into a neutral JSON descriptor (op-type names + params, NOT a by-value
+// LogicalOperator tree) and offers it to each declared optimizer rule via
+// `call-optimize`. The owning component returns a string->SQL REWRITE the core
+// re-plans in place (the `rewrite-query` directive), or none (declined). No plan
+// node crosses the boundary by value.
+interface optimizer-host {
+  use types.{duckerror};
+
+  // One optimizer rule a component declared: a name + the dispatch handle the
+  // host routes `call-optimize` through to the owning component.
+  record optimizer-spec {
+    rule-name: string,
+    callback-handle: u32,
+  }
+
+  // Enumerate the optimizer rules components have declared so far this session.
+  optimizer-list: func() -> list<optimizer-spec>;
+
+  // Offer the flattened plan (`plan-json`) to the rule `handle`. Returns
+  // `some(rewrite-sql)` if the rule rewrites the query (the core re-plans it in
+  // place), or `none` if it declines / the directive is not a query rewrite.
+  call-optimize: func(handle: u32, plan-json: string) -> result<option<string>, duckerror>;
+}

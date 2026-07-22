@@ -1,0 +1,40 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Richer scalar-function registration surface (additive, 2.2.0, Item 6). The
+// existing `runtime.scalar-registry.register` covers the common case; this adds
+// the richer cases WITHOUT touching that frozen signature:
+//
+//   * VARARGS: a trailing repeatable argument type (`varargs`).
+//   * NAMED parameters: ride the existing `funcarg.name` (already optional).
+//   * NULL handling: whether the function is invoked on NULL inputs (`special`)
+//     or short-circuits to NULL (`default`).
+//
+// Kept SEPARATE from `runtime` so existing components' frozen `runtime` copy
+// stays structurally unchanged. `callback-handle` routes invocations exactly like
+// the base scalar path.
+interface runtime-ext {
+  use types.{duckerror, funcarg, logicaltype, funcopts};
+
+  // How a scalar function treats NULL inputs.
+  enum null-handling {
+    // Short-circuit: the engine returns NULL without invoking the function when
+    // any argument is NULL (the default DuckDB behavior).
+    default,
+    // The function is invoked even when arguments are NULL and handles them.
+    special,
+  }
+
+  // Register a scalar function with the richer surface. `arguments` carries the
+  // (optionally named) fixed parameters; `varargs` is the type of a trailing
+  // repeatable argument (none = no varargs). `callback-handle` routes every
+  // invocation back to the owning component.
+  register-scalar-ex: func(name: string,
+                           arguments: list<funcarg>,
+                           varargs: option<logicaltype>,
+                           returns: logicaltype,
+                           null-handling: null-handling,
+                           callback-handle: u32,
+                           options: option<funcopts>) -> result<u32, duckerror>;
+}

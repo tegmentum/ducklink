@@ -1,0 +1,39 @@
+package compose:dynlink@0.1.0;
+
+/// Runtime / dynamic component linking ("dlopen for components").
+///
+/// A guest imports this interface to resolve and instantiate another
+/// component at exec time, then call into it through an opaque,
+/// host-owned handle. This is the general mechanism on which the
+/// host->orchestrator `compose:host/invoker` capability will be
+/// re-implemented.
+///
+/// The host gates every resolution behind trust verification and
+/// policy, and instantiates the provider in its own engine — the guest
+/// never holds the provider's bytes or memory, only the handle.
+interface linker {
+  use sys:compose/types@1.0.0.{error, digest};
+
+  /// An instantiated provider component, owned by the host.
+  ///
+  /// The handle is opaque: the guest cannot inspect the provider's
+  /// memory or exports beyond sending it messages. Dropping the handle
+  /// releases the provider's store on the host side.
+  resource instance {
+    /// Send a message to the provider's `endpoint.handle` export.
+    /// `method` and `payload` are forwarded verbatim; see `endpoint`.
+    invoke: func(method: string, payload: list<u8>) -> result<list<u8>, error>;
+  }
+
+  /// Resolve and instantiate a component by content digest.
+  ///
+  /// The host verifies the digest against the trust store and checks
+  /// the caller's policy before instantiation. The resolved component
+  /// MUST export `compose:dynlink/endpoint`.
+  resolve-by-digest: func(d: digest) -> result<instance, error>;
+
+  /// Resolve and instantiate a component by registry id, which the host
+  /// maps to a content digest before applying the same trust and policy
+  /// checks as `resolve-by-digest`.
+  resolve-by-id: func(id: string) -> result<instance, error>;
+}

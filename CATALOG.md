@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**185 component extensions** · **598 SQL functions** · 9 expose aggregates · 3 require network.
+**188 component extensions** · **681 SQL functions** · 9 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -18,7 +18,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 - **Static embed (opt-in):** `ducklink compose --embed <name>` bakes an extension into the core at build time. Wired today for `isin` (`embed-isin` core feature); `ducklink compose --list` shows what's embeddable. Most extensions stay runtime-loaded by design.
 - **Network grant:** net extensions are denied by default; opt in with `--grant-network all` (or a name allowlist), equivalently the `DUCKLINK_NETWORK_GRANT` env var.
 
-## Data types & encoding (72)
+## Data types & encoding (75)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -68,12 +68,14 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **marisa** | `fst_contains`, `fst_prefix`, `fst_count` | fst |  |
 | **mime** | `mime_type`, `mime_from_ext` | mime_guess |  |
 | **minhash** | `minhash`, `minhash_similarity` | hand-rolled | aggregate |
+| **mobilitydb_temporal_core** | `bitemporal_bool_eq`, `bitemporal_bool_cmp`, `bitemporal_bool_current`, `bitemporal_bool_as_of`, `bitemporal_bool_from_ewkt`, `bitemporal_bool_to_ewkt`, `tint_at_ts`, `tint_before_ts`, `tint_after_ts`, `tint_value_split`, `tint_time_split`, `tfloat_at_ts`, `tfloat_before_ts`, `tfloat_after_ts`, `tbool_count_changes`, `tbool_at_ts`, `ttext_at_ts`, `ttext_before_ts`, `floatset_intersection`, `floatset_union`, `intspan_contains`, `intspan_intersection`, `period_contains`, `period_overlaps`, `periodset_contains`, `periodset_intersection`, `temporal_lt`, `temporal_le`, `temporal_eq`, `temporal_ge`, `temporal_gt` | ciborium, serde, serde_json, wit-bindgen |  |
 | **money** | `format_money` | iso_currency |  |
 | **msgpack** | `msgpack_from_json`, `msgpack_to_json` | rmp-serde, serde_json, hex |  |
 | **petname** | `petname` | petname |  |
 | **plist** | `plist_to_json`, `plist_get` | plist |  |
 | **pluscode** | `pluscode_encode`, `pluscode_valid`, `pluscode_decode_lat`, `pluscode_decode_lon` | open-location-code, geo |  |
 | **polyline** | `polyline_encode`, `polyline_decode` | polyline |  |
+| **postgis_core** | `st_point`, `st_makepoint`, `st_geomfromtext`, `st_geomfromwkb`, `st_astext`, `st_asbinary`, `st_asgeojson`, `st_x`, `st_y`, `st_z`, `st_m`, `st_srid`, `st_setsrid`, `st_distance`, `st_distancesphere`, `st_dwithin`, `st_dfullywithin`, `st_area`, `st_length`, `st_perimeter`, `st_centroid`, `st_envelope`, `st_contains`, `st_within`, `st_intersects`, `st_touches`, `st_crosses`, `st_overlaps`, `st_equals`, `st_disjoint`, `st_union`, `st_intersection`, `st_difference`, `st_symdifference`, `st_buffer`, `st_convexhull`, `st_simplify`, `st_simplifypreservetopology`, `st_transform`, `st_translate`, `st_scale`, `st_rotate`, `st_geometrytype`, `st_isvalid`, `st_isempty`, `st_issimple`, `st_npoints`, `st_numgeometries`, `st_geometryn` | ciborium, serde, serde_json, wit-bindgen |  |
 | **qrcode** | `qr_svg` | qrcode |  |
 | **quotedprintable** | `qp_encode`, `qp_decode` | quoted_printable |  |
 | **rle** | `rle_encode`, `rle_decode` | hand-rolled |  |
@@ -82,6 +84,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **shapefile** | `read_shp` | shapefile |  |
 | **spatialfns** | `ST_Point`, `ST_GeomFromText`, `ST_AsText`, `ST_X`, `ST_Y`, `ST_Distance`, `ST_Area`, `ST_Length`, `ST_Centroid`, `ST_Contains`, `ST_Within`, `ST_Intersects`, `ST_Envelope`, `ST_AsGeoJSON` | geo, wkt, geojson |  |
 | **spatialproj** | `ST_Transform` | rmp-serde, serde |  |
+| **timescale_time_bucket** | `time_bucket`, `time_bucket_range`, `time_bucket_gapfill` | ciborium, serde, serde_json, wit-bindgen |  |
 | **timezone** | `tz_valid`, `tz_offset_seconds`, `tz_abbreviation` | chrono-tz, chrono |  |
 | **toml** | `toml_to_json`, `json_to_toml` | toml, serde_json |  |
 | **tsid** | `tsid_encode`, `tsid_decode`, `tsid_timestamp`, `tsid_from_timestamp` | hand-rolled |  |

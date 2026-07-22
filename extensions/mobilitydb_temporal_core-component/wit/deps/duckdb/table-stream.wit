@@ -1,0 +1,51 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Streaming + FILTER-PUSHDOWN-capable table-function REGISTRATION surface
+// (additive, 3.1.0 -- the first additive MINOR off the frozen major-three baseline,
+// the proof that the v3 freeze policy's additive growth-path works). The base
+// `runtime.table-registry` registers a WHOLE-batch table function with NO
+// streaming / filter-pushdown marker, so the core cannot tell a filterable
+// streaming table fn from a plain one at registration time. This interface is
+// that MARKER: a component OPTS IN by declaring a table function here instead of
+// (or in addition to) `runtime.table-registry`, and the host wires a C++
+// streaming `TableFunction` with `filter_pushdown = true` that drives the
+// component's separate `table-stream-dispatch.call-table-open-filtered` export.
+//
+// FREEZE-COMPLIANT BY CONSTRUCTION (docs/wit-freeze-policy.md rule 3): this is a
+// brand-new interface in a new opt-in world (`duckdb-extension-table-stream`),
+// NOT an edit to the shared `runtime`/`types` enums. The frozen
+// `runtime.table-registry.register` signature and the `runtime.capability`
+// variant are untouched, so every existing @3.0.0 component keeps loading
+// un-rebuilt; only a component that wants filter pushdown imports this interface
+// and rebuilds at @3.1.0.
+//
+// Kept SEPARATE from `table-stream-dispatch` (the host->component cursor calls):
+// this interface is the component->host DECLARATION at load() time; the dispatch
+// interface is the per-scan driving. A filterable streaming component imports
+// THIS and exports `table-stream-dispatch`.
+interface table-stream {
+  use types.{duckerror, funcarg, columndef};
+
+  // Declare a STREAMING + FILTER-PUSHDOWN-capable table function `name`.
+  //
+  // `arguments` are the function's positional argument types (as for
+  // `runtime.table-registry.register`); `columns` is the emitted schema (column
+  // names + logical types) the core registers as the function's return shape;
+  // `callback-handle` is the opaque id the host threads into every
+  // `table-stream-dispatch` call (call-table-open-filtered / call-table-next /
+  // call-table-close) so one component can back several streaming table fns.
+  //
+  // Registering through this interface is the OPT-IN: the core marks the
+  // resulting `TableFunction` filter-pushdown- + projection-pushdown-capable and,
+  // at scan time, pushes the conjunctive filter set down as a neutral, by-value-
+  // safe `table-stream-dispatch.table-filter` descriptor (column index + op +
+  // constant). A component that ignores the pushed filters stays correct (the
+  // core re-checks every filter above the scan); pushing them only prunes at the
+  // source. Returns a registration id.
+  register-filterable-table: func(name: string,
+                                  arguments: list<funcarg>,
+                                  columns: list<columndef>,
+                                  callback-handle: u32) -> result<u32, duckerror>;
+}

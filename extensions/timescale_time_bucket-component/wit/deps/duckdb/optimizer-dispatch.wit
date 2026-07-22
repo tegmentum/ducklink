@@ -1,0 +1,69 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> component callbacks for a general OPTIMIZER rule (additive, 2.3.0 / v3).
+// The core offers the bound logical plan to a registered rule at optimize time as
+// a FLATTENED, NEUTRAL descriptor (NOT a by-value LogicalOperator tree -- the
+// recursion wall) and applies the bounded rewrite directive the rule returns.
+//
+// This is the by-value-safe form of a general optimizer extension and the
+// component-driven generalization of the hard-coded index-scan optimizer in the
+// duckdb-wasm core (core/cpp/wasm_index_optimizer.cpp): a rule recognizes a plan
+// SHAPE and asks the core to rewrite it -- either by re-planning from substitute
+// SQL, or by a named structured rewrite the core shim understands (e.g. reroute a
+// `TOP_N -> PROJECTION(array_distance) -> GET` shape onto an available index).
+//
+// Every call carries `handle` = the callback-handle the component registered for
+// the rule via `optimizer.register-optimizer-rule`.
+interface optimizer-dispatch {
+  use types.{duckerror};
+
+  // A flattened node of the logical plan: a stable `id`, the operator type name
+  // (DuckDB `LogicalOperatorType` as a string, e.g. "LOGICAL_GET",
+  // "LOGICAL_PROJECTION", "LOGICAL_TOP_N", "LOGICAL_FILTER"), the `parent` node id
+  // (none = root), and a JSON blob of the node's salient NEUTRAL parameters --
+  // table name, projected column names, filter/order-by/limit expression TEXT --
+  // never a by-value DuckDB struct. The core owns the flattening; a rule reads
+  // `op-type` + `params-json` to match a shape.
+  record plan-node {
+    id: u32,
+    op-type: string,
+    parent: option<u32>,
+    params-json: string,
+  }
+
+  // The flattened plan offered to a rule: the node list (root first,
+  // parent-before-child) plus the bound SQL the plan came from (so a rule may
+  // express its rewrite as a whole-query re-plan).
+  record plan-shape {
+    nodes: list<plan-node>,
+    query: string,
+  }
+
+  // A named, core-understood structured rewrite applied to a node. The set of
+  // recognized `directive` strings is owned by the core shim (e.g. "use-index").
+  // This lets a rule drive a core rewrite that has no clean SQL form (the
+  // index-reroute case).
+  record structured-rewrite {
+    target: u32,
+    directive: string,
+    args-json: string,
+  }
+
+  // What the rule asks the core to do.
+  variant rewrite-directive {
+    // The rule does not apply; the plan is left unchanged.
+    declined,
+    // Re-plan from this SQL in place of the matched plan: the core re-binds +
+    // re-optimizes it. The neutral, by-value-safe rewrite path.
+    rewrite-query(string),
+    // Apply a named structured rewrite the core shim understands.
+    apply(structured-rewrite),
+  }
+
+  // Offer the flattened plan to the optimizer rule `handle`; returns its rewrite
+  // directive (or `declined`). Called once per optimize pass per registered rule.
+  call-optimize: func(handle: u32,
+                      plan: plan-shape) -> result<rewrite-directive, duckerror>;
+}

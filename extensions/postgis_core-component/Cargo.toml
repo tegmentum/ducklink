@@ -1,0 +1,40 @@
+[package]
+name = "postgis_core-component"
+version = "3.6.4"
+edition = "2021"
+description = """
+postgis_core: 2D geometry constructors, accessors, predicates, measurements,
+processing (~726 ST_* scalars). Vendored from the compose:dynlink per-sub
+bridge (`postgis_core-ducklink-bridge`) — a thin wasm32-wasip2 component that
+imports `compose:dynlink/linker@0.1.0` and routes each scalar dispatch to the
+resident `postgis_core-composed` provider (the vendored monolithic
+postgis-core-composed.wasm) via a CBOR envelope. Exports the canonical
+`duckdb:extension@4.0.0` guest + callback-dispatch pair. Upstream: PostGIS 3.6.4.
+"""
+license = "Apache-2.0"
+publish = false
+
+# Self-contained workspace so this crate builds standalone via
+# `cargo build --target wasm32-wasip2 --release` without polluting the outer
+# ducklink workspace resolver (mirrors extensions/talib-component's pattern;
+# the outer Cargo.toml excludes this dir).
+[workspace]
+members = ["."]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = { version = "0.41", features = ["macros"] }
+wit-bindgen-rt = { version = "0.41", features = ["bitflags"] }
+ciborium = { version = "0.2", default-features = false }
+ciborium-io = { version = "0.2", default-features = false }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+serde_bytes = { version = "0.11", default-features = false, features = ["alloc"] }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

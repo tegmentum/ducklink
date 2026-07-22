@@ -1,0 +1,26 @@
+package duckdb:extension@4.0.0;
+
+// A minimal live-query host import (v1.1 catalog completion). A component that
+// needs to read the live database catalog (e.g. autocomplete, to suggest table
+// and column names) calls `query` with a read-only SELECT; the host runs it and
+// returns the result as rows of text cells (every cell stringified; NULL -> the
+// empty string).
+//
+// Kept as a SEPARATE interface (additive, like `collation` / `storage` /
+// `files-reg`) so the 180+ existing components' frozen WIT copies stay
+// structurally unchanged. Only query-capable components (autocomplete) import it,
+// via the host adding it to the extension linker.
+//
+// RE-ENTRANCY: this is BEST-EFFORT. A table/scalar callback runs INSIDE the core
+// query engine; the host's single core executor is already locked + the core wasm
+// store is mid-call, so a live SELECT cannot re-enter it. In that case the host
+// returns an error and the caller must fall back (e.g. keyword-only completion).
+// Outside an executing query (the core idle) the SELECT runs and returns rows.
+interface query {
+  // Run `sql` (intended: a read-only SELECT) on the live database. On success,
+  // returns the result rows, each a list of text cells (NULL rendered as ""). On
+  // failure -- a SQL error, OR the core being busy (re-entrancy) -- returns the
+  // error message as a string. Callers MUST treat the error case as "no rows"
+  // and degrade gracefully (never trap).
+  query: func(sql: string) -> result<list<list<string>>, string>;
+}
