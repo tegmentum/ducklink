@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**198 component extensions** · **625 SQL functions** · 9 expose aggregates · 3 require network.
+**185 component extensions** · **598 SQL functions** · 9 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -18,11 +18,10 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 - **Static embed (opt-in):** `ducklink compose --embed <name>` bakes an extension into the core at build time. Wired today for `isin` (`embed-isin` core feature); `ducklink compose --list` shows what's embeddable. Most extensions stay runtime-loaded by design.
 - **Network grant:** net extensions are denied by default; opt in with `--grant-network all` (or a name allowlist), equivalently the `DUCKLINK_NETWORK_GRANT` env var.
 
-## Data types & encoding (76)
+## Data types & encoding (72)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
-| **a5** | `a5_lonlat_to_cell`, `a5_cell_to_lat`, `a5_cell_to_lon`, `a5_cell_to_resolution`, `a5_cell_to_parent`, `a5_is_valid_cell`, `a5_cell_to_hex`, `a5_hex_to_cell` | a5 |  |
 | **aggstat** | `harmonic_mean` | hand-rolled | aggregate |
 | **ascii85** | `ascii85_encode`, `ascii85_decode` | ascii85 |  |
 | **base58check** | `base58check_encode`, `base58check_decode` | bs58 |  |
@@ -60,7 +59,6 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **iso** | `iso_country_name`, `iso_country_alpha3`, `iso_country_numeric` | rust_iso3166 |  |
 | **jaq** | `jq`, `jq_first` | jaq-core, jaq-std, jaq-json |  |
 | **json_schema** | `json_schema_valid`, `json_schema_errors` | jsonschema |  |
-| **jsonata** | `jsonata` | jsonata-core |  |
 | **jsonfns** | `json_valid`, `json_extract`, `json_extract_string`, `json_array_length`, `json_type`, `json_keys`, `json_contains`, `json_quote`, `to_json` | serde_json, serde_json_path |  |
 | **jsonschema** | `json_schema_valid` | jsonschema, serde_json |  |
 | **lindel** | `morton_encode`, `morton_decode_x`, `morton_decode_y`, `hilbert_encode`, `hilbert_decode_x`, `hilbert_decode_y` | hand-rolled |  |
@@ -72,7 +70,6 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **minhash** | `minhash`, `minhash_similarity` | hand-rolled | aggregate |
 | **money** | `format_money` | iso_currency |  |
 | **msgpack** | `msgpack_from_json`, `msgpack_to_json` | rmp-serde, serde_json, hex |  |
-| **pcap** | `read_pcap` | pcap-parser |  |
 | **petname** | `petname` | petname |  |
 | **plist** | `plist_to_json`, `plist_get` | plist |  |
 | **pluscode** | `pluscode_encode`, `pluscode_valid`, `pluscode_decode_lat`, `pluscode_decode_lon` | open-location-code, geo |  |
@@ -81,7 +78,6 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **quotedprintable** | `qp_encode`, `qp_decode` | quoted_printable |  |
 | **rle** | `rle_encode`, `rle_decode` | hand-rolled |  |
 | **roman** | `to_roman`, `from_roman`, `roman_encode`, `roman_decode`, `roman_validate` | roman |  |
-| **rtreefns** | `rtree_search`, `bbox4` | rstar |  |
 | **semver** | `semver_valid`, `semver_major`, `semver_minor`, `semver_patch`, `semver_compare` | semver |  |
 | **shapefile** | `read_shp` | shapefile |  |
 | **spatialfns** | `ST_Point`, `ST_GeomFromText`, `ST_AsText`, `ST_X`, `ST_Y`, `ST_Distance`, `ST_Area`, `ST_Length`, `ST_Centroid`, `ST_Contains`, `ST_Within`, `ST_Intersects`, `ST_Envelope`, `ST_AsGeoJSON` | geo, wkt, geojson |  |
@@ -99,11 +95,10 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **yaml** | `yaml_to_json`, `json_to_yaml` | serde_yaml, serde_json |  |
 | **z85** | `z85_encode`, `z85_decode` | z85 |  |
 
-## Text & NLP (61)
+## Text & NLP (58)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
-| **autocomplete** | `sql_complete` | hand-rolled |  |
 | **bbcode** | `bbcode_to_html` | hand-rolled |  |
 | **braille** | `to_braille` | hand-rolled |  |
 | **cardtype** | `card_brand` | hand-rolled |  |
@@ -127,7 +122,6 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **luhngen** | `luhn_check_digit`, `luhn_append` | hand-rolled |  |
 | **mac** | `mac_valid`, `mac_normalize` | macaddr |  |
 | **markdown** | `md_to_html`, `md_to_text` | pulldown-cmark |  |
-| **minijinja** | `jinja_render`, `jinja_valid` | minijinja |  |
 | **morse** | `morse_encode`, `morse_decode` | hand-rolled |  |
 | **nato** | `nato` | hand-rolled |  |
 | **natsort** | `natsort_compare` | natord |  |
@@ -151,7 +145,6 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **stdsql** | `space`, `initcap`, `startsWith`, `endsWith`, `lengthUTF8`, `lowerUTF8`, `upperUTF8`, `toString`, `empty`, `notEmpty`, `replaceAll`, `positionUTF8`, `to_bin`, `to_oct`, `to_ascii`, `quote_ident`, `quote_literal`, `quote_nullable`, `get_byte`, `set_byte` | hand-rolled |  |
 | **stem** | `stem` | rust-stemmers |  |
 | **stopwords** | `is_stopword`, `remove_stopwords` | stop-words |  |
-| **tera** | `tera_render`, `tera_valid` | tera |  |
 | **text_utils** | `sql_normalize`, `insert`, `locate` | hand-rolled |  |
 | **textdiff** | `text_diff`, `diff_ratio`, `diff_changed_lines` | similar |  |
 | **textlines** | `split_lines` | hand-rolled |  |
@@ -183,7 +176,7 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **totp** | `totp` | hmac, sha1, base32 |  |
 | **vigenere** | `vigenere_encrypt`, `vigenere_decrypt` | hand-rolled |  |
 
-## Math (12)
+## Math (11)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -191,7 +184,6 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **celestial** | `equatorial_to_galactic_l`, `equatorial_to_galactic_b`, `angular_separation`, `hms_to_deg`, `dms_to_deg` | hand-rolled |  |
 | **frequentitems** | `top_k`, `top_k_value` | hand-rolled |  |
 | **hashfuncs** | `xxh32`, `xxh64`, `xxh3`, `murmur3` | twox-hash, murmur3 |  |
-| **hnswfns** | `hnsw_search` | instant-distance |  |
 | **math** | `exp2`, `e`, `rand`, `div`, `truncate` | libm |  |
 | **mlkmeans** | `ml_kmeans` | rmp-serde, serde, serde_json | aggregate |
 | **stats** | `percentile`, `percentile_cont`, `percentile_disc` | hand-rolled | aggregate |
@@ -200,23 +192,19 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **tdigest** | `tdigest`, `tdigest_quantile`, `tdigest_count` | tdigest, bincode | aggregate |
 | **vssfns** | `vec_l1_distance`, `vec_linf_distance`, `vec_normalize` | hand-rolled |  |
 
-## Utility (11)
+## Utility (7)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
 | **chrono** | `date_parse`, `date_format`, `to_char`, `str_to_date`, `date_tz_convert`, `date_now_tz`, `date_is_business_day`, `date_business_days_between`, `date_iso_week`, `date_iso_year`, `duration_parse`, `duration_format`, `chrono_version`, `from_unixtime`, `timestampdiff`, `timestampadd`, `adddate`, `subdate`, `makedate`, `maketime`, `from_days`, `utc_timestamp`, `sysdate`, `timestamp_add`, `timestamp_sub`, `timestamp_diff`, `timestamp_trunc`, `timestamp_micros`, `timestamp_millis`, `timestamp_seconds`, `datetime_add`, `datetime_sub`, `datetime_diff`, `datetime_trunc`, `parse_date`, `parse_datetime`, `parse_timestamp`, `format_date`, `format_datetime`, `format_timestamp`, `unix_micros`, `unix_millis`, `unix_seconds`, `date_from_unix_date`, `date_bucket` | chrono, chrono-tz |  |
 | **cron** | `cron_is_valid`, `cron_next`, `cron_prev` | croner |  |
-| **dplyr** | `dplyr` | hand-rolled |  |
-| **ggsql** | `VISUALIZE` | hand-rolled |  |
 | **parsertools** | `sql_tables`, `sql_is_valid`, `sql_statement_type` | sqlparser |  |
 | **prql** | `prql_to_sql`, `prql_is_valid` | prqlc |  |
-| **prql_parser** | `prql` | prqlc |  |
 | **rhai** | `rhai_eval`, `rhai_eval_int`, `rhai_eval_double` | rhai |  |
-| **sqlitecompat** | `zeroblob`, `randomblob`, `likely`, `unlikely`, `likelihood` | hand-rolled |  |
 | **sys_compat** | `system_user`, `database`, `schema`, `collation` | hand-rolled |  |
 | **talib** | `sma`, `ema`, `rsi` | hand-rolled | aggregate |
 
-## Import Export (7)
+## Import Export (6)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
@@ -224,7 +212,6 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **deltascan** | `delta_log_info`, `delta_schema` | serde_json |  |
 | **excelfns** | `xlsx_sheets`, `read_xlsx`, `xlsx_cell` | calamine |  |
 | **icebergscan** | `iceberg_metadata`, `iceberg_schema`, `iceberg_snapshots` | serde_json |  |
-| **sqlitewasm** | `sqlite_blob_scan` | rusqlite |  |
 | **tpcdsgen** | `tpcds_income_band`, `tpcds_date_dim_sample` | hand-rolled |  |
 | **tpchgen** | `tpch_region`, `tpch_nation`, `tpch_supplier`, `tpch_customer`, `tpch_part`, `tpch_partsupp`, `tpch_orders`, `tpch_lineitem`, `tpch_query` | tpchgen |  |
 
