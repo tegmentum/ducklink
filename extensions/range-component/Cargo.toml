@@ -1,0 +1,34 @@
+# Standalone package (opts out of the ducklink workspace) so this
+# smoke-test component can be added without touching the workspace
+# members list — the T6 changes stay confined to `extensions/range-component`.
+[workspace]
+
+[package]
+name = "range-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Smoke-test component for the datalink table-capability pull-up (T6): a
+single `range_from_to(int64, int64) -> (v: int64)` TVF driven by a
+`datalink_extcore::duckdb_shim!` generated shim, with all logic living
+in `range-core`.
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+# Shared, DB-agnostic logic + capability declaration (datalink pull-up).
+range-core = { path = "../../../datalink/extensions/range-core" }
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"
