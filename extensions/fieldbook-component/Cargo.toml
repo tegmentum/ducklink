@@ -1,0 +1,33 @@
+[package]
+name = "fieldbook-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Ducklink Fieldbook wasm engine — the wasm-side counterpart to the native
+duckdb-fieldbook extension. Registers the four fieldbook_* mutate/record
+scalars plus the three fieldbook_list / fieldbook_entries / fieldbook_source
+read macros; executes their DDL/DML through the duckdb:extension/nested-exec
+host import (task #7). All logic + the capability declaration live ONCE in
+fieldbook-core (datalink).
+"""
+license = "MIT"
+publish = false
+
+[lib]
+name = "fieldbook"
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+# Shared, DB-agnostic core (declare!-driven surface + logic).
+fieldbook-core = { path = "../../../datalink/extensions/fieldbook-core" }
+# Neutral value model + shared columnar bridge helpers.
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension-fieldbook"

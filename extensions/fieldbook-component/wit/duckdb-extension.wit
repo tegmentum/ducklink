@@ -1,0 +1,43 @@
+package duckdb:extension@5.0.0;
+
+use runtime;
+use callback-dispatch;
+use config;
+use logging;
+use catalog;
+use files;
+use guest;
+use nested-exec;
+
+// Baseline world (kept for parity with every other extension in the tree so
+// tooling that assumes `duckdb:extension/duckdb-extension` can still resolve
+// it here).
+world duckdb-extension {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  export guest;
+  export callback-dispatch;
+}
+
+// Fieldbook-capable world. Additionally imports `nested-exec`, the host
+// import that lets a scalar/table callback execute SQL on a sibling
+// connection to the same database (see wit/duckdb-extension/nested-exec.wit).
+// This is what makes the fieldbook_* mutate scalars run their DDL/DML
+// without re-entering the outer query engine.
+//
+// COORDINATION NOTE (task #7): the host-side implementation of this import
+// lives in `crates/ducklink-host` and matches the `nested-exec` interface
+// name / function signature declared in wit/duckdb-extension/nested-exec.wit.
+world duckdb-extension-fieldbook {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import nested-exec;
+  export guest;
+  export callback-dispatch;
+}

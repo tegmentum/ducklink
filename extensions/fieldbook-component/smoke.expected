@@ -1,0 +1,10 @@
+created
+true
+ordinal
+1
+n
+1
+src
+CREATE TABLE t AS SELECT 1 x
+dropped
+true
