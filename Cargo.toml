@@ -240,6 +240,14 @@ exclude = [
     "extensions/postgis_core-component",
     "extensions/mobilitydb_temporal_core-component",
     "extensions/timescale_time_bucket-component",
+    # The native ducklink extension is a git submodule with its own
+    # `runtime/` crate ALSO named `ducklink-runtime`. Left in the workspace
+    # it collides with `crates/ducklink-runtime` (both packages have the
+    # same name, so the workspace member wins and the submodule's engine
+    # code sees a wrong-version bindgen). It has its own `[workspace]` +
+    # Cargo.lock and builds standalone: `cargo build --manifest-path
+    # native-extension/ducklink/Cargo.toml`.
+    "native-extension/ducklink",
 ]
 
 resolver = "2"
