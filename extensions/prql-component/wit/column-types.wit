@@ -1,7 +1,7 @@
-// LIVE major-4 columnar value model (duckdb:extension@4.0.0).
+// LIVE major-5 columnar value model (duckdb:extension@5.0.0).
 //
 // The columnar counterpart of types.wit's row-major `duckvalue`. This is the
-// HOT-PATH transfer unit for scalar/aggregate/cast dispatch on major-4: the core
+// HOT-PATH transfer unit for scalar/aggregate/cast dispatch on major-5: the core
 // fills a `colvec` by memcpy-ing straight from `duckdb_vector_get_data` and the
 // guest lifts it as a bulk slice -- no per-cell tagged-variant marshalling.
 //
@@ -10,7 +10,25 @@
 // `list<list<duckvalue>>` which serialized a ~24-byte tagged variant per cell
 // plus a per-row inner-list realloc. Measured 82-110x on a 1M-row i64 scalar
 // (benches/columnar-abi-prototype).
-package duckdb:extension@4.0.0;
+//
+// major-5 (2026-07-23): closes the type-system standing items.
+//   * T2-1 residual: HUGEINT / UHUGEINT get dedicated arms carrying two
+//     u64/s64 halves (WIT has no native s128/u128, matching how DECIMAL is
+//     split). Fixed-width, so they lower/lift as a bulk memcpy on the hot
+//     path.
+//   * S1 nested types (LIST/STRUCT/MAP/ARRAY) get first-class arms. Note:
+//     wit-parser 0.251 rejects VALUE-type cycles (see `collect_deps` in
+//     ast/resolve.rs — it walks THROUGH list<>/option<>/record/variant and
+//     the toposort forbids self-references; only resource own<>/borrow<>
+//     handles are allowed to recur), so the nested arms carry an OPAQUE
+//     byte payload (`list<u8>`) with a runtime-defined compact binary
+//     encoding, rather than a recursive `list<column>`. That's a strict
+//     improvement over the pre-@5 fall-back of routing nested vectors
+//     through the JSON-string `complex(list<complexvalue>)` arm, but stops
+//     short of the fully structural crossing the S1 design brief asked for.
+//     Bump to a future @6 once wit-parser gains recursive-value-type
+//     support (or once the runtime opts into resource handles).
+package duckdb:extension@5.0.0;
 
 interface column-types {
   // Re-used flat records from the row-major model (identical layout).
@@ -19,15 +37,34 @@ interface column-types {
   record uuidvalue { hi: u64, lo: u64 }
   record complexvalue { type-expr: string, json: string }
 
+  // T2-1 residual: 128-bit storage for HUGEINT / UHUGEINT scalars, mirroring
+  // the DECIMAL split (a u64 low half plus a s64/u64 high half). WIT has no
+  // native s128/u128, so the two halves cross the ABI as a flat record and
+  // the runtime reassembles them via `((upper as i128) << 64 | lower as i128)`.
+  record duck-int128 { lower: u64, upper: s64 }
+  record duck-uint128 { lower: u64, upper: u64 }
+
+  // S1 nested-type payloads. See the header note: the payload is an opaque
+  // byte buffer (runtime-defined compact binary encoding) because
+  // wit-parser 0.251 forbids recursive VALUE types. `list-col` / `struct-col`
+  // / `map-col` / `array-col` on the `column` variant tag the KIND so
+  // callers can switch on it cheaply, then decode the payload once per
+  // vector rather than once per row (which is what the `complex` JSON path
+  // costs today).
+  record nested-column { encoded: list<u8> }
+  record map-column { keys-encoded: list<u8>, vals-encoded: list<u8> }
+  record array-column { size: u32, encoded: list<u8> }
+
   // A typed, contiguous COLUMN: one buffer per DuckDB physical type. DuckDB
   // vectors are ALREADY flat contiguous arrays, so the core fills these arms by
   // memcpy-ing straight from `duckdb_vector_get_data` -- no per-cell read loop.
   //
-  // Fixed-width arms (boolean..uuid) lower/lift as a bulk memcpy. The two
-  // variable-width arms (text/blob) stay element-wise -- unavoidable for
-  // var-len data, and identical in cost to the row-major path for those types.
-  // The escape hatch (`complex`) is also element-wise; FUTURE composite types
-  // ride it with no further contract bump, exactly as the row-major `complex`.
+  // Fixed-width arms (boolean..uuid, hugeint/uhugeint) lower/lift as a bulk
+  // memcpy. The two variable-width arms (text/blob) stay element-wise --
+  // unavoidable for var-len data, and identical in cost to the row-major path
+  // for those types. The escape hatch (`complex`) is also element-wise; the
+  // nested-type arms (list-col/struct-col/map-col/array-col) carry a single
+  // opaque byte payload per vector (see `nested-column` above).
   variant column {
     boolean(list<bool>),
     int64(list<s64>),
@@ -49,6 +86,16 @@ interface column-types {
     uuid(list<uuidvalue>),
     text(list<string>),
     blob(list<list<u8>>),
+    // T2-1 residual (major-5): 128-bit integers.
+    hugeint(list<duck-int128>),
+    uhugeint(list<duck-uint128>),
+    // S1 nested types (major-5): first-class LIST/STRUCT/MAP/ARRAY column
+    // arms. Payloads are opaque bytes per the header note; the runtime
+    // owns the encode/decode boundary.
+    list-col(nested-column),
+    struct-col(nested-column),
+    map-col(map-column),
+    array-col(array-column),
     complex(list<complexvalue>),
   }
 

@@ -1,11 +1,41 @@
-package duckdb:extension@4.0.0;
+package duckdb:extension@5.0.0;
 
 interface types {
+  // S2 (major-5): DECIMAL width/scale is now carried structurally by the
+  // `logicaltype` variant itself, so a component can declare "DECIMAL(18,3)"
+  // without going through the `complex` type-expression escape hatch. On
+  // major-4 the `decimal` arm was FIELDLESS -- callers had to pipe width/scale
+  // through a separate name-registration path, losing the type-shape at load
+  // time. `decimalshape` mirrors the value-side `decimalvalue`'s width/scale
+  // halves (the lower/upper HUGEINT halves are value-only, so they stay out
+  // of this shape record).
+  record decimalshape {
+    width: u8,
+    scale: u8,
+  }
+
   // ESCAPE-HATCH logical type. The `complex` arm carries a DuckDB type-expression
   // string (e.g. "INTEGER[]", "STRUCT(a INTEGER, b VARCHAR)"); the core resolves it
   // to a real logical type. This makes `logicaltype` a `variant` (was an `enum`); the
   // fieldless arms keep their discriminant order, so the canonical-ABI is appended-to,
   // not reordered. Any FUTURE type rides this arm with no further contract bump.
+  //
+  // major-5 (2026-07-23) additions:
+  //   * S2: `decimal` carries a `decimalshape { width, scale }` payload so
+  //         DECIMAL type-shape is structural (was fieldless on @4).
+  //   * T2-1 residual: `hugeint` and `uhugeint` are first-class logical types
+  //         (fieldless -- the shape is fixed; values are carried on
+  //         `duckvalue.hugeint` / `.uhugeint` as record payloads).
+  //
+  // NOT added in @5: structural LIST/STRUCT/MAP/ARRAY arms. The S1 design
+  // brief asked for `list-type(list<logicaltype>)`, `struct-type(list<field>)`
+  // etc., but wit-parser 0.251 rejects recursive VALUE types (see the header
+  // note on column-types.wit). Structural nested LOGICAL types are therefore
+  // deferred: callers keep routing them through `complex(string)` (a DuckDB
+  // type-expression like "INTEGER[]" / "STRUCT(a INT, b VARCHAR)"), which the
+  // core resolves at bind time. Nested VALUE transport rides the S1
+  // `list-col` / `struct-col` / `map-col` / `array-col` arms on `column`
+  // (opaque bytes; see column-types.wit).
   variant logicaltype {
     boolean,
     int64,
@@ -24,9 +54,13 @@ interface types {
     date,
     time,
     timestamptz,
-    decimal,
+    // S2 (major-5): DECIMAL width/scale now ride the variant arm.
+    decimal(decimalshape),
     interval,
     uuid,
+    // T2-1 residual (major-5): 128-bit integer logical types.
+    hugeint,
+    uhugeint,
     complex(string),
   }
 
@@ -38,6 +72,21 @@ interface types {
     upper: u64,
     width: u8,
     scale: u8,
+  }
+
+  // T2-1 residual (major-5): 128-bit signed integer value. Two halves,
+  // matching the DECIMAL split -- WIT has no native s128 so the runtime
+  // reassembles the value via `((upper as i128) << 64 | lower as i128)`.
+  record hugeintvalue {
+    lower: u64,
+    upper: s64,
+  }
+
+  // T2-1 residual (major-5): 128-bit unsigned integer value. Same shape as
+  // `hugeintvalue` but with an unsigned high half.
+  record uhugeintvalue {
+    lower: u64,
+    upper: u64,
   }
 
   // DuckDB INTERVAL: months + days + microseconds components.
@@ -60,6 +109,13 @@ interface types {
   // NOT reference `duckvalue`, so there is no recursive WIT cycle. The core
   // reconstructs the real LIST/STRUCT vector from the JSON via the duckdb C vector
   // API (which has no recursion limit).
+  //
+  // NOTE (major-5): the hot-path columnar side now has structural S1 arms
+  // (`list-col` / `struct-col` / `map-col` / `array-col` on `column`) that
+  // carry an opaque binary payload rather than JSON. Row-major `duckvalue`
+  // still falls back to `complex` for nested values -- the row-major path is
+  // COLD (typed-arg cast / catalog eval), so paying the JSON round-trip
+  // there stays acceptable.
   record complexvalue {
     type-expr: string,
     json: string,
@@ -116,6 +172,11 @@ interface types {
     decimal(decimalvalue),
     interval(intervalvalue),
     uuid(uuidvalue),
+    // T2-1 residual (major-5): 128-bit integer scalar values. Guests that
+    // produce HUGEINT / UHUGEINT via cast or scalar dispatch send them
+    // through these arms rather than the `complex` JSON hatch.
+    hugeint(hugeintvalue),
+    uhugeint(uhugeintvalue),
     complex(complexvalue),
   }
 

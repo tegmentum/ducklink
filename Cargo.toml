@@ -8,7 +8,7 @@ members = [
     "crates/ducklink-host",
     "crates/storage-boundary-test",
     "crates/table-stream-boundary-test",
-    # TODO(@5 rebuild): "extensions/sample-extension-component", -- needs WIT sync + rebuild
+    "extensions/sample-extension-component",
     "extensions/isin",
     "extensions/greet-dotcmd",
     "extensions/core-dotcmd",
@@ -28,8 +28,8 @@ members = [
     "extensions/numstream-component",
     "extensions/crypto-component",
     "extensions/casing-component",
-    # TODO(@5 rebuild): "extensions/markdown-component", -- needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/hashfuncs-component", -- uses datalink_extcore macros expecting @5 arms; needs WIT sync + rebuild
+    "extensions/markdown-component",
+    "extensions/hashfuncs-component",
     "extensions/csscolor-component",
     "extensions/rapidfuzz-component",
     "extensions/uuidx-component",
@@ -63,8 +63,8 @@ members = [
     "extensions/stdsql-component",
     "extensions/stats-component",
     "extensions/sys_compat-component",
-    # TODO(@5 rebuild): "extensions/spatialproj-component", -- needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/typetest-component", -- needs WIT sync + rebuild
+    "extensions/spatialproj-component",
+    "extensions/typetest-component",
     "extensions/currency-component",
     "extensions/hmac-component",
     "extensions/phonetic-component",
@@ -72,7 +72,7 @@ members = [
     "extensions/totp-component",
     "extensions/baseconv-component",
     "extensions/emoji-component",
-    # TODO(@5 rebuild): "extensions/whatlang-component", -- uses datalink_extcore macros expecting @5 arms; needs WIT sync + rebuild
+    "extensions/whatlang-component",
     "extensions/ipaddr-component",
     "extensions/mime-component",
     "extensions/pluralize-component",
@@ -85,7 +85,7 @@ members = [
     "extensions/unitconv-component",
     "extensions/wordwrap-component",
     "extensions/timezone-component",
-    # TODO(@5 rebuild): "extensions/rot13-component", -- needs WIT sync + rebuild
+    "extensions/rot13-component",
     "extensions/leetspeak-component",
     "extensions/dms-component",
     "extensions/cbor-component",
@@ -94,13 +94,13 @@ members = [
     "extensions/vigenere-component",
     "extensions/petname-component",
     "extensions/base58check-component",
-    # TODO(@5 rebuild): "extensions/checksums-component", -- uses datalink_extcore macros expecting @5 arms; needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/siphash-component", -- needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/tiktoken-component", -- needs WIT sync + rebuild
+    "extensions/checksums-component",
+    "extensions/siphash-component",
+    "extensions/tiktoken-component",
     "extensions/bech32-component",
     "extensions/uuid5-component",
     "extensions/gravatar-component",
-    # TODO(@5 rebuild): "extensions/html2text-component", -- uses datalink_extcore macros expecting @5 arms; needs WIT sync + rebuild
+    "extensions/html2text-component",
     "extensions/textstat-component",
     "extensions/hashids-component",
     "extensions/checkdigit-component",
@@ -123,28 +123,28 @@ members = [
     "extensions/unicodewidth-component",
     "extensions/colorconv-component",
     "extensions/jsonschema-component",
-    # TODO(@5 rebuild): "extensions/simhash-component", -- needs WIT sync + rebuild
+    "extensions/simhash-component",
     "extensions/idextra-component",
     "extensions/phonetic2-component",
     "extensions/z85-component",
     "extensions/initials-component",
     "extensions/luhngen-component",
-    # TODO(@5 rebuild): "extensions/pintest_a-component", -- needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/pintest_b-component", -- needs WIT sync + rebuild
+    "extensions/pintest_a-component",
+    "extensions/pintest_b-component",
     "extensions/atbash-component",
     "extensions/ducklink-scalars-component",
     "extensions/piglatin-component",
     "extensions/rle-component",
     "extensions/bbcode-component",
-    # TODO(@5 rebuild): "extensions/phonenumber-component", -- needs WIT sync + rebuild
+    "extensions/phonenumber-component",
     "extensions/qrcode-component",
     "extensions/pwstrength-component",
-    # TODO(@5 rebuild): "extensions/aggstat-component", -- uses datalink_extcore macros expecting @5 arms; needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/bloom-component", -- uses datalink_extcore macros expecting @5 arms; needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/minhash-component", -- uses datalink_extcore macros expecting @5 arms; needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/countmin-component", -- uses datalink_extcore macros expecting @5 arms; needs WIT sync + rebuild
+    "extensions/aggstat-component",
+    "extensions/bloom-component",
+    "extensions/minhash-component",
+    "extensions/countmin-component",
     "extensions/dns-component",
-    # TODO(@5 rebuild): "extensions/httpclient-component", -- needs WIT sync + rebuild
+    "extensions/httpclient-component",
     "extensions/lorem-component",
     "extensions/faker-component",
     "extensions/passphrase-component",
@@ -152,21 +152,21 @@ members = [
     "extensions/lindel-component",
     "extensions/magic-component",
     "extensions/tsid-component",
-    # TODO(@5 rebuild): "extensions/rhai-component", -- needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/bitfilters-component", -- needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/prql-component", -- needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/jaq-component", -- needs WIT sync + rebuild
+    "extensions/rhai-component",
+    "extensions/bitfilters-component",
+    "extensions/prql-component",
+    "extensions/jaq-component",
     "extensions/cron-component",
-    # TODO(@5 rebuild): "extensions/xml-component", -- uses datalink_extcore macros expecting @5 arms; needs WIT sync + rebuild
+    "extensions/xml-component",
     "extensions/pinyin-component",
-    # TODO(@5 rebuild): "extensions/sqlformat-component", -- needs WIT sync + rebuild
+    "extensions/sqlformat-component",
     "extensions/secp256k1-component",
-    # TODO(@5 rebuild): "extensions/bibtex-component", -- needs WIT sync + rebuild
+    "extensions/bibtex-component",
     "extensions/useragent-component",
     "extensions/ical-component",
-    # TODO(@5 rebuild): "extensions/tdigest-component", -- needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/mlkmeans-component", -- needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/urlpattern-component", -- needs WIT sync + rebuild
+    "extensions/tdigest-component",
+    "extensions/mlkmeans-component",
+    "extensions/urlpattern-component",
     "extensions/bencode-component",
     "extensions/maidenhead-component",
     "extensions/base45-component",
@@ -176,9 +176,9 @@ members = [
     "extensions/celestial-component",
     "extensions/textlines-component",
     "extensions/netquack-component",
-    # TODO(@5 rebuild): "extensions/openprompt-component", -- needs WIT sync + rebuild
+    "extensions/openprompt-component",
     "extensions/dbf-component",
-    # TODO(@5 rebuild): "extensions/parsertools-component", -- needs WIT sync + rebuild
+    "extensions/parsertools-component",
     "extensions/shapefile-component",
     "extensions/fit-component",
     "extensions/warc-component",
@@ -204,20 +204,21 @@ members = [
     "extensions/qopt-component",
     "extensions/hnswfns-component",
     "extensions/jsonfns-component",
-    # TODO(@5 rebuild): "extensions/inetfns-component", -- uses datalink_extcore macros expecting @5 arms; needs WIT sync + rebuild    "extensions/excelfns-component",
+    "extensions/inetfns-component",
+    "extensions/excelfns-component",
     "extensions/avrofns-component",
-    # TODO(@5 rebuild): "extensions/spatialfns-component", -- uses datalink_extcore macros expecting @5 arms; needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/geomtype-component", -- needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/ftsfns-component", -- needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/icufns-component", -- needs WIT sync + rebuild
+    "extensions/spatialfns-component",
+    "extensions/geomtype-component",
+    "extensions/ftsfns-component",
+    "extensions/icufns-component",
     "extensions/vssfns-component",
-    # TODO(@5 rebuild): "extensions/rtreefns-component", -- needs WIT sync + rebuild
-    # TODO(@5 rebuild): "extensions/tpchgen-component", -- uses datalink_extcore macros expecting @5 arms; needs WIT sync + rebuild
+    "extensions/rtreefns-component",
+    "extensions/tpchgen-component",
     "extensions/tpcdsgen-component",
     "extensions/deltascan-component",
     "extensions/icebergscan-component",
     "extensions/autocomplete-component",
-    # TODO(@5 rebuild): "extensions/statsduck-component", -- needs WIT sync + rebuild
+    "extensions/statsduck-component",
     "tools/catalog-sig-extract",
 ]
 

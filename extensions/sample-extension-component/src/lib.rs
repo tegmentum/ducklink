@@ -273,6 +273,7 @@ fn register_cast_definition() -> Result<(), types::Duckerror> {
             from: "VARCHAR".into(),
             to: "sample_id".into(),
             kind: catalog::CastKind::Explicit,
+            implicit_cost: None,
         },
         callback,
     )

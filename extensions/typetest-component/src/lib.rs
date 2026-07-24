@@ -158,7 +158,7 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         ("tt_date", T::Date, types::Logicaltype::Date, "returns 2021-01-01 as DATE"),
         ("tt_time", T::Time, types::Logicaltype::Time, "returns 12:34:56.789 as TIME"),
         ("tt_timestamptz", T::Timestamptz, types::Logicaltype::Timestamptz, "returns 2021-01-01 as TIMESTAMP_TZ"),
-        ("tt_decimal", T::Decimal, types::Logicaltype::Decimal, "returns 12345.6789 as DECIMAL"),
+        ("tt_decimal", T::Decimal, types::Logicaltype::Decimal(types::Decimalshape { width: 38, scale: 4 }), "returns 12345.6789 as DECIMAL"),
         ("tt_interval", T::Interval, types::Logicaltype::Interval, "returns 1 month 2 days 3s as INTERVAL"),
         ("tt_uuid", T::Uuid, types::Logicaltype::Uuid, "returns a fixed UUID"),
         // ESCAPE-HATCH: the return type is declared via the `complex` arm carrying

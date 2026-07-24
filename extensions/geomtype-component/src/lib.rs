@@ -207,6 +207,7 @@ fn register_type_and_casts() -> Result<(), types::Duckerror> {
             from: "VARCHAR".into(),
             to: TYPE_NAME.into(),
             kind: catalog::CastKind::Assignment,
+            implicit_cost: None,
         },
         runtime::CastCallback::new(h_to),
     )
@@ -225,6 +226,7 @@ fn register_type_and_casts() -> Result<(), types::Duckerror> {
             from: TYPE_NAME.into(),
             to: "VARCHAR".into(),
             kind: catalog::CastKind::Explicit,
+            implicit_cost: None,
         },
         runtime::CastCallback::new(h_from),
     )
@@ -248,6 +250,7 @@ fn register_type_and_casts() -> Result<(), types::Duckerror> {
             from: "geometry".into(),
             to: TYPE_NAME.into(),
             kind: catalog::CastKind::Explicit,
+            implicit_cost: None,
         },
         runtime::CastCallback::new(h_builtin),
     );
