@@ -1,0 +1,21 @@
+package duckdb:extension@5.0.0;
+
+use types;
+
+// Log-storage registration surface (additive, 3.2.0). Class B parity with the
+// stable `duckdb_register_log_storage` C API: a component declares a NAMED log
+// sink DuckDB should route entries to. The host captures the declaration; the
+// entries themselves are streamed to the component via the dispatch export
+// (log-storage-dispatch.write-log-entry), routed by `callback-handle`.
+//
+// Kept SEPARATE (additive) so existing components' frozen WIT copies stay
+// structurally unchanged.
+interface log-storage {
+  use types.{duckerror};
+
+  // Register a log storage backend named `name` (e.g. "otlp", "s3-jsonl").
+  // `callback-handle` routes every log-storage-dispatch call back to the
+  // owning component.
+  register-log-storage: func(name: string,
+                             callback-handle: u32) -> result<u32, duckerror>;
+}

@@ -44,7 +44,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::process::Command;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::thread;
 
 use anyhow::{Context, Result};
@@ -1799,7 +1799,7 @@ struct ExtensionManager {
     engine: Engine,
     core: Option<Arc<Mutex<CoreExecution>>>,
     extensions: HashMap<String, ExtensionInstance>,
-    callback_registry: Arc<Mutex<CallbackRegistry>>,
+    callback_registry: Arc<RwLock<CallbackRegistry>>,
     // M2a: registered ATTACH storage backends, captured from each extension's
     // `register-storage`. Keyed by ATTACH TYPE name (e.g. "sqlitewasm"); the
     // value is the backing extension name + the callback-handle the component
@@ -1954,7 +1954,7 @@ impl ExtensionManager {
             engine,
             core: None,
             extensions: HashMap::new(),
-            callback_registry: Arc::new(Mutex::new(CallbackRegistry::new())),
+            callback_registry: Arc::new(RwLock::new(CallbackRegistry::new())),
             storage_backends: HashMap::new(),
             index_backends: HashMap::new(),
             files_backend: None,
@@ -2418,7 +2418,10 @@ impl ExtensionManager {
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
             extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
         })?;
-        instance.storage_update_rows(handle, txn, table, rowids, updated_columns, rows)
+        // @5.0.0 dropped the `updated_columns` mask from storage-write-dispatch
+        // (the row is now taken as a whole write).
+        let _ = updated_columns;
+        instance.storage_update_rows(handle, txn, table, rowids, rows)
     }
 
     // --- Item 3 / M2a: custom index (build + search) routing ---
@@ -2610,7 +2613,7 @@ impl ExtensionManager {
         let (dispatcher_handle, ext_name) = {
             let registry = self
                 .callback_registry
-                .lock()
+                .read()
                 .unwrap_or_else(|e| e.into_inner());
             match registry.resolve(handle) {
                 Some(entry) if entry.kind == CallbackKind::Scalar => {
@@ -3201,7 +3204,7 @@ impl ExtensionManager {
     fn lookup_callback(&self, handle: u32, kind: CallbackKind) -> Option<CallbackEntry> {
         let registry = self
             .callback_registry
-            .lock()
+            .read()
             .unwrap_or_else(|e| e.into_inner());
         registry.get(handle).filter(|entry| entry.kind == kind)
     }
@@ -5085,10 +5088,101 @@ fn neutral_logicaltype_to_core(ty: reg::LogicalType) -> core_runtime_exports::Lo
         reg::LogicalType::Date => core_runtime_exports::Logicaltype::Date,
         reg::LogicalType::Time => core_runtime_exports::Logicaltype::Time,
         reg::LogicalType::Timestamptz => core_runtime_exports::Logicaltype::Timestamptz,
-        reg::LogicalType::Decimal => core_runtime_exports::Logicaltype::Decimal,
+        // Core (@4.0.0) DECIMAL is fieldless; the @5.0.0 neutral form carries
+        // width/scale which we drop when lowering into the core-runtime shape.
+        reg::LogicalType::Decimal { .. } => core_runtime_exports::Logicaltype::Decimal,
         reg::LogicalType::Interval => core_runtime_exports::Logicaltype::Interval,
         reg::LogicalType::Uuid => core_runtime_exports::Logicaltype::Uuid,
+        // T2-1 residual (major-5): the neutral surface gained fieldless
+        // Hugeint / Uhugeint arms; core stays @4.0.0 so route through the
+        // Complex(type-expr) escape hatch.
+        reg::LogicalType::Hugeint => core_runtime_exports::Logicaltype::Complex("HUGEINT".into()),
+        reg::LogicalType::UHugeint => core_runtime_exports::Logicaltype::Complex("UHUGEINT".into()),
+        // S1 (major-5): nested logical types (LIST / STRUCT / MAP / ARRAY)
+        // added on the neutral side ride out as type-expr strings through
+        // core's Complex arm — the core WIT has no nested shape.
+        reg::LogicalType::List(elem) => core_runtime_exports::Logicaltype::Complex(format!(
+            "LIST({})",
+            neutral_logicaltype_to_type_expr(&elem)
+        )),
+        reg::LogicalType::Struct(fields) => {
+            let mut acc = String::from("STRUCT(");
+            for (i, (n, t)) in fields.iter().enumerate() {
+                if i > 0 {
+                    acc.push_str(", ");
+                }
+                acc.push_str(n);
+                acc.push(' ');
+                acc.push_str(&neutral_logicaltype_to_type_expr(t));
+            }
+            acc.push(')');
+            core_runtime_exports::Logicaltype::Complex(acc)
+        }
+        reg::LogicalType::Map(k, v) => core_runtime_exports::Logicaltype::Complex(format!(
+            "MAP({}, {})",
+            neutral_logicaltype_to_type_expr(&k),
+            neutral_logicaltype_to_type_expr(&v)
+        )),
+        reg::LogicalType::Array(size, elem) => core_runtime_exports::Logicaltype::Complex(format!(
+            "{}[{}]",
+            neutral_logicaltype_to_type_expr(&elem),
+            size
+        )),
         reg::LogicalType::Complex(expr) => core_runtime_exports::Logicaltype::Complex(expr),
+    }
+}
+
+/// Best-effort rendering of a neutral `reg::LogicalType` as a DuckDB SQL type
+/// expression. Used by the core down-cast when the target (core @4.0.0) has no
+/// structural place for a v5 nested / hugeint arm and must fall back to
+/// `Complex(type-expr)`.
+fn neutral_logicaltype_to_type_expr(ty: &reg::LogicalType) -> String {
+    match ty {
+        reg::LogicalType::Boolean => "BOOLEAN".into(),
+        reg::LogicalType::Int64 => "BIGINT".into(),
+        reg::LogicalType::Uint64 => "UBIGINT".into(),
+        reg::LogicalType::Float64 => "DOUBLE".into(),
+        reg::LogicalType::Text => "VARCHAR".into(),
+        reg::LogicalType::Blob => "BLOB".into(),
+        reg::LogicalType::Int32 => "INTEGER".into(),
+        reg::LogicalType::Timestamp => "TIMESTAMP".into(),
+        reg::LogicalType::Int8 => "TINYINT".into(),
+        reg::LogicalType::Int16 => "SMALLINT".into(),
+        reg::LogicalType::Uint8 => "UTINYINT".into(),
+        reg::LogicalType::Uint16 => "USMALLINT".into(),
+        reg::LogicalType::Uint32 => "UINTEGER".into(),
+        reg::LogicalType::Float32 => "FLOAT".into(),
+        reg::LogicalType::Date => "DATE".into(),
+        reg::LogicalType::Time => "TIME".into(),
+        reg::LogicalType::Timestamptz => "TIMESTAMPTZ".into(),
+        reg::LogicalType::Decimal { width, scale } => format!("DECIMAL({width}, {scale})"),
+        reg::LogicalType::Interval => "INTERVAL".into(),
+        reg::LogicalType::Uuid => "UUID".into(),
+        reg::LogicalType::Hugeint => "HUGEINT".into(),
+        reg::LogicalType::UHugeint => "UHUGEINT".into(),
+        reg::LogicalType::List(elem) => format!("{}[]", neutral_logicaltype_to_type_expr(elem)),
+        reg::LogicalType::Struct(fields) => {
+            let mut acc = String::from("STRUCT(");
+            for (i, (n, t)) in fields.iter().enumerate() {
+                if i > 0 {
+                    acc.push_str(", ");
+                }
+                acc.push_str(n);
+                acc.push(' ');
+                acc.push_str(&neutral_logicaltype_to_type_expr(t));
+            }
+            acc.push(')');
+            acc
+        }
+        reg::LogicalType::Map(k, v) => format!(
+            "MAP({}, {})",
+            neutral_logicaltype_to_type_expr(k),
+            neutral_logicaltype_to_type_expr(v)
+        ),
+        reg::LogicalType::Array(size, elem) => {
+            format!("{}[{}]", neutral_logicaltype_to_type_expr(elem), size)
+        }
+        reg::LogicalType::Complex(expr) => expr.clone(),
     }
 }
 
@@ -5142,9 +5236,41 @@ fn neutral_reg_logicaltype_to_core_types(ty: reg::LogicalType) -> core_types::Lo
         reg::LogicalType::Date => C::Date,
         reg::LogicalType::Time => C::Time,
         reg::LogicalType::Timestamptz => C::Timestamptz,
-        reg::LogicalType::Decimal => C::Decimal,
+        // Core (@4.0.0) Decimal is fieldless; drop width/scale on the down-cast.
+        reg::LogicalType::Decimal { .. } => C::Decimal,
         reg::LogicalType::Interval => C::Interval,
         reg::LogicalType::Uuid => C::Uuid,
+        // T2-1 residual (major-5): route new hugeint arms through the
+        // Complex(type-expr) escape hatch since core stays @4.0.0.
+        reg::LogicalType::Hugeint => C::Complex("HUGEINT".into()),
+        reg::LogicalType::UHugeint => C::Complex("UHUGEINT".into()),
+        // S1 (major-5): nested types ride out as type-expr strings.
+        reg::LogicalType::List(elem) => {
+            C::Complex(format!("LIST({})", neutral_logicaltype_to_type_expr(&elem)))
+        }
+        reg::LogicalType::Struct(fields) => {
+            let mut acc = String::from("STRUCT(");
+            for (i, (n, t)) in fields.iter().enumerate() {
+                if i > 0 {
+                    acc.push_str(", ");
+                }
+                acc.push_str(n);
+                acc.push(' ');
+                acc.push_str(&neutral_logicaltype_to_type_expr(t));
+            }
+            acc.push(')');
+            C::Complex(acc)
+        }
+        reg::LogicalType::Map(k, v) => C::Complex(format!(
+            "MAP({}, {})",
+            neutral_logicaltype_to_type_expr(&k),
+            neutral_logicaltype_to_type_expr(&v)
+        )),
+        reg::LogicalType::Array(size, elem) => C::Complex(format!(
+            "{}[{}]",
+            neutral_logicaltype_to_type_expr(&elem),
+            size
+        )),
         reg::LogicalType::Complex(expr) => C::Complex(expr),
     }
 }
@@ -6336,6 +6462,26 @@ fn convert_extension_duckvalue_to_core(value: extension_types::Duckvalue) -> cor
                 json: c.json,
             })
         }
+        // T2-1 residual (major-5): HUGEINT / UHUGEINT scalar values gained
+        // first-class arms on the extension side; core is @4.0.0 and only has
+        // the `complex(complexvalue)` escape hatch. Serialize the 128-bit
+        // integer as a base-10 string (the lossless representation DuckDB
+        // exchanges HUGEINT literals in) and label it via the type-expr.
+        extension_types::Duckvalue::Hugeint(h) => {
+            // Reassemble per the WIT comment: (upper as i128) << 64 | lower.
+            let v: i128 = ((h.upper as i128) << 64) | (h.lower as i128);
+            core_types::Duckvalue::Complex(core_types::Complexvalue {
+                type_expr: "HUGEINT".into(),
+                json: v.to_string(),
+            })
+        }
+        extension_types::Duckvalue::Uhugeint(h) => {
+            let v: u128 = ((h.upper as u128) << 64) | (h.lower as u128);
+            core_types::Duckvalue::Complex(core_types::Complexvalue {
+                type_expr: "UHUGEINT".into(),
+                json: v.to_string(),
+            })
+        }
     }
 }
 
@@ -6521,9 +6667,19 @@ fn convert_extension_logicaltype_to_core(
         extension_types::Logicaltype::Date => core_types::Logicaltype::Date,
         extension_types::Logicaltype::Time => core_types::Logicaltype::Time,
         extension_types::Logicaltype::Timestamptz => core_types::Logicaltype::Timestamptz,
-        extension_types::Logicaltype::Decimal => core_types::Logicaltype::Decimal,
+        // @5.0.0 DECIMAL now carries width/scale; core (@4.0.0) is fieldless. Drop the
+        // shape (best-effort) on the down-cast — the core has no place for width/scale.
+        extension_types::Logicaltype::Decimal(_) => core_types::Logicaltype::Decimal,
         extension_types::Logicaltype::Interval => core_types::Logicaltype::Interval,
         extension_types::Logicaltype::Uuid => core_types::Logicaltype::Uuid,
+        // @5.0.0 new HUGEINT / UHUGEINT surface. Core is @4.0.0 and has no such
+        // arm — fall back to the Complex(type-expr) escape hatch.
+        extension_types::Logicaltype::Hugeint => {
+            core_types::Logicaltype::Complex("HUGEINT".into())
+        }
+        extension_types::Logicaltype::Uhugeint => {
+            core_types::Logicaltype::Complex("UHUGEINT".into())
+        }
         extension_types::Logicaltype::Complex(expr) => core_types::Logicaltype::Complex(expr),
     }
 }
@@ -6559,7 +6715,15 @@ fn convert_core_logicaltype_to_extension(
         core_types::Logicaltype::Date => extension_types::Logicaltype::Date,
         core_types::Logicaltype::Time => extension_types::Logicaltype::Time,
         core_types::Logicaltype::Timestamptz => extension_types::Logicaltype::Timestamptz,
-        core_types::Logicaltype::Decimal => extension_types::Logicaltype::Decimal,
+        // Core (@4.0.0) DECIMAL is fieldless; @5.0.0 needs width/scale. Use a
+        // conservative default matching the extension crate's parse fallback
+        // (DECIMAL(18,3)) so up-casts round-trip through the write path.
+        core_types::Logicaltype::Decimal => {
+            extension_types::Logicaltype::Decimal(extension_types::Decimalshape {
+                width: 18,
+                scale: 3,
+            })
+        }
         core_types::Logicaltype::Interval => extension_types::Logicaltype::Interval,
         core_types::Logicaltype::Uuid => extension_types::Logicaltype::Uuid,
         core_types::Logicaltype::Complex(expr) => extension_types::Logicaltype::Complex(expr),
@@ -6651,11 +6815,7 @@ fn convert_core_scan_request_to_storage(
             })
             .collect(),
         limit: request.limit,
-        // M2c: forward the wants-rowid flag verbatim to the guest's
-        // storage-dispatch scan-open. The read side (SELECT) leaves this
-        // false; UPDATE/DELETE plans set it via the C++ WasmScanInitGlobal
-        // so the guest appends rowid trailers to each row.
-        wants_rowid: request.wants_rowid,
+        // @5.0.0 dropped the `wants-rowid` flag from scan-request.
     }
 }
 
@@ -8671,9 +8831,15 @@ mod tests {
             L::Date,
             L::Time,
             L::Timestamptz,
-            L::Decimal,
+            L::Decimal { width: 18, scale: 3 },
             L::Interval,
             L::Uuid,
+            L::Hugeint,
+            L::UHugeint,
+            L::List(Box::new(L::Int32)),
+            L::Struct(vec![("a".into(), L::Int32)]),
+            L::Map(Box::new(L::Text), Box::new(L::Int32)),
+            L::Array(4, Box::new(L::Int32)),
             L::Complex("LIST(INTEGER)".to_string()),
         ]
     }

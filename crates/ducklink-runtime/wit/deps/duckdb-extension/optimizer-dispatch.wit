@@ -1,7 +1,14 @@
-package duckdb:extension@4.0.0;
+package duckdb:extension@5.0.0;
 
 use types;
 
+// DEPRECATED (ducklink 5.0.0) — scheduled for removal at the next
+// duckdb:extension major bump.
+//
+// Paired with `optimizer` (also deprecated). No host drives `call-optimize`;
+// components exporting `optimizer-dispatch` still load, but nothing calls it.
+// See ducklink v4.6.0 (advanced-tier removal) for the rationale.
+//
 // Host -> component callbacks for a general OPTIMIZER rule (additive, 2.3.0 / v3).
 // The core offers the bound logical plan to a registered rule at optimize time as
 // a FLATTENED, NEUTRAL descriptor (NOT a by-value LogicalOperator tree -- the

@@ -1,4 +1,4 @@
-package duckdb:extension@4.0.0;
+package duckdb:extension@5.0.0;
 
 use types;
 
@@ -38,19 +38,11 @@ interface storage-write-dispatch {
                     table: string,
                     rowids: list<s64>) -> result<u64, duckerror>;
 
-  // Update rows by row-id (parallel `rowids` / `rows`). Each `rows[i]` is a
-  // PARTIAL row that carries ONLY the SET values; the schema-index of each
-  // cell is given by the parallel-indexed entry in `updated-columns`, so
-  // `rows[i][j]` sets column `updated-columns[j]` on the row identified by
-  // `rowids[i]`. Mirrors the storage-host `storage-update-rows` semantic --
-  // the ducklink host forwards `LogicalUpdate::columns` (captured at plan
-  // time by WasmPhysicalUpdate) verbatim as `updated-columns` and the SET
-  // cells of each child DataChunk as the parallel `rows` payload. Returns
-  // the number of rows successfully updated.
+  // Update rows by row-id (parallel `rowids` / `rows`); returns the number
+  // updated.
   update-rows: func(handle: u32,
                     txn: u32,
                     table: string,
                     rowids: list<s64>,
-                    updated-columns: list<u32>,
                     rows: list<list<duckvalue>>) -> result<u64, duckerror>;
 }

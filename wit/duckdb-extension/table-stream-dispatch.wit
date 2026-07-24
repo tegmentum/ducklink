@@ -1,7 +1,15 @@
-package duckdb:extension@4.0.0;
+package duckdb:extension@5.0.0;
 
 use types;
 
+// DEPRECATED (ducklink 5.0.0) — scheduled for removal at the next
+// duckdb:extension major bump.
+//
+// Paired with `table-stream` (also deprecated). No host drives the
+// call-table-open-filtered / call-table-next / call-table-close cursor calls;
+// components exporting `table-stream-dispatch` still load, but nothing calls
+// them. See ducklink v4.6.0 (advanced-tier removal) for the rationale.
+//
 // Host -> component callbacks for a STREAMING + pushdown table function
 // (additive, 2.2.0, Item 6). The existing `runtime.table-callback.call` returns a
 // whole resultset at once; this adds an open/next/close cursor so a component can

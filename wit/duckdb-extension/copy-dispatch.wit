@@ -1,4 +1,4 @@
-package duckdb:extension@4.0.0;
+package duckdb:extension@5.0.0;
 
 use types;
 
@@ -42,9 +42,18 @@ interface copy-dispatch {
 
   // Bind a reader for `path` with key=value `options`; returns a reader handle +
   // the column schema the scan will emit.
+  //
+  // T1-6 landing (BREAKING within the in-flight major-4 contract): the host now
+  // forwards the destination table's `target-columns` (schema DuckDB has already
+  // resolved for e.g. `INSERT INTO t(a,b) FROM COPY ...`) into the guest bind.
+  // The guest MUST prepare rows matching that schema; the host still validates
+  // returned-column arity against the target and rejects mismatches at bind time.
+  // Prior signature (no target-columns arg) is retired; every COPY-capable
+  // component exporting `copy-from-bind` MUST update its export signature.
   copy-from-bind: func(handle: u32,
                        path: string,
-                       options: list<tuple<string, string>>)
+                       options: list<tuple<string, string>>,
+                       target-columns: list<columndef>)
                        -> result<copy-from-bind-result, duckerror>;
 
   // Pull up to `max-rows`; an empty resultset signals EOF.

@@ -18,10 +18,38 @@
 //! through an [`extension::ExtensionServices`] sink — the one direction-specific
 //! seam.
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use wasmtime::component::Component;
 use wasmtime::Engine;
+
+/// Whether `DUCKLINK_LOG=verbose` (case-insensitive) is set at process start.
+/// Gates the per-registration `[extension-manager]` / `[extension-runtime:…]`
+/// diagnostic prints so `LOAD ducklink` + `ducklink_load('<name>')` is silent
+/// on the common path. Cached — the env var is read once and the value never
+/// changes for the life of the process. Error paths and the tier-degradation
+/// notices are NOT gated by this: they always print.
+pub fn verbose_log_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        std::env::var_os("DUCKLINK_LOG")
+            .and_then(|v| v.into_string().ok())
+            .map(|s| s.eq_ignore_ascii_case("verbose"))
+            .unwrap_or(false)
+    })
+}
+
+/// Emit an `eprintln!`-shaped diagnostic only when `DUCKLINK_LOG=verbose`. Use
+/// for per-registration and per-load traces that are useful when debugging
+/// component wiring but pure noise for users on the happy path.
+#[macro_export]
+macro_rules! verbose_log {
+    ($($arg:tt)*) => {
+        if $crate::verbose_log_enabled() {
+            eprintln!($($arg)*);
+        }
+    };
+}
 
 /// The AUTHORITATIVE, content-addressed `duckdb:extension` contract identity: a
 /// **witcanon digest** — `sha256("witcanon:1" || canonical-WIT-bytes)` (hex),
@@ -79,7 +107,20 @@ pub fn contract_digest() -> &'static str {
 /// every @3.x component by design -- taken now, in the no-users churn window
 /// (measured 82-110x on the dispatch boundary). The cold singleton paths
 /// (call-scalar/table/pragma/cast) stay row-major. See docs/v4-columnar-abi.md.
-pub const CONTRACT_MAJOR: u64 = 4;
+///
+/// major-5 (2026-07-20): the TYPE-SURFACE break. Three coordinated changes land
+/// as one MAJOR bump because each alone re-shapes the canonical ABI: S1 collapses
+/// nested column payloads to an opaque `list<u8>` (with a `Complex(string)`
+/// escape hatch on `logicaltype` so scalar/table/pragma paths can still name a
+/// nested SQL type without a WIT shape); S2 promotes `decimal(width, scale)` to
+/// a first-class typed columnar entry (out of the old fallback path); T2-1
+/// removes residual HUGEINT / UHUGEINT surface (kept as row-major-only escape-
+/// hatch complex types via S1). The @4.x columnar entries change shape (nested
+/// column layout + decimal payload) and enum variants drop, so every @4.x
+/// component is REJECTED by design. Taken in the no-users churn window; the
+/// major-5 baseline is the new FROZEN reference and future growth is additive
+/// MINORS. See docs/v5-type-surface.md.
+pub const CONTRACT_MAJOR: u64 = 5;
 
 /// The MINOR version of the `duckdb:extension` WIT contract this host speaks.
 ///
@@ -90,13 +131,13 @@ pub const CONTRACT_MAJOR: u64 = 4;
 /// this host does not provide, so instantiation would fail with a cryptic
 /// missing-import error. [`check_component_contract`] turns that into a friendly,
 /// actionable message. Bump this in lockstep with each additive MINOR contract
-/// bump (set back to 0 on a new MAJOR). Reset to 0 for the major-3 baseline.
+/// bump (set back to 0 on a new MAJOR). Reset to 0 for the major-5 baseline.
 pub const CONTRACT_MINOR: u64 = 0;
 
 /// Full contract version string the host advertises (observability only; the
 /// guard compares MAJOR.minor via [`CONTRACT_MAJOR`]/[`CONTRACT_MINOR`], and the
 /// authoritative identity is the content-addressed [`CONTRACT_DIGEST`]).
-pub const CONTRACT_VERSION: &str = "4.0.0";
+pub const CONTRACT_VERSION: &str = "5.0.0";
 
 /// The host's `duckdb:extension` contract version, for logging / a built-in.
 /// This is the human-readable version; the authoritative content-addressed
@@ -325,8 +366,8 @@ pub use extension::{
     add_extension_interfaces_to_linker, describe_runtime_logicaltype, load_component,
     load_component_with_dynlink, summarize_extopts, summarize_funcopts,
     summarize_registration_names, summarize_runtime_columns, summarize_runtime_funcargs,
-    ConfigError, ExtensionInstance, ExtensionServices, ExtensionStoreState, LogField, LogLevel,
-    PendingKind, PendingRegistrationsData,
+    ConfigError, ExtensionInstance, ExtensionServices, ExtensionStoreState, LogEntry, LogField,
+    LogLevel, PendingRegistrationsData,
 };
 
 /// The generated wasmtime bindings for the `duckdb:extension-host` world — the
@@ -395,7 +436,7 @@ pub mod duckdb_extension_copy_bindings {
         // per-world type conversion. NOTE: bump the @version here in lockstep
         // with the contract.
         with: {
-            "duckdb:extension/types@4.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -410,7 +451,7 @@ pub mod duckdb_extension_secret_bindings {
         world: "duckdb:extension-host/duckdb-extension-secret",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@4.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -425,7 +466,7 @@ pub mod duckdb_extension_storage_write_bindings {
         world: "duckdb:extension-host/duckdb-extension-storage-write",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@4.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -440,25 +481,21 @@ pub mod duckdb_extension_table_stream_bindings {
         world: "duckdb:extension-host/duckdb-extension-table-stream",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@4.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
 
 /// Bindings for the incremental-aggregate world (`duckdb-extension-aggregate-incr`,
-/// 2.2.0, Item 6), which additionally exports `aggregate-incr-dispatch`. The
-/// 4-method incremental-state surface (init/update/combine/finalize) is unused
-/// today (no component registers an incremental aggregate); the live arm is
-/// `call-aggregate-window` -- the postgis cluster surface (#661) backs DuckDB's
-/// custom WINDOW aggregate dispatch through it. Built lazily from an already-
-/// loaded instance.
+/// 2.2.0, Item 6), which additionally exports `aggregate-incr-dispatch`. Only
+/// components that back an incremental aggregate satisfy this; built lazily.
 pub mod duckdb_extension_aggregate_incr_bindings {
     wasmtime::component::bindgen!({
         path: "./wit",
         world: "duckdb:extension-host/duckdb-extension-aggregate-incr",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@4.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -472,7 +509,7 @@ pub mod duckdb_extension_conn_bindings {
         world: "duckdb:extension-host/duckdb-extension-conn",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@4.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -486,7 +523,7 @@ pub mod duckdb_extension_file_write_bindings {
         world: "duckdb:extension-host/duckdb-extension-file-write",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@4.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -500,7 +537,7 @@ pub mod duckdb_extension_index_write_bindings {
         world: "duckdb:extension-host/duckdb-extension-index-write",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@4.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -514,7 +551,7 @@ pub mod duckdb_extension_settings_bindings {
         world: "duckdb:extension-host/duckdb-extension-settings",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@4.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -529,7 +566,7 @@ pub mod duckdb_extension_parser_bindings {
         world: "duckdb:extension-host/duckdb-extension-parser",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@4.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -544,7 +581,42 @@ pub mod duckdb_extension_optimizer_bindings {
         world: "duckdb:extension-host/duckdb-extension-optimizer",
         require_store_data_send: true,
         with: {
-            "duckdb:extension/types@4.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+        },
+    });
+}
+
+/// Bindings for the log-storage world (`duckdb-extension-log-storage`, 3.2.0),
+/// which additionally exports `log-storage-dispatch`. Only components that back
+/// a named log sink satisfy this; the runtime builds these bindings lazily from
+/// an already-loaded instance. Class B parity with the stable
+/// `duckdb_register_log_storage` C API.
+pub mod duckdb_extension_log_storage_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-log-storage",
+        require_store_data_send: true,
+        with: {
+            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
+        },
+    });
+}
+
+/// Bindings for the arrow-ext world (`duckdb-extension-arrow-ext`, 4.0.0), which
+/// additionally exports `arrow-ext-dispatch`. Only components that back a named
+/// Arrow producer (registered via `arrow-ext.register-arrow-table`) satisfy this;
+/// the runtime builds these bindings lazily from an already-loaded instance.
+/// The 3-fn cursor (`call-arrow-open` / `-next` / `-close`) keeps state on the
+/// guest — the host holds only an opaque cursor u32 and pulls row-vector
+/// batches (`resultset`) until an empty resultset signals EOF; no arrow-rs types
+/// cross the WIT boundary.
+pub mod duckdb_extension_arrow_ext_bindings {
+    wasmtime::component::bindgen!({
+        path: "./wit",
+        world: "duckdb:extension-host/duckdb-extension-arrow-ext",
+        require_store_data_send: true,
+        with: {
+            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
         },
     });
 }
@@ -557,6 +629,11 @@ pub enum CallbackKind {
     Aggregate,
     Pragma,
     Cast,
+    /// A named log-storage sink (Class B parity with the stable
+    /// `duckdb_register_log_storage` C API). The dispatcher_handle routes
+    /// every `write-log-entry` re-entry back to the owning component via
+    /// [`ExtensionInstance::dispatch_write_log_entry`].
+    LogStorage,
 }
 
 impl CallbackKind {
@@ -567,6 +644,7 @@ impl CallbackKind {
             CallbackKind::Aggregate => "aggregate",
             CallbackKind::Pragma => "pragma",
             CallbackKind::Cast => "cast",
+            CallbackKind::LogStorage => "log-storage",
         }
     }
 }
@@ -580,7 +658,9 @@ impl CallbackKind {
 pub mod reg {
     /// A DuckDB logical type, restricted to the value kinds the extension ABI
     /// currently exchanges. NOTE: no longer `Copy` -- the `Complex` escape-hatch
-    /// arm carries an owned type-expression `String`.
+    /// arm carries an owned type-expression `String`, and the nested `List` /
+    /// `Struct` / `Map` / `Array` arms (added @5.0.0) box or vec-own their
+    /// element types.
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum LogicalType {
         Boolean,
@@ -600,12 +680,37 @@ pub mod reg {
         Date,
         Time,
         Timestamptz,
-        Decimal,
+        /// S2 (major-5): DECIMAL now carries `width` (total digits) and
+        /// `scale` (fractional digits) structurally, matching the WIT
+        /// `decimal(decimalshape)` arm. Was fieldless on @4.
+        Decimal { width: u8, scale: u8 },
         Interval,
         Uuid,
+        /// T2-1 residual (major-5): 128-bit signed integer logical type.
+        /// Fieldless -- the shape is fixed; values ride on
+        /// `DuckValue::Hugeint`.
+        Hugeint,
+        /// T2-1 residual (major-5): 128-bit unsigned integer logical type.
+        /// Fieldless -- companion to `Hugeint`.
+        UHugeint,
+        /// S1 (major-5): LIST logical type -- element type carried as a boxed
+        /// nested `LogicalType` so the neutral shape can round-trip nested
+        /// DuckDB type-expressions the WIT boundary still lowers through the
+        /// `complex` escape hatch (wit-parser 0.251 forbids recursive VALUE
+        /// types on the WIT side).
+        List(Box<LogicalType>),
+        /// S1 (major-5): STRUCT logical type -- ordered `(field-name, type)`
+        /// entries. Field names preserve declaration order.
+        Struct(Vec<(String, LogicalType)>),
+        /// S1 (major-5): MAP logical type -- `(key-type, value-type)`.
+        Map(Box<LogicalType>, Box<LogicalType>),
+        /// S1 (major-5): fixed-size ARRAY logical type -- (size, element-type).
+        Array(u32, Box<LogicalType>),
         /// ESCAPE-HATCH: a DuckDB type-expression string (e.g. "INTEGER[]",
         /// "STRUCT(a INTEGER, b VARCHAR)"). Carries an arbitrary declared return
-        /// type the core resolves at registration time.
+        /// type the core resolves at registration time. Still used as the
+        /// WIT-side representation for nested logical types, which the WIT
+        /// `logicaltype` variant does not carry structurally in @5.
         Complex(String),
     }
 
@@ -629,9 +734,27 @@ pub mod reg {
                 LogicalType::Date => "DATE".to_string(),
                 LogicalType::Time => "TIME".to_string(),
                 LogicalType::Timestamptz => "TIMESTAMPTZ".to_string(),
-                LogicalType::Decimal => "DECIMAL".to_string(),
+                LogicalType::Decimal { width, scale } => {
+                    format!("DECIMAL({width}, {scale})")
+                }
                 LogicalType::Interval => "INTERVAL".to_string(),
                 LogicalType::Uuid => "UUID".to_string(),
+                LogicalType::Hugeint => "HUGEINT".to_string(),
+                LogicalType::UHugeint => "UHUGEINT".to_string(),
+                LogicalType::List(inner) => format!("LIST({})", inner.describe()),
+                LogicalType::Struct(fields) => {
+                    let parts: Vec<String> = fields
+                        .iter()
+                        .map(|(n, t)| format!("{n} {}", t.describe()))
+                        .collect();
+                    format!("STRUCT{{{}}}", parts.join(", "))
+                }
+                LogicalType::Map(k, v) => {
+                    format!("MAP<{}, {}>", k.describe(), v.describe())
+                }
+                LogicalType::Array(size, inner) => {
+                    format!("ARRAY({}, {size})", inner.describe())
+                }
                 LogicalType::Complex(expr) => expr.clone(),
             }
         }
@@ -747,6 +870,29 @@ pub mod reg {
             hi: u64,
             lo: u64,
         },
+        /// T2-1 residual (major-5): 128-bit signed integer scalar. Two
+        /// halves matching the WIT `hugeintvalue` split -- the runtime
+        /// reassembles the value via `((upper as i128) << 64 | lower as i128)`.
+        Hugeint {
+            lower: u64,
+            upper: i64,
+        },
+        /// T2-1 residual (major-5): 128-bit unsigned integer scalar. Two
+        /// halves matching the WIT `uhugeintvalue` split.
+        UHugeint {
+            lower: u64,
+            upper: u64,
+        },
+        /// S1 (major-5): LIST scalar value -- ordered element values.
+        List(Vec<DuckValue>),
+        /// S1 (major-5): STRUCT scalar value -- ordered `(field-name, value)`
+        /// entries.
+        Struct(Vec<(String, DuckValue)>),
+        /// S1 (major-5): MAP scalar value -- key/value pairs, in the order
+        /// the guest emitted them.
+        Map(Vec<(DuckValue, DuckValue)>),
+        /// S1 (major-5): fixed-size ARRAY scalar value -- element values.
+        Array(Vec<DuckValue>),
         /// ESCAPE-HATCH composite value: a DuckDB type-expression string plus the
         /// value rendered as JSON. The core reconstructs the real LIST/STRUCT vector
         /// from the JSON via the duckdb C vector API.
@@ -872,12 +1018,23 @@ pub mod reg {
     }
 
     /// A cast between two named types, dispatched through a callback.
+    ///
+    /// `implicit_cost` (T2-4) mirrors DuckDB's cast-function implicit-conversion
+    /// cost knob (`duckdb_cast_function_set_implicit_cost` in libduckdb-sys
+    /// 1.10504.0). `None` means "use ducklink's default of 100" — DuckDB's C
+    /// API default is actually `-1` (explicit-only, per cast_function-c.cpp:20
+    /// CCastFunction::implicit_cast_cost), but ducklink treats an unset value
+    /// as implicit-cost 100 to match the typical scalar-registration
+    /// ergonomic. `Some(-1)` marks the cast explicit-only (parity with the C
+    /// API's convention); any other `Some(v)` is a positive cost. The native
+    /// reg_duckdb consolidator applies this at cast-function creation time.
     #[derive(Clone, Debug)]
     pub struct CastReg {
         pub extension: String,
         pub source: String,
         pub target: String,
         pub callback_handle: u32,
+        pub implicit_cost: Option<i32>,
     }
 
     // --- 2.1.0 additive registrations ---
@@ -953,6 +1110,15 @@ pub mod reg {
     /// NULL-handling mode. `varargs` is the declared trailing repeatable type
     /// (None = no varargs); `special_null` is true when the function is invoked on
     /// NULL inputs. `callback_handle` routes invocations.
+    ///
+    /// `volatile` controls whether the direction-specific sink marks the C API
+    /// scalar as `duckdb_scalar_function_set_volatile` — the WIT `funcflags` does
+    /// not expose a VOLATILE bit directly (yet), so the host derives it from the
+    /// funcopts attributes: any scalar-ex whose attributes DON'T include
+    /// `deterministic` is treated as VOLATILE (re-evaluated per row), matching
+    /// DuckDB's IMMUTABLE vs VOLATILE semantics. Absent options default to
+    /// non-volatile so the audit finding "treats every ex-path fn as VOLATILE by
+    /// default" is closed.
     #[derive(Clone, Debug)]
     pub struct ScalarExReg {
         pub extension: String,
@@ -961,6 +1127,7 @@ pub mod reg {
         pub varargs: Option<LogicalType>,
         pub returns: LogicalType,
         pub special_null: bool,
+        pub volatile: bool,
         pub callback_handle: u32,
         pub options: Option<FuncOpts>,
     }
@@ -1013,6 +1180,11 @@ pub mod reg {
         pub callback_handle: u32,
     }
 
+    /// DEPRECATED (ducklink 5.0.0). Scheduled for removal at the next
+    /// `duckdb:extension` major bump. No host consumes `ParserReg`s anymore —
+    /// ducklink is C-API-only and DuckDB's `ParserExtension` is on the
+    /// unstable internal C++ ABI. See ducklink v4.6.0 (advanced-tier removal).
+    ///
     /// A parser extension registered by an extension (2.3.0 / v3). `callback_handle`
     /// routes every `parser-dispatch.call-parse` to the owning component. The core
     /// shim wires a DuckDB `ParserExtension` that forwards unrecognized statement
@@ -1024,6 +1196,11 @@ pub mod reg {
         pub callback_handle: u32,
     }
 
+    /// DEPRECATED (ducklink 5.0.0). Scheduled for removal at the next
+    /// `duckdb:extension` major bump. No host consumes `OptimizerReg`s anymore —
+    /// ducklink is C-API-only and DuckDB's `OptimizerExtension` is on the
+    /// unstable internal C++ ABI. See ducklink v4.6.0 (advanced-tier removal).
+    ///
     /// A general optimizer rule registered by an extension (2.3.0 / v3).
     /// `callback_handle` routes every `optimizer-dispatch.call-optimize` to the
     /// owning component. The core shim wires a DuckDB `OptimizerExtension` that
@@ -1035,6 +1212,13 @@ pub mod reg {
         pub callback_handle: u32,
     }
 
+    /// DEPRECATED (ducklink 5.0.0). Scheduled for removal at the next
+    /// `duckdb:extension` major bump. No host wires filter-pushdown table
+    /// functions anymore — ducklink is C-API-only and the streaming
+    /// `TableFunction` with `filter_pushdown = true` is on the unstable
+    /// internal C++ ABI. Components should register through
+    /// `runtime.table-registry` and filter above the scan. See ducklink v4.6.0.
+    ///
     /// A STREAMING + FILTER-PUSHDOWN-capable table function registered by an
     /// extension via the additive 3.1.0 `table-stream` interface (the first
     /// additive MINOR off the frozen major-3 baseline). Unlike [`TableReg`] (the
@@ -1064,37 +1248,79 @@ pub struct CallbackEntry {
     pub extension: Arc<str>,
     pub dispatcher_handle: u32,
     pub kind: CallbackKind,
+    /// Weak handle to the owning `ExtensionInstance`, populated by the
+    /// direction-specific loader via [`CallbackRegistry::link_extension_instance`]
+    /// after the instance is wrapped in `Arc<Mutex<>>`. The dispatch prologue
+    /// tries `.upgrade()` first — a lock-free path that skips the second
+    /// HashMap lookup keyed on `extension`. Left as `Weak::new()` when
+    /// unpopulated (e.g. the standalone `ducklink` host that owns its own
+    /// instance map); callers that see `None` from `.upgrade()` fall back to
+    /// their normal lookup path, so this field is a pure optimisation with a
+    /// safe default.
+    pub instance: Weak<Mutex<ExtensionInstance>>,
 }
+
+/// A cache-line-padded slot in [`CallbackRegistry::entries`]. Two threads
+/// dispatching on DIFFERENT (but nearby) handles read `entries[a]` and
+/// `entries[b]`; without padding those Options land within the same 64-byte
+/// line on typical x86_64 / aarch64 and each read invalidates the other's
+/// cache line — a 5%+ regression measured on the `parallel_cross_ext` bench
+/// after switching to Vec-indexed storage. `align(64)` forces every slot
+/// onto its own line so cross-instance dispatch scales cleanly.
+#[repr(align(64))]
+#[derive(Default)]
+struct CallbackSlot(Option<CallbackEntry>);
 
 /// Allocates stable host-side handles and maps them to `CallbackEntry`s. The
 /// host hands a handle to DuckDB at registration; DuckDB passes it back on every
 /// invocation, and the engine routes it to the owning component.
+///
+/// Handles are dense small ints starting at 1, monotonically increasing. The
+/// backing store is a `Vec<CallbackSlot>` (each slot 64-byte aligned) indexed
+/// by handle — a direct pointer offset instead of a HashMap hash + bucket
+/// walk on every dispatch. Slot 0 is unused (handles start at 1) so the index
+/// math is a straight cast. Removed callbacks leave `None` in place; the Vec
+/// never shrinks, matching the "handles never rebind" contract loadable
+/// extensions rely on.
 #[derive(Default)]
 pub struct CallbackRegistry {
     next_handle: u32,
-    entries: HashMap<u32, CallbackEntry>,
+    entries: Vec<CallbackSlot>,
 }
 
 impl CallbackRegistry {
     pub fn new() -> Self {
         Self {
             next_handle: 1,
-            entries: HashMap::new(),
+            entries: Vec::new(),
+        }
+    }
+
+    /// Ensure `entries` covers `handle`, filling any gap with `None`.
+    #[inline]
+    fn ensure_slot(&mut self, handle: u32) {
+        let idx = handle as usize;
+        if self.entries.len() <= idx {
+            self.entries
+                .resize_with(idx + 1, CallbackSlot::default);
         }
     }
 
     pub fn allocate(&mut self, extension: &str, kind: CallbackKind, dispatcher_handle: u32) -> u32 {
         let handle = self.next_handle;
         self.next_handle = self.next_handle.wrapping_add(1).max(1);
-        self.entries.insert(
-            handle,
-            CallbackEntry {
-                extension: Arc::from(extension),
-                dispatcher_handle,
-                kind,
-            },
-        );
-        eprintln!(
+        self.ensure_slot(handle);
+        self.entries[handle as usize].0 = Some(CallbackEntry {
+            extension: Arc::from(extension),
+            dispatcher_handle,
+            kind,
+            // Filled in by [`link_extension_instance`] once the owning
+            // ExtensionInstance is wrapped in Arc<Mutex<>> (the loader can't
+            // do it here because that wrap happens AFTER load_component
+            // returns, and allocations fire during load_component's setup).
+            instance: Weak::new(),
+        });
+        verbose_log!(
             "[extension-manager] registered {} callback handle {} for '{}' (dispatcher={dispatcher_handle})",
             kind.describe(),
             handle,
@@ -1104,23 +1330,33 @@ impl CallbackRegistry {
     }
 
     pub fn remove(&mut self, handle: u32) {
-        if let Some(entry) = self.entries.remove(&handle) {
-            eprintln!(
-                "[extension-manager] released {} callback handle {} for '{}'",
-                entry.kind.describe(),
-                handle,
-                entry.extension
-            );
+        let idx = handle as usize;
+        if let Some(slot) = self.entries.get_mut(idx) {
+            if let Some(entry) = slot.0.take() {
+                verbose_log!(
+                    "[extension-manager] released {} callback handle {} for '{}'",
+                    entry.kind.describe(),
+                    handle,
+                    entry.extension
+                );
+            }
         }
     }
 
     pub fn remove_extension(&mut self, extension: &str) {
-        let initial = self.entries.len();
-        self.entries
-            .retain(|_, entry| &*entry.extension != extension);
-        let removed = initial.saturating_sub(self.entries.len());
+        let mut removed = 0usize;
+        for slot in self.entries.iter_mut() {
+            let matches = slot
+                .0
+                .as_ref()
+                .is_some_and(|entry| &*entry.extension == extension);
+            if matches {
+                slot.0 = None;
+                removed += 1;
+            }
+        }
         if removed > 0 {
-            eprintln!(
+            verbose_log!(
                 "[extension-manager] purged {removed} callback handles after unloading '{}'",
                 extension
             );
@@ -1128,7 +1364,9 @@ impl CallbackRegistry {
     }
 
     pub fn get(&self, handle: u32) -> Option<CallbackEntry> {
-        self.entries.get(&handle).cloned()
+        self.entries
+            .get(handle as usize)
+            .and_then(|slot| slot.0.clone())
     }
 
     /// Borrowing handle resolution for the dispatch hot path. Unlike [`get`],
@@ -1139,7 +1377,9 @@ impl CallbackRegistry {
     /// the borrow, which on the dispatch path is already the case.
     #[inline]
     pub fn resolve(&self, handle: u32) -> Option<&CallbackEntry> {
-        self.entries.get(&handle)
+        self.entries
+            .get(handle as usize)
+            .and_then(|slot| slot.0.as_ref())
     }
 
     /// Like [`allocate`] but without the per-registration `eprintln!`. Used by
@@ -1153,14 +1393,43 @@ impl CallbackRegistry {
     ) -> u32 {
         let handle = self.next_handle;
         self.next_handle = self.next_handle.wrapping_add(1).max(1);
-        self.entries.insert(
-            handle,
-            CallbackEntry {
-                extension: Arc::from(extension),
-                dispatcher_handle,
-                kind,
-            },
-        );
+        self.ensure_slot(handle);
+        self.entries[handle as usize].0 = Some(CallbackEntry {
+            extension: Arc::from(extension),
+            dispatcher_handle,
+            kind,
+            instance: Weak::new(),
+        });
         handle
+    }
+
+    /// Populate the `Weak<Mutex<ExtensionInstance>>` on every callback entry
+    /// owned by `extension_name`. Called by the direction-specific loader
+    /// (`Engine2::load` in the DuckDB extension) immediately after the newly
+    /// loaded [`ExtensionInstance`] is wrapped in `Arc<Mutex<>>`, so the
+    /// dispatch prologue can subsequently upgrade the Weak in a single atomic
+    /// load — skipping the second `HashMap<extension_name, ...>` lookup and
+    /// the `Arc<str>` clone that would otherwise happen on every dispatch.
+    ///
+    /// Iterates the `entries` `Vec` once and clones the same `Weak` into
+    /// every matching slot; typical component loads register a handful of
+    /// callbacks (scalars + tables + aggregates), so the walk is cheap.
+    ///
+    /// Idempotent: safe to call repeatedly (e.g. on re-load) — every slot
+    /// gets the latest weak. Slots for unrelated extensions are left alone,
+    /// so mixed-extension loads compose cleanly.
+    pub fn link_extension_instance(
+        &mut self,
+        extension_name: &str,
+        instance: &Arc<Mutex<ExtensionInstance>>,
+    ) {
+        let weak = Arc::downgrade(instance);
+        for slot in self.entries.iter_mut() {
+            if let Some(entry) = slot.0.as_mut() {
+                if &*entry.extension == extension_name {
+                    entry.instance = weak.clone();
+                }
+            }
+        }
     }
 }

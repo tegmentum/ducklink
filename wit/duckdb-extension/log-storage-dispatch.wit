@@ -1,0 +1,30 @@
+package duckdb:extension@5.0.0;
+
+use types;
+
+// Host -> component callback for a registered log storage (additive, 3.2.0).
+// Class B parity with the stable `duckdb_register_log_storage` C API: the host
+// forwards each DuckDB log record to the component whose `callback-handle`
+// matches the storage registered via `log-storage.register-log-storage`.
+//
+// The entry is a by-value record so nothing recursive crosses the WIT boundary:
+// `level` is DuckDB's log level rendered as u32 (matching the C API's numeric
+// level), `message` is the rendered log text, `tags` is the optional structured
+// key/value set, and `ts-micros` is the entry timestamp in microseconds since
+// the Unix epoch (matches DuckDB's TIMESTAMP representation).
+interface log-storage-dispatch {
+  use types.{duckerror};
+
+  // One log entry crossing the boundary. By-value so no per-entry resource
+  // handles or recursive types cross.
+  record log-entry {
+    level: u32,
+    message: string,
+    tags: option<list<tuple<string, string>>>,
+    ts-micros: s64,
+  }
+
+  // Deliver one log entry to storage `handle`. `handle` is the callback-handle
+  // the component registered via `log-storage.register-log-storage`.
+  write-log-entry: func(handle: u32, entry: log-entry) -> result<_, duckerror>;
+}

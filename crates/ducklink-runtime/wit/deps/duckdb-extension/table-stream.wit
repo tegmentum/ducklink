@@ -1,7 +1,18 @@
-package duckdb:extension@4.0.0;
+package duckdb:extension@5.0.0;
 
 use types;
 
+// DEPRECATED (ducklink 5.0.0) — scheduled for removal at the next
+// duckdb:extension major bump.
+//
+// No host wires filter-pushdown-capable table functions anymore: the streaming
+// `TableFunction` with `filter_pushdown = true` sits on the unstable internal
+// C++ ABI with no stable C-API equivalent. A component that calls
+// `register-filterable-table` today still loads, but the declaration is
+// silently no-op'd. Register plain table functions through `runtime.table-registry`
+// instead — DuckDB filters above the scan (correct, not pushdown-fast). See the
+// ducklink v4.6.0 refactor.
+//
 // Streaming + FILTER-PUSHDOWN-capable table-function REGISTRATION surface
 // (additive, 3.1.0 -- the first additive MINOR off the frozen major-3 baseline,
 // the proof that the v3 freeze policy's additive growth-path works). The base

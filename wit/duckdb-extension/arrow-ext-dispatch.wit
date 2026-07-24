@@ -1,0 +1,26 @@
+package duckdb:extension@5.0.0;
+
+use types;
+
+// Host -> component cursor callbacks for a registered Arrow producer (additive).
+// The `arrow-ext.register-arrow-table` registration surface hands the host a
+// `callback-handle` naming an Arrow-backed producer inside the component; this
+// dispatch drives the actual row streaming. A 3-fn cursor keeps state entirely
+// on the guest side: the host holds only the opaque `cursor` u32, and each
+// batch crosses the WIT boundary as a row-vector of cells (`resultset`) rather
+// than as arrow-rs types -- nothing recursive or resource-shaped travels.
+//
+// Kept SEPARATE (additive) so existing components' frozen WIT copies stay
+// structurally unchanged.
+interface arrow-ext-dispatch {
+  use types.{duckerror, resultset};
+
+  // Open a scan cursor for the arrow producer `handle`. Returns opaque cursor id.
+  call-arrow-open: func(handle: u32) -> result<u32, duckerror>;
+
+  // Pull the next batch of rows. Empty resultset = EOF.
+  call-arrow-next: func(handle: u32, cursor: u32) -> result<resultset, duckerror>;
+
+  // Close the cursor and release its state.
+  call-arrow-close: func(handle: u32, cursor: u32) -> result<bool, duckerror>;
+}
