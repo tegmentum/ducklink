@@ -96,7 +96,7 @@ use ducklink_runtime::extension::storage_scan;
 use ducklink_runtime::{
     describe_runtime_logicaltype, summarize_extopts, summarize_funcopts,
     summarize_registration_names, summarize_runtime_columns, summarize_runtime_funcargs,
-    ConfigError, ExtensionInstance, ExtensionServices, LogField, LogLevel,
+    ConfigError, ExtensionInstance, ExtensionServices, LogField, LogLevel, NestedExecResult,
     PendingRegistrationsData,
 };
 use wasmtime::component::{Component, Linker, Resource, ResourceAny, ResourceTable};
@@ -5798,6 +5798,34 @@ impl ExtensionServices for CoreServices {
             .rows
             .insert(sql.to_string(), rows.clone());
         Ok(rows)
+    }
+
+    // Direction-1 nested-exec: DEFERRED (best-effort with an informative error).
+    //
+    // A `nested-exec` from inside an outer statement's callback needs a sibling
+    // execution path that neither re-locks the single `core` executor mutex nor
+    // re-enters the core wasm store (both non-reentrant). The Direction-2
+    // (native DuckDB) impl solves it with a fresh `duckdb_connect` on the
+    // shared database — but the wasm-core direction has no analog: the core
+    // WIT's `connect` returns a resource inside the SAME core store, and a
+    // callback-time re-entry into that store is what wasmtime forbids.
+    //
+    // Options for a future minor:
+    //   1. Stand up a SECOND core `wasmtime::Store` bound to the same DB file
+    //      (expensive on first use, cached after), used exclusively for
+    //      nested-exec. Doable but a real chunk of plumbing.
+    //   2. Run the sibling exec ON the same store's `try_lock`-idle window
+    //      (only works if the outer statement finished mid-callback — it
+    //      hasn't, that's the whole point).
+    //
+    // For now we surface a clear error so a fieldbook-style caller can render
+    // the situation to the user rather than trap.
+    fn nested_exec(&mut self, _sql: &str) -> Result<NestedExecResult, String> {
+        Err(
+            "nested-exec: not yet supported under the wasm-core host \
+             (Direction-1 deferred; use the native DuckDB extension for now)"
+                .to_string(),
+        )
     }
 }
 

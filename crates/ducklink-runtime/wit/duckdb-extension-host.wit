@@ -14,6 +14,7 @@ use duckdb:extension/collation@5.0.0;
 use duckdb:extension/files-reg@5.0.0;
 use duckdb:extension/file-dispatch@5.0.0;
 use duckdb:extension/query@5.0.0;
+use duckdb:extension/nested-exec@5.0.0;
 use duckdb:extension/secret@5.0.0;
 use duckdb:extension/secret-dispatch@5.0.0;
 use duckdb:extension/settings@5.0.0;
@@ -74,6 +75,12 @@ world duckdb-extension {
   // others don't. Listed here so the host bindings generate the `query::Host`
   // trait + `add_to_linker`.
   import duckdb:extension/query@5.0.0;
+  // A host-provided EXECUTE-capable counterpart to `query`. Runs SQL on a
+  // sibling connection to the same database, sidestepping the outer statement's
+  // core-mutex + wasm-store re-entrancy that block `query` inside a callback.
+  // The host always PROVIDES it; only exec-capable components (fieldbook) import
+  // it. See wit/duckdb-extension/nested-exec.wit for the trust + nesting model.
+  import duckdb:extension/nested-exec@5.0.0;
   // 2.1.0 additive registration imports: secret types/providers, extension
   // settings/options, table macros, and modified/enum logical types. The host
   // always PROVIDES them; components import only the subset they use.
