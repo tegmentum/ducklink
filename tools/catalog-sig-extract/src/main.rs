@@ -26,7 +26,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use anyhow::{anyhow, Context, Result};
 use ducklink_runtime::reg;
@@ -67,8 +67,17 @@ fn sql_type_name(lt: &reg::LogicalType) -> String {
         reg::LogicalType::Timestamptz => "TIMESTAMP WITH TIME ZONE".to_string(),
         reg::LogicalType::Interval => "INTERVAL".to_string(),
         reg::LogicalType::Uuid => "UUID".to_string(),
-        // reg_duckdb.rs: T_DECIMAL -> LogicalTypeHandle::decimal(18, 3).
-        reg::LogicalType::Decimal => "DECIMAL(18,3)".to_string(),
+        // reg_duckdb.rs @5 changed Decimal to carry (width, scale).
+        reg::LogicalType::Decimal { width, scale } => format!("DECIMAL({width},{scale})"),
+        // @5 additions: Hugeint / UHugeint / nested (List/Struct/Map/Array).
+        reg::LogicalType::Hugeint => "HUGEINT".to_string(),
+        reg::LogicalType::UHugeint => "UHUGEINT".to_string(),
+        reg::LogicalType::List(_) | reg::LogicalType::Struct(_)
+        | reg::LogicalType::Map(_, _) | reg::LogicalType::Array(_, _) => {
+            // Nested types cross the WIT via the complex(string) escape hatch;
+            // surface as the string form for now (mirrors reg_duckdb.rs).
+            "COMPLEX".to_string()
+        }
         // The declared type-expression (e.g. "INTEGER[]", "STRUCT(a INTEGER)").
         // reg_duckdb.rs registers it as VARCHAR for dispatch, but the catalog
         // should surface the user-visible declared SQL type.
@@ -140,7 +149,7 @@ fn extract_functions(engine: &Engine, name: &str, path: &Path) -> Result<(Value,
         .map_err(anyhow::Error::from)
         .with_context(|| format!("loading component at {}", path.display()))?;
     let wasi: WasiCtx = WasiCtxBuilder::new().inherit_env().inherit_stdio().build();
-    let callbacks = Arc::new(Mutex::new(CallbackRegistry::new()));
+    let callbacks = Arc::new(RwLock::new(CallbackRegistry::new()));
     // Supply an EMPTY compose:dynlink provider registry so components that import
     // `compose:dynlink/linker@0.1.0` (e.g. mlkmeans, spatialproj) still
     // instantiate — they only register their functions at load() time and do not
