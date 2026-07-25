@@ -35,7 +35,7 @@ wit_bindgen::generate!({
     world: "duckdb:extension/duckdb-extension-fieldbook",
 });
 
-use duckdb::extension::{nested_exec as host_nested_exec, runtime, types};
+use duckdb::extension::{catalog, nested_exec as host_nested_exec, runtime, types};
 use exports::duckdb::extension::{callback_dispatch, guest};
 
 // ---------------------------------------------------------------------------
@@ -175,19 +175,22 @@ fn register_scalars() -> Result<(), types::Duckerror> {
 }
 
 fn register_macros() -> Result<(), types::Duckerror> {
-    let cap = runtime::get_capability(types::Capabilitykind::Macro)
-        .ok_or_else(|| types::Duckerror::Internal("no macro capability".into()))?;
-    let reg = match cap {
-        runtime::Capability::Macro(r) => r,
-        _ => return Err(types::Duckerror::Internal("bad macro capability".into())),
-    };
-    let opts = runtime::Extopts {
-        description: Some("fieldbook read-side macro".into()),
-        tags: std::vec!["fieldbook".into()],
-    };
+    // The runtime.macro-registry capability path is intentionally Unsupported
+    // in ducklink (see crates/ducklink-runtime `Capabilitykind::Macro`); macros
+    // register through the sibling `catalog.register-macro` interface, which
+    // the ducklink native extension drains into `CREATE OR REPLACE MACRO`
+    // statements after component load. Schema is left empty (defaults to
+    // `main`); parameters + body come straight from fieldbook-core's
+    // `READ_MACROS` table.
     for m in fieldbook_core::READ_MACROS {
         let params: WitVec<WitString> = m.parameters.iter().map(|s| (*s).into()).collect();
-        reg.register_scalar(m.name, &params, m.body_sql, Some(&opts))?;
+        let def = catalog::MacroDef {
+            schema: WitString::new(),
+            name: m.name.into(),
+            parameters: params,
+            definition_sql: m.body_sql.into(),
+        };
+        catalog::register_macro(&def).map_err(types::Duckerror::Internal)?;
     }
     Ok(())
 }
