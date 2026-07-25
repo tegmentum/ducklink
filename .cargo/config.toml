@@ -7,4 +7,11 @@
 # against the LOCAL working-tree crate so runtime edits are picked up without a
 # commit + re-pin round trip. This config lives at the monorepo root (outside the
 # submodule), so the standalone repo / CI never sees it and uses the git dep.
+#
+# NOTE: since submodule commit 5fdcf42 the submodule's local runtime/ is
+# byte-equivalent to crates/ducklink-runtime (both at @5.0.0), so the override
+# is no longer required for correctness -- monorepo builds work without it.
+# It stays purely for the ergonomic benefit above (edit runtime code, submodule
+# picks it up on next build without a re-vendor step). Remove if you'd rather
+# force the submodule to always resolve its git-pinned runtime.
 paths = ["crates/ducklink-runtime"]

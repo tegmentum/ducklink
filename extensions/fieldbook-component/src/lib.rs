@@ -35,8 +35,8 @@ wit_bindgen::generate!({
     world: "duckdb:extension/duckdb-extension-fieldbook",
 });
 
-use duckdb::extension::{catalog, column_types, nested_exec as host_nested_exec, runtime, types};
-use exports::duckdb::extension::{callback_dispatch, guest};
+use duckdb::extension::{catalog, nested_exec as host_nested_exec, runtime, types};
+use exports::duckdb::extension::guest;
 
 // ---------------------------------------------------------------------------
 // Handle table (u32 -> DECLS index). Mirrors the layout `duckdb_shim!` uses.
