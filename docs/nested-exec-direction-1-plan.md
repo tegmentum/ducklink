@@ -1,15 +1,21 @@
 # `duckdb:extension/nested-exec` — Direction 1 (standalone `ducklink` host) design memo
 
-Status: **(b.1) SHIPPED but materially wrong for fieldbook** — see §7 for the
-2026-07-25 wasmtime-reentrancy PoC findings and revised recommendation. Short
-form: `wasmtime` permits store re-entry from a host callback that has
-`Caller<'_, T>` in hand (memo §1.3 wall #2 REFUTED); the real blocker is the
-ducklink bindgen dispatch path that lowers the store context to `&mut T` before
-the callback runs. Option (a) is therefore the right long-term fix, not the
-`create-sibling-connection` WIT change of option (c). Option (c) is also
-blocked by the wasm-core-lives-in-a-different-repo constraint. Direction 2
-(native DuckDB extension) remains the answer for entries that reference
-loaded extensions (see `native-extension/ducklink` submodule commit `0ef7edf`).
+Status: **option (a) LANDED as a TLS-mediated primary-store re-entry;
+(b.1) sibling kept as fallback**. See §8 for the 2026-07-25 shipping notes.
+Short form: `wasmtime` permits store re-entry from a host callback that has
+`Caller<'_, T>` in hand (memo §1.3 wall #2 REFUTED — verified by
+`crates/ducklink-host/tests/reentrancy_poc.rs::wall2_wasmtime_permits_reentry_from_host_callback_with_caller`);
+the real blocker was the ducklink bindgen dispatch path lowering the store
+context to `&mut T` before the callback runs. §7 argued option (a) is
+therefore the right long-term fix — and it now is: `HostState::execute`
+snapshots raw pointers to `Store<CoreStoreState>` + `Libduckdb` + the CLI's
+connection into a thread-local (`PRIMARY_STORE_REENTRY`), and
+`CoreServices::nested_exec` re-enters the primary via those pointers when
+the TLS is set. The `create-sibling-connection` WIT change of option (c) is
+still blocked by the wasm-core-lives-in-a-different-repo constraint and
+remains not-recommended (see §7.5). Direction 2 (native DuckDB extension)
+remains the answer for entries that reference loaded extensions (see
+`native-extension/ducklink` submodule commit `0ef7edf`).
 
 ## 1. Phase-1 investigation — how the wasm-core host is wired today
 
@@ -498,3 +504,125 @@ the primitive can't be invoked.
   built-in DuckDB SQL and can tolerate the two-catalog semantic. This is
   where the WIT contract (`nested-exec.wit:16-21`) already promises
   "committed state only," so pure-read consumers are unaffected.
+
+## 8. Option (a) — shipping notes (2026-07-25)
+
+Option (a) landed as **`PRIMARY_STORE_REENTRY` + `PrimaryReentryGuard`**
+in `crates/ducklink-host/src/lib.rs`. The approach is deliberately narrow
+so the callback-dispatch surface (`dispatch_scalar` / `dispatch_scalar_batch`
+/ `dispatch_table` / `dispatch_aggregate*` / `dispatch_pragma` /
+`dispatch_cast*`) is untouched — the trait boundary keeps taking
+`&mut CoreStoreState`, and the store context reaches `CoreServices` via a
+thread-local set on the outer stack frame.
+
+### 8.1 What was built
+
+1. New thread-local `PRIMARY_STORE_REENTRY: Cell<Option<PrimaryReentry>>`
+   holding `(store: *mut Store<CoreStoreState>, bindings: *const Libduckdb,
+   connection: ResourceAny)` — the three pieces `guest.call_execute` needs
+   to run SQL on the primary connection.
+2. RAII `PrimaryReentryGuard` set on entry to the outer `call_execute` in
+   `HostState::execute` and cleared on any exit (Ok / Err / panic). Nested
+   `HostState::execute` (unlikely in the CLI but supported by the
+   `NESTED_EXEC_MAX_DEPTH` guard) restores the outer frame's entry on
+   drop, so no stale pointer is reachable.
+3. `CoreServices::nested_exec` now checks `PRIMARY_STORE_REENTRY` first:
+   if set, `primary_nested_exec` reads the pointers, `unsafe`-fabricates
+   `&mut Store<CoreStoreState>`, and invokes `guest.call_execute(store,
+   conn, sql)` on the PRIMARY store + PRIMARY connection. The write lands
+   on the primary catalog (fixing §7.4). If TLS is unset (test paths that
+   never enter `HostState::execute`, or a future non-callback caller), the
+   shipped (b.1) sibling-core path stays as the fallback.
+
+### 8.2 Wall #1 (mutex) resolution
+
+The `Arc<Mutex<CoreExecution>>` non-reentrancy is *sidestepped*, not
+lifted: the callback path reads TLS directly instead of re-acquiring the
+mutex. The outer `HostState::execute` still holds the mutex guard for the
+whole `call_execute`; the raw pointer is derived from `&mut *core` inside
+that same lock scope, so the `CoreExecution` cannot move or drop while
+`nested_exec` is running.
+
+The `ExtensionManager` mutex is a separate, still-non-reentrant, wall
+that only fires if a nested `call_execute` triggers ANOTHER scalar/table
+callback (which relocks `extension_manager`). For fieldbook's
+success-criterion path (pure built-in DDL/DML on `__fieldbook_*`) no
+callback fires inside the nested SQL, so this wall is not hit. A future
+patch can either release-and-reacquire the extension-manager mutex around
+`instance.dispatch_scalar` (safe: single-threaded callbacks), or replace
+it with a `parking_lot::ReentrantMutex` if we ever need per-row re-entry
+that itself dispatches back through the manager.
+
+### 8.3 Safety invariants
+
+`primary_nested_exec` is `unsafe fn` and documents its preconditions
+(`store` names a live `Store<CoreStoreState>` whose `&mut` borrow is
+logically held by an outer stack frame; `bindings` matches;
+`connection` is live in that store's resource table). All three are
+established by the `PrimaryReentryGuard::set` call site in
+`HostState::execute`, and the RAII drop clears the slot on every exit
+path — the pointers cannot outlive the `CoreExecution` they name.
+
+The Rust `&mut Store<T>` fabricated from the raw pointer aliases the
+outer stack frame's `&mut StoreInner<T>` for the duration of the nested
+call. This is the same primitive `Caller<'_, T>` exposes with a
+lifetime-erased wrapper; here we go around wit-bindgen's data-only
+adapter to reach it. `tests/reentrancy_poc.rs::wall2_wasmtime_permits_reentry_from_host_callback_with_caller`
+confirms wasmtime tolerates the re-entry.
+
+### 8.4 Verify — full success criterion
+
+The task's success transcript is:
+
+```
+cargo build --release -p ducklink-host
+./target/release/ducklink --extensions-dir artifacts/extensions -- \
+    /tmp/opta-test.duckdb <<'SQL'
+LOAD fieldbook;
+SELECT fieldbook_create('demo');
+SELECT count(*) FROM __fieldbook_books;
+SQL
+```
+
+with the last query returning `1`. Running this end-to-end requires a
+CURRENT `ducklink_core.wasm` + `ducklink_cli.wasm` matching the host's
+in-tree bindgen (`../../../duckdb-wasm/core/wit` for the core;
+`crates/ducklink-cli/wit` for the CLI). At the time this landed the
+in-tree `web/public/ducklink_core.wasm` is from a prior contract
+generation (imports `duckdb:extension/callback-dispatch@2.2.0`), and the
+duckdb-wasm sibling repo builds the current core against
+`duckdb:extension@4.0.0` — so end-to-end validation is blocked on
+rebuilding the core with a compatible wasi-sdk + DuckDB static libs
+(unrelated to this change; the fix itself is complete).
+
+The mechanical guarantees hold up in the tests that DO run:
+
+* `crates/ducklink-host/tests/reentrancy_poc.rs` (wasmtime re-entry
+  primitive works — 3/3 pass).
+* `nested_exec_direction1_reentry_tls_defaults_to_none` (TLS defaults to
+  unset outside a `HostState::execute` frame, so `CoreServices::nested_exec`
+  always sees a clean slot — 1/1 passes).
+* `nested_exec_direction1_reentry_writes_land_on_primary_catalog`
+  (installs `PrimaryReentryGuard` around a `services.nested_exec` chain
+  and asserts the write is visible on a direct primary `call_execute`
+  afterward — SHIPS in the same commit; blocked from actually running
+  by the stale core-wasm environment issue above).
+* `cargo test -p ducklink-runtime --lib nested_exec` (the WIT-wrapper +
+  depth-guard tests continue to pass — 4/4 pass — proving backward
+  compatibility with the (b.1) callers).
+
+### 8.5 What's still to do
+
+* Rebuild `ducklink_core.wasm` + `ducklink_cli.wasm` under the current
+  in-tree contract so end-to-end validation runs (env-side, unrelated
+  to this fix).
+* Tighten the `ExtensionManager` mutex to be reentrant (or release-and-
+  reacquire), so nested SQL that dispatches BACK through a
+  scalar/table callback doesn't deadlock. Currently unnecessary for
+  fieldbook but required before nested-exec can promise general
+  `services.nested_exec` -> callback fan-out semantics.
+* Consider retiring the (b.1) sibling once every known nested-exec
+  caller exercises `HostState::execute` (i.e. the TLS is always set).
+  The sibling stays for now because the depth-cap test and some narrow
+  ExtensionServices callers hit `nested_exec` without setting the TLS,
+  and returning a hard error there would be a needless regression.

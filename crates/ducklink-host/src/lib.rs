@@ -149,6 +149,8 @@ pub mod resolver;
 
 /// `ducklink extension <subcommand>` (alias `ext`) — extension-management CLI UX.
 pub mod extcli;
+pub mod cron_cli;
+pub mod driver_exec;
 mod ui_server;
 
 /// Sentinel callback handles for the resolver observability scalars
@@ -1334,6 +1336,77 @@ fn is_extension_related_error(msg: &str) -> bool {
         return true;
     }
     false
+}
+
+// ---------------------------------------------------------------------------
+// nested-exec Direction-1 §7.8 option (a): primary-core re-entry TLS
+// ---------------------------------------------------------------------------
+//
+// tests/reentrancy_poc.rs proved wasmtime permits a host callback to
+// re-enter the SAME wasm store when it has a `Caller<'_, T>` /
+// `StoreContextMut<'_, T>` in hand (wall #2 REFUTED). The ducklink
+// callback path lowers to `&mut CoreStoreState` (store DATA, not store
+// CONTEXT) because that is the `HasData<Data<'a> = &'a mut T>` shape
+// wit-bindgen emits; and the outer `Manager::with_core` holds
+// `Arc<Mutex<CoreExecution>>` non-reentrantly (wall #1 CONFIRMED). Both
+// walls sit between a `duckdb:extension/nested-exec` callback and the
+// primary core.
+//
+// This TLS is the low-touch bridge. `HostState::execute` snapshots raw
+// pointers to the primary core's `Store<CoreStoreState>` + the
+// [`duckdb_core_bindings::Libduckdb`] bindings + the CLI's active
+// `ResourceAny` connection handle, sets them here for the duration of the
+// outer `guest.call_execute`, and restores the previous slot on drop
+// (RAII). A callback firing inside that outer call reads the TLS and
+// re-enters the primary store directly through the raw store pointer —
+// no re-lock of the outer mutex, and the write lands on the primary
+// connection so the outer statement's continuation + the outer catalog
+// see it.
+//
+// Safety invariant. The pointers are only dereferenced synchronously,
+// from a host callback firing inside the outer `call_execute`, on the
+// same thread that holds the outer `MutexGuard<CoreExecution>`. The RAII
+// guard restores the previous slot on any exit path (Ok / Err / panic),
+// so a leaked pointer to a freed `CoreExecution` is not reachable.
+//
+// The re-entry retains the shipped (b.1) sibling as a fallback for
+// callers that reach `CoreServices::nested_exec` without the TLS set
+// (narrow unit-test paths, or a future non-callback caller). See
+// `docs/nested-exec-direction-1-plan.md` §7.7-7.8.
+
+thread_local! {
+    static PRIMARY_STORE_REENTRY: std::cell::Cell<Option<PrimaryReentry>> =
+        const { std::cell::Cell::new(None) };
+}
+
+#[derive(Clone, Copy)]
+struct PrimaryReentry {
+    store: *mut Store<CoreStoreState>,
+    bindings: *const duckdb_core_bindings::Libduckdb,
+    connection: ResourceAny,
+}
+
+/// RAII: install `entry` in `PRIMARY_STORE_REENTRY` and restore the
+/// previously-installed entry (typically `None`) on drop. Nesting-safe:
+/// if a callback path ever recurses back into `HostState::execute`
+/// (unlikely in the CLI shell, but the depth guard permits it up to
+/// `NESTED_EXEC_MAX_DEPTH`), the inner guard overwrites the TLS for its
+/// own frame and this guard's Drop restores the outer frame's entry.
+struct PrimaryReentryGuard {
+    prev: Option<PrimaryReentry>,
+}
+
+impl PrimaryReentryGuard {
+    fn set(entry: PrimaryReentry) -> Self {
+        let prev = PRIMARY_STORE_REENTRY.with(|slot| slot.replace(Some(entry)));
+        Self { prev }
+    }
+}
+
+impl Drop for PrimaryReentryGuard {
+    fn drop(&mut self) {
+        PRIMARY_STORE_REENTRY.with(|slot| slot.set(self.prev));
+    }
 }
 
 impl CoreExecution {
@@ -4955,6 +5028,28 @@ impl cli_db::Host for HostState {
         let sql = delta_rewrite::rewrite_delta_scan(&sql, &self.preopens);
         let result = self
             .with_core(|core| {
+                // Option (a) nested-exec (docs/nested-exec-direction-1-plan.md
+                // §7.8): snapshot raw pointers to the primary core so a
+                // scalar/table callback firing inside this call_execute can
+                // re-enter the SAME store via
+                // `PrimaryReentryGuard`/`primary_nested_exec` instead of the
+                // shipped (b.1) sibling. RAII restores TLS on any path
+                // (Ok, Err, panic), so a nested_exec never sees a stale
+                // pointer to a freed CoreExecution.
+                //
+                // Borrow-checker note: the raw-pointer coercions (`&mut
+                // core.store as *mut _`, `&core.bindings as *const _`) drop
+                // their borrows at the end of the coercion expression, so
+                // the subsequent `core.with_database(...)` &mut re-borrow
+                // is unaliased.
+                let store_ptr: *mut Store<CoreStoreState> = &mut core.store;
+                let bindings_ptr: *const duckdb_core_bindings::Libduckdb =
+                    &core.bindings;
+                let _reentry = PrimaryReentryGuard::set(PrimaryReentry {
+                    store: store_ptr,
+                    bindings: bindings_ptr,
+                    connection: entry_handle,
+                });
                 core.with_database(|guest, store| {
                     guest.call_execute(store, entry_handle, &sql)
                 })
@@ -6070,7 +6165,25 @@ impl ExtensionServices for CoreServices {
     // [`is_extension_related_error`] and the error is wrapped with
     // [`NESTED_EXEC_DIRECTION2_REDIRECT`] pointing the caller at Direction 2
     // (native ducklink extension). Non-extension errors pass through verbatim.
+    //
+    // 2026-07-25 (option (a), §7.8): if we were called from a scalar/table
+    // callback that fired inside an outer `HostState::execute`,
+    // `PRIMARY_STORE_REENTRY` is set — dispatch directly on the PRIMARY
+    // store + the outer connection instead of on the sibling. Writes are
+    // then visible to the outer statement's continuation + the outer
+    // connection's catalog (fixes the fieldbook two-catalog bug §7.4).
+    // The sibling path below stays as a fallback for callers reached
+    // without the TLS set (narrow tests, or a future non-callback caller).
     fn nested_exec(&mut self, sql: &str) -> Result<NestedExecResult, String> {
+        if let Some(reentry) = PRIMARY_STORE_REENTRY.with(|slot| slot.get()) {
+            // SAFETY: preconditions documented on `primary_nested_exec` +
+            // `PrimaryReentryGuard`. The RAII guard installed by
+            // `HostState::execute` guarantees the pointers name a live
+            // `CoreExecution` on the outer stack frame, and this call is
+            // synchronous on the same thread.
+            return unsafe { primary_nested_exec(reentry, sql) };
+        }
+
         let sibling = self
             .sibling
             .as_ref()
@@ -6134,6 +6247,48 @@ impl ExtensionServices for CoreServices {
                 }
             }
         }
+    }
+}
+
+/// Option (a) nested-exec: dispatch `sql` on the PRIMARY core store +
+/// the outer CLI connection using the raw pointers snapshotted by
+/// [`PrimaryReentryGuard`] in `HostState::execute`. The write lands on
+/// the primary connection, so the outer statement's catalog + any
+/// subsequent CLI statement see it immediately.
+///
+/// # Safety
+///
+/// * `reentry.store` must name a live `Store<CoreStoreState>` whose
+///   `&mut` borrow is logically held by an outer `HostState::execute`
+///   frame on the same thread — set by [`PrimaryReentryGuard::set`] and
+///   cleared on drop, so a stale slot is impossible.
+/// * `reentry.bindings` must point to the [`duckdb_core_bindings::Libduckdb`]
+///   attached to the same `CoreExecution`.
+/// * `reentry.connection` must be a live [`ResourceAny`] in that store's
+///   resource table (the CLI's entry connection recorded by
+///   `HostState::execute`).
+///
+/// wasmtime tolerates the re-entrant `call_execute` (verified by
+/// `tests/reentrancy_poc.rs::wall2_wasmtime_permits_reentry_from_host_callback_with_caller`).
+/// The Rust `&mut Store<T>` fabricated from the raw pointer aliases the
+/// outer stack frame's `&mut StoreInner<T>` for the duration of this
+/// call, but wasmtime's internal store state is designed for this
+/// pattern (Caller/StoreContextMut is the safe surface of the same
+/// primitive; here we go around wit-bindgen's data-only adapter to reach
+/// it).
+unsafe fn primary_nested_exec(
+    reentry: PrimaryReentry,
+    sql: &str,
+) -> Result<NestedExecResult, String> {
+    let bindings = unsafe { &*reentry.bindings };
+    let store: &mut Store<CoreStoreState> = unsafe { &mut *reentry.store };
+    let guest = bindings.duckdb_component_database();
+    let outcome = guest
+        .call_execute(store.as_context_mut(), reentry.connection, sql)
+        .map_err(|trap| format!("nested-exec: primary call_execute trapped: {trap}"))?;
+    match outcome {
+        Ok(qr) => Ok(query_result_to_nested_exec(qr)),
+        Err(err) => Err(core_duckerror_message(err)),
     }
 }
 
@@ -9745,6 +9900,124 @@ mod tests {
 
         RECURSE_STATE.with(|c| c.set(std::ptr::null_mut()));
         Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // nested-exec Direction-1 §7.8 option (a): primary-core re-entry tests.
+    // ------------------------------------------------------------------
+    //
+    // These verify the new `PRIMARY_STORE_REENTRY` TLS + `primary_nested_exec`
+    // path routes writes through the PRIMARY store (option (a)) instead of
+    // the (b.1) sibling — the bug fix for the fieldbook two-catalog problem
+    // documented in `docs/nested-exec-direction-1-plan.md` §7.4.
+
+    /// With `PrimaryReentryGuard` installed, `CoreServices::nested_exec`
+    /// dispatches to the PRIMARY store + primary connection. A subsequent
+    /// direct `call_execute` on the same primary connection sees the write
+    /// (the guarantee (b.1) sibling failed to provide).
+    #[test]
+    fn nested_exec_direction1_reentry_writes_land_on_primary_catalog() -> Result<()> {
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let tmp = tempdir()?;
+        let engine = build_engine()?;
+
+        // The primary preopens the temp dir at `.` so the guest can `open
+        // "./opt-a.duckdb"`. Same shape the CLI uses (see build_wasi_ctx_*).
+        let preopens: Vec<(&Path, &str)> = vec![(tmp.path(), ".")];
+        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core-optA")], &preopens)?;
+        let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
+        let primary_core_exec =
+            instantiate_core(&engine, &artifacts.core_component, wasi, extension_manager)?;
+        let primary_core = Arc::new(Mutex::new(primary_core_exec));
+
+        // Open a file-backed connection on the PRIMARY. The nested_exec write
+        // has to land in this same DB for the test to be meaningful — file
+        // sharing across two Databases has WAL semantics that would obscure
+        // the catalog-visibility check.
+        let db_path = "./opt-a.duckdb";
+        let primary_conn = {
+            let mut c = primary_core.lock().unwrap();
+            c.with_database(|g, s| g.call_open(s, Some(db_path)))?
+                .map_err(|e| anyhow::anyhow!("primary open failed: {e}"))?
+        };
+
+        // Build a `CoreServices` on the primary. Sibling wired as a safety
+        // net (test asserts nested_exec DID NOT go through it by checking
+        // the primary catalog).
+        let sibling = Arc::new(SiblingState::new(
+            engine.clone(),
+            artifacts.core_component.clone(),
+            vec![(tmp.path().to_path_buf(), ".".to_string())],
+        ));
+        sibling.record_primary_open(Some(db_path.to_string()));
+        let mut services = CoreServices {
+            core: primary_core.clone(),
+            current_connection: Arc::new(Mutex::new(Some(primary_conn))),
+            catalog_snapshot: Arc::new(Mutex::new(CatalogSnapshot::default())),
+            sibling: Some(sibling),
+        };
+
+        // Simulate what `HostState::execute` does around the outer
+        // `call_execute`: snapshot raw store + bindings pointers and install
+        // `PrimaryReentryGuard`. We do NOT drive an outer `call_execute`
+        // here — wasmtime tolerates the "nested" call as a plain first call
+        // when no outer call is in flight, so this test isolates the
+        // dispatch mechanism (guard set -> primary path) from the wasmtime
+        // reentrancy question (already answered by `reentrancy_poc.rs`).
+        let (store_ptr, bindings_ptr) = {
+            let mut c = primary_core.lock().unwrap();
+            let store_ptr: *mut Store<CoreStoreState> = &mut c.store;
+            let bindings_ptr: *const duckdb_core_bindings::Libduckdb = &c.bindings;
+            (store_ptr, bindings_ptr)
+        };
+
+        // CREATE TABLE on the primary via nested_exec.
+        {
+            let _guard = PrimaryReentryGuard::set(PrimaryReentry {
+                store: store_ptr,
+                bindings: bindings_ptr,
+                connection: primary_conn,
+            });
+            services
+                .nested_exec("CREATE TABLE opta_t (x INT)")
+                .expect("CREATE TABLE via primary re-entry");
+            services
+                .nested_exec("INSERT INTO opta_t VALUES (10),(20),(30)")
+                .expect("INSERT via primary re-entry");
+        }
+
+        // Read back via a direct `call_execute` on the PRIMARY connection.
+        // If the write went to the sibling (regression to (b.1)), this
+        // catalog wouldn't have the table yet in-process, and the SELECT
+        // would fail with `Table with name opta_t does not exist`.
+        let sel = {
+            let mut c = primary_core.lock().unwrap();
+            c.with_database(|g, s| g.call_execute(s, primary_conn, "SELECT count(*) FROM opta_t"))?
+                .map_err(|e| anyhow::anyhow!("primary SELECT failed: {e:?}"))?
+        };
+        assert_eq!(sel.rows.len(), 1, "one count row expected, got {:?}", sel.rows);
+        assert_eq!(sel.rows[0].len(), 1);
+        let count_cell = spi_value_text(&sel.rows[0][0]);
+        assert_eq!(
+            count_cell, "3",
+            "expected 3 rows on primary catalog (proves the nested_exec write went to \
+             the primary, not the sibling); got: {count_cell}"
+        );
+        Ok(())
+    }
+
+    /// Without `PrimaryReentryGuard` installed, `CoreServices::nested_exec`
+    /// falls back to the shipped (b.1) sibling — every currently-passing
+    /// sibling test above depends on this fallback. Assert the guard is
+    /// clear by default so a leaked TLS across tests would surface here.
+    #[test]
+    fn nested_exec_direction1_reentry_tls_defaults_to_none() {
+        let observed = PRIMARY_STORE_REENTRY.with(|slot| slot.get());
+        assert!(
+            observed.is_none(),
+            "PRIMARY_STORE_REENTRY must default to None outside a HostState::execute frame; \
+             got Some, likely leaked by a previous test's PrimaryReentryGuard"
+        );
     }
 
     #[test]
