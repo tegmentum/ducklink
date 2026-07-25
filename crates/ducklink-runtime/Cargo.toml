@@ -15,6 +15,13 @@ wasmtime = { version = "46.0.1", features = ["component-model", "cache"] }
 # The extension store-state holds a WasiCtx and implements WasiView (components
 # target wasip2). Same version as wasmtime.
 wasmtime-wasi = "46.0.1"
+# wasi:http host imports (types + outgoing-handler @0.2.9). Required because the
+# composed cache.wasm imports wasi:http via the s3-wasm HTTPS transport; without
+# this the extension linker rejects it with "matching implementation was not
+# found". Same version as wasmtime. `add_only_http_to_linker_sync` avoids the
+# double-add wasi:cli/filesystem/etc conflict with `wasmtime_wasi::p2::
+# add_to_linker_sync` (see wasmtime-wasi-http/src/p2/mod.rs).
+wasmtime-wasi-http = "46.0.1"
 # The witcanon contract-digest scheme: sha256("witcanon:1" || canonical WIT
 # bytes), byte-identical to compose-core::blobs::compute_wit_digest in
 # ~/git/webassembly-component-orchestration so digests interoperate. build.rs

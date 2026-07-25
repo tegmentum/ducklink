@@ -38,6 +38,41 @@ pub mod dotcmd_bindings {
     });
 }
 
+// Module declared here (rather than with the other `pub mod` items further
+// down) so `driver_tool_bindings` below can reference
+// `crate::driver_exec::DriverConnection` in its `with:` map.
+pub mod driver_exec;
+
+/// Generated bindings for the cron-driver-tool world.
+///
+/// The tool is a `wasi:cli/run` command component that imports our small
+/// `duckdb:driver/exec` bridge (open/exec/query) plus a handful of standard
+/// WASI-p2 interfaces (environment/stdout/stderr, monotonic-clock,
+/// wall-clock, io/poll, io/streams). The `with:` map wires every WASI
+/// interface to the wasmtime-wasi types so `p2::add_to_linker_sync` can
+/// service them, and maps the driver-exec `connection` resource to the
+/// native `DriverConnection` struct so the ResourceTable stores it
+/// directly. Only the `Host`/`HostConnection` traits are left generated;
+/// `driver_exec.rs` implements them on `DriverStoreState`.
+pub mod driver_tool_bindings {
+    wasmtime::component::bindgen!({
+        path: "../../extensions/cron-driver-tool/wit",
+        world: "duckdb:driver-tool/cron-driver-tool",
+        with: {
+            "wasi:cli/environment": wasmtime_wasi::p2::bindings::cli::environment,
+            "wasi:cli/stdout": wasmtime_wasi::p2::bindings::cli::stdout,
+            "wasi:cli/stderr": wasmtime_wasi::p2::bindings::cli::stderr,
+            "wasi:clocks/monotonic-clock": wasmtime_wasi::p2::bindings::clocks::monotonic_clock,
+            "wasi:clocks/wall-clock": wasmtime_wasi::p2::bindings::clocks::wall_clock,
+            "wasi:io/poll": wasmtime_wasi::p2::bindings::io::poll,
+            "wasi:io/streams": wasmtime_wasi::p2::bindings::io::streams,
+            "wasi:io/error": wasmtime_wasi::p2::bindings::io::error,
+            "duckdb:driver/exec.connection": crate::driver_exec::DriverConnection,
+        },
+        require_store_data_send: true,
+    });
+}
+
 use std::collections::{BTreeMap, HashMap};
 #[cfg(test)]
 use std::fs;
@@ -150,7 +185,8 @@ pub mod resolver;
 /// `ducklink extension <subcommand>` (alias `ext`) — extension-management CLI UX.
 pub mod extcli;
 pub mod cron_cli;
-pub mod driver_exec;
+// `pub mod driver_exec;` is declared at the top of this file (before the
+// `driver_tool_bindings` bindgen expansion that references its types).
 mod ui_server;
 
 /// Sentinel callback handles for the resolver observability scalars
@@ -225,12 +261,27 @@ use wasmtime_wasi::p2::{
     pipe::{MemoryInputPipe, MemoryOutputPipe},
 };
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
+// wasi:http/{types,outgoing-handler}@0.2.9 host wiring. The composed
+// cache.wasm imports wasi:http via the s3-wasm HTTPS transport (commit
+// d2b8870); every store type this host builds a linker for must (a) impl
+// WasiHttpView and (b) call `add_only_http_to_linker_sync` alongside the
+// existing `p2::add_to_linker_sync`. Using `add_only_http_to_linker_sync`
+// (not the full `add_to_linker_sync`) avoids re-adding wasi:cli/filesystem/
+// etc, which would clash with the wasmtime_wasi call.
+use wasmtime_wasi_http::p2::{
+    add_only_http_to_linker_sync as add_wasi_http_to_linker, WasiHttpCtxView, WasiHttpView,
+};
+use wasmtime_wasi_http::WasiHttpCtx;
 
 type CliString = wasmtime::component::__internal::String;
 
 struct CoreStoreState {
     table: ResourceTable,
     wasi: WasiCtx,
+    /// wasi:http host context (see the module-level `add_wasi_http_to_linker`
+    /// import). Unused today by the core component itself; kept here so the
+    /// `WasiHttpView` impl below has a store-owned `WasiHttpCtx` to project.
+    wasi_http: WasiHttpCtx,
     extension_manager: Arc<Mutex<ExtensionManager>>,
     // Tiered Virtual Memory: host-owned regions back DuckDB's >4 GiB spill tier.
     tvm: tvm_core::RegionDirectory<tvm_core::VecBackedRegion>,
@@ -248,6 +299,16 @@ impl WasiView for CoreStoreState {
         WasiCtxView {
             ctx: &mut self.wasi,
             table: &mut self.table,
+        }
+    }
+}
+
+impl WasiHttpView for CoreStoreState {
+    fn http(&mut self) -> WasiHttpCtxView<'_> {
+        WasiHttpCtxView {
+            ctx: &mut self.wasi_http,
+            table: &mut self.table,
+            hooks: Default::default(),
         }
     }
 }
@@ -1568,6 +1629,10 @@ fn network_grant_allows(extension: &str) -> bool {
 /// for std even though the `duckdb:dotcmd` world declares no WIT imports).
 struct DotcmdState {
     wasi: WasiCtx,
+    /// wasi:http host context (see the module-level `add_wasi_http_to_linker`
+    /// import). Wired unconditionally so a future dot-command component can
+    /// import wasi:http without a per-component gate.
+    wasi_http: WasiHttpCtx,
     table: ResourceTable,
     /// The core (for spi SQL execution) and the CLI's live connection handle.
     core: Arc<Mutex<CoreExecution>>,
@@ -1586,6 +1651,15 @@ struct DotcmdState {
 impl WasiView for DotcmdState {
     fn ctx(&mut self) -> WasiCtxView<'_> {
         WasiCtxView { ctx: &mut self.wasi, table: &mut self.table }
+    }
+}
+impl WasiHttpView for DotcmdState {
+    fn http(&mut self) -> WasiHttpCtxView<'_> {
+        WasiHttpCtxView {
+            ctx: &mut self.wasi_http,
+            table: &mut self.table,
+            hooks: Default::default(),
+        }
     }
 }
 impl wasmtime::component::HasData for DotcmdState {
@@ -1958,6 +2032,7 @@ impl DotcmdRegistry {
         let component = load_component(engine, path).map_err(wasmtime::Error::msg)?;
         let mut linker = Linker::<DotcmdState>::new(engine);
         p2::add_to_linker_sync(&mut linker)?;
+        add_wasi_http_to_linker(&mut linker)?;
         dotcmd_bindings::duckdb::dotcmd::spi::add_to_linker::<DotcmdState, DotcmdState>(
             &mut linker,
             |s| s,
@@ -1987,6 +2062,7 @@ impl DotcmdRegistry {
             engine,
             DotcmdState {
                 wasi,
+                wasi_http: WasiHttpCtx::new(),
                 table: ResourceTable::new(),
                 core,
                 current_connection,
@@ -4019,6 +4095,13 @@ type PendingCast = reg::CastReg;
 pub struct HostState {
     table: ResourceTable,
     wasi: WasiCtx,
+    /// wasi:http host context (see the module-level `add_wasi_http_to_linker`
+    /// import). The CLI itself doesn't call wasi:http today; this is present so
+    /// the CLI-linker's `add_only_http_to_linker_sync` has a `WasiHttpView`
+    /// impl to project. Extensions loaded through this host route through
+    /// `ExtensionStoreState` (which carries its own `WasiHttpCtx`) — this is
+    /// only for the front-end store.
+    wasi_http: WasiHttpCtx,
     core: Arc<Mutex<CoreExecution>>,
     extension_manager: Arc<Mutex<ExtensionManager>>,
     dotcmd_registry: Arc<Mutex<DotcmdRegistry>>,
@@ -4056,6 +4139,16 @@ impl WasiView for HostState {
         WasiCtxView {
             ctx: &mut self.wasi,
             table: &mut self.table,
+        }
+    }
+}
+
+impl WasiHttpView for HostState {
+    fn http(&mut self) -> WasiHttpCtxView<'_> {
+        WasiHttpCtxView {
+            ctx: &mut self.wasi_http,
+            table: &mut self.table,
+            hooks: Default::default(),
         }
     }
 }
@@ -6463,6 +6556,7 @@ fn instantiate_core(
     })?;
     let mut linker = Linker::<CoreStoreState>::new(engine);
     p2::add_to_linker_sync(&mut linker)?;
+    add_wasi_http_to_linker(&mut linker)?;
     core_host_loader::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |state| state)?;
     core_extension_hooks::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |state| {
         state
@@ -6513,6 +6607,7 @@ fn instantiate_core(
         CoreStoreState {
             table: ResourceTable::new(),
             wasi: wasi_ctx,
+            wasi_http: WasiHttpCtx::new(),
             extension_manager,
             tvm: tvm_core::RegionDirectory::new(),
             tvm_slots: std::collections::HashMap::new(),
@@ -6729,6 +6824,127 @@ pub fn precompile_component_to_file(in_path: &Path, out_path: &Path) -> Result<(
     std::fs::write(out_path, &framed)
         .with_context(|| format!("write {}", out_path.display()))?;
     Ok(())
+}
+
+/// Public wrapper around [`build_engine`] for out-of-module callers (the
+/// driver-tool wasmtime path in `driver_exec.rs`) that want the same
+/// component-model + exceptions + compile-cache config the CLI uses.
+pub fn build_engine_for_driver() -> Result<Engine> {
+    build_engine()
+}
+
+/// Per-connection state the `driver_exec::DriverConnection` holds when it
+/// runs against a *persistent* wasm core (the follow-up to the MVP that
+/// spawned a fresh CLI capture per SQL). Opaque outside this crate: the
+/// only useful operations are `driver_core_exec` / `driver_core_query`.
+///
+/// The invariant: `connection` is a live `duckdb:component/database`
+/// connection handle inside `core`'s store, valid for the lifetime of
+/// this struct. Dropping this struct drops the connection handle (via
+/// wasmtime's resource table) and lets the core store deallocate its
+/// side-tables.
+pub(crate) struct DriverCoreState {
+    core: Arc<Mutex<CoreExecution>>,
+    connection: wasmtime::component::ResourceAny,
+    // Kept alive so the extension registry stays valid across calls.
+    _extension_manager: Arc<Mutex<ExtensionManager>>,
+}
+
+/// Bring up a fresh wasm core, open a connection to `db_path`, and load
+/// the `cron` + `cron_scheduler` extensions. This replaces the MVP's
+/// per-call `run_cli_capture` — one wasm instantiation lasts for the
+/// life of the returned `DriverCoreState`, and subsequent SQL runs
+/// through the same store (which is what makes registered scalars,
+/// prepared statements, and the DB connection itself persist).
+///
+/// `db_path` semantics match the WIT contract: `None` (or an empty
+/// string) opens `:memory:`; otherwise the path is interpreted by the
+/// core's WASI ctx against `preopens`.
+pub(crate) fn open_driver_core(
+    engine: &Engine,
+    artifacts: &ComponentArtifacts,
+    preopens: &[(&Path, &str)],
+    db_path: Option<&str>,
+) -> Result<DriverCoreState> {
+    let core_wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], preopens)?;
+    let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
+    let core_exec = instantiate_core(
+        engine,
+        &artifacts.core_component,
+        core_wasi,
+        extension_manager.clone(),
+    )?;
+    let core = Arc::new(Mutex::new(core_exec));
+    {
+        let mut mgr = extension_manager
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        mgr.attach_core(core.clone());
+    }
+
+    // Open the connection.
+    let path_owned: Option<String> = db_path
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    let connection = {
+        let mut c = core.lock().unwrap_or_else(|e| e.into_inner());
+        c.with_database(|guest, store| guest.call_open(store, path_owned.as_deref()))
+            .map_err(|trap| anyhow::anyhow!("driver-core: call_open trapped: {trap}"))?
+            .map_err(|e| anyhow::anyhow!("driver-core: open failed: {e}"))?
+    };
+
+    // Bootstrap: load the two extensions ONCE. Persisting across calls
+    // (that's the whole point of moving to a persistent core) means later
+    // `cron_next` / `cron_advance` / `cron_due` references just work.
+    {
+        let mut c = core.lock().unwrap_or_else(|e| e.into_inner());
+        let bootstrap = "LOAD cron; LOAD cron_scheduler;";
+        c.with_database(|guest, store| guest.call_execute(store, connection.clone(), bootstrap))
+            .map_err(|trap| anyhow::anyhow!("driver-core: bootstrap LOAD trapped: {trap}"))?
+            .map_err(|e| {
+                anyhow::anyhow!("driver-core: bootstrap LOAD failed: {}", core_duckerror_message(e))
+            })?;
+    }
+
+    Ok(DriverCoreState {
+        core,
+        connection,
+        _extension_manager: extension_manager,
+    })
+}
+
+/// Execute `sql` on the persistent connection. Returns rows-affected for
+/// DML (from DuckDB's `Count` shape) or 0 for DDL / SELECT. On failure
+/// returns the DuckDB error text, matching the WIT contract.
+pub(crate) fn driver_core_exec(state: &mut DriverCoreState, sql: &str) -> std::result::Result<u64, String> {
+    let mut c = state.core.lock().unwrap_or_else(|e| e.into_inner());
+    let result = c
+        .with_database(|guest, store| guest.call_execute(store, state.connection.clone(), sql))
+        .map_err(|trap| format!("driver-core: trap: {trap}"))?;
+    match result {
+        Ok(qr) => Ok(extract_rows_affected(&qr).unwrap_or(0)),
+        Err(e) => Err(core_duckerror_message(e)),
+    }
+}
+
+/// Run `sql` and return each cell stringified — matches the shape both
+/// the wasm driver-tool and `duckdb:extension/nested-exec` consume.
+pub(crate) fn driver_core_query(
+    state: &mut DriverCoreState,
+    sql: &str,
+) -> std::result::Result<Vec<Vec<String>>, String> {
+    let mut c = state.core.lock().unwrap_or_else(|e| e.into_inner());
+    let result = c
+        .with_database(|guest, store| guest.call_execute(store, state.connection.clone(), sql))
+        .map_err(|trap| format!("driver-core: trap: {trap}"))?;
+    match result {
+        Ok(qr) => Ok(qr
+            .rows
+            .into_iter()
+            .map(|row| row.iter().map(spi_value_text).collect())
+            .collect()),
+        Err(e) => Err(core_duckerror_message(e)),
+    }
 }
 
 fn build_engine() -> Result<Engine> {
@@ -7532,6 +7748,7 @@ impl CliHarness {
         let host_state = HostState {
             table: ResourceTable::new(),
             wasi: cli_wasi,
+            wasi_http: WasiHttpCtx::new(),
             core: core.clone(),
             extension_manager: extension_manager.clone(),
             dotcmd_registry,
@@ -7554,6 +7771,7 @@ impl CliHarness {
 
         let mut linker = Linker::<HostState>::new(&engine);
         p2::add_to_linker_sync(&mut linker)?;
+        add_wasi_http_to_linker(&mut linker)?;
         cli_db::add_to_linker::<HostState, HostState>(&mut linker, |state| state)?;
         linker
             .instance("duckdb:component/host-extension-loader")?
@@ -7696,6 +7914,7 @@ pub fn run_shell_with_stdio(
     // imports the shell command declares.
     let mut linker = Linker::<CoreStoreState>::new(&engine);
     p2::add_to_linker_sync(&mut linker)?;
+    add_wasi_http_to_linker(&mut linker)?;
     core_host_loader::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |s| s)?;
     core_extension_hooks::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |s| s)?;
     core_callback_dispatch::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |s| s)?;
@@ -7705,6 +7924,7 @@ pub fn run_shell_with_stdio(
         CoreStoreState {
             table: ResourceTable::new(),
             wasi: shell_wasi,
+            wasi_http: WasiHttpCtx::new(),
             extension_manager: extension_manager.clone(),
             tvm: tvm_core::RegionDirectory::new(),
             tvm_slots: std::collections::HashMap::new(),
@@ -7830,6 +8050,7 @@ fn run_cli_inner(
     let host_state = HostState {
         table: ResourceTable::new(),
         wasi: cli_wasi,
+        wasi_http: WasiHttpCtx::new(),
         core: core.clone(),
         extension_manager: extension_manager.clone(),
         dotcmd_registry,
@@ -7852,6 +8073,7 @@ fn run_cli_inner(
 
     let mut linker = Linker::<HostState>::new(&engine);
     p2::add_to_linker_sync(&mut linker)?;
+    add_wasi_http_to_linker(&mut linker)?;
     cli_db::add_to_linker::<HostState, HostState>(&mut linker, |state| state)?;
     linker
         .instance("duckdb:component/host-extension-loader")?
@@ -8919,6 +9141,7 @@ mod tests {
         let engine = build_engine()?;
         let mut linker = Linker::<TestExtensionHost>::new(&engine);
         p2::add_to_linker_sync(&mut linker)?;
+        add_wasi_http_to_linker(&mut linker)?;
         extension_types::add_to_linker::<TestExtensionHost, TestExtensionHost>(
             &mut linker,
             |state| state,
@@ -9020,6 +9243,7 @@ mod tests {
     struct TestExtensionHost {
         table: ResourceTable,
         wasi: WasiCtx,
+        wasi_http: WasiHttpCtx,
         next_resource_id: u32,
     }
 
@@ -9029,6 +9253,7 @@ mod tests {
             Self {
                 table: ResourceTable::new(),
                 wasi,
+                wasi_http: WasiHttpCtx::new(),
                 next_resource_id: 1,
             }
         }
@@ -9045,6 +9270,16 @@ mod tests {
             WasiCtxView {
                 ctx: &mut self.wasi,
                 table: &mut self.table,
+            }
+        }
+    }
+
+    impl WasiHttpView for TestExtensionHost {
+        fn http(&mut self) -> WasiHttpCtxView<'_> {
+            WasiHttpCtxView {
+                ctx: &mut self.wasi_http,
+                table: &mut self.table,
+                hooks: Default::default(),
             }
         }
     }
@@ -10004,6 +10239,132 @@ mod tests {
              the primary, not the sibling); got: {count_cell}"
         );
         Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // nested-exec Direction-1 §8.5: ExtensionManager mutex reentrancy tests.
+    // ------------------------------------------------------------------
+    //
+    // The old `impl core_callback_dispatch::Host for CoreStoreState` bodies
+    // held the `Arc<Mutex<ExtensionManager>>` guard for the full duration of
+    // `manager.dispatch_scalar(...)` (which recurses into wasm via
+    // `instance.dispatch_scalar`). A nested SQL statement issued from that
+    // callback via `primary_nested_exec` -> `guest.call_execute` -> another
+    // scalar callback would then try to reacquire the SAME mutex on the SAME
+    // thread and self-deadlock.
+    //
+    // The fix (§8.5): the callback trait impls call
+    // `ExtensionManager::resolve_dispatch_target(...)` under a SCOPED lock,
+    // drop the guard, then lock the returned `Arc<Mutex<ExtensionInstance>>`
+    // and dispatch. The nested callback's own lock attempt therefore finds
+    // the manager mutex FREE and proceeds without deadlocking.
+    //
+    // The tests below prove the pattern at the manager/instance level
+    // WITHOUT wasm. `nested_exec_recursion` (the wasm-driven end-to-end
+    // repro) is out of scope for this refactor and is called out as a
+    // follow-up in §8.5.
+
+    /// Simulator for the fixed callback trait impl: acquires the manager
+    /// mutex briefly to "resolve" (as `resolve_dispatch_target` does), drops
+    /// the guard, and then runs `dispatch_body` in the released state.
+    fn simulate_release_and_reacquire<T>(
+        mgr: &Arc<Mutex<ExtensionManager>>,
+        dispatch_body: impl FnOnce() -> T,
+    ) -> T {
+        let _resolved = {
+            let guard = mgr.lock().unwrap_or_else(|e| e.into_inner());
+            // Model `resolve_dispatch_target`'s access: read something
+            // through the guard so the compiler proves it's held here.
+            guard.extensions.len()
+        }; // <- guard dropped here BEFORE dispatch_body runs
+        dispatch_body()
+    }
+
+    /// The success criterion of `docs/nested-exec-direction-1-plan.md` §8.5:
+    /// the fixed dispatch pattern must permit a callback that itself invokes
+    /// a nested-exec chain that fires MORE callbacks, without deadlocking on
+    /// the manager mutex.
+    ///
+    /// Structure:
+    ///   outer_dispatch -> nested_dispatch -> inner_dispatch
+    /// Each layer follows the release-and-reacquire pattern; each layer's
+    /// "resolve" phase locks + drops the same `Arc<Mutex<ExtensionManager>>`.
+    /// The old (pre-fix) pattern would hang the second frame because the
+    /// first frame would still be holding the guard when it recursed. This
+    /// test proves the manager is unlocked when the dispatch body runs and
+    /// therefore reacquirable on the same thread.
+    #[test]
+    fn extension_manager_mutex_reentry_via_release_and_reacquire() {
+        let engine = build_engine().expect("engine");
+        let mgr = Arc::new(Mutex::new(ExtensionManager::new(engine)));
+        let mgr_inner = mgr.clone();
+        let mgr_innermost = mgr.clone();
+
+        // Guard against test-suite hang: if a regression re-introduces the
+        // deadlock, the timeout thread panics the test process instead of
+        // hanging the whole test run. Kept generous (~5s) so it never fires
+        // on healthy runs regardless of CI load.
+        let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+        let watchdog = std::thread::spawn(move || {
+            match done_rx.recv_timeout(std::time::Duration::from_secs(5)) {
+                Ok(()) => {}
+                Err(_) => panic!(
+                    "extension_manager_mutex_reentry_via_release_and_reacquire deadlocked \
+                     (>=5s) — a regression in the callback trait impls likely re-holds \
+                     the manager mutex across the dispatch call"
+                ),
+            }
+        });
+
+        let final_value = simulate_release_and_reacquire(&mgr, move || {
+            // Outer "dispatch" body — models `instance.dispatch_scalar`
+            // running wasm which fires another callback.
+            simulate_release_and_reacquire(&mgr_inner, move || {
+                // Nested "dispatch" body — one more level, mimicking a
+                // deeper recursion via `primary_nested_exec`.
+                simulate_release_and_reacquire(&mgr_innermost, || 42u32)
+            })
+        });
+
+        assert_eq!(final_value, 42);
+        // Signal the watchdog that the nested chain returned before the
+        // timeout. Ignored if the watchdog already fired (impossible on
+        // pass) or was dropped.
+        let _ = done_tx.send(());
+        watchdog.join().expect("watchdog thread should complete");
+    }
+
+    /// Companion to the previous test: prove the OLD pattern (hold the
+    /// guard ACROSS the dispatch body) would in fact deadlock — via the
+    /// same non-reentrancy `wall1_std_mutex_is_non_reentrant` demonstrates
+    /// in `tests/reentrancy_poc.rs`, but applied here to the ACTUAL
+    /// `Arc<Mutex<ExtensionManager>>` wrapper shape. Uses `try_lock` so
+    /// the test cannot hang — a `WouldBlock` verdict is what proves the
+    /// old pattern would have deadlocked on a blocking `lock()`.
+    #[test]
+    fn extension_manager_mutex_would_deadlock_if_lock_held_across_dispatch() {
+        let engine = build_engine().expect("engine");
+        let mgr = Arc::new(Mutex::new(ExtensionManager::new(engine)));
+
+        // Simulate the OLD (broken) callback trait impl pattern: acquire
+        // the guard and hold it across the "dispatch body".
+        let outer_guard = mgr.lock().expect("outer lock");
+        let _ = outer_guard.extensions.len(); // ensure we actually hold it
+        // While the guard is held, a same-thread `try_lock` MUST fail with
+        // `WouldBlock` — same non-reentrancy failure a blocking `lock()`
+        // would encounter as a deadlock.
+        match mgr.try_lock() {
+            Err(std::sync::TryLockError::WouldBlock) => {}
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                panic!("manager mutex was poisoned; unexpected")
+            }
+            Ok(_) => panic!(
+                "std::sync::Mutex unexpectedly permitted same-thread re-entry — \
+                 wall #1 (non-reentrancy) has changed, so the release-and-reacquire \
+                 fix is no longer needed"
+            ),
+        }
+        drop(outer_guard);
     }
 
     /// Without `PrimaryReentryGuard` installed, `CoreServices::nested_exec`

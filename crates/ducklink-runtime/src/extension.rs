@@ -17,6 +17,8 @@ use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use wasmtime::component::{Component, Linker, Resource, ResourceTable};
 use wasmtime::{AsContextMut, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
+use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi_http::WasiHttpCtx;
 
 use crate::duckdb_extension_bindings::duckdb::extension::{
     arrow_ext as extension_arrow_ext, catalog as extension_catalog,
@@ -658,6 +660,12 @@ where
 pub struct ExtensionStoreState {
     table: ResourceTable,
     wasi: WasiCtx,
+    /// wasi:http host context. Present on every extension store so the shared
+    /// `base_linker` can wire `wasi:http/{types,outgoing-handler}@0.2.9`. Only
+    /// extensions whose composed component actually imports wasi:http (today:
+    /// the s3-wasm-composed `cache.wasm`) exercise this; every other extension
+    /// pays nothing beyond an unused `WasiHttpCtx` in its store.
+    wasi_http: WasiHttpCtx,
     services: Box<dyn ExtensionServices>,
     next_resource_id: u32,
     scalar_registries: HashMap<u32, PendingScalarRegistry>,
@@ -745,6 +753,7 @@ impl ExtensionStoreState {
         Self {
             table: ResourceTable::new(),
             wasi,
+            wasi_http: WasiHttpCtx::new(),
             services,
             next_resource_id: 1,
             scalar_registries: HashMap::new(),
@@ -1020,6 +1029,16 @@ impl WasiView for ExtensionStoreState {
         WasiCtxView {
             ctx: &mut self.wasi,
             table: &mut self.table,
+        }
+    }
+}
+
+impl WasiHttpView for ExtensionStoreState {
+    fn http(&mut self) -> WasiHttpCtxView<'_> {
+        WasiHttpCtxView {
+            ctx: &mut self.wasi_http,
+            table: &mut self.table,
+            hooks: Default::default(),
         }
     }
 }
@@ -5601,6 +5620,13 @@ pub fn add_extension_interfaces_to_linker(
     linker: &mut Linker<ExtensionStoreState>,
 ) -> wasmtime::Result<()> {
     wasmtime_wasi::p2::add_to_linker_sync(linker)?;
+    // wasi:http/{types,outgoing-handler}@0.2.9 (see the WasiHttpCtx doc on
+    // ExtensionStoreState). `add_only_http_to_linker_sync` — NOT the full
+    // `add_to_linker_sync` — because the wasi:cli / wasi:filesystem / etc.
+    // interfaces are already added by the wasmtime_wasi call above; the full
+    // wasi:http `add_to_linker_sync` re-adds the wasi:http/proxy world and
+    // would collide.
+    wasmtime_wasi_http::p2::add_only_http_to_linker_sync(linker)?;
     extension_types::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_runtime::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_config::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
