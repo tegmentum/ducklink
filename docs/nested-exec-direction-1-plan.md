@@ -1,12 +1,15 @@
 # `duckdb:extension/nested-exec` — Direction 1 (standalone `ducklink` host) design memo
 
-Status: **(b.1) SHIPPED**. Direction 1 now services `nested-exec` from a lazily
-materialized second `CoreExecution` on the same DuckDB file (§5.(b.1) below).
-Extension-touching SQL fails with a sharp "use Direction 2" redirect, as gated
-by `is_extension_related_error` in `crates/ducklink-host/src/lib.rs`. Direction
-2 (native DuckDB extension) remains the answer for entries that reference
+Status: **(b.1) SHIPPED but materially wrong for fieldbook** — see §7 for the
+2026-07-25 wasmtime-reentrancy PoC findings and revised recommendation. Short
+form: `wasmtime` permits store re-entry from a host callback that has
+`Caller<'_, T>` in hand (memo §1.3 wall #2 REFUTED); the real blocker is the
+ducklink bindgen dispatch path that lowers the store context to `&mut T` before
+the callback runs. Option (a) is therefore the right long-term fix, not the
+`create-sibling-connection` WIT change of option (c). Option (c) is also
+blocked by the wasm-core-lives-in-a-different-repo constraint. Direction 2
+(native DuckDB extension) remains the answer for entries that reference
 loaded extensions (see `native-extension/ducklink` submodule commit `0ef7edf`).
-Options (a), (b.2), and (c) below stay open for a follow-up minor.
 
 ## 1. Phase-1 investigation — how the wasm-core host is wired today
 
@@ -300,10 +303,198 @@ exports), pinned core `.wasm` artifact + checksum bump.
 | (b.2) sibling core + extension mirroring | ~1 week | Yes, with duplicated ext state | No | Medium |
 | (c) core-WIT sibling exports | ~1-2 weeks (incl. wasmtime PoC + wasm-core) | Yes | Yes (additive) | Medium |
 
-## 7. Ask for the user
+## 7. PoC findings (2026-07-25) and refined plan
 
-Pick (c) with a 1-day wasmtime reentrancy PoC gate, or accept (b.1) as an
-interim shipping option with a documented "extension functions unavailable in
-nested-exec on wasm-core; use the native ducklink extension for that" note.
-Do NOT ship (b.2) — the doubled extension-load pipeline is not worth the
-maintenance burden for a workaround.
+The §6 wasmtime-reentrancy PoC ran (see
+`crates/ducklink-host/tests/reentrancy_poc.rs`). It probes the two "walls"
+§1.3 stacks — Rust `Mutex` non-reentrancy and wasmtime's alleged store-in-use
+check — as independent hypotheses.
+
+### 7.1 Wall #1 (`std::sync::Mutex` non-reentrant): CONFIRMED
+
+`wall1_std_mutex_is_non_reentrant` holds the outer guard on
+`Arc<Mutex<u32>>` and calls `try_lock` from the same thread; the result is
+`Err(TryLockError::WouldBlock)`, as documented. Any callback firing INSIDE
+`Manager::with_core`'s guard (`crates/ducklink-host/src/lib.rs:4254`) cannot
+re-acquire the primary core's mutex — self-deadlock on `lock()`, `WouldBlock`
+on `try_lock()`. The existing RE-ENTRANCY GUARD comment at `lib.rs:5760` is
+correct about *this* wall.
+
+### 7.2 Wall #2 (wasmtime store "in use" check): REFUTED
+
+`wall2_wasmtime_permits_reentry_from_host_callback_with_caller` builds a
+plain wasm module exporting `run` and `sink`; `run` calls a host import `cb`;
+the host `cb` uses its `Caller<'_, T>` to fetch the SAME instance's `sink`
+export and calls it — RE-ENTERING the same store while `run` is mid-flight.
+Wasmtime accepts it. The nested call runs to completion, control returns to
+`cb`, which returns to `run`, which returns to the outer test frame. No trap,
+no "store in use" error.
+
+The `wall2_wasmtime_permits_calls_on_a_second_store_same_engine` companion
+proves the "at most one exclusive borrow per store" invariant is per-store,
+not per-engine — orthogonal evidence the constraint is a borrow-count
+invariant, not a re-entrancy prohibition.
+
+**Consequence.** The §1.3 claim that "wasmtime's runtime store-lock check
+backstops the borrow checker" and forbids the nested call is factually
+wrong. Wasmtime supports re-entry from a host callback provided the callback
+has the store context in hand (a `Caller<'_, T>` — equivalently a
+`StoreContextMut<'_, T>`). The wall is entirely on the ducklink side.
+
+### 7.3 The real blocker: the ducklink dispatch path lowers away the store context
+
+The bindgen `Host` traits ducklink installs via `add_to_linker(&mut linker,
+|state| state)` (e.g. `core_callback_dispatch::add_to_linker` at
+`lib.rs:6242`) receive `&mut CoreStoreState` — the store's *data*, not its
+*context*. That is the store-data adapter shape wit-bindgen emits for
+component-model imports. From `&mut CoreStoreState` there is no
+`Caller<'_, T>` / `StoreContextMut<'_, T>` to be found — Rust's borrow
+rules do not let you conjure one from the data reference, and no wasmtime
+runtime path yields one either.
+
+So option (a)'s "thread the store context through the callback path" is
+NOT architecturally infeasible; it is *plumbing* — the exact plumbing the
+bindgen-driven `HostWithStore` adapter API would provide (an existing
+wasmtime feature, opt-in per interface). Cost is dominated by the size of
+the callback-dispatch surface (`dispatch_scalar` / `dispatch_scalar_batch`
+/ `dispatch_table` / `dispatch_aggregate*` / `dispatch_pragma` /
+`dispatch_cast*`) that today all lower to `&mut CoreStoreState`, and by
+propagating `StoreContextMut<'_, CoreStoreState>` across the ExtensionStore
+boundary — which brings a second constraint: the extension `Store<ExtensionStoreState>`
+must be entered from inside the core store's context frame without pinning
+the core context, which means the "call into the extension" and "come back
+to call into the core" steps have to interleave through a stackful control
+flow. Doable, but a real refactor.
+
+### 7.4 (b.1) failure mode reproduced end-to-end
+
+Empirical reproducer for the task's success criterion — the shipped (b.1)
+demonstrably fails the fieldbook end-to-end test:
+
+```console
+$ rm -f /tmp/poc.duckdb /tmp/poc.duckdb.wal
+$ ducklink --extensions-dir <root>/artifacts/extensions --dir /tmp::/tmp \
+  -- /tmp/poc.duckdb -c \
+  "LOAD 'fieldbook'; \
+   SELECT fieldbook_create('poc') AS created; \
+   SELECT count(*) AS n FROM __fieldbook_books;"
+...
+[duckdb-core] macro registration failed (continuing): ... 'fieldbook_source': \
+    Catalog Error: Table with name __fieldbook_entries does not exist!
+| created |
++---------+
+| true    |
+internal error: Catalog Error: Table with name __fieldbook_books does not exist!
+```
+
+Two independent effects of (b.1) surface at once:
+
+1. **Load-time bootstrap breaks.** Fieldbook's load hook uses `nested-exec`
+   to `CREATE TABLE __fieldbook_books/__fieldbook_entries/__fieldbook_runs`.
+   Under (b.1) the CREATEs land on the sibling — the primary's catalog never
+   sees them, so the immediately-following `CREATE OR REPLACE MACRO
+   fieldbook_source AS (SELECT ... FROM __fieldbook_entries ...)` on the
+   primary fails with the exact `does not exist` we observe. The
+   `is_extension_related_error` heuristic incorrectly PASSES this shape
+   (it looks like a bare catalog miss, not "extension not loaded"), so no
+   Direction-2 redirect fires and the load partially succeeds without the
+   read macros.
+
+2. **Runtime write invisibility.** `SELECT fieldbook_create('poc')` runs
+   on the primary; its callback calls `nested-exec`, which writes to the
+   sibling. `fieldbook_create` returns `true`. But the primary's
+   `SELECT count(*) FROM __fieldbook_books` errors because the primary's
+   catalog still doesn't have the table (the sibling's writes are file-level
+   through DuckDB's WAL but the CATALOG is per-`Database` and does not
+   auto-refresh across `Database` instances in the same process).
+
+The (b.1) fallback is therefore not just "restrictive" — it is
+**materially wrong** for fieldbook. The Direction-2 redirect only fires on
+specific error shapes; the bootstrap failure is silently misclassified.
+
+### 7.5 Blocker on option (c) as originally scoped
+
+The memo's §5.(c) sketches `create-sibling-connection` / `execute-sibling`
+as additive core-WIT exports. Two problems:
+
+1. **Guest side lives in a different repo.** `ducklink_core.wasm` is built
+   from `~/git/duckdb-wasm` (a separate git repo). The `.wasm` artifact is
+   consumed by `crates/ducklink-host`; the C++/wasm-core side implementing
+   the new exports is out of scope for changes made in *this* repo, per the
+   task's file-touch restrictions. The WIT declaration is easy; the
+   implementation ships in a different pipeline on a different cadence.
+
+2. **The WIT change alone doesn't help.** Even if `create-sibling-connection`
+   only opens a fresh `Connection` over the shared `DatabaseInstance`, calling
+   it still needs a wasmtime entry — the wasm-core's `open` function runs
+   inside its Store. During a callback the outer `guest.call_execute` holds
+   the *entire* store's exclusive borrow (via the mutex, then via the
+   wasmtime borrow). The only way to re-enter is by having the store context
+   in hand — and if the callback already had it, `execute-sibling` would be
+   redundant with plain `execute` on any resource.
+
+Whatever the "right" wasm-core primitive is, the design MUST assume a
+callback that already has `StoreContextMut<'_, CoreStoreState>`. Otherwise
+the primitive can't be invoked.
+
+### 7.6 Revised option matrix
+
+| Option | Cost | Solves fieldbook? | Blocker |
+|--------|------|-------------------|---------|
+| (a) plumb `StoreContextMut` down the callback path | ~1-2 weeks (real refactor across `add_to_linker` sites + dispatch surface) | Yes — writes land on the primary connection | None; wasmtime supports the re-entry (§7.2 PoC) |
+| (b.1) [SHIPPED] sibling core, built-ins only | Done | **No** — load-time bootstrap breaks silently (§7.4); redirect misclassifies | Design limitation |
+| (b.2) sibling core + extension load mirroring | ~1 week + doubled extension-load blast radius | Partial; still no shared-catalog semantics | Not recommended (memo §2.(b)) |
+| (c) core-WIT sibling exports | Unbounded — requires wasm-core repo changes (out of scope) + still needs (a)-style store-context plumbing to invoke | Yes IF (a) plumbing done anyway, in which case (c) is redundant | Out-of-scope wasm-core change |
+
+### 7.7 Refined recommendation
+
+1. **Fix the (b.1) misclassification NOW** (small, low-risk). The load-time
+   fieldbook bootstrap failure produces `Catalog Error: Table ...
+   __fieldbook_entries does not exist` at the *primary's* macro-registration
+   step. `is_extension_related_error` should recognise "does not exist" on
+   an identifier that looks like an internal table (`__` prefix) OR — more
+   robustly — the fieldbook load hook itself should catch this and emit a
+   clearer error that the user must run under the native `ducklink`
+   extension for full functionality. This does not need any of (a)/(c);
+   it just tightens the error surface.
+
+2. **Pursue option (a) as the long-term fix**, not (c). The wasmtime PoC
+   (§7.2) removes the "infeasible" objection. The work is a real refactor
+   (thread `StoreContextMut<'_, CoreStoreState>` through the callback path;
+   replace `Arc<Mutex<CoreExecution>>` with a shape that lets the callback
+   reach the core context without deadlock, e.g. a thread-local pointer set
+   for the duration of `with_core`), but it is well-scoped. Estimate:
+   ~1-2 weeks focused work + a full regression pass on autocomplete /
+   dplyr / scalars (which use the same callback path). Bigger tests to
+   add: (i) the fieldbook success criterion from §7.4; (ii)
+   `dispatch_scalar_batch` under high fan-out with nested-exec inside every
+   row; (iii) `dispatch_table` streaming with nested-exec calls between
+   `next()` iterations.
+
+3. **Drop option (c) from consideration** unless the wasm-core repo grows a
+   need for something like `create-sibling-connection` for reasons unrelated
+   to Direction-1 nested-exec. It is redundant with (a) once (a) is done
+   and cannot be shipped standalone (needs wasm-core cooperation this repo
+   cannot force).
+
+4. **Do NOT ship (b.2).** Reconfirmed after §7.4: mirroring extension loads
+   to a sibling still leaves two disjoint catalogs, so the fieldbook
+   read-macro DDL would still fail at registration time on the primary
+   (macros reference tables the sibling owns).
+
+### 7.8 Concrete next steps (out of scope for this PoC)
+
+- Tighten `is_extension_related_error` OR the fieldbook load hook to
+  surface the load-time bootstrap failure as an actionable
+  "use Direction 2 for fieldbook on the standalone host" error. Small
+  patch, safe to ship in the current minor.
+- Cut a design ticket for option (a): "plumb `StoreContextMut<'_,
+  CoreStoreState>` through the callback dispatch path so nested-exec runs
+  against the primary connection." Include the PoC's `Caller<'_, T>`
+  approach and the two-store cross-boundary interleaving problem (§7.3) as
+  known hard parts.
+- Keep the shipped (b.1) sibling core in place as the fallback for
+  `nested-exec` from any *non*-fieldbook extension that only touches
+  built-in DuckDB SQL and can tolerate the two-catalog semantic. This is
+  where the WIT contract (`nested-exec.wit:16-21`) already promises
+  "committed state only," so pure-read consumers are unaffected.

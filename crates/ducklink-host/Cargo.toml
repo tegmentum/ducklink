@@ -62,6 +62,10 @@ datalink-policy = { git = "https://github.com/tegmentum/datalink.git", rev = "80
 tempfile = "3"
 arrow-ipc = { version = "53", default-features = false }
 arrow-array = { version = "53", default-features = false }
+# PoC for the nested-exec Direction-1 §6 wasmtime re-entrancy experiment:
+# a hand-rolled minimal wasm module (via wat) is enough to prove/refute the
+# memo's claim that wasmtime rejects re-entering a store from a host callback.
+wat = "1"
 
 [[bin]]
 name = "ducklink"
