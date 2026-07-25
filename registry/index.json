@@ -16270,6 +16270,63 @@
           "content_digest": "91a21c44496e86ee01d371c51c68841d789bfcb3697f0bb6c1b1a3a31f23af33"
         }
       ]
+    },
+    {
+      "name": "fieldbook",
+      "version": "0.1.0",
+      "description": "Ducklink Fieldbook wasm engine \u2014 the wasm-side counterpart to the native duckdb-fieldbook extension. Registers three read-side SQL macros (fieldbook_list, fieldbook_entries, fieldbook_source) plus four mutate/record scalars (fieldbook_create, fieldbook_add_entry, fieldbook_drop, fieldbook_record_run) over three backing tables (__fieldbook_books/__fieldbook_entries/__fieldbook_runs). A fieldbook stored via this component is readable and executable from the native duckdb-fieldbook extension (same surface). Targets the duckdb-extension-fieldbook world \u2014 additively imports duckdb:extension/nested-exec@5.0.0 on top of the standard duckdb:extension imports \u2014 so end-to-end execution requires the host to satisfy nested-exec (available today under the native ducklink extension via Direction 2; the standalone ducklink host's Direction 1 is deferred). Deliberately omits fieldbook_run \u2014 execution is a CLI-orchestrator concern (see duckdb-fieldbook).",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "fieldbook",
+        "notebook",
+        "provenance",
+        "nested-exec",
+        "cli-orchestrator"
+      ],
+      "categories": [
+        "utility"
+      ],
+      "source": "extensions/fieldbook-component",
+      "status": "scaffolded",
+      "artifact": "artifacts/extensions/fieldbook.wasm",
+      "wit_contract": "b24dc901568e38e5b05fc0dc535ebaec3c93a9a44c772bb105686032e45e16b3",
+      "wit_contract_version": "4.0.0",
+      "exports": [
+        "fieldbook_list",
+        "fieldbook_entries",
+        "fieldbook_source",
+        "fieldbook_create",
+        "fieldbook_add_entry",
+        "fieldbook_drop",
+        "fieldbook_record_run"
+      ],
+      "requires": [
+        "scalar",
+        "macro"
+      ],
+      "requires_components": [],
+      "crates": [
+        "wit-bindgen",
+        "wit-bindgen-rt",
+        "fieldbook-core",
+        "datalink-extcore"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "fieldbook",
+      "expansion": "com.tegmentum.ducklink.fieldbook",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@5.0.0",
+          "artifact": "artifacts/extensions/fieldbook.wasm"
+        }
+      ]
     }
   ],
   "dotcmds": [

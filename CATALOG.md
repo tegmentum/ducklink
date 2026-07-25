@@ -2,7 +2,7 @@
 
 > Auto-generated from `registry/index.json` by `tooling/gen-catalog.py`. Do not edit by hand.
 
-**188 component extensions** · **681 SQL functions** · 9 expose aggregates · 3 require network.
+**189 component extensions** · **688 SQL functions** · 9 expose aggregates · 3 require network.
 
 Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:extension` WIT world. Load at runtime with `LOAD <name>` (artifacts in `artifacts/extensions/`), or browse them at `ducklink serve`. None overlap DuckDB built-ins; each is verified by `tooling/smoke.py`.
 
@@ -195,12 +195,13 @@ Every extension is a Rust `wasm32-wasip2` component implementing the `duckdb:ext
 | **tdigest** | `tdigest`, `tdigest_quantile`, `tdigest_count` | tdigest, bincode | aggregate |
 | **vssfns** | `vec_l1_distance`, `vec_linf_distance`, `vec_normalize` | hand-rolled |  |
 
-## Utility (7)
+## Utility (8)
 
 | Extension | Functions | Backed by | Notes |
 |---|---|---|---|
 | **chrono** | `date_parse`, `date_format`, `to_char`, `str_to_date`, `date_tz_convert`, `date_now_tz`, `date_is_business_day`, `date_business_days_between`, `date_iso_week`, `date_iso_year`, `duration_parse`, `duration_format`, `chrono_version`, `from_unixtime`, `timestampdiff`, `timestampadd`, `adddate`, `subdate`, `makedate`, `maketime`, `from_days`, `utc_timestamp`, `sysdate`, `timestamp_add`, `timestamp_sub`, `timestamp_diff`, `timestamp_trunc`, `timestamp_micros`, `timestamp_millis`, `timestamp_seconds`, `datetime_add`, `datetime_sub`, `datetime_diff`, `datetime_trunc`, `parse_date`, `parse_datetime`, `parse_timestamp`, `format_date`, `format_datetime`, `format_timestamp`, `unix_micros`, `unix_millis`, `unix_seconds`, `date_from_unix_date`, `date_bucket` | chrono, chrono-tz |  |
 | **cron** | `cron_is_valid`, `cron_next`, `cron_prev` | croner |  |
+| **fieldbook** | `fieldbook_list`, `fieldbook_entries`, `fieldbook_source`, `fieldbook_create`, `fieldbook_add_entry`, `fieldbook_drop`, `fieldbook_record_run` | wit-bindgen, wit-bindgen-rt, fieldbook-core, datalink-extcore |  |
 | **parsertools** | `sql_tables`, `sql_is_valid`, `sql_statement_type` | sqlparser |  |
 | **prql** | `prql_to_sql`, `prql_is_valid` | prqlc |  |
 | **rhai** | `rhai_eval`, `rhai_eval_int`, `rhai_eval_double` | rhai |  |
