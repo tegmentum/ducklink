@@ -1636,6 +1636,80 @@ impl dotcmd_bindings::duckdb::dotcmd::spi::Host for DotcmdState {
             Err(err) => Err(core_duckerror_message(err)),
         }
     }
+
+    /// `duckdb:dotcmd/spi.edit` — shell out to the user's editor for a multi-
+    /// line entry. Mirrors the standalone `fieldbook` CLI's editor UX exactly:
+    /// EDITOR -> VISUAL -> `vi`; whitespace-split so `EDITOR="code -w"` works;
+    /// temp file created in `std::env::temp_dir()`, unlinked after read.
+    fn edit(&mut self, initial: String, hint_suffix: String) -> Result<String, String> {
+        spi_edit(&initial, &hint_suffix)
+    }
+}
+
+/// Launch `$EDITOR` (fallback: `$VISUAL`, then `vi`) on a temp file seeded with
+/// `initial`. Returns the file contents after the editor exits. `hint_suffix`
+/// (e.g. `.sql`) is appended to the temp filename for syntax-highlighting.
+///
+/// Free function (rather than a method on DotcmdState) so it has no state
+/// dependency; tests + callers outside the Host trait can drive it directly.
+fn spi_edit(initial: &str, hint_suffix: &str) -> Result<String, String> {
+    use std::io::Write as _;
+
+    // Same temp-file layout the standalone fieldbook binary uses:
+    // `<tmp>/dotcmd-edit-<pid>-<epoch-ms><suffix>`. PID + timestamp keeps
+    // concurrent invocations from colliding without needing a lockfile.
+    let mut path = std::env::temp_dir();
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let suffix = hint_suffix.trim();
+    let filename = format!("dotcmd-edit-{}-{}{}", std::process::id(), millis, suffix);
+    path.push(filename);
+
+    // Seed the file with the initial contents (may be empty).
+    {
+        let mut f = std::fs::File::create(&path)
+            .map_err(|e| format!("spi.edit: create tempfile {}: {e}", path.display()))?;
+        if !initial.is_empty() {
+            f.write_all(initial.as_bytes())
+                .map_err(|e| format!("spi.edit: write tempfile {}: {e}", path.display()))?;
+        }
+    }
+
+    // Resolve the editor. EDITOR wins; VISUAL fills in; vi is the ultimate
+    // fallback (same order the standalone fieldbook CLI uses).
+    let editor_spec = std::env::var("EDITOR")
+        .or_else(|_| std::env::var("VISUAL"))
+        .unwrap_or_else(|_| "vi".to_string());
+    let mut parts = editor_spec.split_whitespace();
+    let program = parts.next().unwrap_or("vi");
+    let extra_args: Vec<&str> = parts.collect();
+
+    // Blocking spawn — the editor owns the tty for the duration of the call.
+    let status = std::process::Command::new(program)
+        .args(&extra_args)
+        .arg(&path)
+        .status();
+    let status = match status {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = std::fs::remove_file(&path);
+            return Err(format!(
+                "spi.edit: could not spawn editor {editor_spec:?}: {e}"
+            ));
+        }
+    };
+    if !status.success() {
+        let _ = std::fs::remove_file(&path);
+        return Err(format!(
+            "spi.edit: editor {editor_spec:?} exited with {status}"
+        ));
+    }
+    let contents = std::fs::read_to_string(&path)
+        .map_err(|e| format!("spi.edit: read tempfile {}: {e}", path.display()));
+    let _ = std::fs::remove_file(&path);
+    contents
 }
 
 /// The human-readable message inside a core Duckerror (drops the variant noise).

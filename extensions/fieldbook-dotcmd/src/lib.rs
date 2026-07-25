@@ -251,19 +251,23 @@ fn entry_list() -> Result<InvokeResult, String> {
 
 fn entry_add(rest: &str) -> Result<InvokeResult, String> {
     let current = require_current()?;
-    let source = rest.trim();
-    if source.is_empty() {
-        // TODO: add a future `spi.edit(initial: string) -> result<string, string>`
-        // host import so an interactive dot command can shell out to $EDITOR
-        // for multiline entries. The standalone `fieldbook` CLI does this via
-        // std::process::Command; wasm's WASI ctx has no execve so we can't
-        // reproduce it in-guest.
-        return Err(
-            ".entry add SQL — inline mode only for now; use $EDITOR outside the \
-             CLI to prepare multiline SQL and paste as one line"
-                .to_string(),
-        );
-    }
+    let inline = rest.trim();
+    // `.entry add <sql>` uses the inline arg verbatim; `.entry add` on its own
+    // opens $EDITOR (via the spi.edit host import), mirroring the standalone
+    // fieldbook CLI's UX. Post-edit, whitespace-only content is treated as an
+    // explicit abort — same convention the standalone binary uses.
+    let owned;
+    let source: &str = if inline.is_empty() {
+        owned = spi::edit("", ".sql")?;
+        // Post-edit whitespace-only content is an explicit abort.
+        let trimmed = owned.trim();
+        if trimmed.is_empty() {
+            return Err("empty entry; aborted".to_string());
+        }
+        trimmed
+    } else {
+        inline
+    };
     let next_ord = query_scalar_i64(&std::format!(
         "SELECT COALESCE(MAX(ordinal), 0) + 1 FROM __fieldbook_entries WHERE fieldbook = {}",
         sql_literal(&current)
