@@ -3717,6 +3717,12 @@ impl ExtensionManager {
             if grant_network {
                 builder.inherit_network().allow_ip_name_lookup(true);
             }
+            // Grant the extension access to the absolute cache-root paths from
+            // DUCKLINK_LOCAL_CACHE / DUCKLINK_GLOBAL_CACHE. The cache
+            // extension resolves those verbatim; without a matching preopen
+            // (guest name == absolute host path) WASI rejects
+            // `<abs>/objects` etc. with `No such file or directory`.
+            attach_cache_env_preopens(&mut builder);
             let wasi = builder.build();
             let component = Component::from_file(&engine, &artifact_path).map_err(|err| {
                 wasmtime::Error::msg(format!(
@@ -10424,7 +10430,7 @@ mod tests {
     }
 }
 fn resolve_preopens_with_default(preopens: &[(&Path, &str)]) -> Result<Vec<(PathBuf, String)>> {
-    let mut merged = Vec::with_capacity(preopens.len() + 1);
+    let mut merged = Vec::with_capacity(preopens.len() + 3);
     // Only fall back to the current directory when the caller hasn't already
     // mapped the guest cwd ("."). Otherwise the default would shadow an explicit
     // "." preopen — the core's path resolver keeps the first match for equal
@@ -10439,5 +10445,76 @@ fn resolve_preopens_with_default(preopens: &[(&Path, &str)]) -> Result<Vec<(Path
     for (host, guest) in preopens {
         merged.push((host.to_path_buf(), guest.to_string()));
     }
+    // Additive: preopen the absolute cache-root paths that the `cache`
+    // extension (extensions/cache-component/src/lib.rs `cache_root()`) resolves
+    // from DUCKLINK_LOCAL_CACHE / DUCKLINK_GLOBAL_CACHE. Populates the
+    // in-process WasiCtx (`build_wasi_ctx_*`) and — more importantly — the
+    // extension loader's per-extension WasiCtx (see the same helper reused
+    // where extensions are instantiated). Without it the wasm side fails at
+    // `cache: creating <abs>/objects: No such file or directory` because WASI
+    // can only resolve an absolute path via a preopen whose guest name matches
+    // that same absolute path.
+    for (host, guest) in cache_env_preopens() {
+        if merged.iter().any(|(existing, _)| existing == &host) {
+            continue;
+        }
+        merged.push((host, guest));
+    }
     Ok(merged)
+}
+
+/// Absolute cache-root preopens derived from DUCKLINK_LOCAL_CACHE /
+/// DUCKLINK_GLOBAL_CACHE. Guest name == absolute host path so
+/// `<abs>/objects`, `<abs>/locks`, `<abs>/tmp`, `<abs>/metadata.db` inside the
+/// wasm resolve straightforwardly through the matching preopen. Skips cleanly
+/// (logs to stderr, does not fail the process) when a var is set to something
+/// invalid or non-materialisable on disk — the extension surfaces its own
+/// error rather than every host command going down.
+fn cache_env_preopens() -> Vec<(PathBuf, String)> {
+    let mut out: Vec<(PathBuf, String)> = Vec::new();
+    for var in ["DUCKLINK_LOCAL_CACHE", "DUCKLINK_GLOBAL_CACHE"] {
+        let Ok(raw) = std::env::var(var) else { continue };
+        let raw = raw.trim().to_string();
+        if raw.is_empty() {
+            continue;
+        }
+        let path = PathBuf::from(&raw);
+        if !path.is_absolute() {
+            eprintln!(
+                "ducklink-host: ignoring {var}={raw:?}: not an absolute path (WASI preopen requires an absolute path)"
+            );
+            continue;
+        }
+        if let Err(e) = std::fs::create_dir_all(&path) {
+            eprintln!(
+                "ducklink-host: ignoring {var}={}: cannot create directory: {e}",
+                path.display()
+            );
+            continue;
+        }
+        if out.iter().any(|(p, _)| p == &path) {
+            continue;
+        }
+        let guest = path.to_string_lossy().into_owned();
+        out.push((path, guest));
+    }
+    out
+}
+
+/// Attach absolute cache-root preopens (`cache_env_preopens()`) to a
+/// `WasiCtxBuilder`. Used at the extension-loader's per-extension WasiCtx
+/// construction site, where preopens are built inline rather than through
+/// `build_wasi_ctx_*` / `resolve_preopens_with_default`. Missing/invalid
+/// vars are already logged inside `cache_env_preopens()`.
+fn attach_cache_env_preopens(builder: &mut WasiCtxBuilder) {
+    for (host, guest) in cache_env_preopens() {
+        if let Err(e) =
+            builder.preopened_dir(&host, &guest, DirPerms::all(), FilePerms::all())
+        {
+            eprintln!(
+                "ducklink-host: failed to preopen cache root {}: {e}",
+                host.display()
+            );
+        }
+    }
 }
