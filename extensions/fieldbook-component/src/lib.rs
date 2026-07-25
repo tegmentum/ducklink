@@ -35,7 +35,7 @@ wit_bindgen::generate!({
     world: "duckdb:extension/duckdb-extension-fieldbook",
 });
 
-use duckdb::extension::{catalog, nested_exec as host_nested_exec, runtime, types};
+use duckdb::extension::{catalog, column_types, nested_exec as host_nested_exec, runtime, types};
 use exports::duckdb::extension::{callback_dispatch, guest};
 
 // ---------------------------------------------------------------------------
@@ -236,57 +236,44 @@ impl guest::Guest for Extension {
 }
 
 // ---------------------------------------------------------------------------
-// callback_dispatch::Guest — only call_scalar is meaningful here. Everything
-// else is an Unsupported stub (fieldbook exposes no table / aggregate /
-// pragma / cast callbacks). The columnar hot-path methods are stubbed via
-// `datalink_extcore::columnar_stub!()` for uniformity.
+// callback_dispatch::Guest — generated via `columnar_bridge!` so we get a
+// proper `call_scalar_batch_col` that pivots host-side colvecs through the
+// per-row `call_scalar` below. `columnar_stub!()` would only stub those
+// methods and the ducklink runtime calls the columnar hot path directly with
+// no row-major fallback -- so a stubbed columnar impl surfaces as
+// `no scalar functions (bridge stub)` at the first fieldbook_* call.
 // ---------------------------------------------------------------------------
 
-impl callback_dispatch::Guest for Extension {
-    fn call_scalar(
-        handle: u32,
-        args: WitVec<types::Duckvalue>,
-        _ctx: types::Invokeinfo,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        let idx = handles()
-            .lock()
-            .expect("poisoned")
-            .get(&handle)
-            .copied()
-            .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
-        let decl = &Core::DECLS[idx];
-        let neutral: std::vec::Vec<NeutralValue> = args.iter().map(to_neutral).collect();
-        if matches!(decl.null_handling, NullHandling::Propagate)
-            && neutral.iter().any(|v| v.is_null())
-        {
-            return Ok(types::Duckvalue::Null);
-        }
-        let res = Core::dispatch(idx, &neutral).map_err(duckerr)?;
-        Ok(from_neutral(res))
+/// Per-row scalar entry point the columnar bridge fans out to. Free fn (not a
+/// method) so `columnar_bridge!` can name it as a path.
+fn fieldbook_scalar(
+    handle: u32,
+    args: WitVec<types::Duckvalue>,
+    _ctx: types::Invokeinfo,
+) -> Result<types::Duckvalue, types::Duckerror> {
+    let idx = handles()
+        .lock()
+        .expect("poisoned")
+        .get(&handle)
+        .copied()
+        .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
+    let decl = &Core::DECLS[idx];
+    let neutral: std::vec::Vec<NeutralValue> = args.iter().map(to_neutral).collect();
+    if matches!(decl.null_handling, NullHandling::Propagate)
+        && neutral.iter().any(|v| v.is_null())
+    {
+        return Ok(types::Duckvalue::Null);
     }
+    let res = Core::dispatch(idx, &neutral).map_err(duckerr)?;
+    Ok(from_neutral(res))
+}
 
-    datalink_extcore::columnar_stub!();
-
-    fn call_table(
-        _h: u32,
-        _a: WitVec<types::Duckvalue>,
-    ) -> Result<types::Resultset, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("fieldbook: no table fns".into()))
-    }
-
-    fn call_pragma(
-        _h: u32,
-        _a: WitVec<types::Duckvalue>,
-    ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("fieldbook: no pragmas".into()))
-    }
-
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("fieldbook: no casts".into()))
-    }
+datalink_extcore::columnar_bridge! {
+    types = duckdb::extension::types;
+    column_types = duckdb::extension::column_types;
+    callback_dispatch = exports::duckdb::extension::callback_dispatch;
+    target = Extension;
+    scalar = fieldbook_scalar;
 }
 
 export!(Extension);
