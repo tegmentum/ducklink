@@ -618,9 +618,41 @@ The mechanical guarantees hold up in the tests that DO run:
   to this fix).
 * Tighten the `ExtensionManager` mutex to be reentrant (or release-and-
   reacquire), so nested SQL that dispatches BACK through a
-  scalar/table callback doesn't deadlock. Currently unnecessary for
-  fieldbook but required before nested-exec can promise general
-  `services.nested_exec` -> callback fan-out semantics.
+  scalar/table callback doesn't deadlock.
+  **APPROACH VALIDATED, PRODUCTION IMPL DEFERRED.** The
+  release-and-reacquire pattern is proven in isolation by two unit
+  tests (`extension_manager_mutex_reentry_via_release_and_reacquire`,
+  `extension_manager_mutex_would_deadlock_if_lock_held_across_dispatch`):
+  a three-deep nested-dispatch chain succeeds when the manager guard is
+  scoped, but a same-thread `try_lock` returns `WouldBlock` while the
+  outer guard is held (the exact failure mode of the old pattern). The
+  MECHANICAL production change — `HashMap<String, ExtensionInstance>`
+  to `HashMap<String, Arc<Mutex<ExtensionInstance>>>` plus updating
+  every `impl core_callback_dispatch::Host for CoreStoreState` method
+  to resolve under a scoped lock + drop-guard + lock-instance + dispatch
+  — still needs to land. Not blocking any current caller (fieldbook's
+  DDL/DML nested-exec never re-fires a scalar/table into the outer
+  extension), so shipping this pattern doesn't unblock a specific user
+  today; it hardens against future components that would nest per-row.
+
+  Known further edges (SAFE to defer — not on any current caller's
+  path):
+    * If a NESTED callback fires against the SAME extension whose
+      outer dispatch is still on the stack, the *instance* mutex
+      re-lock deadlocks (a separate wall from the manager mutex).
+      This never fires for the fieldbook write path because the
+      nested SQL is pure catalog DDL/DML, not another scalar/table
+      call into the same wasm store. If a future consumer needs
+      per-row nested_exec that ITSELF invokes the caller's scalar
+      recursively, the instance would need its own reentrancy
+      strategy (either a `parking_lot::ReentrantMutex` around the
+      component store — with wasmtime's own borrow rules still
+      barring true `&mut Store` re-entry — or a per-callback
+      call-into-instance queue).
+    * End-to-end wasm-driven repro (`tests/nested_exec_recursion.rs`
+      per §8.5's original request) still requires the fresh
+      `ducklink_core.wasm` from the top bullet; the Rust-only unit
+      tests above prove the mutex-shape fix in the meantime.
 * Consider retiring the (b.1) sibling once every known nested-exec
   caller exercises `HostState::execute` (i.e. the TLS is always set).
   The sibling stays for now because the depth-cap test and some narrow
