@@ -1,0 +1,54 @@
+package duckdb:extension@5.0.0;
+
+use runtime;
+use callback-dispatch;
+use config;
+use logging;
+use catalog;
+use files;
+use guest;
+use nested-exec;
+
+// Baseline world (kept for parity with every other extension in the tree so
+// tooling that assumes `duckdb:extension/duckdb-extension` can still resolve
+// it here).
+world duckdb-extension {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  export guest;
+  export callback-dispatch;
+}
+
+// Cache-capable world. Additively imports:
+//
+//   * `duckdb:extension/nested-exec` — same host import fieldbook uses,
+//     kept so a future v-next resolver can splice DuckDB SQL into its
+//     metadata operations without going through sqlite-lib. In v0 the
+//     scalar bodies do not call this; it is imported here to keep the
+//     world stable across resolver evolutions.
+//   * `sqlite:extension/spi` — the metadata-catalog surface. The
+//     cache-component runs its CREATE TABLE + SELECT / UPSERT against
+//     this import; the host wires it to a sibling sqlite3 connection
+//     opened against `<cache_root>/metadata.db` (matching duckdb-cache's
+//     rusqlite::Connection::open path).
+//
+// COORDINATION NOTE: the sqlite:extension/spi host import is NOT
+// currently satisfied by the ducklink CLI. The component compiles
+// against this world; end-to-end `LOAD cache; SELECT cache(...)`
+// requires the CLI to satisfy the import — either by pre-composing
+// sqlite-lib into the artifact (`wac compose`) or by hosting the SPI
+// natively. See extensions/cache-component/README.md.
+world duckdb-extension-cache {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import nested-exec;
+  import sqlite:extension/spi@0.1.0;
+  export guest;
+  export callback-dispatch;
+}

@@ -1,0 +1,57 @@
+package sqlite:extension@0.1.0;
+
+/// Shared types used by the `sqlite:extension/spi` surface the
+/// `cache-component` imports. Structurally identical to the canonical
+/// `sqlite:extension` types (see sqlite-wasm's
+/// wit/deps/sqlite-extension/types.wit) — only the arms the cache
+/// actually names are kept, so the WIT set stays small and the ducklink
+/// CLI can satisfy the import with either the trimmed shape below or
+/// the full sqlite-lib SPI (structural compatibility is preserved).
+interface types {
+    /// Unified SQL value representation. Used for parameter binding
+    /// and row data on the SPI catalog connection.
+    variant sql-value {
+        null,
+        integer(s64),
+        real(f64),
+        text(string),
+        blob(list<u8>),
+    }
+
+    /// SQLite error carrying both primary and extended result codes.
+    record sqlite-error {
+        code: s32,
+        extended-code: s32,
+        message: string,
+    }
+
+    /// Result of an `execute` call: column names, row data, change
+    /// counts. Matches the shape sqlite-lib returns from `execute`.
+    record query-result {
+        columns: list<string>,
+        rows: list<list<sql-value>>,
+        changes: s64,
+        last-insert-rowid: s64,
+    }
+}
+
+/// The subset of the canonical `sqlite:extension/spi` surface the
+/// cache extension needs. Keeping the interface a proper subset of
+/// the upstream (see sqlite-wasm's wit/deps/sqlite-extension/host-spi.wit)
+/// means a host that already provides the full SPI (e.g. sqlite-lib
+/// pre-composed into the artifact at build time, or the ducklink CLI
+/// after the "host sqlite:extension/spi" follow-up lands) satisfies
+/// this import for free — no name / arity divergence.
+interface spi {
+    use types.{sql-value, query-result, sqlite-error};
+
+    /// Execute a statement; return columns, rows, and change counters.
+    execute: func(sql: string, params: list<sql-value>) -> result<query-result, sqlite-error>;
+
+    /// Execute a statement expected to return one scalar value.
+    execute-scalar: func(sql: string, params: list<sql-value>) -> result<sql-value, sqlite-error>;
+
+    /// Execute one or more statements as a batch; return total rows
+    /// changed.
+    execute-batch: func(sql: string) -> result<s64, sqlite-error>;
+}

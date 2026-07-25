@@ -16272,6 +16272,60 @@
       ]
     },
     {
+      "name": "cache",
+      "version": "0.1.0",
+      "description": "Persistent content-addressed cache for remote resources, exposed to DuckDB as a scalar function. The wasm-side counterpart to the native duckdb-cache extension (https://github.com/tegmentum/duckdb-cache). Two overloads: cache(uri) returns a file:// URI pointing at a locally cached copy of the same bytes; cache(config_json, uri) accepts a JSON config (scope/name/policy/sha256/ttl). v0 backends: file:// pass-through, http/https with full ETag / If-None-Match / 304 revalidation. s3/gs/az/azure are stubbed with the same 'not yet supported' error the native uses. On-disk layout (metadata.db + objects/<hh>/<rest>) is byte-compatible with duckdb-cache. Persistent metadata rides sqlite:extension/spi (imported from sqlite-wasm); the ducklink CLI needs to satisfy that import for end-to-end use (via wac compose against sqlite-lib or a native host wiring). See extensions/cache-component/README.md.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "cache",
+        "http",
+        "content-addressed",
+        "sqlite",
+        "sqlite-extension-spi"
+      ],
+      "categories": [
+        "utility"
+      ],
+      "source": "extensions/cache-component",
+      "status": "scaffolded",
+      "artifact": "artifacts/extensions/cache.wasm",
+      "wit_contract": "78609fcd7678584eb231d50619a6be4430ed39ffa6f645207e43af4f8406176f",
+      "wit_contract_version": "4.0.0",
+      "exports": [
+        "cache"
+      ],
+      "requires": [
+        "scalar"
+      ],
+      "requires_components": [],
+      "crates": [
+        "wit-bindgen",
+        "wit-bindgen-rt",
+        "cache-core",
+        "datalink-extcore",
+        "rustls",
+        "rustls-rustcrypto",
+        "webpki-roots",
+        "sha2"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "cache",
+      "expansion": "com.tegmentum.ducklink.cache",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@5.0.0",
+          "artifact": "artifacts/extensions/cache.wasm"
+        }
+      ]
+    },
+    {
       "name": "fieldbook",
       "version": "0.1.0",
       "description": "Ducklink Fieldbook wasm engine \u2014 the wasm-side counterpart to the native duckdb-fieldbook extension. Registers three read-side SQL macros (fieldbook_list, fieldbook_entries, fieldbook_source) plus four mutate/record scalars (fieldbook_create, fieldbook_add_entry, fieldbook_drop, fieldbook_record_run) over three backing tables (__fieldbook_books/__fieldbook_entries/__fieldbook_runs). A fieldbook stored via this component is readable and executable from the native duckdb-fieldbook extension (same surface). Targets the duckdb-extension-fieldbook world \u2014 additively imports duckdb:extension/nested-exec@5.0.0 on top of the standard duckdb:extension imports \u2014 so end-to-end execution requires the host to satisfy nested-exec (available today under the native ducklink extension via Direction 2; the standalone ducklink host's Direction 1 is deferred). Deliberately omits fieldbook_run \u2014 execution is a CLI-orchestrator concern (see duckdb-fieldbook).",

@@ -1,0 +1,15 @@
+-- Smoke test for the `cache` component.
+--
+-- Only exercises the `file://` pass-through, which does not touch the
+-- sqlite:extension/spi metadata catalog or the HTTP backend. That keeps
+-- the smoke stable across hosts that have not yet wired the SPI import
+-- (see extensions/cache-component/README.md — the wire-up is a
+-- documented follow-up on the ducklink CLI). A future full smoke should
+-- add:
+--   * an http(s):// GET against a mocked origin, verifying the returned
+--     path lives under `<cache_root>/objects/<hh>/<rest>`,
+--   * a repeat call verifying the metadata cache short-circuits the
+--     second fetch,
+--   * a config-JSON round trip through the two-argument overload
+--     (`{"scope":"local","policy":"revalidate"}`).
+SELECT cache('file:///tmp/nonexistent-but-passthrough') AS passthrough;

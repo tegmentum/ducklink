@@ -135,6 +135,7 @@ members = [
     "extensions/atbash-component",
     "extensions/ducklink-scalars-component",
     "extensions/fieldbook-component",
+    "extensions/cache-component",
     "extensions/piglatin-component",
     "extensions/rle-component",
     "extensions/bbcode-component",
