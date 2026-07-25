@@ -8,6 +8,7 @@ use catalog;
 use files;
 use guest;
 use nested-exec;
+use file-lock;
 
 // Baseline world (kept for parity with every other extension in the tree so
 // tooling that assumes `duckdb:extension/duckdb-extension` can still resolve
@@ -48,6 +49,14 @@ world duckdb-extension-cache {
   import catalog;
   import files;
   import nested-exec;
+  // Host-provided advisory file-lock (fs2::FileExt::lock_exclusive on the
+  // ducklink CLI side). Serialises concurrent misses on the SAME source URI
+  // so only one caller performs the download, matching duckdb-cache's
+  // `store.rs::UriLock` behaviour on the native arm. WASI 0.2 has no flock,
+  // so this host import is the mechanism by which the wasm cache regains
+  // parity. Skipping the lock is still correct (rename atomicity handles
+  // publish); the lock just coalesces duplicate work.
+  import file-lock;
   import sqlite:extension/spi@0.1.0;
   export guest;
   export callback-dispatch;

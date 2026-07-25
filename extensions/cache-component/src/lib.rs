@@ -29,20 +29,21 @@
 //! same content-addressed `objects/<hh>/<rest>` shard, same
 //! `<sha256-of-uri>.lock` path (see the locking caveat below).
 //!
-//! # Locking caveat (v0)
+//! # Locking (v0.2)
 //!
 //! The native extension takes an `fs2::FileExt::lock_exclusive` on
-//! `<cache_root>/locks/<sha256>.lock` to serialise concurrent misses
-//! on the same URI. WASI 0.2 does not expose flock cleanly and
-//! `wasi:filesystem/types` has no lock primitive; v0 of this shim
-//! therefore SKIPS the per-URI lock. Because the store is
-//! content-addressed and the publish is rename-atomic, concurrent
-//! misses converge on identical bytes at identical paths — the
-//! catalog's `ON CONFLICT (cache_name, source_uri) DO UPDATE` keeps
-//! the row consistent regardless of write ordering. The lock is
-//! therefore a throughput optimisation the native ports still owns
-//! (avoids duplicate downloads); the wasm arm accepts the duplicate-
-//! download cost in v0 in exchange for shipping.
+//! `<cache_root>/locks/<sha256-of-uri>.lock` to serialise concurrent
+//! misses on the same URI. WASI 0.2 has no flock; the wasm arm
+//! therefore imports the host-provided
+//! `duckdb:extension/file-lock@5.0.0` interface (backed by fs2 on the
+//! host), acquiring the SAME lock file path the native uses. Two
+//! processes racing on the same URI now behave identically to the
+//! native: the loser blocks in `acquire-exclusive`, then observes the
+//! winner's published entry on a re-lookup and returns without ever
+//! going to the network. The lock is ADVISORY: if a host somehow does
+//! not wire the file-lock import, the resolver still produces correct
+//! bytes (content-addressed store + rename-atomic publish), just with
+//! the pre-v0.2 duplicate-download cost.
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -65,7 +66,7 @@ wit_bindgen::generate!({
     generate_all,
 });
 
-use duckdb::extension::{runtime, types};
+use duckdb::extension::{file_lock, runtime, types};
 use exports::duckdb::extension::guest;
 use sqlite::extension::{spi as sqlite_spi, types as sqlite_types};
 
@@ -667,6 +668,36 @@ fn resolver(cfg: &Config, uri: &str) -> Result<String, String> {
     // conservative choice that never returns stale bytes; the native
     // arm's TTL fast path is a follow-up).
     // Everything below crosses the network.
+
+    // v0.2 lock: serialise concurrent misses on the SAME source URI so
+    // only one process pays the download cost. Peers block in
+    // `acquire-exclusive`, then observe the winner's published entry via
+    // the re-lookup below and short-circuit without touching the network.
+    // The lock is ADVISORY -- if the host does not wire file-lock, we
+    // just fall through (correct, but with duplicate-download cost, i.e.
+    // pre-v0.2 behaviour).
+    let lock_path = root
+        .join("locks")
+        .join(format!("{}.lock", cache_core::sha256_hex(uri.as_bytes())));
+    let _uri_lock: Option<file_lock::LockHandle> =
+        match file_lock::acquire_exclusive(&lock_path.to_string_lossy()) {
+            Ok(handle) => {
+                // Re-lookup under lock: a peer may have finished the
+                // download while we blocked. If so, return its entry.
+                if let Some(now_cached) = lookup(&cfg.name, uri)? {
+                    enforce_sha_pin(cfg, &now_cached.content_hash, uri)?;
+                    return Ok(path_to_file_uri(std::path::Path::new(&now_cached.resolved_path)));
+                }
+                Some(handle)
+            }
+            Err(_) => {
+                // Advisory: proceed unlocked. The publish step is
+                // rename-atomic and the catalog upsert is idempotent, so
+                // correctness is preserved; we just may duplicate the
+                // fetch cost with a racing peer.
+                None
+            }
+        };
 
     let (if_none_match, if_modified_since) = match existing.as_ref() {
         Some(e) => (e.etag.clone(), e.last_modified.clone()),

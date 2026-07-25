@@ -35,6 +35,12 @@ datalink-dynlink = { git = "https://github.com/tegmentum/datalink.git", rev = "8
 # hardcoded variant-count assert. `strum` is stable-Rust (no nightly required)
 # and pulls in `strum_macros` transitively via its `derive` feature.
 strum = { version = "0.26", features = ["derive"] }
+# fs2 provides the cross-platform `FileExt::lock_exclusive` / `try_lock_exclusive`
+# used by the `duckdb:extension/file-lock` host import (the wasm-cache flock
+# path). Matches the exact same crate the native duckdb-cache extension uses in
+# `duckdb-cache/src/store.rs::UriLock`, so cache-component's lock semantics on
+# wasm are byte-identical to the native's on macOS/Linux/Windows.
+fs2 = "0.4"
 
 [build-dependencies]
 # Same witcanon scheme, used in build.rs to hash the canonical WIT into a const.

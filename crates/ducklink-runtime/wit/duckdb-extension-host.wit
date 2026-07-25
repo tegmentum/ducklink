@@ -15,6 +15,7 @@ use duckdb:extension/files-reg@5.0.0;
 use duckdb:extension/file-dispatch@5.0.0;
 use duckdb:extension/query@5.0.0;
 use duckdb:extension/nested-exec@5.0.0;
+use duckdb:extension/file-lock@5.0.0;
 use duckdb:extension/secret@5.0.0;
 use duckdb:extension/secret-dispatch@5.0.0;
 use duckdb:extension/settings@5.0.0;
@@ -81,6 +82,12 @@ world duckdb-extension {
   // The host always PROVIDES it; only exec-capable components (fieldbook) import
   // it. See wit/duckdb-extension/nested-exec.wit for the trust + nesting model.
   import duckdb:extension/nested-exec@5.0.0;
+  // Advisory file-lock primitive. WASI 0.2 has no flock, so cache-shaped
+  // components (cache-component, etc.) that need to serialize concurrent
+  // misses on the same source URI go through this host import. The host
+  // always PROVIDES it; only lock-shaped components import it. See
+  // wit/duckdb-extension/file-lock.wit for the trust model.
+  import duckdb:extension/file-lock@5.0.0;
   // 2.1.0 additive registration imports: secret types/providers, extension
   // settings/options, table macros, and modified/enum logical types. The host
   // always PROVIDES them; components import only the subset they use.

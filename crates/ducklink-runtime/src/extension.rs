@@ -26,7 +26,8 @@ use crate::duckdb_extension_bindings::duckdb::extension::{
     files as extension_files, collation as extension_collation, files_reg as extension_files_reg,
     index as extension_index, lifecycle as extension_lifecycle, log_storage as extension_log_storage,
     logging as extension_logging,
-    macro_ext as extension_macro_ext, nested_exec as extension_nested_exec,
+    file_lock as extension_file_lock, macro_ext as extension_macro_ext,
+    nested_exec as extension_nested_exec,
     optimizer as extension_optimizer, parser as extension_parser,
     query as extension_query, runtime as extension_runtime,
     runtime_ext as extension_runtime_ext, secret as extension_secret,
@@ -709,6 +710,17 @@ pub struct ExtensionStoreState {
     /// and pays nothing. The bridge resolves/invokes the shared, resident
     /// provider (e.g. the one warmed ~38 MB pylon) on the guest's behalf.
     dynlink: Option<crate::compose_dynlink::DynLinkBridge>,
+    /// Live `duckdb:extension/file-lock.lock-handle` resources held by the
+    /// guest. Keyed by the `rep` id embedded in the wit-bindgen `Resource`
+    /// handle (allocated via [`alloc_lock_handle`]); each value owns the OS
+    /// file whose Drop releases the underlying `fs2::FileExt::lock_exclusive`
+    /// flock. Empty for components that don't import file-lock.
+    lock_handles: HashMap<u32, LockHandleState>,
+    /// Monotonic counter for allocated file-lock handle ids. Never reused
+    /// within a process (matches CallbackRegistry's handle policy so guests
+    /// that stash a handle across an unusual code path don't accidentally
+    /// alias a released one).
+    next_lock_handle: u32,
 }
 
 impl ExtensionStoreState {
@@ -770,7 +782,26 @@ impl ExtensionStoreState {
             callback_registry,
             extension_name,
             dynlink,
+            lock_handles: HashMap::new(),
+            next_lock_handle: 1,
         }
+    }
+
+    /// Allocate a new `file-lock.lock-handle` id and stash the owning
+    /// [`LockHandleState`] under it. Handles are monotonic per store
+    /// (never reused) so a component that stashes an id after `release`
+    /// cannot accidentally alias a freshly-acquired lock.
+    fn alloc_lock_handle(&mut self, state: LockHandleState) -> u32 {
+        let id = self.next_lock_handle;
+        self.next_lock_handle = self.next_lock_handle.wrapping_add(1).max(1);
+        self.lock_handles.insert(id, state);
+        id
+    }
+
+    /// Drop the state for `id` (releasing the flock via
+    /// `LockHandleState::Drop`). No-op if the id was already released.
+    fn free_lock_handle(&mut self, id: u32) {
+        self.lock_handles.remove(&id);
     }
 
     /// Accessor for the dynlink bridge, used by `impl_compose_dynlink_host!`.
@@ -2227,6 +2258,153 @@ impl extension_nested_exec::Host for ExtensionStoreState {
         let _depth = NestedExecDepthGuard::enter()?;
         let result = self.services.nested_exec(&sql)?;
         Ok(neutral_nestedresult_to_wit(result))
+    }
+}
+
+// The `file-lock` interface: a host-provided advisory-lock primitive. WASI 0.2
+// exposes no flock and cross-process serialization matters for caches / long
+// downloads (the wasm-side counterpart to duckdb-cache's
+// `store.rs::UriLock`). Implemented natively via fs2::FileExt::lock_exclusive,
+// which resolves to fcntl(F_SETLKW) on Unix and LockFileEx on Windows.
+//
+// The acquired lock is stored as a [`LockHandleState`] inside the store's
+// ResourceTable; the returned `Resource<LockHandle>` is the wit-bindgen handle
+// that the guest holds. Dropping the wasm resource routes back through
+// `HostLockHandle::drop` -> `ResourceTable::delete` -> `LockHandleState::drop`,
+// which drops the `File` and releases the lock. The optional `release`
+// method exists so a component can drop the lock early (after publishing,
+// before slower cleanup) without waiting for the guest resource to fall
+// out of scope.
+//
+// Path resolution: the guest passes an OS path string that resolves through
+// its own WASI preopens (the ducklink CLI is expected to preopen the cache
+// root under a name identical to its host path so guest + host see the same
+// string). The host does no additional preopen validation -- see the WIT
+// trust-model comment.
+impl extension_file_lock::Host for ExtensionStoreState {
+    fn acquire_exclusive(
+        &mut self,
+        path: String,
+    ) -> Result<wasmtime::component::Resource<extension_file_lock::LockHandle>, String> {
+        let state = LockHandleState::acquire_exclusive(&path)?;
+        let id = self.alloc_lock_handle(state);
+        Ok(wasmtime::component::Resource::new_own(id))
+    }
+
+    fn try_acquire_exclusive(
+        &mut self,
+        path: String,
+    ) -> Result<Option<wasmtime::component::Resource<extension_file_lock::LockHandle>>, String>
+    {
+        match LockHandleState::try_acquire_exclusive(&path)? {
+            Some(state) => {
+                let id = self.alloc_lock_handle(state);
+                Ok(Some(wasmtime::component::Resource::new_own(id)))
+            }
+            None => Ok(None),
+        }
+    }
+}
+
+impl extension_file_lock::HostLockHandle for ExtensionStoreState {
+    fn release(
+        &mut self,
+        rep: wasmtime::component::Resource<extension_file_lock::LockHandle>,
+    ) {
+        // Drop the state; its Drop impl releases the flock and closes the
+        // file. If the guest already released, the entry is gone -- that is
+        // fine, the invariant "lock is released" is upheld.
+        self.free_lock_handle(rep.rep());
+    }
+
+    fn drop(
+        &mut self,
+        rep: wasmtime::component::Resource<extension_file_lock::LockHandle>,
+    ) -> wasmtime::Result<()> {
+        // Guest let the resource fall out of scope. If the guest already
+        // called `release`, the entry is already gone -- swallow.
+        self.free_lock_handle(rep.rep());
+        Ok(())
+    }
+}
+
+/// Native state backing a wasm `duckdb:extension/file-lock.lock-handle`
+/// resource: an open `File` under an advisory `flock`. Dropping the value
+/// closes the file and releases the lock; that is the invariant the WIT
+/// resource trust model relies on.
+struct LockHandleState {
+    /// The lock-file handle. Held to keep the OS lock alive; never read from
+    /// or written to.
+    _file: std::fs::File,
+    /// Diagnostic path (used only for future logging / debugging).
+    _path: std::path::PathBuf,
+}
+
+impl LockHandleState {
+    /// Open `path` (creating it if missing, never truncating -- matching
+    /// duckdb-cache's `UriLock::acquire`) and take an exclusive advisory
+    /// lock. Blocks until acquired.
+    fn acquire_exclusive(path: &str) -> Result<Self, String> {
+        use fs2::FileExt;
+        let path_buf = std::path::PathBuf::from(path);
+        if let Some(parent) = path_buf.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    format!("file-lock: creating parent {}: {e}", parent.display())
+                })?;
+            }
+        }
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path_buf)
+            .map_err(|e| format!("file-lock: opening {}: {e}", path_buf.display()))?;
+        file.lock_exclusive()
+            .map_err(|e| format!("file-lock: flock {}: {e}", path_buf.display()))?;
+        Ok(Self {
+            _file: file,
+            _path: path_buf,
+        })
+    }
+
+    /// Non-blocking variant. Returns `Ok(None)` when the lock is held by
+    /// another process, `Ok(Some(_))` on success, `Err` on IO failure.
+    fn try_acquire_exclusive(path: &str) -> Result<Option<Self>, String> {
+        use fs2::FileExt;
+        let path_buf = std::path::PathBuf::from(path);
+        if let Some(parent) = path_buf.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    format!("file-lock: creating parent {}: {e}", parent.display())
+                })?;
+            }
+        }
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path_buf)
+            .map_err(|e| format!("file-lock: opening {}: {e}", path_buf.display()))?;
+        match file.try_lock_exclusive() {
+            Ok(()) => Ok(Some(Self {
+                _file: file,
+                _path: path_buf,
+            })),
+            Err(err) => {
+                // fs2 signals "would-block" with the OS-specific error kind
+                // that maps to WouldBlock (EWOULDBLOCK/EAGAIN on Unix,
+                // ERROR_LOCK_VIOLATION on Windows). Anything else is a real
+                // IO failure.
+                if err.kind() == std::io::ErrorKind::WouldBlock {
+                    Ok(None)
+                } else {
+                    Err(format!("file-lock: try_flock {}: {err}", path_buf.display()))
+                }
+            }
+        }
     }
 }
 
@@ -5237,6 +5415,152 @@ mod tests {
         }
         NESTED_EXEC_DEPTH.with(|d| assert_eq!(d.get(), 0));
     }
+
+    // ------------------------------------------------------------------
+    // file-lock tests
+    // ------------------------------------------------------------------
+
+    /// Produce a unique per-test-invocation lock path in the OS temp dir so
+    /// parallel `cargo test` invocations never fight over the same file.
+    fn unique_lock_path(tag: &str) -> std::path::PathBuf {
+        let pid = std::process::id();
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let mut p = std::env::temp_dir();
+        p.push(format!("ducklink-runtime-file-lock-{tag}-{pid}-{stamp}.lock"));
+        p
+    }
+
+    #[test]
+    fn file_lock_try_acquire_returns_none_when_held() {
+        let path = unique_lock_path("try");
+        let held = LockHandleState::acquire_exclusive(path.to_str().unwrap())
+            .expect("first acquire");
+        let contested = LockHandleState::try_acquire_exclusive(path.to_str().unwrap())
+            .expect("try-acquire IO ok");
+        assert!(
+            contested.is_none(),
+            "try-acquire on a held lock must return None (would-block)"
+        );
+        drop(held);
+        // After release, try-acquire succeeds again.
+        let after = LockHandleState::try_acquire_exclusive(path.to_str().unwrap())
+            .expect("try-acquire IO ok after release")
+            .expect("try-acquire returns Some once free");
+        drop(after);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn file_lock_race_between_threads_serializes() {
+        // Four threads race to acquire-exclusive on the SAME lock file. Each
+        // acquires, bumps a shared counter to prove it holds alone, sleeps
+        // briefly, decrements, then releases. If flock is honored, the
+        // counter is never > 1 at any observation point; if it isn't, at
+        // least one thread will see counter >= 2 during its critical section.
+        // We also verify every thread eventually succeeded and total
+        // successful acquisitions == thread count.
+        use std::sync::atomic::{AtomicI32, Ordering};
+        use std::sync::Arc;
+        use std::thread;
+
+        let path = unique_lock_path("race");
+        let path_str = path.to_string_lossy().into_owned();
+        let held_count = Arc::new(AtomicI32::new(0));
+        let max_seen = Arc::new(AtomicI32::new(0));
+        let successes = Arc::new(AtomicI32::new(0));
+
+        let handles: Vec<_> = (0..4)
+            .map(|_| {
+                let path_str = path_str.clone();
+                let held_count = held_count.clone();
+                let max_seen = max_seen.clone();
+                let successes = successes.clone();
+                thread::spawn(move || {
+                    // Acquiring here blocks until the previous holder drops.
+                    let lock = LockHandleState::acquire_exclusive(&path_str)
+                        .expect("acquire ok");
+                    let now = held_count.fetch_add(1, Ordering::AcqRel) + 1;
+                    // Track the max ever observed inside a held section.
+                    let mut cur_max = max_seen.load(Ordering::Acquire);
+                    while now > cur_max {
+                        match max_seen.compare_exchange(
+                            cur_max,
+                            now,
+                            Ordering::AcqRel,
+                            Ordering::Acquire,
+                        ) {
+                            Ok(_) => break,
+                            Err(observed) => cur_max = observed,
+                        }
+                    }
+                    // Yield the CPU to give any racing thread a chance to
+                    // see us inside the section (this AMPLIFIES a broken
+                    // impl; the sleep is not correctness-critical).
+                    thread::sleep(std::time::Duration::from_millis(20));
+                    held_count.fetch_sub(1, Ordering::AcqRel);
+                    successes.fetch_add(1, Ordering::AcqRel);
+                    drop(lock);
+                })
+            })
+            .collect();
+
+        for h in handles {
+            h.join().expect("thread join ok");
+        }
+
+        assert_eq!(
+            max_seen.load(Ordering::Acquire),
+            1,
+            "flock is broken: multiple threads observed inside the section"
+        );
+        assert_eq!(
+            successes.load(Ordering::Acquire),
+            4,
+            "every thread must eventually acquire"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn file_lock_host_acquire_and_release_round_trip() {
+        // Drive the wit `Host` + `HostLockHandle` impls end-to-end, mirroring
+        // what a guest would do: acquire -> hold -> release -> re-acquire.
+        // Uses an ExtensionStoreState (constructed via `scripted_state`) so
+        // the ResourceTable / lock_handles map is real.
+        let path = unique_lock_path("host");
+        let path_str = path.to_string_lossy().into_owned();
+        let mut state = scripted_state();
+
+        let handle = extension_file_lock::Host::acquire_exclusive(&mut state, path_str.clone())
+            .expect("host acquire ok");
+        assert_eq!(state.lock_handles.len(), 1);
+
+        // While held, native try-acquire from the same process (different
+        // OS-level open) sees WouldBlock -- proves the underlying flock is
+        // active.
+        let contested = LockHandleState::try_acquire_exclusive(&path_str)
+            .expect("try IO ok");
+        assert!(
+            contested.is_none(),
+            "flock must exclude a concurrent native try-acquire"
+        );
+
+        // Explicit release drops the state -> flock released.
+        extension_file_lock::HostLockHandle::release(&mut state, handle);
+        assert_eq!(state.lock_handles.len(), 0);
+
+        // Re-acquire succeeds now that the lock is free.
+        let handle2 = extension_file_lock::Host::acquire_exclusive(&mut state, path_str)
+            .expect("host re-acquire ok");
+        // Let drop clean up (also exercise the HostLockHandle::drop path).
+        extension_file_lock::HostLockHandle::drop(&mut state, handle2)
+            .expect("host drop ok");
+        assert_eq!(state.lock_handles.len(), 0);
+        let _ = std::fs::remove_file(&path);
+    }
 }
 
 /// Process-global cache for the base [`Linker`] template — the one populated
@@ -5292,6 +5616,14 @@ pub fn add_extension_interfaces_to_linker(
     // exec-capable components (fieldbook) import it. Uses a sibling connection
     // and a per-thread depth cap; see `NestedExecDepthGuard`.
     extension_nested_exec::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
+        linker,
+        |s| s,
+    )?;
+    // Advisory file-lock primitive. The host always PROVIDES it; only
+    // cache-shaped components import it. Backed by fs2::FileExt::lock_exclusive
+    // (fcntl(F_SETLKW) on Unix, LockFileEx on Windows) -- the same lock
+    // mechanism the native duckdb-cache uses in `store.rs::UriLock`.
+    extension_file_lock::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
         linker,
         |s| s,
     )?;

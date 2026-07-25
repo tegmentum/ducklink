@@ -1,0 +1,47 @@
+package duckdb:extension@5.0.0;
+
+// Host-provided advisory file-lock primitive. Exists because WASI 0.2 has no
+// flock and cross-process serialization matters for caches / long downloads.
+// The host implements this via native flock(2) (fs2::FileExt::lock_exclusive)
+// or an OS equivalent; components use it to prevent duplicate work on
+// simultaneous misses -- the missing counterpart to the native
+// `duckdb-cache/src/store.rs::UriLock` on the wasm arm.
+//
+// TRUST MODEL: advisory only. A component that skips the lock still writes
+// correct data (rename atomicity handles final publish); the lock just
+// coalesces concurrent misses so only one caller does the download. `path`
+// is passed to the host as an OS path string; the guest already has
+// filesystem access to the same location through its WASI preopens (the
+// preopen mapping is chosen by the ducklink CLI so guest + host see the
+// file at identical strings, e.g. an absolute host path preopened under
+// the same name), so the guest is only asking the host to lock a file it
+// itself can already open. The host performs no additional
+// permission/preopen validation -- reject at the caller (the ducklink CLI's
+// preopen policy) if that ever matters.
+//
+// Kept as a SEPARATE interface (additive, like `nested-exec` / `query` /
+// `files-reg`) so existing components' frozen WIT copies stay
+// structurally unchanged. Only cache-shaped components import it.
+interface file-lock {
+  // An acquired lock. Dropping the resource (either explicitly via
+  // `release` or by letting the guest resource fall out of scope) releases
+  // the underlying flock and closes the file handle. Held for the duration
+  // of the critical section (typically: cache-miss download -> publish).
+  resource lock-handle {
+    // Release the lock. Automatically called on drop for the wasm
+    // Resource, but exposed explicitly so callers can release early (e.g.
+    // after publishing, before doing any slower cleanup).
+    release: func();
+  }
+
+  // Acquire an exclusive advisory lock on `path`. Blocks until acquired
+  // (or errors on IO failure). The lock file is opened with
+  // O_RDWR | O_CREAT | O_NOTRUNC so the same file is reused across runs
+  // (matching the native cache's behavior).
+  acquire-exclusive: func(path: string) -> result<lock-handle, string>;
+
+  // Try-acquire variant. Returns Ok(Some(handle)) on success, Ok(None)
+  // when another holder currently owns it (would-block), Err on IO
+  // failure.
+  try-acquire-exclusive: func(path: string) -> result<option<lock-handle>, string>;
+}
