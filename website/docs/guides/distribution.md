@@ -38,7 +38,7 @@ entry carries identity and conformance metadata:
       "description": "...",
       "exports": ["base32_encode", "..."],
       "version": "0.1.0",
-      "wit_contract": "b24dc901568e38e5b05fc0dc535ebaec3c93a9a44c772bb105686032e45e16b3",
+      "wit_contract": "78609fcd7678584eb231d50619a6be4430ed39ffa6f645207e43af4f8406176f",
       "wit_contract_version": "4.0.0",
       "content_digest": "...",
       "providers": [
