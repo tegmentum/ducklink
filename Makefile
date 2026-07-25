@@ -6,7 +6,7 @@ BROWSER_TARGET?=wasm32-unknown-unknown
 # ducklink_core.wasm at the usual path.
 DUCKDB_WASM_DIR?=../duckdb-wasm
 
-.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk smoke-dotcmd sample-extension smoke-extension pintest-probes echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds
+.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk smoke-dotcmd sample-extension smoke-extension pintest-probes echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds cache cache-clean sqlite-lib sqlite-loader-stub
 
 all: core standalone-cli loader-stub dotcmds
 
@@ -77,6 +77,58 @@ sample-extension: all
 	cargo component build -p sample-extension-component --target $(WASI_TARGET) --release
 	mkdir -p artifacts/extensions
 	cp target/$(WASI_TARGET)/release/sample_extension_component.wasm artifacts/extensions/sample_extension.wasm
+
+# --- cache-component: wac-composed with sqlite-lib for the sqlite:extension/spi
+# import + a tiny declining stub for sqlite:wasm/extension-loader.
+#
+# The cache-component imports sqlite:extension/spi@0.1.0 (metadata catalog on
+# top of SQLite). We satisfy that at compose time rather than in the host by
+# plugging sqlite-lib.wasm (from the sibling sqlite-wasm repo) into the
+# component; sqlite-lib itself needs sqlite:wasm/extension-loader satisfied,
+# which the tiny sqlite-loader-stub crate provides with declining impls (never
+# reached — cache only calls spi.execute*). The staged
+# artifacts/extensions/cache.wasm is fully self-contained wrt sqlite:*.
+#
+# Requires (build-only): the sibling sqlite-wasm repo checked out at
+# $(SQLITE_WASM_DIR) with `scripts/setup-cargo-config.sh` already run
+# (writes .cargo/config.toml from the template + wasi-sdk path).
+SQLITE_WASM_DIR ?= ../sqlite-wasm
+SQLITE_LIB_MODULE := $(SQLITE_WASM_DIR)/target/wasm32-wasip2/release/sqlite_lib.wasm
+SQLITE_LIB_COMPONENT := $(SQLITE_WASM_DIR)/target/wasm32-wasip2/release/sqlite_lib.component.wasm
+
+# Build sqlite-lib (SPI provider) and componentize it. Emits both the raw
+# wasip2 core module and a .component.wasm we can plug with wac.
+sqlite-lib:
+	@ : "$${SQLITE_WASM_DIR:=../sqlite-wasm}"
+	@ test -d "$(SQLITE_WASM_DIR)" \
+	  || { echo "error: SQLITE_WASM_DIR=$(SQLITE_WASM_DIR) not found. Checkout tegmentum/sqlite-wasm alongside ducklink." >&2; exit 1; }
+	cd $(SQLITE_WASM_DIR) && cargo build -p sqlite-lib --target wasm32-wasip2 --release
+	wasm-tools component new $(SQLITE_LIB_MODULE) -o $(SQLITE_LIB_COMPONENT)
+
+# The declining sqlite:wasm/extension-loader stub. sqlite-lib imports the
+# loader through its `library` interface; this stub satisfies that import
+# so the composed cache.wasm has no unresolved sqlite:* dependency.
+sqlite-loader-stub:
+	cargo component build -p sqlite-loader-stub --target $(WASI_TARGET) --release
+
+# Full cache pipeline: build raw component + sqlite-lib + stub, then two-stage
+# wac plug (stub -> sqlite-lib, then sqlite-lib-composite -> cache) and stage
+# the fully self-contained artifact.
+cache: sqlite-lib sqlite-loader-stub
+	cargo component build -p cache-component --target $(WASI_TARGET) --release
+	mkdir -p artifacts/extensions target/compose
+	wac plug $(SQLITE_LIB_COMPONENT) \
+	  --plug target/wasm32-wasip1/release/sqlite_loader_stub.wasm \
+	  -o target/compose/sqlite_lib_self_contained.wasm
+	wac plug target/wasm32-wasip1/release/cache.wasm \
+	  --plug target/compose/sqlite_lib_self_contained.wasm \
+	  -o artifacts/extensions/cache.wasm
+	@echo "cache: composed artifact -> artifacts/extensions/cache.wasm"
+
+cache-clean:
+	rm -f artifacts/extensions/cache.wasm \
+	       target/compose/sqlite_lib_self_contained.wasm \
+	       $(SQLITE_LIB_COMPONENT)
 
 smoke-extension:
 	cargo test -p ducklink-host load_sample_extension_component

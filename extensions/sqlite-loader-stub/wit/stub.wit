@@ -1,0 +1,11 @@
+package sqlite:wasm-stub@0.1.0;
+
+/// No-op provider for `sqlite:wasm/extension-loader@0.1.0`. Composed
+/// (via `wac plug`) into cache.wasm after sqlite-lib.wasm so that
+/// sqlite-lib's own extension-loader import is satisfied at
+/// instantiation time. Cache-component never calls `load-extension` on
+/// the SPI surface (it only uses `spi.execute*`), so the functions
+/// return `loader-error` and are never reached in practice.
+world sqlite-loader-stub {
+    export sqlite:wasm/extension-loader@0.1.0;
+}

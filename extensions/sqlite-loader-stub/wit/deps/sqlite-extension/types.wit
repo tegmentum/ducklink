@@ -1,0 +1,147 @@
+package sqlite:extension@0.1.0;
+
+/// Trimmed types shared with the sqlite:wasm/extension-loader interface
+/// stub. Structurally a subset of the canonical `sqlite:extension` types
+/// (see sqlite-wasm's wit/deps/sqlite-extension/types.wit) — only the
+/// items reachable from the `extension-loader` surface are kept.
+///
+/// Kept structural (same names / same shapes) so a plug component
+/// (this stub) can satisfy sqlite-lib.wasm's `sqlite:wasm/extension-loader`
+/// import when both are wac-composed into a socket that reads its
+/// spi from sqlite-lib.
+interface types {
+    flags function-flags {
+        deterministic,
+        direct-only,
+        innocuous,
+    }
+}
+
+/// Types-only. Sits between `types` and `metadata` because
+/// `policy.load-options` names `http.method` in its allowed-methods
+/// field.
+interface http {
+    variant method {
+        get,
+        head,
+        post,
+        put,
+        delete,
+        connect,
+        options,
+        trace,
+        patch,
+        other(string),
+    }
+}
+
+interface policy {
+    use http.{method};
+
+    record http-policy {
+        allowed-hosts: list<string>,
+        allowed-methods: option<list<method>>,
+        max-body-bytes: option<u64>,
+        timeout-ms: option<u32>,
+    }
+
+    record dns-policy {
+        allowed-domains: list<string>,
+        timeout-ms: option<u32>,
+    }
+
+    record fs-policy {
+        readable-prefixes: list<string>,
+        writable-prefixes: list<string>,
+        max-write-bytes-per-call: option<u64>,
+    }
+
+    variant capability {
+        spi,
+        prepared,
+        transaction,
+        schema,
+        state,
+        cache,
+        random,
+        text,
+        hashing,
+        encoding,
+        http,
+        dns,
+    }
+
+    record load-options {
+        fuel-per-call: option<u64>,
+        memory-limit-bytes: option<u64>,
+        epoch-deadline-ms: option<u64>,
+        http-policy: option<http-policy>,
+        dns-policy: option<dns-policy>,
+        fs-policy: option<fs-policy>,
+        grant: list<capability>,
+    }
+}
+
+interface metadata {
+    use types.{function-flags};
+    use policy.{capability};
+
+    record scalar-function-spec {
+        id: u64,
+        name: string,
+        num-args: s32,
+        func-flags: function-flags,
+    }
+
+    record aggregate-function-spec {
+        id: u64,
+        name: string,
+        num-args: s32,
+        func-flags: function-flags,
+        is-window: bool,
+    }
+
+    record collation-spec {
+        id: u64,
+        name: string,
+    }
+
+    record vtab-spec {
+        id: u64,
+        name: string,
+        eponymous: bool,
+        mutable: bool,
+        batched: bool,
+    }
+
+    record dot-command-example {
+        description: string,
+        command: string,
+    }
+
+    record dot-command-spec {
+        id: u64,
+        name: string,
+        version: string,
+        summary: string,
+        usage: string,
+        help: string,
+        examples: list<dot-command-example>,
+        requires-write: bool,
+        no-args: bool,
+    }
+
+    record manifest {
+        name: string,
+        version: string,
+        scalar-functions: list<scalar-function-spec>,
+        aggregate-functions: list<aggregate-function-spec>,
+        collations: list<collation-spec>,
+        vtabs: list<vtab-spec>,
+        dot-commands: list<dot-command-spec>,
+        has-authorizer: bool,
+        has-update-hook: bool,
+        has-commit-hook: bool,
+        declared-capabilities: list<capability>,
+    }
+}

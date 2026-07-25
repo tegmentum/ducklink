@@ -1,0 +1,32 @@
+[package]
+name = "sqlite-loader-stub"
+version = "0.1.0"
+edition = "2021"
+description = """
+Tiny wasm component that exports `sqlite:wasm/extension-loader@0.1.0`
+with declining implementations. Composed (via `wac plug`) into
+cache.wasm AFTER `sqlite-lib.wasm` so that sqlite-lib's own
+extension-loader import is satisfied at instantiation time. Cache
+never calls `load-extension` (it uses only `spi.execute*`), so the
+error path is unreachable in practice.
+"""
+publish = false
+
+[lib]
+name = "sqlite_loader_stub"
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = { version = "0.41", features = ["bitflags"] }
+
+[package.metadata.component]
+package = "sqlite:wasm-stub"
+
+[package.metadata.component.target]
+path = "wit"
+world = "sqlite:wasm-stub/sqlite-loader-stub"
+
+[package.metadata.component.target.dependencies]
+"sqlite:extension" = { path = "wit/deps/sqlite-extension" }
+"sqlite:wasm" = { path = "wit/deps/sqlite-wasm" }

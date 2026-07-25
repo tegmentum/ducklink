@@ -1,0 +1,25 @@
+package sqlite:wasm@0.1.0;
+
+/// Trimmed twin of sqlite-wasm's wit/extension-loader.wit. The stub
+/// component in this crate exports this interface with declining
+/// implementations so a wac-composed cache.wasm (which links against
+/// sqlite-lib as its SPI provider) can satisfy sqlite-lib's own
+/// `sqlite:wasm/extension-loader` import at instantiation time.
+///
+/// Cache never actually invokes `load-extension`; the loader-error
+/// arm is a placeholder for any future consumer.
+interface extension-loader {
+    use sqlite:extension/policy@0.1.0.{load-options};
+    use sqlite:extension/metadata@0.1.0.{manifest};
+
+    record loader-error {
+        code: s32,
+        message: string,
+    }
+
+    load-extension: func(path: string, options: load-options) -> result<manifest, loader-error>;
+
+    unload-extension: func(name: string) -> result<_, loader-error>;
+
+    load-extension-from-uri: func(uri: string, options: load-options) -> result<manifest, loader-error>;
+}
