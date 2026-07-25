@@ -1,9 +1,12 @@
 # `duckdb:extension/nested-exec` — Direction 1 (standalone `ducklink` host) design memo
 
-Status: **DESIGN — awaiting user decision**. Direction 2 (native DuckDB extension) is
-already implemented via a fresh `duckdb_connect` on the shared database (see
-`native-extension/ducklink` submodule commit `0ef7edf`). Direction 1 is currently a
-stub returning an informative error at `crates/ducklink-host/src/lib.rs:5823`.
+Status: **(b.1) SHIPPED**. Direction 1 now services `nested-exec` from a lazily
+materialized second `CoreExecution` on the same DuckDB file (§5.(b.1) below).
+Extension-touching SQL fails with a sharp "use Direction 2" redirect, as gated
+by `is_extension_related_error` in `crates/ducklink-host/src/lib.rs`. Direction
+2 (native DuckDB extension) remains the answer for entries that reference
+loaded extensions (see `native-extension/ducklink` submodule commit `0ef7edf`).
+Options (a), (b.2), and (c) below stay open for a follow-up minor.
 
 ## 1. Phase-1 investigation — how the wasm-core host is wired today
 

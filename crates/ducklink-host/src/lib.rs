@@ -1196,6 +1196,146 @@ struct CoreExecution {
     bindings: duckdb_core_bindings::Libduckdb,
 }
 
+/// The `nested-exec` Direction-1 §5.(b.1) sibling-core state, shared between
+/// [`HostState`] (which records the primary's opened DB path) and every
+/// [`CoreServices`] (which lazily instantiates a second [`CoreExecution`] over
+/// the same DB on first `nested_exec`).
+///
+/// The sibling runs in its own [`wasmtime::Store`] with a fresh
+/// [`ExtensionManager`] and an idle mutex, so a `nested-exec` from inside an
+/// outer statement's callback does NOT re-enter the primary core's store or
+/// take the primary's contended mutex. See `nested-exec-direction-1-plan.md`
+/// §5.(b.1).
+///
+/// **Known limitation.** The sibling has NONE of the primary core's extensions
+/// loaded. `nested-exec` SQL that references an extension-provided function
+/// (scalar / table / aggregate) fails; [`CoreServices::nested_exec`] detects
+/// that failure shape and prepends [`NESTED_EXEC_DIRECTION2_REDIRECT`] so the
+/// caller knows to reach for the native `ducklink` DuckDB extension (Direction
+/// 2) instead.
+struct SiblingState {
+    engine: Engine,
+    core_component_path: PathBuf,
+    /// Preopens to grant the sibling's WASI ctx. The primary resolves user
+    /// paths (`open "/data/foo.duckdb"`) against a preopen set, so the sibling
+    /// must have the SAME set to reach the same file. Threaded here from
+    /// `HostState`'s construction — one snapshot for the whole process.
+    preopens: Vec<(PathBuf, String)>,
+    /// The DB path the primary core opened.
+    ///
+    /// * Outer `None` — no `open` yet (nested-exec has nothing to sibling into).
+    /// * `Some(None)` — in-memory database. Sibling cannot share it, so
+    ///   `nested-exec` returns a clear error.
+    /// * `Some(Some(path))` — file-backed database; sibling opens the same path.
+    primary_db_path: Mutex<Option<Option<String>>>,
+    /// Lazily-materialized second core executor + connection into it, cached
+    /// for the process lifetime after first successful `nested_exec`.
+    slot: Mutex<Option<SiblingSlot>>,
+}
+
+impl SiblingState {
+    fn new(
+        engine: Engine,
+        core_component_path: PathBuf,
+        preopens: Vec<(PathBuf, String)>,
+    ) -> Self {
+        Self {
+            engine,
+            core_component_path,
+            preopens,
+            primary_db_path: Mutex::new(None),
+            slot: Mutex::new(None),
+        }
+    }
+
+    /// Record what the primary just opened. Called from `HostState::open` /
+    /// `open_with_config`. `path == None` means the primary opened `:memory:`.
+    fn record_primary_open(&self, path: Option<String>) {
+        *self
+            .primary_db_path
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(path);
+    }
+}
+
+/// The lazy-init cache: a second [`CoreExecution`] on the same underlying
+/// DuckDB file + a connection resource opened inside its store. Both are
+/// created together on the first `nested_exec` call and reused for every
+/// subsequent call for the process lifetime.
+struct SiblingSlot {
+    core: Arc<Mutex<CoreExecution>>,
+    connection: ResourceAny,
+}
+
+/// Normalize whatever the primary passed to `open` into the form the sibling
+/// will use to open the same DB. `None` (the WIT default) OR the literal
+/// `":memory:"` collapse to `None`, which [`SiblingState`] treats as
+/// "in-memory, cannot share". Any other string is passed through verbatim as
+/// the file path.
+fn sanitize_sibling_open_path(primary: Option<&str>) -> Option<String> {
+    match primary {
+        None => None,
+        Some(p) if p == ":memory:" || p.trim().is_empty() => None,
+        Some(p) => Some(p.to_string()),
+    }
+}
+
+/// Prefix prepended to a sibling `call_execute` error when the failure looks
+/// like it references a function only a host-loaded extension would provide
+/// (e.g. `Catalog Error: Scalar Function with name X does not exist!`). Points
+/// the caller at the Direction-2 native ducklink extension, which shares the
+/// primary connection and therefore sees every loaded extension. See
+/// [`is_extension_related_error`] for the heuristic that gates it.
+const NESTED_EXEC_DIRECTION2_REDIRECT: &str =
+    "nested-exec (Direction 1): the sibling core does not have host extensions loaded.\n\
+If this entry references a function provided by a loaded extension, run it under\n\
+the native ducklink DuckDB extension (Direction 2) instead. Underlying error: ";
+
+/// True if `msg` looks like DuckDB is complaining about a missing catalog entry
+/// that a loaded extension would have provided — the failure shape a Direction-1
+/// sibling produces for extension-touching SQL because it never LOADed those
+/// extensions. Best-effort textual match; DuckDB does not expose a structured
+/// "which extension owns this function" hint, so we recognise the two dominant
+/// error shapes:
+///
+/// * `Catalog Error: <Kind> Function with name <name> does not exist` — the
+///   generic missing-function message DuckDB emits when the catalog has no
+///   entry for the identifier and no extension autoload matches.
+/// * Messages that mention an extension explicitly (`Missing Extension Error`,
+///   `... requires the ... extension`, `extension ... not loaded`).
+///
+/// Syntax errors, table-not-found, and other non-extension failures pass the
+/// filter and surface verbatim (no misleading redirect).
+fn is_extension_related_error(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    // "Catalog Error: [Scalar|Table|Aggregate|Macro] Function with name X does not exist"
+    // (also matches DuckDB's plain `Function with name X does not exist!` shape).
+    if lower.contains("function with name") && lower.contains("does not exist") {
+        return true;
+    }
+    if lower.contains("does not exist") && lower.contains("function") {
+        return true;
+    }
+    // "Missing Extension Error" / "extension X is not loaded" / similar.
+    if lower.contains("missing extension") {
+        return true;
+    }
+    if lower.contains("extension")
+        && (lower.contains("not loaded")
+            || lower.contains("not installed")
+            || lower.contains("not found"))
+    {
+        return true;
+    }
+    // "No function matches ... signature ..." — the binder-side complaint DuckDB
+    // emits when a name resolves but no overload matches; commonly triggered when
+    // an extension-registered overload is the one the user meant.
+    if lower.contains("no function matches") {
+        return true;
+    }
+    false
+}
+
 impl CoreExecution {
     fn with_database<F, R>(&mut self, f: F) -> R
     where
@@ -1917,6 +2057,12 @@ struct ExtensionManager {
     // core's next drain output so the registrations still reach the DuckDB
     // catalog on the deferred `LOAD`.
     deferred_registrations: PendingRegistrationsData,
+    // The nested-exec (Direction-1 §5.(b.1)) sibling-core state. `Some` when
+    // the host wired one at construction (the CLI / harness paths do this);
+    // `None` for narrow test paths that never opt in. Cloned into every
+    // component's `CoreServices` at load so first `nested_exec` lazy-inits the
+    // shared sibling core.
+    sibling: Option<Arc<SiblingState>>,
 }
 
 impl ExtensionManager {
@@ -1977,6 +2123,7 @@ impl ExtensionManager {
             deferred_prefix_declarations: Vec::new(),
             deferred_drain_names: Vec::new(),
             deferred_registrations: PendingRegistrationsData::default(),
+            sibling: None,
         }
     }
 
@@ -2583,6 +2730,13 @@ impl ExtensionManager {
     /// connection the user is on.
     fn attach_current_connection(&mut self, conn: Arc<Mutex<Option<ResourceAny>>>) {
         self.current_connection = conn;
+    }
+
+    /// nested-exec Direction-1 §5.(b.1): attach a shared [`SiblingState`] so
+    /// each component's [`CoreServices`] can service `nested_exec` from the
+    /// lazily-materialized second core.
+    fn attach_sibling_state(&mut self, sibling: Arc<SiblingState>) {
+        self.sibling = Some(sibling);
     }
 
     /// v1.1 live-query host import: the shared catalog snapshot, so the CLI
@@ -3293,6 +3447,7 @@ impl ExtensionManager {
         let callback_registry = self.callback_registry.clone();
         let current_connection = self.current_connection.clone();
         let catalog_snapshot = self.catalog_snapshot.clone();
+        let sibling = self.sibling.clone();
         let extension_name = sanitized.clone();
         // The shared compose:dynlink provider registry (populated from
         // DUCKLINK_PROVIDERS). Cloned into the load thread; the bridge is built
@@ -3362,6 +3517,7 @@ impl ExtensionManager {
                     core,
                     current_connection,
                     catalog_snapshot,
+                    sibling,
                 }),
                 callback_registry,
                 extension_name.clone(),
@@ -3741,6 +3897,11 @@ pub struct HostState {
     /// host->guest preopen mapping, used by the `delta_scan('dir')` SQL rewrite
     /// to read a Delta table's `_delta_log` off the real host filesystem.
     preopens: Vec<(PathBuf, String)>,
+    /// nested-exec Direction-1 §5.(b.1): shared sibling-core state, populated
+    /// with the primary's opened DB path on the first `open` call so a later
+    /// extension `nested_exec` can materialize the sibling. `None` = the
+    /// harness did not wire nested-exec (narrow paths).
+    sibling: Option<Arc<SiblingState>>,
 }
 
 impl WasiView for HostState {
@@ -4592,6 +4753,13 @@ impl cli_db::Host for HostState {
                     .current_connection
                     .lock()
                     .unwrap_or_else(|e| e.into_inner()) = Some(handle.clone());
+                // nested-exec Direction-1 §5.(b.1): remember which DB the primary
+                // just opened so a later extension `nested_exec` can materialize
+                // the sibling core against the same file. `None` = in-memory,
+                // which the sibling cannot share -> nested_exec errors clearly.
+                if let Some(sibling) = self.sibling.as_ref() {
+                    sibling.record_primary_open(sanitize_sibling_open_path(owned.as_deref()));
+                }
                 self.connections.insert(
                     id,
                     ConnectionEntry {
@@ -4632,6 +4800,11 @@ impl cli_db::Host for HostState {
                     .current_connection
                     .lock()
                     .unwrap_or_else(|e| e.into_inner()) = Some(handle.clone());
+                // nested-exec Direction-1 §5.(b.1): record the primary's opened
+                // path — see the mirror call in `open` above.
+                if let Some(sibling) = self.sibling.as_ref() {
+                    sibling.record_primary_open(sanitize_sibling_open_path(owned_path.as_deref()));
+                }
                 self.connections.insert(
                     id,
                     ConnectionEntry {
@@ -5621,6 +5794,11 @@ struct CoreServices {
     // v1.1 live-query host import: the re-entrancy fallback snapshot (see
     // CatalogSnapshot). Served when the core is busy (the table-function case).
     catalog_snapshot: Arc<Mutex<CatalogSnapshot>>,
+    // nested-exec Direction-1 §5.(b.1): shared sibling-core state, lazily
+    // materialized on first `nested_exec` call. `None` when the host did not
+    // wire a sibling (narrow test paths); `nested_exec` then reports
+    // unavailability instead of trapping.
+    sibling: Option<Arc<SiblingState>>,
 }
 
 impl CoreServices {
@@ -5800,32 +5978,193 @@ impl ExtensionServices for CoreServices {
         Ok(rows)
     }
 
-    // Direction-1 nested-exec: DEFERRED (best-effort with an informative error).
+    // Direction-1 nested-exec (§5.(b.1) of `docs/nested-exec-direction-1-plan.md`):
+    // route `sql` to a SIBLING [`CoreExecution`] opened against the same DB file
+    // as the primary. The sibling lives in its own wasmtime store + its own
+    // `ExtensionManager`, so it never re-enters the primary core's store or its
+    // (contended) mutex from inside an outer statement's callback.
     //
-    // A `nested-exec` from inside an outer statement's callback needs a sibling
-    // execution path that neither re-locks the single `core` executor mutex nor
-    // re-enters the core wasm store (both non-reentrant). The Direction-2
-    // (native DuckDB) impl solves it with a fresh `duckdb_connect` on the
-    // shared database — but the wasm-core direction has no analog: the core
-    // WIT's `connect` returns a resource inside the SAME core store, and a
-    // callback-time re-entry into that store is what wasmtime forbids.
+    // Sibling init is LAZY: the first call after `HostState::open` opens a
+    // fresh core over the primary's DB path and caches it; subsequent calls
+    // reuse it for the process lifetime. The [`NestedExecDepthGuard`] applied
+    // by `extension_nested_exec::Host::nested_exec` in ducklink-runtime bounds
+    // recursion; nothing to do here.
     //
-    // Options for a future minor:
-    //   1. Stand up a SECOND core `wasmtime::Store` bound to the same DB file
-    //      (expensive on first use, cached after), used exclusively for
-    //      nested-exec. Doable but a real chunk of plumbing.
-    //   2. Run the sibling exec ON the same store's `try_lock`-idle window
-    //      (only works if the outer statement finished mid-callback — it
-    //      hasn't, that's the whole point).
-    //
-    // For now we surface a clear error so a fieldbook-style caller can render
-    // the situation to the user rather than trap.
-    fn nested_exec(&mut self, _sql: &str) -> Result<NestedExecResult, String> {
-        Err(
-            "nested-exec: not yet supported under the wasm-core host \
-             (Direction-1 deferred; use the native DuckDB extension for now)"
-                .to_string(),
-        )
+    // KNOWN LIMITATION. The sibling has NONE of the primary's extensions
+    // loaded, so SQL that references an extension-provided function fails with
+    // `Catalog Error: ... does not exist`. That failure shape is detected via
+    // [`is_extension_related_error`] and the error is wrapped with
+    // [`NESTED_EXEC_DIRECTION2_REDIRECT`] pointing the caller at Direction 2
+    // (native ducklink extension). Non-extension errors pass through verbatim.
+    fn nested_exec(&mut self, sql: &str) -> Result<NestedExecResult, String> {
+        let sibling = self
+            .sibling
+            .as_ref()
+            .ok_or_else(|| {
+                "nested-exec: sibling-core state not wired in this host \
+                 (Direction-1 §5.(b.1) support requires SiblingState via \
+                 ExtensionManager::attach_sibling_state)"
+                    .to_string()
+            })?
+            .clone();
+
+        // Resolve the primary's opened DB path. `open` writes it via
+        // `SiblingState::record_primary_open`; :memory: is rejected because two
+        // in-memory opens are independent Database objects (no sharing).
+        let primary_path = {
+            let guard = sibling
+                .primary_db_path
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            match guard.as_ref() {
+                Some(Some(p)) => p.clone(),
+                Some(None) => {
+                    return Err(
+                        "nested-exec: primary database is in-memory; \
+                         Direction-1 sibling-core cannot share it. \
+                         Open a file-backed database or use the native \
+                         ducklink DuckDB extension (Direction 2)."
+                            .to_string(),
+                    )
+                }
+                None => {
+                    return Err(
+                        "nested-exec: primary database not yet opened \
+                         (Direction-1 sibling waits for HostState::open)"
+                            .to_string(),
+                    )
+                }
+            }
+        };
+
+        // Lazy-init the sibling core + connection (once per process).
+        let slot = sibling_ensure_slot(&sibling, &primary_path)?;
+
+        // Run the SQL on the sibling connection. Its mutex is independent of
+        // the primary's, and we're always the outermost frame from the
+        // sibling's perspective — no try_lock gymnastics needed.
+        let mut core = slot.core.lock().unwrap_or_else(|e| e.into_inner());
+        let outcome = core
+            .with_database(|guest, store| guest.call_execute(store, slot.connection, sql))
+            .map_err(|trap| format!("nested-exec: sibling call_execute trapped: {trap}"))?;
+        drop(core);
+
+        match outcome {
+            Ok(qr) => Ok(query_result_to_nested_exec(qr)),
+            Err(err) => {
+                let msg = core_duckerror_message(err);
+                if is_extension_related_error(&msg) {
+                    Err(format!("{NESTED_EXEC_DIRECTION2_REDIRECT}{msg}"))
+                } else {
+                    Err(msg)
+                }
+            }
+        }
+    }
+}
+
+/// Materialize (once) the sibling [`CoreExecution`] + its [`ResourceAny`]
+/// connection over `primary_path`, cache them on `sibling`, and return a
+/// clone of the cached [`SiblingSlot`]. Idempotent: after the first success
+/// every call returns the cached slot instantly.
+fn sibling_ensure_slot(
+    sibling: &SiblingState,
+    primary_path: &str,
+) -> Result<SiblingSlot, String> {
+    let mut slot = sibling.slot.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(existing) = slot.as_ref() {
+        return Ok(SiblingSlot {
+            core: existing.core.clone(),
+            connection: existing.connection,
+        });
+    }
+
+    // Build the sibling's WASI ctx with the SAME preopen set the primary
+    // received. The primary resolves user-facing paths (e.g.
+    // `open "/data/foo.duckdb"`) against a preopen mapping; the sibling must
+    // resolve them identically to reach the same file. Stdio is inherited so
+    // DuckDB's diagnostics still reach the terminal.
+    let preopen_refs: Vec<(&Path, &str)> = sibling
+        .preopens
+        .iter()
+        .map(|(host, guest)| (host.as_path(), guest.as_str()))
+        .collect();
+    let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core-sibling")], &preopen_refs)
+        .map_err(|e| format!("nested-exec: sibling WASI ctx: {e}"))?;
+    // Fresh ExtensionManager for the sibling. The primary's is a different
+    // wasmtime store and cannot be shared. The sibling never loads
+    // extensions — that is the whole (b.1) limitation.
+    let sibling_manager = Arc::new(Mutex::new(ExtensionManager::new(sibling.engine.clone())));
+    let core_exec = instantiate_core(
+        &sibling.engine,
+        &sibling.core_component_path,
+        wasi,
+        sibling_manager.clone(),
+    )
+    .map_err(|e| format!("nested-exec: sibling instantiate_core: {e}"))?;
+    let core = Arc::new(Mutex::new(core_exec));
+    {
+        let mut mgr = sibling_manager
+            .lock()
+            .expect("sibling extension manager mutex poisoned");
+        mgr.attach_core(core.clone());
+    }
+    // Open the sibling's connection to the SAME DB file the primary opened.
+    let connection = {
+        let mut c = core.lock().unwrap_or_else(|e| e.into_inner());
+        let result = c
+            .with_database(|guest, store| guest.call_open(store, Some(primary_path)))
+            .map_err(|trap| format!("nested-exec: sibling call_open trapped: {trap}"))?;
+        result.map_err(|e| format!("nested-exec: sibling open failed: {e}"))?
+    };
+
+    *slot = Some(SiblingSlot {
+        core: core.clone(),
+        connection,
+    });
+    Ok(SiblingSlot { core, connection })
+}
+
+/// Stringify a wasm-core `QueryResult` into the neutral [`NestedExecResult`]
+/// shape (rows of text cells, mirroring Direction-2's row rendering). Always
+/// populates `rows`; also populates `rows_affected` from the single-column
+/// `Count` scalar DuckDB emits for pure DML.
+fn query_result_to_nested_exec(qr: core_db_exports::QueryResult) -> NestedExecResult {
+    // DuckDB reports DML (INSERT/UPDATE/DELETE with no RETURNING) as a
+    // single-column result named "Count" carrying the affected row count.
+    // Extract it BEFORE stringifying so the caller sees rows_affected without
+    // parsing the string cell back out.
+    let rows_affected = extract_rows_affected(&qr);
+    let rows: Vec<Vec<String>> = qr
+        .rows
+        .iter()
+        .map(|row| row.iter().map(spi_value_text).collect())
+        .collect();
+    NestedExecResult {
+        rows: Some(rows),
+        rows_affected,
+    }
+}
+
+/// Detect DuckDB's pure-DML pattern (single row, single column named `Count`
+/// holding an integer) and return the affected-row count. Everything else
+/// returns `None` — the caller relies on `rows` alone for SELECT and mixed
+/// (RETURNING) shapes.
+fn extract_rows_affected(qr: &core_db_exports::QueryResult) -> Option<u64> {
+    if qr.columns.len() != 1 {
+        return None;
+    }
+    if !qr.columns[0].name.eq_ignore_ascii_case("Count") {
+        return None;
+    }
+    let row = qr.rows.first()?;
+    let cell = row.first()?;
+    match cell {
+        core_types::Duckvalue::Int64(v) => Some((*v).max(0) as u64),
+        core_types::Duckvalue::Uint64(v) => Some(*v),
+        core_types::Duckvalue::Int32(v) => Some((*v).max(0) as u64),
+        core_types::Duckvalue::Uint32(v) => Some(*v as u64),
+        _ => None,
     }
 }
 
@@ -6928,11 +7267,22 @@ impl CliHarness {
             extension_manager.clone(),
         )?;
         let core = Arc::new(Mutex::new(core_exec));
+        // nested-exec Direction-1 §5.(b.1): a shared sibling-core state
+        // pinned to the same core component + the SAME preopens the primary
+        // received (so the sibling resolves user-facing paths identically).
+        // `open` writes the primary's path here; the first `nested_exec`
+        // lazy-inits the sibling.
+        let sibling = Arc::new(SiblingState::new(
+            engine.clone(),
+            artifacts.core_component.clone(),
+            owned_preopens.clone(),
+        ));
         {
             let mut manager = extension_manager
                 .lock()
                 .expect("extension manager mutex poisoned");
             manager.attach_core(core.clone());
+            manager.attach_sibling_state(sibling.clone());
         }
         let current_connection = Arc::new(Mutex::new(None));
         let catalog_snapshot;
@@ -6969,6 +7319,7 @@ impl CliHarness {
             did_autoload: false,
             catalog_snapshot,
             preopens: owned_preopens.clone(),
+            sibling: Some(sibling),
         };
         let mut store = Store::new(&engine, host_state);
 
@@ -7217,11 +7568,19 @@ fn run_cli_inner(
         extension_manager.clone(),
     )?;
     let core = Arc::new(Mutex::new(core_exec));
+    // nested-exec Direction-1 §5.(b.1): see the mirror block in
+    // `CliHarness::with_artifacts`.
+    let sibling = Arc::new(SiblingState::new(
+        engine.clone(),
+        artifacts.core_component.clone(),
+        owned_preopens.clone(),
+    ));
     {
         let mut manager = extension_manager
             .lock()
             .expect("extension manager mutex poisoned");
         manager.attach_core(core.clone());
+        manager.attach_sibling_state(sibling.clone());
     }
     let current_connection = Arc::new(Mutex::new(None));
     let catalog_snapshot;
@@ -7258,6 +7617,7 @@ fn run_cli_inner(
         did_autoload: false,
         catalog_snapshot,
         preopens: owned_preopens.clone(),
+        sibling: Some(sibling),
     };
     let mut store = Store::new(&engine, host_state);
 
@@ -9001,6 +9361,358 @@ mod tests {
         for v in all_core_duckvalues() {
             assert!(!describe_core_duckvalue(&v).is_empty());
         }
+    }
+
+    // ------------------------------------------------------------------
+    // nested-exec Direction-1 §5.(b.1) sibling-core tests.
+    //
+    // These drive `CoreServices::nested_exec` (the ExtensionServices sink the
+    // component-side `duckdb:extension/nested-exec` import routes to) against
+    // a real sibling core opened over a temp file-backed DuckDB. No
+    // extensions are loaded on the sibling — that's the whole limitation the
+    // heuristic in `is_extension_related_error` gates the Direction-2
+    // redirect against.
+    // ------------------------------------------------------------------
+
+    /// Build a `CoreServices` wired to a fresh sibling that preopens
+    /// `preopen_dir` at guest path `.` and records the guest-visible
+    /// `db_guest_path` (e.g. `"./mydb.duckdb"`) as the primary's DB path.
+    /// The `primary` [`CoreExecution`] is a throwaway (`nested_exec` never
+    /// touches it) — just enough to satisfy the struct's `core` field.
+    fn build_direction1_services(
+        artifacts: &ComponentArtifacts,
+        preopen_dir: &Path,
+        db_guest_path: &str,
+    ) -> Result<(Arc<Mutex<CoreExecution>>, Arc<SiblingState>, CoreServices)> {
+        let engine = build_engine()?;
+        // Throwaway primary — nested_exec never reads it, but the struct
+        // holds an Arc<Mutex<CoreExecution>> so we build a fresh one.
+        let primary_wasi =
+            build_wasi_ctx_inherit(&[String::from("duckdb-core-primary-throwaway")], &[])?;
+        let primary_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
+        let primary_core = Arc::new(Mutex::new(instantiate_core(
+            &engine,
+            &artifacts.core_component,
+            primary_wasi,
+            primary_manager,
+        )?));
+
+        // Sibling gets a single preopen so it can reach the file the test
+        // wrote at `preopen_dir/db_guest_path`.
+        let preopens = vec![(preopen_dir.to_path_buf(), ".".to_string())];
+        let sibling = Arc::new(SiblingState::new(
+            engine.clone(),
+            artifacts.core_component.clone(),
+            preopens,
+        ));
+        // The test skips going through HostState::open, so record the DB path
+        // directly (exactly what `open`/`open_with_config` do in the CLI path).
+        sibling.record_primary_open(Some(db_guest_path.to_string()));
+
+        let services = CoreServices {
+            core: primary_core.clone(),
+            current_connection: Arc::new(Mutex::new(None)),
+            catalog_snapshot: Arc::new(Mutex::new(CatalogSnapshot::default())),
+            sibling: Some(sibling.clone()),
+        };
+        Ok((primary_core, sibling, services))
+    }
+
+    #[test]
+    fn nested_exec_direction1_select_returns_rows() -> Result<()> {
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let tmp = tempdir()?;
+        let (_primary, _sibling, mut services) =
+            build_direction1_services(&artifacts, tmp.path(), "./d1-select.duckdb")?;
+
+        let r = services
+            .nested_exec("SELECT 42 AS x")
+            .expect("SELECT nested_exec ok");
+        let rows = r.rows.expect("SELECT populates rows");
+        assert_eq!(rows.len(), 1, "one row expected, got {rows:?}");
+        assert_eq!(rows[0].len(), 1, "one cell expected, got {:?}", rows[0]);
+        assert_eq!(rows[0][0], "42");
+        assert!(r.rows_affected.is_none(), "SELECT should not report rows_affected");
+        Ok(())
+    }
+
+    #[test]
+    fn nested_exec_direction1_ddl_and_dml() -> Result<()> {
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let tmp = tempdir()?;
+        let (_primary, _sibling, mut services) =
+            build_direction1_services(&artifacts, tmp.path(), "./d1-ddl-dml.duckdb")?;
+
+        // CREATE TABLE (DDL). No rows, no rows_affected expected.
+        let create = services
+            .nested_exec("CREATE TABLE t (x INT)")
+            .expect("CREATE TABLE nested_exec ok");
+        assert!(
+            create.rows.as_ref().map(|r| r.is_empty()).unwrap_or(true),
+            "CREATE TABLE should not produce user rows, got {create:?}"
+        );
+
+        // INSERT (DML). DuckDB emits a single `Count`-column row for pure DML;
+        // we lift it into rows_affected.
+        let insert = services
+            .nested_exec("INSERT INTO t VALUES (1),(2)")
+            .expect("INSERT nested_exec ok");
+        assert_eq!(
+            insert.rows_affected,
+            Some(2),
+            "INSERT should report 2 rows_affected, got {insert:?}"
+        );
+
+        // SELECT count(*). Row-producing; check the cell.
+        let sel = services
+            .nested_exec("SELECT count(*) FROM t")
+            .expect("SELECT count(*) nested_exec ok");
+        let rows = sel.rows.expect("SELECT populates rows");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0][0], "2");
+        Ok(())
+    }
+
+    #[test]
+    fn nested_exec_direction1_missing_extension_function() -> Result<()> {
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let tmp = tempdir()?;
+        let (_primary, _sibling, mut services) =
+            build_direction1_services(&artifacts, tmp.path(), "./d1-ext.duckdb")?;
+
+        // Reference an obviously-missing function. The primary might have
+        // extension-provided scalars via DUCKLINK_AUTOLOAD, but the SIBLING
+        // core loads none — so any function not in the DuckDB built-ins
+        // triggers the extension-related-error redirect.
+        let err = services
+            .nested_exec("SELECT some_missing_scalar_function('x')")
+            .expect_err("missing function should fail");
+        assert!(
+            err.starts_with("nested-exec (Direction 1):"),
+            "expected Direction-1 redirect prefix, got: {err}"
+        );
+        assert!(
+            err.contains("native ducklink DuckDB extension (Direction 2)"),
+            "expected Direction-2 pointer in error, got: {err}"
+        );
+        assert!(
+            err.contains("Underlying error:"),
+            "expected the underlying error to be preserved, got: {err}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn nested_exec_direction1_syntax_error_passes_through_unchanged() -> Result<()> {
+        // Negative case for `is_extension_related_error`: a plain syntax error
+        // must NOT be wrapped with the Direction-2 redirect (that would be
+        // misleading — it isn't an extension issue).
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let tmp = tempdir()?;
+        let (_primary, _sibling, mut services) =
+            build_direction1_services(&artifacts, tmp.path(), "./d1-syntax.duckdb")?;
+
+        let err = services
+            .nested_exec("SELEKT 1")
+            .expect_err("syntax error should fail");
+        assert!(
+            !err.starts_with("nested-exec (Direction 1):"),
+            "syntax error must not be tagged Direction-2, got: {err}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn nested_exec_direction1_in_memory_primary_errors_clearly() -> Result<()> {
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let tmp = tempdir()?;
+        let (_primary, sibling, mut services) =
+            build_direction1_services(&artifacts, tmp.path(), "./d1-mem.duckdb")?; // path unused
+
+        // Override the record: pretend the primary opened `:memory:`.
+        sibling.record_primary_open(None);
+
+        let err = services
+            .nested_exec("SELECT 1")
+            .expect_err(":memory: primary should fail nested_exec");
+        assert!(
+            err.contains("in-memory"),
+            "expected in-memory explanation, got: {err}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn nested_exec_direction1_depth_cap() -> Result<()> {
+        // Drive the WIT wrapper (`extension_nested_exec::Host::nested_exec`)
+        // through a services sink whose own body re-invokes the same wrapper
+        // via a raw-pointer stashed thread-local. Each entry bumps the
+        // per-thread depth guard; the (NESTED_EXEC_MAX_DEPTH+1)th invocation
+        // errors with the depth-cap message BEFORE reaching the sink again.
+        //
+        // Runtime-crate-side tests cover the guard in isolation
+        // (`nested_exec_depth_cap_returns_error_at_level_max_plus_one` in
+        // `crates/ducklink-runtime/src/extension.rs`); this test complements
+        // it by proving the guard fires when driven end-to-end THROUGH our
+        // sink.
+        use ducklink_runtime::duckdb_extension_bindings::duckdb::extension::nested_exec as ext_nested_exec;
+        use ducklink_runtime::{
+            CallbackRegistry, ExtensionServices, ExtensionStoreState, LogField, LogLevel,
+            NestedExecResult, NESTED_EXEC_MAX_DEPTH,
+        };
+        use std::cell::Cell;
+        use std::sync::RwLock;
+
+        thread_local! {
+            /// Non-null while a depth-cap test is running; the sink reads it
+            /// to know which state to recurse into. Set/cleared by the test.
+            static RECURSE_STATE: Cell<*mut ExtensionStoreState> = const { Cell::new(std::ptr::null_mut()) };
+            /// Last error the sink observed from its own recursive
+            /// Host::nested_exec call — the depth-cap message when the guard
+            /// fires.
+            static RECURSE_LAST_ERR: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+        }
+
+        struct RecursingSink;
+        impl ExtensionServices for RecursingSink {
+            fn provider_version(&mut self) -> Result<String, ducklink_runtime::ConfigError> {
+                Ok("test".to_string())
+            }
+            fn list_keys(&mut self, _: Option<&str>) -> Result<Vec<String>, ducklink_runtime::ConfigError> {
+                Ok(Vec::new())
+            }
+            fn get_string(&mut self, _: &str) -> Result<Option<String>, ducklink_runtime::ConfigError> {
+                Ok(None)
+            }
+            fn get_bool(&mut self, _: &str) -> Result<Option<bool>, ducklink_runtime::ConfigError> {
+                Ok(None)
+            }
+            fn get_i64(&mut self, _: &str) -> Result<Option<i64>, ducklink_runtime::ConfigError> {
+                Ok(None)
+            }
+            fn get_u64(&mut self, _: &str) -> Result<Option<u64>, ducklink_runtime::ConfigError> {
+                Ok(None)
+            }
+            fn get_f64(&mut self, _: &str) -> Result<Option<f64>, ducklink_runtime::ConfigError> {
+                Ok(None)
+            }
+            fn get_bytes(&mut self, _: &str) -> Result<Option<Vec<u8>>, ducklink_runtime::ConfigError> {
+                Ok(None)
+            }
+            fn get_string_list(&mut self, _: &str) -> Result<Option<Vec<String>>, ducklink_runtime::ConfigError> {
+                Ok(None)
+            }
+            fn log(&mut self, _: LogLevel, _: &str, _: Option<&str>) {}
+            fn log_fields(&mut self, _: LogLevel, _: &str, _: &[LogField]) {}
+            fn nested_exec(&mut self, _sql: &str) -> Result<NestedExecResult, String> {
+                // Re-enter the WIT wrapper. Its `NestedExecDepthGuard::enter()`
+                // bumps the thread-local counter; the guard drops when this
+                // frame returns.
+                let state_ptr = RECURSE_STATE.with(|c| c.get());
+                if state_ptr.is_null() {
+                    return Ok(NestedExecResult {
+                        rows: Some(Vec::new()),
+                        rows_affected: None,
+                    });
+                }
+                // SAFETY: single-threaded test scope; `state` outlives this
+                // recursive chain (owned by the outer stack frame in
+                // `nested_exec_direction1_depth_cap`), the pointer is set
+                // before the outermost `Host::nested_exec` call and cleared
+                // after — no concurrent access, no lifetime overlap.
+                let state: &mut ExtensionStoreState = unsafe { &mut *state_ptr };
+                match ext_nested_exec::Host::nested_exec(state, "recurse".to_string()) {
+                    Ok(_) => Ok(NestedExecResult {
+                        rows: Some(Vec::new()),
+                        rows_affected: None,
+                    }),
+                    Err(e) => {
+                        RECURSE_LAST_ERR.with(|c| *c.borrow_mut() = Some(e.clone()));
+                        // Bubble the depth-cap error up so the outermost
+                        // `Host::nested_exec` returns Err as well.
+                        Err(e)
+                    }
+                }
+            }
+        }
+
+        let wasi = wasmtime_wasi::WasiCtxBuilder::new().build();
+        let mut state = ExtensionStoreState::new(
+            wasi,
+            Box::new(RecursingSink),
+            Arc::new(RwLock::new(CallbackRegistry::default())),
+            "depth-cap-test".to_string(),
+        );
+        RECURSE_STATE.with(|c| c.set(&mut state as *mut _));
+        RECURSE_LAST_ERR.with(|c| *c.borrow_mut() = None);
+
+        // Outermost Host::nested_exec: depth 0 -> 1 (enters guard). Recurses
+        // NESTED_EXEC_MAX_DEPTH more times; the (max+1)th enter() rejects.
+        let err = ext_nested_exec::Host::nested_exec(&mut state, "kick".to_string())
+            .expect_err("depth cap must fire at max+1");
+        assert!(
+            err.contains("max nesting depth"),
+            "outer error should carry the depth-cap message; got: {err}"
+        );
+        // Every recursed frame surfaces the same message.
+        let inner = RECURSE_LAST_ERR
+            .with(|c| c.borrow().clone())
+            .expect("inner recursion should have observed at least one error");
+        assert!(
+            inner.contains("max nesting depth"),
+            "inner error should be the depth-cap message; got: {inner}"
+        );
+        // The depth ceiling is exposed as a pub const; sanity-check it hasn't
+        // shifted so a future NESTED_EXEC_MAX_DEPTH change surfaces here.
+        assert!(
+            NESTED_EXEC_MAX_DEPTH >= 1,
+            "depth cap must be positive"
+        );
+
+        RECURSE_STATE.with(|c| c.set(std::ptr::null_mut()));
+        Ok(())
+    }
+
+    #[test]
+    fn is_extension_related_error_flags_missing_function_shapes() {
+        // Positive: DuckDB's dominant missing-function shape.
+        assert!(is_extension_related_error(
+            "Catalog Error: Scalar Function with name aba_validate does not exist!"
+        ));
+        assert!(is_extension_related_error(
+            "Catalog Error: Table Function with name unknown_tf does not exist!"
+        ));
+        assert!(is_extension_related_error(
+            "Missing Extension Error: 'httpfs' is required"
+        ));
+        assert!(is_extension_related_error(
+            "extension 'spatial' is not loaded"
+        ));
+        assert!(is_extension_related_error(
+            "Binder Error: No function matches the given name"
+        ));
+        // Negative: unrelated failures pass through unchanged.
+        assert!(!is_extension_related_error(
+            "Parser Error: syntax error at or near \"SELEKT\""
+        ));
+        assert!(!is_extension_related_error(
+            "Catalog Error: Table with name t does not exist"
+        )); // table, not function
+        assert!(!is_extension_related_error(
+            "IO Error: cannot open file"
+        ));
+    }
+
+    #[test]
+    fn sanitize_sibling_open_path_normalizes_memory_marker_to_none() {
+        assert_eq!(sanitize_sibling_open_path(None), None);
+        assert_eq!(sanitize_sibling_open_path(Some(":memory:")), None);
+        assert_eq!(sanitize_sibling_open_path(Some("")), None);
+        assert_eq!(sanitize_sibling_open_path(Some("   ")), None);
+        assert_eq!(
+            sanitize_sibling_open_path(Some("/tmp/foo.duckdb")),
+            Some("/tmp/foo.duckdb".to_string())
+        );
     }
 }
 fn resolve_preopens_with_default(preopens: &[(&Path, &str)]) -> Result<Vec<(PathBuf, String)>> {
