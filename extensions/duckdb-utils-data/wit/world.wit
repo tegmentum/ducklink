@@ -1,4 +1,4 @@
-package duckdb:dotcmd@0.1.0;
+package duckdb:dotcmd@0.2.0;
 
 /// SQL access to the CLI's live connection, provided by the host. A dot-command
 /// component running during a session shares the very connection the user is
@@ -7,6 +7,19 @@ interface spi {
     /// Run SQL on the CLI's live connection. Returns the rows as text: one row
     /// per line, columns tab-separated, NULL as empty, no header. Error -> err.
     query: func(sql: string) -> result<string, string>;
+
+    /// Open the user's editor (resolved as `$EDITOR` -> `$VISUAL` -> `vi`)
+    /// with `initial` as the starting buffer contents. Blocks until the editor
+    /// exits, then returns the file's contents.
+    ///
+    /// `hint-suffix` is appended to the temp filename so the editor picks the
+    /// right syntax highlighting (e.g. `".sql"`). Empty string = no hint.
+    ///
+    /// Err when the editor binary is missing, spawning fails, the editor exits
+    /// nonzero, or the underlying temp-file I/O fails. Callers decide what an
+    /// empty (or whitespace-only) return means — the host does not treat that
+    /// as an error.
+    edit: func(initial: string, hint-suffix: string) -> result<string, string>;
 }
 
 /// A pluggable CLI dot-command provider. The host calls `list-commands` at load

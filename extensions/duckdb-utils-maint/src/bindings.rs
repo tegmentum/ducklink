@@ -35,7 +35,7 @@ pub mod duckdb {
                     let len0 = vec0.len();
                     let ptr1 = ret_area.0.as_mut_ptr().cast::<u8>();
                     #[cfg(target_arch = "wasm32")]
-                    #[link(wasm_import_module = "duckdb:dotcmd/spi@0.1.0")]
+                    #[link(wasm_import_module = "duckdb:dotcmd/spi@0.2.0")]
                     unsafe extern "C" {
                         #[link_name = "query"]
                         fn wit_import2(_: *mut u8, _: usize, _: *mut u8);
@@ -86,6 +86,109 @@ pub mod duckdb {
                         _ => _rt::invalid_enum_discriminant(),
                     };
                     result10
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Open the user's editor (resolved as `$EDITOR` -> `$VISUAL` -> `vi`)
+            /// with `initial` as the starting buffer contents. Blocks until the editor
+            /// exits, then returns the file's contents.
+            ///
+            /// `hint-suffix` is appended to the temp filename so the editor picks the
+            /// right syntax highlighting (e.g. `".sql"`). Empty string = no hint.
+            ///
+            /// Err when the editor binary is missing, spawning fails, the editor exits
+            /// nonzero, or the underlying temp-file I/O fails. Callers decide what an
+            /// empty (or whitespace-only) return means — the host does not treat that
+            /// as an error.
+            pub fn edit(
+                initial: &str,
+                hint_suffix: &str,
+            ) -> Result<_rt::String, _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let vec0 = initial;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    let vec1 = hint_suffix;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let ptr2 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "duckdb:dotcmd/spi@0.2.0")]
+                    unsafe extern "C" {
+                        #[link_name = "edit"]
+                        fn wit_import3(
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import3(
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import3(ptr0.cast_mut(), len0, ptr1.cast_mut(), len1, ptr2)
+                    };
+                    let l4 = i32::from(*ptr2.add(0).cast::<u8>());
+                    let result11 = match l4 {
+                        0 => {
+                            let e = {
+                                let l5 = *ptr2
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l6 = *ptr2
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len7 = l6;
+                                let bytes7 = _rt::Vec::from_raw_parts(
+                                    l5.cast(),
+                                    len7,
+                                    len7,
+                                );
+                                _rt::string_lift(bytes7)
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l8 = *ptr2
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l9 = *ptr2
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len10 = l9;
+                                let bytes10 = _rt::Vec::from_raw_parts(
+                                    l8.cast(),
+                                    len10,
+                                    len10,
+                                );
+                                _rt::string_lift(bytes10)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result11
                 }
             }
         }
@@ -430,28 +533,28 @@ pub mod exports {
                     ) -> Result<InvokeResult, _rt::String>;
                 }
                 #[doc(hidden)]
-                macro_rules! __export_duckdb_dotcmd_registry_0_1_0_cabi {
+                macro_rules! __export_duckdb_dotcmd_registry_0_2_0_cabi {
                     ($ty:ident with_types_in $($path_to_types:tt)*) => {
                         const _ : () = { #[unsafe (export_name =
-                        "duckdb:dotcmd/registry@0.1.0#list-commands")] unsafe extern "C"
+                        "duckdb:dotcmd/registry@0.2.0#list-commands")] unsafe extern "C"
                         fn export_list_commands() -> * mut u8 { unsafe {
                         $($path_to_types)*:: _export_list_commands_cabi::<$ty > () } }
                         #[unsafe (export_name =
-                        "cabi_post_duckdb:dotcmd/registry@0.1.0#list-commands")] unsafe
+                        "cabi_post_duckdb:dotcmd/registry@0.2.0#list-commands")] unsafe
                         extern "C" fn _post_return_list_commands(arg0 : * mut u8,) {
                         unsafe { $($path_to_types)*:: __post_return_list_commands::<$ty >
                         (arg0) } } #[unsafe (export_name =
-                        "duckdb:dotcmd/registry@0.1.0#invoke")] unsafe extern "C" fn
+                        "duckdb:dotcmd/registry@0.2.0#invoke")] unsafe extern "C" fn
                         export_invoke(arg0 : i64, arg1 : * mut u8, arg2 : usize,) -> *
                         mut u8 { unsafe { $($path_to_types)*:: _export_invoke_cabi::<$ty
                         > (arg0, arg1, arg2) } } #[unsafe (export_name =
-                        "cabi_post_duckdb:dotcmd/registry@0.1.0#invoke")] unsafe extern
+                        "cabi_post_duckdb:dotcmd/registry@0.2.0#invoke")] unsafe extern
                         "C" fn _post_return_invoke(arg0 : * mut u8,) { unsafe {
                         $($path_to_types)*:: __post_return_invoke::<$ty > (arg0) } } };
                     };
                 }
                 #[doc(hidden)]
-                pub(crate) use __export_duckdb_dotcmd_registry_0_1_0_cabi;
+                pub(crate) use __export_duckdb_dotcmd_registry_0_2_0_cabi;
                 #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
                 #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
                 struct _RetArea(
@@ -547,7 +650,7 @@ macro_rules! __export_dotcmd_impl {
     };
     ($ty:ident with_types_in $($path_to_types_root:tt)*) => {
         $($path_to_types_root)*::
-        exports::duckdb::dotcmd::registry::__export_duckdb_dotcmd_registry_0_1_0_cabi!($ty
+        exports::duckdb::dotcmd::registry::__export_duckdb_dotcmd_registry_0_2_0_cabi!($ty
         with_types_in $($path_to_types_root)*:: exports::duckdb::dotcmd::registry);
     };
 }
@@ -555,21 +658,22 @@ macro_rules! __export_dotcmd_impl {
 pub(crate) use __export_dotcmd_impl as export;
 #[cfg(target_arch = "wasm32")]
 #[unsafe(
-    link_section = "component-type:wit-bindgen:0.41.0:duckdb:dotcmd@0.1.0:dotcmd:encoded world"
+    link_section = "component-type:wit-bindgen:0.41.0:duckdb:dotcmd@0.2.0:dotcmd:encoded world"
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 437] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xb8\x02\x01A\x02\x01\
-A\x04\x01B\x03\x01j\x01s\x01s\x01@\x01\x03sqls\0\0\x04\0\x05query\x01\x01\x03\0\x17\
-duckdb:dotcmd/spi@0.1.0\x05\0\x01B\x0d\x01r\x04\x02idw\x04names\x07summarys\x05u\
-sages\x04\0\x0ccommand-spec\x03\0\0\x01r\x02\x03keys\x05values\x04\0\x0bstate-de\
-lta\x03\0\x02\x01p\x03\x01r\x02\x04texts\x0cstate-deltas\x04\x04\0\x0dinvoke-res\
-ult\x03\0\x05\x01p\x01\x01@\0\0\x07\x04\0\x0dlist-commands\x01\x08\x01j\x01\x06\x01\
-s\x01@\x02\x02idw\x04argss\0\x09\x04\0\x06invoke\x01\x0a\x04\0\x1cduckdb:dotcmd/\
-registry@0.1.0\x05\x01\x04\0\x1aduckdb:dotcmd/dotcmd@0.1.0\x04\0\x0b\x0c\x01\0\x06\
-dotcmd\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227\
-.1\x10wit-bindgen-rust\x060.41.0";
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 473] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xdc\x02\x01A\x02\x01\
+A\x04\x01B\x05\x01j\x01s\x01s\x01@\x01\x03sqls\0\0\x04\0\x05query\x01\x01\x01@\x02\
+\x07initials\x0bhint-suffixs\0\0\x04\0\x04edit\x01\x02\x03\0\x17duckdb:dotcmd/sp\
+i@0.2.0\x05\0\x01B\x0d\x01r\x04\x02idw\x04names\x07summarys\x05usages\x04\0\x0cc\
+ommand-spec\x03\0\0\x01r\x02\x03keys\x05values\x04\0\x0bstate-delta\x03\0\x02\x01\
+p\x03\x01r\x02\x04texts\x0cstate-deltas\x04\x04\0\x0dinvoke-result\x03\0\x05\x01\
+p\x01\x01@\0\0\x07\x04\0\x0dlist-commands\x01\x08\x01j\x01\x06\x01s\x01@\x02\x02\
+idw\x04argss\0\x09\x04\0\x06invoke\x01\x0a\x04\0\x1cduckdb:dotcmd/registry@0.2.0\
+\x05\x01\x04\0\x1aduckdb:dotcmd/dotcmd@0.2.0\x04\0\x0b\x0c\x01\0\x06dotcmd\x03\0\
+\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bi\
+ndgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {
