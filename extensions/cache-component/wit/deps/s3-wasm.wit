@@ -1,0 +1,290 @@
+package component:s3-wasm;
+
+/// Structural mirror of the `component:s3-wasm` exports the
+/// `cache-component` imports at compose time. The upstream lives at
+/// tegmentum/s3-wasm; when the `cache` Makefile target runs
+/// `wac plug`, the composed `s3-lib` satisfies these imports for
+/// the cache extension so `SELECT cache('s3://...')` works end-to-end
+/// in the wasm cache. Only the interfaces the cache resolver actually
+/// calls are declared here (types + base + aws), matching the
+/// canonical shape exported by `s3-wasm.wasm`.
+interface s3-types {
+    /// S3 error types
+    variant error {
+        access-denied,
+        no-such-bucket,
+        no-such-key,
+        invalid-bucket-name,
+        invalid-request(string),
+        network-error(string),
+        parse-error(string),
+        internal(string),
+    }
+
+    /// Credentials for S3 authentication
+    record credentials {
+        access-key-id: string,
+        secret-access-key: string,
+        session-token: option<string>,
+    }
+
+    /// S3 endpoint configuration
+    record endpoint-config {
+        url: string,
+        region: string,
+        path-style: bool,
+    }
+
+    /// Object metadata
+    record object-metadata {
+        content-type: option<string>,
+        content-length: option<u64>,
+        etag: option<string>,
+        last-modified: option<u64>,
+        custom: list<tuple<string, string>>,
+    }
+
+    /// Object in a listing
+    record object-info {
+        key: string,
+        size: u64,
+        etag: option<string>,
+        last-modified: option<u64>,
+        storage-class: option<string>,
+    }
+
+    /// Result of a list objects operation
+    record list-objects-output {
+        objects: list<object-info>,
+        common-prefixes: list<string>,
+        next-continuation-token: option<string>,
+        is-truncated: bool,
+    }
+
+    /// Options for get-object
+    record get-object-options {
+        range: option<tuple<u64, u64>>,
+        if-match: option<string>,
+        if-none-match: option<string>,
+    }
+
+    /// Options for put-object
+    record put-object-options {
+        content-type: option<string>,
+        metadata: list<tuple<string, string>>,
+        cache-control: option<string>,
+    }
+
+    /// Options for list-objects
+    record list-objects-options {
+        prefix: option<string>,
+        delimiter: option<string>,
+        max-keys: option<u32>,
+        continuation-token: option<string>,
+    }
+
+    /// Result of get-object
+    record get-object-output {
+        body: list<u8>,
+        metadata: object-metadata,
+    }
+
+    /// Result of put-object
+    record put-object-output {
+        etag: string,
+    }
+
+    /// Result of head-object
+    record head-object-output {
+        metadata: object-metadata,
+    }
+}
+
+/// Base S3 interface - works with any S3-compatible service
+/// (MinIO, Cloudflare R2, DigitalOcean Spaces, etc.).
+interface s3-base {
+    use s3-types.{
+        error,
+        credentials,
+        endpoint-config,
+        get-object-options,
+        get-object-output,
+        put-object-options,
+        put-object-output,
+        head-object-output,
+        list-objects-options,
+        list-objects-output,
+    };
+
+    get-object: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        bucket: string,
+        key: string,
+        options: option<get-object-options>,
+    ) -> result<get-object-output, error>;
+
+    put-object: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        bucket: string,
+        key: string,
+        body: list<u8>,
+        options: option<put-object-options>,
+    ) -> result<put-object-output, error>;
+
+    delete-object: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        bucket: string,
+        key: string,
+    ) -> result<_, error>;
+
+    head-object: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        bucket: string,
+        key: string,
+    ) -> result<head-object-output, error>;
+
+    list-objects: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        bucket: string,
+        options: option<list-objects-options>,
+    ) -> result<list-objects-output, error>;
+
+    copy-object: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        source-bucket: string,
+        source-key: string,
+        dest-bucket: string,
+        dest-key: string,
+    ) -> result<put-object-output, error>;
+}
+
+/// AWS S3-specific interface - extends base with AWS-only features.
+interface s3-aws {
+    use s3-types.{error, credentials};
+
+    record aws-config {
+        region: string,
+        use-accelerate: bool,
+        use-dualstack: bool,
+    }
+
+    enum storage-class {
+        standard,
+        reduced-redundancy,
+        standard-ia,
+        onezone-ia,
+        intelligent-tiering,
+        glacier,
+        glacier-ir,
+        deep-archive,
+    }
+
+    enum restore-tier {
+        expedited,
+        standard,
+        bulk,
+    }
+
+    record tag {
+        key: string,
+        value: string,
+    }
+
+    enum presign-method {
+        get,
+        put,
+    }
+
+    record presign-options {
+        expires-in: u64,
+        method: presign-method,
+    }
+
+    record presigned-url {
+        url: string,
+        expires-at: u64,
+    }
+
+    record csv-input {
+        field-delimiter: option<string>,
+        record-delimiter: option<string>,
+        file-header-info: option<string>,
+    }
+
+    record json-input {
+        %type: option<string>,
+    }
+
+    variant select-input-format {
+        csv(csv-input),
+        json(json-input),
+        parquet,
+    }
+
+    record csv-output {
+        field-delimiter: option<string>,
+        record-delimiter: option<string>,
+    }
+
+    record json-output {
+        record-delimiter: option<string>,
+    }
+
+    variant select-output-format {
+        csv(csv-output),
+        json(json-output),
+    }
+
+    presign-url: func(
+        aws-config: aws-config,
+        credentials: credentials,
+        bucket: string,
+        key: string,
+        options: presign-options,
+    ) -> result<presigned-url, error>;
+
+    get-object-tagging: func(
+        aws-config: aws-config,
+        credentials: credentials,
+        bucket: string,
+        key: string,
+    ) -> result<list<tag>, error>;
+
+    put-object-tagging: func(
+        aws-config: aws-config,
+        credentials: credentials,
+        bucket: string,
+        key: string,
+        tags: list<tag>,
+    ) -> result<_, error>;
+
+    restore-object: func(
+        aws-config: aws-config,
+        credentials: credentials,
+        bucket: string,
+        key: string,
+        days: u32,
+        tier: restore-tier,
+    ) -> result<_, error>;
+
+    select-object-content: func(
+        aws-config: aws-config,
+        credentials: credentials,
+        bucket: string,
+        key: string,
+        expression: string,
+        input-format: select-input-format,
+        output-format: select-output-format,
+    ) -> result<list<u8>, error>;
+
+    get-bucket-location: func(
+        credentials: credentials,
+        bucket: string,
+    ) -> result<string, error>;
+}

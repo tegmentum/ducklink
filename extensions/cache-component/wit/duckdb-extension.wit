@@ -58,6 +58,15 @@ world duckdb-extension-cache {
   // publish); the lock just coalesces duplicate work.
   import file-lock;
   import sqlite:extension/spi@0.1.0;
+  // s3-wasm surface: satisfied at compose time by plugging the
+  // `s3-wasm` component (composed with `aws-sigv4-wasm` first) into
+  // `cache.wasm`. See the `cache` recipe in Makefile. The s3 backend
+  // in `src/lib.rs` calls `s3-base::head-object` + `s3-base::get-object`
+  // (and `s3-aws` for AWS SigV4-authenticated flows when the resolver
+  // needs presign / bucket-location paths).
+  import component:s3-wasm/s3-types;
+  import component:s3-wasm/s3-base;
+  import component:s3-wasm/s3-aws;
   export guest;
   export callback-dispatch;
 }

@@ -38,6 +38,12 @@ webpki-roots = "0.26"
 # sha2 for content-addressed publish. Matches cache-core's transitive
 # choice, so the workspace unifies to a single `sha2` build.
 sha2 = "0.10"
+# Lenient JSON for s3-specific config fields (endpoint, region,
+# version_id, anonymous). cache-core's `Config::from_json` uses
+# `#[serde(deny_unknown_fields)]`, so the s3 backend parses its own
+# fields off `serde_json::Value` before handing the cache-core knobs
+# (name, policy, sha256, ttl) back through the normal path.
+serde_json = { version = "1", default-features = false, features = ["std"] }
 
 [package.metadata.component]
 package = "duckdb:extension"
@@ -48,3 +54,4 @@ world = "duckdb:extension/duckdb-extension-cache"
 
 [package.metadata.component.target.dependencies]
 "sqlite:extension" = { path = "wit/deps/sqlite-extension.wit" }
+"component:s3-wasm" = { path = "wit/deps/s3-wasm.wit" }

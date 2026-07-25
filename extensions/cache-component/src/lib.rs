@@ -69,6 +69,10 @@ wit_bindgen::generate!({
 use duckdb::extension::{file_lock, runtime, types};
 use exports::duckdb::extension::guest;
 use sqlite::extension::{spi as sqlite_spi, types as sqlite_types};
+// s3-wasm bindings: satisfied at compose time by `wac plug`ing the
+// `s3-wasm` component (pre-composed with `aws-sigv4-wasm`) into
+// `cache.wasm`. See the `cache` recipe in ../../../Makefile.
+use component::s3_wasm::{s3_base, s3_types};
 
 // ---------------------------------------------------------------------------
 // Handle table (u32 -> DECLS index). Same layout the `duckdb_shim!`
@@ -430,8 +434,8 @@ fn fetch_http(
 // ---------------------------------------------------------------------------
 
 const NOT_YET_SUPPORTED_HINT: &str =
-    "supported schemes in v0: file://, http://, https://. \
-     s3/gs/az/azure backends are stubbed pending object_store integration.";
+    "supported schemes in v0: file://, http://, https://, s3://. \
+     gs/az/azure backends are stubbed pending object_store integration.";
 
 struct CachedEntry {
     etag: Option<String>,
@@ -604,7 +608,17 @@ fn resolver(cfg: &Config, uri: &str) -> Result<String, String> {
         .unwrap_or_default();
 
     // Cloud stubs (parity with duckdb-cache/src/backends/mod.rs::dispatch).
-    if matches!(scheme.as_str(), "s3" | "gs" | "az" | "azure") {
+    // Note: s3:// is intercepted in `cache_scalar` before we reach
+    // here, because s3-specific config keys (endpoint / region /
+    // version_id / anonymous) don't round-trip through cache-core's
+    // strict `Config::from_json` (deny_unknown_fields). If an s3://
+    // URI does reach this point (only possible for the arity-1
+    // overload `cache(uri)` where no config is supplied), fall
+    // through to the s3 dispatch with default endpoint / anonymous.
+    if scheme == "s3" {
+        return resolve_s3(cfg, S3Params::default(), uri, &scheme);
+    }
+    if matches!(scheme.as_str(), "gs" | "az" | "azure") {
         return Err(format!(
             "cache: scheme {scheme:?} not yet supported. {NOT_YET_SUPPORTED_HINT}"
         ));
@@ -784,6 +798,396 @@ fn resolver(cfg: &Config, uri: &str) -> Result<String, String> {
     Ok(path_to_file_uri(&final_path))
 }
 
+// ---------------------------------------------------------------------------
+// s3 backend (composed via `component:s3-wasm/{s3-base,s3-aws}`).
+//
+// The s3-wasm surface exports two orthogonal call families:
+//
+//   * `s3-base` — the S3 REST core; works against any S3-compatible
+//     endpoint (real AWS, MinIO, Cloudflare R2, DigitalOcean Spaces).
+//     Composed at build time so signed URLs go over the imported
+//     `wasi:http/outgoing-handler` transport rather than the raw
+//     TcpStream + rustls the http/https backend uses.
+//   * `s3-aws`  — AWS-only extensions (presign, tagging, restore,
+//     select). The cache resolver only calls `s3-base` for read
+//     operations; `s3-aws` is imported to keep the composition
+//     complete (so if the resolver grows AWS-specific paths later,
+//     the component is already wired).
+//
+// Config JSON extends the base `Config` with four s3-specific keys
+// that mirror the native duckdb-cache/backends/s3.rs surface:
+//
+//   * `endpoint`   — override the S3 endpoint URL (MinIO, R2, custom).
+//                    Default: infer from `region` -> `s3.<region>.amazonaws.com`.
+//   * `region`     — signing / URL region. Default: `AWS_REGION` env
+//                    var or `us-east-1`.
+//   * `version_id` — pin a specific object version on a versioned bucket.
+//                    Sent via `versionId` query parameter (not yet
+//                    threaded through s3-wasm's get-object; kept in
+//                    the struct so the parse is complete and a
+//                    follow-up can wire it into a range/opts add-on).
+//   * `anonymous`  — skip credential resolution entirely. Public
+//                    buckets (NOAA / Landsat / etc.) don't need
+//                    SigV4 headers.
+// ---------------------------------------------------------------------------
+
+#[derive(Default, Debug, Clone)]
+struct S3Params {
+    endpoint: Option<String>,
+    region: Option<String>,
+    version_id: Option<String>,
+    anonymous: bool,
+    path_style: bool,
+}
+
+impl S3Params {
+    /// Parse the s3-specific fields off a JSON blob (leniently — the
+    /// full JSON is also handed to cache-core's strict parser for the
+    /// name/policy/sha256/ttl fields). Empty / missing config -> defaults.
+    fn from_json(s: &str) -> Result<Self, String> {
+        if s.trim().is_empty() {
+            return Ok(Self::default());
+        }
+        let v: serde_json::Value =
+            serde_json::from_str(s).map_err(|e| format!("cache s3 config: {e}"))?;
+        let obj = v
+            .as_object()
+            .ok_or_else(|| String::from("cache s3 config: expected a JSON object"))?;
+        let mut out = Self::default();
+        if let Some(ep) = obj.get("endpoint") {
+            out.endpoint = Some(
+                ep.as_str()
+                    .ok_or_else(|| String::from("cache s3 config: endpoint must be a string"))?
+                    .to_string(),
+            );
+        }
+        if let Some(rg) = obj.get("region") {
+            out.region = Some(
+                rg.as_str()
+                    .ok_or_else(|| String::from("cache s3 config: region must be a string"))?
+                    .to_string(),
+            );
+        }
+        if let Some(v) = obj.get("version_id") {
+            out.version_id = Some(
+                v.as_str()
+                    .ok_or_else(|| String::from("cache s3 config: version_id must be a string"))?
+                    .to_string(),
+            );
+        }
+        if let Some(v) = obj.get("anonymous") {
+            out.anonymous = v
+                .as_bool()
+                .ok_or_else(|| String::from("cache s3 config: anonymous must be a boolean"))?;
+        }
+        if let Some(v) = obj.get("path_style") {
+            out.path_style = v
+                .as_bool()
+                .ok_or_else(|| String::from("cache s3 config: path_style must be a boolean"))?;
+        }
+        Ok(out)
+    }
+}
+
+/// Strip the s3-specific keys from a config JSON blob so cache-core's
+/// strict parser can still handle the shared knobs (name, policy,
+/// sha256, ttl). Returns an empty string when nothing remains, which
+/// cache-core treats as `Config::default()`.
+fn strip_s3_keys(s: &str) -> Result<String, String> {
+    if s.trim().is_empty() {
+        return Ok(String::new());
+    }
+    let mut v: serde_json::Value =
+        serde_json::from_str(s).map_err(|e| format!("cache s3 config: {e}"))?;
+    if let Some(obj) = v.as_object_mut() {
+        for k in ["endpoint", "region", "version_id", "anonymous", "path_style"] {
+            obj.remove(k);
+        }
+        if obj.is_empty() {
+            return Ok(String::new());
+        }
+    }
+    Ok(v.to_string())
+}
+
+/// Parse an `s3://<bucket>/<key...>` URI. Rejects malformed inputs
+/// and empty keys (`s3://only-bucket`) — matching parse_bucket_key
+/// in duckdb-cache/backends/cloud.rs.
+fn parse_s3_uri(uri: &str) -> Result<(String, String), String> {
+    let rest = uri
+        .strip_prefix("s3://")
+        .ok_or_else(|| format!("cache s3 backend: not an s3:// URL: {uri}"))?;
+    let (bucket, key) = match rest.split_once('/') {
+        Some((b, k)) => (b, k),
+        None => (rest, ""),
+    };
+    if bucket.is_empty() {
+        return Err(format!("cache s3 backend: no bucket in {uri}"));
+    }
+    if key.is_empty() {
+        return Err(format!("cache s3 backend: URI has no object key: {uri}"));
+    }
+    Ok((bucket.to_string(), key.to_string()))
+}
+
+fn s3_error_to_string(e: &s3_types::Error) -> String {
+    match e {
+        s3_types::Error::AccessDenied => "access-denied".to_string(),
+        s3_types::Error::NoSuchBucket => "no-such-bucket".to_string(),
+        s3_types::Error::NoSuchKey => "no-such-key".to_string(),
+        s3_types::Error::InvalidBucketName => "invalid-bucket-name".to_string(),
+        s3_types::Error::InvalidRequest(m) => format!("invalid-request: {m}"),
+        s3_types::Error::NetworkError(m) => format!("network-error: {m}"),
+        s3_types::Error::ParseError(m) => format!("parse-error: {m}"),
+        s3_types::Error::Internal(m) => format!("internal: {m}"),
+    }
+}
+
+fn resolve_region(p: &S3Params) -> String {
+    if let Some(r) = &p.region {
+        return r.clone();
+    }
+    if let Ok(r) = std::env::var("AWS_REGION") {
+        if !r.is_empty() {
+            return r;
+        }
+    }
+    if let Ok(r) = std::env::var("AWS_DEFAULT_REGION") {
+        if !r.is_empty() {
+            return r;
+        }
+    }
+    String::from("us-east-1")
+}
+
+fn resolve_endpoint(p: &S3Params, region: &str) -> String {
+    if let Some(e) = &p.endpoint {
+        return e.clone();
+    }
+    if let Ok(e) = std::env::var("AWS_ENDPOINT_URL") {
+        if !e.is_empty() {
+            return e;
+        }
+    }
+    if region == "us-east-1" {
+        String::from("https://s3.amazonaws.com")
+    } else {
+        format!("https://s3.{region}.amazonaws.com")
+    }
+}
+
+fn resolve_credentials(p: &S3Params) -> s3_types::Credentials {
+    if p.anonymous {
+        // s3-wasm treats empty access-key-id + empty secret as
+        // "anonymous" -- the base client skips the SigV4 header when
+        // the access key is empty. This matches the object_store
+        // `.with_skip_signature(true)` semantic on the native side.
+        return s3_types::Credentials {
+            access_key_id: String::new(),
+            secret_access_key: String::new(),
+            session_token: None,
+        };
+    }
+    let ak = std::env::var("AWS_ACCESS_KEY_ID").unwrap_or_default();
+    let sk = std::env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_default();
+    let token = std::env::var("AWS_SESSION_TOKEN").ok().filter(|s| !s.is_empty());
+    s3_types::Credentials {
+        access_key_id: ak,
+        secret_access_key: sk,
+        session_token: token,
+    }
+}
+
+/// Head-then-get flow against `s3-base`. Mirrors
+/// `duckdb-cache/backends/cloud.rs::fetch_via_head`:
+///
+///   1. `head-object` — cheap metadata probe. If the returned ETag
+///      matches the catalog's cached etag and no `version_id` pin is
+///      requested, skip the body download and re-touch the catalog
+///      row (`revalidate`-style behaviour).
+///   2. Otherwise `get-object`, hash the body, publish to the
+///      content-addressed store, and upsert the catalog row.
+fn resolve_s3(
+    cfg: &Config,
+    params: S3Params,
+    uri: &str,
+    scheme: &str,
+) -> Result<String, String> {
+    let (bucket, key) = parse_s3_uri(uri)?;
+    let region = resolve_region(&params);
+    let endpoint_url = resolve_endpoint(&params, &region);
+    let creds = resolve_credentials(&params);
+
+    let root = cache_root()?;
+    ensure_dirs(&root)?;
+    let existing = lookup(&cfg.name, uri)?;
+
+    // Offline: never touch the network.
+    if cfg.policy == Policy::Offline {
+        return match existing {
+            Some(e) => {
+                enforce_sha_pin(cfg, &e.content_hash, uri)?;
+                Ok(path_to_file_uri(std::path::Path::new(&e.resolved_path)))
+            }
+            None => Err(format!(
+                "cache: policy \"offline\" and no cached entry for {uri}"
+            )),
+        };
+    }
+
+    // Immutable + pinned-sha + blob on disk -> done, no network.
+    if cfg.policy == Policy::Immutable {
+        if let Some(expected) = &cfg.sha256 {
+            let pinned = blob_path(&root, expected);
+            if pinned.is_file() {
+                if existing.is_none() {
+                    let now = compute_now();
+                    let len = std::fs::metadata(&pinned).ok().map(|m| m.len() as i64);
+                    upsert(
+                        &cfg.name, uri, scheme, None, None, expected, len,
+                        &pinned.to_string_lossy(), &now, None,
+                    )?;
+                }
+                return Ok(path_to_file_uri(&pinned));
+            }
+        }
+    }
+
+    // v0.2 lock (advisory) — matches the http/https path so concurrent
+    // s3 fetches of the same URI coalesce to one download.
+    let lock_path = root
+        .join("locks")
+        .join(format!("{}.lock", cache_core::sha256_hex(uri.as_bytes())));
+    let _uri_lock: Option<file_lock::LockHandle> =
+        match file_lock::acquire_exclusive(&lock_path.to_string_lossy()) {
+            Ok(handle) => {
+                if let Some(now_cached) = lookup(&cfg.name, uri)? {
+                    enforce_sha_pin(cfg, &now_cached.content_hash, uri)?;
+                    return Ok(path_to_file_uri(std::path::Path::new(&now_cached.resolved_path)));
+                }
+                Some(handle)
+            }
+            Err(_) => None,
+        };
+
+    let endpoint = s3_types::EndpointConfig {
+        url: endpoint_url,
+        region: region.clone(),
+        // MinIO / LocalStack / R2-with-custom-endpoint use path-style
+        // by default (bucket in the path, not the subdomain). When
+        // `endpoint` is set and `path_style` isn't explicitly false,
+        // prefer path-style so non-AWS endpoints Just Work.
+        path_style: params.path_style || params.endpoint.is_some(),
+    };
+
+    // Step 1: HEAD. If the ETag matches the catalog + no version pin,
+    // short-circuit before pulling bytes.
+    let head_res = s3_base::head_object(&endpoint, &creds, &bucket, &key);
+    let (head_etag, head_last_modified) = match head_res {
+        Ok(h) => {
+            let etag = h.metadata.etag.clone();
+            let last_modified = h.metadata.last_modified.map(|s| s.to_string());
+            (etag, last_modified)
+        }
+        // A HEAD failure is informational — fall through to GET so the
+        // real error surfaces on the byte transfer (matches how the
+        // native's object_store surface reports errors on `get_opts`).
+        Err(_) => (None, None),
+    };
+    if params.version_id.is_none() {
+        if let (Some(cur), Some(existing_row)) = (&head_etag, existing.as_ref()) {
+            if existing_row.etag.as_deref() == Some(cur.as_str()) {
+                // Unchanged -- re-touch validated_at and return the
+                // cached blob without downloading.
+                let now = compute_now();
+                upsert(
+                    &cfg.name, uri, scheme,
+                    head_etag.as_deref(),
+                    head_last_modified.as_deref(),
+                    &existing_row.content_hash,
+                    None,
+                    &existing_row.resolved_path,
+                    &now,
+                    None,
+                )?;
+                enforce_sha_pin(cfg, &existing_row.content_hash, uri)?;
+                return Ok(path_to_file_uri(std::path::Path::new(
+                    &existing_row.resolved_path,
+                )));
+            }
+        }
+    }
+
+    // Step 2: GET. `version_id` isn't threaded through s3-wasm's
+    // `get-object-options` yet -- when the caller pins a version,
+    // surface a clear error rather than silently returning the
+    // current version's bytes.
+    if params.version_id.is_some() {
+        return Err(String::from(
+            "cache s3 backend: version_id is not yet supported by the s3-wasm surface \
+             (follow-up: extend s3-wasm's get-object-options with a version field).",
+        ));
+    }
+    let got = s3_base::get_object(&endpoint, &creds, &bucket, &key, None)
+        .map_err(|e| format!("cache s3 backend: get {uri}: {}", s3_error_to_string(&e)))?;
+    let body_vec: Vec<u8> = got.body.to_vec();
+    let now = compute_now();
+    let hash = cache_core::sha256_hex(&body_vec);
+    if let Some(expected) = &cfg.sha256 {
+        if &hash != expected {
+            return Err(format!(
+                "cache: sha256 mismatch for {uri}: expected {expected}, got {hash}"
+            ));
+        }
+    }
+    let content_length = body_vec.len() as i64;
+    let final_path = blob_path(&root, &hash);
+    if let Some(parent) = final_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("cache staging: creating {}: {e}", parent.display()))?;
+    }
+    if !final_path.exists() {
+        let tmp_name = format!("{}.{}", hash, std::process::id());
+        let tmp_path = root.join("tmp").join(&tmp_name);
+        std::fs::write(&tmp_path, &body_vec)
+            .map_err(|e| format!("cache staging: writing tmp: {e}"))?;
+        match std::fs::rename(&tmp_path, &final_path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                let _ = std::fs::remove_file(&tmp_path);
+            }
+            Err(err) => {
+                let _ = std::fs::remove_file(&tmp_path);
+                return Err(format!(
+                    "cache staging: renaming to {}: {err}",
+                    final_path.display()
+                ));
+            }
+        }
+    }
+    let etag = got
+        .metadata
+        .etag
+        .clone()
+        .or(head_etag);
+    let last_modified = got
+        .metadata
+        .last_modified
+        .map(|s| s.to_string())
+        .or(head_last_modified);
+    upsert(
+        &cfg.name, uri, scheme,
+        etag.as_deref(),
+        last_modified.as_deref(),
+        &hash,
+        Some(content_length),
+        &final_path.to_string_lossy(),
+        &now,
+        None,
+    )?;
+    Ok(path_to_file_uri(&final_path))
+}
+
 fn enforce_sha_pin(cfg: &Config, cached_hash: &str, uri: &str) -> Result<(), String> {
     if let Some(expected) = &cfg.sha256 {
         if expected != cached_hash {
@@ -901,6 +1305,41 @@ fn cache_scalar(
     {
         return Ok(types::Duckvalue::Null);
     }
+
+    // s3:// intercept — cache-core's `Config::from_json` rejects any
+    // s3-specific keys (deny_unknown_fields), so route the s3 flow
+    // directly with a lenient parse for {endpoint, region,
+    // version_id, anonymous, path_style}. The remaining common knobs
+    // (name, policy, sha256, ttl) still go through cache-core's
+    // strict parser after the s3-only keys are stripped.
+    let (cfg_json_opt, uri_opt): (Option<&str>, Option<&str>) = match neutral.as_slice() {
+        [NeutralValue::Text(u)] => (None, Some(u.as_str())),
+        [NeutralValue::Text(j), NeutralValue::Text(u)] => (Some(j.as_str()), Some(u.as_str())),
+        _ => (None, None),
+    };
+    if let Some(uri) = uri_opt {
+        let lc = uri.trim_start().to_ascii_lowercase();
+        if lc.starts_with("s3:") {
+            let params = match cfg_json_opt {
+                Some(j) => S3Params::from_json(j).map_err(duckerr)?,
+                None => S3Params::default(),
+            };
+            let cfg = match cfg_json_opt {
+                Some(j) => {
+                    let stripped = strip_s3_keys(j).map_err(duckerr)?;
+                    if stripped.is_empty() {
+                        Config::default()
+                    } else {
+                        Config::from_json(&stripped).map_err(duckerr)?
+                    }
+                }
+                None => Config::default(),
+            };
+            let out = resolve_s3(&cfg, params, uri, "s3").map_err(duckerr)?;
+            return Ok(from_neutral(NeutralValue::Text(out)));
+        }
+    }
+
     let res = cache_core::Core::dispatch(idx, &neutral).map_err(duckerr)?;
     Ok(from_neutral(res))
 }
