@@ -211,6 +211,23 @@ fn spi_bootstrap() -> Result<(), String> {
     let root = cache_root()?;
     ensure_dirs(&root)?;
     let db_path = root.join("metadata.db");
+
+    // Cross-process bootstrap lock. wasivfs (the SQLite VFS baked into
+    // sqlite-lib.wasm) does NOT implement real xLock/xUnlock — those are
+    // in-memory bookkeeping only, per its "single-process use" contract.
+    // Without an external lock, N concurrent ducklink processes each
+    // run `CREATE TABLE IF NOT EXISTS` against the same file at load-
+    // time, and the interleaved writes corrupt the pager (SQLITE_CORRUPT
+    // "database disk image is malformed"). Serialise on a file lock
+    // just for the bootstrap window; steady-state reads/writes below
+    // still ride on the per-URI lock the resolver takes around the
+    // fetch, and this lock is dropped before any DuckDB scalar runs.
+    let bootstrap_lock_path = root.join("locks").join("metadata-bootstrap.lock");
+    let _bootstrap_lock: Option<file_lock::LockHandle> = file_lock::acquire_exclusive(
+        &bootstrap_lock_path.to_string_lossy(),
+    )
+    .ok();
+
     sqlite_spi::open_db(
         db_path
             .to_str()
