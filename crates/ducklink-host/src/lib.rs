@@ -1,6 +1,9 @@
 pub mod duckdb_core_bindings {
     wasmtime::component::bindgen!({
-        path: "../../../duckdb-wasm/core/wit",
+        // Phase 2: consume the @5 core world from ducklink's synced mirror
+        // (populated by scripts/sync-cli-wit.sh). No longer references the
+        // out-of-tree duckdb-wasm working copy.
+        path: "../../crates/ducklink-cli/wit/deps/duckdb",
         world: "duckdb:component/libduckdb",
         with: {
             "wasi:cli/environment": wasmtime_wasi::p2::bindings::cli::environment,
@@ -54,16 +57,11 @@ use duckdb_core_bindings::duckdb::component::extension_loader_hooks as core_exte
 use duckdb_core_bindings::duckdb::component::host_extension_loader as core_host_loader;
 use duckdb_core_bindings::duckdb::extension::callback_dispatch as core_callback_dispatch;
 use duckdb_core_bindings::duckdb::extension::column_types as core_column_types;
-use duckdb_core_bindings::duckdb::extension::storage_host as core_storage_host;
-use duckdb_core_bindings::duckdb::extension::index_host as core_index_host;
-use duckdb_core_bindings::duckdb::extension::collation_host as core_collation_host;
-use duckdb_core_bindings::duckdb::extension::pragma_host as core_pragma_host;
-use duckdb_core_bindings::duckdb::extension::parser_host as core_parser_host;
-use duckdb_core_bindings::duckdb::extension::optimizer_host as core_optimizer_host;
-// 3.1.0 additive minor: the core imports this; the host provides it and drives a
-// component's streaming filter-pushdown table fn (ts-open-filtered/next/close).
-use duckdb_core_bindings::duckdb::extension::table_stream_host as core_table_stream_host;
-use duckdb_core_bindings::duckdb::extension::files_host as core_files_host;
+// Phase 2 (@5): the 8 `*-host` imports on the core WIT world are DELETED --
+// storage/index/collation/pragma/parser/optimizer/files/table-stream all lift
+// to the host, which orchestrates each per-extension `*-dispatch` export
+// directly (see the ATTACH intercept + write intercept in HostState::execute
+// and ADR wasm-ecosystem-at-5-adr.md Decision 3 + Amendment A1).
 use duckdb_core_bindings::duckdb::extension::types as core_types;
 use duckdb_core_bindings::tvm::memory::bytes as core_tvm_bytes;
 use duckdb_core_bindings::tvm::memory::manager as core_tvm_manager;
@@ -114,6 +112,7 @@ pub use ducklink_runtime::compose_dynlink::{ProviderPreopen, ProviderRegistry};
 pub mod compose_dynlink_test_support {
     pub use ducklink_runtime::compose_dynlink::{add_to_linker, imports_linker, DynState};
 }
+pub mod at5_intercept;
 mod delta_rewrite;
 mod plan_shape;
 /// Phase D: per-sub-extension `compose:dynlink` bridge + composed-provider
@@ -421,610 +420,13 @@ impl core_callback_dispatch::Host for CoreStoreState {
     }
 }
 
-// M2a: the core imports `duckdb:extension/storage-host` for read-only
-// foreign-catalog enumeration; the host PROVIDES it and routes each call through
-// the ExtensionManager to the backing storage component's `storage-dispatch`
-// export (mirroring callback-dispatch above). storage-attach reads the host file
-// named by the DSN and stages it into the component.
-impl core_storage_host::Host for CoreStoreState {
-    fn storage_list_types(&mut self) -> Vec<String> {
-        let manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager.registered_storage_types()
-    }
-
-    fn storage_attach(&mut self, dsn: String) -> Result<u32, core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_storage_attach(&dsn)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn storage_list_tables(&mut self, catalog: u32) -> Result<Vec<String>, core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_storage_list_tables(catalog)
-            .map(|tables| tables.into_iter().map(Into::into).collect())
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn storage_table_columns(
-        &mut self,
-        catalog: u32,
-        table: String,
-    ) -> Result<Vec<core_types::Columndef>, core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_storage_table_columns(catalog, &table)
-            .map(|cols| {
-                cols.into_iter()
-                    .map(convert_extension_columndef_to_core)
-                    .collect()
-            })
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    // M2b scan surface: engine-driven projection + filter pushdown. The core
-    // sends a scan-request (table + projection + filters + limit); the host
-    // routes it to the backing component's storage-dispatch.
-    fn storage_scan_open(
-        &mut self,
-        catalog: u32,
-        request: core_storage_host::ScanRequest,
-    ) -> Result<u32, core_types::Duckerror> {
-        // Criterion 2: prove the pushdown reached the host with the projection +
-        // filters the engine pushed.
-        let filter_log: Vec<String> = request
-            .filters
-            .iter()
-            .map(|f| {
-                format!(
-                    "(col {} {:?} {})",
-                    f.column,
-                    f.op,
-                    describe_core_duckvalue(&f.value)
-                )
-            })
-            .collect();
-        eprintln!(
-            "[storage-scan] dispatch_storage_scan_open catalog={} table={:?} projection={:?} filters=[{}] limit={:?}",
-            catalog,
-            request.table,
-            request.projection,
-            filter_log.join(", "),
-            request.limit,
-        );
-
-        let scan_request = convert_core_scan_request_to_storage(request);
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_storage_scan_open(catalog, scan_request)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn storage_scan_next(
-        &mut self,
-        scan: u32,
-        max_rows: u32,
-    ) -> Result<core_storage_host::Resultset, core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_storage_scan_next(scan, max_rows)
-            .map(convert_extension_resultset_to_core)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn storage_scan_close(&mut self, scan: u32) -> Result<bool, core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_storage_scan_close(scan)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    // M2c write surface: transactions + DDL + DML. The core imports these
-    // through `storage-host`; the host resolves the (ext, callback-handle)
-    // via the same `resolve_storage_backend` picker the read side uses and
-    // routes to the writable component's `storage-write-dispatch` export
-    // through the ExtensionInstance's `storage_*` trampolines.
-    fn storage_begin_transaction(
-        &mut self,
-        catalog: u32,
-    ) -> Result<u32, core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_storage_begin_transaction(catalog)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn storage_commit_transaction(&mut self, txn: u32) -> Result<(), core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_storage_commit_transaction(txn)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn storage_rollback_transaction(
-        &mut self,
-        txn: u32,
-    ) -> Result<(), core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_storage_rollback_transaction(txn)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn storage_create_table(
-        &mut self,
-        txn: u32,
-        table: String,
-        columns: Vec<core_types::Columndef>,
-    ) -> Result<(), core_types::Duckerror> {
-        let ext_columns: Vec<extension_types::Columndef> = columns
-            .into_iter()
-            .map(convert_core_columndef_to_extension)
-            .collect();
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_storage_create_table(txn, &table, &ext_columns)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn storage_insert_rows(
-        &mut self,
-        txn: u32,
-        table: String,
-        rows: Vec<Vec<core_types::Duckvalue>>,
-    ) -> Result<u64, core_types::Duckerror> {
-        let ext_rows: Vec<Vec<extension_types::Duckvalue>> = rows
-            .into_iter()
-            .map(|row| {
-                row.into_iter()
-                    .map(convert_core_duckvalue_to_extension)
-                    .collect()
-            })
-            .collect();
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_storage_insert_rows(txn, &table, &ext_rows)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn storage_delete_rows(
-        &mut self,
-        txn: u32,
-        table: String,
-        rowids: Vec<i64>,
-    ) -> Result<u64, core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_storage_delete_rows(txn, &table, &rowids)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn storage_update_rows(
-        &mut self,
-        txn: u32,
-        table: String,
-        rowids: Vec<i64>,
-        updated_columns: Vec<u32>,
-        rows: Vec<Vec<core_types::Duckvalue>>,
-    ) -> Result<u64, core_types::Duckerror> {
-        let ext_rows: Vec<Vec<extension_types::Duckvalue>> = rows
-            .into_iter()
-            .map(|row| {
-                row.into_iter()
-                    .map(convert_core_duckvalue_to_extension)
-                    .collect()
-            })
-            .collect();
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_storage_update_rows(txn, &table, &rowids, &updated_columns, &ext_rows)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-}
-
-// Item 3 / M2a: the core imports `duckdb:extension/index-host` for custom-index
-// build + search. The host PROVIDES it and routes each call through the
-// ExtensionManager to the backing index component's `index-dispatch` export
-// (mirroring storage-host). index-type-list lets the core register a wasm
-// IndexType per declared type so `CREATE INDEX ... USING <type>` dispatches here.
-impl core_index_host::Host for CoreStoreState {
-    fn index_type_list(&mut self) -> Vec<String> {
-        let manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager.registered_index_types()
-    }
-
-    fn index_create(
-        &mut self,
-        type_name: String,
-        index_name: String,
-        dims: u32,
-    ) -> Result<u32, core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_index_create(&type_name, &index_name, dims)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn index_append(
-        &mut self,
-        handle: u32,
-        rowids: Vec<i64>,
-        vectors: Vec<Vec<f32>>,
-    ) -> Result<(), core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_index_append(handle, &rowids, &vectors)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn index_build(&mut self, handle: u32) -> Result<(), core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_index_build(handle)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn index_search(
-        &mut self,
-        handle: u32,
-        query: Vec<f32>,
-        k: u32,
-    ) -> Result<Vec<core_index_host::IndexHit>, core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_index_search(handle, &query, k)
-            .map(|hits| {
-                hits.into_iter()
-                    .map(|h| core_index_host::IndexHit {
-                        rowid: h.rowid,
-                        distance: h.distance,
-                    })
-                    .collect()
-            })
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn index_drop(&mut self, handle: u32) -> Result<(), core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_index_drop(handle)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-}
-
-// Item 2: the core imports `duckdb:extension/collation-host` to pull the
-// collations components have declared. The host PROVIDES it, returning each
-// collation's name + transform scalar + combinable flag. The core wraps each as
-// a DuckDB collation (CreateCollationInfo) reusing the named, already-registered
-// sort-key scalar -- no per-row dispatch (the scalar's own callback path drives
-// the transform).
-impl core_collation_host::Host for CoreStoreState {
-    fn collation_list(&mut self) -> Vec<core_collation_host::CollationSpec> {
-        let manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .registered_collations()
-            .into_iter()
-            .map(|(name, transform_scalar, combinable)| core_collation_host::CollationSpec {
-                name,
-                transform_scalar,
-                combinable,
-            })
-            .collect()
-    }
-}
-
-// Item 4: the core imports `duckdb:extension/pragma-host` to pull the pragmas
-// components have declared. The host PROVIDES it, returning each pragma's name +
-// callback handle. The core intercepts `PRAGMA <name>(...)`, dispatches via
-// callback-dispatch.call-pragma (the component returns a SQL script), and runs
-// that script -- no mid-callback re-entry into SQL.
-impl core_pragma_host::Host for CoreStoreState {
-    fn pragma_list(&mut self) -> Vec<core_pragma_host::PragmaSpec> {
-        let manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .registered_pragmas()
-            .into_iter()
-            .map(|(name, callback_handle)| core_pragma_host::PragmaSpec {
-                name,
-                callback_handle,
-            })
-            .collect()
-    }
-}
-
-// 2.3.0 / v3: the core imports `duckdb:extension/parser-host` to pull declared
-// parser extensions and offer parser-rejected statements to them. The host
-// PROVIDES it: `parser_list` enumerates declarations; `call_parse` routes to the
-// owning component's `parser-dispatch.call-parse` and returns its string->SQL
-// rewrite (or none if declined). The core runs the rewrite in place.
-impl core_parser_host::Host for CoreStoreState {
-    fn parser_list(&mut self) -> Vec<core_parser_host::ParserSpec> {
-        let manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .registered_parsers()
-            .into_iter()
-            .map(|(name, callback_handle)| core_parser_host::ParserSpec {
-                name,
-                callback_handle,
-            })
-            .collect()
-    }
-
-    fn call_parse(
-        &mut self,
-        handle: u32,
-        query: String,
-    ) -> Result<Option<String>, core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_parse(handle, &query)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-}
-
-// 2.3.0 / v3: the core imports `duckdb:extension/optimizer-host` to pull declared
-// optimizer rules and offer the flattened plan to them. The host PROVIDES it:
-// `optimizer_list` enumerates declarations (the core registers its component
-// OptimizerExtension when non-empty); `call_optimize` routes to the owning
-// component's `optimizer-dispatch.call-optimize` and returns its rewrite SQL.
-impl core_optimizer_host::Host for CoreStoreState {
-    fn optimizer_list(&mut self) -> Vec<core_optimizer_host::OptimizerSpec> {
-        let manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .registered_optimizers()
-            .into_iter()
-            .map(|(rule_name, callback_handle)| core_optimizer_host::OptimizerSpec {
-                rule_name,
-                callback_handle,
-            })
-            .collect()
-    }
-
-    fn call_optimize(
-        &mut self,
-        handle: u32,
-        plan_json: String,
-    ) -> Result<Option<String>, core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_optimize(handle, &plan_json)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-}
-
-// 3.1.0 additive minor: the core imports `duckdb:extension/table-stream-host` to
-// drive a component's streaming + filter-pushdown table function. The host
-// PROVIDES it: `filterable-table-list` surfaces the declared filterable tables
-// (so the core registers a C++ TableFunction with filter_pushdown = true for
-// each), and ts-open-filtered / ts-next / ts-close route the pushed-down filter
-// set + cursor pulls to the owning component's `call-table-open-filtered` export.
-impl core_table_stream_host::Host for CoreStoreState {
-    fn filterable_table_list(&mut self) -> Vec<core_table_stream_host::FilterableTable> {
-        let manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .registered_filterable_tables()
-            .into_iter()
-            .map(|ft| core_table_stream_host::FilterableTable {
-                name: ft.name,
-                arguments: ft
-                    .arguments
-                    .into_iter()
-                    .map(|a| core_types::Columndef {
-                        name: a.name.unwrap_or_default(),
-                        logical: neutral_reg_logicaltype_to_core_types(a.logical),
-                    })
-                    .collect::<Vec<_>>()
-                    .into(),
-                columns: ft
-                    .columns
-                    .into_iter()
-                    .map(|c| core_types::Columndef {
-                        name: c.name,
-                        logical: neutral_reg_logicaltype_to_core_types(c.logical),
-                    })
-                    .collect::<Vec<_>>()
-                    .into(),
-                handle: ft.callback_handle,
-            })
-            .collect()
-    }
-
-    fn ts_open_filtered(
-        &mut self,
-        handle: u32,
-        args: BindgenVec<core_types::Duckvalue>,
-        projection: BindgenVec<u32>,
-        filters: BindgenVec<core_table_stream_host::TsFilter>,
-    ) -> Result<core_table_stream_host::TsOpenResult, core_types::Duckerror> {
-        let ext_args: Vec<_> = args
-            .into_iter()
-            .map(convert_core_duckvalue_to_extension)
-            .collect();
-        let proj: Vec<u32> = projection.into_iter().collect();
-        let ext_filters: Vec<_> = filters
-            .into_iter()
-            .map(convert_core_tsfilter_to_extension)
-            .collect();
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_table_open_filtered(handle, &ext_args, &proj, &ext_filters)
-            .map(|open| core_table_stream_host::TsOpenResult {
-                cursor: open.cursor,
-                columns: open
-                    .columns
-                    .into_iter()
-                    .map(convert_extension_columndef_to_core)
-                    .collect::<Vec<_>>()
-                    .into(),
-            })
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn ts_next(
-        &mut self,
-        handle: u32,
-        cursor: u32,
-        max_rows: u32,
-    ) -> Result<core_table_stream_host::Resultset, core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_table_next(handle, cursor, max_rows)
-            .map(|rows| {
-                rows.into_iter()
-                    .map(|row| {
-                        row.into_iter()
-                            .map(convert_extension_duckvalue_to_core)
-                            .collect::<Vec<_>>()
-                            .into()
-                    })
-                    .collect::<Vec<_>>()
-                    .into()
-            })
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn ts_close(
-        &mut self,
-        handle: u32,
-        cursor: u32,
-    ) -> Result<bool, core_types::Duckerror> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_table_close(handle, cursor)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-}
-
-// httpfs M2: the core imports `duckdb:extension/files-host` for remote file I/O;
-// the host PROVIDES it and routes each call through the ExtensionManager to the
-// registered files-backend component's `file-dispatch` export (mirroring
-// storage-host above). The error channel is plain strings (not duckerror).
-impl core_files_host::Host for CoreStoreState {
-    fn file_open(
-        &mut self,
-        url: String,
-    ) -> Result<core_files_host::FileOpenResult, String> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_file_open(&url)
-            .map(|(handle, size)| core_files_host::FileOpenResult { handle, size })
-    }
-
-    fn file_read(
-        &mut self,
-        handle: u32,
-        offset: u64,
-        len: u32,
-    ) -> Result<Vec<u8>, String> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager.dispatch_file_read(handle, offset, len)
-    }
-
-    fn file_close(&mut self, handle: u32) -> Result<(), String> {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager.dispatch_file_close(handle)
-    }
-}
+// Phase 2 (@5): the eight `*-host::Host` trait implementations that used to
+// bridge storage / index / collation / pragma / parser / optimizer /
+// files / table-stream calls out of the wasm core have been DELETED. Those
+// capabilities now flow through the ATTACH intercept + write intercept in
+// HostState::execute (see ADR Decision 3 + Amendment A1). The dispatch
+// plumbing in ExtensionInstance::storage_* and ExtensionManager::dispatch_*
+// stays intact -- what changed is the CALLER: the host, not the core.
 
 // ---- TVM spill host (Tiered Virtual Memory) ----
 // Backs the libduckdb world's tvm:memory imports with an in-process region
@@ -1545,9 +947,23 @@ fn spi_value_text(v: &core_types::Duckvalue) -> String {
             format!("{} months {} days {} us", iv.months, iv.days, iv.micros)
         }
         core_types::Duckvalue::Uuid(u) => format_uuid(u.hi, u.lo),
+        // @5.0.0: first-class 128-bit integer values.
+        core_types::Duckvalue::Hugeint(h) => format_hugeint(h.lower, h.upper),
+        core_types::Duckvalue::Uhugeint(h) => format_uhugeint(h.lower, h.upper),
         // ESCAPE-HATCH: the value is already JSON; emit it verbatim.
         core_types::Duckvalue::Complex(c) => c.json.clone(),
     }
+}
+
+/// Render a signed 128-bit integer split into (lower: u64, upper: i64) halves.
+pub(crate) fn format_hugeint(lower: u64, upper: i64) -> String {
+    let raw = (((upper as u64 as u128) << 64) | lower as u128) as i128;
+    raw.to_string()
+}
+/// Render an unsigned 128-bit integer split into (lower, upper) 64-bit halves.
+pub(crate) fn format_uhugeint(lower: u64, upper: u64) -> String {
+    let raw = ((upper as u128) << 64) | lower as u128;
+    raw.to_string()
 }
 
 /// Render a HUGEINT-backed DECIMAL: unscaled int128 = (upper<<64 | lower),
@@ -2211,8 +1627,19 @@ impl ExtensionManager {
     /// registered (via `register-storage`). The core pulls this list (through the
     /// `storage-host.storage-list-types` import) and registers a wasm
     /// StorageExtension for each, so `ATTACH ... (TYPE <name>)` dispatches here.
+    #[allow(dead_code)]
     fn registered_storage_types(&self) -> Vec<String> {
         self.storage_backends.keys().cloned().collect()
+    }
+
+    /// Phase 2 (@5) B1: lookup the storage backend for a specific TYPE name
+    /// parsed from the intercepted ATTACH SQL. Returns
+    /// `(extension-id, callback-handle)` or `None` if no extension has
+    /// registered a backend under `type_name`.
+    pub fn storage_backend_for(&self, type_name: &str) -> Option<(String, u32)> {
+        self.storage_backends
+            .get(type_name)
+            .map(|(ext, handle)| (ext.clone(), *handle))
     }
 
     /// Resolve the storage backend that should service an ATTACH. For M2a the
@@ -2391,6 +1818,31 @@ impl ExtensionManager {
             extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
         })?;
         instance.storage_insert_rows(handle, txn, table, rows)
+    }
+
+    /// Phase 2 (@5) intercept helper: wrap a single INSERT dispatch in an
+    /// auto-BEGIN/COMMIT so the ATTACH-intercept write path doesn't need to
+    /// manage transaction lifecycles itself. Rolls back on failure. Used
+    /// exclusively by `HostState::intercept_write`.
+    pub fn dispatch_storage_insert_direct(
+        &mut self,
+        catalog: u32,
+        table: &str,
+        rows: &[Vec<extension_types::Duckvalue>],
+    ) -> Result<u64, extension_types::Duckerror> {
+        let txn = self.dispatch_storage_begin_transaction(catalog)?;
+        match self.dispatch_storage_insert_rows(txn, table, rows) {
+            Ok(n) => {
+                self.dispatch_storage_commit_transaction(txn)?;
+                Ok(n)
+            }
+            Err(err) => {
+                // Roll back on error; ignore any secondary rollback failure --
+                // the original error is what matters to the caller.
+                let _ = self.dispatch_storage_rollback_transaction(txn);
+                Err(err)
+            }
+        }
     }
 
     fn dispatch_storage_delete_rows(
@@ -3741,6 +3193,22 @@ pub struct HostState {
     /// host->guest preopen mapping, used by the `delta_scan('dir')` SQL rewrite
     /// to read a Delta table's `_delta_log` off the real host filesystem.
     preopens: Vec<(PathBuf, String)>,
+    /// Phase 2 (@5): aliases previously ATTACHed against a storage-capable
+    /// extension. Maps `<alias>` → `(extension-id, catalog-handle,
+    /// callback-handle, table-columns-keyed-by-table-name)`. Populated by the
+    /// ATTACH intercept in `execute`; consulted by the write intercept.
+    attached_aliases: HashMap<String, AttachedForeignCatalog>,
+}
+
+/// Metadata the ATTACH intercept records for an `<alias>` bound to a storage
+/// extension. See `HostState::attached_aliases`.
+#[derive(Debug, Clone)]
+pub(crate) struct AttachedForeignCatalog {
+    pub extension: String,
+    pub catalog_handle: u32,
+    pub callback_handle: u32,
+    pub type_name: String,
+    pub tables: Vec<String>,
 }
 
 impl WasiView for HostState {
@@ -4364,6 +3832,218 @@ impl HostState {
     fn schedule_appender_drop(&mut self, appender: Resource<cli_db::Appender>) {
         self.pending_appender_drops.push(appender);
     }
+
+    // -----------------------------------------------------------------------
+    // Phase 2 (@5): ATTACH intercept + write intercept helpers. See ADR
+    // Decision 3 + Amendments A1 / A5 / B1 / B2.
+    // -----------------------------------------------------------------------
+
+    /// Handle a parsed `ATTACH '<dsn>' AS <alias> (TYPE <type>)` intercept.
+    /// Looks up the extension registered for `<type>` in the ExtensionManager
+    /// (see B1 + B2), opens the foreign catalog through the extension's
+    /// `storage-dispatch.storage-attach`, and records the mapping in
+    /// `attached_aliases` so subsequent SELECTs / writes route back here.
+    ///
+    /// Returns a synthetic empty QueryResult (like the core's own `ATTACH`
+    /// return). The caller unwraps into `Ok(...)` at `execute`'s bottom.
+    fn intercept_attach(
+        &mut self,
+        _entry_handle: ResourceAny,
+        spec: at5_intercept::AttachSpec,
+    ) -> Result<cli_db::QueryResult, cli_types::Duckerror> {
+        let attach_note = format!(
+            "[at5-attach] alias={} type={} dsn={} options={:?}",
+            spec.alias, spec.type_name, spec.dsn, spec.options
+        );
+        eprintln!("{attach_note}");
+        // B1: look up the (extension, callback-handle) pair for this TYPE.
+        let (ext, callback_handle) = {
+            let manager = self
+                .extension_manager
+                .lock()
+                .expect("extension manager mutex poisoned");
+            match manager.storage_backend_for(&spec.type_name) {
+                Some(pair) => pair,
+                None => {
+                    return Err(cli_types::Duckerror::Invalidargument(
+                        format!(
+                            "No storage extension registered for TYPE {} \
+                             (attach '{}' AS {})",
+                            spec.type_name, spec.dsn, spec.alias
+                        )
+                        .into(),
+                    ));
+                }
+            }
+        };
+        if spec.if_not_exists && self.attached_aliases.contains_key(&spec.alias) {
+            return Ok(empty_query_result());
+        }
+        // Call the extension's storage-dispatch to open the foreign catalog.
+        let (catalog_handle, tables) = {
+            let mut manager = self
+                .extension_manager
+                .lock()
+                .expect("extension manager mutex poisoned");
+            let catalog_handle = manager
+                .dispatch_storage_attach(&spec.dsn)
+                .map_err(cli_extension_duckerror)?;
+            let tables = manager
+                .dispatch_storage_list_tables(catalog_handle)
+                .map_err(cli_extension_duckerror)?;
+            (catalog_handle, tables)
+        };
+        eprintln!(
+            "[at5-attach] extension='{}' callback={} catalog={} tables={:?}",
+            ext, callback_handle, catalog_handle, tables
+        );
+        self.attached_aliases.insert(
+            spec.alias.clone(),
+            AttachedForeignCatalog {
+                extension: ext,
+                catalog_handle,
+                callback_handle,
+                type_name: spec.type_name.clone(),
+                tables,
+            },
+        );
+        Ok(empty_query_result())
+    }
+
+    /// Handle a parsed WRITE against an attached foreign catalog. INSERT
+    /// dispatches directly to `storage_insert_rows`; UPDATE/DELETE with a
+    /// WHERE would need the rowid pre-scan design in ADR Amendment A5 --
+    /// v0 defers those to a Phase-2b follow-up and rejects here with a
+    /// clear message. `WriteRoute::Unsupported` variants come from the
+    /// parser (Risk 8 non-goals) and are surfaced with `Unsupported`.
+    fn intercept_write(
+        &mut self,
+        _entry_handle: ResourceAny,
+        route: at5_intercept::WriteRoute,
+    ) -> Result<cli_db::QueryResult, cli_types::Duckerror> {
+        use at5_intercept::WriteRoute;
+        match route {
+            WriteRoute::Unsupported(reason) => Err(cli_types::Duckerror::Unsupported(
+                format!(
+                    "Operation not supported on @5 attached tables: {reason}. \
+                     Use the native duckdb build if this pattern is required."
+                )
+                .into(),
+            )),
+            WriteRoute::Insert {
+                alias,
+                table,
+                columns,
+                rows,
+            } => {
+                let catalog = self.attached_aliases.get(&alias).ok_or_else(|| {
+                    cli_types::Duckerror::Internal(
+                        format!("alias {alias} disappeared before dispatch").into(),
+                    )
+                })?;
+                let catalog_handle = catalog.catalog_handle;
+                // Convert parsed literals into extension Duckvalue rows. Any
+                // Raw/expression cell means we can't dispatch to the extension
+                // cleanly; reject with a clear message.
+                let mut ext_rows: Vec<Vec<extension_types::Duckvalue>> =
+                    Vec::with_capacity(rows.len());
+                for row in rows {
+                    if !columns.is_empty() && row.len() != columns.len() {
+                        return Err(cli_types::Duckerror::Invalidargument(
+                            format!(
+                                "INSERT into {alias}.{table}: {} values for {} \
+                                 named columns",
+                                row.len(),
+                                columns.len()
+                            )
+                            .into(),
+                        ));
+                    }
+                    let mut cells = Vec::with_capacity(row.len());
+                    for lit in row {
+                        cells.push(literal_to_extension_duckvalue(lit).map_err(|reason| {
+                            cli_types::Duckerror::Unsupported(
+                                format!(
+                                    "Operation not supported on @5 attached tables: {reason}. \
+                                     Use the native duckdb build if this pattern is required."
+                                )
+                                .into(),
+                            )
+                        })?);
+                    }
+                    ext_rows.push(cells);
+                }
+                let mut manager = self
+                    .extension_manager
+                    .lock()
+                    .expect("extension manager mutex poisoned");
+                let n = manager
+                    .dispatch_storage_insert_direct(catalog_handle, &table, &ext_rows)
+                    .map_err(cli_extension_duckerror)?;
+                eprintln!(
+                    "[at5-write] INSERT {alias}.{table}: {n} row(s) dispatched to \
+                     storage-write-dispatch"
+                );
+                Ok(empty_query_result())
+            }
+            WriteRoute::Update { alias, table, .. } => Err(cli_types::Duckerror::Unsupported(
+                format!(
+                    "UPDATE against {alias}.{table} requires the rowid pre-scan \
+                     path (ADR Amendment A5); tracked as Phase 2b, not landed in \
+                     this build. Use the native duckdb build for UPDATEs on \
+                     ATTACHed foreign catalogs."
+                )
+                .into(),
+            )),
+            WriteRoute::Delete { alias, table, .. } => Err(cli_types::Duckerror::Unsupported(
+                format!(
+                    "DELETE against {alias}.{table} requires the rowid pre-scan \
+                     path (ADR Amendment A5); tracked as Phase 2b, not landed in \
+                     this build. Use the native duckdb build for DELETEs on \
+                     ATTACHed foreign catalogs."
+                )
+                .into(),
+            )),
+        }
+    }
+}
+
+fn empty_query_result() -> cli_db::QueryResult {
+    cli_db::QueryResult {
+        columns: Vec::new().into(),
+        rows: Vec::new().into(),
+    }
+}
+
+fn cli_extension_duckerror(err: extension_types::Duckerror) -> cli_types::Duckerror {
+    match err {
+        extension_types::Duckerror::Invalidargument(m) => {
+            cli_types::Duckerror::Invalidargument(m.into())
+        }
+        extension_types::Duckerror::Unsupported(m) => cli_types::Duckerror::Unsupported(m.into()),
+        extension_types::Duckerror::Invalidstate(m) => cli_types::Duckerror::Invalidstate(m.into()),
+        extension_types::Duckerror::Io(m) => cli_types::Duckerror::Io(m.into()),
+        extension_types::Duckerror::Internal(m) => cli_types::Duckerror::Internal(m.into()),
+    }
+}
+
+fn literal_to_extension_duckvalue(
+    lit: at5_intercept::ValueLiteral,
+) -> Result<extension_types::Duckvalue, String> {
+    use at5_intercept::ValueLiteral;
+    Ok(match lit {
+        ValueLiteral::Null => extension_types::Duckvalue::Null,
+        ValueLiteral::Integer(n) => extension_types::Duckvalue::Int64(n),
+        ValueLiteral::Float(f) => extension_types::Duckvalue::Float64(f),
+        ValueLiteral::String(s) => extension_types::Duckvalue::Text(s.into()),
+        ValueLiteral::Blob(b) => extension_types::Duckvalue::Blob(b.into()),
+        ValueLiteral::Raw(expr) => {
+            return Err(format!(
+                "unsupported expression `{expr}` in VALUES tuple (only literals \
+                 NULL/int/float/'string'/X'hex' are routed to the extension)"
+            ));
+        }
+    })
 }
 
 // Retained only for the test mocks below (the production impls moved to
@@ -4576,6 +4256,16 @@ impl cli_db::Host for HostState {
         None
     }
 
+    /// @5.0.0: The CLI shell never serves quack RPC through its connection;
+    /// the quack extension's bridge server (if started) is driven directly from
+    /// the core-side host bindings (see `handle_quack_request` in core lib.rs).
+    fn handle_quack_request(
+        &mut self,
+        _body: wasmtime::component::__internal::Vec<u8>,
+    ) -> Option<wasmtime::component::__internal::Vec<u8>> {
+        None
+    }
+
     fn open(&mut self, path: Option<CliString>) -> Result<Resource<cli_db::Connection>, CliString> {
         let owned: Option<String> = path.map(|s| s.into());
         let result = self
@@ -4700,6 +4390,40 @@ impl cli_db::Host for HostState {
         // the core mutex). Drain the queue here — the core is idle again
         // — so `<alias>.<fn>` resolves for the user's next statement.
         self.flush_deferred_prefix_declarations(entry_handle.clone());
+        // Phase 2 (@5): ATTACH + write intercept for foreign catalogs backed
+        // by a storage-capable extension. Both branches run BEFORE the SQL
+        // reaches the core (see ADR Decision 3 + Amendment A1 + A5).
+        //
+        // ATTACH: parse `ATTACH '<dsn>' AS <alias> (TYPE <name> [, k=v ...])`,
+        // route to the extension's storage-dispatch, materialize the foreign
+        // catalog into an in-memory attached DB on the core, and record the
+        // alias in `attached_aliases` so subsequent writes are routed here too.
+        // Falls through to the core for any ATTACH shape we don't recognize.
+        if let Some(spec) = at5_intercept::parse_attach(sql.as_ref()) {
+            match self.intercept_attach(entry_handle.clone(), spec) {
+                Ok(result) => {
+                    self.refresh_catalog_snapshot();
+                    return Ok(result);
+                }
+                Err(err) => return Err(err),
+            }
+        }
+        // WRITE: parse INSERT/UPDATE/DELETE against an attached alias. See
+        // `resolve_write_target` for the accept/reject matrix (Amendment A2
+        // Risk 8 non-goals return `Unsupported` here).
+        if !self.attached_aliases.is_empty() {
+            let alias_map: HashMap<String, String> =
+                self.attached_aliases.keys().map(|k| (k.clone(), String::new())).collect();
+            if let Some(route) = at5_intercept::resolve_write_target(sql.as_ref(), &alias_map) {
+                match self.intercept_write(entry_handle.clone(), route) {
+                    Ok(result) => {
+                        self.refresh_catalog_snapshot();
+                        return Ok(result);
+                    }
+                    Err(err) => return Err(err),
+                }
+            }
+        }
         // One-query `delta_scan('dir')`: the wasm core can't take a subquery-
         // valued table-fn arg, so the host reads the table's _delta_log off the
         // real filesystem, resolves the active files (add minus remove), and
@@ -5088,16 +4812,20 @@ fn neutral_logicaltype_to_core(ty: reg::LogicalType) -> core_runtime_exports::Lo
         reg::LogicalType::Date => core_runtime_exports::Logicaltype::Date,
         reg::LogicalType::Time => core_runtime_exports::Logicaltype::Time,
         reg::LogicalType::Timestamptz => core_runtime_exports::Logicaltype::Timestamptz,
-        // Core (@4.0.0) DECIMAL is fieldless; the @5.0.0 neutral form carries
-        // width/scale which we drop when lowering into the core-runtime shape.
-        reg::LogicalType::Decimal { .. } => core_runtime_exports::Logicaltype::Decimal,
+        // @5.0.0: DECIMAL carries a decimalshape { width, scale } payload
+        // structurally on the variant arm. `core_runtime_exports` re-exports
+        // the shared type from core_types.
+        reg::LogicalType::Decimal { width, scale } => {
+            core_runtime_exports::Logicaltype::Decimal(core_types::Decimalshape {
+                width,
+                scale,
+            })
+        }
         reg::LogicalType::Interval => core_runtime_exports::Logicaltype::Interval,
         reg::LogicalType::Uuid => core_runtime_exports::Logicaltype::Uuid,
-        // T2-1 residual (major-5): the neutral surface gained fieldless
-        // Hugeint / Uhugeint arms; core stays @4.0.0 so route through the
-        // Complex(type-expr) escape hatch.
-        reg::LogicalType::Hugeint => core_runtime_exports::Logicaltype::Complex("HUGEINT".into()),
-        reg::LogicalType::UHugeint => core_runtime_exports::Logicaltype::Complex("UHUGEINT".into()),
+        // @5.0.0: first-class fieldless 128-bit integer logical types.
+        reg::LogicalType::Hugeint => core_runtime_exports::Logicaltype::Hugeint,
+        reg::LogicalType::UHugeint => core_runtime_exports::Logicaltype::Uhugeint,
         // S1 (major-5): nested logical types (LIST / STRUCT / MAP / ARRAY)
         // added on the neutral side ride out as type-expr strings through
         // core's Complex arm — the core WIT has no nested shape.
@@ -5236,14 +4964,15 @@ fn neutral_reg_logicaltype_to_core_types(ty: reg::LogicalType) -> core_types::Lo
         reg::LogicalType::Date => C::Date,
         reg::LogicalType::Time => C::Time,
         reg::LogicalType::Timestamptz => C::Timestamptz,
-        // Core (@4.0.0) Decimal is fieldless; drop width/scale on the down-cast.
-        reg::LogicalType::Decimal { .. } => C::Decimal,
+        // @5.0.0: DECIMAL carries width/scale on the variant arm.
+        reg::LogicalType::Decimal { width, scale } => {
+            C::Decimal(core_types::Decimalshape { width, scale })
+        }
         reg::LogicalType::Interval => C::Interval,
         reg::LogicalType::Uuid => C::Uuid,
-        // T2-1 residual (major-5): route new hugeint arms through the
-        // Complex(type-expr) escape hatch since core stays @4.0.0.
-        reg::LogicalType::Hugeint => C::Complex("HUGEINT".into()),
-        reg::LogicalType::UHugeint => C::Complex("UHUGEINT".into()),
+        // @5.0.0: first-class fieldless HUGEINT / UHUGEINT.
+        reg::LogicalType::Hugeint => C::Hugeint,
+        reg::LogicalType::UHugeint => C::Uhugeint,
         // S1 (major-5): nested types ride out as type-expr strings.
         reg::LogicalType::List(elem) => {
             C::Complex(format!("LIST({})", neutral_logicaltype_to_type_expr(&elem)))
@@ -5275,38 +5004,10 @@ fn neutral_reg_logicaltype_to_core_types(ty: reg::LogicalType) -> core_types::Lo
     }
 }
 
-// 3.1.0 additive minor: a pushed-down filter clause crossing from the core
-// (`table-stream-host.ts-filter`) to the component (`table-stream-dispatch.
-// table-filter`). Both are the neutral by-value descriptor (column index + op +
-// constant values); only the generated Rust types differ across the two bindgen
-// worlds.
-fn convert_core_tsfilter_to_extension(
-    f: core_table_stream_host::TsFilter,
-) -> ducklink_runtime::extension::TableFilter {
-    use core_table_stream_host::TsFilterOp as CoreOp;
-    use ducklink_runtime::extension::FilterOp as ExtOp;
-    let op = match f.op {
-        CoreOp::Eq => ExtOp::Eq,
-        CoreOp::Ne => ExtOp::Ne,
-        CoreOp::Lt => ExtOp::Lt,
-        CoreOp::Le => ExtOp::Le,
-        CoreOp::Gt => ExtOp::Gt,
-        CoreOp::Ge => ExtOp::Ge,
-        CoreOp::IsIn => ExtOp::IsIn,
-        CoreOp::IsNull => ExtOp::IsNull,
-        CoreOp::IsNotNull => ExtOp::IsNotNull,
-    };
-    ducklink_runtime::extension::TableFilter {
-        column: f.column,
-        op,
-        values: f
-            .values
-            .into_iter()
-            .map(convert_core_duckvalue_to_extension)
-            .collect::<Vec<_>>()
-            .into(),
-    }
-}
+// Phase 2 (@5): the core no longer imports `table-stream-host`, so there is
+// no ts-filter clause crossing from the core to translate. The extension-side
+// table-filter shape stays intact; the host builds those directly from its
+// intercepted plan (see ATTACH intercept in HostState::execute).
 
 fn convert_funcargs_to_loader(args: Vec<reg::FuncArg>) -> BindgenVec<core_extension_hooks::FuncArg> {
     args.into_iter()
@@ -5369,6 +5070,15 @@ fn convert_core_duckvalue(value: core_types::Duckvalue) -> cli_types::Duckvalue 
         core_types::Duckvalue::Uuid(u) => {
             cli_types::Duckvalue::Uuid(cli_types::Uuidvalue { hi: u.hi, lo: u.lo })
         }
+        // @5.0.0: first-class 128-bit integer arms carry (lower, upper) halves.
+        core_types::Duckvalue::Hugeint(h) => cli_types::Duckvalue::Hugeint(cli_types::Hugeintvalue {
+            lower: h.lower,
+            upper: h.upper,
+        }),
+        core_types::Duckvalue::Uhugeint(h) => cli_types::Duckvalue::Uhugeint(cli_types::Uhugeintvalue {
+            lower: h.lower,
+            upper: h.upper,
+        }),
         core_types::Duckvalue::Complex(c) => {
             cli_types::Duckvalue::Complex(cli_types::Complexvalue {
                 type_expr: c.type_expr,
@@ -5416,6 +5126,15 @@ fn convert_cli_duckvalue(value: cli_types::Duckvalue) -> core_types::Duckvalue {
         cli_types::Duckvalue::Uuid(u) => {
             core_types::Duckvalue::Uuid(core_types::Uuidvalue { hi: u.hi, lo: u.lo })
         }
+        // @5.0.0: first-class 128-bit integer arms carry (lower, upper) halves.
+        cli_types::Duckvalue::Hugeint(h) => core_types::Duckvalue::Hugeint(core_types::Hugeintvalue {
+            lower: h.lower,
+            upper: h.upper,
+        }),
+        cli_types::Duckvalue::Uhugeint(h) => core_types::Duckvalue::Uhugeint(core_types::Uhugeintvalue {
+            lower: h.lower,
+            upper: h.upper,
+        }),
         cli_types::Duckvalue::Complex(c) => {
             core_types::Duckvalue::Complex(core_types::Complexvalue {
                 type_expr: c.type_expr,
@@ -5460,9 +5179,18 @@ fn convert_core_logicaltype(ty: core_types::Logicaltype) -> cli_types::Logicalty
         core_types::Logicaltype::Date => cli_types::Logicaltype::Date,
         core_types::Logicaltype::Time => cli_types::Logicaltype::Time,
         core_types::Logicaltype::Timestamptz => cli_types::Logicaltype::Timestamptz,
-        core_types::Logicaltype::Decimal => cli_types::Logicaltype::Decimal,
+        // @5.0.0: decimal now carries a decimalshape { width, scale } payload.
+        core_types::Logicaltype::Decimal(shape) => {
+            cli_types::Logicaltype::Decimal(cli_types::Decimalshape {
+                width: shape.width,
+                scale: shape.scale,
+            })
+        }
         core_types::Logicaltype::Interval => cli_types::Logicaltype::Interval,
         core_types::Logicaltype::Uuid => cli_types::Logicaltype::Uuid,
+        // @5.0.0: first-class 128-bit integer logical types (fieldless).
+        core_types::Logicaltype::Hugeint => cli_types::Logicaltype::Hugeint,
+        core_types::Logicaltype::Uhugeint => cli_types::Logicaltype::Uhugeint,
         core_types::Logicaltype::Complex(expr) => cli_types::Logicaltype::Complex(expr),
     }
 }
@@ -5875,40 +5603,11 @@ fn instantiate_core(
         &mut linker,
         |state| state,
     )?;
-    core_storage_host::add_to_linker::<CoreStoreState, CoreStoreState>(
-        &mut linker,
-        |state| state,
-    )?;
-    core_index_host::add_to_linker::<CoreStoreState, CoreStoreState>(
-        &mut linker,
-        |state| state,
-    )?;
-    core_collation_host::add_to_linker::<CoreStoreState, CoreStoreState>(
-        &mut linker,
-        |state| state,
-    )?;
-    core_pragma_host::add_to_linker::<CoreStoreState, CoreStoreState>(
-        &mut linker,
-        |state| state,
-    )?;
-    core_parser_host::add_to_linker::<CoreStoreState, CoreStoreState>(
-        &mut linker,
-        |state| state,
-    )?;
-    core_optimizer_host::add_to_linker::<CoreStoreState, CoreStoreState>(
-        &mut linker,
-        |state| state,
-    )?;
-    core_files_host::add_to_linker::<CoreStoreState, CoreStoreState>(
-        &mut linker,
-        |state| state,
-    )?;
-    // 3.1.0 additive minor: provide table-stream-host so the core can drive a
-    // component's streaming filter-pushdown table fn.
-    core_table_stream_host::add_to_linker::<CoreStoreState, CoreStoreState>(
-        &mut linker,
-        |state| state,
-    )?;
+    // Phase 2 (@5): the 8 `*-host` linker registrations
+    // (storage / index / collation / pragma / parser / optimizer / files /
+    // table-stream) are DELETED. Those imports no longer exist on the core
+    // world -- their capabilities lift to the host's SQL-level ATTACH intercept
+    // and write intercept (see HostState::execute). See ADR Decision 3.
     core_tvm_manager::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |state| state)?;
     core_tvm_bytes::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |state| state)?;
 
@@ -6409,6 +6108,13 @@ fn convert_core_duckvalue_to_extension(value: core_types::Duckvalue) -> extensio
         core_types::Duckvalue::Uuid(u) => {
             extension_types::Duckvalue::Uuid(extension_types::Uuidvalue { hi: u.hi, lo: u.lo })
         }
+        // @5.0.0: first-class 128-bit integer arms carry (lower, upper) halves.
+        core_types::Duckvalue::Hugeint(h) => extension_types::Duckvalue::Hugeint(
+            extension_types::Hugeintvalue { lower: h.lower, upper: h.upper },
+        ),
+        core_types::Duckvalue::Uhugeint(h) => extension_types::Duckvalue::Uhugeint(
+            extension_types::Uhugeintvalue { lower: h.lower, upper: h.upper },
+        ),
         core_types::Duckvalue::Complex(c) => {
             extension_types::Duckvalue::Complex(extension_types::Complexvalue {
                 type_expr: c.type_expr,
@@ -6527,6 +6233,45 @@ fn core_colvec_value_at(c: &core_callback_dispatch::Colvec, r: usize) -> core_ty
             months: v[r].months, days: v[r].days, micros: v[r].micros,
         }),
         Column::Uuid(v) => core_types::Duckvalue::Uuid(core_types::Uuidvalue { hi: v[r].hi, lo: v[r].lo }),
+        // @5.0.0: first-class hugeint columns + nested logical arms
+        // (list/struct/map/array). Nested arms have no first-class Duckvalue
+        // representation; escape them through Complex(json).
+        Column::Hugeint(v) => core_types::Duckvalue::Hugeint(core_types::Hugeintvalue {
+            lower: v[r].lower, upper: v[r].upper,
+        }),
+        Column::Uhugeint(v) => core_types::Duckvalue::Uhugeint(core_types::Uhugeintvalue {
+            lower: v[r].lower, upper: v[r].upper,
+        }),
+        // @5.0.0 S1 nested arms: payload is an opaque byte buffer
+        // (list-col/struct-col wrap `nested-column { encoded }`, map-col wraps
+        // `map-column { keys-encoded, vals-encoded }`, array-col wraps
+        // `array-column { size, encoded }`). These have no first-class
+        // scalar Duckvalue projection at this cross-boundary point --
+        // escape through Complex(json) carrying byte lengths.
+        Column::ListCol(v) => core_types::Duckvalue::Complex(core_types::Complexvalue {
+            type_expr: format!("LIST(row {r})"),
+            json: format!("{{\"kind\":\"list\",\"bytes\":{}}}", v.encoded.len()),
+        }),
+        Column::StructCol(v) => core_types::Duckvalue::Complex(core_types::Complexvalue {
+            type_expr: format!("STRUCT(row {r})"),
+            json: format!("{{\"kind\":\"struct\",\"bytes\":{}}}", v.encoded.len()),
+        }),
+        Column::MapCol(v) => core_types::Duckvalue::Complex(core_types::Complexvalue {
+            type_expr: format!("MAP(row {r})"),
+            json: format!(
+                "{{\"kind\":\"map\",\"keys_bytes\":{},\"vals_bytes\":{}}}",
+                v.keys_encoded.len(),
+                v.vals_encoded.len()
+            ),
+        }),
+        Column::ArrayCol(v) => core_types::Duckvalue::Complex(core_types::Complexvalue {
+            type_expr: format!("ARRAY(row {r})"),
+            json: format!(
+                "{{\"kind\":\"array\",\"size\":{},\"bytes\":{}}}",
+                v.size,
+                v.encoded.len()
+            ),
+        }),
         Column::Complex(v) => core_types::Duckvalue::Complex(core_types::Complexvalue {
             type_expr: v[r].type_expr.clone(), json: v[r].json.clone(),
         }),
@@ -6593,6 +6338,9 @@ fn ext_values_to_core_colvec(vals: Vec<extension_types::Duckvalue>) -> core_call
         Some(D::Decimal(_)) => build!(Decimal, core_column_types::Decimalvalue { lower: 0, upper: 0, width: 0, scale: 0 }, D::Decimal(d) => core_column_types::Decimalvalue { lower: d.lower, upper: d.upper, width: d.width, scale: d.scale }),
         Some(D::Interval(_)) => build!(Interval, core_column_types::Intervalvalue { months: 0, days: 0, micros: 0 }, D::Interval(d) => core_column_types::Intervalvalue { months: d.months, days: d.days, micros: d.micros }),
         Some(D::Uuid(_)) => build!(Uuid, core_column_types::Uuidvalue { hi: 0, lo: 0 }, D::Uuid(d) => core_column_types::Uuidvalue { hi: d.hi, lo: d.lo }),
+        // @5.0.0: first-class 128-bit integer columnar arms.
+        Some(D::Hugeint(_)) => build!(Hugeint, core_column_types::DuckInt128 { lower: 0, upper: 0 }, D::Hugeint(h) => core_column_types::DuckInt128 { lower: h.lower, upper: h.upper }),
+        Some(D::Uhugeint(_)) => build!(Uhugeint, core_column_types::DuckUint128 { lower: 0, upper: 0 }, D::Uhugeint(h) => core_column_types::DuckUint128 { lower: h.lower, upper: h.upper }),
         Some(D::Complex(_)) => build!(Complex, core_column_types::Complexvalue { type_expr: String::new(), json: "null".into() }, D::Complex(c) => core_column_types::Complexvalue { type_expr: c.type_expr.clone(), json: c.json.clone() }),
         Some(D::Null) => unreachable!(),
     };
@@ -6667,19 +6415,19 @@ fn convert_extension_logicaltype_to_core(
         extension_types::Logicaltype::Date => core_types::Logicaltype::Date,
         extension_types::Logicaltype::Time => core_types::Logicaltype::Time,
         extension_types::Logicaltype::Timestamptz => core_types::Logicaltype::Timestamptz,
-        // @5.0.0 DECIMAL now carries width/scale; core (@4.0.0) is fieldless. Drop the
-        // shape (best-effort) on the down-cast — the core has no place for width/scale.
-        extension_types::Logicaltype::Decimal(_) => core_types::Logicaltype::Decimal,
+        // @5.0.0: DECIMAL carries decimalshape { width, scale } payload on
+        // both sides -- pass through structurally.
+        extension_types::Logicaltype::Decimal(shape) => {
+            core_types::Logicaltype::Decimal(core_types::Decimalshape {
+                width: shape.width,
+                scale: shape.scale,
+            })
+        }
         extension_types::Logicaltype::Interval => core_types::Logicaltype::Interval,
         extension_types::Logicaltype::Uuid => core_types::Logicaltype::Uuid,
-        // @5.0.0 new HUGEINT / UHUGEINT surface. Core is @4.0.0 and has no such
-        // arm — fall back to the Complex(type-expr) escape hatch.
-        extension_types::Logicaltype::Hugeint => {
-            core_types::Logicaltype::Complex("HUGEINT".into())
-        }
-        extension_types::Logicaltype::Uhugeint => {
-            core_types::Logicaltype::Complex("UHUGEINT".into())
-        }
+        // @5.0.0: first-class HUGEINT / UHUGEINT arms on both sides.
+        extension_types::Logicaltype::Hugeint => core_types::Logicaltype::Hugeint,
+        extension_types::Logicaltype::Uhugeint => core_types::Logicaltype::Uhugeint,
         extension_types::Logicaltype::Complex(expr) => core_types::Logicaltype::Complex(expr),
     }
 }
@@ -6715,17 +6463,18 @@ fn convert_core_logicaltype_to_extension(
         core_types::Logicaltype::Date => extension_types::Logicaltype::Date,
         core_types::Logicaltype::Time => extension_types::Logicaltype::Time,
         core_types::Logicaltype::Timestamptz => extension_types::Logicaltype::Timestamptz,
-        // Core (@4.0.0) DECIMAL is fieldless; @5.0.0 needs width/scale. Use a
-        // conservative default matching the extension crate's parse fallback
-        // (DECIMAL(18,3)) so up-casts round-trip through the write path.
-        core_types::Logicaltype::Decimal => {
+        // @5.0.0: DECIMAL carries decimalshape { width, scale } on both sides.
+        core_types::Logicaltype::Decimal(shape) => {
             extension_types::Logicaltype::Decimal(extension_types::Decimalshape {
-                width: 18,
-                scale: 3,
+                width: shape.width,
+                scale: shape.scale,
             })
         }
         core_types::Logicaltype::Interval => extension_types::Logicaltype::Interval,
         core_types::Logicaltype::Uuid => extension_types::Logicaltype::Uuid,
+        // @5.0.0: first-class HUGEINT / UHUGEINT on both sides.
+        core_types::Logicaltype::Hugeint => extension_types::Logicaltype::Hugeint,
+        core_types::Logicaltype::Uhugeint => extension_types::Logicaltype::Uhugeint,
         core_types::Logicaltype::Complex(expr) => extension_types::Logicaltype::Complex(expr),
     }
 }
@@ -6737,87 +6486,11 @@ fn convert_core_columndef_to_extension(col: core_types::Columndef) -> extension_
     }
 }
 
-// M2b: convert a core-WIT scan-request into the storage-interface scan-request
-// the backing component's storage-dispatch expects.
-fn convert_core_compare_op_to_storage(op: core_storage_host::CompareOp) -> storage_scan::CompareOp {
-    match op {
-        core_storage_host::CompareOp::Eq => storage_scan::CompareOp::Eq,
-        core_storage_host::CompareOp::Ne => storage_scan::CompareOp::Ne,
-        core_storage_host::CompareOp::Lt => storage_scan::CompareOp::Lt,
-        core_storage_host::CompareOp::Le => storage_scan::CompareOp::Le,
-        core_storage_host::CompareOp::Gt => storage_scan::CompareOp::Gt,
-        core_storage_host::CompareOp::Ge => storage_scan::CompareOp::Ge,
-        core_storage_host::CompareOp::IsNull => storage_scan::CompareOp::IsNull,
-        core_storage_host::CompareOp::IsNotNull => storage_scan::CompareOp::IsNotNull,
-    }
-}
-
-fn convert_core_duckvalue_to_storage(value: core_types::Duckvalue) -> storage_scan::Duckvalue {
-    match value {
-        core_types::Duckvalue::Null => storage_scan::Duckvalue::Null,
-        core_types::Duckvalue::Boolean(v) => storage_scan::Duckvalue::Boolean(v),
-        core_types::Duckvalue::Int64(v) => storage_scan::Duckvalue::Int64(v),
-        core_types::Duckvalue::Uint64(v) => storage_scan::Duckvalue::Uint64(v),
-        core_types::Duckvalue::Float64(v) => storage_scan::Duckvalue::Float64(v),
-        core_types::Duckvalue::Text(v) => storage_scan::Duckvalue::Text(v),
-        core_types::Duckvalue::Blob(v) => storage_scan::Duckvalue::Blob(v),
-        core_types::Duckvalue::Int32(v) => storage_scan::Duckvalue::Int32(v),
-        core_types::Duckvalue::Timestamp(v) => storage_scan::Duckvalue::Timestamp(v),
-        core_types::Duckvalue::Int8(v) => storage_scan::Duckvalue::Int8(v),
-        core_types::Duckvalue::Int16(v) => storage_scan::Duckvalue::Int16(v),
-        core_types::Duckvalue::Uint8(v) => storage_scan::Duckvalue::Uint8(v),
-        core_types::Duckvalue::Uint16(v) => storage_scan::Duckvalue::Uint16(v),
-        core_types::Duckvalue::Uint32(v) => storage_scan::Duckvalue::Uint32(v),
-        core_types::Duckvalue::Float32(v) => storage_scan::Duckvalue::Float32(v),
-        core_types::Duckvalue::Date(v) => storage_scan::Duckvalue::Date(v),
-        core_types::Duckvalue::Time(v) => storage_scan::Duckvalue::Time(v),
-        core_types::Duckvalue::Timestamptz(v) => storage_scan::Duckvalue::Timestamptz(v),
-        core_types::Duckvalue::Decimal(d) => {
-            storage_scan::Duckvalue::Decimal(storage_scan::Decimalvalue {
-                lower: d.lower,
-                upper: d.upper,
-                width: d.width,
-                scale: d.scale,
-            })
-        }
-        core_types::Duckvalue::Interval(iv) => {
-            storage_scan::Duckvalue::Interval(storage_scan::Intervalvalue {
-                months: iv.months,
-                days: iv.days,
-                micros: iv.micros,
-            })
-        }
-        core_types::Duckvalue::Uuid(u) => {
-            storage_scan::Duckvalue::Uuid(storage_scan::Uuidvalue { hi: u.hi, lo: u.lo })
-        }
-        core_types::Duckvalue::Complex(c) => {
-            storage_scan::Duckvalue::Complex(storage_scan::Complexvalue {
-                type_expr: c.type_expr,
-                json: c.json,
-            })
-        }
-    }
-}
-
-fn convert_core_scan_request_to_storage(
-    request: core_storage_host::ScanRequest,
-) -> storage_scan::ScanRequest {
-    storage_scan::ScanRequest {
-        table: request.table,
-        projection: request.projection,
-        filters: request
-            .filters
-            .into_iter()
-            .map(|f| storage_scan::ScanFilter {
-                column: f.column,
-                op: convert_core_compare_op_to_storage(f.op),
-                value: convert_core_duckvalue_to_storage(f.value),
-            })
-            .collect(),
-        limit: request.limit,
-        // @5.0.0 dropped the `wants-rowid` flag from scan-request.
-    }
-}
+// Phase 2 (@5): translators from core-WIT storage-host scan types to the
+// dispatch-side storage-interface types are DELETED alongside the storage-host
+// import itself. The host now BUILDS scan-requests directly from its ATTACH
+// intercept (in HostState::execute) rather than translating what the core
+// pushed. See ADR Decision 3 + Amendment A1.
 
 /// Short human-readable rendering of a core Duckvalue for the pushdown log line.
 fn describe_core_duckvalue(value: &core_types::Duckvalue) -> String {
@@ -6845,6 +6518,9 @@ fn describe_core_duckvalue(value: &core_types::Duckvalue) -> String {
             format!("{}mon {}d {}us", iv.months, iv.days, iv.micros)
         }
         core_types::Duckvalue::Uuid(u) => format_uuid(u.hi, u.lo),
+        // @5.0.0: first-class 128-bit integer values.
+        core_types::Duckvalue::Hugeint(h) => format_hugeint(h.lower, h.upper),
+        core_types::Duckvalue::Uhugeint(h) => format_uhugeint(h.lower, h.upper),
         core_types::Duckvalue::Complex(c) => format!("{}:{}", c.type_expr, c.json),
     }
 }
@@ -6941,6 +6617,7 @@ impl CliHarness {
             did_autoload: false,
             catalog_snapshot,
             preopens: owned_preopens.clone(),
+            attached_aliases: HashMap::new(),
         };
         let mut store = Store::new(&engine, host_state);
 
@@ -7230,6 +6907,7 @@ fn run_cli_inner(
         did_autoload: false,
         catalog_snapshot,
         preopens: owned_preopens.clone(),
+        attached_aliases: HashMap::new(),
     };
     let mut store = Store::new(&engine, host_state);
 
@@ -8923,30 +8601,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn core_storage_duckvalue_converts_every_arm() {
-        // core -> storage scan value: every arm converts without panic; spot
-        // check the rich arms preserve their payload.
-        for v in all_core_duckvalues() {
-            let s = convert_core_duckvalue_to_storage(v.clone());
-            match (&v, &s) {
-                (
-                    core_types::Duckvalue::Decimal(d),
-                    storage_scan::Duckvalue::Decimal(sd),
-                ) => {
-                    assert_eq!((d.lower, d.width, d.scale), (sd.lower, sd.width, sd.scale));
-                }
-                (
-                    core_types::Duckvalue::Complex(c),
-                    storage_scan::Duckvalue::Complex(sc),
-                ) => {
-                    assert_eq!(c.type_expr, sc.type_expr);
-                    assert_eq!(c.json, sc.json);
-                }
-                _ => {}
-            }
-        }
-    }
+    // Phase 2 (@5): `convert_core_duckvalue_to_storage` was deleted along
+    // with the storage-host import; the host builds scan-request values from
+    // its ATTACH intercept now. Test removed.
 
     #[test]
     fn neutral_funcflags_to_core_maps_each_bit() {
