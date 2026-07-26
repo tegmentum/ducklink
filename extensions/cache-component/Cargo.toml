@@ -55,6 +55,7 @@ world = "duckdb:extension/duckdb-extension-cache"
 "sqlite:extension" = { path = "wit/deps/sqlite-extension.wit" }
 "component:s3-wasm" = { path = "wit/deps/s3-wasm.wit" }
 "component:azure-wasm" = { path = "wit/deps/azure-wasm.wit" }
+"component:gcs-wasm" = { path = "wit/deps/gcs-wasm.wit" }
 "wasi:http" = { path = "wit/deps/http" }
 "wasi:io" = { path = "wit/deps/io" }
 "wasi:clocks" = { path = "wit/deps/clocks" }

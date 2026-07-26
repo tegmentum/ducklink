@@ -78,6 +78,19 @@ world duckdb-extension-cache {
   import component:azure-wasm/blob-base;
   import component:azure-wasm/blob-shared-key;
   import component:azure-wasm/blob-sas;
+  // gcs-wasm surface: satisfied at compose time by plugging the
+  // `gcs-wasm` component into `cache.wasm`. The gcs backend in
+  // `src/lib.rs` calls `blob-base::head-blob` + `blob-base::get-blob`
+  // and uses `blob-oauth::mint-access-token` to mint bearers from a
+  // service-account key (cached in the extension for the process
+  // lifetime). `blob-anon` is imported to keep the composition
+  // complete — anonymous auth is driven entirely via the
+  // credentials variant, so the marker interface has no runtime
+  // consumer here.
+  import component:gcs-wasm/blob-types;
+  import component:gcs-wasm/blob-base;
+  import component:gcs-wasm/blob-oauth;
+  import component:gcs-wasm/blob-anon;
   // wasi:http surface used by the HTTP fetch backend in `src/lib.rs`.
   // The ducklink host wires this via wasmtime-wasi-http's
   // `add_only_http_to_linker_sync` (commit aaa5891), the same surface

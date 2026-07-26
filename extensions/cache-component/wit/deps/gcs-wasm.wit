@@ -1,0 +1,204 @@
+package component:gcs-wasm;
+
+/// Structural mirror of the `component:gcs-wasm` exports the
+/// `cache-component` imports at compose time. The upstream lives at
+/// tegmentum/gcs-wasm; when the `cache` Makefile target runs
+/// `wac plug`, the gcs-wasm component satisfies these imports for
+/// the cache extension so `SELECT cache('gs://...')` works end-to-end
+/// in the wasm cache. Only the interfaces the cache resolver actually
+/// calls are declared here (types + base + oauth + anon), matching
+/// the canonical shape exported by `gcs_wasm.wasm`.
+interface blob-types {
+    /// GCS error variants
+    variant error {
+        access-denied,
+        no-such-bucket,
+        no-such-object,
+        invalid-request(string),
+        network-error(string),
+        parse-error(string),
+        internal(string),
+    }
+
+    /// A Google Cloud service-account (parsed from a service-account JSON key).
+    record service-account {
+        email: string,
+        private-key-pem: string,
+        token-uri: option<string>,
+        scopes: list<string>,
+    }
+
+    /// A previously-minted OAuth2 access token.
+    record access-token {
+        token: string,
+        expires-at: u64,
+    }
+
+    /// Credentials for GCS authentication. Exactly one variant is chosen
+    /// per call:
+    ///   - `service-account`: the JWT self-signing flow (gcs-wasm mints
+    ///     + caches the bearer internally).
+    ///   - `access-token`: caller pre-minted the token.
+    ///   - `anonymous`: no `Authorization` header (public buckets).
+    variant credentials {
+        service-account(service-account),
+        access-token(access-token),
+        anonymous,
+    }
+
+    /// GCS endpoint configuration. Defaults to https://storage.googleapis.com.
+    record endpoint-config {
+        url: string,
+    }
+
+    /// Object metadata parsed out of GCS response headers.
+    record object-metadata {
+        content-type: option<string>,
+        content-length: option<u64>,
+        etag: option<string>,
+        last-modified: option<u64>,
+        generation: option<string>,
+        custom: list<tuple<string, string>>,
+    }
+
+    /// Object in a list response.
+    record object-info {
+        name: string,
+        size: u64,
+        etag: option<string>,
+        last-modified: option<u64>,
+        content-type: option<string>,
+    }
+
+    /// Result of a list-blobs operation.
+    record list-objects-output {
+        objects: list<object-info>,
+        prefixes: list<string>,
+        next-page-token: option<string>,
+    }
+
+    /// Options for get-blob.
+    record get-object-options {
+        range: option<tuple<u64, u64>>,
+        if-match: option<string>,
+        if-none-match: option<string>,
+        if-modified-since: option<u64>,
+    }
+
+    /// Options for put-blob.
+    record put-object-options {
+        content-type: option<string>,
+        metadata: list<tuple<string, string>>,
+        cache-control: option<string>,
+    }
+
+    /// Options for list-blobs.
+    record list-objects-options {
+        prefix: option<string>,
+        delimiter: option<string>,
+        max-results: option<u32>,
+        page-token: option<string>,
+    }
+
+    /// Result of get-blob. `status` distinguishes 200 (body returned)
+    /// from 304 (Not Modified — body empty). Response headers are
+    /// preserved verbatim; the cache resolver harvests ETag / Last-
+    /// Modified out of them.
+    record get-object-output {
+        status: u16,
+        headers: list<tuple<string, string>>,
+        body: list<u8>,
+    }
+
+    /// Result of put-blob.
+    record put-object-output {
+        etag: string,
+    }
+
+    /// Result of head-blob.
+    record head-object-output {
+        status: u16,
+        headers: list<tuple<string, string>>,
+    }
+}
+
+/// Base Google Cloud Storage interface. Modeled after s3-base /
+/// azure blob-base so the cache component dispatches to any of the
+/// three via near-identical wiring. v0 in gcs-wasm: only `head-blob`
+/// and `get-blob` are implemented; put/delete/list return
+/// `internal("not implemented")` — the cache resolver only exercises
+/// head + get.
+interface blob-base {
+    use blob-types.{
+        error,
+        credentials,
+        endpoint-config,
+        get-object-options,
+        get-object-output,
+        put-object-options,
+        put-object-output,
+        head-object-output,
+        list-objects-options,
+        list-objects-output,
+    };
+
+    get-blob: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        bucket: string,
+        key: string,
+        options: option<get-object-options>,
+    ) -> result<get-object-output, error>;
+
+    head-blob: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        bucket: string,
+        key: string,
+    ) -> result<head-object-output, error>;
+
+    put-blob: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        bucket: string,
+        key: string,
+        body: list<u8>,
+        options: option<put-object-options>,
+    ) -> result<put-object-output, error>;
+
+    delete-blob: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        bucket: string,
+        key: string,
+    ) -> result<_, error>;
+
+    list-blobs: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        bucket: string,
+        options: option<list-objects-options>,
+    ) -> result<list-objects-output, error>;
+}
+
+/// OAuth2 token exchange for service-account credentials. Signs an
+/// RS256 JWT with the SA's private key + POSTs it to Google's token
+/// endpoint to get a short-lived bearer. Exposed so a caller can
+/// pre-mint tokens rather than let blob-base do it lazily on every
+/// request. The cache-component uses this to cache a bearer across
+/// resolver calls (`static Mutex<Option<CachedToken>>`).
+interface blob-oauth {
+    use blob-types.{error, service-account, access-token};
+
+    mint-access-token: func(
+        service-account: service-account,
+    ) -> result<access-token, error>;
+}
+
+/// Marker interface — anonymous auth is driven entirely by passing
+/// `credentials::anonymous` to any `blob-base` operation. Exists so
+/// composers can enumerate advertised auth modes via a stable
+/// interface name (matches the s3-wasm anonymous convention).
+interface blob-anon {
+    is-anonymous-supported: func() -> bool;
+}

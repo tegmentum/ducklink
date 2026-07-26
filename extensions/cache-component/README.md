@@ -17,7 +17,7 @@ Given a URI, the scalar returns a `file://` URI pointing at a locally cached cop
 | `http://` / `https://` | full ETag / If-None-Match / Last-Modified / If-Modified-Since / 304 dance |
 | `s3://` | wac-composed via `component:s3-wasm` (with `aws-sigv4-wasm` for signing); head-then-get with ETag revalidation. Works against real AWS, MinIO, R2, DigitalOcean Spaces. |
 | `az://` / `azure://` | wac-composed via `component:azure-wasm`; SharedKey + SAS + anonymous auth, head-then-get with ETag revalidation. Works against real Azure Blob Storage and Azurite. Both URI aliases canonicalize to the `az` scheme in the metadata catalog. |
-| `gs://` | stubbed with the same "not yet supported" error the native uses; wasm coverage picks up separately. |
+| `gs://` | wac-composed via `component:gcs-wasm`; service-account (RS256-JWT -> OAuth2 access token) + pre-minted access token + anonymous auth, head-then-get with ETag revalidation. |
 
 ## On-disk layout parity
 
@@ -149,6 +149,64 @@ make cache
   -c "LOAD cache; SELECT cache('{\"endpoint\":\"http://127.0.0.1:10000/devstoreaccount1\",\"account\":\"devstoreaccount1\",\"shared_key\":\"Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==\"}', 'az://mycontainer/fixture.bin') AS uri;"
 ```
 
+## GCS backend (`gs://`)
+
+The GCS backend rides `component:gcs-wasm` (sibling repo `tegmentum/gcs-wasm`), plugged into `cache.wasm` at build time via `wac plug` — same shape as the s3-wasm and azure-wasm composes, minus a sidecar signer (RS256 JWT signing happens inside gcs-wasm itself via RustCrypto `rsa`). Once composed, the artifact imports only WASI (host-satisfied) plus the standard `duckdb:extension/*` surface; the `component:gcs-wasm/*` interfaces are internal.
+
+### URI scheme
+
+`gs://<bucket>/<object>`. Object keys containing `/` are handled transparently — gcs-wasm URL-encodes the key when it builds the JSON-API path.
+
+### Config JSON
+
+The arity-2 overload accepts a gcs-specific config JSON (parsed leniently in `cache_scalar` before the shared knobs pass through `cache-core`'s strict parser):
+
+| Key                     | Type            | Meaning                                                                                                    |
+|-------------------------|-----------------|------------------------------------------------------------------------------------------------------------|
+| `endpoint`              | string          | Full base URL. Default: `https://storage.googleapis.com` (rarely overridden; kept for parity).             |
+| `service_account_json`  | string / object | Service-account JSON key blob (or nested JSON object). Component signs an RS256 JWT + exchanges for a bearer. |
+| `service_account_path`  | string          | Path to a service-account JSON file on disk (read at bootstrap).                                           |
+| `access_token`          | string          | Pre-minted OAuth2 bearer (e.g. from `gcloud auth print-access-token`). Skips the JWT exchange.             |
+| `anonymous`             | bool            | Skip credential resolution — use for public buckets.                                                       |
+
+### Auth resolution order
+
+1. `"anonymous": true` — skip everything.
+2. `access_token` (config field) — use verbatim.
+3. `service_account_json` (config field, inline JSON blob or object).
+4. `service_account_path` (config field, path to SA JSON on disk).
+5. `GOOGLE_APPLICATION_CREDENTIALS` env var (path to SA JSON).
+
+If none resolve, the request fails with an explicit "no credentials resolved" error — no silent fallthrough to anonymous, which would mask typo'd paths against public buckets.
+
+### Token caching
+
+Minted OAuth2 bearers are cached in the extension process (`static Mutex<HashMap<email, CachedToken>>`) and refreshed 60 s before expiry. Multiple service accounts coexist correctly (keyed by `client_email`). The `access_token` and `anonymous` paths skip minting entirely.
+
+### Examples
+
+```sql
+LOAD cache;
+
+-- Public GCS bucket (no auth)
+SELECT cache('{"anonymous":true}', 'gs://gcp-public-data--goes-16/README.txt');
+
+-- Service account via inline JSON
+SELECT cache(
+  '{"service_account_json":"{\"client_email\":\"...\",\"private_key\":\"-----BEGIN PRIVATE KEY-----\\n...\"}"}',
+  'gs://my-bucket/data.parquet'
+);
+
+-- Service account via path (or env GOOGLE_APPLICATION_CREDENTIALS)
+SELECT cache('{"service_account_path":"/path/to/sa.json"}', 'gs://my-bucket/data.parquet');
+
+-- Pre-minted bearer (e.g. from `gcloud auth print-access-token`)
+SELECT cache('{"access_token":"ya29..."}', 'gs://my-bucket/data.parquet');
+
+-- Env-based (GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa.json)
+SELECT cache('gs://my-bucket/data.parquet');
+```
+
 ## Related
 
 - [`cache-core`](../../../datalink/extensions/cache-core) (datalink) — the DB-agnostic logic + capability declaration.
@@ -156,3 +214,4 @@ make cache
 - [`sqlite-wasm`](https://github.com/tegmentum/sqlite-wasm) — the componentized SQLite `sqlite-lib` this component's SPI import points at.
 - [`s3-wasm`](https://github.com/tegmentum/s3-wasm) + [`aws-sigv4-wasm`](https://github.com/tegmentum/aws-sigv4-wasm) — the `s3://` backend components.
 - [`azure-wasm`](https://github.com/tegmentum/azure-wasm) — the `az://` / `azure://` backend component.
+- [`gcs-wasm`](https://github.com/tegmentum/gcs-wasm) — the `gs://` backend component.

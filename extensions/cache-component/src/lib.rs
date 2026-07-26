@@ -16,10 +16,14 @@
 //!   / If-Modified-Since / 304 dance over `std::net::TcpStream`
 //!   (matches `httpclient-component`'s TLS stack: rustls + rustls-
 //!   rustcrypto + webpki-roots).
-//! * `s3://` / `gs://` / `az://` / `azure://` — stubbed with the same
-//!   error string the native uses; a sibling task adds `object_store`
-//!   coverage on the native side, and the wasm arm picks up its own
-//!   `object_store`-in-wasm story separately.
+//! * `s3://` / `az://` / `azure://` / `gs://` — wac-composed cloud
+//!   backends. Each rides a sibling `component:*-wasm` component
+//!   plugged in at build time (see the `cache` recipe in
+//!   ../../../Makefile). Auth is per-backend (SigV4 for s3, SharedKey
+//!   / SAS / anonymous for azure, service-account JWT / access-token /
+//!   anonymous for gcs); all three run head-then-get with ETag
+//!   revalidation against the shared catalog + content-addressed
+//!   store.
 //!
 //! # Persistent metadata
 //!
@@ -75,6 +79,15 @@ use component::s3_wasm::{s3_base, s3_types};
 // ../../../Makefile. Azure has no separate signer sidecar — signing
 // happens inside azure-wasm from the `credentials` record.
 use component::azure_wasm::{blob_base, blob_types};
+// gcs-wasm bindings: satisfied at compose time by `wac plug`ing the
+// `gcs-wasm` component into `cache.wasm`. See the `cache` recipe in
+// ../../../Makefile. GCS has no separate signer sidecar either — the
+// RS256 JWT signing happens inside gcs-wasm via RustCrypto `rsa`.
+// Renamed on import to avoid a name clash with the azure-wasm modules.
+use component::gcs_wasm::{
+    blob_anon as gcs_blob_anon, blob_base as gcs_blob_base, blob_oauth as gcs_blob_oauth,
+    blob_types as gcs_blob_types,
+};
 // wasi:http surface for the HTTP/HTTPS fetch backend. Both TLS and
 // plaintext transport now go through the host's wasmtime-wasi-http
 // wiring (see `ducklink-host::add_only_http_to_linker_sync`, commit
@@ -499,7 +512,7 @@ fn fetch_http_via_wasi(
 
 const NOT_YET_SUPPORTED_HINT: &str =
     "supported schemes in v0: file://, http://, https://, s3://, \
-     az://, azure://. gs backend is stubbed pending object_store integration.";
+     az://, azure://, gs://.";
 
 struct CachedEntry {
     etag: Option<String>,
@@ -685,9 +698,7 @@ fn resolver(cfg: &Config, uri: &str) -> Result<String, String> {
         return resolve_azure(cfg, AzureParams::default(), uri, &scheme);
     }
     if scheme == "gs" {
-        return Err(format!(
-            "cache: scheme {scheme:?} not yet supported. {NOT_YET_SUPPORTED_HINT}"
-        ));
+        return resolve_gcs(cfg, GcsParams::default(), uri, &scheme);
     }
     if scheme != "http" && scheme != "https" {
         return Err(format!(
@@ -1656,6 +1667,522 @@ fn resolve_azure(
     Ok(path_to_file_uri(&final_path))
 }
 
+// ---------------------------------------------------------------------------
+// gcs backend (composed via `component:gcs-wasm/{blob-base,blob-oauth,...}`).
+//
+// Same head-then-get shape as the s3 and azure backends, adapted to
+// GCS's REST surface. Key differences from the sibling backends:
+//
+//   * NO `region` concept. The default endpoint is
+//     https://storage.googleapis.com and rarely needs overriding.
+//   * NO SigV4 / SharedKey signing. Auth is one of:
+//       - service-account JSON (RS256-JWT -> OAuth2 access token).
+//         gcs-wasm caches the minted bearer internally; the resolver
+//         additionally caches it on this side so subsequent calls
+//         skip the JWT sign + POST entirely.
+//       - a pre-minted access token (from `gcloud auth print-access-token`
+//         or workload identity fed in from the host).
+//       - anonymous (public buckets).
+//   * `head-blob` returns only `{status, headers}` (no metadata
+//     struct); ETag / Last-Modified are parsed out of the header
+//     list. Same for `get-blob` -- headers arrive as `list<(string,
+//     string)>` and are folded into the catalog directly.
+//
+// URI shape: `gs://<bucket>/<key>`.
+//
+// Auth resolution order (mirrors the README):
+//   1. `"anonymous": true` — skip everything.
+//   2. `access_token` (config field) — use verbatim.
+//   3. `service_account_json` (config field, inline JSON blob).
+//   4. `service_account_path` (config field, path to SA JSON on disk).
+//   5. `GOOGLE_APPLICATION_CREDENTIALS` env var (path to SA JSON).
+// If none resolve, the request fails with a clear "no GCS credentials
+// found" error unless the URI actually can be served anonymously
+// (that path requires explicit `"anonymous": true` to avoid silent
+// fallthrough on typo'd credential paths).
+// ---------------------------------------------------------------------------
+
+#[derive(Default, Debug, Clone)]
+struct GcsParams {
+    endpoint: Option<String>,
+    service_account_json: Option<String>,
+    service_account_path: Option<String>,
+    access_token: Option<String>,
+    anonymous: bool,
+}
+
+impl GcsParams {
+    /// Parse the gcs-specific fields off a JSON blob (leniently — the
+    /// full JSON is also handed to cache-core's strict parser for the
+    /// name/policy/sha256/ttl fields). Empty / missing config -> defaults.
+    fn from_json(s: &str) -> Result<Self, String> {
+        if s.trim().is_empty() {
+            return Ok(Self::default());
+        }
+        let v: serde_json::Value =
+            serde_json::from_str(s).map_err(|e| format!("cache gcs config: {e}"))?;
+        let obj = v
+            .as_object()
+            .ok_or_else(|| String::from("cache gcs config: expected a JSON object"))?;
+        let mut out = Self::default();
+        if let Some(ep) = obj.get("endpoint") {
+            out.endpoint = Some(
+                ep.as_str()
+                    .ok_or_else(|| String::from("cache gcs config: endpoint must be a string"))?
+                    .to_string(),
+            );
+        }
+        if let Some(saj) = obj.get("service_account_json") {
+            // Accept either a stringified JSON blob or a nested JSON
+            // object (the latter is the natural shape when the caller
+            // has already parsed the SA key). We normalise to a string
+            // so the downstream JSON parse is uniform.
+            let s = match saj {
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Object(_) => saj.to_string(),
+                _ => {
+                    return Err(String::from(
+                        "cache gcs config: service_account_json must be a string or object",
+                    ));
+                }
+            };
+            out.service_account_json = Some(s);
+        }
+        if let Some(sap) = obj.get("service_account_path") {
+            out.service_account_path = Some(
+                sap.as_str()
+                    .ok_or_else(|| {
+                        String::from("cache gcs config: service_account_path must be a string")
+                    })?
+                    .to_string(),
+            );
+        }
+        if let Some(tok) = obj.get("access_token") {
+            out.access_token = Some(
+                tok.as_str()
+                    .ok_or_else(|| String::from("cache gcs config: access_token must be a string"))?
+                    .to_string(),
+            );
+        }
+        if let Some(anon) = obj.get("anonymous") {
+            out.anonymous = anon
+                .as_bool()
+                .ok_or_else(|| String::from("cache gcs config: anonymous must be a boolean"))?;
+        }
+        Ok(out)
+    }
+}
+
+/// Strip the gcs-specific keys from a config JSON blob so cache-core's
+/// strict parser can still handle the shared knobs (name, policy,
+/// sha256, ttl). Returns an empty string when nothing remains, which
+/// cache-core treats as `Config::default()`.
+fn strip_gcs_keys(s: &str) -> Result<String, String> {
+    if s.trim().is_empty() {
+        return Ok(String::new());
+    }
+    let mut v: serde_json::Value =
+        serde_json::from_str(s).map_err(|e| format!("cache gcs config: {e}"))?;
+    if let Some(obj) = v.as_object_mut() {
+        for k in [
+            "endpoint",
+            "service_account_json",
+            "service_account_path",
+            "access_token",
+            "anonymous",
+        ] {
+            obj.remove(k);
+        }
+        if obj.is_empty() {
+            return Ok(String::new());
+        }
+    }
+    Ok(v.to_string())
+}
+
+/// Parse a `gs://<bucket>/<key...>` URI. Rejects malformed inputs
+/// and empty keys (`gs://only-bucket`).
+fn parse_gcs_uri(uri: &str) -> Result<(String, String), String> {
+    let rest = uri
+        .strip_prefix("gs://")
+        .ok_or_else(|| format!("cache gcs backend: not a gs:// URL: {uri}"))?;
+    let (bucket, key) = match rest.split_once('/') {
+        Some((b, k)) => (b, k),
+        None => (rest, ""),
+    };
+    if bucket.is_empty() {
+        return Err(format!("cache gcs backend: no bucket in {uri}"));
+    }
+    if key.is_empty() {
+        return Err(format!("cache gcs backend: URI has no object key: {uri}"));
+    }
+    Ok((bucket.to_string(), key.to_string()))
+}
+
+fn gcs_error_to_string(e: &gcs_blob_types::Error) -> String {
+    match e {
+        gcs_blob_types::Error::AccessDenied => "access-denied".to_string(),
+        gcs_blob_types::Error::NoSuchBucket => "no-such-bucket".to_string(),
+        gcs_blob_types::Error::NoSuchObject => "no-such-object".to_string(),
+        gcs_blob_types::Error::InvalidRequest(m) => format!("invalid-request: {m}"),
+        gcs_blob_types::Error::NetworkError(m) => format!("network-error: {m}"),
+        gcs_blob_types::Error::ParseError(m) => format!("parse-error: {m}"),
+        gcs_blob_types::Error::Internal(m) => format!("internal: {m}"),
+    }
+}
+
+fn resolve_gcs_endpoint(p: &GcsParams) -> gcs_blob_types::EndpointConfig {
+    let url = if let Some(e) = &p.endpoint {
+        e.clone()
+    } else if let Ok(e) = std::env::var("GOOGLE_STORAGE_ENDPOINT_URL") {
+        if e.is_empty() {
+            String::from("https://storage.googleapis.com")
+        } else {
+            e
+        }
+    } else {
+        String::from("https://storage.googleapis.com")
+    };
+    gcs_blob_types::EndpointConfig { url }
+}
+
+/// A minted OAuth2 bearer cached across resolver calls. Keyed by the
+/// service-account `client_email` so multiple SAs coexist correctly.
+/// Refreshed 60 s before expiry to keep in-flight requests off the
+/// edge (matches the safety margin gcs-wasm applies internally when
+/// it caches).
+struct CachedToken {
+    token: String,
+    expires_at: u64,
+}
+
+fn gcs_token_cache() -> &'static Mutex<HashMap<String, CachedToken>> {
+    static T: OnceLock<Mutex<HashMap<String, CachedToken>>> = OnceLock::new();
+    T.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn now_epoch_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Load the raw service-account JSON string from (inline config,
+/// path config, GOOGLE_APPLICATION_CREDENTIALS env). Returns None
+/// when the caller isn't using the SA flow.
+fn load_gcs_service_account_json(p: &GcsParams) -> Result<Option<String>, String> {
+    if let Some(s) = &p.service_account_json {
+        return Ok(Some(s.clone()));
+    }
+    if let Some(path) = &p.service_account_path {
+        let s = std::fs::read_to_string(path).map_err(|e| {
+            format!("cache gcs backend: reading service_account_path {path}: {e}")
+        })?;
+        return Ok(Some(s));
+    }
+    if let Ok(path) = std::env::var("GOOGLE_APPLICATION_CREDENTIALS") {
+        if !path.is_empty() {
+            let s = std::fs::read_to_string(&path).map_err(|e| {
+                format!(
+                    "cache gcs backend: reading GOOGLE_APPLICATION_CREDENTIALS={path}: {e}"
+                )
+            })?;
+            return Ok(Some(s));
+        }
+    }
+    Ok(None)
+}
+
+/// Parse an SA JSON blob into a gcs-wasm `service-account` record.
+/// Extracts `client_email`, `private_key`, `token_uri` (optional).
+/// Scopes default to devstorage.read_only when the caller doesn't
+/// specify (matches gcs-wasm's own default; cache reads only need
+/// read scope).
+fn parse_gcs_service_account(
+    sa_json: &str,
+) -> Result<gcs_blob_types::ServiceAccount, String> {
+    let v: serde_json::Value = serde_json::from_str(sa_json)
+        .map_err(|e| format!("cache gcs backend: parsing service-account JSON: {e}"))?;
+    let obj = v.as_object().ok_or_else(|| {
+        String::from("cache gcs backend: service-account JSON must be an object")
+    })?;
+    let email = obj
+        .get("client_email")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            String::from("cache gcs backend: service-account JSON missing client_email")
+        })?
+        .to_string();
+    let private_key_pem = obj
+        .get("private_key")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            String::from("cache gcs backend: service-account JSON missing private_key")
+        })?
+        .to_string();
+    let token_uri = obj
+        .get("token_uri")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    Ok(gcs_blob_types::ServiceAccount {
+        email,
+        private_key_pem,
+        token_uri,
+        // gcs-wasm defaults an empty scopes list to devstorage.read_only.
+        scopes: WitVec::new().into(),
+    })
+}
+
+/// Mint (or reuse) a bearer for the given service-account. Cached
+/// per-email; refreshed 60 s before expiry.
+fn mint_or_cached_gcs_token(
+    sa: &gcs_blob_types::ServiceAccount,
+) -> Result<gcs_blob_types::AccessToken, String> {
+    let now = now_epoch_secs();
+    {
+        let cache = gcs_token_cache().lock().expect("poisoned");
+        if let Some(entry) = cache.get(&sa.email) {
+            if entry.expires_at > now + 60 {
+                return Ok(gcs_blob_types::AccessToken {
+                    token: entry.token.clone(),
+                    expires_at: entry.expires_at,
+                });
+            }
+        }
+    }
+    let minted = gcs_blob_oauth::mint_access_token(sa)
+        .map_err(|e| format!("cache gcs backend: mint access token: {}", gcs_error_to_string(&e)))?;
+    {
+        let mut cache = gcs_token_cache().lock().expect("poisoned");
+        cache.insert(
+            sa.email.clone(),
+            CachedToken {
+                token: minted.token.clone(),
+                expires_at: minted.expires_at,
+            },
+        );
+    }
+    Ok(minted)
+}
+
+/// Assemble the credentials record. Precedence documented on the module.
+fn resolve_gcs_credentials(p: &GcsParams) -> Result<gcs_blob_types::Credentials, String> {
+    if p.anonymous {
+        return Ok(gcs_blob_types::Credentials::Anonymous);
+    }
+    if let Some(tok) = &p.access_token {
+        if !tok.is_empty() {
+            return Ok(gcs_blob_types::Credentials::AccessToken(
+                gcs_blob_types::AccessToken {
+                    token: tok.clone(),
+                    // Caller opted in to raw token — we don't know its
+                    // expiry, so mark it as long-lived. gcs-wasm doesn't
+                    // consult this field, it just attaches the bearer.
+                    expires_at: u64::MAX,
+                },
+            ));
+        }
+    }
+    if let Some(sa_json) = load_gcs_service_account_json(p)? {
+        let sa = parse_gcs_service_account(&sa_json)?;
+        let tok = mint_or_cached_gcs_token(&sa)?;
+        return Ok(gcs_blob_types::Credentials::AccessToken(tok));
+    }
+    Err(String::from(
+        "cache gcs backend: no credentials resolved. Set one of: \
+         config `anonymous: true`, config `access_token`, config \
+         `service_account_json` / `service_account_path`, or env \
+         `GOOGLE_APPLICATION_CREDENTIALS` (path to SA JSON).",
+    ))
+}
+
+/// Parse the `ETag` header out of a header list (case-insensitive).
+/// gcs-wasm returns HEAD/GET results as `list<(string, string)>`
+/// without a metadata struct; the resolver harvests exactly what
+/// the catalog needs.
+fn header_get(headers: &[(String, String)], name: &str) -> Option<String> {
+    headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case(name))
+        .map(|(_, v)| v.clone())
+}
+
+/// Head-then-get flow against `gcs_blob_base`. Mirrors resolve_s3 /
+/// resolve_azure:
+///
+///   1. `head-blob` — cheap metadata probe. If the returned ETag
+///      matches the catalog's cached etag, skip the body download
+///      and re-touch the catalog row.
+///   2. Otherwise `get-blob`, hash the body, publish to the
+///      content-addressed store, and upsert the catalog row.
+fn resolve_gcs(
+    cfg: &Config,
+    params: GcsParams,
+    uri: &str,
+    scheme: &str,
+) -> Result<String, String> {
+    let (bucket, key) = parse_gcs_uri(uri)?;
+    let endpoint = resolve_gcs_endpoint(&params);
+    let creds = resolve_gcs_credentials(&params)?;
+
+    let root = cache_root()?;
+    ensure_dirs(&root)?;
+    let existing = lookup(&cfg.name, uri)?;
+
+    // Offline: never touch the network.
+    if cfg.policy == Policy::Offline {
+        return match existing {
+            Some(e) => {
+                enforce_sha_pin(cfg, &e.content_hash, uri)?;
+                Ok(path_to_file_uri(std::path::Path::new(&e.resolved_path)))
+            }
+            None => Err(format!(
+                "cache: policy \"offline\" and no cached entry for {uri}"
+            )),
+        };
+    }
+
+    // Immutable + pinned-sha + blob on disk -> done, no network.
+    if cfg.policy == Policy::Immutable {
+        if let Some(expected) = &cfg.sha256 {
+            let pinned = blob_path(&root, expected);
+            if pinned.is_file() {
+                if existing.is_none() {
+                    let now = compute_now();
+                    let len = std::fs::metadata(&pinned).ok().map(|m| m.len() as i64);
+                    upsert(
+                        &cfg.name, uri, scheme, None, None, expected, len,
+                        &pinned.to_string_lossy(), &now, None,
+                    )?;
+                }
+                return Ok(path_to_file_uri(&pinned));
+            }
+        }
+    }
+
+    // v0.2 lock (advisory) — matches the other cloud backends.
+    let lock_path = root
+        .join("locks")
+        .join(format!("{}.lock", cache_core::sha256_hex(uri.as_bytes())));
+    let _uri_lock: Option<file_lock::LockHandle> =
+        match file_lock::acquire_exclusive(&lock_path.to_string_lossy()) {
+            Ok(handle) => {
+                if let Some(now_cached) = lookup(&cfg.name, uri)? {
+                    enforce_sha_pin(cfg, &now_cached.content_hash, uri)?;
+                    return Ok(path_to_file_uri(std::path::Path::new(&now_cached.resolved_path)));
+                }
+                Some(handle)
+            }
+            Err(_) => None,
+        };
+
+    // Step 1: HEAD. Harvest ETag / Last-Modified from the header list.
+    let head_res = gcs_blob_base::head_blob(&endpoint, &creds, &bucket, &key);
+    let (head_etag, head_last_modified) = match head_res {
+        Ok(h) => {
+            let headers: Vec<(String, String)> = h.headers.into_iter().collect();
+            (
+                header_get(&headers, "etag"),
+                header_get(&headers, "last-modified"),
+            )
+        }
+        // A HEAD failure is informational — fall through to GET so the
+        // real error surfaces on the byte transfer.
+        Err(_) => (None, None),
+    };
+    if let (Some(cur), Some(existing_row)) = (&head_etag, existing.as_ref()) {
+        if existing_row.etag.as_deref() == Some(cur.as_str()) {
+            let now = compute_now();
+            upsert(
+                &cfg.name, uri, scheme,
+                head_etag.as_deref(),
+                head_last_modified.as_deref(),
+                &existing_row.content_hash,
+                None,
+                &existing_row.resolved_path,
+                &now,
+                None,
+            )?;
+            enforce_sha_pin(cfg, &existing_row.content_hash, uri)?;
+            return Ok(path_to_file_uri(std::path::Path::new(
+                &existing_row.resolved_path,
+            )));
+        }
+    }
+
+    // Step 2: GET.
+    let got = gcs_blob_base::get_blob(&endpoint, &creds, &bucket, &key, None)
+        .map_err(|e| format!("cache gcs backend: get {uri}: {}", gcs_error_to_string(&e)))?;
+    // Non-2xx from the GET (only 200 is expected here; gcs-wasm surfaces
+    // 304 through get-object-output.status, but the resolver didn't set
+    // If-None-Match so 200 is the norm).
+    if !(200..300).contains(&got.status) {
+        return Err(format!(
+            "cache gcs backend: get {uri} returned status {}",
+            got.status
+        ));
+    }
+    let get_headers: Vec<(String, String)> = got.headers.into_iter().collect();
+    let body_vec: Vec<u8> = got.body.to_vec();
+    let now = compute_now();
+    let hash = cache_core::sha256_hex(&body_vec);
+    if let Some(expected) = &cfg.sha256 {
+        if &hash != expected {
+            return Err(format!(
+                "cache: sha256 mismatch for {uri}: expected {expected}, got {hash}"
+            ));
+        }
+    }
+    let content_length = body_vec.len() as i64;
+    let final_path = blob_path(&root, &hash);
+    if let Some(parent) = final_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("cache staging: creating {}: {e}", parent.display()))?;
+    }
+    if !final_path.exists() {
+        let tmp_name = format!("{}.{}", hash, TMP_COUNTER.fetch_add(1, Ordering::Relaxed));
+        let tmp_path = root.join("tmp").join(&tmp_name);
+        std::fs::write(&tmp_path, &body_vec)
+            .map_err(|e| format!("cache staging: writing tmp: {e}"))?;
+        match std::fs::rename(&tmp_path, &final_path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                let _ = std::fs::remove_file(&tmp_path);
+            }
+            Err(err) => {
+                let _ = std::fs::remove_file(&tmp_path);
+                return Err(format!(
+                    "cache staging: renaming to {}: {err}",
+                    final_path.display()
+                ));
+            }
+        }
+    }
+    let etag = header_get(&get_headers, "etag").or(head_etag);
+    let last_modified = header_get(&get_headers, "last-modified").or(head_last_modified);
+    upsert(
+        &cfg.name, uri, scheme,
+        etag.as_deref(),
+        last_modified.as_deref(),
+        &hash,
+        Some(content_length),
+        &final_path.to_string_lossy(),
+        &now,
+        None,
+    )?;
+    Ok(path_to_file_uri(&final_path))
+}
+
+// A tiny sanity call on the marker interface so composition catches
+// a missing gcs-wasm plug at instantiation time rather than on the
+// first `gs://` cache call. Called from `Guest::load`. This is
+// specifically why `blob-anon` is imported — the interface exists to
+// let composers verify wire-up, and this is where we exercise it.
+fn probe_gcs_anon_wiring() -> bool {
+    gcs_blob_anon::is_anonymous_supported()
+}
+
 fn enforce_sha_pin(cfg: &Config, cached_hash: &str, uri: &str) -> Result<(), String> {
     if let Some(expected) = &cfg.sha256 {
         if expected != cached_hash {
@@ -1734,7 +2261,13 @@ impl guest::Guest for Extension {
             eprintln!("cache-component: spi_bootstrap failed: {e}");
         }
 
-        // 3) Register the two cache overloads.
+        // 3) Cheap probe of the gcs-wasm marker interface so a missing
+        //    compose-time plug surfaces at extension load rather than
+        //    on the first `gs://` cache call. The value is discarded;
+        //    we only care that the imported function is present.
+        let _ = probe_gcs_anon_wiring();
+
+        // 4) Register the two cache overloads.
         register_scalars()?;
 
         Ok(types::Loadresult {
@@ -1829,6 +2362,30 @@ fn cache_scalar(
                 None => Config::default(),
             };
             let out = resolve_azure(&cfg, params, uri, "az").map_err(duckerr)?;
+            return Ok(from_neutral(NeutralValue::Text(out)));
+        }
+        // gs:// intercept — parallel to s3 and azure. Lenient parse of
+        // the gcs-specific keys (endpoint / service_account_json /
+        // service_account_path / access_token / anonymous), then the
+        // remaining shared knobs pass through cache-core's strict
+        // parser after those keys are stripped.
+        if lc.starts_with("gs:") {
+            let params = match cfg_json_opt {
+                Some(j) => GcsParams::from_json(j).map_err(duckerr)?,
+                None => GcsParams::default(),
+            };
+            let cfg = match cfg_json_opt {
+                Some(j) => {
+                    let stripped = strip_gcs_keys(j).map_err(duckerr)?;
+                    if stripped.is_empty() {
+                        Config::default()
+                    } else {
+                        Config::from_json(&stripped).map_err(duckerr)?
+                    }
+                }
+                None => Config::default(),
+            };
+            let out = resolve_gcs(&cfg, params, uri, "gs").map_err(duckerr)?;
             return Ok(from_neutral(NeutralValue::Text(out)));
         }
     }
