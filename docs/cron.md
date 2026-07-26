@@ -97,7 +97,10 @@ identity: `--node` > `$DUCKLINK_CRON_NODE` > `<hostname>-<pid>` fallback.
 `--attach PATH=NAME` (repeatable) runs
 `ATTACH IF NOT EXISTS 'PATH' AS NAME` at driver startup so cross-catalog jobs
 scheduled with `--database NAME` can find their target catalog — see
-[Cross-catalog jobs](#cross-catalog-jobs).
+[Cross-catalog jobs](#cross-catalog-jobs). `--history-limit N` keeps only
+the N most-recent `__cron_runs` rows per job (trim runs at end of any tick
+that fired). Omit for the v0 default of no trim; the caller manages runs
+retention.
 
 ## Catch-up policies
 
@@ -350,7 +353,9 @@ Whole-scheduler mutex (one row, key `'tick'`). Populated automatically by
 
 ### `__cron_runs`
 
-Append-only history, one row per fire. No auto-trim in v0 — callers prune.
+Append-only history, one row per fire. Bounded via
+`cron run --history-limit N` (keeps the N most-recent rows per job at end of
+each tick). Without the flag, callers prune.
 
 | Column | Type | Meaning |
 | --- | --- | --- |
@@ -365,7 +370,9 @@ Append-only history, one row per fire. No auto-trim in v0 — callers prune.
 - **Node identity default is `<hostname>-<pid>`.** Restarted drivers get a
   new identity (new PID). Set `--node NAME` explicitly if you want a stable
   identity across restarts.
-- **__cron_runs grows unbounded.** No auto-trim in v0 — callers prune.
+- **`__cron_runs` retention is per-driver-invocation.** Opt in with
+  `--history-limit N` on `cron run`; omit for unbounded growth (v0
+  default). A driver that isn't running does no trimming.
 - **Cross-catalog jobs require `--attach PATH=NAME` on the driver command
   line;** the driver doesn't discover attached catalogs on its own.
 - **The catalog switch uses `USE` on the persistent connection;** jobs

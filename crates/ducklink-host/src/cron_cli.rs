@@ -80,6 +80,9 @@ schedule OPTIONS:
 run OPTIONS:
     --interval <SECS>        Sleep between ticks. Default: 30.
     --once                   Run one tick and exit (useful in host-driven mode).
+    --history-limit <N>      Keep at most N __cron_runs rows per job (oldest
+                             pruned at end of each tick). 0 or unset = no
+                             pruning (v0 behaviour; the caller manages it).
     --wasm-driver            Dispatch to cron-driver-tool.wasm (wasi:cli/run)
                              instead of the native Rust loop. Portable to any
                              wasi-preview2 host. Same behaviour; slightly
@@ -523,6 +526,9 @@ fn cmd_run(common: &Common, rest: &[String]) -> Result<()> {
     // cross-catalog jobs (`--database NAME` at schedule time) can find
     // their target catalog when the tick loop USEs it.
     let mut attach_specs: Vec<(PathBuf, String)> = Vec::new();
+    // `--history-limit N` — end-of-tick trim keeping only the N most-recent
+    // __cron_runs rows per job. 0 (or unset) = no trim (v0 behaviour).
+    let mut history_limit: u32 = 0;
     let mut i = 0;
     while i < rest.len() {
         match rest[i].as_str() {
@@ -549,6 +555,13 @@ fn cmd_run(common: &Common, rest: &[String]) -> Result<()> {
                         .cloned()
                         .ok_or_else(|| anyhow::anyhow!("--node expects a name"))?,
                 );
+            }
+            "--history-limit" => {
+                i += 1;
+                history_limit = rest
+                    .get(i)
+                    .and_then(|s| s.parse().ok())
+                    .ok_or_else(|| anyhow::anyhow!("--history-limit expects a non-negative number"))?;
             }
             "--attach" => {
                 i += 1;
@@ -649,7 +662,8 @@ fn cmd_run(common: &Common, rest: &[String]) -> Result<()> {
         // in cascade. Restarting the process (systemd, docker, etc.)
         // rebuilds a clean core — the loop keeps going otherwise so a
         // transient error doesn't tear down a long-running scheduler.
-        match tick(&mut state, &node, lease_ttl_ms) {
+        let outcome = tick(&mut state, &node, lease_ttl_ms);
+        match &outcome {
             Ok(TickOutcome { fired: 0, contended: 0 }) => {}
             Ok(TickOutcome { fired, contended: 0 }) => {
                 eprintln!("cron: fired {fired} job(s)")
@@ -661,6 +675,16 @@ fn cmd_run(common: &Common, rest: &[String]) -> Result<()> {
                 "cron: fired {fired} job(s), {contended} already held by another driver"
             ),
             Err(err) => eprintln!("cron: tick error: {err:?}"),
+        }
+        // Trim __cron_runs if requested. Only run when we actually fired
+        // something (a no-op tick can't have added new rows) and only trim
+        // jobs that fired this tick — bounds the DELETE's work per tick.
+        if history_limit > 0 {
+            if let Ok(TickOutcome { fired: n, .. }) = outcome {
+                if n > 0 {
+                    trim_runs(&mut state, history_limit);
+                }
+            }
         }
         if once {
             break;
@@ -873,6 +897,31 @@ fn tick_body(
     }
 
     Ok(TickOutcome { fired, contended })
+}
+
+/// Delete every `__cron_runs` row beyond the `limit` most-recent per
+/// `job_id`. Runs at end of tick when `--history-limit N` is set and any
+/// jobs actually fired. Best-effort: any error is logged and the loop
+/// keeps going — a trim failure never kills a driver.
+///
+/// The DELETE uses `ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY run_at
+/// DESC)` so multi-job DBs get bounded per-job. Not indexed on `(job_id,
+/// run_at)` today — call sites keep history_limit large enough that the
+/// window doesn't grow beyond a table scan's tolerable cost.
+fn trim_runs(state: &mut DriverCoreState, limit: u32) {
+    let sql = format!(
+        "DELETE FROM __cron_runs \
+         WHERE rowid IN ( \
+            SELECT rowid FROM ( \
+                SELECT rowid, row_number() OVER (PARTITION BY job_id ORDER BY run_at DESC) AS rn \
+                FROM __cron_runs \
+            ) t \
+            WHERE t.rn > {limit} \
+         );"
+    );
+    if let Err(e) = driver_core_exec(state, &sql) {
+        eprintln!("cron: __cron_runs trim (--history-limit {limit}) failed: {e}");
+    }
 }
 
 /// The DDL text baked into the extension. We prefer running it via the
