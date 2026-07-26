@@ -443,6 +443,16 @@ fn main() -> Result<()> {
         return ducklink_host::extcli::run(&raw[2..]);
     }
 
+    // `ducklink cron <subcommand>` — cron-style SQL scheduler:
+    //   init / schedule / unschedule / activate / deactivate / list / run
+    // See crates/ducklink-host/src/cron_cli.rs for the shape. `run` supports
+    // `--wasm-driver` to dispatch to `cron_driver_tool.wasm` (wasi:cli/run)
+    // instead of the native Rust tick loop; that path is wired through
+    // `driver_exec::run_driver_tool`.
+    if raw.get(1).map(String::as_str) == Some("cron") {
+        return ducklink_host::cron_cli::run(&raw[2..]);
+    }
+
     // `ducklink compose --list`
     // `ducklink compose --embed NAME[,NAME...] [--output PATH] [--precompile] [--repo-root DIR]`
     // Build a custom core component with selected extensions EMBEDDED at compile
