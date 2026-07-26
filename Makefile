@@ -6,7 +6,7 @@ BROWSER_TARGET?=wasm32-unknown-unknown
 # ducklink_core.wasm at the usual path.
 DUCKDB_WASM_DIR?=../duckdb-wasm
 
-.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk smoke-dotcmd sample-extension smoke-extension pintest-probes echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds cron-driver cache cache-clean sqlite-lib sqlite-loader-stub s3-wasm aws-sigv4-wasm azure-wasm gcs-wasm mosaic mosaic-browser mosaic-clean
+.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk smoke-dotcmd sample-extension smoke-extension pintest-probes echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds cron-driver cache cache-clean sqlite-lib sqlite-loader-stub s3-wasm aws-sigv4-wasm azure-wasm gcs-wasm mosaic mosaic-browser mosaic-clean fieldbook-loader fieldbook-cli fieldbook-cli-clean fieldbook-cli-smoke fieldbook-browser fieldbook-browser-clean
 
 all: core standalone-cli loader-stub dotcmds
 
@@ -360,6 +360,100 @@ mosaic-clean:
 	rm -rf extensions/mosaic-component/browser/dist \
 	       extensions/mosaic-component/browser/node_modules \
 	       artifacts/extensions/mosaic.wasm
+
+# --- fieldbook-cli: standalone `wasmtime fieldbook-cli.wasm mydata.duckdb` --
+#
+# Product 1 of the Fieldbook-wasm initiative (see
+# docs/fieldbook-wasm-phase0-findings.md §2 and §6.1). Composes the ducklink
+# CLI + core + a fieldbook-specific loader stub into a single self-contained
+# wasm component that any wasmtime can run — no native ducklink host needed.
+#
+# Three-stage wac plug (wac plug DROPS unused exports of a plug, so a single
+# loader with both core-facing stubs AND the CLI's dotcmd-host stub can't
+# satisfy both sockets in one invocation — the loader is plugged in twice,
+# once for each socket, and the two composites are then joined):
+#
+#   1. plug fieldbook_loader into ducklink_core  -> core_fb_loaded
+#      Loader's `host-extension-loader / extension-loader-hooks /
+#      callback-dispatch / storage|index|collation|pragma|parser|optimizer|
+#      files|table-stream host / tvm:memory` exports satisfy core's imports.
+#   2. plug fieldbook_loader into ducklink_cli   -> cli_fb_dotcmd
+#      Loader's `duckdb:cli/dotcmd-host` export (no-op — invoke returns
+#      ok(none), list-commands returns empty) satisfies the CLI's
+#      pluggable-dot-command import.
+#   3. plug core_fb_loaded into cli_fb_dotcmd    -> fieldbook-cli.wasm
+#      Wires the loaded core's `duckdb:component/database` into the CLI.
+#
+# The loader also answers `request_load("fieldbook") -> true` /
+# `request_load("fieldbook_dotcmd") -> true` so a user typing `LOAD fieldbook;`
+# at the REPL sees "Success" — a placeholder until fieldbook.wasm and
+# fieldbook_dotcmd.wasm can be baked in end-to-end. That requires either a
+# core rebuild at duckdb:extension@5.0.0 (fieldbook.wasm targets @5, the
+# current core is @4 — see docs/fieldbook-wasm-phase0-findings.md §2.3 and
+# the repo-wide v4->v5 migration), or a dotcmd-host adapter that bridges the
+# `duckdb:dotcmd/registry@0.2.0` surface fieldbook_dotcmd exports into the
+# `duckdb:cli/dotcmd-host` surface the CLI imports. Both are follow-ups.
+fieldbook-loader:
+	cargo component build -p fieldbook-loader --target $(WASI_TARGET) --release
+
+fieldbook-cli: standalone-cli fieldbook-loader
+	@ test -f target/$(WASI_TARGET)/release/ducklink_core.wasm \
+	  || { echo "error: target/$(WASI_TARGET)/release/ducklink_core.wasm missing. Run 'make core' first (needs DUCKDB_STATIC_LIB / DUCKDB_INCLUDE_DIR)." >&2; exit 1; }
+	mkdir -p artifacts/cli target/compose
+	wac plug target/$(WASI_TARGET)/release/ducklink_core.wasm \
+	  --plug target/wasm32-wasip1/release/fieldbook_loader.wasm \
+	  -o target/compose/ducklink_core_fb_loaded.wasm
+	wac plug target/$(WASI_TARGET)/release/ducklink_cli.wasm \
+	  --plug target/wasm32-wasip1/release/fieldbook_loader.wasm \
+	  -o target/compose/ducklink_cli_fb_dotcmd.wasm
+	wac plug target/compose/ducklink_cli_fb_dotcmd.wasm \
+	  --plug target/compose/ducklink_core_fb_loaded.wasm \
+	  -o artifacts/cli/fieldbook-cli.wasm
+	@echo "fieldbook-cli: composed artifact -> artifacts/cli/fieldbook-cli.wasm"
+	@ ls -lh artifacts/cli/fieldbook-cli.wasm
+
+fieldbook-cli-clean:
+	rm -f artifacts/cli/fieldbook-cli.wasm \
+	       target/compose/ducklink_core_fb_loaded.wasm \
+	       target/compose/ducklink_cli_fb_dotcmd.wasm \
+	       target/wasm32-wasip1/release/fieldbook_loader.wasm
+
+fieldbook-cli-smoke: fieldbook-cli
+	./scripts/fieldbook-cli-wasm-smoke.sh
+
+# --- fieldbook-browser: Product 2 of the Fieldbook-wasm initiative.
+# A pure browser bundle that loads the WIT-based ducklink DuckDB core
+# (~/git/duckdb-wasm, NOT the npm @duckdb/duckdb-wasm) via jco +
+# @tegmentum/wasi-polyfill and mounts a Lit-web-component notebook UI on
+# top. Mirrors the mosaic-browser esbuild pattern; also copies the two
+# runtime wasm artifacts into web/fieldbook/dist/ so `bash run.sh` from
+# that directory can serve everything statically without further wiring.
+#
+# Dependencies: `make core` for ducklink_core.wasm (built in the sibling
+# ~/git/duckdb-wasm repo and staged into target/), and one of the extension
+# builds that produce artifacts/extensions/fieldbook.wasm. The recipe fails
+# early with an actionable message if either artifact is missing.
+FIELDBOOK_CORE_WASM=target/$(WASI_TARGET)/release/ducklink_core.wasm
+FIELDBOOK_EXT_WASM=artifacts/extensions/fieldbook.wasm
+
+fieldbook-browser:
+	@ command -v npm >/dev/null 2>&1 \
+	  || { echo "error: npm not found; install Node 20+ (or run with a Node in PATH)." >&2; exit 1; }
+	@ test -f $(FIELDBOOK_CORE_WASM) \
+	  || { echo "error: $(FIELDBOOK_CORE_WASM) not found — run 'make core' first." >&2; exit 1; }
+	@ test -f $(FIELDBOOK_EXT_WASM) \
+	  || { echo "error: $(FIELDBOOK_EXT_WASM) not found — build the fieldbook extension first." >&2; exit 1; }
+	cd web/fieldbook \
+	  && ( test -d node_modules || npm install --no-audit --no-fund ) \
+	  && npm run build
+	cp $(FIELDBOOK_CORE_WASM) web/fieldbook/dist/ducklink_core.wasm
+	cp $(FIELDBOOK_EXT_WASM) web/fieldbook/dist/fieldbook.wasm
+	@echo "fieldbook-browser: built web/fieldbook/dist/{index.html,assets/,ducklink_core.wasm,fieldbook.wasm}"
+
+fieldbook-browser-clean:
+	rm -rf web/fieldbook/dist \
+	       web/fieldbook/node_modules \
+	       web/fieldbook/package-lock.json
 
 clean:
 	cargo clean

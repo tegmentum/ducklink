@@ -1,0 +1,20 @@
+{
+  "name": "ducklink-fieldbook-browser",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Browser bundle for the fieldbook notebook demo: loads the WIT-based ducklink DuckDB core (~/git/duckdb-wasm) via jco + @tegmentum/wasi-polyfill and mounts a Lit web-component notebook UI on top. Product 2 of the Fieldbook-wasm initiative.",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "preview": "vite preview",
+    "dev": "vite"
+  },
+  "dependencies": {
+    "lit": "^3.2.0",
+    "@tegmentum/wasi-polyfill": "file:../../../wasi-polyfill",
+    "@bytecodealliance/jco": "^1.23.0"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  }
+}

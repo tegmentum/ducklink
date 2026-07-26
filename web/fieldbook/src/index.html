@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ducklink Fieldbook — browser notebook</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --fg: #111;
+        --muted: #666;
+        --border: #ddd;
+        --accent: #2b5edd;
+        --error: #a00;
+        --ok: #060;
+        --bg-alt: #f7f7f9;
+      }
+      body {
+        font: 14px/1.4 system-ui, -apple-system, sans-serif;
+        margin: 0;
+        padding: 0;
+        color: var(--fg);
+      }
+      #status {
+        padding: 0.4rem 1rem;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+        background: var(--bg-alt);
+      }
+      main { padding: 1rem; max-width: 960px; margin: 0 auto; }
+    </style>
+  </head>
+  <body>
+    <div id="status">bootstrapping&hellip;</div>
+    <main>
+      <fieldbook-notebook id="nb"></fieldbook-notebook>
+    </main>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
