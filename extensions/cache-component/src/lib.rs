@@ -1683,10 +1683,11 @@ fn resolve_azure(
 //       - a pre-minted access token (from `gcloud auth print-access-token`
 //         or workload identity fed in from the host).
 //       - anonymous (public buckets).
-//   * `head-blob` returns only `{status, headers}` (no metadata
-//     struct); ETag / Last-Modified are parsed out of the header
-//     list. Same for `get-blob` -- headers arrive as `list<(string,
-//     string)>` and are folded into the catalog directly.
+//   * `head-blob` / `get-blob` now return a parsed `object-metadata`
+//     struct (parallel to s3-wasm's `object-metadata` and azure-wasm's
+//     `blob-metadata`), so the resolver harvests ETag / Last-Modified
+//     via `.metadata` — one uniform code path across the three cloud
+//     backends. Raw `headers` are still returned as an escape hatch.
 //
 // URI shape: `gs://<bucket>/<key>`.
 //
@@ -1997,17 +1998,6 @@ fn resolve_gcs_credentials(p: &GcsParams) -> Result<gcs_blob_types::Credentials,
     ))
 }
 
-/// Parse the `ETag` header out of a header list (case-insensitive).
-/// gcs-wasm returns HEAD/GET results as `list<(string, string)>`
-/// without a metadata struct; the resolver harvests exactly what
-/// the catalog needs.
-fn header_get(headers: &[(String, String)], name: &str) -> Option<String> {
-    headers
-        .iter()
-        .find(|(k, _)| k.eq_ignore_ascii_case(name))
-        .map(|(_, v)| v.clone())
-}
-
 /// Head-then-get flow against `gcs_blob_base`. Mirrors resolve_s3 /
 /// resolve_azure:
 ///
@@ -2016,6 +2006,13 @@ fn header_get(headers: &[(String, String)], name: &str) -> Option<String> {
 ///      and re-touch the catalog row.
 ///   2. Otherwise `get-blob`, hash the body, publish to the
 ///      content-addressed store, and upsert the catalog row.
+///
+/// Since gcs-wasm now returns a parsed `object-metadata` on head/get
+/// (parallel to s3-wasm's `object-metadata` and azure-wasm's
+/// `blob-metadata`), the resolver just reads `.metadata.etag` /
+/// `.metadata.last_modified` — no more hand-parsing of the header
+/// list — leaving the three backend harvest paths structurally
+/// identical.
 fn resolve_gcs(
     cfg: &Config,
     params: GcsParams,
@@ -2077,16 +2074,15 @@ fn resolve_gcs(
             Err(_) => None,
         };
 
-    // Step 1: HEAD. Harvest ETag / Last-Modified from the header list.
+    // Step 1: HEAD. Consume the pre-parsed metadata struct that gcs-wasm now
+    // emits — same shape s3-wasm and azure-wasm already ship. No more
+    // header-list scanning on this side.
     let head_res = gcs_blob_base::head_blob(&endpoint, &creds, &bucket, &key);
     let (head_etag, head_last_modified) = match head_res {
-        Ok(h) => {
-            let headers: Vec<(String, String)> = h.headers.into_iter().collect();
-            (
-                header_get(&headers, "etag"),
-                header_get(&headers, "last-modified"),
-            )
-        }
+        Ok(h) => match h.metadata {
+            Some(m) => (m.etag, m.last_modified),
+            None => (None, None),
+        },
         // A HEAD failure is informational — fall through to GET so the
         // real error surfaces on the byte transfer.
         Err(_) => (None, None),
@@ -2123,7 +2119,6 @@ fn resolve_gcs(
             got.status
         ));
     }
-    let get_headers: Vec<(String, String)> = got.headers.into_iter().collect();
     let body_vec: Vec<u8> = got.body.to_vec();
     let now = compute_now();
     let hash = cache_core::sha256_hex(&body_vec);
@@ -2159,8 +2154,14 @@ fn resolve_gcs(
             }
         }
     }
-    let etag = header_get(&get_headers, "etag").or(head_etag);
-    let last_modified = header_get(&get_headers, "last-modified").or(head_last_modified);
+    // Same shape as resolve_s3 / resolve_azure: prefer the GET response's
+    // metadata, fall back to what HEAD reported.
+    let (get_etag, get_last_modified) = match got.metadata {
+        Some(m) => (m.etag, m.last_modified),
+        None => (None, None),
+    };
+    let etag = get_etag.or(head_etag);
+    let last_modified = get_last_modified.or(head_last_modified);
     upsert(
         &cfg.name, uri, scheme,
         etag.as_deref(),

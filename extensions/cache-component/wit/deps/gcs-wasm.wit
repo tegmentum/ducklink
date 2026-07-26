@@ -51,13 +51,29 @@ interface blob-types {
         url: string,
     }
 
-    /// Object metadata parsed out of GCS response headers.
+    /// Object metadata. Structurally aligned with `s3-types::object-metadata`
+    /// and `azure blob-types::blob-metadata` so the cache-component's harvest
+    /// paths look identical across the three cloud backends. All fields
+    /// optional — the two GCS response shapes (JSON metadata body vs. object
+    /// headers from `?alt=media`) populate different subsets.
     record object-metadata {
         content-type: option<string>,
         content-length: option<u64>,
         etag: option<string>,
-        last-modified: option<u64>,
+        /// Pass-through: RFC 3339 from JSON `updated`, or HTTP-date from a
+        /// `last-modified` header. Callers needing epoch or a specific format
+        /// should parse.
+        last-modified: option<string>,
+        /// Base64-encoded MD5 of the object contents (from JSON `md5Hash`
+        /// or `x-goog-hash: md5=...`). Absent for composite objects.
+        md5-hash: option<string>,
+        /// Base64-encoded CRC32C of the object contents (from JSON `crc32c`
+        /// or `x-goog-hash: crc32c=...`).
+        crc32c: option<string>,
+        /// GCS generation number (object versioning). String because GCS
+        /// returns it as such in JSON and it can exceed 2^53.
         generation: option<string>,
+        /// User-defined metadata (JSON `metadata` object or `x-goog-meta-*`).
         custom: list<tuple<string, string>>,
     }
 
@@ -101,13 +117,14 @@ interface blob-types {
     }
 
     /// Result of get-blob. `status` distinguishes 200 (body returned)
-    /// from 304 (Not Modified — body empty). Response headers are
-    /// preserved verbatim; the cache resolver harvests ETag / Last-
-    /// Modified out of them.
+    /// from 304 (Not Modified — body empty). Raw response headers are
+    /// preserved verbatim; `metadata` is the pre-parsed struct siblings
+    /// (s3, azure) also expose. None on 304.
     record get-object-output {
         status: u16,
         headers: list<tuple<string, string>>,
         body: list<u8>,
+        metadata: option<object-metadata>,
     }
 
     /// Result of put-blob.
@@ -115,10 +132,15 @@ interface blob-types {
         etag: string,
     }
 
-    /// Result of head-blob.
+    /// Result of head-blob. Raw `headers` preserved for escape-hatch use;
+    /// `metadata` is populated from the JSON metadata body (the wire ETag /
+    /// Last-Modified on the JSON metadata response describe the JSON
+    /// representation, NOT the object — so the parsed struct is what
+    /// callers should read).
     record head-object-output {
         status: u16,
         headers: list<tuple<string, string>>,
+        metadata: option<object-metadata>,
     }
 }
 
