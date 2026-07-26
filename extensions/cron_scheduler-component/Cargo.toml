@@ -1,0 +1,42 @@
+[package]
+name = "cron_scheduler-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Cron-style SQL scheduler for DuckDB. Registers the scalar helpers used by the
+scheduler tables/macros: cron_advance(schedule, last_ms, now_ms, catch_up) for
+policy-aware next-fire computation, and cron_bootstrap_sql() which returns the
+bootstrap DDL for __cron_jobs / __cron_runs / cron_schedule etc.
+
+The scheduler itself is pure SQL over these tables; a driver (e.g. `ducklink
+cron run`, or any host-embedder's own ticker) loops calling SELECT
+cron_run_due(). The wasm side never runs SQL — it only computes.
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+croner = "3"
+chrono = { version = "0.4", default-features = false, features = ["alloc"] }
+# Same rationale as sys_compat-component: the declare! table is DB-private
+# (its bootstrap DDL references __cron_jobs by name), so it lives here rather
+# than in a datalink core. Rides the datalink_extcore::duckdb_shim! codegen
+# for the registration/marshalling glue.
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1

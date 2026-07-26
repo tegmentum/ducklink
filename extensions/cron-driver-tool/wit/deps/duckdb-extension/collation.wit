@@ -1,0 +1,26 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Collation registration surface. A component that already registered a
+// sort-key SCALAR (text -> sort-key text) via `register-scalar` can declare a
+// COLLATION whose transform is that scalar, so `ORDER BY x COLLATE <name>`
+// resolves to it. No new dispatch is needed: the collation reuses the
+// already-registered scalar entirely.
+//
+// Kept as a SEPARATE interface (additive, like `storage` / `files-reg`) so
+// existing components' frozen WIT copies stay structurally unchanged. Only
+// collation-capable components (e.g. icufns) import it via a separate world.
+interface collation {
+  use types.{duckerror};
+
+  // Called by the component in load(), AFTER registering the sort-key scalar
+  // `transform-scalar`. Declares a collation `name` whose transform is that
+  // already-registered single-argument scalar (text -> sort-key text). The core
+  // looks the scalar up in the catalog by name and wraps it in a DuckDB
+  // CreateCollationInfo. `combinable` controls whether the collation can be
+  // combined with other collations (e.g. `COLLATE nocase.icu_sv`).
+  register-collation: func(name: string,
+                           transform-scalar: string,
+                           combinable: bool) -> result<_, duckerror>;
+}

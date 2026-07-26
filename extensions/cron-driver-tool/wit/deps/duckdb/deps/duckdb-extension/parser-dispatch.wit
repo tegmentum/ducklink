@@ -1,0 +1,33 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> component callbacks for a PARSER extension (additive, 2.3.0 / v3).
+// DuckDB's `ParserExtension` lets an extension intercept SQL the built-in parser
+// rejects. The core hands the raw, unrecognized statement text to the component;
+// the component either DECLINES (the core proceeds to the next parser extension /
+// its own error) or CLAIMS it and returns a REWRITE -- a string of ordinary
+// DuckDB SQL the core parses + executes in place of the original.
+//
+// This is the by-value-safe form of a parser extension: no bound parse tree
+// crosses the boundary (the WIT recursion wall), only text in and text out.
+//
+// Every call carries `handle` = the callback-handle the component registered for
+// the parser extension via `parser.register-parser-extension`.
+interface parser-dispatch {
+  use types.{duckerror};
+
+  // Outcome of offering a statement to a parser extension.
+  variant parse-outcome {
+    // The component does not recognize this statement; the core proceeds to the
+    // next parser extension / its own parse error.
+    declined,
+    // The component claims the statement and rewrites it to the carried SQL,
+    // which the core parses + runs in place of the original statement.
+    rewrite(string),
+  }
+
+  // Offer one statement the built-in parser could not handle to the parser
+  // extension `handle`. `query` is the full statement text.
+  call-parse: func(handle: u32, query: string) -> result<parse-outcome, duckerror>;
+}

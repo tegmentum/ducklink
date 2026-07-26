@@ -1,0 +1,25 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Connection-lifecycle registration surface (additive, 2.2.0, Item 7). A
+// component declares in load() that it wants connection-open/close callbacks; the
+// host captures the declaration and drives the actual notifications through the
+// separate `conn-dispatch` export.
+//
+// Kept SEPARATE (additive, like `secret` / `settings`) so existing components'
+// frozen WIT copies stay structurally unchanged.
+interface lifecycle {
+  use types.{duckerror};
+
+  // Which lifecycle events a component subscribes to.
+  flags conn-events {
+    opened,
+    closed,
+  }
+
+  // Subscribe to connection lifecycle events. `callback-handle` routes every
+  // `conn-dispatch` notification back to the owning component.
+  register-connection-callback: func(events: conn-events,
+                                     callback-handle: u32) -> result<u32, duckerror>;
+}

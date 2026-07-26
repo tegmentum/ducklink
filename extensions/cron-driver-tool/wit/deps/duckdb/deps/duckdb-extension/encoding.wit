@@ -1,0 +1,22 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Text-encoding registration surface (additive, 2.2.0, Item 7). A component
+// declares a text encoding (e.g. "latin-1", "shift-jis") it can transcode to
+// UTF-8 on read; the host captures the declaration so the CSV/text readers can
+// route an `encoding=` option to the component. Transcoding itself is driven via
+// an already-registered scalar (the component's decode function), so no new
+// dispatch export is needed.
+//
+// Kept SEPARATE (additive) so existing components' frozen WIT copies stay
+// structurally unchanged.
+interface encoding {
+  use types.{duckerror};
+
+  // Register a text encoding `name` with optional `aliases`. `callback-handle`
+  // identifies the owning component for diagnostics / routing.
+  register-encoding: func(name: string,
+                          aliases: list<string>,
+                          callback-handle: u32) -> result<u32, duckerror>;
+}

@@ -1,0 +1,21 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Arrow-extension registration surface (additive, 2.2.0, Item 7). A component
+// declares an Arrow-backed table source: a named producer that yields Arrow IPC
+// record batches the core decodes into DataChunks. The host captures the
+// declaration; streaming the batches reuses the existing table cursor shape
+// (a producer is driven like any other table function via its callback-handle).
+//
+// Kept SEPARATE (additive) so existing components' frozen WIT copies stay
+// structurally unchanged.
+interface arrow-ext {
+  use types.{duckerror, columndef};
+
+  // Register an Arrow table producer `name` advertising the column `schema` it
+  // emits. `callback-handle` routes the host's pull calls back to the component.
+  register-arrow-table: func(name: string,
+                             schema: list<columndef>,
+                             callback-handle: u32) -> result<u32, duckerror>;
+}

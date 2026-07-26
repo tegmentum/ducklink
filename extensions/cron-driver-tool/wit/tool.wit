@@ -1,0 +1,19 @@
+// The cron-driver tool world. It's a wasi:cli/run tool (so any wasi-preview2
+// host can instantiate it — CLI, browser via wasi-shim, edge runtime), plus
+// it imports the small `duckdb:driver/exec` bridge for running SQL against
+// the host's DuckDB core, and `wasi:clocks/monotonic-clock` + `wasi:io/poll`
+// so the tick loop can sleep between polls with a real wasi-native pollable
+// rather than a busy-wait.
+package duckdb:driver-tool;
+
+world cron-driver-tool {
+    import duckdb:driver/exec@5.0.0;
+    import wasi:clocks/monotonic-clock@0.2.6;
+    import wasi:clocks/wall-clock@0.2.6;
+    import wasi:io/poll@0.2.6;
+    import wasi:cli/environment@0.2.6;
+    import wasi:cli/stderr@0.2.6;
+    import wasi:cli/stdout@0.2.6;
+
+    export wasi:cli/run@0.2.6;
+}

@@ -1,0 +1,29 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// General optimizer-rule registration surface (additive, 2.3.0 / v3). A component
+// that wants to participate in query optimization declares a rule here in load();
+// the host wires a DuckDB `OptimizerExtension` that offers the (flattened) logical
+// plan to the component via the separate `optimizer-dispatch` export.
+//
+// CONSTRAINED-BY-DESIGN: this is PATTERN-MATCH-AND-REWRITE only. A by-value
+// `LogicalOperator` tree is recursive + DuckDB-internal and cannot cross the WIT
+// boundary (the recursion wall). The host instead passes a FLATTENED, NEUTRAL
+// plan-shape descriptor (see optimizer-dispatch.plan-shape) and the component
+// returns a bounded rewrite directive. This generalizes the hard-coded
+// index-scan optimizer (duckdb-wasm core/cpp/wasm_index_optimizer.cpp) into a
+// component-driven rule.
+//
+// Kept SEPARATE (additive) so existing components' frozen WIT stays unchanged;
+// only optimizer-capable components import it via the `duckdb-extension-optimizer`
+// world.
+interface optimizer {
+  use types.{duckerror};
+
+  // Declare an optimizer rule named `rule-name`. `callback-handle` is the opaque
+  // id the host threads into every `optimizer-dispatch.call-optimize` so one
+  // component can back several rules. Returns a registration id.
+  register-optimizer-rule: func(rule-name: string,
+                                callback-handle: u32) -> result<u32, duckerror>;
+}

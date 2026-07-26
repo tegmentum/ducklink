@@ -1,0 +1,22 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Compression-codec registration surface (additive, 2.2.0, Item 7). A component
+// declares a compression codec (e.g. "lz4", "zstd") keyed by a file extension;
+// the host captures the declaration so the file readers/writers can route a
+// matching file (or `compression=` option) to the component. The actual
+// (de)compression rides an already-registered scalar, so no new dispatch export
+// is needed.
+//
+// Kept SEPARATE (additive) so existing components' frozen WIT copies stay
+// structurally unchanged.
+interface compression {
+  use types.{duckerror};
+
+  // Register a compression codec `name` for files ending in `file-extension`
+  // (e.g. "zst"). `callback-handle` identifies the owning component.
+  register-compression: func(name: string,
+                             file-extension: string,
+                             callback-handle: u32) -> result<u32, duckerror>;
+}

@@ -1,0 +1,250 @@
+package duckdb:extension@4.0.0;
+
+use runtime;
+use callback-dispatch;
+use config;
+use logging;
+use catalog;
+use files;
+use guest;
+use storage;
+use storage-dispatch;
+use query;
+use index;
+use index-dispatch;
+use files-reg;
+use file-dispatch;
+use secret;
+use secret-dispatch;
+use settings;
+use macro-ext;
+use types-ext;
+use copy-dispatch;
+use storage-write-dispatch;
+// 2.2.0 additive interfaces (Items 6-7).
+use runtime-ext;
+use lifecycle;
+use coordinate-system;
+use arrow-ext;
+use encoding;
+use compression;
+use table-stream-dispatch;
+// 3.1.0 additive: filterable-table registration marker.
+use table-stream;
+use aggregate-incr-dispatch;
+use conn-dispatch;
+use file-write-dispatch;
+use index-write-dispatch;
+use settings-dispatch;
+
+world duckdb-extension {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  // 2.1.0 additive registration imports.
+  import secret;
+  import settings;
+  import macro-ext;
+  import types-ext;
+  // 2.2.0 additive registration imports (Items 6-7): richer scalars, connection
+  // lifecycle, CRS, Arrow, text encodings, compression codecs.
+  import runtime-ext;
+  import lifecycle;
+  import coordinate-system;
+  import arrow-ext;
+  import encoding;
+  import compression;
+  export guest;
+  export callback-dispatch;
+}
+
+// v1.1 query-capable world: a superset that additionally imports the live-query
+// host import (`query`), for catalog-name completion. Only components that read
+// the live catalog (e.g. autocomplete) target this world; the base
+// `duckdb-extension` world is unchanged, so every existing component's frozen
+// WIT copy keeps linking identically. The host PROVIDES `query` in the extension
+// linker unconditionally, so a component importing it instantiates against the
+// host either way.
+world duckdb-extension-query {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import query;
+  export guest;
+  export callback-dispatch;
+}
+
+// Storage-capable world: a superset that additionally imports the storage
+// registration surface and exports the storage-dispatch callbacks. Only
+// components that back an ATTACH-able catalog (e.g. the sqlite scanner) target
+// this world; the default `duckdb-extension` world is unchanged, so every
+// existing component's frozen WIT copy keeps linking identically.
+world duckdb-extension-storage {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import storage;
+  export guest;
+  export callback-dispatch;
+  export storage-dispatch;
+}
+
+// Index-capable world: a superset that additionally imports the custom-index
+// registration surface and exports the index-dispatch callbacks. Only components
+// that back a `CREATE INDEX ... USING <type>` custom index (e.g. hnswfns) target
+// this world; the default `duckdb-extension` world is unchanged, so every
+// existing component's frozen WIT copy keeps linking identically.
+world duckdb-extension-index {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import index;
+  export guest;
+  export callback-dispatch;
+  export index-dispatch;
+}
+
+// Files-capable world: a superset that additionally imports the files-backend
+// registration surface and exports the file-dispatch callbacks. Only components
+// that back remote file reads (an http(s) fetcher, e.g. webfs) target this
+// world; the default `duckdb-extension` world is unchanged, so every existing
+// component's frozen WIT copy keeps linking identically.
+world duckdb-extension-files {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import files-reg;
+  export guest;
+  export callback-dispatch;
+  export file-dispatch;
+}
+
+// Copy-capable world (2.1.0): exports copy-dispatch.
+world duckdb-extension-copy {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  export guest;
+  export callback-dispatch;
+  export copy-dispatch;
+}
+
+// Secret-capable world (2.1.0): exports secret-dispatch.
+world duckdb-extension-secret {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import secret;
+  export guest;
+  export callback-dispatch;
+  export secret-dispatch;
+}
+
+// Writable-storage world (2.1.0): exports storage-write-dispatch on top of the
+// read-only storage-dispatch.
+world duckdb-extension-storage-write {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import storage;
+  export guest;
+  export callback-dispatch;
+  export storage-dispatch;
+  export storage-write-dispatch;
+}
+
+// Streaming-table world (2.2.0, Item 6): exports table-stream-dispatch.
+// 3.1.0 additive: also imports the `table-stream` registration marker so a
+// filterable streaming component declares its table fn in load() AND serves the
+// pushed-down-filter cursor from the one instance.
+world duckdb-extension-table-stream {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import table-stream;
+  export guest;
+  export callback-dispatch;
+  export table-stream-dispatch;
+}
+
+// Incremental-aggregate world (2.2.0, Item 6): exports aggregate-incr-dispatch.
+world duckdb-extension-aggregate-incr {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  export guest;
+  export callback-dispatch;
+  export aggregate-incr-dispatch;
+}
+
+// Connection-lifecycle world (2.2.0, Item 7): exports conn-dispatch.
+world duckdb-extension-conn {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import lifecycle;
+  export guest;
+  export callback-dispatch;
+  export conn-dispatch;
+}
+
+// Writable/glob files world (2.2.0, Item 7): exports file-write-dispatch.
+world duckdb-extension-file-write {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import files-reg;
+  export guest;
+  export callback-dispatch;
+  export file-write-dispatch;
+}
+
+// General-index world (2.2.0, Item 7): exports index-write-dispatch.
+world duckdb-extension-index-write {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import index;
+  export guest;
+  export callback-dispatch;
+  export index-write-dispatch;
+}
+
+// Settings-callback world (2.2.0, Item 7): exports settings-dispatch.
+world duckdb-extension-settings {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import settings;
+  export guest;
+  export callback-dispatch;
+  export settings-dispatch;
+}

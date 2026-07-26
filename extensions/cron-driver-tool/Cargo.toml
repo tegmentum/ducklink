@@ -1,0 +1,35 @@
+[package]
+name = "cron-driver-tool"
+version = "0.1.0"
+edition = "2021"
+description = """
+wasi:cli/run tool that runs the cron_scheduler tick loop entirely in wasm:
+imports `duckdb:driver/exec` for SQL, `wasi:clocks/monotonic-clock` +
+`wasi:io/poll` to sleep between ticks. Same behaviour as the native
+`ducklink cron run` — but portable to any wasi-preview2 host (Workers with
+cron triggers, browsers via wasi-shim, edge runtimes) with no native code.
+"""
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen-rt = { version = "0.41.0", features = ["bitflags"] }
+
+[package.metadata.component]
+package = "duckdb:driver-tool"
+
+[package.metadata.component.target]
+path = "wit"
+world = "duckdb:driver-tool/cron-driver-tool"
+
+[package.metadata.component.target.dependencies]
+"duckdb:driver" = { path = "wit/deps/duckdb-driver" }
+"wasi:cli" = { path = "wit/deps/wasi-cli" }
+"wasi:filesystem" = { path = "wit/deps/wasi-filesystem" }
+"wasi:io" = { path = "wit/deps/wasi-io" }
+"wasi:clocks" = { path = "wit/deps/wasi-clocks" }
+"wasi:sockets" = { path = "wit/deps/wasi-sockets" }
+"wasi:random" = { path = "wit/deps/wasi-random" }

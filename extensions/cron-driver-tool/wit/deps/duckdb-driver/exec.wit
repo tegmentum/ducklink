@@ -1,0 +1,25 @@
+// duckdb:driver — the tool-side SQL bridge.
+//
+// A `wasi:cli/run` tool (like `cron-driver-tool`) doesn't get composed with
+// core.wasm the way the shell does; instead the host implements this small
+// interface and dispatches each call to the same core the CLI uses.
+package duckdb:driver@5.0.0;
+
+interface exec {
+    /// A host-owned handle to an open DuckDB connection. Dropping the
+    /// resource closes the underlying connection.
+    resource connection {
+        /// Execute a statement (or `;`-separated batch). Returns the number
+        /// of rows affected by the LAST statement (0 for DDL / SELECT).
+        exec: func(sql: string) -> result<u64, string>;
+
+        /// Run a query and return every row with each cell stringified —
+        /// NULL is the empty string. Matches the shape used by
+        /// `duckdb:extension/nested-exec` so drivers can consume both.
+        query: func(sql: string) -> result<list<list<string>>, string>;
+    }
+
+    /// Open a DuckDB database at `path` (relative paths resolve against the
+    /// tool's cwd preopen). Pass an empty string for `:memory:`.
+    open: func(path: string) -> result<connection, string>;
+}
