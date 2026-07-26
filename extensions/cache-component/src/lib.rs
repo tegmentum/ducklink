@@ -46,9 +46,6 @@
 //! the pre-v0.2 duplicate-download cost.
 
 use std::collections::HashMap;
-use std::io::{Read, Write};
-use std::net::TcpStream;
-use std::sync::Arc;
 use std::sync::{
     atomic::{AtomicU32, Ordering},
     Mutex, OnceLock,
@@ -73,6 +70,14 @@ use sqlite::extension::{spi as sqlite_spi, types as sqlite_types};
 // `s3-wasm` component (pre-composed with `aws-sigv4-wasm`) into
 // `cache.wasm`. See the `cache` recipe in ../../../Makefile.
 use component::s3_wasm::{s3_base, s3_types};
+// wasi:http surface for the HTTP/HTTPS fetch backend. Both TLS and
+// plaintext transport now go through the host's wasmtime-wasi-http
+// wiring (see `ducklink-host::add_only_http_to_linker_sync`, commit
+// aaa5891) — the same interface s3-wasm consumes for its HTTPS
+// requests. One transport, one host wiring, no in-wasm rustls.
+use wasi::http::outgoing_handler;
+use wasi::http::types::{Fields, Method, OutgoingRequest, Scheme};
+use wasi::io::streams::StreamError;
 
 // ---------------------------------------------------------------------------
 // Handle table (u32 -> DECLS index). Same layout the `duckdb_shim!`
@@ -84,6 +89,14 @@ fn handles() -> &'static Mutex<HashMap<u32, usize>> {
     T.get_or_init(|| Mutex::new(HashMap::new()))
 }
 static NEXT_HANDLE: AtomicU32 = AtomicU32::new(1);
+
+/// Monotonic tmp-name suffix. `std::process::id()` panics under wasip1 (the
+/// stdlib's WASI shim aborts on unsupported syscalls); a static counter is
+/// unique-within-process which is all the staging path needs — the sha256
+/// prefix + this suffix collide only if two threads happen to publish the
+/// same content-hash simultaneously, and the two-step rename tolerates the
+/// AlreadyExists case anyway.
+static TMP_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 // ---------------------------------------------------------------------------
 // Marshalling: Duckvalue <-> NeutralValue.
@@ -190,6 +203,20 @@ fn spi_i64(v: &sqlite_types::SqlValue) -> Option<i64> {
 }
 
 fn spi_bootstrap() -> Result<(), String> {
+    // Point the SPI's shared connection at the on-disk metadata.db BEFORE
+    // running any DDL. sqlite-lib's default connection is `:memory:` and
+    // per-wasm-instance; without this every process (or every re-load)
+    // would have its own catalog, defeating cross-process cache sharing
+    // and making the file-lock re-lookup-under-lock always miss.
+    let root = cache_root()?;
+    ensure_dirs(&root)?;
+    let db_path = root.join("metadata.db");
+    sqlite_spi::open_db(
+        db_path
+            .to_str()
+            .ok_or_else(|| format!("cache metadata: non-utf8 db path {}", db_path.display()))?,
+    )
+    .map_err(spi_err)?;
     // Two DDLs; batch them so the SPI runs them under one prepare/step
     // pair (or falls back to two prepares if the host does not support
     // `execute-batch` compounds — either way idempotent).
@@ -247,10 +274,13 @@ fn path_to_file_uri(p: &std::path::Path) -> String {
 // ---------------------------------------------------------------------------
 // HTTP fetch.
 //
-// Reuses the same TCP + rustls stack as `httpclient-component`, but with
-// full cache-control semantics: If-None-Match / If-Modified-Since on
-// request, ETag / Last-Modified / Cache-Control max-age / Expires
-// harvested from response, and a 304 returned as `Revalidated`.
+// Runs over `wasi:http/outgoing-handler` — the same host-provided
+// transport `component:s3-wasm` uses for HTTPS. TLS is handled by the
+// host (wasmtime-wasi-http) so the wasm arm carries no rustls / no
+// embedded CA bundle. Full cache-control semantics are preserved:
+// If-None-Match / If-Modified-Since on request, ETag / Last-Modified /
+// Cache-Control max-age / Expires harvested from response, and a 304
+// returned as a body-less `HttpResp` with `status = 304`.
 // ---------------------------------------------------------------------------
 
 struct HttpResp {
@@ -262,12 +292,15 @@ struct HttpResp {
     expires: Option<String>,
 }
 
-fn parse_url(url: &str) -> Option<(String, u16, String, bool)> {
+/// Parse `http(s)://authority[/path[?query]]` into
+/// `(scheme, authority, path_with_query)`. Authority is the raw
+/// `host[:port]` string (wasi:http accepts it unparsed).
+fn parse_url(url: &str) -> Option<(Scheme, String, String)> {
     let url = url.trim();
-    let (tls, rest, default_port) = if let Some(r) = url.strip_prefix("https://") {
-        (true, r, 443u16)
+    let (scheme, rest) = if let Some(r) = url.strip_prefix("https://") {
+        (Scheme::Https, r)
     } else if let Some(r) = url.strip_prefix("http://") {
-        (false, r, 80)
+        (Scheme::Http, r)
     } else {
         return None;
     };
@@ -275,57 +308,20 @@ fn parse_url(url: &str) -> Option<(String, u16, String, bool)> {
         Some(i) => (&rest[..i], &rest[i..]),
         None => (rest, "/"),
     };
-    let (host, port) = match authority.rsplit_once(':') {
-        Some((h, p)) => (h.to_string(), p.parse().ok()?),
-        None => (authority.to_string(), default_port),
-    };
-    if host.is_empty() {
+    if authority.is_empty() {
         return None;
     }
-    Some((
-        host,
-        port,
-        if path.is_empty() {
-            "/".into()
-        } else {
-            path.to_string()
-        },
-        tls,
-    ))
+    let path_with_query = if path.is_empty() { "/".to_string() } else { path.to_string() };
+    Some((scheme, authority.to_string(), path_with_query))
 }
 
-fn build_request(
-    host: &str,
-    path: &str,
-    if_none_match: Option<&str>,
-    if_modified_since: Option<&str>,
-) -> String {
-    let mut req = format!(
-        "GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: ducklink-cache/{}\r\nAccept: */*\r\n",
-        env!("CARGO_PKG_VERSION")
-    );
-    if let Some(v) = if_none_match {
-        req.push_str(&format!("If-None-Match: {v}\r\n"));
-    }
-    if let Some(v) = if_modified_since {
-        req.push_str(&format!("If-Modified-Since: {v}\r\n"));
-    }
-    req.push_str("Connection: close\r\n\r\n");
-    req
-}
-
-/// Read a header line's value (case-insensitive on name), if present.
-fn header_of(head: &str, name: &str) -> Option<String> {
-    for line in head.lines().skip(1) {
-        let (n, v) = match line.split_once(':') {
-            Some(x) => x,
-            None => continue,
-        };
-        if n.trim().eq_ignore_ascii_case(name) {
-            return Some(v.trim().to_string());
-        }
-    }
-    None
+/// Case-insensitive header lookup on the `(name, value)` list wasi:http
+/// hands back from `Fields::entries()`.
+fn header_of(headers: &[(String, String)], name: &str) -> Option<String> {
+    headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case(name))
+        .map(|(_, v)| v.clone())
 }
 
 fn parse_max_age(cache_control: Option<&str>) -> Option<u64> {
@@ -339,20 +335,126 @@ fn parse_max_age(cache_control: Option<&str>) -> Option<u64> {
     None
 }
 
-fn parse_response(raw: Vec<u8>) -> Option<HttpResp> {
-    // Split at the header/body boundary.
-    let idx = raw
-        .windows(4)
-        .position(|w| w == b"\r\n\r\n")?;
-    let head = std::str::from_utf8(&raw[..idx]).ok()?.to_string();
-    let body = raw[idx + 4..].to_vec();
-    let status: u16 = head.lines().next()?.split_whitespace().nth(1)?.parse().ok()?;
-    let etag = header_of(&head, "ETag");
-    let last_modified = header_of(&head, "Last-Modified");
-    let cc = header_of(&head, "Cache-Control");
+/// GET `url` over `wasi:http/outgoing-handler`. Conditional-request
+/// headers (If-None-Match / If-Modified-Since) go on the outgoing
+/// request when supplied; response headers (etag / last-modified /
+/// cache-control max-age / expires) are harvested to drive cache-core's
+/// revalidation policy.
+fn fetch_http_via_wasi(
+    url: &str,
+    if_none_match: Option<&str>,
+    if_modified_since: Option<&str>,
+) -> Result<HttpResp, String> {
+    let (scheme, authority, path_with_query) = parse_url(url)
+        .ok_or_else(|| format!("cache http backend: not an http(s) URL: {url}"))?;
+
+    // Build the request headers. `Fields::from_list` takes
+    // `(name, Vec<u8>)` pairs.
+    let ua = format!("ducklink-cache/{}", env!("CARGO_PKG_VERSION"));
+    let mut header_entries: Vec<(String, Vec<u8>)> = vec![
+        ("user-agent".to_string(), ua.into_bytes()),
+        ("accept".to_string(), b"*/*".to_vec()),
+    ];
+    if let Some(v) = if_none_match {
+        header_entries.push(("if-none-match".to_string(), v.as_bytes().to_vec()));
+    }
+    if let Some(v) = if_modified_since {
+        header_entries.push(("if-modified-since".to_string(), v.as_bytes().to_vec()));
+    }
+    let fields = Fields::from_list(&header_entries).map_err(|e| {
+        format!("cache http backend: build headers for {url} failed: {e:?}")
+    })?;
+
+    let request = OutgoingRequest::new(fields);
+    request
+        .set_method(&Method::Get)
+        .map_err(|_| format!("cache http backend: set method for {url} failed"))?;
+    request
+        .set_scheme(Some(&scheme))
+        .map_err(|_| format!("cache http backend: set scheme for {url} failed"))?;
+    request
+        .set_authority(Some(&authority))
+        .map_err(|_| format!("cache http backend: set authority for {url} failed"))?;
+    request
+        .set_path_with_query(Some(&path_with_query))
+        .map_err(|_| format!("cache http backend: set path for {url} failed"))?;
+
+    // Dispatch. `handle` returns a `future-incoming-response`; poll it
+    // until the host resolves it, mirroring the shape s3-wasm uses.
+    let future_response = outgoing_handler::handle(request, None)
+        .map_err(|e| format!("cache http backend: request to {url} failed: {e:?}"))?;
+
+    let response = loop {
+        if let Some(result) = future_response.get() {
+            break result
+                .map_err(|_| {
+                    format!("cache http backend: response future for {url} already consumed")
+                })?
+                .map_err(|e| format!("cache http backend: request to {url} failed: {e:?}"))?;
+        }
+        // Block until the host has more work for us.
+        future_response.subscribe().block();
+    };
+
+    let status = response.status();
+    let header_list: Vec<(String, String)> = response
+        .headers()
+        .entries()
+        .into_iter()
+        .map(|(k, v)| (k, String::from_utf8_lossy(&v).into_owned()))
+        .collect();
+
+    let etag = header_of(&header_list, "etag");
+    let last_modified = header_of(&header_list, "last-modified");
+    let cc = header_of(&header_list, "cache-control");
     let max_age = parse_max_age(cc.as_deref());
-    let expires = header_of(&head, "Expires");
-    Some(HttpResp {
+    let expires = header_of(&header_list, "expires");
+
+    // 304 has no body; skip the body read.
+    if status == 304 {
+        return Ok(HttpResp {
+            status,
+            body: Vec::new(),
+            etag,
+            last_modified,
+            max_age,
+            expires,
+        });
+    }
+
+    // Read the body via the incoming-body's input-stream.
+    // `incoming-body::stream()` must be dropped before we call
+    // `IncomingBody::finish`; we skip the trailer collection here since
+    // cache-core has no use for HTTP trailers.
+    let incoming_body = response
+        .consume()
+        .map_err(|_| format!("cache http backend: consume body for {url} failed"))?;
+    let stream = incoming_body
+        .stream()
+        .map_err(|_| format!("cache http backend: open body stream for {url} failed"))?;
+    let mut body = Vec::new();
+    loop {
+        match stream.blocking_read(64 * 1024) {
+            Ok(chunk) => {
+                if chunk.is_empty() {
+                    // A zero-length read on a still-open stream is a
+                    // "no bytes right now" signal — block on the
+                    // stream's readiness pollable and try again.
+                    stream.subscribe().block();
+                    continue;
+                }
+                body.extend_from_slice(&chunk);
+            }
+            Err(StreamError::Closed) => break,
+            Err(e) => {
+                return Err(format!(
+                    "cache http backend: read body for {url} failed: {e:?}"
+                ));
+            }
+        }
+    }
+
+    Ok(HttpResp {
         status,
         body,
         etag,
@@ -360,66 +462,6 @@ fn parse_response(raw: Vec<u8>) -> Option<HttpResp> {
         max_age,
         expires,
     })
-}
-
-fn fetch_plain(
-    host: &str,
-    port: u16,
-    path: &str,
-    if_none_match: Option<&str>,
-    if_modified_since: Option<&str>,
-) -> Option<HttpResp> {
-    let mut sock = TcpStream::connect((host, port)).ok()?;
-    sock.write_all(build_request(host, path, if_none_match, if_modified_since).as_bytes())
-        .ok()?;
-    let mut raw = Vec::new();
-    sock.read_to_end(&mut raw).ok()?;
-    parse_response(raw)
-}
-
-fn fetch_tls(
-    host: &str,
-    port: u16,
-    path: &str,
-    if_none_match: Option<&str>,
-    if_modified_since: Option<&str>,
-) -> Option<HttpResp> {
-    let root_store = rustls::RootCertStore {
-        roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
-    };
-    let config = rustls::ClientConfig::builder_with_provider(Arc::new(rustls_rustcrypto::provider()))
-        .with_safe_default_protocol_versions()
-        .ok()?
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
-    let server_name = rustls::pki_types::ServerName::try_from(host.to_string()).ok()?;
-    let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).ok()?;
-    let mut sock = TcpStream::connect((host, port)).ok()?;
-    let mut tls = rustls::Stream::new(&mut conn, &mut sock);
-    tls.write_all(build_request(host, path, if_none_match, if_modified_since).as_bytes())
-        .ok()?;
-    let mut raw = Vec::new();
-    // Tolerate servers that close without a TLS close_notify.
-    let _ = tls.read_to_end(&mut raw);
-    if raw.is_empty() {
-        return None;
-    }
-    parse_response(raw)
-}
-
-fn fetch_http(
-    url: &str,
-    if_none_match: Option<&str>,
-    if_modified_since: Option<&str>,
-) -> Result<HttpResp, String> {
-    let (host, port, path, tls) = parse_url(url)
-        .ok_or_else(|| format!("cache http backend: not an http(s) URL: {url}"))?;
-    let r = if tls {
-        fetch_tls(&host, port, &path, if_none_match, if_modified_since)
-    } else {
-        fetch_plain(&host, port, &path, if_none_match, if_modified_since)
-    };
-    r.ok_or_else(|| format!("cache http backend: request to {url} failed"))
 }
 
 // ---------------------------------------------------------------------------
@@ -717,7 +759,8 @@ fn resolver(cfg: &Config, uri: &str) -> Result<String, String> {
         Some(e) => (e.etag.clone(), e.last_modified.clone()),
         None => (None, None),
     };
-    let resp = fetch_http(uri, if_none_match.as_deref(), if_modified_since.as_deref())?;
+    let resp =
+        fetch_http_via_wasi(uri, if_none_match.as_deref(), if_modified_since.as_deref())?;
     let now = compute_now();
 
     if resp.status == 304 {
@@ -763,7 +806,7 @@ fn resolver(cfg: &Config, uri: &str) -> Result<String, String> {
     if !final_path.exists() {
         // Two-step publish: write to tmp/, then rename. `create_dir_all`
         // on tmp/ was done by `ensure_dirs`.
-        let tmp_name = format!("{}.{}", hash, std::process::id());
+        let tmp_name = format!("{}.{}", hash, TMP_COUNTER.fetch_add(1, Ordering::Relaxed));
         let tmp_path = root.join("tmp").join(&tmp_name);
         std::fs::write(&tmp_path, &resp.body)
             .map_err(|e| format!("cache staging: writing tmp: {e}"))?;
@@ -1147,7 +1190,7 @@ fn resolve_s3(
             .map_err(|e| format!("cache staging: creating {}: {e}", parent.display()))?;
     }
     if !final_path.exists() {
-        let tmp_name = format!("{}.{}", hash, std::process::id());
+        let tmp_name = format!("{}.{}", hash, TMP_COUNTER.fetch_add(1, Ordering::Relaxed));
         let tmp_path = root.join("tmp").join(&tmp_name);
         std::fs::write(&tmp_path, &body_vec)
             .map_err(|e| format!("cache staging: writing tmp: {e}"))?;
@@ -1256,13 +1299,15 @@ impl guest::Guest for Extension {
         //    can call `cache_core::resolve(cfg, uri)`.
         cache_core::install_resolver(resolver);
 
-        // 2) Bootstrap the metadata catalog. Non-fatal if the host has
-        //    not wired sqlite:extension/spi yet: the tables can be
-        //    created lazily on the first mutating call. A hard fail
-        //    here would prevent the component from loading at all,
-        //    which surprises users during migration from the native
-        //    extension.
-        let _ = spi_bootstrap();
+        // 2) Bootstrap the metadata catalog. Any failure here (bad
+        //    preopen, sqlite:extension/spi not wired, etc.) surfaces as
+        //    a load-time error via stderr — the cache is unusable
+        //    without a catalog, so silently swallowing the failure
+        //    only produced confusing "no such table" errors on the
+        //    first cache() call.
+        if let Err(e) = spi_bootstrap() {
+            eprintln!("cache-component: spi_bootstrap failed: {e}");
+        }
 
         // 3) Register the two cache overloads.
         register_scalars()?;

@@ -54,4 +54,11 @@ interface spi {
     /// Execute one or more statements as a batch; return total rows
     /// changed.
     execute-batch: func(sql: string) -> result<s64, sqlite-error>;
+
+    /// Swap the SPI's shared connection to the sqlite DB at `path`. Empty
+    /// path or `:memory:` opens a fresh in-memory DB (the default). A
+    /// filesystem path opens (or creates) a persistent file-backed DB —
+    /// required for cross-process metadata sharing. Must be called BEFORE
+    /// any `execute*` if a non-default connection is desired.
+    open-db: func(path: string) -> result<_, sqlite-error>;
 }

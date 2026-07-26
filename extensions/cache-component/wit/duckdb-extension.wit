@@ -67,6 +67,13 @@ world duckdb-extension-cache {
   import component:s3-wasm/s3-types;
   import component:s3-wasm/s3-base;
   import component:s3-wasm/s3-aws;
+  // wasi:http surface used by the HTTP fetch backend in `src/lib.rs`.
+  // The ducklink host wires this via wasmtime-wasi-http's
+  // `add_only_http_to_linker_sync` (commit aaa5891), the same surface
+  // s3-wasm consumes for its HTTPS transport. Same host wiring, one
+  // consistent code path across the two backends.
+  import wasi:http/types@0.2.8;
+  import wasi:http/outgoing-handler@0.2.8;
   export guest;
   export callback-dispatch;
 }

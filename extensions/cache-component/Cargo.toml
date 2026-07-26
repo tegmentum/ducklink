@@ -29,12 +29,11 @@ wit-bindgen-rt = "0.41"
 cache-core = { path = "../../../datalink/extensions/cache-core" }
 # Neutral value model + shared columnar bridge helpers.
 datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
-# HTTP fetch: pure-Rust TLS over the wasi:sockets graft, same stack
-# `extensions/httpclient-component` uses so the two extensions share a
-# single crypto/ca chain in the workspace lockfile.
-rustls = { version = "0.23", default-features = false, features = ["std", "tls12"] }
-rustls-rustcrypto = "0.0.2-alpha"
-webpki-roots = "0.26"
+# HTTP fetch runs over `wasi:http/outgoing-handler` — the host's
+# wasmtime-wasi-http linker satisfies the transport (TLS included), the
+# same wiring `component:s3-wasm` consumes. No rustls / no CA bundle
+# lives in the wasm; the WIT world imports `wasi:http/{types,outgoing-handler}`
+# and the generated bindings drive it. See `src/lib.rs::fetch_http_via_wasi`.
 # sha2 for content-addressed publish. Matches cache-core's transitive
 # choice, so the workspace unifies to a single `sha2` build.
 sha2 = "0.10"
@@ -55,3 +54,6 @@ world = "duckdb:extension/duckdb-extension-cache"
 [package.metadata.component.target.dependencies]
 "sqlite:extension" = { path = "wit/deps/sqlite-extension.wit" }
 "component:s3-wasm" = { path = "wit/deps/s3-wasm.wit" }
+"wasi:http" = { path = "wit/deps/http" }
+"wasi:io" = { path = "wit/deps/io" }
+"wasi:clocks" = { path = "wit/deps/clocks" }
