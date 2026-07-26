@@ -59,6 +59,8 @@ SUBCOMMANDS:
     list                                 Show scheduled jobs (JSON)
     metrics                              Prometheus text-format counters/gauges
                                          over __cron_runs / __cron_jobs / leases
+    force <NAME-OR-ID>                   Mark a job due right now (next_run_at=0)
+    force --all                          Same, for every active job
     run                                  Tick loop: fire due jobs, sleep, repeat
 
 COMMON OPTIONS:
@@ -87,6 +89,13 @@ schedule OPTIONS:
 run OPTIONS:
     --interval <SECS>        Sleep between ticks. Default: 30.
     --once                   Run one tick and exit (useful in host-driven mode).
+    --force                  Zero every active job's next_run_at at driver
+                             startup so the first tick fires them all
+                             regardless of schedule. One-shot; the tick
+                             advances next_run_at back to the normal
+                             schedule after each job fires. Handy with
+                             --once for scripts/tests that need a
+                             deterministic \"fire everything now\" step.
     --history-limit <N>      Keep at most N __cron_runs rows per job (oldest
                              pruned at end of each tick). 0 or unset = no
                              pruning (v0 behaviour; the caller manages it).
@@ -504,6 +513,50 @@ fn cmd_alter(common: &Common, rest: &[String], op: &str) -> Result<()> {
     Ok(())
 }
 
+/// `cron force <NAME-OR-ID>` — mark a job as due right now by zeroing
+/// its `next_run_at`. The next tick from any active driver will pick it
+/// up. `--all` targets every active job. Useful for operator overrides
+/// and for driving tests that would otherwise wait on a cron minute
+/// boundary. No `cron.wasm` load — the underlying UPDATE runs against
+/// the __cron_jobs table directly.
+fn cmd_force(common: &Common, rest: &[String]) -> Result<()> {
+    let mut target: Option<String> = None;
+    let mut all = false;
+    for arg in rest {
+        match arg.as_str() {
+            "--all" => all = true,
+            other if target.is_none() => target = Some(other.to_string()),
+            other => bail!("force: unexpected argument `{other}`"),
+        }
+    }
+    if all && target.is_some() {
+        bail!("force: pass either --all OR a NAME-OR-ID, not both");
+    }
+    let (artifacts, preopens) = artifacts_and_preopens()?;
+    let engine = build_engine_for_driver()?;
+    let mut state = open_state(&engine, &artifacts, &preopens, common)?;
+    let where_clause = if all {
+        "active".to_string()
+    } else {
+        let target = target
+            .ok_or_else(|| anyhow::anyhow!("force: NAME-OR-ID (or --all) is required"))?;
+        format!(
+            "id = TRY_CAST('{t}' AS BIGINT) OR name = '{t}'",
+            t = sql_escape(&target)
+        )
+    };
+    let sql = format!("UPDATE __cron_jobs SET next_run_at = 0 WHERE {where_clause};");
+    driver_core_exec(&mut state, &sql)
+        .map_err(|e| anyhow::anyhow!("cron: force failed: {e}"))?;
+    if all {
+        eprintln!("cron: forced all active jobs due");
+    } else {
+        // target was consumed above; the where_clause already contains it.
+        eprintln!("cron: forced job due");
+    }
+    Ok(())
+}
+
 fn cmd_list(common: &Common) -> Result<()> {
     let (artifacts, preopens) = artifacts_and_preopens()?;
     let engine = build_engine_for_driver()?;
@@ -660,6 +713,12 @@ fn escape_prom_label(s: &str) -> String {
 fn cmd_run(common: &Common, rest: &[String]) -> Result<()> {
     let mut interval_secs: u64 = 30;
     let mut once = false;
+    // --force zeroes every active job's next_run_at at driver startup so
+    // the next tick fires every job right away, regardless of schedule.
+    // Useful for `--once` invocations that need to run "everything now"
+    // (integration tests, operator overrides). Not persistent — future
+    // ticks respect the normal schedule again.
+    let mut force = false;
     let mut wasm_driver = false;
     let mut node_flag: Option<String> = None;
     // `--attach PATH=NAME` (repeatable). Each spec is turned into an
@@ -681,6 +740,7 @@ fn cmd_run(common: &Common, rest: &[String]) -> Result<()> {
                     .ok_or_else(|| anyhow::anyhow!("--interval expects a positive number"))?;
             }
             "--once" => once = true,
+            "--force" => force = true,
             // --wasm-driver: run cron-driver-tool.wasm instead of the native
             // Rust tick loop. Same behaviour + slightly better observability
             // (per-job error captured from exec()), but portable to any
@@ -784,6 +844,18 @@ fn cmd_run(common: &Common, rest: &[String]) -> Result<()> {
         })?;
         eprintln!("cron: attached {} as {}", path.display(), name);
     }
+    // --force: zero every active job's next_run_at so the first tick
+    // fires everything. One-shot; future ticks respect the normal
+    // schedule (each fired job's next_run_at is advanced during tick).
+    if force {
+        driver_core_exec(
+            &mut state,
+            "UPDATE __cron_jobs SET next_run_at = 0 WHERE active;",
+        )
+        .map_err(|e| anyhow::anyhow!("cron: --force pre-tick UPDATE failed: {e}"))?;
+        eprintln!("cron: --force zeroed every active job's next_run_at");
+    }
+
     // Whole-tick lease TTL: 5x the tick interval, floored at 60s. Rationale:
     // covers a normal tick even with a slow SQL call plus process pause; a
     // crashed holder's lease expires naturally so the next driver takes over.
@@ -1163,6 +1235,7 @@ pub fn run(args: &[String]) -> Result<()> {
         "deactivate" => cmd_alter(&common, &rest, "deactivate"),
         "list" => cmd_list(&common),
         "metrics" => cmd_metrics(&common),
+        "force" => cmd_force(&common, &rest),
         "run" => cmd_run(&common, &rest),
         other => {
             eprintln!("unknown subcommand `{other}`\n\n{HELP}");
