@@ -2171,21 +2171,36 @@ impl extension_log_storage::Host for ExtensionStoreState {
 }
 
 // The `storage` interface lets a component register an ATTACH-able catalog
-// backend (a DB scanner) in `load()`. The host satisfies the import so
-// storage-capable components instantiate and load; the registration is captured
-// into the neutral pending buffer. Driving the component's `storage-dispatch`
-// export (attach/scan) is the direction-specific sink's job.
+// backend (a DB scanner) in `load()`. Phase 2 (@5): the host records the
+// (type-name -> extension) mapping in its own `storage_backends` registry
+// (see `ExtensionManager` in `ducklink-host`) via the pending-storages
+// drain path; the ATTACH intercept in `HostState::execute` looks the
+// storage backend up by TYPE and routes to the owning component's
+// `storage-dispatch` export. No C-API `duckdb_register_storage_extension`
+// is involved -- see ADR Amendments A1 + B1/B2.
 impl extension_storage::Host for ExtensionStoreState {
     fn register_storage(
         &mut self,
-        _type_name: String,
-        _callback_handle: u32,
-        _options: Option<extension_storage::Extopts>,
+        type_name: String,
+        callback_handle: u32,
+        options: Option<extension_storage::Extopts>,
     ) -> Result<u32, extension_types::Duckerror> {
-        Err(extension_types::Duckerror::Unsupported(
-            "duckdb_register_storage_extension is not part of the DuckDB stable C API"
-                .to_string(),
-        ))
+        let neutral_options = options.map(|o| reg::ExtOpts {
+            description: o.description,
+            tags: o.tags.into_iter().collect(),
+        });
+        self.pending_storages.push(reg::StorageReg {
+            extension: self.extension_name.clone(),
+            type_name,
+            callback_handle,
+            options: neutral_options,
+        });
+        // The callback handle the component passed in is what the host will
+        // pass back on every subsequent storage-dispatch call, so return it
+        // unchanged (the @4 host-side API return-was-the-handle contract is
+        // preserved for wire compatibility with the extension's expected
+        // dispatch model).
+        Ok(callback_handle)
     }
 }
 

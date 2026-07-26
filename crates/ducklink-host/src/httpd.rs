@@ -884,6 +884,9 @@ fn dv_to_body_bytes(v: core_types::Duckvalue) -> Vec<u8> {
             format!("{}mon {}d {}us", iv.months, iv.days, iv.micros).into_bytes()
         }
         core_types::Duckvalue::Uuid(u) => crate::format_uuid(u.hi, u.lo).into_bytes(),
+        // @5.0.0: first-class 128-bit integer values.
+        core_types::Duckvalue::Hugeint(h) => crate::format_hugeint(h.lower, h.upper).into_bytes(),
+        core_types::Duckvalue::Uhugeint(h) => crate::format_uhugeint(h.lower, h.upper).into_bytes(),
         // ESCAPE-HATCH: the value is already JSON; emit it verbatim.
         core_types::Duckvalue::Complex(c) => c.json.into_bytes(),
     }
