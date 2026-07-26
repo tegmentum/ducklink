@@ -5863,6 +5863,24 @@ fn convert_cli_duckvalue(value: cli_types::Duckvalue) -> core_types::Duckvalue {
                 json: c.json,
             })
         }
+        // T2-1 residual: CLI wit is @5 (Hugeint/Uhugeint have first-class
+        // arms) while core is still @4 (only the Complex escape hatch).
+        // Serialize the 128-bit value as base-10 text and label it with
+        // the type-expr — same shape convert_core_extension_duckvalue uses.
+        cli_types::Duckvalue::Hugeint(h) => {
+            let v: i128 = ((h.upper as i128) << 64) | (h.lower as i128);
+            core_types::Duckvalue::Complex(core_types::Complexvalue {
+                type_expr: "HUGEINT".into(),
+                json: v.to_string(),
+            })
+        }
+        cli_types::Duckvalue::Uhugeint(h) => {
+            let v: u128 = ((h.upper as u128) << 64) | (h.lower as u128);
+            core_types::Duckvalue::Complex(core_types::Complexvalue {
+                type_expr: "UHUGEINT".into(),
+                json: v.to_string(),
+            })
+        }
     }
 }
 
@@ -5901,9 +5919,19 @@ fn convert_core_logicaltype(ty: core_types::Logicaltype) -> cli_types::Logicalty
         core_types::Logicaltype::Date => cli_types::Logicaltype::Date,
         core_types::Logicaltype::Time => cli_types::Logicaltype::Time,
         core_types::Logicaltype::Timestamptz => cli_types::Logicaltype::Timestamptz,
-        core_types::Logicaltype::Decimal => cli_types::Logicaltype::Decimal,
+        // CLI wit @5 needs a decimalshape payload; core @4 doesn't carry
+        // width/scale on the fieldless variant. Route through the Complex
+        // escape hatch labelled 'DECIMAL' — callers reconstruct the
+        // shape from the type-expr string.
+        core_types::Logicaltype::Decimal => {
+            cli_types::Logicaltype::Complex("DECIMAL".into())
+        }
         core_types::Logicaltype::Interval => cli_types::Logicaltype::Interval,
         core_types::Logicaltype::Uuid => cli_types::Logicaltype::Uuid,
+        // Core is @4 so no Hugeint enum variant exists on the core side.
+        // Emit the Complex escape hatch labelled 'HUGEINT' / 'UHUGEINT'
+        // when a downstream cli-side conversion asks for it — the
+        // reverse direction fabricates from CLI @5.
         core_types::Logicaltype::Complex(expr) => cli_types::Logicaltype::Complex(expr),
     }
 }
