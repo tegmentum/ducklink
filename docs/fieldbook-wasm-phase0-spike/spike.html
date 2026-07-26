@@ -1,0 +1,176 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Fieldbook browser Phase 0 spike</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 2rem; max-width: 820px; }
+  h1 { font-size: 1.15rem; margin: 0 0 0.5rem; }
+  h2 { font-size: 1rem; margin: 1.25rem 0 0.25rem; }
+  p  { color: #444; margin: 0.25rem 0 1rem; }
+  #status { color: #888; font-family: ui-monospace, monospace; font-size: 12px; }
+  #tbl-container, #ext-container {
+    border: 1px solid #ddd; padding: 0.5rem; margin-bottom: 1rem;
+    min-height: 3rem;
+  }
+  table { border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #ccc; padding: 2px 8px; text-align: right; }
+  th { background: #f4f4f4; }
+  .err { color: #a00; white-space: pre-wrap; font-family: ui-monospace, monospace; }
+  .ok  { color: #060; }
+</style>
+
+<h1>Fieldbook browser Phase 0 spike</h1>
+<p>
+  Two questions this page answers, without any build tools, with two
+  distinct browser DuckDB stacks loaded from CDN:
+</p>
+<ol>
+  <li><strong>Vanilla `@duckdb/duckdb-wasm`</strong> works in-browser — a
+    hard-coded <code>CREATE TABLE demo AS SELECT range::INT AS x, x*x AS y
+    FROM range(20)</code> renders below.</li>
+  <li><strong>Can it load our <code>fieldbook.wasm</code> component?</strong>
+    &nbsp;<em>No — <code>@duckdb/duckdb-wasm</code> is an Emscripten build of
+    DuckDB C++ that loads <code>.duckdb_extension</code> shared objects from
+    a fixed curated URL list. Our fieldbook is a
+    <code>duckdb:extension</code> <strong>WIT component</strong> for the
+    ducklink-team's separate <code>~/git/duckdb-wasm/</code> core. The two
+    stacks are incompatible — see the memo.</em></li>
+</ol>
+
+<div id="status">bootstrapping&hellip;</div>
+
+<h2>Vanilla duckdb-wasm demo</h2>
+<div id="tbl-container">loading&hellip;</div>
+
+<h2>Fieldbook extension load attempt</h2>
+<div id="ext-container">not attempted&hellip;</div>
+
+<script type="module">
+  const status = document.getElementById("status");
+  const tblEl  = document.getElementById("tbl-container");
+  const extEl  = document.getElementById("ext-container");
+  const log = (m) => { status.textContent = m; console.log(m); };
+
+  // ---- (1) load duckdb-wasm from jsdelivr ------------------------------
+  log("importing @duckdb/duckdb-wasm from jsdelivr");
+  const duckdb = await import(
+    "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm"
+  );
+  const CDN_BASE = "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/dist/";
+
+  // The library ships several bundle variants (mvp / eh / coi). Pick one
+  // based on browser capability. `selectBundle` reads bundle URLs off the
+  // manifest we hand it.
+  const BUNDLES = {
+    mvp: {
+      mainModule:  CDN_BASE + "duckdb-mvp.wasm",
+      mainWorker:  CDN_BASE + "duckdb-browser-mvp.worker.js",
+    },
+    eh: {
+      mainModule:  CDN_BASE + "duckdb-eh.wasm",
+      mainWorker:  CDN_BASE + "duckdb-browser-eh.worker.js",
+    },
+  };
+  const bundle = await duckdb.selectBundle(BUNDLES);
+  log("selected bundle: " + (bundle.mainModule.endsWith("eh.wasm") ? "eh" : "mvp"));
+
+  // Instantiate a worker + async DB against it.
+  const workerUrl = URL.createObjectURL(
+    new Blob([`importScripts("${bundle.mainWorker}");`], { type: "text/javascript" }),
+  );
+  const worker = new Worker(workerUrl);
+  const logger = new duckdb.ConsoleLogger();
+  const db = new duckdb.AsyncDuckDB(logger, worker);
+  await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+  URL.revokeObjectURL(workerUrl);
+  log("duckdb-wasm instantiated");
+
+  // ---- (2) run a query, render as HTML table --------------------------
+  try {
+    const conn = await db.connect();
+    await conn.query(
+      "CREATE TABLE demo AS " +
+      "SELECT (range)::INT AS x, ((range)*(range))::INT AS y FROM range(20)"
+    );
+    const result = await conn.query("SELECT * FROM demo ORDER BY x");
+
+    // Result is an Apache Arrow table. Convert to row objects.
+    const rows = result.toArray().map((r) => r.toJSON());
+    renderTable(tblEl, rows);
+    log("vanilla query OK — " + rows.length + " rows");
+    await conn.close();
+  } catch (e) {
+    renderError(tblEl, e);
+    log("vanilla query FAILED");
+  }
+
+  // ---- (3) attempt to load our fieldbook.wasm --------------------------
+  //
+  // We know a priori this cannot work — the two stacks are incompatible.
+  // We still make the attempt so the failure mode is visible on the page:
+  // fetch fieldbook.wasm, hand its bytes to the C++ DuckDB extension
+  // loader via `registerFileBuffer` + `LOAD`, observe the error.
+  try {
+    extEl.textContent = "fetching fieldbook.wasm…";
+    const resp = await fetch("./fieldbook.wasm");
+    if (!resp.ok) throw new Error("fetch fieldbook.wasm: " + resp.status);
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+
+    // Register the bytes so DuckDB's httpfs-VFS can "see" a file. The
+    // extension loader still expects a native .duckdb_extension mach-o/elf
+    // shared object though, so LOAD will reject the wasm-component bytes.
+    await db.registerFileBuffer("fieldbook.wasm", bytes);
+    const conn = await db.connect();
+    // Enable unsigned extensions so the loader at least gets that far.
+    await conn.query("SET allow_unsigned_extensions = true");
+    await conn.query("LOAD 'fieldbook.wasm'");
+    // If somehow it loaded, try the SQL surface.
+    const created = await conn.query(
+      "SELECT fieldbook_create('spike') AS r"
+    );
+    renderTable(extEl, created.toArray().map((r) => r.toJSON()));
+    await conn.close();
+  } catch (e) {
+    renderError(
+      extEl,
+      "Expected failure — @duckdb/duckdb-wasm does NOT understand " +
+      "wasm-component extensions. See memo section 3.\n\n" +
+      String(e && (e.message || e)),
+    );
+    log("fieldbook load attempted (see extension pane for failure)");
+  }
+
+  // ---------- helpers ---------------------------------------------------
+  function renderTable(container, rows) {
+    if (!rows.length) {
+      container.textContent = "(no rows)";
+      return;
+    }
+    const cols = Object.keys(rows[0]);
+    const t = document.createElement("table");
+    const thead = t.createTHead();
+    const tr = thead.insertRow();
+    for (const c of cols) {
+      const th = document.createElement("th");
+      th.textContent = c;
+      tr.appendChild(th);
+    }
+    const tbody = t.createTBody();
+    for (const r of rows) {
+      const trb = tbody.insertRow();
+      for (const c of cols) {
+        const td = trb.insertCell();
+        const v = r[c];
+        td.textContent = (typeof v === "bigint") ? v.toString() + "n"
+                       : (v === null || v === undefined) ? "" : String(v);
+      }
+    }
+    container.replaceChildren(t);
+  }
+
+  function renderError(container, e) {
+    const pre = document.createElement("pre");
+    pre.className = "err";
+    pre.textContent = typeof e === "string" ? e : (e && (e.stack || e.message)) || String(e);
+    container.replaceChildren(pre);
+  }
+</script>
