@@ -100,12 +100,16 @@ CREATE TABLE IF NOT EXISTS __cron_runs (
     ms       BIGINT
 );
 
--- __cron_leases: at most one row per lease key. The driver's tick loop uses
--- the single key 'tick' as a whole-scheduler mutex — a driver acquires it
--- with a TTL at tick start, holds it while it reads-due / pre-advances /
--- fires, then releases. Contending drivers whose acquire fails skip that
--- tick with a log line. A crashed holder's lease expires naturally at
--- `expires_at`; the next tick's acquire takes it over.
+-- __cron_leases: at most one row per lease key. Two shapes coexist:
+--   * key = 'tick'  -> whole-scheduler barrier (v0). Kept as a fast-path
+--                      for schedulers that WANT strict single-driver-at-a-time
+--                      semantics; toggled off by default.
+--   * key = 'job:N' -> per-job lease keyed by __cron_jobs.id (v1). Each due
+--                      job is acquired independently: a slow job holds only
+--                      its own row, so another driver can fire the rest of
+--                      the due-set concurrently.
+-- Contending drivers whose acquire fails simply skip that job. A crashed
+-- holder's lease expires at `expires_at`; the next tick's acquire steals it.
 CREATE TABLE IF NOT EXISTS __cron_leases (
     key         TEXT     NOT NULL PRIMARY KEY,
     holder      TEXT     NOT NULL,

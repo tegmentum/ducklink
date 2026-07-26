@@ -85,12 +85,13 @@ run OPTIONS:
                              wasi-preview2 host. Same behaviour; slightly
                              better per-job error capture. Requires the
                              cron-driver-tool component to be built.
-    --node <NAME>             This driver's identity for leader-election +
-                              per-node targeting. Precedence: --node flag >
-                              $DUCKLINK_CRON_NODE > \"<hostname>-<pid>\" fallback.
-                              A driver acquires the whole-tick lease under this
-                              name; contending drivers skip that tick with a
-                              log line. Node-targeted jobs (scheduled with
+    --node <NAME>             This driver's identity for per-job lease
+                              ownership + per-node targeting. Precedence:
+                              --node flag > $DUCKLINK_CRON_NODE >
+                              \"<hostname>-<pid>\" fallback. Each due job is
+                              acquired independently via __cron_leases;
+                              contending drivers just skip THAT job (not the
+                              whole tick). Node-targeted jobs (scheduled with
                               --node NAME) fire only when this identity
                               matches; anyone-goes jobs (default) fire on any.
     --attach <PATH=NAME>      (repeatable) At startup, run
@@ -649,11 +650,15 @@ fn cmd_run(common: &Common, rest: &[String]) -> Result<()> {
         // rebuilds a clean core — the loop keeps going otherwise so a
         // transient error doesn't tear down a long-running scheduler.
         match tick(&mut state, &node, lease_ttl_ms) {
-            Ok(TickOutcome::Fired(n)) if n > 0 => eprintln!("cron: fired {n} job(s)"),
-            Ok(TickOutcome::Fired(_)) => {}
-            Ok(TickOutcome::Skipped { holder, expires_in_ms }) => eprintln!(
-                "cron: another driver holds the tick lease (holder=`{holder}`, expires in {}s); skipping",
-                (expires_in_ms.max(0) / 1000)
+            Ok(TickOutcome { fired: 0, contended: 0 }) => {}
+            Ok(TickOutcome { fired, contended: 0 }) => {
+                eprintln!("cron: fired {fired} job(s)")
+            }
+            Ok(TickOutcome { fired: 0, contended }) => eprintln!(
+                "cron: {contended} due job(s) already held by another driver; skipped"
+            ),
+            Ok(TickOutcome { fired, contended }) => eprintln!(
+                "cron: fired {fired} job(s), {contended} already held by another driver"
             ),
             Err(err) => eprintln!("cron: tick error: {err:?}"),
         }
@@ -665,95 +670,44 @@ fn cmd_run(common: &Common, rest: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// Outcome of one tick — either we fired N jobs (possibly zero) or we
-/// were locked out by another driver holding the lease.
-enum TickOutcome {
-    Fired(usize),
-    Skipped { holder: String, expires_in_ms: i64 },
+/// Outcome of one tick — how many jobs this driver fired, plus how many
+/// were skipped because another driver already held the per-job lease.
+struct TickOutcome {
+    fired: usize,
+    contended: usize,
 }
 
-/// One tick: acquire the whole-tick lease (skip if another driver holds
-/// it), read due jobs, pre-advance next_run_at (so a mid-tick crash doesn't
-/// re-fire the same window), then execute each job's SQL and record a
-/// `__cron_runs` row. Releases the lease at end. Returns the fired-count
-/// (or `Skipped` when we lost the race).
-///
-/// Every SQL here runs through `state`'s persistent connection — no fresh
-/// wasm instantiation per statement, and `driver_core_exec` surfaces the
-/// real DuckDB error text on failure so `last_status`/`last_error` reflect
+/// One tick: read due jobs, pre-advance next_run_at (so a mid-tick crash
+/// doesn't re-fire the same window), then attempt to acquire a per-job
+/// lease for each and fire the ones we won. Every SQL runs through
+/// `state`'s persistent connection; `driver_core_exec` surfaces the real
+/// DuckDB error text on failure so `last_status`/`last_error` reflect
 /// the actual outcome.
+///
+/// Per-job leases (v1) — one row in `__cron_leases` per due job, keyed
+/// `job:<id>`. If driver A's job takes 90s to run, driver B's tick can
+/// still fire every OTHER due job during that window; only THAT job's
+/// row is locked. This replaces v0's single `tick` key which was a
+/// whole-scheduler barrier.
 fn tick(state: &mut DriverCoreState, node: &str, lease_ttl_ms: i64) -> Result<TickOutcome> {
     let now = now_ms();
-    let node_sql = sql_escape(node);
-    let expires_at = now.saturating_add(lease_ttl_ms);
-
-    // 1. Acquire the whole-tick lease. UPSERT semantics: the row is
-    //    inserted if absent, or overwritten if the current holder's lease
-    //    has expired. The RETURNING clause tells us whether WE ended up
-    //    holding it.
-    let acquire = format!(
-        "INSERT INTO __cron_leases (key, holder, acquired_at, expires_at) \
-         VALUES ('tick', '{node_sql}', {now}, {expires_at}) \
-         ON CONFLICT (key) DO UPDATE SET \
-             holder = excluded.holder, \
-             acquired_at = excluded.acquired_at, \
-             expires_at = excluded.expires_at \
-         WHERE __cron_leases.expires_at <= {now} \
-         RETURNING holder;"
-    );
-    let acquire_rows = driver_core_query(state, &acquire)
-        .map_err(|e| anyhow::anyhow!("cron: lease acquire failed: {e}"))?;
-    let acquired = acquire_rows
-        .first()
-        .and_then(|r| r.first())
-        .map(|h| h == node)
-        .unwrap_or(false);
-    if !acquired {
-        // Someone else holds it. Read the current holder so we can log
-        // something useful; if the row somehow vanished between our upsert
-        // and the read, just report the raw state (this is a race a
-        // subsequent tick handles).
-        let holder_rows = driver_core_query(
-            state,
-            "SELECT holder, expires_at FROM __cron_leases WHERE key = 'tick';",
-        )
-        .map_err(|e| anyhow::anyhow!("cron: reading lease holder: {e}"))?;
-        let (holder, expires_in_ms) = holder_rows
-            .first()
-            .map(|r| {
-                let h = r.first().cloned().unwrap_or_default();
-                let e: i64 = r.get(1).and_then(|s| s.parse().ok()).unwrap_or(now);
-                (h, e - now)
-            })
-            .unwrap_or_else(|| (String::new(), 0));
-        return Ok(TickOutcome::Skipped { holder, expires_in_ms });
-    }
-
-    // Wrap steps 2-4 in a closure so we can always attempt to release the
-    // lease even on error paths. Rust doesn't have try/finally; the pattern
-    // here is: run the body, capture the result, always release, propagate.
-    let outcome = tick_body(state, node, now);
-
-    // 5. Release the lease. Best-effort: even if this UPDATE fails, the
-    //    `expires_at` TTL will eventually free it. Only release when we
-    //    still hold it (a super-slow tick could have gotten stolen).
-    let release = format!(
-        "UPDATE __cron_leases SET expires_at = 0 \
-         WHERE key = 'tick' AND holder = '{node_sql}';"
-    );
-    if let Err(e) = driver_core_exec(state, &release) {
-        eprintln!("cron: could not release tick lease: {e}");
-    }
-
-    outcome
+    tick_body(state, node, now, lease_ttl_ms)
 }
 
-/// The read-due → pre-advance → fire loop. Extracted so `tick()` can
-/// always release the lease afterwards. `now` is captured by the caller so
-/// timing stays consistent across the lease-acquire read and the
-/// pre-advance write.
-fn tick_body(state: &mut DriverCoreState, node: &str, now: i64) -> Result<TickOutcome> {
+/// The read-due → pre-advance → per-job-lease → fire loop. `now` is
+/// captured by the caller so timing stays consistent between reads and
+/// writes within one tick. `lease_ttl_ms` sets each per-job lease's TTL
+/// so a crashed holder's row expires naturally on a later tick.
+fn tick_body(
+    state: &mut DriverCoreState,
+    node: &str,
+    now: i64,
+    lease_ttl_ms: i64,
+) -> Result<TickOutcome> {
     let node_sql = sql_escape(node);
+    let expires_at = now.saturating_add(lease_ttl_ms);
+    let mut contended = 0usize;
+    let mut fired = 0usize;
 
     // 2. Read due jobs — the per-node variant, so both `nodename IS NULL`
     //    (global) and `nodename = <us>` (targeted) come back and no other
@@ -766,7 +720,7 @@ fn tick_body(state: &mut DriverCoreState, node: &str, now: i64) -> Result<TickOu
     let rows = driver_core_query(state, &read_sql)
         .map_err(|e| anyhow::anyhow!("cron: reading due jobs: {e}"))?;
     if rows.is_empty() {
-        return Ok(TickOutcome::Fired(0));
+        return Ok(TickOutcome { fired: 0, contended: 0 });
     }
     let due: Vec<(u64, String, String)> = rows
         .into_iter()
@@ -778,7 +732,7 @@ fn tick_body(state: &mut DriverCoreState, node: &str, now: i64) -> Result<TickOu
         })
         .collect();
     if due.is_empty() {
-        return Ok(TickOutcome::Fired(0));
+        return Ok(TickOutcome { fired: 0, contended: 0 });
     }
 
     // 3. Pre-advance `next_run_at` on every due row we're about to fire.
@@ -811,8 +765,38 @@ fn tick_body(state: &mut DriverCoreState, node: &str, now: i64) -> Result<TickOu
         None
     };
 
-    // 4. Fire each job on the same persistent connection.
+    // 4. For each due job: acquire a per-job lease (skip if another
+    //    driver already holds it), fire on the same persistent connection,
+    //    then release. Independent per-job leases mean a slow job on
+    //    driver A doesn't block driver B from firing other due jobs.
     for (id, sql, database) in &due {
+        // Per-job lease acquire. UPSERT semantics identical to the v0
+        // whole-tick shape: insert on absent, overwrite on expired,
+        // do-nothing if a valid lease is held by someone else. RETURNING
+        // holder tells us whether WE ended up with it.
+        let lease_key = format!("job:{id}");
+        let acquire = format!(
+            "INSERT INTO __cron_leases (key, holder, acquired_at, expires_at) \
+             VALUES ('{lease_key}', '{node_sql}', {now}, {expires_at}) \
+             ON CONFLICT (key) DO UPDATE SET \
+                 holder = excluded.holder, \
+                 acquired_at = excluded.acquired_at, \
+                 expires_at = excluded.expires_at \
+             WHERE __cron_leases.expires_at <= {now} \
+             RETURNING holder;"
+        );
+        let acquire_rows = driver_core_query(state, &acquire)
+            .map_err(|e| anyhow::anyhow!("cron: job {id} lease acquire failed: {e}"))?;
+        let held_by_us = acquire_rows
+            .first()
+            .and_then(|r| r.first())
+            .map(|h| h == node)
+            .unwrap_or(false);
+        if !held_by_us {
+            contended += 1;
+            continue;
+        }
+
         let start = Instant::now();
 
         // Cross-catalog jobs: USE the target catalog, run the job SQL,
@@ -820,7 +804,7 @@ fn tick_body(state: &mut DriverCoreState, node: &str, now: i64) -> Result<TickOu
         // outcome (so the record UPDATE / INSERT and the tick-lease
         // release land back in the scheduler's own catalog). Missing
         // catalogs are recorded as `skipped` without crashing the tick.
-        let fired: (Result<u64, String>, &'static str) = if database.is_empty() {
+        let outcome: (Result<u64, String>, &'static str) = if database.is_empty() {
             (driver_core_exec(state, sql), "fired")
         } else {
             let use_sql = format!("USE {}", sql_escape_identifier(database));
@@ -856,8 +840,8 @@ fn tick_body(state: &mut DriverCoreState, node: &str, now: i64) -> Result<TickOu
             }
         };
         let elapsed_ms = start.elapsed().as_millis() as i64;
-        let (ok, err_lit, status) = match &fired.0 {
-            Ok(_) => (true, "NULL".to_string(), fired.1),
+        let (ok, err_lit, status) = match &outcome.0 {
+            Ok(_) => (true, "NULL".to_string(), outcome.1),
             Err(msg) => {
                 let escaped = msg.replace('\'', "''");
                 (false, format!("'{escaped}'"), "failed")
@@ -873,10 +857,22 @@ fn tick_body(state: &mut DriverCoreState, node: &str, now: i64) -> Result<TickOu
         if let Err(e) = driver_core_exec(state, &record) {
             eprintln!("cron: could not record run for job {id}: {e}");
         }
+
+        // Per-job lease release. Best-effort: TTL would eventually
+        // free it. Only release when WE still hold it (a super-slow
+        // job could have gotten stolen).
+        let release = format!(
+            "UPDATE __cron_leases SET expires_at = 0 \
+             WHERE key = '{lease_key}' AND holder = '{node_sql}';"
+        );
+        if let Err(e) = driver_core_exec(state, &release) {
+            eprintln!("cron: could not release job {id} lease: {e}");
+        }
+
+        fired += 1;
     }
 
-    let _ = node;
-    Ok(TickOutcome::Fired(due.len()))
+    Ok(TickOutcome { fired, contended })
 }
 
 /// The DDL text baked into the extension. We prefer running it via the

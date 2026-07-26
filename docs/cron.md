@@ -188,31 +188,34 @@ Two shapes are supported: **safe coexistence** (multiple drivers point at
 the same DB, only one ticks at a time) and **per-node targeting** (jobs
 assigned to a specific driver).
 
-### Whole-tick lease
+### Per-job leases
 
 Every driver identifies itself with a node name — from `--node`, else
-`$DUCKLINK_CRON_NODE`, else `<hostname>-<pid>`. At the start of each tick the
-driver acquires a row in `__cron_leases` under the key `tick`; if another
-driver already holds a non-expired lease, this tick logs a line and skips:
+`$DUCKLINK_CRON_NODE`, else `<hostname>-<pid>`. For each due job in a tick,
+the driver upserts a row in `__cron_leases` under the key `job:<id>` with a
+TTL and its own name as `holder`. Contending drivers see the existing row
+and skip that specific job — but they still race for every other due job in
+the same tick. A slow job on driver A holds only its own lease row; driver
+B can fire the rest of the due-set in parallel.
 
 ```
-cron: another driver holds the tick lease (holder=`node-b-1234`, expires in 42s); skipping
+cron: fired 3 job(s), 1 already held by another driver
 ```
 
-The lease TTL is `max(60s, 5 × --interval)`. A crashed holder's lease expires
-naturally on the next tick after `expires_at`, and the next driver takes it
-over. This is the whole scheduler's mutex — fine-grained per-job leases are
-a v2 concern.
+The lease TTL is `max(60s, 5 × --interval)`. A crashed holder's lease
+expires at `expires_at`; the next tick's acquire takes it over. Each fired
+job's lease is released at the end of that job (best-effort — TTL still
+covers a missed release).
 
 Two useful setups:
 
 - **Hot-standby**: point two drivers at the same DB with the same interval.
-  One "wins" each tick; the other logs a skip. If the winner crashes, the
-  loser starts firing within TTL seconds.
+  Both tick, one wins each per-job lease. If the winner crashes mid-job, the
+  runner-up picks it up within TTL seconds.
 - **Active-active with targeting**: give each driver a distinct `--node NAME`
   and use `--node` on `cron schedule` to route specific jobs to specific
   drivers. Anyone-goes jobs (no `--node` at schedule time) still race for
-  the tick lease and fire once total per window.
+  the per-job lease and fire once total per window.
 
 ### Per-node targeting
 
@@ -340,7 +343,7 @@ Whole-scheduler mutex (one row, key `'tick'`). Populated automatically by
 
 | Column | Type | Meaning |
 | --- | --- | --- |
-| `key` | `TEXT` | Always `'tick'` in v0 (fine-grained per-job leases are a future addition). |
+| `key` | `TEXT` | `job:<id>` — one row per due job that's actively held by some driver. |
 | `holder` | `TEXT` | Node identity of the current holder. |
 | `acquired_at` | `BIGINT` | UTC epoch ms of the acquire. |
 | `expires_at` | `BIGINT` | UTC epoch ms after which any driver may steal. |
@@ -359,12 +362,10 @@ Append-only history, one row per fire. No auto-trim in v0 — callers prune.
 
 ## Known limitations / v1 roadmap
 
-- **Whole-tick lease only.** The `__cron_leases` lock is scheduler-wide; a
-  slow job on one driver blocks another driver from ticking until the TTL
-  expires or the holder releases. Fine-grained per-job leases are a v2 add.
 - **Node identity default is `<hostname>-<pid>`.** Restarted drivers get a
   new identity (new PID). Set `--node NAME` explicitly if you want a stable
   identity across restarts.
+- **__cron_runs grows unbounded.** No auto-trim in v0 — callers prune.
 - **Cross-catalog jobs require `--attach PATH=NAME` on the driver command
   line;** the driver doesn't discover attached catalogs on its own.
 - **The catalog switch uses `USE` on the persistent connection;** jobs
