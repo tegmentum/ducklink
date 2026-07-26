@@ -15,7 +15,9 @@ Given a URI, the scalar returns a `file://` URI pointing at a locally cached cop
 |---|---|
 | `file://` | pass-through (identical to native) |
 | `http://` / `https://` | full ETag / If-None-Match / Last-Modified / If-Modified-Since / 304 dance |
-| `s3://` / `gs://` / `az://` / `azure://` | stubbed with the same "not yet supported" error the native uses; the sibling agent working on the native side adds `object_store` coverage there and the wasm arm picks up its own `object_store`-in-wasm story separately |
+| `s3://` | wac-composed via `component:s3-wasm` (with `aws-sigv4-wasm` for signing); head-then-get with ETag revalidation. Works against real AWS, MinIO, R2, DigitalOcean Spaces. |
+| `az://` / `azure://` | wac-composed via `component:azure-wasm`; SharedKey + SAS + anonymous auth, head-then-get with ETag revalidation. Works against real Azure Blob Storage and Azurite. Both URI aliases canonicalize to the `az` scheme in the metadata catalog. |
+| `gs://` | stubbed with the same "not yet supported" error the native uses; wasm coverage picks up separately. |
 
 ## On-disk layout parity
 
@@ -75,8 +77,82 @@ The component imports:
 
 Until the SPI import is wired, `LOAD cache;` will surface an unresolved-import error at instantiation. The `file://` pass-through does not exercise the SPI, but the extension still needs the import satisfied at load time.
 
+## Azure Blob backend (`az://` / `azure://`)
+
+The Azure backend rides `component:azure-wasm` (sibling repo `tegmentum/azure-wasm`), plugged into `cache.wasm` at build time via `wac plug` — same shape as the s3-wasm compose, minus the sidecar signer (Azure signing happens inside azure-wasm itself). Once composed, the artifact imports only WASI (host-satisfied) plus the standard `duckdb:extension/*` surface; the `component:azure-wasm/*` interfaces are internal.
+
+### URI schemes
+
+`az://<container>/<blob>` and `azure://<container>/<blob>` are equivalent — both parse identically and land in the catalog under the canonical `az` scheme label.
+
+### Config JSON
+
+The arity-2 overload accepts an azure-specific config JSON (parsed leniently in `cache_scalar` before the shared knobs pass through `cache-core`'s strict parser):
+
+| Key           | Type    | Meaning                                                                                       |
+|---------------|---------|-----------------------------------------------------------------------------------------------|
+| `endpoint`    | string  | Full base URL. Default: `https://<account>.blob.core.windows.net`.                            |
+| `account`     | string  | Storage account name. Falls back to `AZURE_STORAGE_ACCOUNT`.                                  |
+| `shared_key`  | string  | Base64 shared key for SharedKey auth. Falls back to `AZURE_STORAGE_KEY`.                      |
+| `sas_token`   | string  | SAS query string (with or without leading `?`). Falls back to `AZURE_STORAGE_SAS_TOKEN`.      |
+| `anonymous`   | bool    | Skip credential resolution — use for public containers.                                        |
+
+### Auth resolution order
+
+1. `"anonymous": true` — skip both.
+2. `sas_token` (config OR `AZURE_STORAGE_SAS_TOKEN` env).
+3. `shared_key` (config OR `AZURE_STORAGE_KEY` env).
+
+### Endpoint / emulator detection
+
+If `endpoint` contains `127.0.0.1`, `localhost`, `azurite`, or `devstoreaccount`, the request is signed with the emulator canonical-resource shape (account name doubly-prefixed). Otherwise the standard cloud shape is used. Sovereign clouds work by setting `endpoint` explicitly (e.g. `https://<account>.blob.core.usgovcloudapi.net`) or the `AZURE_STORAGE_ENDPOINT_SUFFIX` env var.
+
+### Example
+
+```sql
+LOAD cache;
+
+-- Public Azurite emulator (well-known devstoreaccount1 credentials)
+SELECT cache(
+  '{"endpoint":"http://127.0.0.1:10000/devstoreaccount1","account":"devstoreaccount1","shared_key":"Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="}',
+  'az://mycontainer/fixture.bin'
+);
+
+-- Real Azure via env vars
+-- export AZURE_STORAGE_ACCOUNT=myacct AZURE_STORAGE_KEY=...
+SELECT cache('az://mycontainer/data.parquet');
+
+-- SAS-based auth
+SELECT cache('{"account":"myacct","sas_token":"sv=2021-06-08&sig=..."}', 'az://mycontainer/blob.bin');
+
+-- Public container (no auth)
+SELECT cache('{"account":"myacct","anonymous":true}', 'az://open-data/index.html');
+```
+
+### Live smoke recipe (Azurite)
+
+```bash
+# 1. Boot Azurite
+docker run --rm -d --name azurite \
+  -p 10000:10000 mcr.microsoft.com/azure-storage/azurite \
+  azurite-blob --blobHost 0.0.0.0
+
+# 2. Pre-create container + upload fixture (Shared Key HMAC — an
+#    outside-the-tree Python helper or `az storage blob upload` works).
+
+# 3. Build + run
+make cache
+./target/release/ducklink \
+  --grant-network all \
+  --extensions-dir "$(pwd)/artifacts/extensions" \
+  -- :memory: \
+  -c "LOAD cache; SELECT cache('{\"endpoint\":\"http://127.0.0.1:10000/devstoreaccount1\",\"account\":\"devstoreaccount1\",\"shared_key\":\"Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==\"}', 'az://mycontainer/fixture.bin') AS uri;"
+```
+
 ## Related
 
 - [`cache-core`](../../../datalink/extensions/cache-core) (datalink) — the DB-agnostic logic + capability declaration.
 - [`duckdb-cache`](https://github.com/tegmentum/duckdb-cache) — the native reference this component tracks.
 - [`sqlite-wasm`](https://github.com/tegmentum/sqlite-wasm) — the componentized SQLite `sqlite-lib` this component's SPI import points at.
+- [`s3-wasm`](https://github.com/tegmentum/s3-wasm) + [`aws-sigv4-wasm`](https://github.com/tegmentum/aws-sigv4-wasm) — the `s3://` backend components.
+- [`azure-wasm`](https://github.com/tegmentum/azure-wasm) — the `az://` / `azure://` backend component.

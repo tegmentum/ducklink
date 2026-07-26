@@ -6,7 +6,7 @@ BROWSER_TARGET?=wasm32-unknown-unknown
 # ducklink_core.wasm at the usual path.
 DUCKDB_WASM_DIR?=../duckdb-wasm
 
-.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk smoke-dotcmd sample-extension smoke-extension pintest-probes echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds cron-driver cache cache-clean sqlite-lib sqlite-loader-stub s3-wasm aws-sigv4-wasm
+.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk smoke-dotcmd sample-extension smoke-extension pintest-probes echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds cron-driver cache cache-clean sqlite-lib sqlite-loader-stub s3-wasm aws-sigv4-wasm azure-wasm
 
 all: core standalone-cli loader-stub dotcmds
 
@@ -146,8 +146,10 @@ sqlite-loader-stub:
 # differs.
 S3_WASM_DIR         ?= ../s3-wasm
 AWS_SIGV4_WASM_DIR  ?= ../aws-sigv4-wasm
+AZURE_WASM_DIR      ?= ../azure-wasm
 S3_WASM_COMPONENT        := $(S3_WASM_DIR)/target/wasm32-wasip2/release/s3_wasm.wasm
 AWS_SIGV4_WASM_COMPONENT := $(AWS_SIGV4_WASM_DIR)/target/wasm32-wasip2/release/aws_sigv4_wasm.wasm
+AZURE_WASM_COMPONENT     := $(AZURE_WASM_DIR)/target/wasm32-wasip2/release/azure_wasm.wasm
 
 # Build s3-wasm as a wasm component. `cargo build --target
 # wasm32-wasip2 --release` auto-componentizes (unlike wasip1, which
@@ -163,15 +165,30 @@ aws-sigv4-wasm:
 	  || { echo "error: AWS_SIGV4_WASM_DIR=$(AWS_SIGV4_WASM_DIR) not found. Checkout tegmentum/aws-sigv4-wasm alongside ducklink." >&2; exit 1; }
 	cd $(AWS_SIGV4_WASM_DIR) && cargo build --release
 
+# Build azure-wasm as a wasm component. Same wasip2 auto-componentize
+# story as s3-wasm; azure-wasm's .cargo/config.toml pins the target so
+# a bare `cargo build --release` produces a componentized artifact at
+# target/wasm32-wasip2/release/azure_wasm.wasm. Self-contained wrt its
+# only cross-component surface: it imports wasi:{http,clocks/wall-clock,
+# cli/environment}, which flow up to the final cache.wasm.
+azure-wasm:
+	@ test -d "$(AZURE_WASM_DIR)" \
+	  || { echo "error: AZURE_WASM_DIR=$(AZURE_WASM_DIR) not found. Checkout tegmentum/azure-wasm alongside ducklink." >&2; exit 1; }
+	cd $(AZURE_WASM_DIR) && cargo build --release
+
 # Full cache pipeline: build raw component + sqlite-lib + stub +
-# s3-wasm + aws-sigv4-wasm, then two chained wac-plug composes and
-# stage the fully self-contained artifact.
+# s3-wasm + aws-sigv4-wasm + azure-wasm, then chained wac-plug composes
+# and stage the fully self-contained artifact.
 #
 #   step 1: plug sqlite-loader-stub into sqlite-lib
 #   step 2: plug aws-sigv4-wasm into s3-wasm
-#   step 3: plug the sqlite composite AND the s3 composite into cache.wasm
-#           (two --plug flags in a single wac invocation)
-cache: sqlite-lib sqlite-loader-stub s3-wasm aws-sigv4-wasm
+#   step 3: plug the sqlite composite AND the s3 composite AND azure-wasm
+#           into cache.wasm (three --plug flags in a single wac invocation)
+#
+# azure-wasm is self-contained wrt cross-component surfaces (its only
+# imports are WASI: http, clocks/wall-clock, cli/environment) so it goes
+# straight into the final plug without a preceding compose step.
+cache: sqlite-lib sqlite-loader-stub s3-wasm aws-sigv4-wasm azure-wasm
 	cargo component build -p cache-component --target $(WASI_TARGET) --release
 	mkdir -p artifacts/extensions target/compose
 	wac plug $(SQLITE_LIB_COMPONENT) \
@@ -183,6 +200,7 @@ cache: sqlite-lib sqlite-loader-stub s3-wasm aws-sigv4-wasm
 	wac plug target/wasm32-wasip1/release/cache.wasm \
 	  --plug target/compose/sqlite_lib_self_contained.wasm \
 	  --plug target/compose/s3_lib_self_contained.wasm \
+	  --plug $(AZURE_WASM_COMPONENT) \
 	  -o artifacts/extensions/cache.wasm
 	@echo "cache: composed artifact -> artifacts/extensions/cache.wasm"
 
@@ -192,7 +210,8 @@ cache-clean:
 	       target/compose/s3_lib_self_contained.wasm \
 	       $(SQLITE_LIB_COMPONENT) \
 	       $(S3_WASM_COMPONENT) \
-	       $(AWS_SIGV4_WASM_COMPONENT)
+	       $(AWS_SIGV4_WASM_COMPONENT) \
+	       $(AZURE_WASM_COMPONENT)
 
 smoke-extension:
 	cargo test -p ducklink-host load_sample_extension_component

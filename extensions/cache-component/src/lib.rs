@@ -70,6 +70,11 @@ use sqlite::extension::{spi as sqlite_spi, types as sqlite_types};
 // `s3-wasm` component (pre-composed with `aws-sigv4-wasm`) into
 // `cache.wasm`. See the `cache` recipe in ../../../Makefile.
 use component::s3_wasm::{s3_base, s3_types};
+// azure-wasm bindings: satisfied at compose time by `wac plug`ing the
+// `azure-wasm` component into `cache.wasm`. See the `cache` recipe in
+// ../../../Makefile. Azure has no separate signer sidecar — signing
+// happens inside azure-wasm from the `credentials` record.
+use component::azure_wasm::{blob_base, blob_types};
 // wasi:http surface for the HTTP/HTTPS fetch backend. Both TLS and
 // plaintext transport now go through the host's wasmtime-wasi-http
 // wiring (see `ducklink-host::add_only_http_to_linker_sync`, commit
@@ -493,8 +498,8 @@ fn fetch_http_via_wasi(
 // ---------------------------------------------------------------------------
 
 const NOT_YET_SUPPORTED_HINT: &str =
-    "supported schemes in v0: file://, http://, https://, s3://. \
-     gs/az/azure backends are stubbed pending object_store integration.";
+    "supported schemes in v0: file://, http://, https://, s3://, \
+     az://, azure://. gs backend is stubbed pending object_store integration.";
 
 struct CachedEntry {
     etag: Option<String>,
@@ -667,17 +672,19 @@ fn resolver(cfg: &Config, uri: &str) -> Result<String, String> {
         .unwrap_or_default();
 
     // Cloud stubs (parity with duckdb-cache/src/backends/mod.rs::dispatch).
-    // Note: s3:// is intercepted in `cache_scalar` before we reach
-    // here, because s3-specific config keys (endpoint / region /
-    // version_id / anonymous) don't round-trip through cache-core's
-    // strict `Config::from_json` (deny_unknown_fields). If an s3://
-    // URI does reach this point (only possible for the arity-1
-    // overload `cache(uri)` where no config is supplied), fall
-    // through to the s3 dispatch with default endpoint / anonymous.
+    // Note: s3:// and az:///azure:// are intercepted in `cache_scalar`
+    // before we reach here, because backend-specific config keys don't
+    // round-trip through cache-core's strict `Config::from_json`
+    // (deny_unknown_fields). If a cloud URI does reach this point (only
+    // possible for the arity-1 overload `cache(uri)` where no config is
+    // supplied), fall through to the backend dispatch with defaults.
     if scheme == "s3" {
         return resolve_s3(cfg, S3Params::default(), uri, &scheme);
     }
-    if matches!(scheme.as_str(), "gs" | "az" | "azure") {
+    if scheme == "az" || scheme == "azure" {
+        return resolve_azure(cfg, AzureParams::default(), uri, &scheme);
+    }
+    if scheme == "gs" {
         return Err(format!(
             "cache: scheme {scheme:?} not yet supported. {NOT_YET_SUPPORTED_HINT}"
         ));
@@ -1248,6 +1255,407 @@ fn resolve_s3(
     Ok(path_to_file_uri(&final_path))
 }
 
+// ---------------------------------------------------------------------------
+// azure backend (composed via `component:azure-wasm/{blob-base,...}`).
+//
+// Same head-then-get flow as the s3 backend, adapted to Azure's REST
+// surface. Azure Blob Storage differs from S3 in a few ways that shape
+// the parameter surface:
+//
+//   * NO `region` concept. The account URL bakes in the region.
+//   * NO `version_id` — Azure has versioning, but the surface here is
+//     not yet threaded through blob-base's get-blob-options.
+//   * `endpoint` is optional and either:
+//       - the full base URL (Azure public / sovereign clouds:
+//         `https://<account>.blob.core.windows.net`)
+//       - Azurite emulator: `http://127.0.0.1:10000/<account>` — signer
+//         must set `emulator: true` (canonical resource is double-
+//         prefixed with the account name).
+//     Default: derived from `account` -> the public cloud URL.
+//   * Auth: SharedKey (default; from `shared_key` or `AZURE_STORAGE_KEY`
+//     env) vs SAS (`sas_token`) vs anonymous (`"anonymous": true`,
+//     for public containers).
+//
+// URI shape: `az://<container>/<blob>` OR `azure://<container>/<blob>`
+// — both are canonicalized on parse.
+// ---------------------------------------------------------------------------
+
+#[derive(Default, Debug, Clone)]
+struct AzureParams {
+    endpoint: Option<String>,
+    account: Option<String>,
+    shared_key: Option<String>,
+    sas_token: Option<String>,
+    anonymous: bool,
+}
+
+impl AzureParams {
+    /// Parse the azure-specific fields off a JSON blob (leniently — the
+    /// full JSON is also handed to cache-core's strict parser for the
+    /// name/policy/sha256/ttl fields). Empty / missing config -> defaults.
+    fn from_json(s: &str) -> Result<Self, String> {
+        if s.trim().is_empty() {
+            return Ok(Self::default());
+        }
+        let v: serde_json::Value =
+            serde_json::from_str(s).map_err(|e| format!("cache azure config: {e}"))?;
+        let obj = v
+            .as_object()
+            .ok_or_else(|| String::from("cache azure config: expected a JSON object"))?;
+        let mut out = Self::default();
+        if let Some(ep) = obj.get("endpoint") {
+            out.endpoint = Some(
+                ep.as_str()
+                    .ok_or_else(|| String::from("cache azure config: endpoint must be a string"))?
+                    .to_string(),
+            );
+        }
+        if let Some(acct) = obj.get("account") {
+            out.account = Some(
+                acct.as_str()
+                    .ok_or_else(|| String::from("cache azure config: account must be a string"))?
+                    .to_string(),
+            );
+        }
+        if let Some(sk) = obj.get("shared_key") {
+            out.shared_key = Some(
+                sk.as_str()
+                    .ok_or_else(|| String::from("cache azure config: shared_key must be a string"))?
+                    .to_string(),
+            );
+        }
+        if let Some(sas) = obj.get("sas_token") {
+            out.sas_token = Some(
+                sas.as_str()
+                    .ok_or_else(|| String::from("cache azure config: sas_token must be a string"))?
+                    .to_string(),
+            );
+        }
+        if let Some(anon) = obj.get("anonymous") {
+            out.anonymous = anon
+                .as_bool()
+                .ok_or_else(|| String::from("cache azure config: anonymous must be a boolean"))?;
+        }
+        Ok(out)
+    }
+}
+
+/// Strip the azure-specific keys from a config JSON blob so cache-core's
+/// strict parser can still handle the shared knobs (name, policy, sha256,
+/// ttl). Returns an empty string when nothing remains, which cache-core
+/// treats as `Config::default()`.
+fn strip_azure_keys(s: &str) -> Result<String, String> {
+    if s.trim().is_empty() {
+        return Ok(String::new());
+    }
+    let mut v: serde_json::Value =
+        serde_json::from_str(s).map_err(|e| format!("cache azure config: {e}"))?;
+    if let Some(obj) = v.as_object_mut() {
+        for k in ["endpoint", "account", "shared_key", "sas_token", "anonymous"] {
+            obj.remove(k);
+        }
+        if obj.is_empty() {
+            return Ok(String::new());
+        }
+    }
+    Ok(v.to_string())
+}
+
+/// Parse an `az://<container>/<blob>` or `azure://<container>/<blob>`
+/// URI. Rejects malformed inputs and empty blob names.
+fn parse_azure_uri(uri: &str) -> Result<(String, String), String> {
+    let rest = if let Some(r) = uri.strip_prefix("az://") {
+        r
+    } else if let Some(r) = uri.strip_prefix("azure://") {
+        r
+    } else {
+        return Err(format!(
+            "cache azure backend: not an az://|azure:// URL: {uri}"
+        ));
+    };
+    let (container, blob) = match rest.split_once('/') {
+        Some((c, b)) => (c, b),
+        None => (rest, ""),
+    };
+    if container.is_empty() {
+        return Err(format!("cache azure backend: no container in {uri}"));
+    }
+    if blob.is_empty() {
+        return Err(format!("cache azure backend: URI has no blob name: {uri}"));
+    }
+    Ok((container.to_string(), blob.to_string()))
+}
+
+fn azure_error_to_string(e: &blob_types::Error) -> String {
+    match e {
+        blob_types::Error::AccessDenied => "access-denied".to_string(),
+        blob_types::Error::NoSuchContainer => "no-such-container".to_string(),
+        blob_types::Error::NoSuchBlob => "no-such-blob".to_string(),
+        blob_types::Error::InvalidContainerName => "invalid-container-name".to_string(),
+        blob_types::Error::InvalidRequest(m) => format!("invalid-request: {m}"),
+        blob_types::Error::NetworkError(m) => format!("network-error: {m}"),
+        blob_types::Error::ParseError(m) => format!("parse-error: {m}"),
+        blob_types::Error::Internal(m) => format!("internal: {m}"),
+    }
+}
+
+/// Resolve the storage account name from (config, env). Required for
+/// SharedKey auth AND for deriving the default endpoint URL.
+fn resolve_azure_account(p: &AzureParams) -> Option<String> {
+    if let Some(a) = &p.account {
+        if !a.is_empty() {
+            return Some(a.clone());
+        }
+    }
+    if let Ok(a) = std::env::var("AZURE_STORAGE_ACCOUNT") {
+        if !a.is_empty() {
+            return Some(a);
+        }
+    }
+    None
+}
+
+/// Build the endpoint config (URL + emulator flag) from params and the
+/// resolved account name. Detects the Azurite emulator by the shape of
+/// the endpoint URL so the signer can canonicalize the resource with
+/// the account double-prefix Azurite requires.
+fn resolve_azure_endpoint(
+    p: &AzureParams,
+    account: &str,
+) -> blob_types::EndpointConfig {
+    let (url, emulator) = if let Some(e) = &p.endpoint {
+        // Heuristic: any endpoint pointing at a loopback / dev host
+        // is an emulator. Matches the Azurite default binding and the
+        // devstoreaccount1 quickstart URL.
+        let lc = e.to_ascii_lowercase();
+        let is_emu = lc.contains("127.0.0.1")
+            || lc.contains("localhost")
+            || lc.contains("azurite")
+            || lc.contains("devstoreaccount");
+        (e.clone(), is_emu)
+    } else if let Ok(e) = std::env::var("AZURE_STORAGE_ENDPOINT_URL") {
+        if !e.is_empty() {
+            let lc = e.to_ascii_lowercase();
+            let is_emu = lc.contains("127.0.0.1")
+                || lc.contains("localhost")
+                || lc.contains("azurite")
+                || lc.contains("devstoreaccount");
+            (e, is_emu)
+        } else {
+            let suffix = std::env::var("AZURE_STORAGE_ENDPOINT_SUFFIX")
+                .unwrap_or_else(|_| String::from("core.windows.net"));
+            (format!("https://{account}.blob.{suffix}"), false)
+        }
+    } else {
+        let suffix = std::env::var("AZURE_STORAGE_ENDPOINT_SUFFIX")
+            .unwrap_or_else(|_| String::from("core.windows.net"));
+        (format!("https://{account}.blob.{suffix}"), false)
+    };
+    blob_types::EndpointConfig { url, emulator }
+}
+
+/// Assemble the credentials record. Auth precedence:
+///   1. anonymous (skip both key + SAS)
+///   2. SAS token (config field OR AZURE_STORAGE_SAS_TOKEN env)
+///   3. SharedKey (config field OR AZURE_STORAGE_KEY env)
+fn resolve_azure_credentials(
+    p: &AzureParams,
+    account: &str,
+) -> blob_types::Credentials {
+    if p.anonymous {
+        return blob_types::Credentials {
+            account: account.to_string(),
+            shared_key: None,
+            sas_token: None,
+        };
+    }
+    // Prefer SAS when explicitly supplied, else fall back to shared key.
+    let sas_from_env = std::env::var("AZURE_STORAGE_SAS_TOKEN")
+        .ok()
+        .filter(|s| !s.is_empty());
+    let sas_token = p.sas_token.clone().or(sas_from_env);
+    if sas_token.is_some() {
+        return blob_types::Credentials {
+            account: account.to_string(),
+            shared_key: None,
+            sas_token,
+        };
+    }
+    let key_from_env = std::env::var("AZURE_STORAGE_KEY")
+        .ok()
+        .filter(|s| !s.is_empty());
+    let shared_key = p.shared_key.clone().or(key_from_env);
+    blob_types::Credentials {
+        account: account.to_string(),
+        shared_key,
+        sas_token: None,
+    }
+}
+
+/// Head-then-get flow against `blob-base`. Mirrors resolve_s3's structure:
+///
+///   1. `head-blob` — cheap metadata probe. If the returned ETag matches
+///      the catalog's cached etag, skip the body download and re-touch
+///      the catalog row.
+///   2. Otherwise `get-blob`, hash the body, publish to the content-
+///      addressed store, and upsert the catalog row.
+fn resolve_azure(
+    cfg: &Config,
+    params: AzureParams,
+    uri: &str,
+    scheme: &str,
+) -> Result<String, String> {
+    let (container, blob_name) = parse_azure_uri(uri)?;
+    let account = resolve_azure_account(&params).ok_or_else(|| {
+        String::from(
+            "cache azure backend: no storage account (set `account` in the config \
+             JSON or the AZURE_STORAGE_ACCOUNT env var)",
+        )
+    })?;
+    let endpoint = resolve_azure_endpoint(&params, &account);
+    let creds = resolve_azure_credentials(&params, &account);
+
+    let root = cache_root()?;
+    ensure_dirs(&root)?;
+    let existing = lookup(&cfg.name, uri)?;
+
+    // Offline: never touch the network.
+    if cfg.policy == Policy::Offline {
+        return match existing {
+            Some(e) => {
+                enforce_sha_pin(cfg, &e.content_hash, uri)?;
+                Ok(path_to_file_uri(std::path::Path::new(&e.resolved_path)))
+            }
+            None => Err(format!(
+                "cache: policy \"offline\" and no cached entry for {uri}"
+            )),
+        };
+    }
+
+    // Immutable + pinned-sha + blob on disk -> done, no network.
+    if cfg.policy == Policy::Immutable {
+        if let Some(expected) = &cfg.sha256 {
+            let pinned = blob_path(&root, expected);
+            if pinned.is_file() {
+                if existing.is_none() {
+                    let now = compute_now();
+                    let len = std::fs::metadata(&pinned).ok().map(|m| m.len() as i64);
+                    upsert(
+                        &cfg.name, uri, scheme, None, None, expected, len,
+                        &pinned.to_string_lossy(), &now, None,
+                    )?;
+                }
+                return Ok(path_to_file_uri(&pinned));
+            }
+        }
+    }
+
+    // v0.2 lock (advisory) — matches the http/https and s3 paths so
+    // concurrent azure fetches of the same URI coalesce to one download.
+    let lock_path = root
+        .join("locks")
+        .join(format!("{}.lock", cache_core::sha256_hex(uri.as_bytes())));
+    let _uri_lock: Option<file_lock::LockHandle> =
+        match file_lock::acquire_exclusive(&lock_path.to_string_lossy()) {
+            Ok(handle) => {
+                if let Some(now_cached) = lookup(&cfg.name, uri)? {
+                    enforce_sha_pin(cfg, &now_cached.content_hash, uri)?;
+                    return Ok(path_to_file_uri(std::path::Path::new(&now_cached.resolved_path)));
+                }
+                Some(handle)
+            }
+            Err(_) => None,
+        };
+
+    // Step 1: HEAD. If the ETag matches the catalog, short-circuit.
+    let head_res = blob_base::head_blob(&endpoint, &creds, &container, &blob_name);
+    let (head_etag, head_last_modified) = match head_res {
+        Ok(h) => {
+            let etag = h.metadata.etag.clone();
+            let last_modified = h.metadata.last_modified.map(|s| s.to_string());
+            (etag, last_modified)
+        }
+        // A HEAD failure is informational — fall through to GET so the
+        // real error surfaces on the byte transfer.
+        Err(_) => (None, None),
+    };
+    if let (Some(cur), Some(existing_row)) = (&head_etag, existing.as_ref()) {
+        if existing_row.etag.as_deref() == Some(cur.as_str()) {
+            let now = compute_now();
+            upsert(
+                &cfg.name, uri, scheme,
+                head_etag.as_deref(),
+                head_last_modified.as_deref(),
+                &existing_row.content_hash,
+                None,
+                &existing_row.resolved_path,
+                &now,
+                None,
+            )?;
+            enforce_sha_pin(cfg, &existing_row.content_hash, uri)?;
+            return Ok(path_to_file_uri(std::path::Path::new(
+                &existing_row.resolved_path,
+            )));
+        }
+    }
+
+    // Step 2: GET.
+    let got = blob_base::get_blob(&endpoint, &creds, &container, &blob_name, None)
+        .map_err(|e| format!("cache azure backend: get {uri}: {}", azure_error_to_string(&e)))?;
+    let body_vec: Vec<u8> = got.body.to_vec();
+    let now = compute_now();
+    let hash = cache_core::sha256_hex(&body_vec);
+    if let Some(expected) = &cfg.sha256 {
+        if &hash != expected {
+            return Err(format!(
+                "cache: sha256 mismatch for {uri}: expected {expected}, got {hash}"
+            ));
+        }
+    }
+    let content_length = body_vec.len() as i64;
+    let final_path = blob_path(&root, &hash);
+    if let Some(parent) = final_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("cache staging: creating {}: {e}", parent.display()))?;
+    }
+    if !final_path.exists() {
+        let tmp_name = format!("{}.{}", hash, TMP_COUNTER.fetch_add(1, Ordering::Relaxed));
+        let tmp_path = root.join("tmp").join(&tmp_name);
+        std::fs::write(&tmp_path, &body_vec)
+            .map_err(|e| format!("cache staging: writing tmp: {e}"))?;
+        match std::fs::rename(&tmp_path, &final_path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                let _ = std::fs::remove_file(&tmp_path);
+            }
+            Err(err) => {
+                let _ = std::fs::remove_file(&tmp_path);
+                return Err(format!(
+                    "cache staging: renaming to {}: {err}",
+                    final_path.display()
+                ));
+            }
+        }
+    }
+    let etag = got.metadata.etag.clone().or(head_etag);
+    let last_modified = got
+        .metadata
+        .last_modified
+        .map(|s| s.to_string())
+        .or(head_last_modified);
+    upsert(
+        &cfg.name, uri, scheme,
+        etag.as_deref(),
+        last_modified.as_deref(),
+        &hash,
+        Some(content_length),
+        &final_path.to_string_lossy(),
+        &now,
+        None,
+    )?;
+    Ok(path_to_file_uri(&final_path))
+}
+
 fn enforce_sha_pin(cfg: &Config, cached_hash: &str, uri: &str) -> Result<(), String> {
     if let Some(expected) = &cfg.sha256 {
         if expected != cached_hash {
@@ -1398,6 +1806,29 @@ fn cache_scalar(
                 None => Config::default(),
             };
             let out = resolve_s3(&cfg, params, uri, "s3").map_err(duckerr)?;
+            return Ok(from_neutral(NeutralValue::Text(out)));
+        }
+        // az:// and azure:// intercept — same story as s3, but with
+        // azure-specific config keys (endpoint / account / shared_key /
+        // sas_token / anonymous). Canonicalize the scheme label to "az"
+        // in the catalog regardless of which alias the caller used.
+        if lc.starts_with("az:") || lc.starts_with("azure:") {
+            let params = match cfg_json_opt {
+                Some(j) => AzureParams::from_json(j).map_err(duckerr)?,
+                None => AzureParams::default(),
+            };
+            let cfg = match cfg_json_opt {
+                Some(j) => {
+                    let stripped = strip_azure_keys(j).map_err(duckerr)?;
+                    if stripped.is_empty() {
+                        Config::default()
+                    } else {
+                        Config::from_json(&stripped).map_err(duckerr)?
+                    }
+                }
+                None => Config::default(),
+            };
+            let out = resolve_azure(&cfg, params, uri, "az").map_err(duckerr)?;
             return Ok(from_neutral(NeutralValue::Text(out)));
         }
     }

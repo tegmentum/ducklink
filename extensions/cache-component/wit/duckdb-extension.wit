@@ -67,6 +67,17 @@ world duckdb-extension-cache {
   import component:s3-wasm/s3-types;
   import component:s3-wasm/s3-base;
   import component:s3-wasm/s3-aws;
+  // azure-wasm surface: satisfied at compose time by plugging the
+  // `azure-wasm` component into `cache.wasm`. The azure backend in
+  // `src/lib.rs` calls `blob-base::head-blob` + `blob-base::get-blob`
+  // (auth is handled inside azure-wasm from the credentials record —
+  // shared-key HMAC or SAS pass-through). `blob-shared-key` and
+  // `blob-sas` are imported to keep the composition complete for
+  // future resolver evolutions.
+  import component:azure-wasm/blob-types;
+  import component:azure-wasm/blob-base;
+  import component:azure-wasm/blob-shared-key;
+  import component:azure-wasm/blob-sas;
   // wasi:http surface used by the HTTP fetch backend in `src/lib.rs`.
   // The ducklink host wires this via wasmtime-wasi-http's
   // `add_only_http_to_linker_sync` (commit aaa5891), the same surface

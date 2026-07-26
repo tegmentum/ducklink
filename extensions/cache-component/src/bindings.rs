@@ -4,6 +4,2796 @@
 #[rustfmt::skip]
 #[allow(dead_code, clippy::all)]
 pub mod component {
+    pub mod azure_wasm {
+        /// Structural mirror of the `component:azure-wasm` exports the
+        /// `cache-component` imports at compose time. The upstream lives at
+        /// tegmentum/azure-wasm; when the `cache` Makefile target runs
+        /// `wac plug`, the azure-wasm component satisfies these imports for
+        /// the cache extension so `SELECT cache('az://...')` and
+        /// `SELECT cache('azure://...')` work end-to-end in the wasm cache.
+        /// Only the interfaces the cache resolver actually calls are declared
+        /// here (types + base + shared-key + sas), matching the canonical
+        /// shape exported by `azure_wasm.wasm`.
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod blob_types {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            /// Azure Blob error types
+            #[derive(Clone)]
+            pub enum Error {
+                AccessDenied,
+                NoSuchContainer,
+                NoSuchBlob,
+                InvalidContainerName,
+                InvalidRequest(_rt::String),
+                NetworkError(_rt::String),
+                ParseError(_rt::String),
+                Internal(_rt::String),
+            }
+            impl ::core::fmt::Debug for Error {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    match self {
+                        Error::AccessDenied => {
+                            f.debug_tuple("Error::AccessDenied").finish()
+                        }
+                        Error::NoSuchContainer => {
+                            f.debug_tuple("Error::NoSuchContainer").finish()
+                        }
+                        Error::NoSuchBlob => f.debug_tuple("Error::NoSuchBlob").finish(),
+                        Error::InvalidContainerName => {
+                            f.debug_tuple("Error::InvalidContainerName").finish()
+                        }
+                        Error::InvalidRequest(e) => {
+                            f.debug_tuple("Error::InvalidRequest").field(e).finish()
+                        }
+                        Error::NetworkError(e) => {
+                            f.debug_tuple("Error::NetworkError").field(e).finish()
+                        }
+                        Error::ParseError(e) => {
+                            f.debug_tuple("Error::ParseError").field(e).finish()
+                        }
+                        Error::Internal(e) => {
+                            f.debug_tuple("Error::Internal").field(e).finish()
+                        }
+                    }
+                }
+            }
+            impl ::core::fmt::Display for Error {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    write!(f, "{:?}", self)
+                }
+            }
+            impl std::error::Error for Error {}
+            /// Credentials for Azure Blob authentication.
+            /// Exactly one of `shared-key` or `sas-token` should be set.
+            #[derive(Clone)]
+            pub struct Credentials {
+                pub account: _rt::String,
+                pub shared_key: Option<_rt::String>,
+                pub sas_token: Option<_rt::String>,
+            }
+            impl ::core::fmt::Debug for Credentials {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("Credentials")
+                        .field("account", &self.account)
+                        .field("shared-key", &self.shared_key)
+                        .field("sas-token", &self.sas_token)
+                        .finish()
+                }
+            }
+            /// Azure Blob endpoint configuration
+            #[derive(Clone)]
+            pub struct EndpointConfig {
+                pub url: _rt::String,
+                pub emulator: bool,
+            }
+            impl ::core::fmt::Debug for EndpointConfig {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("EndpointConfig")
+                        .field("url", &self.url)
+                        .field("emulator", &self.emulator)
+                        .finish()
+                }
+            }
+            /// Blob metadata
+            #[derive(Clone)]
+            pub struct BlobMetadata {
+                pub content_type: Option<_rt::String>,
+                pub content_length: Option<u64>,
+                pub etag: Option<_rt::String>,
+                pub last_modified: Option<u64>,
+                pub content_md5: Option<_rt::String>,
+                pub custom: _rt::Vec<(_rt::String, _rt::String)>,
+            }
+            impl ::core::fmt::Debug for BlobMetadata {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("BlobMetadata")
+                        .field("content-type", &self.content_type)
+                        .field("content-length", &self.content_length)
+                        .field("etag", &self.etag)
+                        .field("last-modified", &self.last_modified)
+                        .field("content-md5", &self.content_md5)
+                        .field("custom", &self.custom)
+                        .finish()
+                }
+            }
+            /// Blob in a listing
+            #[derive(Clone)]
+            pub struct BlobInfo {
+                pub name: _rt::String,
+                pub size: u64,
+                pub etag: Option<_rt::String>,
+                pub last_modified: Option<u64>,
+                pub content_type: Option<_rt::String>,
+            }
+            impl ::core::fmt::Debug for BlobInfo {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("BlobInfo")
+                        .field("name", &self.name)
+                        .field("size", &self.size)
+                        .field("etag", &self.etag)
+                        .field("last-modified", &self.last_modified)
+                        .field("content-type", &self.content_type)
+                        .finish()
+                }
+            }
+            /// Result of a list blobs operation
+            #[derive(Clone)]
+            pub struct ListBlobsOutput {
+                pub blobs: _rt::Vec<BlobInfo>,
+                pub prefixes: _rt::Vec<_rt::String>,
+                pub next_marker: Option<_rt::String>,
+            }
+            impl ::core::fmt::Debug for ListBlobsOutput {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("ListBlobsOutput")
+                        .field("blobs", &self.blobs)
+                        .field("prefixes", &self.prefixes)
+                        .field("next-marker", &self.next_marker)
+                        .finish()
+                }
+            }
+            /// Options for get-blob
+            #[derive(Clone)]
+            pub struct GetBlobOptions {
+                pub range: Option<(u64, u64)>,
+                pub if_match: Option<_rt::String>,
+                pub if_none_match: Option<_rt::String>,
+            }
+            impl ::core::fmt::Debug for GetBlobOptions {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("GetBlobOptions")
+                        .field("range", &self.range)
+                        .field("if-match", &self.if_match)
+                        .field("if-none-match", &self.if_none_match)
+                        .finish()
+                }
+            }
+            /// Options for put-blob
+            #[derive(Clone)]
+            pub struct PutBlobOptions {
+                pub content_type: Option<_rt::String>,
+                pub metadata: _rt::Vec<(_rt::String, _rt::String)>,
+                pub cache_control: Option<_rt::String>,
+            }
+            impl ::core::fmt::Debug for PutBlobOptions {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("PutBlobOptions")
+                        .field("content-type", &self.content_type)
+                        .field("metadata", &self.metadata)
+                        .field("cache-control", &self.cache_control)
+                        .finish()
+                }
+            }
+            /// Options for list-blobs
+            #[derive(Clone)]
+            pub struct ListBlobsOptions {
+                pub prefix: Option<_rt::String>,
+                pub delimiter: Option<_rt::String>,
+                pub max_results: Option<u32>,
+                pub marker: Option<_rt::String>,
+            }
+            impl ::core::fmt::Debug for ListBlobsOptions {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("ListBlobsOptions")
+                        .field("prefix", &self.prefix)
+                        .field("delimiter", &self.delimiter)
+                        .field("max-results", &self.max_results)
+                        .field("marker", &self.marker)
+                        .finish()
+                }
+            }
+            /// Result of get-blob
+            #[derive(Clone)]
+            pub struct GetBlobOutput {
+                pub body: _rt::Vec<u8>,
+                pub metadata: BlobMetadata,
+            }
+            impl ::core::fmt::Debug for GetBlobOutput {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("GetBlobOutput")
+                        .field("body", &self.body)
+                        .field("metadata", &self.metadata)
+                        .finish()
+                }
+            }
+            /// Result of put-blob
+            #[derive(Clone)]
+            pub struct PutBlobOutput {
+                pub etag: _rt::String,
+            }
+            impl ::core::fmt::Debug for PutBlobOutput {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("PutBlobOutput").field("etag", &self.etag).finish()
+                }
+            }
+            /// Result of head-blob
+            #[derive(Clone)]
+            pub struct HeadBlobOutput {
+                pub metadata: BlobMetadata,
+            }
+            impl ::core::fmt::Debug for HeadBlobOutput {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("HeadBlobOutput")
+                        .field("metadata", &self.metadata)
+                        .finish()
+                }
+            }
+        }
+        /// Base Azure Blob interface. Modeled after s3-base so that a cache
+        /// component can dispatch to either via near-identical wiring.
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod blob_base {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            pub type Error = super::super::super::component::azure_wasm::blob_types::Error;
+            pub type Credentials = super::super::super::component::azure_wasm::blob_types::Credentials;
+            pub type EndpointConfig = super::super::super::component::azure_wasm::blob_types::EndpointConfig;
+            pub type GetBlobOptions = super::super::super::component::azure_wasm::blob_types::GetBlobOptions;
+            pub type GetBlobOutput = super::super::super::component::azure_wasm::blob_types::GetBlobOutput;
+            pub type PutBlobOptions = super::super::super::component::azure_wasm::blob_types::PutBlobOptions;
+            pub type PutBlobOutput = super::super::super::component::azure_wasm::blob_types::PutBlobOutput;
+            pub type HeadBlobOutput = super::super::super::component::azure_wasm::blob_types::HeadBlobOutput;
+            pub type ListBlobsOptions = super::super::super::component::azure_wasm::blob_types::ListBlobsOptions;
+            pub type ListBlobsOutput = super::super::super::component::azure_wasm::blob_types::ListBlobsOutput;
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn get_blob(
+                endpoint: &EndpointConfig,
+                credentials: &Credentials,
+                container: &str,
+                blob: &str,
+                options: Option<&GetBlobOptions>,
+            ) -> Result<GetBlobOutput, Error> {
+                unsafe {
+                    #[repr(align(8))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 40 + 20 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 40
+                            + 20 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    let super::super::super::component::azure_wasm::blob_types::EndpointConfig {
+                        url: url1,
+                        emulator: emulator1,
+                    } = endpoint;
+                    let vec2 = url1;
+                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                    let len2 = vec2.len();
+                    *ptr0.add(::core::mem::size_of::<*const u8>()).cast::<usize>() = len2;
+                    *ptr0.add(0).cast::<*mut u8>() = ptr2.cast_mut();
+                    *ptr0.add(2 * ::core::mem::size_of::<*const u8>()).cast::<u8>() = (match emulator1 {
+                        true => 1,
+                        false => 0,
+                    }) as u8;
+                    let super::super::super::component::azure_wasm::blob_types::Credentials {
+                        account: account3,
+                        shared_key: shared_key3,
+                        sas_token: sas_token3,
+                    } = credentials;
+                    let vec4 = account3;
+                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                    let len4 = vec4.len();
+                    *ptr0.add(4 * ::core::mem::size_of::<*const u8>()).cast::<usize>() = len4;
+                    *ptr0
+                        .add(3 * ::core::mem::size_of::<*const u8>())
+                        .cast::<*mut u8>() = ptr4.cast_mut();
+                    match shared_key3 {
+                        Some(e) => {
+                            *ptr0
+                                .add(5 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (1i32) as u8;
+                            let vec5 = e;
+                            let ptr5 = vec5.as_ptr().cast::<u8>();
+                            let len5 = vec5.len();
+                            *ptr0
+                                .add(7 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len5;
+                            *ptr0
+                                .add(6 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr5.cast_mut();
+                        }
+                        None => {
+                            *ptr0
+                                .add(5 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (0i32) as u8;
+                        }
+                    };
+                    match sas_token3 {
+                        Some(e) => {
+                            *ptr0
+                                .add(8 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (1i32) as u8;
+                            let vec6 = e;
+                            let ptr6 = vec6.as_ptr().cast::<u8>();
+                            let len6 = vec6.len();
+                            *ptr0
+                                .add(10 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len6;
+                            *ptr0
+                                .add(9 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr6.cast_mut();
+                        }
+                        None => {
+                            *ptr0
+                                .add(8 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (0i32) as u8;
+                        }
+                    };
+                    let vec7 = container;
+                    let ptr7 = vec7.as_ptr().cast::<u8>();
+                    let len7 = vec7.len();
+                    *ptr0
+                        .add(12 * ::core::mem::size_of::<*const u8>())
+                        .cast::<usize>() = len7;
+                    *ptr0
+                        .add(11 * ::core::mem::size_of::<*const u8>())
+                        .cast::<*mut u8>() = ptr7.cast_mut();
+                    let vec8 = blob;
+                    let ptr8 = vec8.as_ptr().cast::<u8>();
+                    let len8 = vec8.len();
+                    *ptr0
+                        .add(14 * ::core::mem::size_of::<*const u8>())
+                        .cast::<usize>() = len8;
+                    *ptr0
+                        .add(13 * ::core::mem::size_of::<*const u8>())
+                        .cast::<*mut u8>() = ptr8.cast_mut();
+                    match options {
+                        Some(e) => {
+                            *ptr0
+                                .add(8 + 14 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (1i32) as u8;
+                            let super::super::super::component::azure_wasm::blob_types::GetBlobOptions {
+                                range: range9,
+                                if_match: if_match9,
+                                if_none_match: if_none_match9,
+                            } = e;
+                            match range9 {
+                                Some(e) => {
+                                    *ptr0
+                                        .add(16 + 14 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let (t10_0, t10_1) = e;
+                                    *ptr0
+                                        .add(24 + 14 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<i64>() = _rt::as_i64(t10_0);
+                                    *ptr0
+                                        .add(32 + 14 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<i64>() = _rt::as_i64(t10_1);
+                                }
+                                None => {
+                                    *ptr0
+                                        .add(16 + 14 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                }
+                            };
+                            match if_match9 {
+                                Some(e) => {
+                                    *ptr0
+                                        .add(40 + 14 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec11 = e;
+                                    let ptr11 = vec11.as_ptr().cast::<u8>();
+                                    let len11 = vec11.len();
+                                    *ptr0
+                                        .add(40 + 16 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len11;
+                                    *ptr0
+                                        .add(40 + 15 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr11.cast_mut();
+                                }
+                                None => {
+                                    *ptr0
+                                        .add(40 + 14 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                }
+                            };
+                            match if_none_match9 {
+                                Some(e) => {
+                                    *ptr0
+                                        .add(40 + 17 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec12 = e;
+                                    let ptr12 = vec12.as_ptr().cast::<u8>();
+                                    let len12 = vec12.len();
+                                    *ptr0
+                                        .add(40 + 19 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len12;
+                                    *ptr0
+                                        .add(40 + 18 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr12.cast_mut();
+                                }
+                                None => {
+                                    *ptr0
+                                        .add(40 + 17 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                }
+                            };
+                        }
+                        None => {
+                            *ptr0
+                                .add(8 + 14 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (0i32) as u8;
+                        }
+                    };
+                    let ptr13 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "component:azure-wasm/blob-base")]
+                    unsafe extern "C" {
+                        #[link_name = "get-blob"]
+                        fn wit_import14(_: *mut u8, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import14(_: *mut u8, _: *mut u8) {
+                        unreachable!()
+                    }
+                    unsafe { wit_import14(ptr0, ptr13) };
+                    let l15 = i32::from(*ptr13.add(0).cast::<u8>());
+                    let result58 = match l15 {
+                        0 => {
+                            let e = {
+                                let l16 = *ptr13.add(8).cast::<*mut u8>();
+                                let l17 = *ptr13
+                                    .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len18 = l17;
+                                let l19 = i32::from(
+                                    *ptr13
+                                        .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                let l23 = i32::from(
+                                    *ptr13
+                                        .add(16 + 4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                let l25 = i32::from(
+                                    *ptr13
+                                        .add(32 + 4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                let l29 = i32::from(
+                                    *ptr13
+                                        .add(40 + 6 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                let l31 = i32::from(
+                                    *ptr13
+                                        .add(56 + 6 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                let l35 = *ptr13
+                                    .add(56 + 9 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l36 = *ptr13
+                                    .add(56 + 10 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let base43 = l35;
+                                let len43 = l36;
+                                let mut result43 = _rt::Vec::with_capacity(len43);
+                                for i in 0..len43 {
+                                    let base = base43
+                                        .add(i * (4 * ::core::mem::size_of::<*const u8>()));
+                                    let e43 = {
+                                        let l37 = *base.add(0).cast::<*mut u8>();
+                                        let l38 = *base
+                                            .add(::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len39 = l38;
+                                        let bytes39 = _rt::Vec::from_raw_parts(
+                                            l37.cast(),
+                                            len39,
+                                            len39,
+                                        );
+                                        let l40 = *base
+                                            .add(2 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<*mut u8>();
+                                        let l41 = *base
+                                            .add(3 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len42 = l41;
+                                        let bytes42 = _rt::Vec::from_raw_parts(
+                                            l40.cast(),
+                                            len42,
+                                            len42,
+                                        );
+                                        (_rt::string_lift(bytes39), _rt::string_lift(bytes42))
+                                    };
+                                    result43.push(e43);
+                                }
+                                _rt::cabi_dealloc(
+                                    base43,
+                                    len43 * (4 * ::core::mem::size_of::<*const u8>()),
+                                    ::core::mem::size_of::<*const u8>(),
+                                );
+                                super::super::super::component::azure_wasm::blob_types::GetBlobOutput {
+                                    body: _rt::Vec::from_raw_parts(l16.cast(), len18, len18),
+                                    metadata: super::super::super::component::azure_wasm::blob_types::BlobMetadata {
+                                        content_type: match l19 {
+                                            0 => None,
+                                            1 => {
+                                                let e = {
+                                                    let l20 = *ptr13
+                                                        .add(8 + 3 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<*mut u8>();
+                                                    let l21 = *ptr13
+                                                        .add(8 + 4 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>();
+                                                    let len22 = l21;
+                                                    let bytes22 = _rt::Vec::from_raw_parts(
+                                                        l20.cast(),
+                                                        len22,
+                                                        len22,
+                                                    );
+                                                    _rt::string_lift(bytes22)
+                                                };
+                                                Some(e)
+                                            }
+                                            _ => _rt::invalid_enum_discriminant(),
+                                        },
+                                        content_length: match l23 {
+                                            0 => None,
+                                            1 => {
+                                                let e = {
+                                                    let l24 = *ptr13
+                                                        .add(24 + 4 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<i64>();
+                                                    l24 as u64
+                                                };
+                                                Some(e)
+                                            }
+                                            _ => _rt::invalid_enum_discriminant(),
+                                        },
+                                        etag: match l25 {
+                                            0 => None,
+                                            1 => {
+                                                let e = {
+                                                    let l26 = *ptr13
+                                                        .add(32 + 5 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<*mut u8>();
+                                                    let l27 = *ptr13
+                                                        .add(32 + 6 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>();
+                                                    let len28 = l27;
+                                                    let bytes28 = _rt::Vec::from_raw_parts(
+                                                        l26.cast(),
+                                                        len28,
+                                                        len28,
+                                                    );
+                                                    _rt::string_lift(bytes28)
+                                                };
+                                                Some(e)
+                                            }
+                                            _ => _rt::invalid_enum_discriminant(),
+                                        },
+                                        last_modified: match l29 {
+                                            0 => None,
+                                            1 => {
+                                                let e = {
+                                                    let l30 = *ptr13
+                                                        .add(48 + 6 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<i64>();
+                                                    l30 as u64
+                                                };
+                                                Some(e)
+                                            }
+                                            _ => _rt::invalid_enum_discriminant(),
+                                        },
+                                        content_md5: match l31 {
+                                            0 => None,
+                                            1 => {
+                                                let e = {
+                                                    let l32 = *ptr13
+                                                        .add(56 + 7 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<*mut u8>();
+                                                    let l33 = *ptr13
+                                                        .add(56 + 8 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>();
+                                                    let len34 = l33;
+                                                    let bytes34 = _rt::Vec::from_raw_parts(
+                                                        l32.cast(),
+                                                        len34,
+                                                        len34,
+                                                    );
+                                                    _rt::string_lift(bytes34)
+                                                };
+                                                Some(e)
+                                            }
+                                            _ => _rt::invalid_enum_discriminant(),
+                                        },
+                                        custom: result43,
+                                    },
+                                }
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l44 = i32::from(*ptr13.add(8).cast::<u8>());
+                                use super::super::super::component::azure_wasm::blob_types::Error as V57;
+                                let v57 = match l44 {
+                                    0 => V57::AccessDenied,
+                                    1 => V57::NoSuchContainer,
+                                    2 => V57::NoSuchBlob,
+                                    3 => V57::InvalidContainerName,
+                                    4 => {
+                                        let e57 = {
+                                            let l45 = *ptr13
+                                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l46 = *ptr13
+                                                .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len47 = l46;
+                                            let bytes47 = _rt::Vec::from_raw_parts(
+                                                l45.cast(),
+                                                len47,
+                                                len47,
+                                            );
+                                            _rt::string_lift(bytes47)
+                                        };
+                                        V57::InvalidRequest(e57)
+                                    }
+                                    5 => {
+                                        let e57 = {
+                                            let l48 = *ptr13
+                                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l49 = *ptr13
+                                                .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len50 = l49;
+                                            let bytes50 = _rt::Vec::from_raw_parts(
+                                                l48.cast(),
+                                                len50,
+                                                len50,
+                                            );
+                                            _rt::string_lift(bytes50)
+                                        };
+                                        V57::NetworkError(e57)
+                                    }
+                                    6 => {
+                                        let e57 = {
+                                            let l51 = *ptr13
+                                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l52 = *ptr13
+                                                .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len53 = l52;
+                                            let bytes53 = _rt::Vec::from_raw_parts(
+                                                l51.cast(),
+                                                len53,
+                                                len53,
+                                            );
+                                            _rt::string_lift(bytes53)
+                                        };
+                                        V57::ParseError(e57)
+                                    }
+                                    n => {
+                                        debug_assert_eq!(n, 7, "invalid enum discriminant");
+                                        let e57 = {
+                                            let l54 = *ptr13
+                                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l55 = *ptr13
+                                                .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len56 = l55;
+                                            let bytes56 = _rt::Vec::from_raw_parts(
+                                                l54.cast(),
+                                                len56,
+                                                len56,
+                                            );
+                                            _rt::string_lift(bytes56)
+                                        };
+                                        V57::Internal(e57)
+                                    }
+                                };
+                                v57
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result58
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn put_blob(
+                endpoint: &EndpointConfig,
+                credentials: &Credentials,
+                container: &str,
+                blob: &str,
+                body: &[u8],
+                options: Option<&PutBlobOptions>,
+            ) -> Result<PutBlobOutput, Error> {
+                unsafe {
+                    let mut cleanup_list = _rt::Vec::new();
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 26 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 26
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    let super::super::super::component::azure_wasm::blob_types::EndpointConfig {
+                        url: url1,
+                        emulator: emulator1,
+                    } = endpoint;
+                    let vec2 = url1;
+                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                    let len2 = vec2.len();
+                    *ptr0.add(::core::mem::size_of::<*const u8>()).cast::<usize>() = len2;
+                    *ptr0.add(0).cast::<*mut u8>() = ptr2.cast_mut();
+                    *ptr0.add(2 * ::core::mem::size_of::<*const u8>()).cast::<u8>() = (match emulator1 {
+                        true => 1,
+                        false => 0,
+                    }) as u8;
+                    let super::super::super::component::azure_wasm::blob_types::Credentials {
+                        account: account3,
+                        shared_key: shared_key3,
+                        sas_token: sas_token3,
+                    } = credentials;
+                    let vec4 = account3;
+                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                    let len4 = vec4.len();
+                    *ptr0.add(4 * ::core::mem::size_of::<*const u8>()).cast::<usize>() = len4;
+                    *ptr0
+                        .add(3 * ::core::mem::size_of::<*const u8>())
+                        .cast::<*mut u8>() = ptr4.cast_mut();
+                    match shared_key3 {
+                        Some(e) => {
+                            *ptr0
+                                .add(5 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (1i32) as u8;
+                            let vec5 = e;
+                            let ptr5 = vec5.as_ptr().cast::<u8>();
+                            let len5 = vec5.len();
+                            *ptr0
+                                .add(7 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len5;
+                            *ptr0
+                                .add(6 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr5.cast_mut();
+                        }
+                        None => {
+                            *ptr0
+                                .add(5 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (0i32) as u8;
+                        }
+                    };
+                    match sas_token3 {
+                        Some(e) => {
+                            *ptr0
+                                .add(8 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (1i32) as u8;
+                            let vec6 = e;
+                            let ptr6 = vec6.as_ptr().cast::<u8>();
+                            let len6 = vec6.len();
+                            *ptr0
+                                .add(10 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len6;
+                            *ptr0
+                                .add(9 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr6.cast_mut();
+                        }
+                        None => {
+                            *ptr0
+                                .add(8 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (0i32) as u8;
+                        }
+                    };
+                    let vec7 = container;
+                    let ptr7 = vec7.as_ptr().cast::<u8>();
+                    let len7 = vec7.len();
+                    *ptr0
+                        .add(12 * ::core::mem::size_of::<*const u8>())
+                        .cast::<usize>() = len7;
+                    *ptr0
+                        .add(11 * ::core::mem::size_of::<*const u8>())
+                        .cast::<*mut u8>() = ptr7.cast_mut();
+                    let vec8 = blob;
+                    let ptr8 = vec8.as_ptr().cast::<u8>();
+                    let len8 = vec8.len();
+                    *ptr0
+                        .add(14 * ::core::mem::size_of::<*const u8>())
+                        .cast::<usize>() = len8;
+                    *ptr0
+                        .add(13 * ::core::mem::size_of::<*const u8>())
+                        .cast::<*mut u8>() = ptr8.cast_mut();
+                    let vec9 = body;
+                    let ptr9 = vec9.as_ptr().cast::<u8>();
+                    let len9 = vec9.len();
+                    *ptr0
+                        .add(16 * ::core::mem::size_of::<*const u8>())
+                        .cast::<usize>() = len9;
+                    *ptr0
+                        .add(15 * ::core::mem::size_of::<*const u8>())
+                        .cast::<*mut u8>() = ptr9.cast_mut();
+                    match options {
+                        Some(e) => {
+                            *ptr0
+                                .add(17 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (1i32) as u8;
+                            let super::super::super::component::azure_wasm::blob_types::PutBlobOptions {
+                                content_type: content_type10,
+                                metadata: metadata10,
+                                cache_control: cache_control10,
+                            } = e;
+                            match content_type10 {
+                                Some(e) => {
+                                    *ptr0
+                                        .add(18 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec11 = e;
+                                    let ptr11 = vec11.as_ptr().cast::<u8>();
+                                    let len11 = vec11.len();
+                                    *ptr0
+                                        .add(20 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len11;
+                                    *ptr0
+                                        .add(19 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr11.cast_mut();
+                                }
+                                None => {
+                                    *ptr0
+                                        .add(18 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                }
+                            };
+                            let vec15 = metadata10;
+                            let len15 = vec15.len();
+                            let layout15 = _rt::alloc::Layout::from_size_align_unchecked(
+                                vec15.len() * (4 * ::core::mem::size_of::<*const u8>()),
+                                ::core::mem::size_of::<*const u8>(),
+                            );
+                            let result15 = if layout15.size() != 0 {
+                                let ptr = _rt::alloc::alloc(layout15).cast::<u8>();
+                                if ptr.is_null() {
+                                    _rt::alloc::handle_alloc_error(layout15);
+                                }
+                                ptr
+                            } else {
+                                ::core::ptr::null_mut()
+                            };
+                            for (i, e) in vec15.into_iter().enumerate() {
+                                let base = result15
+                                    .add(i * (4 * ::core::mem::size_of::<*const u8>()));
+                                {
+                                    let (t12_0, t12_1) = e;
+                                    let vec13 = t12_0;
+                                    let ptr13 = vec13.as_ptr().cast::<u8>();
+                                    let len13 = vec13.len();
+                                    *base
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len13;
+                                    *base.add(0).cast::<*mut u8>() = ptr13.cast_mut();
+                                    let vec14 = t12_1;
+                                    let ptr14 = vec14.as_ptr().cast::<u8>();
+                                    let len14 = vec14.len();
+                                    *base
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len14;
+                                    *base
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr14.cast_mut();
+                                }
+                            }
+                            *ptr0
+                                .add(22 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len15;
+                            *ptr0
+                                .add(21 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = result15;
+                            match cache_control10 {
+                                Some(e) => {
+                                    *ptr0
+                                        .add(23 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec16 = e;
+                                    let ptr16 = vec16.as_ptr().cast::<u8>();
+                                    let len16 = vec16.len();
+                                    *ptr0
+                                        .add(25 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len16;
+                                    *ptr0
+                                        .add(24 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr16.cast_mut();
+                                }
+                                None => {
+                                    *ptr0
+                                        .add(23 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                }
+                            };
+                            cleanup_list.extend_from_slice(&[(result15, layout15)]);
+                        }
+                        None => {
+                            *ptr0
+                                .add(17 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (0i32) as u8;
+                        }
+                    };
+                    let ptr17 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "component:azure-wasm/blob-base")]
+                    unsafe extern "C" {
+                        #[link_name = "put-blob"]
+                        fn wit_import18(_: *mut u8, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import18(_: *mut u8, _: *mut u8) {
+                        unreachable!()
+                    }
+                    unsafe { wit_import18(ptr0, ptr17) };
+                    let l19 = i32::from(*ptr17.add(0).cast::<u8>());
+                    let result37 = match l19 {
+                        0 => {
+                            let e = {
+                                let l20 = *ptr17
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l21 = *ptr17
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len22 = l21;
+                                let bytes22 = _rt::Vec::from_raw_parts(
+                                    l20.cast(),
+                                    len22,
+                                    len22,
+                                );
+                                super::super::super::component::azure_wasm::blob_types::PutBlobOutput {
+                                    etag: _rt::string_lift(bytes22),
+                                }
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l23 = i32::from(
+                                    *ptr17.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                                );
+                                use super::super::super::component::azure_wasm::blob_types::Error as V36;
+                                let v36 = match l23 {
+                                    0 => V36::AccessDenied,
+                                    1 => V36::NoSuchContainer,
+                                    2 => V36::NoSuchBlob,
+                                    3 => V36::InvalidContainerName,
+                                    4 => {
+                                        let e36 = {
+                                            let l24 = *ptr17
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l25 = *ptr17
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len26 = l25;
+                                            let bytes26 = _rt::Vec::from_raw_parts(
+                                                l24.cast(),
+                                                len26,
+                                                len26,
+                                            );
+                                            _rt::string_lift(bytes26)
+                                        };
+                                        V36::InvalidRequest(e36)
+                                    }
+                                    5 => {
+                                        let e36 = {
+                                            let l27 = *ptr17
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l28 = *ptr17
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len29 = l28;
+                                            let bytes29 = _rt::Vec::from_raw_parts(
+                                                l27.cast(),
+                                                len29,
+                                                len29,
+                                            );
+                                            _rt::string_lift(bytes29)
+                                        };
+                                        V36::NetworkError(e36)
+                                    }
+                                    6 => {
+                                        let e36 = {
+                                            let l30 = *ptr17
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l31 = *ptr17
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len32 = l31;
+                                            let bytes32 = _rt::Vec::from_raw_parts(
+                                                l30.cast(),
+                                                len32,
+                                                len32,
+                                            );
+                                            _rt::string_lift(bytes32)
+                                        };
+                                        V36::ParseError(e36)
+                                    }
+                                    n => {
+                                        debug_assert_eq!(n, 7, "invalid enum discriminant");
+                                        let e36 = {
+                                            let l33 = *ptr17
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l34 = *ptr17
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len35 = l34;
+                                            let bytes35 = _rt::Vec::from_raw_parts(
+                                                l33.cast(),
+                                                len35,
+                                                len35,
+                                            );
+                                            _rt::string_lift(bytes35)
+                                        };
+                                        V36::Internal(e36)
+                                    }
+                                };
+                                v36
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    for (ptr, layout) in cleanup_list {
+                        if layout.size() != 0 {
+                            _rt::alloc::dealloc(ptr.cast(), layout);
+                        }
+                    }
+                    result37
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn delete_blob(
+                endpoint: &EndpointConfig,
+                credentials: &Credentials,
+                container: &str,
+                blob: &str,
+            ) -> Result<(), Error> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 4 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 4
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let super::super::super::component::azure_wasm::blob_types::EndpointConfig {
+                        url: url0,
+                        emulator: emulator0,
+                    } = endpoint;
+                    let vec1 = url0;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let super::super::super::component::azure_wasm::blob_types::Credentials {
+                        account: account2,
+                        shared_key: shared_key2,
+                        sas_token: sas_token2,
+                    } = credentials;
+                    let vec3 = account2;
+                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                    let len3 = vec3.len();
+                    let (result5_0, result5_1, result5_2) = match shared_key2 {
+                        Some(e) => {
+                            let vec4 = e;
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            (1i32, ptr4.cast_mut(), len4)
+                        }
+                        None => (0i32, ::core::ptr::null_mut(), 0usize),
+                    };
+                    let (result7_0, result7_1, result7_2) = match sas_token2 {
+                        Some(e) => {
+                            let vec6 = e;
+                            let ptr6 = vec6.as_ptr().cast::<u8>();
+                            let len6 = vec6.len();
+                            (1i32, ptr6.cast_mut(), len6)
+                        }
+                        None => (0i32, ::core::ptr::null_mut(), 0usize),
+                    };
+                    let vec8 = container;
+                    let ptr8 = vec8.as_ptr().cast::<u8>();
+                    let len8 = vec8.len();
+                    let vec9 = blob;
+                    let ptr9 = vec9.as_ptr().cast::<u8>();
+                    let len9 = vec9.len();
+                    let ptr10 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "component:azure-wasm/blob-base")]
+                    unsafe extern "C" {
+                        #[link_name = "delete-blob"]
+                        fn wit_import11(
+                            _: *mut u8,
+                            _: usize,
+                            _: i32,
+                            _: *mut u8,
+                            _: usize,
+                            _: i32,
+                            _: *mut u8,
+                            _: usize,
+                            _: i32,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import11(
+                        _: *mut u8,
+                        _: usize,
+                        _: i32,
+                        _: *mut u8,
+                        _: usize,
+                        _: i32,
+                        _: *mut u8,
+                        _: usize,
+                        _: i32,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import11(
+                            ptr1.cast_mut(),
+                            len1,
+                            match emulator0 {
+                                true => 1,
+                                false => 0,
+                            },
+                            ptr3.cast_mut(),
+                            len3,
+                            result5_0,
+                            result5_1,
+                            result5_2,
+                            result7_0,
+                            result7_1,
+                            result7_2,
+                            ptr8.cast_mut(),
+                            len8,
+                            ptr9.cast_mut(),
+                            len9,
+                            ptr10,
+                        )
+                    };
+                    let l12 = i32::from(*ptr10.add(0).cast::<u8>());
+                    let result27 = match l12 {
+                        0 => {
+                            let e = ();
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l13 = i32::from(
+                                    *ptr10.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                                );
+                                use super::super::super::component::azure_wasm::blob_types::Error as V26;
+                                let v26 = match l13 {
+                                    0 => V26::AccessDenied,
+                                    1 => V26::NoSuchContainer,
+                                    2 => V26::NoSuchBlob,
+                                    3 => V26::InvalidContainerName,
+                                    4 => {
+                                        let e26 = {
+                                            let l14 = *ptr10
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l15 = *ptr10
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len16 = l15;
+                                            let bytes16 = _rt::Vec::from_raw_parts(
+                                                l14.cast(),
+                                                len16,
+                                                len16,
+                                            );
+                                            _rt::string_lift(bytes16)
+                                        };
+                                        V26::InvalidRequest(e26)
+                                    }
+                                    5 => {
+                                        let e26 = {
+                                            let l17 = *ptr10
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l18 = *ptr10
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len19 = l18;
+                                            let bytes19 = _rt::Vec::from_raw_parts(
+                                                l17.cast(),
+                                                len19,
+                                                len19,
+                                            );
+                                            _rt::string_lift(bytes19)
+                                        };
+                                        V26::NetworkError(e26)
+                                    }
+                                    6 => {
+                                        let e26 = {
+                                            let l20 = *ptr10
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l21 = *ptr10
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len22 = l21;
+                                            let bytes22 = _rt::Vec::from_raw_parts(
+                                                l20.cast(),
+                                                len22,
+                                                len22,
+                                            );
+                                            _rt::string_lift(bytes22)
+                                        };
+                                        V26::ParseError(e26)
+                                    }
+                                    n => {
+                                        debug_assert_eq!(n, 7, "invalid enum discriminant");
+                                        let e26 = {
+                                            let l23 = *ptr10
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l24 = *ptr10
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len25 = l24;
+                                            let bytes25 = _rt::Vec::from_raw_parts(
+                                                l23.cast(),
+                                                len25,
+                                                len25,
+                                            );
+                                            _rt::string_lift(bytes25)
+                                        };
+                                        V26::Internal(e26)
+                                    }
+                                };
+                                v26
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result27
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn head_blob(
+                endpoint: &EndpointConfig,
+                credentials: &Credentials,
+                container: &str,
+                blob: &str,
+            ) -> Result<HeadBlobOutput, Error> {
+                unsafe {
+                    #[repr(align(8))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 64 + 8 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 64
+                            + 8 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let super::super::super::component::azure_wasm::blob_types::EndpointConfig {
+                        url: url0,
+                        emulator: emulator0,
+                    } = endpoint;
+                    let vec1 = url0;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let super::super::super::component::azure_wasm::blob_types::Credentials {
+                        account: account2,
+                        shared_key: shared_key2,
+                        sas_token: sas_token2,
+                    } = credentials;
+                    let vec3 = account2;
+                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                    let len3 = vec3.len();
+                    let (result5_0, result5_1, result5_2) = match shared_key2 {
+                        Some(e) => {
+                            let vec4 = e;
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            (1i32, ptr4.cast_mut(), len4)
+                        }
+                        None => (0i32, ::core::ptr::null_mut(), 0usize),
+                    };
+                    let (result7_0, result7_1, result7_2) = match sas_token2 {
+                        Some(e) => {
+                            let vec6 = e;
+                            let ptr6 = vec6.as_ptr().cast::<u8>();
+                            let len6 = vec6.len();
+                            (1i32, ptr6.cast_mut(), len6)
+                        }
+                        None => (0i32, ::core::ptr::null_mut(), 0usize),
+                    };
+                    let vec8 = container;
+                    let ptr8 = vec8.as_ptr().cast::<u8>();
+                    let len8 = vec8.len();
+                    let vec9 = blob;
+                    let ptr9 = vec9.as_ptr().cast::<u8>();
+                    let len9 = vec9.len();
+                    let ptr10 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "component:azure-wasm/blob-base")]
+                    unsafe extern "C" {
+                        #[link_name = "head-blob"]
+                        fn wit_import11(
+                            _: *mut u8,
+                            _: usize,
+                            _: i32,
+                            _: *mut u8,
+                            _: usize,
+                            _: i32,
+                            _: *mut u8,
+                            _: usize,
+                            _: i32,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import11(
+                        _: *mut u8,
+                        _: usize,
+                        _: i32,
+                        _: *mut u8,
+                        _: usize,
+                        _: i32,
+                        _: *mut u8,
+                        _: usize,
+                        _: i32,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import11(
+                            ptr1.cast_mut(),
+                            len1,
+                            match emulator0 {
+                                true => 1,
+                                false => 0,
+                            },
+                            ptr3.cast_mut(),
+                            len3,
+                            result5_0,
+                            result5_1,
+                            result5_2,
+                            result7_0,
+                            result7_1,
+                            result7_2,
+                            ptr8.cast_mut(),
+                            len8,
+                            ptr9.cast_mut(),
+                            len9,
+                            ptr10,
+                        )
+                    };
+                    let l12 = i32::from(*ptr10.add(0).cast::<u8>());
+                    let result52 = match l12 {
+                        0 => {
+                            let e = {
+                                let l13 = i32::from(*ptr10.add(8).cast::<u8>());
+                                let l17 = i32::from(
+                                    *ptr10
+                                        .add(16 + 2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                let l19 = i32::from(
+                                    *ptr10
+                                        .add(32 + 2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                let l23 = i32::from(
+                                    *ptr10
+                                        .add(40 + 4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                let l25 = i32::from(
+                                    *ptr10
+                                        .add(56 + 4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                let l29 = *ptr10
+                                    .add(56 + 7 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l30 = *ptr10
+                                    .add(56 + 8 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let base37 = l29;
+                                let len37 = l30;
+                                let mut result37 = _rt::Vec::with_capacity(len37);
+                                for i in 0..len37 {
+                                    let base = base37
+                                        .add(i * (4 * ::core::mem::size_of::<*const u8>()));
+                                    let e37 = {
+                                        let l31 = *base.add(0).cast::<*mut u8>();
+                                        let l32 = *base
+                                            .add(::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len33 = l32;
+                                        let bytes33 = _rt::Vec::from_raw_parts(
+                                            l31.cast(),
+                                            len33,
+                                            len33,
+                                        );
+                                        let l34 = *base
+                                            .add(2 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<*mut u8>();
+                                        let l35 = *base
+                                            .add(3 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len36 = l35;
+                                        let bytes36 = _rt::Vec::from_raw_parts(
+                                            l34.cast(),
+                                            len36,
+                                            len36,
+                                        );
+                                        (_rt::string_lift(bytes33), _rt::string_lift(bytes36))
+                                    };
+                                    result37.push(e37);
+                                }
+                                _rt::cabi_dealloc(
+                                    base37,
+                                    len37 * (4 * ::core::mem::size_of::<*const u8>()),
+                                    ::core::mem::size_of::<*const u8>(),
+                                );
+                                super::super::super::component::azure_wasm::blob_types::HeadBlobOutput {
+                                    metadata: super::super::super::component::azure_wasm::blob_types::BlobMetadata {
+                                        content_type: match l13 {
+                                            0 => None,
+                                            1 => {
+                                                let e = {
+                                                    let l14 = *ptr10
+                                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<*mut u8>();
+                                                    let l15 = *ptr10
+                                                        .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>();
+                                                    let len16 = l15;
+                                                    let bytes16 = _rt::Vec::from_raw_parts(
+                                                        l14.cast(),
+                                                        len16,
+                                                        len16,
+                                                    );
+                                                    _rt::string_lift(bytes16)
+                                                };
+                                                Some(e)
+                                            }
+                                            _ => _rt::invalid_enum_discriminant(),
+                                        },
+                                        content_length: match l17 {
+                                            0 => None,
+                                            1 => {
+                                                let e = {
+                                                    let l18 = *ptr10
+                                                        .add(24 + 2 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<i64>();
+                                                    l18 as u64
+                                                };
+                                                Some(e)
+                                            }
+                                            _ => _rt::invalid_enum_discriminant(),
+                                        },
+                                        etag: match l19 {
+                                            0 => None,
+                                            1 => {
+                                                let e = {
+                                                    let l20 = *ptr10
+                                                        .add(32 + 3 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<*mut u8>();
+                                                    let l21 = *ptr10
+                                                        .add(32 + 4 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>();
+                                                    let len22 = l21;
+                                                    let bytes22 = _rt::Vec::from_raw_parts(
+                                                        l20.cast(),
+                                                        len22,
+                                                        len22,
+                                                    );
+                                                    _rt::string_lift(bytes22)
+                                                };
+                                                Some(e)
+                                            }
+                                            _ => _rt::invalid_enum_discriminant(),
+                                        },
+                                        last_modified: match l23 {
+                                            0 => None,
+                                            1 => {
+                                                let e = {
+                                                    let l24 = *ptr10
+                                                        .add(48 + 4 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<i64>();
+                                                    l24 as u64
+                                                };
+                                                Some(e)
+                                            }
+                                            _ => _rt::invalid_enum_discriminant(),
+                                        },
+                                        content_md5: match l25 {
+                                            0 => None,
+                                            1 => {
+                                                let e = {
+                                                    let l26 = *ptr10
+                                                        .add(56 + 5 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<*mut u8>();
+                                                    let l27 = *ptr10
+                                                        .add(56 + 6 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>();
+                                                    let len28 = l27;
+                                                    let bytes28 = _rt::Vec::from_raw_parts(
+                                                        l26.cast(),
+                                                        len28,
+                                                        len28,
+                                                    );
+                                                    _rt::string_lift(bytes28)
+                                                };
+                                                Some(e)
+                                            }
+                                            _ => _rt::invalid_enum_discriminant(),
+                                        },
+                                        custom: result37,
+                                    },
+                                }
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l38 = i32::from(*ptr10.add(8).cast::<u8>());
+                                use super::super::super::component::azure_wasm::blob_types::Error as V51;
+                                let v51 = match l38 {
+                                    0 => V51::AccessDenied,
+                                    1 => V51::NoSuchContainer,
+                                    2 => V51::NoSuchBlob,
+                                    3 => V51::InvalidContainerName,
+                                    4 => {
+                                        let e51 = {
+                                            let l39 = *ptr10
+                                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l40 = *ptr10
+                                                .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len41 = l40;
+                                            let bytes41 = _rt::Vec::from_raw_parts(
+                                                l39.cast(),
+                                                len41,
+                                                len41,
+                                            );
+                                            _rt::string_lift(bytes41)
+                                        };
+                                        V51::InvalidRequest(e51)
+                                    }
+                                    5 => {
+                                        let e51 = {
+                                            let l42 = *ptr10
+                                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l43 = *ptr10
+                                                .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len44 = l43;
+                                            let bytes44 = _rt::Vec::from_raw_parts(
+                                                l42.cast(),
+                                                len44,
+                                                len44,
+                                            );
+                                            _rt::string_lift(bytes44)
+                                        };
+                                        V51::NetworkError(e51)
+                                    }
+                                    6 => {
+                                        let e51 = {
+                                            let l45 = *ptr10
+                                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l46 = *ptr10
+                                                .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len47 = l46;
+                                            let bytes47 = _rt::Vec::from_raw_parts(
+                                                l45.cast(),
+                                                len47,
+                                                len47,
+                                            );
+                                            _rt::string_lift(bytes47)
+                                        };
+                                        V51::ParseError(e51)
+                                    }
+                                    n => {
+                                        debug_assert_eq!(n, 7, "invalid enum discriminant");
+                                        let e51 = {
+                                            let l48 = *ptr10
+                                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l49 = *ptr10
+                                                .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len50 = l49;
+                                            let bytes50 = _rt::Vec::from_raw_parts(
+                                                l48.cast(),
+                                                len50,
+                                                len50,
+                                            );
+                                            _rt::string_lift(bytes50)
+                                        };
+                                        V51::Internal(e51)
+                                    }
+                                };
+                                v51
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result52
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn list_blobs(
+                endpoint: &EndpointConfig,
+                credentials: &Credentials,
+                container: &str,
+                options: Option<&ListBlobsOptions>,
+            ) -> Result<ListBlobsOutput, Error> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 8 + 23 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 8
+                            + 23 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    let super::super::super::component::azure_wasm::blob_types::EndpointConfig {
+                        url: url1,
+                        emulator: emulator1,
+                    } = endpoint;
+                    let vec2 = url1;
+                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                    let len2 = vec2.len();
+                    *ptr0.add(::core::mem::size_of::<*const u8>()).cast::<usize>() = len2;
+                    *ptr0.add(0).cast::<*mut u8>() = ptr2.cast_mut();
+                    *ptr0.add(2 * ::core::mem::size_of::<*const u8>()).cast::<u8>() = (match emulator1 {
+                        true => 1,
+                        false => 0,
+                    }) as u8;
+                    let super::super::super::component::azure_wasm::blob_types::Credentials {
+                        account: account3,
+                        shared_key: shared_key3,
+                        sas_token: sas_token3,
+                    } = credentials;
+                    let vec4 = account3;
+                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                    let len4 = vec4.len();
+                    *ptr0.add(4 * ::core::mem::size_of::<*const u8>()).cast::<usize>() = len4;
+                    *ptr0
+                        .add(3 * ::core::mem::size_of::<*const u8>())
+                        .cast::<*mut u8>() = ptr4.cast_mut();
+                    match shared_key3 {
+                        Some(e) => {
+                            *ptr0
+                                .add(5 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (1i32) as u8;
+                            let vec5 = e;
+                            let ptr5 = vec5.as_ptr().cast::<u8>();
+                            let len5 = vec5.len();
+                            *ptr0
+                                .add(7 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len5;
+                            *ptr0
+                                .add(6 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr5.cast_mut();
+                        }
+                        None => {
+                            *ptr0
+                                .add(5 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (0i32) as u8;
+                        }
+                    };
+                    match sas_token3 {
+                        Some(e) => {
+                            *ptr0
+                                .add(8 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (1i32) as u8;
+                            let vec6 = e;
+                            let ptr6 = vec6.as_ptr().cast::<u8>();
+                            let len6 = vec6.len();
+                            *ptr0
+                                .add(10 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len6;
+                            *ptr0
+                                .add(9 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr6.cast_mut();
+                        }
+                        None => {
+                            *ptr0
+                                .add(8 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (0i32) as u8;
+                        }
+                    };
+                    let vec7 = container;
+                    let ptr7 = vec7.as_ptr().cast::<u8>();
+                    let len7 = vec7.len();
+                    *ptr0
+                        .add(12 * ::core::mem::size_of::<*const u8>())
+                        .cast::<usize>() = len7;
+                    *ptr0
+                        .add(11 * ::core::mem::size_of::<*const u8>())
+                        .cast::<*mut u8>() = ptr7.cast_mut();
+                    match options {
+                        Some(e) => {
+                            *ptr0
+                                .add(13 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (1i32) as u8;
+                            let super::super::super::component::azure_wasm::blob_types::ListBlobsOptions {
+                                prefix: prefix8,
+                                delimiter: delimiter8,
+                                max_results: max_results8,
+                                marker: marker8,
+                            } = e;
+                            match prefix8 {
+                                Some(e) => {
+                                    *ptr0
+                                        .add(14 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec9 = e;
+                                    let ptr9 = vec9.as_ptr().cast::<u8>();
+                                    let len9 = vec9.len();
+                                    *ptr0
+                                        .add(16 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len9;
+                                    *ptr0
+                                        .add(15 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr9.cast_mut();
+                                }
+                                None => {
+                                    *ptr0
+                                        .add(14 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                }
+                            };
+                            match delimiter8 {
+                                Some(e) => {
+                                    *ptr0
+                                        .add(17 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec10 = e;
+                                    let ptr10 = vec10.as_ptr().cast::<u8>();
+                                    let len10 = vec10.len();
+                                    *ptr0
+                                        .add(19 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len10;
+                                    *ptr0
+                                        .add(18 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr10.cast_mut();
+                                }
+                                None => {
+                                    *ptr0
+                                        .add(17 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                }
+                            };
+                            match max_results8 {
+                                Some(e) => {
+                                    *ptr0
+                                        .add(20 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    *ptr0
+                                        .add(4 + 20 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<i32>() = _rt::as_i32(e);
+                                }
+                                None => {
+                                    *ptr0
+                                        .add(20 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                }
+                            };
+                            match marker8 {
+                                Some(e) => {
+                                    *ptr0
+                                        .add(8 + 20 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec11 = e;
+                                    let ptr11 = vec11.as_ptr().cast::<u8>();
+                                    let len11 = vec11.len();
+                                    *ptr0
+                                        .add(8 + 22 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len11;
+                                    *ptr0
+                                        .add(8 + 21 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr11.cast_mut();
+                                }
+                                None => {
+                                    *ptr0
+                                        .add(8 + 20 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                }
+                            };
+                        }
+                        None => {
+                            *ptr0
+                                .add(13 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (0i32) as u8;
+                        }
+                    };
+                    let ptr12 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "component:azure-wasm/blob-base")]
+                    unsafe extern "C" {
+                        #[link_name = "list-blobs"]
+                        fn wit_import13(_: *mut u8, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import13(_: *mut u8, _: *mut u8) {
+                        unreachable!()
+                    }
+                    unsafe { wit_import13(ptr0, ptr12) };
+                    let l14 = i32::from(*ptr12.add(0).cast::<u8>());
+                    let result56 = match l14 {
+                        0 => {
+                            let e = {
+                                let l15 = *ptr12
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l16 = *ptr12
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let base31 = l15;
+                                let len31 = l16;
+                                let mut result31 = _rt::Vec::with_capacity(len31);
+                                for i in 0..len31 {
+                                    let base = base31
+                                        .add(i * (40 + 6 * ::core::mem::size_of::<*const u8>()));
+                                    let e31 = {
+                                        let l17 = *base.add(0).cast::<*mut u8>();
+                                        let l18 = *base
+                                            .add(::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len19 = l18;
+                                        let bytes19 = _rt::Vec::from_raw_parts(
+                                            l17.cast(),
+                                            len19,
+                                            len19,
+                                        );
+                                        let l20 = *base
+                                            .add(2 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<i64>();
+                                        let l21 = i32::from(
+                                            *base
+                                                .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<u8>(),
+                                        );
+                                        let l25 = i32::from(
+                                            *base
+                                                .add(16 + 4 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<u8>(),
+                                        );
+                                        let l27 = i32::from(
+                                            *base
+                                                .add(32 + 4 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<u8>(),
+                                        );
+                                        super::super::super::component::azure_wasm::blob_types::BlobInfo {
+                                            name: _rt::string_lift(bytes19),
+                                            size: l20 as u64,
+                                            etag: match l21 {
+                                                0 => None,
+                                                1 => {
+                                                    let e = {
+                                                        let l22 = *base
+                                                            .add(8 + 3 * ::core::mem::size_of::<*const u8>())
+                                                            .cast::<*mut u8>();
+                                                        let l23 = *base
+                                                            .add(8 + 4 * ::core::mem::size_of::<*const u8>())
+                                                            .cast::<usize>();
+                                                        let len24 = l23;
+                                                        let bytes24 = _rt::Vec::from_raw_parts(
+                                                            l22.cast(),
+                                                            len24,
+                                                            len24,
+                                                        );
+                                                        _rt::string_lift(bytes24)
+                                                    };
+                                                    Some(e)
+                                                }
+                                                _ => _rt::invalid_enum_discriminant(),
+                                            },
+                                            last_modified: match l25 {
+                                                0 => None,
+                                                1 => {
+                                                    let e = {
+                                                        let l26 = *base
+                                                            .add(24 + 4 * ::core::mem::size_of::<*const u8>())
+                                                            .cast::<i64>();
+                                                        l26 as u64
+                                                    };
+                                                    Some(e)
+                                                }
+                                                _ => _rt::invalid_enum_discriminant(),
+                                            },
+                                            content_type: match l27 {
+                                                0 => None,
+                                                1 => {
+                                                    let e = {
+                                                        let l28 = *base
+                                                            .add(32 + 5 * ::core::mem::size_of::<*const u8>())
+                                                            .cast::<*mut u8>();
+                                                        let l29 = *base
+                                                            .add(32 + 6 * ::core::mem::size_of::<*const u8>())
+                                                            .cast::<usize>();
+                                                        let len30 = l29;
+                                                        let bytes30 = _rt::Vec::from_raw_parts(
+                                                            l28.cast(),
+                                                            len30,
+                                                            len30,
+                                                        );
+                                                        _rt::string_lift(bytes30)
+                                                    };
+                                                    Some(e)
+                                                }
+                                                _ => _rt::invalid_enum_discriminant(),
+                                            },
+                                        }
+                                    };
+                                    result31.push(e31);
+                                }
+                                _rt::cabi_dealloc(
+                                    base31,
+                                    len31 * (40 + 6 * ::core::mem::size_of::<*const u8>()),
+                                    8,
+                                );
+                                let l32 = *ptr12
+                                    .add(3 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l33 = *ptr12
+                                    .add(4 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let base37 = l32;
+                                let len37 = l33;
+                                let mut result37 = _rt::Vec::with_capacity(len37);
+                                for i in 0..len37 {
+                                    let base = base37
+                                        .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                                    let e37 = {
+                                        let l34 = *base.add(0).cast::<*mut u8>();
+                                        let l35 = *base
+                                            .add(::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len36 = l35;
+                                        let bytes36 = _rt::Vec::from_raw_parts(
+                                            l34.cast(),
+                                            len36,
+                                            len36,
+                                        );
+                                        _rt::string_lift(bytes36)
+                                    };
+                                    result37.push(e37);
+                                }
+                                _rt::cabi_dealloc(
+                                    base37,
+                                    len37 * (2 * ::core::mem::size_of::<*const u8>()),
+                                    ::core::mem::size_of::<*const u8>(),
+                                );
+                                let l38 = i32::from(
+                                    *ptr12
+                                        .add(5 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                super::super::super::component::azure_wasm::blob_types::ListBlobsOutput {
+                                    blobs: result31,
+                                    prefixes: result37,
+                                    next_marker: match l38 {
+                                        0 => None,
+                                        1 => {
+                                            let e = {
+                                                let l39 = *ptr12
+                                                    .add(6 * ::core::mem::size_of::<*const u8>())
+                                                    .cast::<*mut u8>();
+                                                let l40 = *ptr12
+                                                    .add(7 * ::core::mem::size_of::<*const u8>())
+                                                    .cast::<usize>();
+                                                let len41 = l40;
+                                                let bytes41 = _rt::Vec::from_raw_parts(
+                                                    l39.cast(),
+                                                    len41,
+                                                    len41,
+                                                );
+                                                _rt::string_lift(bytes41)
+                                            };
+                                            Some(e)
+                                        }
+                                        _ => _rt::invalid_enum_discriminant(),
+                                    },
+                                }
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l42 = i32::from(
+                                    *ptr12.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                                );
+                                use super::super::super::component::azure_wasm::blob_types::Error as V55;
+                                let v55 = match l42 {
+                                    0 => V55::AccessDenied,
+                                    1 => V55::NoSuchContainer,
+                                    2 => V55::NoSuchBlob,
+                                    3 => V55::InvalidContainerName,
+                                    4 => {
+                                        let e55 = {
+                                            let l43 = *ptr12
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l44 = *ptr12
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len45 = l44;
+                                            let bytes45 = _rt::Vec::from_raw_parts(
+                                                l43.cast(),
+                                                len45,
+                                                len45,
+                                            );
+                                            _rt::string_lift(bytes45)
+                                        };
+                                        V55::InvalidRequest(e55)
+                                    }
+                                    5 => {
+                                        let e55 = {
+                                            let l46 = *ptr12
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l47 = *ptr12
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len48 = l47;
+                                            let bytes48 = _rt::Vec::from_raw_parts(
+                                                l46.cast(),
+                                                len48,
+                                                len48,
+                                            );
+                                            _rt::string_lift(bytes48)
+                                        };
+                                        V55::NetworkError(e55)
+                                    }
+                                    6 => {
+                                        let e55 = {
+                                            let l49 = *ptr12
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l50 = *ptr12
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len51 = l50;
+                                            let bytes51 = _rt::Vec::from_raw_parts(
+                                                l49.cast(),
+                                                len51,
+                                                len51,
+                                            );
+                                            _rt::string_lift(bytes51)
+                                        };
+                                        V55::ParseError(e55)
+                                    }
+                                    n => {
+                                        debug_assert_eq!(n, 7, "invalid enum discriminant");
+                                        let e55 = {
+                                            let l52 = *ptr12
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l53 = *ptr12
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len54 = l53;
+                                            let bytes54 = _rt::Vec::from_raw_parts(
+                                                l52.cast(),
+                                                len54,
+                                                len54,
+                                            );
+                                            _rt::string_lift(bytes54)
+                                        };
+                                        V55::Internal(e55)
+                                    }
+                                };
+                                v55
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result56
+                }
+            }
+        }
+        /// Azure Shared Key signing. Pure computation - exposed so other
+        /// components (e.g., a cache) can sign requests they build themselves
+        /// while still using this crate's canonicalization. The cache-component
+        /// does not currently call it (it drives blob-base directly, which does
+        /// its own signing internally); imported here to keep the composition
+        /// complete so a future resolver that builds custom requests already
+        /// has the surface wired.
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod blob_shared_key {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            pub type Error = super::super::super::component::azure_wasm::blob_types::Error;
+            #[derive(Clone)]
+            pub struct SigningRequest {
+                pub method: _rt::String,
+                pub account: _rt::String,
+                pub uri: _rt::String,
+                pub query_params: _rt::Vec<(_rt::String, _rt::String)>,
+                pub headers: _rt::Vec<(_rt::String, _rt::String)>,
+                pub emulator: bool,
+            }
+            impl ::core::fmt::Debug for SigningRequest {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("SigningRequest")
+                        .field("method", &self.method)
+                        .field("account", &self.account)
+                        .field("uri", &self.uri)
+                        .field("query-params", &self.query_params)
+                        .field("headers", &self.headers)
+                        .field("emulator", &self.emulator)
+                        .finish()
+                }
+            }
+            #[derive(Clone)]
+            pub struct SignedHeaders {
+                pub authorization: _rt::String,
+                pub x_ms_date: _rt::String,
+                pub x_ms_version: _rt::String,
+            }
+            impl ::core::fmt::Debug for SignedHeaders {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("SignedHeaders")
+                        .field("authorization", &self.authorization)
+                        .field("x-ms-date", &self.x_ms_date)
+                        .field("x-ms-version", &self.x_ms_version)
+                        .finish()
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn sign_request(
+                shared_key: &str,
+                request: &SigningRequest,
+                timestamp: u64,
+            ) -> Result<SignedHeaders, Error> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 7 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 7
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let vec0 = shared_key;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    let SigningRequest {
+                        method: method1,
+                        account: account1,
+                        uri: uri1,
+                        query_params: query_params1,
+                        headers: headers1,
+                        emulator: emulator1,
+                    } = request;
+                    let vec2 = method1;
+                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                    let len2 = vec2.len();
+                    let vec3 = account1;
+                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                    let len3 = vec3.len();
+                    let vec4 = uri1;
+                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                    let len4 = vec4.len();
+                    let vec8 = query_params1;
+                    let len8 = vec8.len();
+                    let layout8 = _rt::alloc::Layout::from_size_align_unchecked(
+                        vec8.len() * (4 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result8 = if layout8.size() != 0 {
+                        let ptr = _rt::alloc::alloc(layout8).cast::<u8>();
+                        if ptr.is_null() {
+                            _rt::alloc::handle_alloc_error(layout8);
+                        }
+                        ptr
+                    } else {
+                        ::core::ptr::null_mut()
+                    };
+                    for (i, e) in vec8.into_iter().enumerate() {
+                        let base = result8
+                            .add(i * (4 * ::core::mem::size_of::<*const u8>()));
+                        {
+                            let (t5_0, t5_1) = e;
+                            let vec6 = t5_0;
+                            let ptr6 = vec6.as_ptr().cast::<u8>();
+                            let len6 = vec6.len();
+                            *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len6;
+                            *base.add(0).cast::<*mut u8>() = ptr6.cast_mut();
+                            let vec7 = t5_1;
+                            let ptr7 = vec7.as_ptr().cast::<u8>();
+                            let len7 = vec7.len();
+                            *base
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len7;
+                            *base
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr7.cast_mut();
+                        }
+                    }
+                    let vec12 = headers1;
+                    let len12 = vec12.len();
+                    let layout12 = _rt::alloc::Layout::from_size_align_unchecked(
+                        vec12.len() * (4 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result12 = if layout12.size() != 0 {
+                        let ptr = _rt::alloc::alloc(layout12).cast::<u8>();
+                        if ptr.is_null() {
+                            _rt::alloc::handle_alloc_error(layout12);
+                        }
+                        ptr
+                    } else {
+                        ::core::ptr::null_mut()
+                    };
+                    for (i, e) in vec12.into_iter().enumerate() {
+                        let base = result12
+                            .add(i * (4 * ::core::mem::size_of::<*const u8>()));
+                        {
+                            let (t9_0, t9_1) = e;
+                            let vec10 = t9_0;
+                            let ptr10 = vec10.as_ptr().cast::<u8>();
+                            let len10 = vec10.len();
+                            *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len10;
+                            *base.add(0).cast::<*mut u8>() = ptr10.cast_mut();
+                            let vec11 = t9_1;
+                            let ptr11 = vec11.as_ptr().cast::<u8>();
+                            let len11 = vec11.len();
+                            *base
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len11;
+                            *base
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr11.cast_mut();
+                        }
+                    }
+                    let ptr13 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "component:azure-wasm/blob-shared-key")]
+                    unsafe extern "C" {
+                        #[link_name = "sign-request"]
+                        fn wit_import14(
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: i32,
+                            _: i64,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import14(
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: i32,
+                        _: i64,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import14(
+                            ptr0.cast_mut(),
+                            len0,
+                            ptr2.cast_mut(),
+                            len2,
+                            ptr3.cast_mut(),
+                            len3,
+                            ptr4.cast_mut(),
+                            len4,
+                            result8,
+                            len8,
+                            result12,
+                            len12,
+                            match emulator1 {
+                                true => 1,
+                                false => 0,
+                            },
+                            _rt::as_i64(&timestamp),
+                            ptr13,
+                        )
+                    };
+                    let l15 = i32::from(*ptr13.add(0).cast::<u8>());
+                    let result39 = match l15 {
+                        0 => {
+                            let e = {
+                                let l16 = *ptr13
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l17 = *ptr13
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len18 = l17;
+                                let bytes18 = _rt::Vec::from_raw_parts(
+                                    l16.cast(),
+                                    len18,
+                                    len18,
+                                );
+                                let l19 = *ptr13
+                                    .add(3 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l20 = *ptr13
+                                    .add(4 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len21 = l20;
+                                let bytes21 = _rt::Vec::from_raw_parts(
+                                    l19.cast(),
+                                    len21,
+                                    len21,
+                                );
+                                let l22 = *ptr13
+                                    .add(5 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l23 = *ptr13
+                                    .add(6 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len24 = l23;
+                                let bytes24 = _rt::Vec::from_raw_parts(
+                                    l22.cast(),
+                                    len24,
+                                    len24,
+                                );
+                                SignedHeaders {
+                                    authorization: _rt::string_lift(bytes18),
+                                    x_ms_date: _rt::string_lift(bytes21),
+                                    x_ms_version: _rt::string_lift(bytes24),
+                                }
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l25 = i32::from(
+                                    *ptr13.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                                );
+                                use super::super::super::component::azure_wasm::blob_types::Error as V38;
+                                let v38 = match l25 {
+                                    0 => V38::AccessDenied,
+                                    1 => V38::NoSuchContainer,
+                                    2 => V38::NoSuchBlob,
+                                    3 => V38::InvalidContainerName,
+                                    4 => {
+                                        let e38 = {
+                                            let l26 = *ptr13
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l27 = *ptr13
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len28 = l27;
+                                            let bytes28 = _rt::Vec::from_raw_parts(
+                                                l26.cast(),
+                                                len28,
+                                                len28,
+                                            );
+                                            _rt::string_lift(bytes28)
+                                        };
+                                        V38::InvalidRequest(e38)
+                                    }
+                                    5 => {
+                                        let e38 = {
+                                            let l29 = *ptr13
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l30 = *ptr13
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len31 = l30;
+                                            let bytes31 = _rt::Vec::from_raw_parts(
+                                                l29.cast(),
+                                                len31,
+                                                len31,
+                                            );
+                                            _rt::string_lift(bytes31)
+                                        };
+                                        V38::NetworkError(e38)
+                                    }
+                                    6 => {
+                                        let e38 = {
+                                            let l32 = *ptr13
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l33 = *ptr13
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len34 = l33;
+                                            let bytes34 = _rt::Vec::from_raw_parts(
+                                                l32.cast(),
+                                                len34,
+                                                len34,
+                                            );
+                                            _rt::string_lift(bytes34)
+                                        };
+                                        V38::ParseError(e38)
+                                    }
+                                    n => {
+                                        debug_assert_eq!(n, 7, "invalid enum discriminant");
+                                        let e38 = {
+                                            let l35 = *ptr13
+                                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l36 = *ptr13
+                                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len37 = l36;
+                                            let bytes37 = _rt::Vec::from_raw_parts(
+                                                l35.cast(),
+                                                len37,
+                                                len37,
+                                            );
+                                            _rt::string_lift(bytes37)
+                                        };
+                                        V38::Internal(e38)
+                                    }
+                                };
+                                v38
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    if layout8.size() != 0 {
+                        _rt::alloc::dealloc(result8.cast(), layout8);
+                    }
+                    if layout12.size() != 0 {
+                        _rt::alloc::dealloc(result12.cast(), layout12);
+                    }
+                    result39
+                }
+            }
+        }
+        /// SAS (Shared Access Signature) helpers.
+        ///
+        /// SAS is Azure's "URL parameter" authentication - the token is pre-signed
+        /// by the account owner (out of band); the client just appends it to every
+        /// request URL as query string. No signing happens here.
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod blob_sas {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn append_sas(url: &str, sas_token: &str) -> _rt::String {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 2 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 2
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let vec0 = url;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    let vec1 = sas_token;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let ptr2 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "component:azure-wasm/blob-sas")]
+                    unsafe extern "C" {
+                        #[link_name = "append-sas"]
+                        fn wit_import3(
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import3(
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import3(ptr0.cast_mut(), len0, ptr1.cast_mut(), len1, ptr2)
+                    };
+                    let l4 = *ptr2.add(0).cast::<*mut u8>();
+                    let l5 = *ptr2
+                        .add(::core::mem::size_of::<*const u8>())
+                        .cast::<usize>();
+                    let len6 = l5;
+                    let bytes6 = _rt::Vec::from_raw_parts(l4.cast(), len6, len6);
+                    let result7 = _rt::string_lift(bytes6);
+                    result7
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn merge_sas(
+                query_params: &[(_rt::String, _rt::String)],
+                sas_token: &str,
+            ) -> _rt::Vec<(_rt::String, _rt::String)> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 2 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 2
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let vec3 = query_params;
+                    let len3 = vec3.len();
+                    let layout3 = _rt::alloc::Layout::from_size_align_unchecked(
+                        vec3.len() * (4 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result3 = if layout3.size() != 0 {
+                        let ptr = _rt::alloc::alloc(layout3).cast::<u8>();
+                        if ptr.is_null() {
+                            _rt::alloc::handle_alloc_error(layout3);
+                        }
+                        ptr
+                    } else {
+                        ::core::ptr::null_mut()
+                    };
+                    for (i, e) in vec3.into_iter().enumerate() {
+                        let base = result3
+                            .add(i * (4 * ::core::mem::size_of::<*const u8>()));
+                        {
+                            let (t0_0, t0_1) = e;
+                            let vec1 = t0_0;
+                            let ptr1 = vec1.as_ptr().cast::<u8>();
+                            let len1 = vec1.len();
+                            *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len1;
+                            *base.add(0).cast::<*mut u8>() = ptr1.cast_mut();
+                            let vec2 = t0_1;
+                            let ptr2 = vec2.as_ptr().cast::<u8>();
+                            let len2 = vec2.len();
+                            *base
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len2;
+                            *base
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr2.cast_mut();
+                        }
+                    }
+                    let vec4 = sas_token;
+                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                    let len4 = vec4.len();
+                    let ptr5 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "component:azure-wasm/blob-sas")]
+                    unsafe extern "C" {
+                        #[link_name = "merge-sas"]
+                        fn wit_import6(
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import6(
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe { wit_import6(result3, len3, ptr4.cast_mut(), len4, ptr5) };
+                    let l7 = *ptr5.add(0).cast::<*mut u8>();
+                    let l8 = *ptr5
+                        .add(::core::mem::size_of::<*const u8>())
+                        .cast::<usize>();
+                    let base15 = l7;
+                    let len15 = l8;
+                    let mut result15 = _rt::Vec::with_capacity(len15);
+                    for i in 0..len15 {
+                        let base = base15
+                            .add(i * (4 * ::core::mem::size_of::<*const u8>()));
+                        let e15 = {
+                            let l9 = *base.add(0).cast::<*mut u8>();
+                            let l10 = *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let len11 = l10;
+                            let bytes11 = _rt::Vec::from_raw_parts(
+                                l9.cast(),
+                                len11,
+                                len11,
+                            );
+                            let l12 = *base
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l13 = *base
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let len14 = l13;
+                            let bytes14 = _rt::Vec::from_raw_parts(
+                                l12.cast(),
+                                len14,
+                                len14,
+                            );
+                            (_rt::string_lift(bytes11), _rt::string_lift(bytes14))
+                        };
+                        result15.push(e15);
+                    }
+                    _rt::cabi_dealloc(
+                        base15,
+                        len15 * (4 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result16 = result15;
+                    if layout3.size() != 0 {
+                        _rt::alloc::dealloc(result3.cast(), layout3);
+                    }
+                    result16
+                }
+            }
+        }
+    }
     pub mod s3_wasm {
         /// Structural mirror of the `component:s3-wasm` exports the
         /// `cache-component` imports at compose time. The upstream lives at
@@ -30574,352 +33364,397 @@ pub(crate) use __export_duckdb_extension_cache_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 16442] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xad\x7f\x01A\x02\x01\
-AS\x01B4\x01r\x02\x05width}\x05scale}\x04\0\x0cdecimalshape\x03\0\0\x01q\x17\x07\
-boolean\0\0\x05int64\0\0\x06uint64\0\0\x07float64\0\0\x04text\0\0\x04blob\0\0\x05\
-int32\0\0\x09timestamp\0\0\x04int8\0\0\x05int16\0\0\x05uint8\0\0\x06uint16\0\0\x06\
-uint32\0\0\x07float32\0\0\x04date\0\0\x04time\0\0\x0btimestamptz\0\0\x07decimal\x01\
-\x01\0\x08interval\0\0\x04uuid\0\0\x07hugeint\0\0\x08uhugeint\0\0\x07complex\x01\
-s\0\x04\0\x0blogicaltype\x03\0\x02\x01r\x04\x05lowerw\x05upperw\x05width}\x05sca\
-le}\x04\0\x0cdecimalvalue\x03\0\x04\x01r\x02\x05lowerw\x05upperx\x04\0\x0chugein\
-tvalue\x03\0\x06\x01r\x02\x05lowerw\x05upperw\x04\0\x0duhugeintvalue\x03\0\x08\x01\
-r\x03\x06monthsz\x04daysz\x06microsx\x04\0\x0dintervalvalue\x03\0\x0a\x01r\x02\x02\
-hiw\x02low\x04\0\x09uuidvalue\x03\0\x0c\x01r\x02\x09type-exprs\x04jsons\x04\0\x0c\
-complexvalue\x03\0\x0e\x01ks\x01r\x02\x04name\x10\x07logical\x03\x04\0\x07funcar\
-g\x03\0\x11\x01n\x05\x0ddeterministic\x0bcommutative\x09stateless\x0dsideeffecti\
-ng\x0adeprecated\x04\0\x09funcflags\x03\0\x13\x01ps\x01r\x03\x0bdescription\x10\x04\
-tags\x15\x0aattributes\x14\x04\0\x08funcopts\x03\0\x16\x01r\x02\x04names\x07logi\
-cal\x03\x04\0\x09columndef\x03\0\x18\x01r\x02\x0bdescription\x10\x04tags\x15\x04\
-\0\x07extopts\x03\0\x1a\x01p}\x01q\x18\x04null\0\0\x07boolean\x01\x7f\0\x05int64\
-\x01x\0\x06uint64\x01w\0\x07float64\x01u\0\x04text\x01s\0\x04blob\x01\x1c\0\x05i\
-nt32\x01z\0\x09timestamp\x01x\0\x04int8\x01~\0\x05int16\x01|\0\x05uint8\x01}\0\x06\
-uint16\x01{\0\x06uint32\x01y\0\x07float32\x01v\0\x04date\x01z\0\x04time\x01x\0\x0b\
-timestamptz\x01x\0\x07decimal\x01\x05\0\x08interval\x01\x0b\0\x04uuid\x01\x0d\0\x07\
-hugeint\x01\x07\0\x08uhugeint\x01\x09\0\x07complex\x01\x0f\0\x04\0\x09duckvalue\x03\
-\0\x1d\x01p\x1e\x01p\x1f\x04\0\x09resultset\x03\0\x20\x01p\x1f\x04\0\x08rowbatch\
-\x03\0\"\x01kw\x01r\x02\x08rowindex$\x08iswindow\x7f\x04\0\x0ainvokeinfo\x03\0%\x01\
-q\x05\x0finvalidargument\x01s\0\x0bunsupported\x01s\0\x0cinvalidstate\x01s\0\x02\
-io\x01s\0\x08internal\x01s\0\x04\0\x09duckerror\x03\0'\x01q\x04\x0ainvalidkey\x01\
-s\0\x0ctypemismatch\x01s\0\x0bunavailable\x01s\0\x0einternalconfig\x01s\0\x04\0\x0b\
-configerror\x03\0)\x01m\x05\x05trace\x05debug\x04info\x04warn\x05error\x04\0\x08\
-loglevel\x03\0+\x01r\x02\x03keys\x05values\x04\0\x08logfield\x03\0-\x01m\x07\x06\
-scalar\x05table\x09aggregate\x06pragma\x05macro\x07catalog\x0bfile-format\x04\0\x0e\
-capabilitykind\x03\0/\x01p0\x01r\x03\x04names\x07version\x10\x08requires1\x04\0\x0a\
-loadresult\x03\02\x03\0\x1cduckdb:extension/types@5.0.0\x05\0\x02\x03\0\0\x0ecap\
-abilitykind\x02\x03\0\0\x09duckerror\x02\x03\0\0\x09duckvalue\x02\x03\0\0\x07ext\
-opts\x02\x03\0\0\x07funcarg\x02\x03\0\0\x08funcopts\x02\x03\0\0\x0ainvokeinfo\x02\
-\x03\0\0\x0blogicaltype\x02\x03\0\0\x09resultset\x02\x03\0\0\x08rowbatch\x02\x03\
-\0\0\x09columndef\x01Bf\x02\x03\x02\x01\x01\x04\0\x0ecapabilitykind\x03\0\0\x02\x03\
-\x02\x01\x02\x04\0\x09duckerror\x03\0\x02\x02\x03\x02\x01\x03\x04\0\x09duckvalue\
-\x03\0\x04\x02\x03\x02\x01\x04\x04\0\x07extopts\x03\0\x06\x02\x03\x02\x01\x05\x04\
-\0\x07funcarg\x03\0\x08\x02\x03\x02\x01\x06\x04\0\x08funcopts\x03\0\x0a\x02\x03\x02\
-\x01\x07\x04\0\x0ainvokeinfo\x03\0\x0c\x02\x03\x02\x01\x08\x04\0\x0blogicaltype\x03\
-\0\x0e\x02\x03\x02\x01\x09\x04\0\x09resultset\x03\0\x10\x02\x03\x02\x01\x0a\x04\0\
-\x08rowbatch\x03\0\x12\x02\x03\x02\x01\x0b\x04\0\x09columndef\x03\0\x14\x04\0\x0f\
-scalar-callback\x03\x01\x04\0\x0etable-callback\x03\x01\x04\0\x12aggregate-callb\
-ack\x03\x01\x04\0\x0fpragma-callback\x03\x01\x04\0\x0dcast-callback\x03\x01\x04\0\
-\x0fscalar-registry\x03\x01\x04\0\x0etable-registry\x03\x01\x04\0\x12aggregate-r\
-egistry\x03\x01\x04\0\x0fpragma-registry\x03\x01\x04\0\x0emacro-registry\x03\x01\
-\x01i\x1b\x01i\x1c\x01i\x1d\x01i\x1e\x01i\x1f\x01q\x05\x06scalar\x01\x20\0\x05ta\
-ble\x01!\0\x09aggregate\x01\"\0\x06pragma\x01#\0\x05macro\x01$\0\x04\0\x0acapabi\
-lity\x03\0%\x01i\x16\x01@\x01\x06handley\0'\x04\0\x1c[constructor]scalar-callbac\
-k\x01(\x01h\x16\x01p\x05\x01j\x01\x05\x01\x03\x01@\x03\x04self)\x04args*\x03ctx\x0d\
-\0+\x04\0\x1c[method]scalar-callback.call\x01,\x01i\x17\x01@\x01\x06handley\0-\x04\
-\0\x1b[constructor]table-callback\x01.\x01h\x17\x01j\x01\x11\x01\x03\x01@\x02\x04\
-self/\x04args*\00\x04\0\x1b[method]table-callback.call\x011\x01i\x18\x01@\x01\x06\
-handley\02\x04\0\x1f[constructor]aggregate-callback\x013\x01h\x18\x01@\x02\x04se\
-lf4\x04rows\x13\0+\x04\0\x1f[method]aggregate-callback.call\x015\x01i\x19\x01@\x01\
-\x06handley\06\x04\0\x1c[constructor]pragma-callback\x017\x01h\x19\x01k\x05\x01j\
-\x019\x01\x03\x01@\x02\x04self8\x04args*\0:\x04\0\x1c[method]pragma-callback.cal\
-l\x01;\x01i\x1a\x01@\x01\x06handley\0<\x04\0\x1a[constructor]cast-callback\x01=\x01\
-h\x1a\x01@\x02\x04self>\x05value\x05\0+\x04\0\x1a[method]cast-callback.call\x01?\
-\x01h\x1b\x01p\x09\x01k\x0b\x01j\x01y\x01\x03\x01@\x06\x04self\xc0\0\x04names\x09\
-arguments\xc1\0\x07returns\x0f\x08callback'\x07options\xc2\0\0\xc3\0\x04\0\x20[m\
-ethod]scalar-registry.register\x01D\x01h\x1c\x01p\x15\x01k\x07\x01@\x06\x04self\xc5\
-\0\x04names\x09arguments\xc1\0\x07columns\xc6\0\x08callback-\x07options\xc7\0\0\xc3\
-\0\x04\0\x1f[method]table-registry.register\x01H\x01h\x1d\x01@\x06\x04self\xc9\0\
-\x04names\x09arguments\xc1\0\x07returns\x0f\x08callback2\x07options\xc2\0\0\xc3\0\
-\x04\0#[method]aggregate-registry.register\x01J\x01h\x1e\x01@\x06\x04self\xcb\0\x04\
-names\x09arguments\xc1\0\x07returns\x0f\x08callback6\x07options\xc7\0\0\xc3\0\x04\
-\0%[method]pragma-registry.register-call\x01L\x01h\x1f\x01ps\x01j\x01\x7f\x01\x03\
-\x01@\x05\x04self\xcd\0\x04names\x0aparameters\xce\0\x08body-sqls\x07options\xc7\
-\0\0\xcf\0\x04\0&[method]macro-registry.register-scalar\x01P\x01k&\x01@\x01\x04k\
-ind\x01\0\xd1\0\x04\0\x0eget-capability\x01R\x01p\x01\x01@\0\0\xd3\0\x04\0\x11li\
-st-capabilities\x01T\x03\0\x1educkdb:extension/runtime@5.0.0\x05\x0c\x02\x03\0\0\
-\x0bconfigerror\x01B$\x02\x03\x02\x01\x0d\x04\0\x0bconfigerror\x03\0\0\x01@\0\0s\
-\x04\0\x10provider-version\x01\x02\x01ks\x01ps\x01@\x01\x06prefix\x03\0\x04\x04\0\
-\x09list-keys\x01\x05\x01j\x01\x03\x01\x01\x01@\x01\x04paths\0\x06\x04\0\x0aget-\
-string\x01\x07\x01k\x7f\x01j\x01\x08\x01\x01\x01@\x01\x04paths\0\x09\x04\0\x08ge\
-t-bool\x01\x0a\x01kx\x01j\x01\x0b\x01\x01\x01@\x01\x04paths\0\x0c\x04\0\x07get-i\
-64\x01\x0d\x01kw\x01j\x01\x0e\x01\x01\x01@\x01\x04paths\0\x0f\x04\0\x07get-u64\x01\
-\x10\x01ku\x01j\x01\x11\x01\x01\x01@\x01\x04paths\0\x12\x04\0\x07get-f64\x01\x13\
-\x01p}\x01k\x14\x01j\x01\x15\x01\x01\x01@\x01\x04paths\0\x16\x04\0\x09get-bytes\x01\
-\x17\x01k\x04\x01j\x01\x18\x01\x01\x01@\x01\x04paths\0\x19\x04\0\x0fget-string-l\
-ist\x01\x1a\x03\0\x1dduckdb:extension/config@5.0.0\x05\x0e\x02\x03\0\0\x08logfie\
-ld\x02\x03\0\0\x08loglevel\x01B\x0a\x02\x03\x02\x01\x0f\x04\0\x08logfield\x03\0\0\
-\x02\x03\x02\x01\x10\x04\0\x08loglevel\x03\0\x02\x01ks\x01@\x03\x05level\x03\x07\
-messages\x06target\x04\x01\0\x04\0\x03log\x01\x05\x01p\x01\x01@\x03\x05level\x03\
-\x07messages\x06fields\x06\x01\0\x04\0\x0alog-fields\x01\x07\x03\0\x1educkdb:ext\
-ension/logging@5.0.0\x05\x11\x02\x03\0\x01\x0dcast-callback\x01B\x17\x02\x03\x02\
-\x01\x12\x04\0\x0dcast-callback\x03\0\0\x01r\x02\x04names\x08physicals\x04\0\x0c\
-logical-type\x03\0\x02\x01y\x04\0\x13logical-type-handle\x03\0\x04\x01m\x03\x08i\
-mplicit\x0aassignment\x08explicit\x04\0\x09cast-kind\x03\0\x06\x01kz\x01r\x04\x04\
-froms\x02tos\x04kind\x07\x0dimplicit-cost\x08\x04\0\x09cast-spec\x03\0\x09\x01ps\
-\x01r\x04\x06schemas\x04names\x0aparameters\x0b\x0edefinition-sqls\x04\0\x09macr\
-o-def\x03\0\x0c\x01j\x01\x05\x01s\x01@\x01\x02ty\x03\0\x0e\x04\0\x15register-log\
-ical-type\x01\x0f\x01i\x01\x01j\0\x01s\x01@\x02\x04spec\x0a\x08callback\x10\0\x11\
-\x04\0\x0dregister-cast\x01\x12\x01@\x01\x03def\x0d\0\x11\x04\0\x0eregister-macr\
-o\x01\x13\x03\0\x1educkdb:extension/catalog@5.0.0\x05\x13\x01B\x15\x01y\x04\0\x15\
-table-function-handle\x03\0\0\x01y\x04\0\x14copy-function-handle\x03\0\x02\x01y\x04\
-\0\x13replacement-scan-id\x03\0\x04\x01y\x04\0\x0fcopy-handler-id\x03\0\x06\x01m\
-\x02\x0eextension-only\x09signature\x04\0\x0edetection-mode\x03\0\x08\x01ps\x01r\
-\x03\x0aextensions\x0a\x0etable-function\x01\x04mode\x09\x04\0\x10replacement-sc\
-an\x03\0\x0b\x01r\x02\x09extensions\x08function\x03\x04\0\x0ccopy-handler\x03\0\x0d\
-\x01j\x01\x05\x01s\x01@\x01\x04scan\x0c\0\x0f\x04\0\x19register-replacement-scan\
-\x01\x10\x01j\x01\x07\x01s\x01@\x01\x07handler\x0e\0\x11\x04\0\x15register-copy-\
-handler\x01\x12\x03\0\x1cduckdb:extension/files@5.0.0\x05\x14\x01B\x09\x01ps\x01\
-p\0\x01k\x01\x01kw\x01r\x02\x04rows\x02\x0drows-affected\x03\x04\0\x0bexec-resul\
-t\x03\0\x04\x01j\x01\x05\x01s\x01@\x01\x03sqls\0\x06\x04\0\x0bnested-exec\x01\x07\
-\x03\0\"duckdb:extension/nested-exec@5.0.0\x05\x15\x01B\x0c\x04\0\x0block-handle\
-\x03\x01\x01h\0\x01@\x01\x04self\x01\x01\0\x04\0\x1b[method]lock-handle.release\x01\
-\x02\x01i\0\x01j\x01\x03\x01s\x01@\x01\x04paths\0\x04\x04\0\x11acquire-exclusive\
-\x01\x05\x01k\x03\x01j\x01\x06\x01s\x01@\x01\x04paths\0\x07\x04\0\x15try-acquire\
--exclusive\x01\x08\x03\0\x20duckdb:extension/file-lock@5.0.0\x05\x16\x01B\x0a\x01\
-p}\x01q\x05\x04null\0\0\x07integer\x01x\0\x04real\x01u\0\x04text\x01s\0\x04blob\x01\
-\0\0\x04\0\x09sql-value\x03\0\x01\x01r\x03\x04codez\x0dextended-codez\x07message\
-s\x04\0\x0csqlite-error\x03\0\x03\x01ps\x01p\x02\x01p\x06\x01r\x04\x07columns\x05\
-\x04rows\x07\x07changesx\x11last-insert-rowidx\x04\0\x0cquery-result\x03\0\x08\x03\
-\0\x1csqlite:extension/types@0.1.0\x05\x17\x02\x03\0\x08\x09sql-value\x02\x03\0\x08\
-\x0cquery-result\x02\x03\0\x08\x0csqlite-error\x01B\x13\x02\x03\x02\x01\x18\x04\0\
-\x09sql-value\x03\0\0\x02\x03\x02\x01\x19\x04\0\x0cquery-result\x03\0\x02\x02\x03\
-\x02\x01\x1a\x04\0\x0csqlite-error\x03\0\x04\x01p\x01\x01j\x01\x03\x01\x05\x01@\x02\
-\x03sqls\x06params\x06\0\x07\x04\0\x07execute\x01\x08\x01j\x01\x01\x01\x05\x01@\x02\
-\x03sqls\x06params\x06\0\x09\x04\0\x0eexecute-scalar\x01\x0a\x01j\x01x\x01\x05\x01\
-@\x01\x03sqls\0\x0b\x04\0\x0dexecute-batch\x01\x0c\x01j\0\x01\x05\x01@\x01\x04pa\
-ths\0\x0d\x04\0\x07open-db\x01\x0e\x03\0\x1asqlite:extension/spi@0.1.0\x05\x1b\x01\
-B\"\x01q\x08\x0daccess-denied\0\0\x0eno-such-bucket\0\0\x0bno-such-key\0\0\x13in\
-valid-bucket-name\0\0\x0finvalid-request\x01s\0\x0dnetwork-error\x01s\0\x0bparse\
--error\x01s\0\x08internal\x01s\0\x04\0\x05error\x03\0\0\x01ks\x01r\x03\x0daccess\
--key-ids\x11secret-access-keys\x0dsession-token\x02\x04\0\x0bcredentials\x03\0\x03\
-\x01r\x03\x03urls\x06regions\x0apath-style\x7f\x04\0\x0fendpoint-config\x03\0\x05\
-\x01kw\x01o\x02ss\x01p\x08\x01r\x05\x0ccontent-type\x02\x0econtent-length\x07\x04\
-etag\x02\x0dlast-modified\x07\x06custom\x09\x04\0\x0fobject-metadata\x03\0\x0a\x01\
-r\x05\x03keys\x04sizew\x04etag\x02\x0dlast-modified\x07\x0dstorage-class\x02\x04\
-\0\x0bobject-info\x03\0\x0c\x01p\x0d\x01ps\x01r\x04\x07objects\x0e\x0fcommon-pre\
-fixes\x0f\x17next-continuation-token\x02\x0cis-truncated\x7f\x04\0\x13list-objec\
-ts-output\x03\0\x10\x01o\x02ww\x01k\x12\x01r\x03\x05range\x13\x08if-match\x02\x0d\
-if-none-match\x02\x04\0\x12get-object-options\x03\0\x14\x01r\x03\x0ccontent-type\
-\x02\x08metadata\x09\x0dcache-control\x02\x04\0\x12put-object-options\x03\0\x16\x01\
-ky\x01r\x04\x06prefix\x02\x09delimiter\x02\x08max-keys\x18\x12continuation-token\
-\x02\x04\0\x14list-objects-options\x03\0\x19\x01p}\x01r\x02\x04body\x1b\x08metad\
-ata\x0b\x04\0\x11get-object-output\x03\0\x1c\x01r\x01\x04etags\x04\0\x11put-obje\
-ct-output\x03\0\x1e\x01r\x01\x08metadata\x0b\x04\0\x12head-object-output\x03\0\x20\
-\x03\0\x1acomponent:s3-wasm/s3-types\x05\x1c\x02\x03\0\x0a\x05error\x02\x03\0\x0a\
-\x0bcredentials\x02\x03\0\x0a\x0fendpoint-config\x02\x03\0\x0a\x12get-object-opt\
-ions\x02\x03\0\x0a\x11get-object-output\x02\x03\0\x0a\x12put-object-options\x02\x03\
-\0\x0a\x11put-object-output\x02\x03\0\x0a\x12head-object-output\x02\x03\0\x0a\x14\
-list-objects-options\x02\x03\0\x0a\x13list-objects-output\x01B)\x02\x03\x02\x01\x1d\
-\x04\0\x05error\x03\0\0\x02\x03\x02\x01\x1e\x04\0\x0bcredentials\x03\0\x02\x02\x03\
-\x02\x01\x1f\x04\0\x0fendpoint-config\x03\0\x04\x02\x03\x02\x01\x20\x04\0\x12get\
--object-options\x03\0\x06\x02\x03\x02\x01!\x04\0\x11get-object-output\x03\0\x08\x02\
-\x03\x02\x01\"\x04\0\x12put-object-options\x03\0\x0a\x02\x03\x02\x01#\x04\0\x11p\
-ut-object-output\x03\0\x0c\x02\x03\x02\x01$\x04\0\x12head-object-output\x03\0\x0e\
-\x02\x03\x02\x01%\x04\0\x14list-objects-options\x03\0\x10\x02\x03\x02\x01&\x04\0\
-\x13list-objects-output\x03\0\x12\x01k\x07\x01j\x01\x09\x01\x01\x01@\x05\x08endp\
-oint\x05\x0bcredentials\x03\x06buckets\x03keys\x07options\x14\0\x15\x04\0\x0aget\
--object\x01\x16\x01p}\x01k\x0b\x01j\x01\x0d\x01\x01\x01@\x06\x08endpoint\x05\x0b\
-credentials\x03\x06buckets\x03keys\x04body\x17\x07options\x18\0\x19\x04\0\x0aput\
--object\x01\x1a\x01j\0\x01\x01\x01@\x04\x08endpoint\x05\x0bcredentials\x03\x06bu\
-ckets\x03keys\0\x1b\x04\0\x0ddelete-object\x01\x1c\x01j\x01\x0f\x01\x01\x01@\x04\
-\x08endpoint\x05\x0bcredentials\x03\x06buckets\x03keys\0\x1d\x04\0\x0bhead-objec\
-t\x01\x1e\x01k\x11\x01j\x01\x13\x01\x01\x01@\x04\x08endpoint\x05\x0bcredentials\x03\
-\x06buckets\x07options\x1f\0\x20\x04\0\x0clist-objects\x01!\x01@\x06\x08endpoint\
-\x05\x0bcredentials\x03\x0dsource-buckets\x0asource-keys\x0bdest-buckets\x08dest\
--keys\0\x19\x04\0\x0bcopy-object\x01\"\x03\0\x19component:s3-wasm/s3-base\x05'\x01\
-B2\x02\x03\x02\x01\x1d\x04\0\x05error\x03\0\0\x02\x03\x02\x01\x1e\x04\0\x0bcrede\
-ntials\x03\0\x02\x01r\x03\x06regions\x0euse-accelerate\x7f\x0duse-dualstack\x7f\x04\
-\0\x0aaws-config\x03\0\x04\x01m\x08\x08standard\x12reduced-redundancy\x0bstandar\
-d-ia\x0aonezone-ia\x13intelligent-tiering\x07glacier\x0aglacier-ir\x0cdeep-archi\
-ve\x04\0\x0dstorage-class\x03\0\x06\x01m\x03\x09expedited\x08standard\x04bulk\x04\
-\0\x0crestore-tier\x03\0\x08\x01r\x02\x03keys\x05values\x04\0\x03tag\x03\0\x0a\x01\
-m\x02\x03get\x03put\x04\0\x0epresign-method\x03\0\x0c\x01r\x02\x0aexpires-inw\x06\
-method\x0d\x04\0\x0fpresign-options\x03\0\x0e\x01r\x02\x03urls\x0aexpires-atw\x04\
-\0\x0dpresigned-url\x03\0\x10\x01ks\x01r\x03\x0ffield-delimiter\x12\x10record-de\
-limiter\x12\x10file-header-info\x12\x04\0\x09csv-input\x03\0\x13\x01r\x01\x04typ\
-e\x12\x04\0\x0ajson-input\x03\0\x15\x01q\x03\x03csv\x01\x14\0\x04json\x01\x16\0\x07\
-parquet\0\0\x04\0\x13select-input-format\x03\0\x17\x01r\x02\x0ffield-delimiter\x12\
-\x10record-delimiter\x12\x04\0\x0acsv-output\x03\0\x19\x01r\x01\x10record-delimi\
-ter\x12\x04\0\x0bjson-output\x03\0\x1b\x01q\x02\x03csv\x01\x1a\0\x04json\x01\x1c\
-\0\x04\0\x14select-output-format\x03\0\x1d\x01j\x01\x11\x01\x01\x01@\x05\x0aaws-\
-config\x05\x0bcredentials\x03\x06buckets\x03keys\x07options\x0f\0\x1f\x04\0\x0bp\
-resign-url\x01\x20\x01p\x0b\x01j\x01!\x01\x01\x01@\x04\x0aaws-config\x05\x0bcred\
-entials\x03\x06buckets\x03keys\0\"\x04\0\x12get-object-tagging\x01#\x01j\0\x01\x01\
-\x01@\x05\x0aaws-config\x05\x0bcredentials\x03\x06buckets\x03keys\x04tags!\0$\x04\
-\0\x12put-object-tagging\x01%\x01@\x06\x0aaws-config\x05\x0bcredentials\x03\x06b\
-uckets\x03keys\x04daysy\x04tier\x09\0$\x04\0\x0erestore-object\x01&\x01p}\x01j\x01\
-'\x01\x01\x01@\x07\x0aaws-config\x05\x0bcredentials\x03\x06buckets\x03keys\x0aex\
-pressions\x0cinput-format\x18\x0doutput-format\x1e\0(\x04\0\x15select-object-con\
-tent\x01)\x01j\x01s\x01\x01\x01@\x02\x0bcredentials\x03\x06buckets\0*\x04\0\x13g\
-et-bucket-location\x01+\x03\0\x18component:s3-wasm/s3-aws\x05(\x01B\x0a\x04\0\x08\
-pollable\x03\x01\x01h\0\x01@\x01\x04self\x01\0\x7f\x04\0\x16[method]pollable.rea\
-dy\x01\x02\x01@\x01\x04self\x01\x01\0\x04\0\x16[method]pollable.block\x01\x03\x01\
-p\x01\x01py\x01@\x01\x02in\x04\0\x05\x04\0\x04poll\x01\x06\x03\0\x12wasi:io/poll\
-@0.2.8\x05)\x02\x03\0\x0d\x08pollable\x01B\x0f\x02\x03\x02\x01*\x04\0\x08pollabl\
-e\x03\0\0\x01w\x04\0\x07instant\x03\0\x02\x01w\x04\0\x08duration\x03\0\x04\x01@\0\
-\0\x03\x04\0\x03now\x01\x06\x01@\0\0\x05\x04\0\x0aresolution\x01\x07\x01i\x01\x01\
-@\x01\x04when\x03\0\x08\x04\0\x11subscribe-instant\x01\x09\x01@\x01\x04when\x05\0\
-\x08\x04\0\x12subscribe-duration\x01\x0a\x03\0!wasi:clocks/monotonic-clock@0.2.8\
-\x05+\x01B\x04\x04\0\x05error\x03\x01\x01h\0\x01@\x01\x04self\x01\0s\x04\0\x1d[m\
-ethod]error.to-debug-string\x01\x02\x03\0\x13wasi:io/error@0.2.8\x05,\x02\x03\0\x0f\
-\x05error\x01B(\x02\x03\x02\x01-\x04\0\x05error\x03\0\0\x02\x03\x02\x01*\x04\0\x08\
-pollable\x03\0\x02\x01i\x01\x01q\x02\x15last-operation-failed\x01\x04\0\x06close\
-d\0\0\x04\0\x0cstream-error\x03\0\x05\x04\0\x0cinput-stream\x03\x01\x04\0\x0dout\
-put-stream\x03\x01\x01h\x07\x01p}\x01j\x01\x0a\x01\x06\x01@\x02\x04self\x09\x03l\
-enw\0\x0b\x04\0\x19[method]input-stream.read\x01\x0c\x04\0\"[method]input-stream\
-.blocking-read\x01\x0c\x01j\x01w\x01\x06\x01@\x02\x04self\x09\x03lenw\0\x0d\x04\0\
-\x19[method]input-stream.skip\x01\x0e\x04\0\"[method]input-stream.blocking-skip\x01\
-\x0e\x01i\x03\x01@\x01\x04self\x09\0\x0f\x04\0\x1e[method]input-stream.subscribe\
-\x01\x10\x01h\x08\x01@\x01\x04self\x11\0\x0d\x04\0![method]output-stream.check-w\
-rite\x01\x12\x01j\0\x01\x06\x01@\x02\x04self\x11\x08contents\x0a\0\x13\x04\0\x1b\
-[method]output-stream.write\x01\x14\x04\0.[method]output-stream.blocking-write-a\
-nd-flush\x01\x14\x01@\x01\x04self\x11\0\x13\x04\0\x1b[method]output-stream.flush\
-\x01\x15\x04\0$[method]output-stream.blocking-flush\x01\x15\x01@\x01\x04self\x11\
-\0\x0f\x04\0\x1f[method]output-stream.subscribe\x01\x16\x01@\x02\x04self\x11\x03\
-lenw\0\x13\x04\0\"[method]output-stream.write-zeroes\x01\x17\x04\05[method]outpu\
-t-stream.blocking-write-zeroes-and-flush\x01\x17\x01@\x03\x04self\x11\x03src\x09\
-\x03lenw\0\x0d\x04\0\x1c[method]output-stream.splice\x01\x18\x04\0%[method]outpu\
-t-stream.blocking-splice\x01\x18\x03\0\x15wasi:io/streams@0.2.8\x05.\x02\x03\0\x0e\
-\x08duration\x02\x03\0\x10\x0cinput-stream\x02\x03\0\x10\x0doutput-stream\x01B\xc1\
-\x01\x02\x03\x02\x01/\x04\0\x08duration\x03\0\0\x02\x03\x02\x010\x04\0\x0cinput-\
-stream\x03\0\x02\x02\x03\x02\x011\x04\0\x0doutput-stream\x03\0\x04\x02\x03\x02\x01\
--\x04\0\x08io-error\x03\0\x06\x02\x03\x02\x01*\x04\0\x08pollable\x03\0\x08\x01q\x0a\
-\x03get\0\0\x04head\0\0\x04post\0\0\x03put\0\0\x06delete\0\0\x07connect\0\0\x07o\
-ptions\0\0\x05trace\0\0\x05patch\0\0\x05other\x01s\0\x04\0\x06method\x03\0\x0a\x01\
-q\x03\x04HTTP\0\0\x05HTTPS\0\0\x05other\x01s\0\x04\0\x06scheme\x03\0\x0c\x01ks\x01\
-k{\x01r\x02\x05rcode\x0e\x09info-code\x0f\x04\0\x11DNS-error-payload\x03\0\x10\x01\
-k}\x01r\x02\x08alert-id\x12\x0dalert-message\x0e\x04\0\x1aTLS-alert-received-pay\
-load\x03\0\x13\x01ky\x01r\x02\x0afield-name\x0e\x0afield-size\x15\x04\0\x12field\
--size-payload\x03\0\x16\x01kw\x01k\x17\x01q'\x0bDNS-timeout\0\0\x09DNS-error\x01\
-\x11\0\x15destination-not-found\0\0\x17destination-unavailable\0\0\x19destinatio\
-n-IP-prohibited\0\0\x19destination-IP-unroutable\0\0\x12connection-refused\0\0\x15\
-connection-terminated\0\0\x12connection-timeout\0\0\x17connection-read-timeout\0\
-\0\x18connection-write-timeout\0\0\x18connection-limit-reached\0\0\x12TLS-protoc\
-ol-error\0\0\x15TLS-certificate-error\0\0\x12TLS-alert-received\x01\x14\0\x13HTT\
-P-request-denied\0\0\x1cHTTP-request-length-required\0\0\x16HTTP-request-body-si\
-ze\x01\x18\0\x1bHTTP-request-method-invalid\0\0\x18HTTP-request-URI-invalid\0\0\x19\
-HTTP-request-URI-too-long\0\0\x20HTTP-request-header-section-size\x01\x15\0\x18H\
-TTP-request-header-size\x01\x19\0!HTTP-request-trailer-section-size\x01\x15\0\x19\
-HTTP-request-trailer-size\x01\x17\0\x18HTTP-response-incomplete\0\0!HTTP-respons\
-e-header-section-size\x01\x15\0\x19HTTP-response-header-size\x01\x17\0\x17HTTP-r\
-esponse-body-size\x01\x18\0\"HTTP-response-trailer-section-size\x01\x15\0\x1aHTT\
-P-response-trailer-size\x01\x17\0\x1dHTTP-response-transfer-coding\x01\x0e\0\x1c\
-HTTP-response-content-coding\x01\x0e\0\x15HTTP-response-timeout\0\0\x13HTTP-upgr\
-ade-failed\0\0\x13HTTP-protocol-error\0\0\x0dloop-detected\0\0\x13configuration-\
-error\0\0\x0einternal-error\x01\x0e\0\x04\0\x0aerror-code\x03\0\x1a\x01q\x03\x0e\
-invalid-syntax\0\0\x09forbidden\0\0\x09immutable\0\0\x04\0\x0cheader-error\x03\0\
-\x1c\x01s\x04\0\x09field-key\x03\0\x1e\x04\0\x0afield-name\x03\0\x1f\x01p}\x04\0\
-\x0bfield-value\x03\0!\x04\0\x06fields\x03\x01\x04\0\x07headers\x03\0#\x04\0\x08\
-trailers\x03\0#\x04\0\x10incoming-request\x03\x01\x04\0\x10outgoing-request\x03\x01\
-\x04\0\x0frequest-options\x03\x01\x04\0\x11response-outparam\x03\x01\x01{\x04\0\x0b\
-status-code\x03\0*\x04\0\x11incoming-response\x03\x01\x04\0\x0dincoming-body\x03\
-\x01\x04\0\x0ffuture-trailers\x03\x01\x04\0\x11outgoing-response\x03\x01\x04\0\x0d\
-outgoing-body\x03\x01\x04\0\x18future-incoming-response\x03\x01\x01i#\x01@\0\02\x04\
-\0\x13[constructor]fields\x013\x01o\x02\x20\"\x01p4\x01j\x012\x01\x1d\x01@\x01\x07\
-entries5\06\x04\0\x18[static]fields.from-list\x017\x01h#\x01p\"\x01@\x02\x04self\
-8\x04name\x20\09\x04\0\x12[method]fields.get\x01:\x01@\x02\x04self8\x04name\x20\0\
-\x7f\x04\0\x12[method]fields.has\x01;\x01j\0\x01\x1d\x01@\x03\x04self8\x04name\x20\
-\x05value9\0<\x04\0\x12[method]fields.set\x01=\x01@\x02\x04self8\x04name\x20\0<\x04\
-\0\x15[method]fields.delete\x01>\x01@\x03\x04self8\x04name\x20\x05value\"\0<\x04\
-\0\x15[method]fields.append\x01?\x01@\x01\x04self8\05\x04\0\x16[method]fields.en\
-tries\x01@\x01@\x01\x04self8\02\x04\0\x14[method]fields.clone\x01A\x01h&\x01@\x01\
-\x04self\xc2\0\0\x0b\x04\0\x1f[method]incoming-request.method\x01C\x01@\x01\x04s\
-elf\xc2\0\0\x0e\x04\0([method]incoming-request.path-with-query\x01D\x01k\x0d\x01\
-@\x01\x04self\xc2\0\0\xc5\0\x04\0\x1f[method]incoming-request.scheme\x01F\x04\0\"\
-[method]incoming-request.authority\x01D\x01i$\x01@\x01\x04self\xc2\0\0\xc7\0\x04\
-\0\x20[method]incoming-request.headers\x01H\x01i-\x01j\x01\xc9\0\0\x01@\x01\x04s\
-elf\xc2\0\0\xca\0\x04\0\x20[method]incoming-request.consume\x01K\x01i'\x01@\x01\x07\
-headers\xc7\0\0\xcc\0\x04\0\x1d[constructor]outgoing-request\x01M\x01h'\x01i0\x01\
-j\x01\xcf\0\0\x01@\x01\x04self\xce\0\0\xd0\0\x04\0\x1d[method]outgoing-request.b\
-ody\x01Q\x01@\x01\x04self\xce\0\0\x0b\x04\0\x1f[method]outgoing-request.method\x01\
-R\x01j\0\0\x01@\x02\x04self\xce\0\x06method\x0b\0\xd3\0\x04\0#[method]outgoing-r\
-equest.set-method\x01T\x01@\x01\x04self\xce\0\0\x0e\x04\0([method]outgoing-reque\
-st.path-with-query\x01U\x01@\x02\x04self\xce\0\x0fpath-with-query\x0e\0\xd3\0\x04\
-\0,[method]outgoing-request.set-path-with-query\x01V\x01@\x01\x04self\xce\0\0\xc5\
-\0\x04\0\x1f[method]outgoing-request.scheme\x01W\x01@\x02\x04self\xce\0\x06schem\
-e\xc5\0\0\xd3\0\x04\0#[method]outgoing-request.set-scheme\x01X\x04\0\"[method]ou\
-tgoing-request.authority\x01U\x01@\x02\x04self\xce\0\x09authority\x0e\0\xd3\0\x04\
-\0&[method]outgoing-request.set-authority\x01Y\x01@\x01\x04self\xce\0\0\xc7\0\x04\
-\0\x20[method]outgoing-request.headers\x01Z\x01i(\x01@\0\0\xdb\0\x04\0\x1c[const\
-ructor]request-options\x01\\\x01h(\x01k\x01\x01@\x01\x04self\xdd\0\0\xde\0\x04\0\
-'[method]request-options.connect-timeout\x01_\x01@\x02\x04self\xdd\0\x08duration\
-\xde\0\0\xd3\0\x04\0+[method]request-options.set-connect-timeout\x01`\x04\0*[met\
-hod]request-options.first-byte-timeout\x01_\x04\0.[method]request-options.set-fi\
-rst-byte-timeout\x01`\x04\0-[method]request-options.between-bytes-timeout\x01_\x04\
-\01[method]request-options.set-between-bytes-timeout\x01`\x01i)\x01i/\x01j\x01\xe2\
-\0\x01\x1b\x01@\x02\x05param\xe1\0\x08response\xe3\0\x01\0\x04\0\x1d[static]resp\
-onse-outparam.set\x01d\x01h,\x01@\x01\x04self\xe5\0\0+\x04\0\x20[method]incoming\
--response.status\x01f\x01@\x01\x04self\xe5\0\0\xc7\0\x04\0![method]incoming-resp\
-onse.headers\x01g\x01@\x01\x04self\xe5\0\0\xca\0\x04\0![method]incoming-response\
-.consume\x01h\x01h-\x01i\x03\x01j\x01\xea\0\0\x01@\x01\x04self\xe9\0\0\xeb\0\x04\
-\0\x1c[method]incoming-body.stream\x01l\x01i.\x01@\x01\x04this\xc9\0\0\xed\0\x04\
-\0\x1c[static]incoming-body.finish\x01n\x01h.\x01i\x09\x01@\x01\x04self\xef\0\0\xf0\
-\0\x04\0![method]future-trailers.subscribe\x01q\x01i%\x01k\xf2\0\x01j\x01\xf3\0\x01\
-\x1b\x01j\x01\xf4\0\0\x01k\xf5\0\x01@\x01\x04self\xef\0\0\xf6\0\x04\0\x1b[method\
-]future-trailers.get\x01w\x01@\x01\x07headers\xc7\0\0\xe2\0\x04\0\x1e[constructo\
-r]outgoing-response\x01x\x01h/\x01@\x01\x04self\xf9\0\0+\x04\0%[method]outgoing-\
-response.status-code\x01z\x01@\x02\x04self\xf9\0\x0bstatus-code+\0\xd3\0\x04\0)[\
-method]outgoing-response.set-status-code\x01{\x01@\x01\x04self\xf9\0\0\xc7\0\x04\
-\0![method]outgoing-response.headers\x01|\x01@\x01\x04self\xf9\0\0\xd0\0\x04\0\x1e\
-[method]outgoing-response.body\x01}\x01h0\x01i\x05\x01j\x01\xff\0\0\x01@\x01\x04\
-self\xfe\0\0\x80\x01\x04\0\x1b[method]outgoing-body.write\x01\x81\x01\x01j\0\x01\
-\x1b\x01@\x02\x04this\xcf\0\x08trailers\xf3\0\0\x82\x01\x04\0\x1c[static]outgoin\
-g-body.finish\x01\x83\x01\x01h1\x01@\x01\x04self\x84\x01\0\xf0\0\x04\0*[method]f\
-uture-incoming-response.subscribe\x01\x85\x01\x01i,\x01j\x01\x86\x01\x01\x1b\x01\
-j\x01\x87\x01\0\x01k\x88\x01\x01@\x01\x04self\x84\x01\0\x89\x01\x04\0$[method]fu\
-ture-incoming-response.get\x01\x8a\x01\x01h\x07\x01k\x1b\x01@\x01\x03err\x8b\x01\
-\0\x8c\x01\x04\0\x0fhttp-error-code\x01\x8d\x01\x03\0\x15wasi:http/types@0.2.8\x05\
-2\x02\x03\0\x11\x10outgoing-request\x02\x03\0\x11\x0frequest-options\x02\x03\0\x11\
-\x18future-incoming-response\x02\x03\0\x11\x0aerror-code\x01B\x0f\x02\x03\x02\x01\
-3\x04\0\x10outgoing-request\x03\0\0\x02\x03\x02\x014\x04\0\x0frequest-options\x03\
-\0\x02\x02\x03\x02\x015\x04\0\x18future-incoming-response\x03\0\x04\x02\x03\x02\x01\
-6\x04\0\x0aerror-code\x03\0\x06\x01i\x01\x01i\x03\x01k\x09\x01i\x05\x01j\x01\x0b\
-\x01\x07\x01@\x02\x07request\x08\x07options\x0a\0\x0c\x04\0\x06handle\x01\x0d\x03\
-\0\x20wasi:http/outgoing-handler@0.2.8\x057\x01B)\x01r\x04\x05lowerw\x05upperw\x05\
-width}\x05scale}\x04\0\x0cdecimalvalue\x03\0\0\x01r\x03\x06monthsz\x04daysz\x06m\
-icrosx\x04\0\x0dintervalvalue\x03\0\x02\x01r\x02\x02hiw\x02low\x04\0\x09uuidvalu\
-e\x03\0\x04\x01r\x02\x09type-exprs\x04jsons\x04\0\x0ccomplexvalue\x03\0\x06\x01r\
-\x02\x05lowerw\x05upperx\x04\0\x0bduck-int128\x03\0\x08\x01r\x02\x05lowerw\x05up\
-perw\x04\0\x0cduck-uint128\x03\0\x0a\x01p}\x01r\x01\x07encoded\x0c\x04\0\x0dnest\
-ed-column\x03\0\x0d\x01r\x02\x0ckeys-encoded\x0c\x0cvals-encoded\x0c\x04\0\x0ama\
-p-column\x03\0\x0f\x01r\x02\x04sizey\x07encoded\x0c\x04\0\x0carray-column\x03\0\x11\
-\x01p\x7f\x01px\x01pw\x01pu\x01pz\x01p~\x01p|\x01p{\x01py\x01pv\x01p\x01\x01p\x03\
-\x01p\x05\x01ps\x01p\x0c\x01p\x09\x01p\x0b\x01p\x07\x01q\x1b\x07boolean\x01\x13\0\
-\x05int64\x01\x14\0\x06uint64\x01\x15\0\x07float64\x01\x16\0\x05int32\x01\x17\0\x09\
-timestamp\x01\x14\0\x04int8\x01\x18\0\x05int16\x01\x19\0\x05uint8\x01\x0c\0\x06u\
-int16\x01\x1a\0\x06uint32\x01\x1b\0\x07float32\x01\x1c\0\x04date\x01\x17\0\x04ti\
-me\x01\x14\0\x0btimestamptz\x01\x14\0\x07decimal\x01\x1d\0\x08interval\x01\x1e\0\
-\x04uuid\x01\x1f\0\x04text\x01\x20\0\x04blob\x01!\0\x07hugeint\x01\"\0\x08uhugei\
-nt\x01#\0\x08list-col\x01\x0e\0\x0astruct-col\x01\x0e\0\x07map-col\x01\x10\0\x09\
-array-col\x01\x12\0\x07complex\x01$\0\x04\0\x06column\x03\0%\x01r\x03\x04data&\x08\
-validity\x0c\x04rowsy\x04\0\x06colvec\x03\0'\x03\0#duckdb:extension/column-types\
-@5.0.0\x058\x02\x03\0\0\x0aloadresult\x01B\x0d\x02\x03\x02\x01\x02\x04\0\x09duck\
-error\x03\0\0\x02\x03\x02\x019\x04\0\x0aloadresult\x03\0\x02\x01j\x01\x03\x01\x01\
-\x01@\0\0\x04\x04\0\x04load\x01\x05\x01ps\x01j\x01\x7f\x01\x01\x01@\x01\x04keys\x06\
-\0\x07\x04\0\x0breconfigure\x01\x08\x01@\0\0\x07\x04\0\x08shutdown\x01\x09\x04\0\
-\x1cduckdb:extension/guest@5.0.0\x05:\x02\x03\0\x13\x06colvec\x01B\x1f\x02\x03\x02\
-\x01\x02\x04\0\x09duckerror\x03\0\0\x02\x03\x02\x01\x03\x04\0\x09duckvalue\x03\0\
-\x02\x02\x03\x02\x01\x07\x04\0\x0ainvokeinfo\x03\0\x04\x02\x03\x02\x01\x09\x04\0\
-\x09resultset\x03\0\x06\x02\x03\x02\x01;\x04\0\x06colvec\x03\0\x08\x01p\x09\x01j\
-\x01\x09\x01\x01\x01@\x03\x06handley\x04args\x0a\x03ctx\x05\0\x0b\x04\0\x15call-\
-scalar-batch-col\x01\x0c\x01j\x01\x03\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x0d\
-\x04\0\x12call-aggregate-col\x01\x0e\x01@\x02\x06handley\x03arg\x09\0\x0b\x04\0\x0d\
-call-cast-col\x01\x0f\x01p\x03\x01@\x03\x06handley\x04args\x10\x03ctx\x05\0\x0d\x04\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 18513] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xc3\x8f\x01\x01A\x02\
+\x01Ae\x01B4\x01r\x02\x05width}\x05scale}\x04\0\x0cdecimalshape\x03\0\0\x01q\x17\
+\x07boolean\0\0\x05int64\0\0\x06uint64\0\0\x07float64\0\0\x04text\0\0\x04blob\0\0\
+\x05int32\0\0\x09timestamp\0\0\x04int8\0\0\x05int16\0\0\x05uint8\0\0\x06uint16\0\
+\0\x06uint32\0\0\x07float32\0\0\x04date\0\0\x04time\0\0\x0btimestamptz\0\0\x07de\
+cimal\x01\x01\0\x08interval\0\0\x04uuid\0\0\x07hugeint\0\0\x08uhugeint\0\0\x07co\
+mplex\x01s\0\x04\0\x0blogicaltype\x03\0\x02\x01r\x04\x05lowerw\x05upperw\x05widt\
+h}\x05scale}\x04\0\x0cdecimalvalue\x03\0\x04\x01r\x02\x05lowerw\x05upperx\x04\0\x0c\
+hugeintvalue\x03\0\x06\x01r\x02\x05lowerw\x05upperw\x04\0\x0duhugeintvalue\x03\0\
+\x08\x01r\x03\x06monthsz\x04daysz\x06microsx\x04\0\x0dintervalvalue\x03\0\x0a\x01\
+r\x02\x02hiw\x02low\x04\0\x09uuidvalue\x03\0\x0c\x01r\x02\x09type-exprs\x04jsons\
+\x04\0\x0ccomplexvalue\x03\0\x0e\x01ks\x01r\x02\x04name\x10\x07logical\x03\x04\0\
+\x07funcarg\x03\0\x11\x01n\x05\x0ddeterministic\x0bcommutative\x09stateless\x0ds\
+ideeffecting\x0adeprecated\x04\0\x09funcflags\x03\0\x13\x01ps\x01r\x03\x0bdescri\
+ption\x10\x04tags\x15\x0aattributes\x14\x04\0\x08funcopts\x03\0\x16\x01r\x02\x04\
+names\x07logical\x03\x04\0\x09columndef\x03\0\x18\x01r\x02\x0bdescription\x10\x04\
+tags\x15\x04\0\x07extopts\x03\0\x1a\x01p}\x01q\x18\x04null\0\0\x07boolean\x01\x7f\
+\0\x05int64\x01x\0\x06uint64\x01w\0\x07float64\x01u\0\x04text\x01s\0\x04blob\x01\
+\x1c\0\x05int32\x01z\0\x09timestamp\x01x\0\x04int8\x01~\0\x05int16\x01|\0\x05uin\
+t8\x01}\0\x06uint16\x01{\0\x06uint32\x01y\0\x07float32\x01v\0\x04date\x01z\0\x04\
+time\x01x\0\x0btimestamptz\x01x\0\x07decimal\x01\x05\0\x08interval\x01\x0b\0\x04\
+uuid\x01\x0d\0\x07hugeint\x01\x07\0\x08uhugeint\x01\x09\0\x07complex\x01\x0f\0\x04\
+\0\x09duckvalue\x03\0\x1d\x01p\x1e\x01p\x1f\x04\0\x09resultset\x03\0\x20\x01p\x1f\
+\x04\0\x08rowbatch\x03\0\"\x01kw\x01r\x02\x08rowindex$\x08iswindow\x7f\x04\0\x0a\
+invokeinfo\x03\0%\x01q\x05\x0finvalidargument\x01s\0\x0bunsupported\x01s\0\x0cin\
+validstate\x01s\0\x02io\x01s\0\x08internal\x01s\0\x04\0\x09duckerror\x03\0'\x01q\
+\x04\x0ainvalidkey\x01s\0\x0ctypemismatch\x01s\0\x0bunavailable\x01s\0\x0eintern\
+alconfig\x01s\0\x04\0\x0bconfigerror\x03\0)\x01m\x05\x05trace\x05debug\x04info\x04\
+warn\x05error\x04\0\x08loglevel\x03\0+\x01r\x02\x03keys\x05values\x04\0\x08logfi\
+eld\x03\0-\x01m\x07\x06scalar\x05table\x09aggregate\x06pragma\x05macro\x07catalo\
+g\x0bfile-format\x04\0\x0ecapabilitykind\x03\0/\x01p0\x01r\x03\x04names\x07versi\
+on\x10\x08requires1\x04\0\x0aloadresult\x03\02\x03\0\x1cduckdb:extension/types@5\
+.0.0\x05\0\x02\x03\0\0\x0ecapabilitykind\x02\x03\0\0\x09duckerror\x02\x03\0\0\x09\
+duckvalue\x02\x03\0\0\x07extopts\x02\x03\0\0\x07funcarg\x02\x03\0\0\x08funcopts\x02\
+\x03\0\0\x0ainvokeinfo\x02\x03\0\0\x0blogicaltype\x02\x03\0\0\x09resultset\x02\x03\
+\0\0\x08rowbatch\x02\x03\0\0\x09columndef\x01Bf\x02\x03\x02\x01\x01\x04\0\x0ecap\
+abilitykind\x03\0\0\x02\x03\x02\x01\x02\x04\0\x09duckerror\x03\0\x02\x02\x03\x02\
+\x01\x03\x04\0\x09duckvalue\x03\0\x04\x02\x03\x02\x01\x04\x04\0\x07extopts\x03\0\
+\x06\x02\x03\x02\x01\x05\x04\0\x07funcarg\x03\0\x08\x02\x03\x02\x01\x06\x04\0\x08\
+funcopts\x03\0\x0a\x02\x03\x02\x01\x07\x04\0\x0ainvokeinfo\x03\0\x0c\x02\x03\x02\
+\x01\x08\x04\0\x0blogicaltype\x03\0\x0e\x02\x03\x02\x01\x09\x04\0\x09resultset\x03\
+\0\x10\x02\x03\x02\x01\x0a\x04\0\x08rowbatch\x03\0\x12\x02\x03\x02\x01\x0b\x04\0\
+\x09columndef\x03\0\x14\x04\0\x0fscalar-callback\x03\x01\x04\0\x0etable-callback\
+\x03\x01\x04\0\x12aggregate-callback\x03\x01\x04\0\x0fpragma-callback\x03\x01\x04\
+\0\x0dcast-callback\x03\x01\x04\0\x0fscalar-registry\x03\x01\x04\0\x0etable-regi\
+stry\x03\x01\x04\0\x12aggregate-registry\x03\x01\x04\0\x0fpragma-registry\x03\x01\
+\x04\0\x0emacro-registry\x03\x01\x01i\x1b\x01i\x1c\x01i\x1d\x01i\x1e\x01i\x1f\x01\
+q\x05\x06scalar\x01\x20\0\x05table\x01!\0\x09aggregate\x01\"\0\x06pragma\x01#\0\x05\
+macro\x01$\0\x04\0\x0acapability\x03\0%\x01i\x16\x01@\x01\x06handley\0'\x04\0\x1c\
+[constructor]scalar-callback\x01(\x01h\x16\x01p\x05\x01j\x01\x05\x01\x03\x01@\x03\
+\x04self)\x04args*\x03ctx\x0d\0+\x04\0\x1c[method]scalar-callback.call\x01,\x01i\
+\x17\x01@\x01\x06handley\0-\x04\0\x1b[constructor]table-callback\x01.\x01h\x17\x01\
+j\x01\x11\x01\x03\x01@\x02\x04self/\x04args*\00\x04\0\x1b[method]table-callback.\
+call\x011\x01i\x18\x01@\x01\x06handley\02\x04\0\x1f[constructor]aggregate-callba\
+ck\x013\x01h\x18\x01@\x02\x04self4\x04rows\x13\0+\x04\0\x1f[method]aggregate-cal\
+lback.call\x015\x01i\x19\x01@\x01\x06handley\06\x04\0\x1c[constructor]pragma-cal\
+lback\x017\x01h\x19\x01k\x05\x01j\x019\x01\x03\x01@\x02\x04self8\x04args*\0:\x04\
+\0\x1c[method]pragma-callback.call\x01;\x01i\x1a\x01@\x01\x06handley\0<\x04\0\x1a\
+[constructor]cast-callback\x01=\x01h\x1a\x01@\x02\x04self>\x05value\x05\0+\x04\0\
+\x1a[method]cast-callback.call\x01?\x01h\x1b\x01p\x09\x01k\x0b\x01j\x01y\x01\x03\
+\x01@\x06\x04self\xc0\0\x04names\x09arguments\xc1\0\x07returns\x0f\x08callback'\x07\
+options\xc2\0\0\xc3\0\x04\0\x20[method]scalar-registry.register\x01D\x01h\x1c\x01\
+p\x15\x01k\x07\x01@\x06\x04self\xc5\0\x04names\x09arguments\xc1\0\x07columns\xc6\
+\0\x08callback-\x07options\xc7\0\0\xc3\0\x04\0\x1f[method]table-registry.registe\
+r\x01H\x01h\x1d\x01@\x06\x04self\xc9\0\x04names\x09arguments\xc1\0\x07returns\x0f\
+\x08callback2\x07options\xc2\0\0\xc3\0\x04\0#[method]aggregate-registry.register\
+\x01J\x01h\x1e\x01@\x06\x04self\xcb\0\x04names\x09arguments\xc1\0\x07returns\x0f\
+\x08callback6\x07options\xc7\0\0\xc3\0\x04\0%[method]pragma-registry.register-ca\
+ll\x01L\x01h\x1f\x01ps\x01j\x01\x7f\x01\x03\x01@\x05\x04self\xcd\0\x04names\x0ap\
+arameters\xce\0\x08body-sqls\x07options\xc7\0\0\xcf\0\x04\0&[method]macro-regist\
+ry.register-scalar\x01P\x01k&\x01@\x01\x04kind\x01\0\xd1\0\x04\0\x0eget-capabili\
+ty\x01R\x01p\x01\x01@\0\0\xd3\0\x04\0\x11list-capabilities\x01T\x03\0\x1educkdb:\
+extension/runtime@5.0.0\x05\x0c\x02\x03\0\0\x0bconfigerror\x01B$\x02\x03\x02\x01\
+\x0d\x04\0\x0bconfigerror\x03\0\0\x01@\0\0s\x04\0\x10provider-version\x01\x02\x01\
+ks\x01ps\x01@\x01\x06prefix\x03\0\x04\x04\0\x09list-keys\x01\x05\x01j\x01\x03\x01\
+\x01\x01@\x01\x04paths\0\x06\x04\0\x0aget-string\x01\x07\x01k\x7f\x01j\x01\x08\x01\
+\x01\x01@\x01\x04paths\0\x09\x04\0\x08get-bool\x01\x0a\x01kx\x01j\x01\x0b\x01\x01\
+\x01@\x01\x04paths\0\x0c\x04\0\x07get-i64\x01\x0d\x01kw\x01j\x01\x0e\x01\x01\x01\
+@\x01\x04paths\0\x0f\x04\0\x07get-u64\x01\x10\x01ku\x01j\x01\x11\x01\x01\x01@\x01\
+\x04paths\0\x12\x04\0\x07get-f64\x01\x13\x01p}\x01k\x14\x01j\x01\x15\x01\x01\x01\
+@\x01\x04paths\0\x16\x04\0\x09get-bytes\x01\x17\x01k\x04\x01j\x01\x18\x01\x01\x01\
+@\x01\x04paths\0\x19\x04\0\x0fget-string-list\x01\x1a\x03\0\x1dduckdb:extension/\
+config@5.0.0\x05\x0e\x02\x03\0\0\x08logfield\x02\x03\0\0\x08loglevel\x01B\x0a\x02\
+\x03\x02\x01\x0f\x04\0\x08logfield\x03\0\0\x02\x03\x02\x01\x10\x04\0\x08loglevel\
+\x03\0\x02\x01ks\x01@\x03\x05level\x03\x07messages\x06target\x04\x01\0\x04\0\x03\
+log\x01\x05\x01p\x01\x01@\x03\x05level\x03\x07messages\x06fields\x06\x01\0\x04\0\
+\x0alog-fields\x01\x07\x03\0\x1educkdb:extension/logging@5.0.0\x05\x11\x02\x03\0\
+\x01\x0dcast-callback\x01B\x17\x02\x03\x02\x01\x12\x04\0\x0dcast-callback\x03\0\0\
+\x01r\x02\x04names\x08physicals\x04\0\x0clogical-type\x03\0\x02\x01y\x04\0\x13lo\
+gical-type-handle\x03\0\x04\x01m\x03\x08implicit\x0aassignment\x08explicit\x04\0\
+\x09cast-kind\x03\0\x06\x01kz\x01r\x04\x04froms\x02tos\x04kind\x07\x0dimplicit-c\
+ost\x08\x04\0\x09cast-spec\x03\0\x09\x01ps\x01r\x04\x06schemas\x04names\x0aparam\
+eters\x0b\x0edefinition-sqls\x04\0\x09macro-def\x03\0\x0c\x01j\x01\x05\x01s\x01@\
+\x01\x02ty\x03\0\x0e\x04\0\x15register-logical-type\x01\x0f\x01i\x01\x01j\0\x01s\
+\x01@\x02\x04spec\x0a\x08callback\x10\0\x11\x04\0\x0dregister-cast\x01\x12\x01@\x01\
+\x03def\x0d\0\x11\x04\0\x0eregister-macro\x01\x13\x03\0\x1educkdb:extension/cata\
+log@5.0.0\x05\x13\x01B\x15\x01y\x04\0\x15table-function-handle\x03\0\0\x01y\x04\0\
+\x14copy-function-handle\x03\0\x02\x01y\x04\0\x13replacement-scan-id\x03\0\x04\x01\
+y\x04\0\x0fcopy-handler-id\x03\0\x06\x01m\x02\x0eextension-only\x09signature\x04\
+\0\x0edetection-mode\x03\0\x08\x01ps\x01r\x03\x0aextensions\x0a\x0etable-functio\
+n\x01\x04mode\x09\x04\0\x10replacement-scan\x03\0\x0b\x01r\x02\x09extensions\x08\
+function\x03\x04\0\x0ccopy-handler\x03\0\x0d\x01j\x01\x05\x01s\x01@\x01\x04scan\x0c\
+\0\x0f\x04\0\x19register-replacement-scan\x01\x10\x01j\x01\x07\x01s\x01@\x01\x07\
+handler\x0e\0\x11\x04\0\x15register-copy-handler\x01\x12\x03\0\x1cduckdb:extensi\
+on/files@5.0.0\x05\x14\x01B\x09\x01ps\x01p\0\x01k\x01\x01kw\x01r\x02\x04rows\x02\
+\x0drows-affected\x03\x04\0\x0bexec-result\x03\0\x04\x01j\x01\x05\x01s\x01@\x01\x03\
+sqls\0\x06\x04\0\x0bnested-exec\x01\x07\x03\0\"duckdb:extension/nested-exec@5.0.\
+0\x05\x15\x01B\x0c\x04\0\x0block-handle\x03\x01\x01h\0\x01@\x01\x04self\x01\x01\0\
+\x04\0\x1b[method]lock-handle.release\x01\x02\x01i\0\x01j\x01\x03\x01s\x01@\x01\x04\
+paths\0\x04\x04\0\x11acquire-exclusive\x01\x05\x01k\x03\x01j\x01\x06\x01s\x01@\x01\
+\x04paths\0\x07\x04\0\x15try-acquire-exclusive\x01\x08\x03\0\x20duckdb:extension\
+/file-lock@5.0.0\x05\x16\x01B\x0a\x01p}\x01q\x05\x04null\0\0\x07integer\x01x\0\x04\
+real\x01u\0\x04text\x01s\0\x04blob\x01\0\0\x04\0\x09sql-value\x03\0\x01\x01r\x03\
+\x04codez\x0dextended-codez\x07messages\x04\0\x0csqlite-error\x03\0\x03\x01ps\x01\
+p\x02\x01p\x06\x01r\x04\x07columns\x05\x04rows\x07\x07changesx\x11last-insert-ro\
+widx\x04\0\x0cquery-result\x03\0\x08\x03\0\x1csqlite:extension/types@0.1.0\x05\x17\
+\x02\x03\0\x08\x09sql-value\x02\x03\0\x08\x0cquery-result\x02\x03\0\x08\x0csqlit\
+e-error\x01B\x13\x02\x03\x02\x01\x18\x04\0\x09sql-value\x03\0\0\x02\x03\x02\x01\x19\
+\x04\0\x0cquery-result\x03\0\x02\x02\x03\x02\x01\x1a\x04\0\x0csqlite-error\x03\0\
+\x04\x01p\x01\x01j\x01\x03\x01\x05\x01@\x02\x03sqls\x06params\x06\0\x07\x04\0\x07\
+execute\x01\x08\x01j\x01\x01\x01\x05\x01@\x02\x03sqls\x06params\x06\0\x09\x04\0\x0e\
+execute-scalar\x01\x0a\x01j\x01x\x01\x05\x01@\x01\x03sqls\0\x0b\x04\0\x0dexecute\
+-batch\x01\x0c\x01j\0\x01\x05\x01@\x01\x04paths\0\x0d\x04\0\x07open-db\x01\x0e\x03\
+\0\x1asqlite:extension/spi@0.1.0\x05\x1b\x01B\"\x01q\x08\x0daccess-denied\0\0\x0e\
+no-such-bucket\0\0\x0bno-such-key\0\0\x13invalid-bucket-name\0\0\x0finvalid-requ\
+est\x01s\0\x0dnetwork-error\x01s\0\x0bparse-error\x01s\0\x08internal\x01s\0\x04\0\
+\x05error\x03\0\0\x01ks\x01r\x03\x0daccess-key-ids\x11secret-access-keys\x0dsess\
+ion-token\x02\x04\0\x0bcredentials\x03\0\x03\x01r\x03\x03urls\x06regions\x0apath\
+-style\x7f\x04\0\x0fendpoint-config\x03\0\x05\x01kw\x01o\x02ss\x01p\x08\x01r\x05\
+\x0ccontent-type\x02\x0econtent-length\x07\x04etag\x02\x0dlast-modified\x07\x06c\
+ustom\x09\x04\0\x0fobject-metadata\x03\0\x0a\x01r\x05\x03keys\x04sizew\x04etag\x02\
+\x0dlast-modified\x07\x0dstorage-class\x02\x04\0\x0bobject-info\x03\0\x0c\x01p\x0d\
+\x01ps\x01r\x04\x07objects\x0e\x0fcommon-prefixes\x0f\x17next-continuation-token\
+\x02\x0cis-truncated\x7f\x04\0\x13list-objects-output\x03\0\x10\x01o\x02ww\x01k\x12\
+\x01r\x03\x05range\x13\x08if-match\x02\x0dif-none-match\x02\x04\0\x12get-object-\
+options\x03\0\x14\x01r\x03\x0ccontent-type\x02\x08metadata\x09\x0dcache-control\x02\
+\x04\0\x12put-object-options\x03\0\x16\x01ky\x01r\x04\x06prefix\x02\x09delimiter\
+\x02\x08max-keys\x18\x12continuation-token\x02\x04\0\x14list-objects-options\x03\
+\0\x19\x01p}\x01r\x02\x04body\x1b\x08metadata\x0b\x04\0\x11get-object-output\x03\
+\0\x1c\x01r\x01\x04etags\x04\0\x11put-object-output\x03\0\x1e\x01r\x01\x08metada\
+ta\x0b\x04\0\x12head-object-output\x03\0\x20\x03\0\x1acomponent:s3-wasm/s3-types\
+\x05\x1c\x02\x03\0\x0a\x05error\x02\x03\0\x0a\x0bcredentials\x02\x03\0\x0a\x0fen\
+dpoint-config\x02\x03\0\x0a\x12get-object-options\x02\x03\0\x0a\x11get-object-ou\
+tput\x02\x03\0\x0a\x12put-object-options\x02\x03\0\x0a\x11put-object-output\x02\x03\
+\0\x0a\x12head-object-output\x02\x03\0\x0a\x14list-objects-options\x02\x03\0\x0a\
+\x13list-objects-output\x01B)\x02\x03\x02\x01\x1d\x04\0\x05error\x03\0\0\x02\x03\
+\x02\x01\x1e\x04\0\x0bcredentials\x03\0\x02\x02\x03\x02\x01\x1f\x04\0\x0fendpoin\
+t-config\x03\0\x04\x02\x03\x02\x01\x20\x04\0\x12get-object-options\x03\0\x06\x02\
+\x03\x02\x01!\x04\0\x11get-object-output\x03\0\x08\x02\x03\x02\x01\"\x04\0\x12pu\
+t-object-options\x03\0\x0a\x02\x03\x02\x01#\x04\0\x11put-object-output\x03\0\x0c\
+\x02\x03\x02\x01$\x04\0\x12head-object-output\x03\0\x0e\x02\x03\x02\x01%\x04\0\x14\
+list-objects-options\x03\0\x10\x02\x03\x02\x01&\x04\0\x13list-objects-output\x03\
+\0\x12\x01k\x07\x01j\x01\x09\x01\x01\x01@\x05\x08endpoint\x05\x0bcredentials\x03\
+\x06buckets\x03keys\x07options\x14\0\x15\x04\0\x0aget-object\x01\x16\x01p}\x01k\x0b\
+\x01j\x01\x0d\x01\x01\x01@\x06\x08endpoint\x05\x0bcredentials\x03\x06buckets\x03\
+keys\x04body\x17\x07options\x18\0\x19\x04\0\x0aput-object\x01\x1a\x01j\0\x01\x01\
+\x01@\x04\x08endpoint\x05\x0bcredentials\x03\x06buckets\x03keys\0\x1b\x04\0\x0dd\
+elete-object\x01\x1c\x01j\x01\x0f\x01\x01\x01@\x04\x08endpoint\x05\x0bcredential\
+s\x03\x06buckets\x03keys\0\x1d\x04\0\x0bhead-object\x01\x1e\x01k\x11\x01j\x01\x13\
+\x01\x01\x01@\x04\x08endpoint\x05\x0bcredentials\x03\x06buckets\x07options\x1f\0\
+\x20\x04\0\x0clist-objects\x01!\x01@\x06\x08endpoint\x05\x0bcredentials\x03\x0ds\
+ource-buckets\x0asource-keys\x0bdest-buckets\x08dest-keys\0\x19\x04\0\x0bcopy-ob\
+ject\x01\"\x03\0\x19component:s3-wasm/s3-base\x05'\x01B2\x02\x03\x02\x01\x1d\x04\
+\0\x05error\x03\0\0\x02\x03\x02\x01\x1e\x04\0\x0bcredentials\x03\0\x02\x01r\x03\x06\
+regions\x0euse-accelerate\x7f\x0duse-dualstack\x7f\x04\0\x0aaws-config\x03\0\x04\
+\x01m\x08\x08standard\x12reduced-redundancy\x0bstandard-ia\x0aonezone-ia\x13inte\
+lligent-tiering\x07glacier\x0aglacier-ir\x0cdeep-archive\x04\0\x0dstorage-class\x03\
+\0\x06\x01m\x03\x09expedited\x08standard\x04bulk\x04\0\x0crestore-tier\x03\0\x08\
+\x01r\x02\x03keys\x05values\x04\0\x03tag\x03\0\x0a\x01m\x02\x03get\x03put\x04\0\x0e\
+presign-method\x03\0\x0c\x01r\x02\x0aexpires-inw\x06method\x0d\x04\0\x0fpresign-\
+options\x03\0\x0e\x01r\x02\x03urls\x0aexpires-atw\x04\0\x0dpresigned-url\x03\0\x10\
+\x01ks\x01r\x03\x0ffield-delimiter\x12\x10record-delimiter\x12\x10file-header-in\
+fo\x12\x04\0\x09csv-input\x03\0\x13\x01r\x01\x04type\x12\x04\0\x0ajson-input\x03\
+\0\x15\x01q\x03\x03csv\x01\x14\0\x04json\x01\x16\0\x07parquet\0\0\x04\0\x13selec\
+t-input-format\x03\0\x17\x01r\x02\x0ffield-delimiter\x12\x10record-delimiter\x12\
+\x04\0\x0acsv-output\x03\0\x19\x01r\x01\x10record-delimiter\x12\x04\0\x0bjson-ou\
+tput\x03\0\x1b\x01q\x02\x03csv\x01\x1a\0\x04json\x01\x1c\0\x04\0\x14select-outpu\
+t-format\x03\0\x1d\x01j\x01\x11\x01\x01\x01@\x05\x0aaws-config\x05\x0bcredential\
+s\x03\x06buckets\x03keys\x07options\x0f\0\x1f\x04\0\x0bpresign-url\x01\x20\x01p\x0b\
+\x01j\x01!\x01\x01\x01@\x04\x0aaws-config\x05\x0bcredentials\x03\x06buckets\x03k\
+eys\0\"\x04\0\x12get-object-tagging\x01#\x01j\0\x01\x01\x01@\x05\x0aaws-config\x05\
+\x0bcredentials\x03\x06buckets\x03keys\x04tags!\0$\x04\0\x12put-object-tagging\x01\
+%\x01@\x06\x0aaws-config\x05\x0bcredentials\x03\x06buckets\x03keys\x04daysy\x04t\
+ier\x09\0$\x04\0\x0erestore-object\x01&\x01p}\x01j\x01'\x01\x01\x01@\x07\x0aaws-\
+config\x05\x0bcredentials\x03\x06buckets\x03keys\x0aexpressions\x0cinput-format\x18\
+\x0doutput-format\x1e\0(\x04\0\x15select-object-content\x01)\x01j\x01s\x01\x01\x01\
+@\x02\x0bcredentials\x03\x06buckets\0*\x04\0\x13get-bucket-location\x01+\x03\0\x18\
+component:s3-wasm/s3-aws\x05(\x01B\"\x01q\x08\x0daccess-denied\0\0\x11no-such-co\
+ntainer\0\0\x0cno-such-blob\0\0\x16invalid-container-name\0\0\x0finvalid-request\
+\x01s\0\x0dnetwork-error\x01s\0\x0bparse-error\x01s\0\x08internal\x01s\0\x04\0\x05\
+error\x03\0\0\x01ks\x01r\x03\x07accounts\x0ashared-key\x02\x09sas-token\x02\x04\0\
+\x0bcredentials\x03\0\x03\x01r\x02\x03urls\x08emulator\x7f\x04\0\x0fendpoint-con\
+fig\x03\0\x05\x01kw\x01o\x02ss\x01p\x08\x01r\x06\x0ccontent-type\x02\x0econtent-\
+length\x07\x04etag\x02\x0dlast-modified\x07\x0bcontent-md5\x02\x06custom\x09\x04\
+\0\x0dblob-metadata\x03\0\x0a\x01r\x05\x04names\x04sizew\x04etag\x02\x0dlast-mod\
+ified\x07\x0ccontent-type\x02\x04\0\x09blob-info\x03\0\x0c\x01p\x0d\x01ps\x01r\x03\
+\x05blobs\x0e\x08prefixes\x0f\x0bnext-marker\x02\x04\0\x11list-blobs-output\x03\0\
+\x10\x01o\x02ww\x01k\x12\x01r\x03\x05range\x13\x08if-match\x02\x0dif-none-match\x02\
+\x04\0\x10get-blob-options\x03\0\x14\x01r\x03\x0ccontent-type\x02\x08metadata\x09\
+\x0dcache-control\x02\x04\0\x10put-blob-options\x03\0\x16\x01ky\x01r\x04\x06pref\
+ix\x02\x09delimiter\x02\x0bmax-results\x18\x06marker\x02\x04\0\x12list-blobs-opt\
+ions\x03\0\x19\x01p}\x01r\x02\x04body\x1b\x08metadata\x0b\x04\0\x0fget-blob-outp\
+ut\x03\0\x1c\x01r\x01\x04etags\x04\0\x0fput-blob-output\x03\0\x1e\x01r\x01\x08me\
+tadata\x0b\x04\0\x10head-blob-output\x03\0\x20\x03\0\x1fcomponent:azure-wasm/blo\
+b-types\x05)\x02\x03\0\x0d\x05error\x02\x03\0\x0d\x0bcredentials\x02\x03\0\x0d\x0f\
+endpoint-config\x02\x03\0\x0d\x10get-blob-options\x02\x03\0\x0d\x0fget-blob-outp\
+ut\x02\x03\0\x0d\x10put-blob-options\x02\x03\0\x0d\x0fput-blob-output\x02\x03\0\x0d\
+\x10head-blob-output\x02\x03\0\x0d\x12list-blobs-options\x02\x03\0\x0d\x11list-b\
+lobs-output\x01B'\x02\x03\x02\x01*\x04\0\x05error\x03\0\0\x02\x03\x02\x01+\x04\0\
+\x0bcredentials\x03\0\x02\x02\x03\x02\x01,\x04\0\x0fendpoint-config\x03\0\x04\x02\
+\x03\x02\x01-\x04\0\x10get-blob-options\x03\0\x06\x02\x03\x02\x01.\x04\0\x0fget-\
+blob-output\x03\0\x08\x02\x03\x02\x01/\x04\0\x10put-blob-options\x03\0\x0a\x02\x03\
+\x02\x010\x04\0\x0fput-blob-output\x03\0\x0c\x02\x03\x02\x011\x04\0\x10head-blob\
+-output\x03\0\x0e\x02\x03\x02\x012\x04\0\x12list-blobs-options\x03\0\x10\x02\x03\
+\x02\x013\x04\0\x11list-blobs-output\x03\0\x12\x01k\x07\x01j\x01\x09\x01\x01\x01\
+@\x05\x08endpoint\x05\x0bcredentials\x03\x09containers\x04blobs\x07options\x14\0\
+\x15\x04\0\x08get-blob\x01\x16\x01p}\x01k\x0b\x01j\x01\x0d\x01\x01\x01@\x06\x08e\
+ndpoint\x05\x0bcredentials\x03\x09containers\x04blobs\x04body\x17\x07options\x18\
+\0\x19\x04\0\x08put-blob\x01\x1a\x01j\0\x01\x01\x01@\x04\x08endpoint\x05\x0bcred\
+entials\x03\x09containers\x04blobs\0\x1b\x04\0\x0bdelete-blob\x01\x1c\x01j\x01\x0f\
+\x01\x01\x01@\x04\x08endpoint\x05\x0bcredentials\x03\x09containers\x04blobs\0\x1d\
+\x04\0\x09head-blob\x01\x1e\x01k\x11\x01j\x01\x13\x01\x01\x01@\x04\x08endpoint\x05\
+\x0bcredentials\x03\x09containers\x07options\x1f\0\x20\x04\0\x0alist-blobs\x01!\x03\
+\0\x1ecomponent:azure-wasm/blob-base\x054\x01B\x0b\x02\x03\x02\x01*\x04\0\x05err\
+or\x03\0\0\x01o\x02ss\x01p\x02\x01r\x06\x06methods\x07accounts\x03uris\x0cquery-\
+params\x03\x07headers\x03\x08emulator\x7f\x04\0\x0fsigning-request\x03\0\x04\x01\
+r\x03\x0dauthorizations\x09x-ms-dates\x0cx-ms-versions\x04\0\x0esigned-headers\x03\
+\0\x06\x01j\x01\x07\x01\x01\x01@\x03\x0ashared-keys\x07request\x05\x09timestampw\
+\0\x08\x04\0\x0csign-request\x01\x09\x03\0$component:azure-wasm/blob-shared-key\x05\
+5\x01B\x06\x01@\x02\x03urls\x09sas-tokens\0s\x04\0\x0aappend-sas\x01\0\x01o\x02s\
+s\x01p\x01\x01@\x02\x0cquery-params\x02\x09sas-tokens\0\x02\x04\0\x09merge-sas\x01\
+\x03\x03\0\x1dcomponent:azure-wasm/blob-sas\x056\x01B\x0a\x04\0\x08pollable\x03\x01\
+\x01h\0\x01@\x01\x04self\x01\0\x7f\x04\0\x16[method]pollable.ready\x01\x02\x01@\x01\
+\x04self\x01\x01\0\x04\0\x16[method]pollable.block\x01\x03\x01p\x01\x01py\x01@\x01\
+\x02in\x04\0\x05\x04\0\x04poll\x01\x06\x03\0\x12wasi:io/poll@0.2.8\x057\x02\x03\0\
+\x11\x08pollable\x01B\x0f\x02\x03\x02\x018\x04\0\x08pollable\x03\0\0\x01w\x04\0\x07\
+instant\x03\0\x02\x01w\x04\0\x08duration\x03\0\x04\x01@\0\0\x03\x04\0\x03now\x01\
+\x06\x01@\0\0\x05\x04\0\x0aresolution\x01\x07\x01i\x01\x01@\x01\x04when\x03\0\x08\
+\x04\0\x11subscribe-instant\x01\x09\x01@\x01\x04when\x05\0\x08\x04\0\x12subscrib\
+e-duration\x01\x0a\x03\0!wasi:clocks/monotonic-clock@0.2.8\x059\x01B\x04\x04\0\x05\
+error\x03\x01\x01h\0\x01@\x01\x04self\x01\0s\x04\0\x1d[method]error.to-debug-str\
+ing\x01\x02\x03\0\x13wasi:io/error@0.2.8\x05:\x02\x03\0\x13\x05error\x01B(\x02\x03\
+\x02\x01;\x04\0\x05error\x03\0\0\x02\x03\x02\x018\x04\0\x08pollable\x03\0\x02\x01\
+i\x01\x01q\x02\x15last-operation-failed\x01\x04\0\x06closed\0\0\x04\0\x0cstream-\
+error\x03\0\x05\x04\0\x0cinput-stream\x03\x01\x04\0\x0doutput-stream\x03\x01\x01\
+h\x07\x01p}\x01j\x01\x0a\x01\x06\x01@\x02\x04self\x09\x03lenw\0\x0b\x04\0\x19[me\
+thod]input-stream.read\x01\x0c\x04\0\"[method]input-stream.blocking-read\x01\x0c\
+\x01j\x01w\x01\x06\x01@\x02\x04self\x09\x03lenw\0\x0d\x04\0\x19[method]input-str\
+eam.skip\x01\x0e\x04\0\"[method]input-stream.blocking-skip\x01\x0e\x01i\x03\x01@\
+\x01\x04self\x09\0\x0f\x04\0\x1e[method]input-stream.subscribe\x01\x10\x01h\x08\x01\
+@\x01\x04self\x11\0\x0d\x04\0![method]output-stream.check-write\x01\x12\x01j\0\x01\
+\x06\x01@\x02\x04self\x11\x08contents\x0a\0\x13\x04\0\x1b[method]output-stream.w\
+rite\x01\x14\x04\0.[method]output-stream.blocking-write-and-flush\x01\x14\x01@\x01\
+\x04self\x11\0\x13\x04\0\x1b[method]output-stream.flush\x01\x15\x04\0$[method]ou\
+tput-stream.blocking-flush\x01\x15\x01@\x01\x04self\x11\0\x0f\x04\0\x1f[method]o\
+utput-stream.subscribe\x01\x16\x01@\x02\x04self\x11\x03lenw\0\x13\x04\0\"[method\
+]output-stream.write-zeroes\x01\x17\x04\05[method]output-stream.blocking-write-z\
+eroes-and-flush\x01\x17\x01@\x03\x04self\x11\x03src\x09\x03lenw\0\x0d\x04\0\x1c[\
+method]output-stream.splice\x01\x18\x04\0%[method]output-stream.blocking-splice\x01\
+\x18\x03\0\x15wasi:io/streams@0.2.8\x05<\x02\x03\0\x12\x08duration\x02\x03\0\x14\
+\x0cinput-stream\x02\x03\0\x14\x0doutput-stream\x01B\xc1\x01\x02\x03\x02\x01=\x04\
+\0\x08duration\x03\0\0\x02\x03\x02\x01>\x04\0\x0cinput-stream\x03\0\x02\x02\x03\x02\
+\x01?\x04\0\x0doutput-stream\x03\0\x04\x02\x03\x02\x01;\x04\0\x08io-error\x03\0\x06\
+\x02\x03\x02\x018\x04\0\x08pollable\x03\0\x08\x01q\x0a\x03get\0\0\x04head\0\0\x04\
+post\0\0\x03put\0\0\x06delete\0\0\x07connect\0\0\x07options\0\0\x05trace\0\0\x05\
+patch\0\0\x05other\x01s\0\x04\0\x06method\x03\0\x0a\x01q\x03\x04HTTP\0\0\x05HTTP\
+S\0\0\x05other\x01s\0\x04\0\x06scheme\x03\0\x0c\x01ks\x01k{\x01r\x02\x05rcode\x0e\
+\x09info-code\x0f\x04\0\x11DNS-error-payload\x03\0\x10\x01k}\x01r\x02\x08alert-i\
+d\x12\x0dalert-message\x0e\x04\0\x1aTLS-alert-received-payload\x03\0\x13\x01ky\x01\
+r\x02\x0afield-name\x0e\x0afield-size\x15\x04\0\x12field-size-payload\x03\0\x16\x01\
+kw\x01k\x17\x01q'\x0bDNS-timeout\0\0\x09DNS-error\x01\x11\0\x15destination-not-f\
+ound\0\0\x17destination-unavailable\0\0\x19destination-IP-prohibited\0\0\x19dest\
+ination-IP-unroutable\0\0\x12connection-refused\0\0\x15connection-terminated\0\0\
+\x12connection-timeout\0\0\x17connection-read-timeout\0\0\x18connection-write-ti\
+meout\0\0\x18connection-limit-reached\0\0\x12TLS-protocol-error\0\0\x15TLS-certi\
+ficate-error\0\0\x12TLS-alert-received\x01\x14\0\x13HTTP-request-denied\0\0\x1cH\
+TTP-request-length-required\0\0\x16HTTP-request-body-size\x01\x18\0\x1bHTTP-requ\
+est-method-invalid\0\0\x18HTTP-request-URI-invalid\0\0\x19HTTP-request-URI-too-l\
+ong\0\0\x20HTTP-request-header-section-size\x01\x15\0\x18HTTP-request-header-siz\
+e\x01\x19\0!HTTP-request-trailer-section-size\x01\x15\0\x19HTTP-request-trailer-\
+size\x01\x17\0\x18HTTP-response-incomplete\0\0!HTTP-response-header-section-size\
+\x01\x15\0\x19HTTP-response-header-size\x01\x17\0\x17HTTP-response-body-size\x01\
+\x18\0\"HTTP-response-trailer-section-size\x01\x15\0\x1aHTTP-response-trailer-si\
+ze\x01\x17\0\x1dHTTP-response-transfer-coding\x01\x0e\0\x1cHTTP-response-content\
+-coding\x01\x0e\0\x15HTTP-response-timeout\0\0\x13HTTP-upgrade-failed\0\0\x13HTT\
+P-protocol-error\0\0\x0dloop-detected\0\0\x13configuration-error\0\0\x0einternal\
+-error\x01\x0e\0\x04\0\x0aerror-code\x03\0\x1a\x01q\x03\x0einvalid-syntax\0\0\x09\
+forbidden\0\0\x09immutable\0\0\x04\0\x0cheader-error\x03\0\x1c\x01s\x04\0\x09fie\
+ld-key\x03\0\x1e\x04\0\x0afield-name\x03\0\x1f\x01p}\x04\0\x0bfield-value\x03\0!\
+\x04\0\x06fields\x03\x01\x04\0\x07headers\x03\0#\x04\0\x08trailers\x03\0#\x04\0\x10\
+incoming-request\x03\x01\x04\0\x10outgoing-request\x03\x01\x04\0\x0frequest-opti\
+ons\x03\x01\x04\0\x11response-outparam\x03\x01\x01{\x04\0\x0bstatus-code\x03\0*\x04\
+\0\x11incoming-response\x03\x01\x04\0\x0dincoming-body\x03\x01\x04\0\x0ffuture-t\
+railers\x03\x01\x04\0\x11outgoing-response\x03\x01\x04\0\x0doutgoing-body\x03\x01\
+\x04\0\x18future-incoming-response\x03\x01\x01i#\x01@\0\02\x04\0\x13[constructor\
+]fields\x013\x01o\x02\x20\"\x01p4\x01j\x012\x01\x1d\x01@\x01\x07entries5\06\x04\0\
+\x18[static]fields.from-list\x017\x01h#\x01p\"\x01@\x02\x04self8\x04name\x20\09\x04\
+\0\x12[method]fields.get\x01:\x01@\x02\x04self8\x04name\x20\0\x7f\x04\0\x12[meth\
+od]fields.has\x01;\x01j\0\x01\x1d\x01@\x03\x04self8\x04name\x20\x05value9\0<\x04\
+\0\x12[method]fields.set\x01=\x01@\x02\x04self8\x04name\x20\0<\x04\0\x15[method]\
+fields.delete\x01>\x01@\x03\x04self8\x04name\x20\x05value\"\0<\x04\0\x15[method]\
+fields.append\x01?\x01@\x01\x04self8\05\x04\0\x16[method]fields.entries\x01@\x01\
+@\x01\x04self8\02\x04\0\x14[method]fields.clone\x01A\x01h&\x01@\x01\x04self\xc2\0\
+\0\x0b\x04\0\x1f[method]incoming-request.method\x01C\x01@\x01\x04self\xc2\0\0\x0e\
+\x04\0([method]incoming-request.path-with-query\x01D\x01k\x0d\x01@\x01\x04self\xc2\
+\0\0\xc5\0\x04\0\x1f[method]incoming-request.scheme\x01F\x04\0\"[method]incoming\
+-request.authority\x01D\x01i$\x01@\x01\x04self\xc2\0\0\xc7\0\x04\0\x20[method]in\
+coming-request.headers\x01H\x01i-\x01j\x01\xc9\0\0\x01@\x01\x04self\xc2\0\0\xca\0\
+\x04\0\x20[method]incoming-request.consume\x01K\x01i'\x01@\x01\x07headers\xc7\0\0\
+\xcc\0\x04\0\x1d[constructor]outgoing-request\x01M\x01h'\x01i0\x01j\x01\xcf\0\0\x01\
+@\x01\x04self\xce\0\0\xd0\0\x04\0\x1d[method]outgoing-request.body\x01Q\x01@\x01\
+\x04self\xce\0\0\x0b\x04\0\x1f[method]outgoing-request.method\x01R\x01j\0\0\x01@\
+\x02\x04self\xce\0\x06method\x0b\0\xd3\0\x04\0#[method]outgoing-request.set-meth\
+od\x01T\x01@\x01\x04self\xce\0\0\x0e\x04\0([method]outgoing-request.path-with-qu\
+ery\x01U\x01@\x02\x04self\xce\0\x0fpath-with-query\x0e\0\xd3\0\x04\0,[method]out\
+going-request.set-path-with-query\x01V\x01@\x01\x04self\xce\0\0\xc5\0\x04\0\x1f[\
+method]outgoing-request.scheme\x01W\x01@\x02\x04self\xce\0\x06scheme\xc5\0\0\xd3\
+\0\x04\0#[method]outgoing-request.set-scheme\x01X\x04\0\"[method]outgoing-reques\
+t.authority\x01U\x01@\x02\x04self\xce\0\x09authority\x0e\0\xd3\0\x04\0&[method]o\
+utgoing-request.set-authority\x01Y\x01@\x01\x04self\xce\0\0\xc7\0\x04\0\x20[meth\
+od]outgoing-request.headers\x01Z\x01i(\x01@\0\0\xdb\0\x04\0\x1c[constructor]requ\
+est-options\x01\\\x01h(\x01k\x01\x01@\x01\x04self\xdd\0\0\xde\0\x04\0'[method]re\
+quest-options.connect-timeout\x01_\x01@\x02\x04self\xdd\0\x08duration\xde\0\0\xd3\
+\0\x04\0+[method]request-options.set-connect-timeout\x01`\x04\0*[method]request-\
+options.first-byte-timeout\x01_\x04\0.[method]request-options.set-first-byte-tim\
+eout\x01`\x04\0-[method]request-options.between-bytes-timeout\x01_\x04\01[method\
+]request-options.set-between-bytes-timeout\x01`\x01i)\x01i/\x01j\x01\xe2\0\x01\x1b\
+\x01@\x02\x05param\xe1\0\x08response\xe3\0\x01\0\x04\0\x1d[static]response-outpa\
+ram.set\x01d\x01h,\x01@\x01\x04self\xe5\0\0+\x04\0\x20[method]incoming-response.\
+status\x01f\x01@\x01\x04self\xe5\0\0\xc7\0\x04\0![method]incoming-response.heade\
+rs\x01g\x01@\x01\x04self\xe5\0\0\xca\0\x04\0![method]incoming-response.consume\x01\
+h\x01h-\x01i\x03\x01j\x01\xea\0\0\x01@\x01\x04self\xe9\0\0\xeb\0\x04\0\x1c[metho\
+d]incoming-body.stream\x01l\x01i.\x01@\x01\x04this\xc9\0\0\xed\0\x04\0\x1c[stati\
+c]incoming-body.finish\x01n\x01h.\x01i\x09\x01@\x01\x04self\xef\0\0\xf0\0\x04\0!\
+[method]future-trailers.subscribe\x01q\x01i%\x01k\xf2\0\x01j\x01\xf3\0\x01\x1b\x01\
+j\x01\xf4\0\0\x01k\xf5\0\x01@\x01\x04self\xef\0\0\xf6\0\x04\0\x1b[method]future-\
+trailers.get\x01w\x01@\x01\x07headers\xc7\0\0\xe2\0\x04\0\x1e[constructor]outgoi\
+ng-response\x01x\x01h/\x01@\x01\x04self\xf9\0\0+\x04\0%[method]outgoing-response\
+.status-code\x01z\x01@\x02\x04self\xf9\0\x0bstatus-code+\0\xd3\0\x04\0)[method]o\
+utgoing-response.set-status-code\x01{\x01@\x01\x04self\xf9\0\0\xc7\0\x04\0![meth\
+od]outgoing-response.headers\x01|\x01@\x01\x04self\xf9\0\0\xd0\0\x04\0\x1e[metho\
+d]outgoing-response.body\x01}\x01h0\x01i\x05\x01j\x01\xff\0\0\x01@\x01\x04self\xfe\
+\0\0\x80\x01\x04\0\x1b[method]outgoing-body.write\x01\x81\x01\x01j\0\x01\x1b\x01\
+@\x02\x04this\xcf\0\x08trailers\xf3\0\0\x82\x01\x04\0\x1c[static]outgoing-body.f\
+inish\x01\x83\x01\x01h1\x01@\x01\x04self\x84\x01\0\xf0\0\x04\0*[method]future-in\
+coming-response.subscribe\x01\x85\x01\x01i,\x01j\x01\x86\x01\x01\x1b\x01j\x01\x87\
+\x01\0\x01k\x88\x01\x01@\x01\x04self\x84\x01\0\x89\x01\x04\0$[method]future-inco\
+ming-response.get\x01\x8a\x01\x01h\x07\x01k\x1b\x01@\x01\x03err\x8b\x01\0\x8c\x01\
+\x04\0\x0fhttp-error-code\x01\x8d\x01\x03\0\x15wasi:http/types@0.2.8\x05@\x02\x03\
+\0\x15\x10outgoing-request\x02\x03\0\x15\x0frequest-options\x02\x03\0\x15\x18fut\
+ure-incoming-response\x02\x03\0\x15\x0aerror-code\x01B\x0f\x02\x03\x02\x01A\x04\0\
+\x10outgoing-request\x03\0\0\x02\x03\x02\x01B\x04\0\x0frequest-options\x03\0\x02\
+\x02\x03\x02\x01C\x04\0\x18future-incoming-response\x03\0\x04\x02\x03\x02\x01D\x04\
+\0\x0aerror-code\x03\0\x06\x01i\x01\x01i\x03\x01k\x09\x01i\x05\x01j\x01\x0b\x01\x07\
+\x01@\x02\x07request\x08\x07options\x0a\0\x0c\x04\0\x06handle\x01\x0d\x03\0\x20w\
+asi:http/outgoing-handler@0.2.8\x05E\x01B)\x01r\x04\x05lowerw\x05upperw\x05width\
+}\x05scale}\x04\0\x0cdecimalvalue\x03\0\0\x01r\x03\x06monthsz\x04daysz\x06micros\
+x\x04\0\x0dintervalvalue\x03\0\x02\x01r\x02\x02hiw\x02low\x04\0\x09uuidvalue\x03\
+\0\x04\x01r\x02\x09type-exprs\x04jsons\x04\0\x0ccomplexvalue\x03\0\x06\x01r\x02\x05\
+lowerw\x05upperx\x04\0\x0bduck-int128\x03\0\x08\x01r\x02\x05lowerw\x05upperw\x04\
+\0\x0cduck-uint128\x03\0\x0a\x01p}\x01r\x01\x07encoded\x0c\x04\0\x0dnested-colum\
+n\x03\0\x0d\x01r\x02\x0ckeys-encoded\x0c\x0cvals-encoded\x0c\x04\0\x0amap-column\
+\x03\0\x0f\x01r\x02\x04sizey\x07encoded\x0c\x04\0\x0carray-column\x03\0\x11\x01p\
+\x7f\x01px\x01pw\x01pu\x01pz\x01p~\x01p|\x01p{\x01py\x01pv\x01p\x01\x01p\x03\x01\
+p\x05\x01ps\x01p\x0c\x01p\x09\x01p\x0b\x01p\x07\x01q\x1b\x07boolean\x01\x13\0\x05\
+int64\x01\x14\0\x06uint64\x01\x15\0\x07float64\x01\x16\0\x05int32\x01\x17\0\x09t\
+imestamp\x01\x14\0\x04int8\x01\x18\0\x05int16\x01\x19\0\x05uint8\x01\x0c\0\x06ui\
+nt16\x01\x1a\0\x06uint32\x01\x1b\0\x07float32\x01\x1c\0\x04date\x01\x17\0\x04tim\
+e\x01\x14\0\x0btimestamptz\x01\x14\0\x07decimal\x01\x1d\0\x08interval\x01\x1e\0\x04\
+uuid\x01\x1f\0\x04text\x01\x20\0\x04blob\x01!\0\x07hugeint\x01\"\0\x08uhugeint\x01\
+#\0\x08list-col\x01\x0e\0\x0astruct-col\x01\x0e\0\x07map-col\x01\x10\0\x09array-\
+col\x01\x12\0\x07complex\x01$\0\x04\0\x06column\x03\0%\x01r\x03\x04data&\x08vali\
+dity\x0c\x04rowsy\x04\0\x06colvec\x03\0'\x03\0#duckdb:extension/column-types@5.0\
+.0\x05F\x02\x03\0\0\x0aloadresult\x01B\x0d\x02\x03\x02\x01\x02\x04\0\x09duckerro\
+r\x03\0\0\x02\x03\x02\x01G\x04\0\x0aloadresult\x03\0\x02\x01j\x01\x03\x01\x01\x01\
+@\0\0\x04\x04\0\x04load\x01\x05\x01ps\x01j\x01\x7f\x01\x01\x01@\x01\x04keys\x06\0\
+\x07\x04\0\x0breconfigure\x01\x08\x01@\0\0\x07\x04\0\x08shutdown\x01\x09\x04\0\x1c\
+duckdb:extension/guest@5.0.0\x05H\x02\x03\0\x17\x06colvec\x01B\x1f\x02\x03\x02\x01\
+\x02\x04\0\x09duckerror\x03\0\0\x02\x03\x02\x01\x03\x04\0\x09duckvalue\x03\0\x02\
+\x02\x03\x02\x01\x07\x04\0\x0ainvokeinfo\x03\0\x04\x02\x03\x02\x01\x09\x04\0\x09\
+resultset\x03\0\x06\x02\x03\x02\x01I\x04\0\x06colvec\x03\0\x08\x01p\x09\x01j\x01\
+\x09\x01\x01\x01@\x03\x06handley\x04args\x0a\x03ctx\x05\0\x0b\x04\0\x15call-scal\
+ar-batch-col\x01\x0c\x01j\x01\x03\x01\x01\x01@\x02\x06handley\x04args\x0a\0\x0d\x04\
+\0\x12call-aggregate-col\x01\x0e\x01@\x02\x06handley\x03arg\x09\0\x0b\x04\0\x0dc\
+all-cast-col\x01\x0f\x01p\x03\x01@\x03\x06handley\x04args\x10\x03ctx\x05\0\x0d\x04\
 \0\x0bcall-scalar\x01\x11\x01j\x01\x07\x01\x01\x01@\x02\x06handley\x04args\x10\0\
 \x12\x04\0\x0acall-table\x01\x13\x01k\x03\x01j\x01\x14\x01\x01\x01@\x02\x06handl\
 ey\x04args\x10\0\x15\x04\0\x0bcall-pragma\x01\x16\x01@\x02\x06handley\x05value\x03\
 \0\x0d\x04\0\x09call-cast\x01\x17\x04\0(duckdb:extension/callback-dispatch@5.0.0\
-\x05<\x04\0-duckdb:extension/duckdb-extension-cache@5.0.0\x04\0\x0b\x1c\x01\0\x16\
+\x05J\x04\0-duckdb:extension/duckdb-extension-cache@5.0.0\x04\0\x0b\x1c\x01\0\x16\
 duckdb-extension-cache\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-co\
 mponent\x070.227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]

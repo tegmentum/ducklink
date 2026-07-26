@@ -1,0 +1,203 @@
+package component:azure-wasm;
+
+/// Structural mirror of the `component:azure-wasm` exports the
+/// `cache-component` imports at compose time. The upstream lives at
+/// tegmentum/azure-wasm; when the `cache` Makefile target runs
+/// `wac plug`, the azure-wasm component satisfies these imports for
+/// the cache extension so `SELECT cache('az://...')` and
+/// `SELECT cache('azure://...')` work end-to-end in the wasm cache.
+/// Only the interfaces the cache resolver actually calls are declared
+/// here (types + base + shared-key + sas), matching the canonical
+/// shape exported by `azure_wasm.wasm`.
+interface blob-types {
+    /// Azure Blob error types
+    variant error {
+        access-denied,
+        no-such-container,
+        no-such-blob,
+        invalid-container-name,
+        invalid-request(string),
+        network-error(string),
+        parse-error(string),
+        internal(string),
+    }
+
+    /// Credentials for Azure Blob authentication.
+    /// Exactly one of `shared-key` or `sas-token` should be set.
+    record credentials {
+        account: string,
+        shared-key: option<string>,
+        sas-token: option<string>,
+    }
+
+    /// Azure Blob endpoint configuration
+    record endpoint-config {
+        url: string,
+        emulator: bool,
+    }
+
+    /// Blob metadata
+    record blob-metadata {
+        content-type: option<string>,
+        content-length: option<u64>,
+        etag: option<string>,
+        last-modified: option<u64>,
+        content-md5: option<string>,
+        custom: list<tuple<string, string>>,
+    }
+
+    /// Blob in a listing
+    record blob-info {
+        name: string,
+        size: u64,
+        etag: option<string>,
+        last-modified: option<u64>,
+        content-type: option<string>,
+    }
+
+    /// Result of a list blobs operation
+    record list-blobs-output {
+        blobs: list<blob-info>,
+        prefixes: list<string>,
+        next-marker: option<string>,
+    }
+
+    /// Options for get-blob
+    record get-blob-options {
+        range: option<tuple<u64, u64>>,
+        if-match: option<string>,
+        if-none-match: option<string>,
+    }
+
+    /// Options for put-blob
+    record put-blob-options {
+        content-type: option<string>,
+        metadata: list<tuple<string, string>>,
+        cache-control: option<string>,
+    }
+
+    /// Options for list-blobs
+    record list-blobs-options {
+        prefix: option<string>,
+        delimiter: option<string>,
+        max-results: option<u32>,
+        marker: option<string>,
+    }
+
+    /// Result of get-blob
+    record get-blob-output {
+        body: list<u8>,
+        metadata: blob-metadata,
+    }
+
+    /// Result of put-blob
+    record put-blob-output {
+        etag: string,
+    }
+
+    /// Result of head-blob
+    record head-blob-output {
+        metadata: blob-metadata,
+    }
+}
+
+/// Base Azure Blob interface. Modeled after s3-base so that a cache
+/// component can dispatch to either via near-identical wiring.
+interface blob-base {
+    use blob-types.{
+        error,
+        credentials,
+        endpoint-config,
+        get-blob-options,
+        get-blob-output,
+        put-blob-options,
+        put-blob-output,
+        head-blob-output,
+        list-blobs-options,
+        list-blobs-output,
+    };
+
+    get-blob: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        container: string,
+        blob: string,
+        options: option<get-blob-options>,
+    ) -> result<get-blob-output, error>;
+
+    put-blob: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        container: string,
+        blob: string,
+        body: list<u8>,
+        options: option<put-blob-options>,
+    ) -> result<put-blob-output, error>;
+
+    delete-blob: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        container: string,
+        blob: string,
+    ) -> result<_, error>;
+
+    head-blob: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        container: string,
+        blob: string,
+    ) -> result<head-blob-output, error>;
+
+    list-blobs: func(
+        endpoint: endpoint-config,
+        credentials: credentials,
+        container: string,
+        options: option<list-blobs-options>,
+    ) -> result<list-blobs-output, error>;
+}
+
+/// Azure Shared Key signing. Pure computation - exposed so other
+/// components (e.g., a cache) can sign requests they build themselves
+/// while still using this crate's canonicalization. The cache-component
+/// does not currently call it (it drives blob-base directly, which does
+/// its own signing internally); imported here to keep the composition
+/// complete so a future resolver that builds custom requests already
+/// has the surface wired.
+interface blob-shared-key {
+    use blob-types.{error};
+
+    record signing-request {
+        method: string,
+        account: string,
+        uri: string,
+        query-params: list<tuple<string, string>>,
+        headers: list<tuple<string, string>>,
+        emulator: bool,
+    }
+
+    record signed-headers {
+        authorization: string,
+        x-ms-date: string,
+        x-ms-version: string,
+    }
+
+    sign-request: func(
+        shared-key: string,
+        request: signing-request,
+        timestamp: u64,
+    ) -> result<signed-headers, error>;
+}
+
+/// SAS (Shared Access Signature) helpers.
+///
+/// SAS is Azure's "URL parameter" authentication - the token is pre-signed
+/// by the account owner (out of band); the client just appends it to every
+/// request URL as query string. No signing happens here.
+interface blob-sas {
+    append-sas: func(url: string, sas-token: string) -> string;
+
+    merge-sas: func(
+        query-params: list<tuple<string, string>>,
+        sas-token: string,
+    ) -> list<tuple<string, string>>;
+}
