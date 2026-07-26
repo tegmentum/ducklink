@@ -7,29 +7,21 @@ package duckdb:loader-stub;
 // pending, and the callback-dispatch entry points are never reached (nothing is
 // registered to invoke them). Plain SQL works; `LOAD <ext>` simply reports the
 // extension is unavailable.
+//
+// At `duckdb:extension@5.0.0` the eight `*-host` interfaces (storage-host,
+// index-host, collation-host, pragma-host, parser-host, optimizer-host,
+// files-host, table-stream-host) are gone: the wasm core no longer participates
+// in the storage / index / files pipeline, so the loader-stub no longer needs
+// to export any `*-host` shim.
 world loader-stub {
     export duckdb:component/host-extension-loader;
     export duckdb:component/extension-loader-hooks;
-    export duckdb:extension/callback-dispatch@4.0.0;
-    // Host->core callbacks the core imports so extension-registered backends can
-    // service storage (ATTACH), vector indexes, collations, pragmas, parsers,
-    // optimizers, remote files (httpfs), and filtered table streams. A standalone
-    // registers no such backends, so each `*-list` enumerator returns empty (the
-    // core registers nothing) and the per-handle operations are unreachable. The
-    // engine's built-in local/in-memory functionality is unaffected.
-    export duckdb:extension/storage-host@4.0.0;
-    export duckdb:extension/index-host@4.0.0;
-    export duckdb:extension/collation-host@4.0.0;
-    export duckdb:extension/pragma-host@4.0.0;
-    export duckdb:extension/parser-host@4.0.0;
-    export duckdb:extension/optimizer-host@4.0.0;
-    export duckdb:extension/files-host@4.0.0;
-    export duckdb:extension/table-stream-host@4.0.0;
+    export duckdb:extension/callback-dispatch@5.0.0;
     // The core imports tvm:memory unconditionally (the >4 GiB spill tier). The
     // standalone has no 64-bit host to back it, so the stub declines region
-    // creation: the guest's spill bridge then disables TVM and falls back to the
-    // ordinary temp-directory path. (A future spill-capable standalone could
-    // back regions with the stub's own linear memory.)
+    // creation: the guest's spill bridge then disables TVM and falls back to
+    // the ordinary temp-directory path. (A future spill-capable standalone
+    // could back regions with the stub's own linear memory.)
     export tvm:memory/manager@0.1.0;
     export tvm:memory/bytes@0.1.0;
 }
