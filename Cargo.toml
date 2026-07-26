@@ -136,6 +136,7 @@ members = [
     "extensions/ducklink-scalars-component",
     "extensions/fieldbook-component",
     "extensions/cache-component",
+    "extensions/mosaic-component",
     "extensions/sqlite-loader-stub",
     "extensions/piglatin-component",
     "extensions/rle-component",

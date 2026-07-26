@@ -6,7 +6,7 @@ BROWSER_TARGET?=wasm32-unknown-unknown
 # ducklink_core.wasm at the usual path.
 DUCKDB_WASM_DIR?=../duckdb-wasm
 
-.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk smoke-dotcmd sample-extension smoke-extension pintest-probes echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds cron-driver cache cache-clean sqlite-lib sqlite-loader-stub s3-wasm aws-sigv4-wasm azure-wasm gcs-wasm
+.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk smoke-dotcmd sample-extension smoke-extension pintest-probes echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds cron-driver cache cache-clean sqlite-lib sqlite-loader-stub s3-wasm aws-sigv4-wasm azure-wasm gcs-wasm mosaic mosaic-browser mosaic-clean
 
 all: core standalone-cli loader-stub dotcmds
 
@@ -333,6 +333,33 @@ ext-ship: host
 	@ : "$${NAME:?set NAME to the extension (bare or -component), e.g. NAME=isin-component}"
 	python3 tooling/smoke.py --build $(NAME)
 	python3 tooling/smoke.py --all
+
+# --- mosaic-component: builds the browser runtime (esbuild bundles
+# @uwdata/vgplot + mosaic-core + mosaic-spec + @observablehq/plot into
+# a single ~800 KB IIFE at extensions/mosaic-component/browser/dist/)
+# then builds the wasm component (which include_bytes!'s that bundle
+# and the SPA shell into the routes-table static handlers). No
+# wac-compose step needed — the extension only uses stdlib + the
+# duckdb:extension/nested-exec host import + wasi:random for token
+# generation, all already wired by ducklink-host.
+mosaic-browser:
+	@ command -v npm >/dev/null 2>&1 \
+	  || { echo "error: npm not found; install Node 20+ (or run with a Node in PATH)." >&2; exit 1; }
+	cd extensions/mosaic-component/browser \
+	  && ( test -d node_modules || npm install ) \
+	  && node esbuild.config.mjs
+	@echo "mosaic-browser: built extensions/mosaic-component/browser/dist/{bundle.js,index.html}"
+
+mosaic: mosaic-browser
+	cargo component build -p mosaic-component --target $(WASI_TARGET) --release
+	mkdir -p artifacts/extensions
+	cp target/wasm32-wasip1/release/mosaic.wasm artifacts/extensions/mosaic.wasm
+	@echo "mosaic: staged artifact -> artifacts/extensions/mosaic.wasm"
+
+mosaic-clean:
+	rm -rf extensions/mosaic-component/browser/dist \
+	       extensions/mosaic-component/browser/node_modules \
+	       artifacts/extensions/mosaic.wasm
 
 clean:
 	cargo clean

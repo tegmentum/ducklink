@@ -1,0 +1,40 @@
+package duckdb:extension@5.0.0;
+
+use runtime;
+use callback-dispatch;
+use config;
+use logging;
+use catalog;
+use files;
+use guest;
+use nested-exec;
+
+// Baseline world (kept for parity with every other extension in the tree so
+// tooling that assumes `duckdb:extension/duckdb-extension` can still resolve
+// it here).
+world duckdb-extension {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  export guest;
+  export callback-dispatch;
+}
+
+// Mosaic-capable world. Additionally imports `nested-exec`, the host
+// import that lets a scalar/table callback execute SQL on a sibling
+// connection to the same database (see wit/duckdb-extension/nested-exec.wit).
+// This is what makes the mosaic_create scalar insert into the routes
+// table (and the __mosaic_apps companion) without re-entering the outer
+// query engine.
+world duckdb-extension-mosaic {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import nested-exec;
+  export guest;
+  export callback-dispatch;
+}

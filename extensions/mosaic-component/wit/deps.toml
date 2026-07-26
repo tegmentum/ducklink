@@ -1,0 +1,3 @@
+[package]
+name = "duckdb:extension"
+version = "0.1.0"

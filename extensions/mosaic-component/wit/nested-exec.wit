@@ -1,0 +1,44 @@
+package duckdb:extension@5.0.0;
+
+// A host import for EXECUTING SQL from inside an extension callback -- the
+// counterpart to `query`, which is READ-ONLY and gracefully degrades on
+// re-entrancy. `nested-exec` runs the SQL on a SIBLING connection to the same
+// underlying database, sidestepping both the core-mutex contention and the
+// wasm-store re-entrancy that block `query` from inside an outer statement.
+// That makes it usable from scalar/table callbacks -- the mechanism the
+// workspace/notebook engine (`ducklink:fieldbook`) needs to execute a stored
+// entry from `fieldbook_run(...)`.
+//
+// Kept as a SEPARATE interface (additive, like `query` / `collation` /
+// `files-reg`) so existing components' frozen WIT copies stay structurally
+// unchanged. Only exec-capable components (fieldbook) import it.
+//
+// TRUST MODEL: the sibling connection sees the same catalog + files as the
+// outer connection but runs in a fresh, autocommitted transaction. A
+// `fieldbook_run` invoked inside an outer `BEGIN` therefore sees the
+// *committed* state, not the outer transaction's uncommitted changes. This is
+// documented, not a bug -- the alternative (sharing the outer transaction)
+// would re-introduce the very re-entrancy this interface exists to avoid.
+//
+// NESTING: the host enforces a nesting-depth ceiling (default 4). A component
+// that would exceed it gets an error result. This prevents accidental
+// cascades (a fieldbook entry that itself calls `fieldbook_run`) from
+// unbounded recursion.
+interface nested-exec {
+  // Result of a nested execution. `rows` is present for row-producing
+  // statements (SELECT / RETURNING / PRAGMA that returns rows); every cell is
+  // stringified (NULL -> the empty string), matching the neutral row shape
+  // used by the `query` interface. `rows-affected` is present for DML
+  // (INSERT / UPDATE / DELETE) and reports the changed-row count.
+  record exec-result {
+    rows: option<list<list<string>>>,
+    rows-affected: option<u64>,
+  }
+
+  // Run `sql` on a sibling connection to the same database. On success the
+  // caller receives an `exec-result`; on failure it receives the SQL error
+  // message verbatim (or a nesting-depth-exceeded error). Callers MUST NOT
+  // trap on error -- treat it as a data failure and surface the message to
+  // the user.
+  nested-exec: func(sql: string) -> result<exec-result, string>;
+}

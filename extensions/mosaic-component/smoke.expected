@@ -1,0 +1,8 @@
+has_apps_insert
+true
+has_app_route
+true
+embeds_bundle_boot
+true
+plot_kind_line
+true

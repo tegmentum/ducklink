@@ -1,0 +1,34 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ducklink mosaic — __NAME__</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 2rem; max-width: 860px; }
+  h1 { font-size: 1.1rem; margin: 0 0 0.25rem; }
+  p  { color: #555; margin: 0.25rem 0 1rem; }
+  #mosaic-root { border: 1px solid #ddd; padding: 0.5rem; min-height: 320px; }
+  .err { color: #a00; white-space: pre-wrap; }
+  code { background: #f4f4f4; padding: 0 4px; border-radius: 2px; }
+</style>
+
+<h1>ducklink mosaic — <code>__NAME__</code></h1>
+<p>
+  This page is served straight out of the <code>routes</code> table by
+  <code>ducklink serve</code>. The runtime bundle below is embedded in the
+  <code>mosaic</code> extension and staged on <code>mosaic.create(&hellip;)</code>.
+  Everything runs in one DuckDB process — no separate app server.
+</p>
+
+<div id="mosaic-root">loading&hellip;</div>
+
+<script src="/ducklink/mosaic/app/__NAME__/bundle.js"></script>
+<script>
+  window.mosaicRuntime.boot({
+    queryUri: "/ducklink/mosaic/api/app/__NAME__/query?token=__TOKEN__",
+    specUri:  "/ducklink/mosaic/api/app/__NAME__/spec",
+    mountEl:  "#mosaic-root",
+  }).catch(function (e) {
+    var el = document.getElementById("mosaic-root");
+    el.className = "err";
+    el.textContent = "mosaic boot failed: " + e;
+  });
+</script>

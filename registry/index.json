@@ -16382,6 +16382,65 @@
         }
       ],
       "content_digest": "c9b44c58ff37d1fc31dceb6d91d037376be1774e70aeb25a60650805ff1851ef"
+    },
+    {
+      "name": "mosaic",
+      "version": "0.1.0",
+      "description": "In-database Mosaic apps served straight out of ducklink's routes-table httpd — no separate app server. mosaic_create(name, spec_json [, opts_json]) stages a per-app SPA + JS bundle + spec JSON + shared /api/query route via nested-exec INSERTs; the returned URL opens on the same ducklink serve port. The browser bundle (mosaic-spec + vgplot + plot) is embedded in the wasm (~800 KB) so the .duckdb file stays self-contained. Auth: per-app token defaulting to a fresh 32-hex-char string on each create (opts.token = 'auto' | 'none' | '<hex>'). Also ships mosaic_drop / mosaic_url / mosaic_spec / mosaic_plot (raw-SQL -> canonical vgplot spec + create) scalars and the mosaic_list read macro. Additively imports duckdb:extension/nested-exec@5.0.0 on top of the standard duckdb:extension imports; the routes-table INSERTs land on the sibling connection and are visible to the httpd's next request. Companion table: __mosaic_apps (name PK, spec, token, description, created_at, updated_at). See extensions/mosaic-component/README.md + docs/mosaic-phase0-findings.md.",
+      "license": "MIT",
+      "authors": [
+        "Tegmentum"
+      ],
+      "repository": "https://github.com/tegmentum/ducklink",
+      "keywords": [
+        "mosaic",
+        "vgplot",
+        "visualization",
+        "http",
+        "routes",
+        "nested-exec"
+      ],
+      "categories": [
+        "utility"
+      ],
+      "source": "extensions/mosaic-component",
+      "status": "working",
+      "artifact": "artifacts/extensions/mosaic.wasm",
+      "wit_contract": "78609fcd7678584eb231d50619a6be4430ed39ffa6f645207e43af4f8406176f",
+      "wit_contract_version": "5.0.0",
+      "exports": [
+        "mosaic_create",
+        "mosaic_drop",
+        "mosaic_url",
+        "mosaic_spec",
+        "mosaic_plot",
+        "mosaic_list"
+      ],
+      "requires": [
+        "scalar",
+        "macro"
+      ],
+      "requires_components": [],
+      "crates": [
+        "wit-bindgen",
+        "wit-bindgen-rt",
+        "mosaic-core",
+        "datalink-extcore",
+        "getrandom",
+        "serde_json"
+      ],
+      "min_duckdb_version": "1.0.0",
+      "prefix": "mosaic",
+      "expansion": "com.tegmentum.ducklink.mosaic",
+      "providers": [
+        {
+          "id": "wasm-component",
+          "kind": "wasm",
+          "reference": true,
+          "abi": "duckdb:extension@5.0.0",
+          "artifact": "artifacts/extensions/mosaic.wasm"
+        }
+      ]
     }
   ],
   "dotcmds": [

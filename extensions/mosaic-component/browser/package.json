@@ -1,0 +1,24 @@
+{
+  "name": "ducklink-mosaic-browser",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Browser bundle for the ducklink mosaic-component: mosaic-core + vgplot + plot, bundled by esbuild into a single self-contained IIFE that the extension embeds via include_bytes! and serves out of the routes table.",
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs"
+  },
+  "dependencies": {
+    "@observablehq/plot": "^0.6.16",
+    "@uwdata/mosaic-core": "^0.20.0",
+    "@uwdata/mosaic-spec": "^0.20.1",
+    "@uwdata/mosaic-sql": "^0.20.0",
+    "@uwdata/vgplot": "^0.20.0",
+    "apache-arrow": "^19.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  },
+  "allowScripts": {
+    "esbuild@0.24.2": true
+  }
+}

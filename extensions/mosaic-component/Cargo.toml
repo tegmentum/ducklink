@@ -1,0 +1,44 @@
+[package]
+name = "mosaic-component"
+version = "0.1.0"
+edition = "2021"
+description = """
+Ducklink mosaic wasm extension. Registers six scalars (mosaic_create
+[arity 2 + 3 overloads], mosaic_drop, mosaic_url, mosaic_spec,
+mosaic_plot) and one read-side macro (mosaic_list) that let SQL turn a
+raw query + spec into a live in-database Mosaic app served straight
+out of ducklink's routes-table httpd — no separate app server. Per the
+Phase 0 findings (docs/mosaic-phase0-findings.md §6), the whole flow
+runs through the existing sql-kind + static-kind route handlers; the
+extension inserts routes via the duckdb:extension/nested-exec host
+import. The embedded browser bundle (mosaic-spec + vgplot + plot,
+~800 KB minified) lives under browser/dist/ and is include_bytes!'d
+into the wasm; mosaic-core (datalink) owns the SQL surface and the
+fn-pointer bridges the shim wires up at load().
+"""
+license = "MIT"
+publish = false
+
+[lib]
+name = "mosaic"
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.41"
+wit-bindgen-rt = "0.41"
+# Shared, DB-agnostic core (declare!-driven surface + logic).
+mosaic-core = { path = "../../../datalink/extensions/mosaic-core" }
+# Neutral value model + shared columnar bridge helpers.
+datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
+# Random token generation. `getrandom` v0.2 on wasm32-wasip2 goes
+# through wasi_snapshot_preview1::random_get — the host's wasmtime-wasi
+# wiring satisfies it. Default features only; no "js" flag (that's for
+# the browser target, not wasi).
+getrandom = { version = "0.2" }
+
+[package.metadata.component]
+package = "duckdb:extension"
+
+[package.metadata.component.target]
+path = "./wit"
+world = "duckdb:extension/duckdb-extension-mosaic"
