@@ -57,6 +57,8 @@ SUBCOMMANDS:
     activate <NAME-OR-ID>                Re-arm a paused job (recomputes next_run_at)
     deactivate <NAME-OR-ID>              Pause a job without deleting it
     list                                 Show scheduled jobs (JSON)
+    metrics                              Prometheus text-format counters/gauges
+                                         over __cron_runs / __cron_jobs / leases
     run                                  Tick loop: fire due jobs, sleep, repeat
 
 COMMON OPTIONS:
@@ -514,6 +516,128 @@ fn cmd_list(common: &Common) -> Result<()> {
     ];
     println!("{}", rows_to_json(&cols, &rows));
     Ok(())
+}
+
+/// Emit Prometheus text-format counters + gauges from __cron_runs / __cron_jobs.
+/// Text is written to stdout so operators can point a scrape endpoint at
+/// `ducklink cron metrics --db X` (via a small HTTP shim) or pipe it directly
+/// into pushgateway. No time-series storage — all metrics are computed on
+/// each invocation from the underlying tables.
+fn cmd_metrics(common: &Common) -> Result<()> {
+    let (artifacts, preopens) = artifacts_and_preopens()?;
+    let engine = build_engine_for_driver()?;
+    let mut state = open_state(&engine, &artifacts, &preopens, common)?;
+
+    // Per-(job, status) fire counts. `status` is derived from ok+err so a
+    // succeeded job comes back as `fired`, a failed one as `failed`, matching
+    // the __cron_jobs.last_status values. We aggregate over ALL history —
+    // callers who want windowed metrics should trim __cron_runs first via
+    // `cron run --history-limit N`.
+    let per_status = driver_core_query(
+        &mut state,
+        "SELECT j.name, CASE WHEN r.ok THEN 'fired' ELSE 'failed' END, \
+                COUNT(*), COALESCE(SUM(r.ms), 0) \
+         FROM __cron_runs r \
+         JOIN __cron_jobs j ON r.job_id = j.id \
+         GROUP BY j.name, r.ok \
+         ORDER BY j.name, r.ok DESC;",
+    )
+    .map_err(|e| anyhow::anyhow!("cron: metrics per-status query failed: {e}"))?;
+
+    // Per-job last-fire timestamp (seconds since epoch, Prometheus's
+    // canonical time unit for _timestamp gauges).
+    let per_last = driver_core_query(
+        &mut state,
+        "SELECT name, COALESCE(last_run_at, 0) FROM __cron_jobs ORDER BY name;",
+    )
+    .map_err(|e| anyhow::anyhow!("cron: metrics last-run query failed: {e}"))?;
+
+    // Whole-scheduler gauges.
+    let active_rows = driver_core_query(
+        &mut state,
+        "SELECT COUNT(*) FROM __cron_jobs WHERE active;",
+    )
+    .map_err(|e| anyhow::anyhow!("cron: metrics active-count query failed: {e}"))?;
+    let held_rows = driver_core_query(
+        &mut state,
+        &format!(
+            "SELECT COUNT(*) FROM __cron_leases WHERE expires_at > {};",
+            now_ms()
+        ),
+    )
+    .map_err(|e| anyhow::anyhow!("cron: metrics leases query failed: {e}"))?;
+
+    let active = active_rows
+        .first()
+        .and_then(|r| r.first())
+        .cloned()
+        .unwrap_or_else(|| "0".to_string());
+    let held = held_rows
+        .first()
+        .and_then(|r| r.first())
+        .cloned()
+        .unwrap_or_else(|| "0".to_string());
+
+    // Prometheus text format: HELP + TYPE lines, then one sample per line.
+    // Label values are already alphanumeric+underscore in practice (cron_id
+    // is a numeric hash and job names are user-picked but SQL-safe), but
+    // escape just in case a user's job name contains a quote or backslash.
+    let mut out = String::new();
+    out.push_str("# HELP cron_fires_total Number of __cron_runs rows per (job, status).\n");
+    out.push_str("# TYPE cron_fires_total counter\n");
+    for row in &per_status {
+        let job = escape_prom_label(row.first().map(String::as_str).unwrap_or(""));
+        let status = row.get(1).map(String::as_str).unwrap_or("");
+        let count = row.get(2).map(String::as_str).unwrap_or("0");
+        out.push_str(&format!(
+            "cron_fires_total{{job=\"{job}\",status=\"{status}\"}} {count}\n"
+        ));
+    }
+    out.push_str("# HELP cron_fire_duration_ms_sum Total fire duration in ms per (job, status).\n");
+    out.push_str("# TYPE cron_fire_duration_ms_sum counter\n");
+    for row in &per_status {
+        let job = escape_prom_label(row.first().map(String::as_str).unwrap_or(""));
+        let status = row.get(1).map(String::as_str).unwrap_or("");
+        let ms_sum = row.get(3).map(String::as_str).unwrap_or("0");
+        out.push_str(&format!(
+            "cron_fire_duration_ms_sum{{job=\"{job}\",status=\"{status}\"}} {ms_sum}\n"
+        ));
+    }
+    out.push_str("# HELP cron_last_run_timestamp_seconds UTC epoch seconds of each job's last successful fire.\n");
+    out.push_str("# TYPE cron_last_run_timestamp_seconds gauge\n");
+    for row in &per_last {
+        let job = escape_prom_label(row.first().map(String::as_str).unwrap_or(""));
+        // last_run_at is ms; Prometheus wants seconds (float).
+        let ms: i64 = row.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let secs = ms as f64 / 1000.0;
+        out.push_str(&format!(
+            "cron_last_run_timestamp_seconds{{job=\"{job}\"}} {secs}\n"
+        ));
+    }
+    out.push_str("# HELP cron_active_jobs Number of active jobs in __cron_jobs.\n");
+    out.push_str("# TYPE cron_active_jobs gauge\n");
+    out.push_str(&format!("cron_active_jobs {active}\n"));
+    out.push_str("# HELP cron_leases_held Number of non-expired per-job leases in __cron_leases.\n");
+    out.push_str("# TYPE cron_leases_held gauge\n");
+    out.push_str(&format!("cron_leases_held {held}\n"));
+    print!("{out}");
+    Ok(())
+}
+
+/// Prometheus label-value escape: backslash, double-quote, newline per
+/// spec (openmetrics-text-format §5.1). Job names in this codebase are
+/// unlikely to contain these but we don't control what users pick.
+fn escape_prom_label(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 fn cmd_run(common: &Common, rest: &[String]) -> Result<()> {
@@ -1002,6 +1126,7 @@ pub fn run(args: &[String]) -> Result<()> {
         "activate" => cmd_alter(&common, &rest, "activate"),
         "deactivate" => cmd_alter(&common, &rest, "deactivate"),
         "list" => cmd_list(&common),
+        "metrics" => cmd_metrics(&common),
         "run" => cmd_run(&common, &rest),
         other => {
             eprintln!("unknown subcommand `{other}`\n\n{HELP}");
