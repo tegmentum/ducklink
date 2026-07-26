@@ -78,6 +78,11 @@ schedule OPTIONS:
                               attached at driver startup with `run --attach
                               PATH=NAME`. Omit to run against the driver's
                               current catalog (backwards-compatible default).
+    --readonly                Wrap this job's fire in BEGIN; ... ROLLBACK;
+                              so any writes are undone at end. Best-effort
+                              (an explicit COMMIT in the SQL still commits);
+                              safety-net for jobs the operator expects to
+                              be read-only.
 
 run OPTIONS:
     --interval <SECS>        Sleep between ticks. Default: 30.
@@ -348,6 +353,10 @@ fn cmd_schedule(common: &Common, rest: &[String]) -> Result<()> {
     let mut catch_up = "skip".to_string();
     let mut nodename: Option<String> = None;
     let mut database: Option<String> = None;
+    // --readonly wraps this job's fire in BEGIN; ... ROLLBACK; so writes
+    // are undone. Best-effort (an explicit COMMIT in the SQL still commits)
+    // — safety net for jobs the operator expects to be read-only.
+    let mut readonly = false;
     let mut i = 0;
     while i < rest.len() {
         match rest[i].as_str() {
@@ -385,6 +394,7 @@ fn cmd_schedule(common: &Common, rest: &[String]) -> Result<()> {
                         .ok_or_else(|| anyhow::anyhow!("--database expects a name"))?,
                 );
             }
+            "--readonly" => readonly = true,
             other => {
                 if name.is_none() {
                     name = Some(other.to_string());
@@ -429,22 +439,27 @@ fn cmd_schedule(common: &Common, rest: &[String]) -> Result<()> {
         Some(v) => format!("'{}'", sql_escape(v)),
         None => "NULL".to_string(),
     };
+    // Readonly is a real BOOLEAN column, not the NULL/literal pattern used
+    // for text opt-outs. `NULL` in the DB is treated as false at read time.
+    let ro_lit = if readonly { "true" } else { "false" };
     let upsert = format!(
-        "INSERT INTO __cron_jobs (id, name, schedule, sql, active, catch_up, next_run_at, nodename, database) \
+        "INSERT INTO __cron_jobs (id, name, schedule, sql, active, catch_up, next_run_at, nodename, database, readonly) \
          VALUES (cron_id('{n}'), '{n}', '{e}', '{s}', true, '{c}', \
-         cron_next('{e}', epoch_ms(now())), {node_lit}, {db_lit}) \
+         cron_next('{e}', epoch_ms(now())), {node_lit}, {db_lit}, {ro_lit}) \
          ON CONFLICT (id) DO UPDATE SET \
          schedule = excluded.schedule, sql = excluded.sql, catch_up = excluded.catch_up, \
          active = true, \
          next_run_at = cron_next(excluded.schedule, epoch_ms(now())), \
          nodename = excluded.nodename, \
-         database = excluded.database;"
+         database = excluded.database, \
+         readonly = excluded.readonly;"
     );
     driver_core_exec(&mut state, &upsert)
         .map_err(|e| anyhow::anyhow!("cron: schedule upsert failed: {e}"))?;
 
     let select = format!(
-        "SELECT id, name, next_run_at, COALESCE(nodename, ''), COALESCE(database, '') \
+        "SELECT id, name, next_run_at, COALESCE(nodename, ''), COALESCE(database, ''), \
+                COALESCE(readonly, false) \
          FROM __cron_jobs WHERE id = cron_id('{n}');"
     );
     let rows = driver_core_query(&mut state, &select)
@@ -452,7 +467,7 @@ fn cmd_schedule(common: &Common, rest: &[String]) -> Result<()> {
     println!(
         "{}",
         rows_to_json(
-            &["id", "name", "next_run_at", "nodename", "database"],
+            &["id", "name", "next_run_at", "nodename", "database", "readonly"],
             &rows,
         )
     );
@@ -497,7 +512,8 @@ fn cmd_list(common: &Common) -> Result<()> {
         &mut state,
         "SELECT id, name, schedule, active, catch_up, \
          next_run_at, last_run_at, last_status, last_error, \
-         COALESCE(nodename, ''), COALESCE(database, '') \
+         COALESCE(nodename, ''), COALESCE(database, ''), \
+         COALESCE(readonly, false) \
          FROM __cron_jobs ORDER BY name;",
     )
     .map_err(|e| anyhow::anyhow!("cron: list failed: {e}"))?;
@@ -513,6 +529,7 @@ fn cmd_list(common: &Common) -> Result<()> {
         "last_error",
         "nodename",
         "database",
+        "readonly",
     ];
     println!("{}", rows_to_json(&cols, &rows));
     Ok(())
@@ -863,20 +880,26 @@ fn tick_body(
     //    directly. Also project `database` so cross-catalog jobs can be
     //    switched into their target catalog before firing.
     let read_sql = format!(
-        "SELECT id, sql, COALESCE(database, '') FROM cron_due_for({now}, '{node_sql}');"
+        "SELECT id, sql, COALESCE(database, ''), COALESCE(readonly, false) \
+         FROM cron_due_for({now}, '{node_sql}');"
     );
     let rows = driver_core_query(state, &read_sql)
         .map_err(|e| anyhow::anyhow!("cron: reading due jobs: {e}"))?;
     if rows.is_empty() {
         return Ok(TickOutcome { fired: 0, contended: 0 });
     }
-    let due: Vec<(u64, String, String)> = rows
+    let due: Vec<(u64, String, String, bool)> = rows
         .into_iter()
         .filter_map(|row| {
             let id = row.first()?.parse::<u64>().ok()?;
             let sql = row.get(1).cloned().unwrap_or_default();
             let database = row.get(2).cloned().unwrap_or_default();
-            Some((id, sql, database))
+            // DuckDB's driver_core_query stringifies booleans as "true"/"false".
+            let readonly = row
+                .get(3)
+                .map(|s| s.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
+            Some((id, sql, database, readonly))
         })
         .collect();
     if due.is_empty() {
@@ -903,7 +926,7 @@ fn tick_body(
     // each cross-catalog job so subsequent per-tick bookkeeping
     // (record UPDATE / INSERT, lease release) always lands in the scheduler's
     // own catalog.
-    let needs_switch = due.iter().any(|(_, _, db)| !db.is_empty());
+    let needs_switch = due.iter().any(|(_, _, db, _)| !db.is_empty());
     let original_catalog: Option<String> = if needs_switch {
         let rows = driver_core_query(state, "SELECT current_database();").map_err(|e| {
             anyhow::anyhow!("cron: reading current catalog: {e}")
@@ -917,7 +940,18 @@ fn tick_body(
     //    driver already holds it), fire on the same persistent connection,
     //    then release. Independent per-job leases mean a slow job on
     //    driver A doesn't block driver B from firing other due jobs.
-    for (id, sql, database) in &due {
+    for (id, sql, database, readonly) in &due {
+        // If the job is readonly, wrap the fire in an explicit transaction
+        // that ALWAYS ends in ROLLBACK. DuckDB executes a `;`-separated
+        // batch as one call; if the user's SQL fails mid-way, the ROLLBACK
+        // that follows still runs and unwinds any preceding work in the
+        // transaction. Best-effort: an explicit COMMIT inside the user SQL
+        // still commits (documented in --help).
+        let effective_sql = if *readonly {
+            format!("BEGIN TRANSACTION; {sql}; ROLLBACK;")
+        } else {
+            sql.clone()
+        };
         // Per-job lease acquire. UPSERT semantics identical to the v0
         // whole-tick shape: insert on absent, overwrite on expired,
         // do-nothing if a valid lease is held by someone else. RETURNING
@@ -953,7 +987,7 @@ fn tick_body(
         // release land back in the scheduler's own catalog). Missing
         // catalogs are recorded as `skipped` without crashing the tick.
         let outcome: (Result<u64, String>, &'static str) = if database.is_empty() {
-            (driver_core_exec(state, sql), "fired")
+            (driver_core_exec(state, &effective_sql), "fired")
         } else {
             let use_sql = format!("USE {}", sql_escape_identifier(database));
             match driver_core_exec(state, &use_sql) {
@@ -971,7 +1005,7 @@ fn tick_body(
                     continue;
                 }
                 Ok(_) => {
-                    let result = driver_core_exec(state, sql);
+                    let result = driver_core_exec(state, &effective_sql);
                     // Unconditional restore — even on job error — so the
                     // lease-release UPDATE and the outcome-recording SQL
                     // always land in the scheduler's own catalog.
@@ -1072,10 +1106,12 @@ CREATE TABLE IF NOT EXISTS __cron_jobs (
     last_error   TEXT,
     created_at   BIGINT       NOT NULL DEFAULT (epoch_ms(now())),
     nodename     TEXT,
-    database     TEXT
+    database     TEXT,
+    readonly     BOOLEAN
 );
 ALTER TABLE __cron_jobs ADD COLUMN IF NOT EXISTS nodename TEXT;
 ALTER TABLE __cron_jobs ADD COLUMN IF NOT EXISTS database TEXT;
+ALTER TABLE __cron_jobs ADD COLUMN IF NOT EXISTS readonly BOOLEAN;
 CREATE TABLE IF NOT EXISTS __cron_runs (
     job_id   UBIGINT NOT NULL,
     run_at   BIGINT NOT NULL,
@@ -1091,12 +1127,12 @@ CREATE TABLE IF NOT EXISTS __cron_leases (
 );
 CREATE OR REPLACE MACRO cron_id(name) AS hash(name);
 CREATE OR REPLACE MACRO cron_due(now_ms) AS TABLE
-    SELECT id, name, schedule, sql, catch_up, next_run_at, last_run_at, nodename, database
+    SELECT id, name, schedule, sql, catch_up, next_run_at, last_run_at, nodename, database, readonly
     FROM __cron_jobs
     WHERE active AND next_run_at IS NOT NULL AND next_run_at <= now_ms AND nodename IS NULL
     ORDER BY next_run_at;
 CREATE OR REPLACE MACRO cron_due_for(now_ms, node) AS TABLE
-    SELECT id, name, schedule, sql, catch_up, next_run_at, last_run_at, nodename, database
+    SELECT id, name, schedule, sql, catch_up, next_run_at, last_run_at, nodename, database, readonly
     FROM __cron_jobs
     WHERE active AND next_run_at IS NOT NULL AND next_run_at <= now_ms
       AND (nodename IS NULL OR nodename = node)

@@ -81,7 +81,14 @@ CREATE TABLE IF NOT EXISTS __cron_jobs (
     -- this catalog for the job's SQL, then restores. The catalog must be
     -- attached to the driver at startup (`ducklink cron run --attach
     -- PATH=NAME`); missing catalogs are recorded as `last_status='skipped'`.
-    database     TEXT
+    database     TEXT,
+    -- Best-effort transactional isolation for user-supplied SQL: NULL / false
+    -- runs the SQL directly; true wraps the fire in `BEGIN; <sql>; ROLLBACK;`
+    -- so any writes are undone at end. Not a security boundary — a job that
+    -- includes an explicit COMMIT can still defeat the rollback — but a
+    -- convenient safety-net for read-mostly jobs the operator wants to be
+    -- sure won't mutate the DB.
+    readonly     BOOLEAN
 );
 
 -- Additive migration path for DBs init'd before `nodename` existed: DuckDB
@@ -90,6 +97,7 @@ CREATE TABLE IF NOT EXISTS __cron_jobs (
 -- runs against a pre-existing table.
 ALTER TABLE __cron_jobs ADD COLUMN IF NOT EXISTS nodename TEXT;
 ALTER TABLE __cron_jobs ADD COLUMN IF NOT EXISTS database TEXT;
+ALTER TABLE __cron_jobs ADD COLUMN IF NOT EXISTS readonly BOOLEAN;
 
 -- __cron_runs: append-only history (bounded by callers; no auto-trim in v0).
 CREATE TABLE IF NOT EXISTS __cron_runs (
@@ -132,7 +140,7 @@ CREATE OR REPLACE MACRO cron_id(name) AS
 -- The single-arg form kept for backward compatibility: it fires only global
 -- jobs (a driver that has no node identity of its own).
 CREATE OR REPLACE MACRO cron_due(now_ms) AS TABLE
-    SELECT id, name, schedule, sql, catch_up, next_run_at, last_run_at, nodename, database
+    SELECT id, name, schedule, sql, catch_up, next_run_at, last_run_at, nodename, database, readonly
     FROM __cron_jobs
     WHERE active
       AND next_run_at IS NOT NULL
@@ -144,7 +152,7 @@ CREATE OR REPLACE MACRO cron_due(now_ms) AS TABLE
 -- driver's identity (see `resolve_node_name` in ducklink-host). Fires jobs
 -- that are global (nodename IS NULL) OR node-targeted at THIS driver.
 CREATE OR REPLACE MACRO cron_due_for(now_ms, node) AS TABLE
-    SELECT id, name, schedule, sql, catch_up, next_run_at, last_run_at, nodename, database
+    SELECT id, name, schedule, sql, catch_up, next_run_at, last_run_at, nodename, database, readonly
     FROM __cron_jobs
     WHERE active
       AND next_run_at IS NOT NULL
@@ -297,5 +305,6 @@ mod tests {
         assert!(BOOTSTRAP_SQL.contains("cron_id"));
         assert!(BOOTSTRAP_SQL.contains("nodename"));
         assert!(BOOTSTRAP_SQL.contains("database"));
+        assert!(BOOTSTRAP_SQL.contains("readonly"));
     }
 }

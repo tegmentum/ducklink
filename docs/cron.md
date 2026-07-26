@@ -59,6 +59,10 @@ evaluated in UTC. `SQL` is any DuckDB statement (or `;`-separated batch).
 "any driver" behaviour. `--database NAME` runs the job against a specific
 attached catalog (see [Cross-catalog jobs](#cross-catalog-jobs)); omit to run
 against the driver's current catalog (the backwards-compatible default).
+`--readonly` wraps the fire in `BEGIN TRANSACTION; <sql>; ROLLBACK;` so
+any writes are discarded at end — a safety net for jobs the operator expects
+to be read-only. Best-effort: an explicit `COMMIT` inside the user SQL will
+still commit.
 
 ### `unschedule <NAME-OR-ID>` / `activate <NAME-OR-ID>` / `deactivate <NAME-OR-ID>`
 
@@ -337,6 +341,8 @@ Behaviour matches the CLI driver — the CLI is just this loop in Rust.
 | `last_error` | `TEXT` | Last error message (or `NULL`). |
 | `created_at` | `BIGINT` | UTC epoch ms of insertion. |
 | `nodename` | `TEXT` | Per-node targeting: `NULL` = any driver; a value = fires only on the matching driver. |
+| `database` | `TEXT` | Cross-catalog target: `NULL` = run in the driver's current catalog; a value = `USE <value>` before firing, restore after. |
+| `readonly` | `BOOLEAN` | If true, wrap the job's SQL in `BEGIN; ... ROLLBACK;` so writes are undone. |
 | `database` | `TEXT` | Cross-catalog target: `NULL` = run in the current catalog; a value = `USE <value>` before the SQL. |
 
 ### `__cron_leases`
