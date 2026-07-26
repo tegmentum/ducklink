@@ -5,6 +5,7 @@ members = [
     "crates/ducklink-runtime",
     "crates/ducklink-cli",
     "crates/ducklink-loader",
+    "extensions/fieldbook-loader",
     "crates/ducklink-host",
     "crates/storage-boundary-test",
     "crates/table-stream-boundary-test",

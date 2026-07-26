@@ -1,0 +1,27 @@
+// Trimmed twin of `wit/standalone/duckdb-cli.wit`'s `dotcmd-host` interface.
+// Only the interface (not the CLI world) is copied so the fieldbook-loader stub
+// can `export duckdb:cli/dotcmd-host` and satisfy the CLI's `dotcmd-host`
+// import at wac-plug time. Every method is a no-op stub in the standalone —
+// `list-commands` returns an empty list and `invoke` returns `ok(none)` so the
+// CLI falls back to its built-ins (which are compiled in, `.help`, `.quit`,
+// etc.).
+package duckdb:cli;
+
+interface dotcmd-host {
+    record state-delta {
+        key: string,
+        value: string,
+    }
+    record outcome {
+        text: string,
+        state-deltas: list<state-delta>,
+    }
+    invoke: func(name: string, args: string) -> result<option<outcome>, string>;
+
+    record command-info {
+        name: string,
+        summary: string,
+        usage: string,
+    }
+    list-commands: func() -> list<command-info>;
+}

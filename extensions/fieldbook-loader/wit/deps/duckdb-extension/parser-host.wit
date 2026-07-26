@@ -1,0 +1,29 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> core parser pull + dispatch (2.3.0 / v3). The DuckDB-compiled-to-wasm
+// core IMPORTS this interface; the native host PROVIDES it. Mirrors
+// `pragma-host`: the core pulls the parser extensions components have declared
+// (via `parser.register-parser-extension`), and -- when the built-in parser
+// rejects a statement -- offers the raw statement text to each, applying the
+// string->SQL REWRITE the owning component returns. The component never returns a
+// bound parse tree (the by-value WIT recursion wall); only text in, SQL out.
+interface parser-host {
+  use types.{duckerror};
+
+  // One parser extension a component declared: a name + the dispatch handle the
+  // host routes `call-parse` through to the owning component.
+  record parser-spec {
+    name: string,
+    callback-handle: u32,
+  }
+
+  // Enumerate the parser extensions components have declared so far this session.
+  parser-list: func() -> list<parser-spec>;
+
+  // Offer the unrecognized statement `query` to the parser extension `handle`.
+  // Returns `some(rewrite-sql)` if the component claims + rewrites it, or `none`
+  // if it declines (the core proceeds to its own parse error).
+  call-parse: func(handle: u32, query: string) -> result<option<string>, duckerror>;
+}

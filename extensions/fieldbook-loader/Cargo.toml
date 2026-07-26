@@ -1,0 +1,44 @@
+[package]
+name = "fieldbook-loader"
+version = "0.1.0"
+edition = "2021"
+description = """
+Fieldbook-specific provider stub for the DuckDB core's dynamic-extension host
+imports. Composed (via wac plug) into ducklink_core.wasm to produce a
+self-contained fieldbook-cli.wasm. Structurally identical to
+`crates/ducklink-loader` (declining defaults for callback-dispatch and the
+eight host->core backend surfaces plus tvm:memory) with one tweak:
+`request-load` returns `true` for `"fieldbook"` and `"fieldbook_dotcmd"` so
+the CLI's `LOAD fieldbook;` autoload path reports success. The fieldbook
+authoring surface (`.fb`, `.entry`, `.run`) reaches the user via the
+wac-plugged fieldbook-dotcmd component; the engine-level fieldbook_* scalars
+remain gated on the shared nested-exec ecosystem fix.
+"""
+license = "MIT"
+publish = false
+
+[lib]
+name = "fieldbook_loader"
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen-rt = { version = "0.41.0", features = ["bitflags"] }
+
+[package.metadata.component]
+package = "duckdb:fieldbook-loader"
+
+[package.metadata.component.target]
+path = "wit"
+world = "duckdb:fieldbook-loader/loader-stub"
+
+[package.metadata.component.target.dependencies]
+"duckdb:component" = { path = "wit/deps/duckdb" }
+"duckdb:extension" = { path = "wit/deps/duckdb/deps/duckdb-extension" }
+"wasi:cli" = { path = "wit/deps/wasi-cli" }
+"wasi:filesystem" = { path = "wit/deps/wasi-filesystem" }
+"wasi:io" = { path = "wit/deps/wasi-io" }
+"wasi:clocks" = { path = "wit/deps/wasi-clocks" }
+"wasi:sockets" = { path = "wit/deps/wasi-sockets" }
+"wasi:random" = { path = "wit/deps/wasi-random" }
+"tvm:memory" = { path = "wit/deps/tvm" }
+"duckdb:cli" = { path = "wit/deps/duckdb-cli" }

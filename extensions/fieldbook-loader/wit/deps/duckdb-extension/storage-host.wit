@@ -1,0 +1,126 @@
+package duckdb:extension@4.0.0;
+
+use types;
+
+// Host -> core storage callbacks. The DuckDB-compiled-to-wasm core IMPORTS this
+// interface; the native host PROVIDES it and routes each call to the storage
+// component (e.g. sqlitewasm) that registered an ATTACH backend, driving that
+// component's `storage-dispatch` export. This mirrors how the core imports
+// `callback-dispatch` (call-table etc.) for function dispatch.
+//
+// M2a needs only attach + table/column enumeration; scan-open/next/close are
+// declared for M2b but the core may not call them yet.
+interface storage-host {
+  use types.{duckerror, columndef, duckvalue};
+
+  type resultset = list<list<duckvalue>>;
+
+  // Comparison pushed into a scan as an AND-ed predicate. Mirrors the backing
+  // component's storage.compare-op.
+  enum compare-op {
+    eq, ne, lt, le, gt, ge, is-null, is-not-null,
+  }
+
+  // One predicate. `column` indexes the table's FULL column list (not the
+  // projection). Pushdown is best-effort: the engine re-applies every filter.
+  record scan-filter {
+    column: u32,
+    op: compare-op,
+    value: duckvalue,        // ignored for is-null / is-not-null
+  }
+
+  // What the engine asks a scan to produce. Mirrors the component's
+  // storage.scan-request.
+  //
+  // When `wants-rowid` is true the guest must append a stable per-row s64
+  // rowid as the FINAL cell of every row returned by `storage-scan-next`
+  // (in addition to the projected column cells). DuckDB's UPDATE/DELETE
+  // physical plans project `COLUMN_IDENTIFIER_ROW_ID` alongside the touched
+  // columns; the C++ WasmScanInitGlobal detects those slots, strips them
+  // from `projection` (which stays exclusively real table column indices),
+  // and sets this flag. `storage-scan-open` on the storage-dispatch side
+  // carries the same semantic across the host->guest dispatch layer.
+  record scan-request {
+    table: string,
+    projection: list<u32>,   // column indices to emit, in order; empty = all
+    filters: list<scan-filter>,
+    limit: option<u64>,      // best-effort row cap
+    wants-rowid: bool,       // append s64 rowid as trailing cell of each row
+  }
+
+  // Enumerate the ATTACH `TYPE` names that components have registered (via
+  // `register-storage`) so far this session. The core calls this lazily (before
+  // running queries) and registers a wasm StorageExtension for each type it has
+  // not yet seen, so `ATTACH ... (TYPE <name>)` can dispatch to that component.
+  // This replaces the previous hardcoded "sqlitewasm" registration at DB-open.
+  storage-list-types: func() -> list<string>;
+
+  // Open the foreign catalog named by an ATTACH DSN (a host file path for the
+  // native host). The host stages the file bytes into the backing component and
+  // returns the component-side catalog handle.
+  storage-attach: func(dsn: string) -> result<u32, duckerror>;
+
+  // Enumerate the catalog's base tables.
+  storage-list-tables: func(catalog: u32) -> result<list<string>, duckerror>;
+
+  // Enumerate one table's columns (name + duckdb logical type).
+  storage-table-columns: func(catalog: u32, table: string) -> result<list<columndef>, duckerror>;
+
+  // M2b scan surface: engine-driven projection + filter pushdown.
+  storage-scan-open: func(catalog: u32, request: scan-request) -> result<u32, duckerror>;
+  storage-scan-next: func(scan: u32, max-rows: u32) -> result<resultset, duckerror>;
+  storage-scan-close: func(scan: u32) -> result<bool, duckerror>;
+
+  // M2c WRITE surface (additive): transactions + DDL + DML. Each call mirrors
+  // the corresponding entry on the component's `storage-write-dispatch` export;
+  // the host resolves the (extension, handle) to route to via the same
+  // `resolve_storage_backend` picker the read-side scan imports use, then
+  // forwards to the ExtensionInstance write trampolines
+  // (ducklink-runtime/src/extension.rs `storage_{begin,commit,rollback}_transaction`,
+  // `storage_{create_table,insert_rows,update_rows,delete_rows}`).
+  //
+  // The C++ WasmCatalog `PlanInsert / PlanUpdate / PlanDelete` +
+  // WasmTransactionManager + WasmSchemaEntry::CreateTable route here through the
+  // extern-C bridge in `wasm_storage_bridge.h` (wasm_storage_write_*).
+
+  // Open a write transaction on `catalog`; returns a transaction handle.
+  storage-begin-transaction: func(catalog: u32) -> result<u32, duckerror>;
+
+  // Commit an open write transaction.
+  storage-commit-transaction: func(txn: u32) -> result<_, duckerror>;
+
+  // Roll back an open write transaction; releases txn state on the component
+  // side even if it was already rolled back.
+  storage-rollback-transaction: func(txn: u32) -> result<_, duckerror>;
+
+  // CREATE TABLE within an open transaction.
+  storage-create-table: func(txn: u32, table: string,
+                             columns: list<columndef>) -> result<_, duckerror>;
+
+  // Append rows; returns the number of rows inserted.
+  storage-insert-rows: func(txn: u32, table: string,
+                            rows: list<list<duckvalue>>) -> result<u64, duckerror>;
+
+  // Delete rows by rowid; returns the number deleted.
+  storage-delete-rows: func(txn: u32, table: string,
+                            rowids: list<s64>) -> result<u64, duckerror>;
+
+  // Update rows by rowid (parallel `rowids` and `rows`). Each `rows[i]` is a
+  // PARTIAL row carrying only the values for the columns being SET; the
+  // schema-index of each cell is given by the parallel-indexed entry in
+  // `updated-columns`, so `rows[i][j]` sets the schema column
+  // `updated-columns[j]` on the row identified by `rowids[i]`.
+  //
+  // DuckDB's `LogicalUpdate::columns` is the plan-time list of physical
+  // schema indices that appear in the `SET` clause; the C++ WasmPhysicalUpdate
+  // captures those at plan time and forwards them here alongside the child
+  // DataChunk's SET cells (whose column count is always `updated-columns.len`;
+  // the trailing chunk column is the row identifier — captured out-of-band as
+  // `rowids`). The guest may reject an `updated-columns` entry it doesn't
+  // know how to project on (e.g. a virtual column). Returns the number of
+  // rows successfully updated.
+  storage-update-rows: func(txn: u32, table: string,
+                            rowids: list<s64>,
+                            updated-columns: list<u32>,
+                            rows: list<list<duckvalue>>) -> result<u64, duckerror>;
+}

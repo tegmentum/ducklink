@@ -1,0 +1,47 @@
+package duckdb:fieldbook-loader;
+
+// Fieldbook-specific provider for the three host imports the core component
+// declares for dynamic extension loading (`host-extension-loader`,
+// `extension-loader-hooks`, `callback-dispatch`) plus the eight host->core
+// backend surfaces (`storage-host`, `index-host`, `collation-host`,
+// `pragma-host`, `parser-host`, `optimizer-host`, `files-host`,
+// `table-stream-host`) and the `tvm:memory` spill tier.
+//
+// Structurally identical to `crates/ducklink-loader`'s `loader-stub` world:
+// declining implementations for every entry point so a wac-composed CLI can
+// instantiate. The single fieldbook-specific tweak lives in `request-load`,
+// which returns `true` for `"fieldbook"` and `"fieldbook_dotcmd"` so the CLI's
+// autoload path (`LOAD fieldbook;`) reports success even though no dynamic
+// extension actually runs — the fieldbook surface reaches the user via the
+// wac-plugged `fieldbook-dotcmd` component instead of the engine-level
+// scalars (see docs/fieldbook-wasm-phase0-findings.md §2.4).
+world loader-stub {
+    export duckdb:component/host-extension-loader;
+    export duckdb:component/extension-loader-hooks;
+    export duckdb:extension/callback-dispatch@4.0.0;
+    // Host->core callbacks the core imports so extension-registered backends can
+    // service storage (ATTACH), vector indexes, collations, pragmas, parsers,
+    // optimizers, remote files (httpfs), and filtered table streams. The
+    // fieldbook standalone registers no such backends, so each `*-list`
+    // enumerator returns empty and the per-handle operations are unreachable.
+    export duckdb:extension/storage-host@4.0.0;
+    export duckdb:extension/index-host@4.0.0;
+    export duckdb:extension/collation-host@4.0.0;
+    export duckdb:extension/pragma-host@4.0.0;
+    export duckdb:extension/parser-host@4.0.0;
+    export duckdb:extension/optimizer-host@4.0.0;
+    export duckdb:extension/files-host@4.0.0;
+    export duckdb:extension/table-stream-host@4.0.0;
+    // The core imports tvm:memory unconditionally (the >4 GiB spill tier). The
+    // standalone has no 64-bit host to back it, so the stub declines region
+    // creation: the guest's spill bridge then disables TVM and falls back to the
+    // ordinary temp-directory path.
+    export tvm:memory/manager@0.1.0;
+    export tvm:memory/bytes@0.1.0;
+    // The ducklink CLI imports `duckdb:cli/dotcmd-host` for the pluggable
+    // dot-command dispatch the native host normally provides. In a standalone
+    // wac compose the host isn't there, so we export a no-op stub: `invoke`
+    // returns `ok(none)` (CLI falls back to its compiled-in built-ins like
+    // `.help`, `.quit`, `.tables`) and `list-commands` returns an empty list.
+    export duckdb:cli/dotcmd-host;
+}

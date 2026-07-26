@@ -396,7 +396,9 @@ mosaic-clean:
 fieldbook-loader:
 	cargo component build -p fieldbook-loader --target $(WASI_TARGET) --release
 
-fieldbook-cli: standalone-cli fieldbook-loader
+fieldbook-cli: fieldbook-loader
+	@ test -f target/$(WASI_TARGET)/release/ducklink_cli.wasm \
+	  || { echo "error: target/$(WASI_TARGET)/release/ducklink_cli.wasm missing. Run 'make standalone-cli' first (blocked today on the v4->v5 WIT resync — see docs/fieldbook-wasm-phase0-findings.md §2.3; use a pre-built artifact for now)." >&2; exit 1; }
 	@ test -f target/$(WASI_TARGET)/release/ducklink_core.wasm \
 	  || { echo "error: target/$(WASI_TARGET)/release/ducklink_core.wasm missing. Run 'make core' first (needs DUCKDB_STATIC_LIB / DUCKDB_INCLUDE_DIR)." >&2; exit 1; }
 	mkdir -p artifacts/cli target/compose
