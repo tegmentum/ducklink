@@ -345,6 +345,18 @@ fn parse_dir_mapping(value: &str) -> Result<DirMapping, String> {
 }
 
 fn main() -> Result<()> {
+    // Install a process-wide rustls CryptoProvider BEFORE any wasmtime store is
+    // constructed. wasmtime-wasi-http (46.0.1) hands outgoing HTTPS off to
+    // rustls, which panics on first request if no default provider is installed.
+    // Runs for every subcommand (CLI, serve, run-tool, cron, extension, compose,
+    // ...) so extension components that reach real HTTPS endpoints (s3-wasm to
+    // AWS, azure-wasm to Azure) don't crash the host. `install_default` returns
+    // Err if a provider is already installed — safe to ignore, that's the intent
+    // (double-install is fine; e.g. `serve`'s httpd used to install it too).
+    // Uses `ring` because it's the feature already enabled in the crate's
+    // rustls dep (see Cargo.toml).
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     // `ducklink precompile <in.wasm> <out.cwasm>` AOT-compiles a component so
     // a later run loads it (by passing the .cwasm path) without the Cranelift
     // compile. Handled before clap, which uses trailing_var_arg and would
