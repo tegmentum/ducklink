@@ -60,9 +60,11 @@ interface blob-types {
         content-type: option<string>,
         content-length: option<u64>,
         etag: option<string>,
-        /// Pass-through: RFC 3339 from JSON `updated`, or HTTP-date from a
-        /// `last-modified` header. Callers needing epoch or a specific format
-        /// should parse.
+        /// HTTP-date (RFC 7231 IMF-fixdate, e.g. `Fri, 17 Apr 2026 19:48:16
+        /// GMT`) — both paths normalize to this shape. HEAD parses the JSON
+        /// `updated` field (RFC 3339) and converts; GET passes through the
+        /// wire `Last-Modified` header. Fedable straight into
+        /// `If-Modified-Since` with no conversion.
         last-modified: option<string>,
         /// Base64-encoded MD5 of the object contents (from JSON `md5Hash`
         /// or `x-goog-hash: md5=...`). Absent for composite objects.
@@ -70,8 +72,11 @@ interface blob-types {
         /// Base64-encoded CRC32C of the object contents (from JSON `crc32c`
         /// or `x-goog-hash: crc32c=...`).
         crc32c: option<string>,
-        /// GCS generation number (object versioning). String because GCS
-        /// returns it as such in JSON and it can exceed 2^53.
+        /// GCS generation number (object versioning). Opaque per-object
+        /// versioning token — string because that's how GCS returns it in
+        /// JSON and Google documents no upper bound (generation numbers
+        /// are monotonic timestamps with sub-millisecond resolution).
+        /// Parse to u64 at your own risk.
         generation: option<string>,
         /// User-defined metadata (JSON `metadata` object or `x-goog-meta-*`).
         custom: list<tuple<string, string>>,
