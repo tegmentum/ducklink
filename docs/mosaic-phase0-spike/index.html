@@ -1,0 +1,81 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Mosaic Phase 0 spike</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 2rem; max-width: 780px; }
+  h1 { font-size: 1.15rem; margin: 0 0 0.5rem; }
+  p  { color: #444; margin: 0.25rem 0 1rem; }
+  #chart { border: 1px solid #ddd; padding: 0.5rem; margin-bottom: 1rem; }
+  table { border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #ccc; padding: 2px 8px; text-align: right; }
+  th { background: #f4f4f4; }
+  .err { color: #a00; white-space: pre-wrap; }
+</style>
+
+<h1>Mosaic Phase 0 spike</h1>
+<p>
+  Round-trip: this page fetches from <code>POST /api/query</code> on the same
+  <code>ducklink serve</code> that hosts it. The request body is raw SQL; the
+  server runs it via the <code>query()</code> table function and returns a
+  JSON array of row objects.
+</p>
+
+<div id="chart">loading&hellip;</div>
+<div id="table"></div>
+
+<!--
+  @observablehq/plot is loaded from a CDN. This spike is a throwaway smoke;
+  the mosaic-component built in Phase 1 will bundle its own JS locally.
+-->
+<script type="module">
+  import * as Plot from "https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm";
+
+  const SQL = "SELECT ts, value FROM fixture ORDER BY ts";
+  const chartEl = document.getElementById("chart");
+  const tableEl = document.getElementById("table");
+
+  try {
+    const res = await fetch("/api/query", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: SQL,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    const rows = await res.json();
+
+    // The httpd returns ISO strings for DATE/TIMESTAMP columns; parse them.
+    for (const r of rows) r.ts = new Date(r.ts);
+
+    // Chart
+    chartEl.replaceChildren(
+      Plot.plot({
+        width: 720,
+        height: 240,
+        marks: [
+          Plot.line(rows, { x: "ts", y: "value", stroke: "steelblue" }),
+          Plot.dot(rows,  { x: "ts", y: "value", fill: "steelblue" }),
+        ],
+      })
+    );
+
+    // Table
+    const cols = Object.keys(rows[0] ?? {});
+    const table = document.createElement("table");
+    const thead = table.createTHead();
+    const tr = thead.insertRow();
+    for (const c of cols) tr.insertCell().outerHTML = `<th>${c}</th>`;
+    const tbody = table.createTBody();
+    for (const r of rows) {
+      const trb = tbody.insertRow();
+      for (const c of cols) {
+        const v = r[c];
+        trb.insertCell().textContent =
+          v instanceof Date ? v.toISOString().slice(0, 10) : String(v);
+      }
+    }
+    tableEl.replaceChildren(table);
+  } catch (e) {
+    chartEl.className = "err";
+    chartEl.textContent = String(e);
+  }
+</script>
