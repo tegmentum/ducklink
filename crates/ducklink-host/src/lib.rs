@@ -5064,29 +5064,55 @@ impl cli_db::Host for HostState {
             .into()
     }
 
-    /// Phase 2b: the WIT for `database.register-table-function` landed on the
-    /// core (see Phase 2b's cross-repo work + docs/wasm-ecosystem-at-5-adr.md
-    /// Amendment A1). No CLI-component call site drives it today; Phase 2c
-    /// will call the core directly from `HostState::intercept_attach` rather
-    /// than routing through the CLI's imported view of `database`. Until then
-    /// this stub keeps the trait surface satisfied. When Phase 2c needs a
-    /// component-facing forward, replace the body with a `with_core` +
-    /// `call_register_table_function` bridge mirroring `register_extension`
-    /// above (adding a `convert_cli_columndescriptor_to_core` helper alongside
-    /// `convert_core_columndef` at line ~5083).
+    /// Phase 2c: bridge a CLI-side `database.register-table-function` call
+    /// through to the core's own `database.register-table-function` export
+    /// (see ADR Amendment A1 + Phase 2b Part A). The CLI's imported view
+    /// carries a distinct-but-structurally-identical `Connection` /
+    /// `ColumnDescriptor` shape from the core's export view, so this trait
+    /// impl resolves the CLI connection resource to the core-side connection
+    /// handle, converts each column descriptor CLI -> core, and forwards.
+    ///
+    /// Phase 2c's `intercept_attach` calls the core directly (via
+    /// `with_core` + `call_register_table_function`) rather than routing
+    /// through this trait — but if a CLI-facing component ever wants to
+    /// register a host-owned table function, this stub is now live.
     fn register_table_function(
         &mut self,
-        _conn: Resource<cli_db::Connection>,
-        _name: CliString,
-        _columns: wasmtime::component::__internal::Vec<cli_db::ColumnDescriptor>,
-        _callback_handle: u32,
+        conn: Resource<cli_db::Connection>,
+        name: CliString,
+        columns: wasmtime::component::__internal::Vec<cli_db::ColumnDescriptor>,
+        callback_handle: u32,
     ) -> Result<(), CliString> {
-        Err(
-            "register_table_function is not exposed through the ducklink CLI; \
-             use the core's database.register-table-function directly (Phase 2c)"
-                .to_string()
-                .into(),
-        )
+        let entry_handle = self
+            .connections
+            .get(&conn.rep())
+            .ok_or_else(|| {
+                CliString::from("register_table_function: unknown connection resource")
+            })?
+            .handle
+            .clone();
+        let core_name: String = name.into();
+        let core_columns: Vec<core_db_exports::ColumnDescriptor> = columns
+            .into_iter()
+            .map(convert_cli_columndescriptor_to_core)
+            .collect();
+        let result = self
+            .with_core(|core| {
+                core.with_database(|guest, store| {
+                    guest.call_register_table_function(
+                        store,
+                        entry_handle,
+                        &core_name,
+                        core_columns.as_slice(),
+                        callback_handle,
+                    )
+                })
+            })
+            .map_err(trap_to_cli_string)?;
+        match result {
+            Ok(()) => Ok(()),
+            Err(err) => Err(err.into()),
+        }
     }
 }
 
@@ -5109,6 +5135,58 @@ fn convert_core_columndef(col: core_db_exports::Columndef) -> cli_db::Columndef 
     cli_db::Columndef {
         name: col.name.into(),
         logical: convert_core_logicaltype(col.logical),
+    }
+}
+
+/// Phase 2c: CLI-side `column-descriptor` -> core-side `column-descriptor`.
+/// The two bindgen expansions generate structurally-identical types (both
+/// vendor the same `duckdb:component/database.column-descriptor` WIT record),
+/// but wasmtime treats them as distinct nominal types so we must convert
+/// explicitly. Used by `HostState::register_table_function` and by
+/// `intercept_attach`.
+fn convert_cli_columndescriptor_to_core(
+    col: cli_db::ColumnDescriptor,
+) -> core_db_exports::ColumnDescriptor {
+    core_db_exports::ColumnDescriptor {
+        name: col.name.into(),
+        ty: convert_cli_logicaltype_to_core(col.ty),
+    }
+}
+
+/// Phase 2c: inverse of `convert_core_logicaltype`. Both `cli_types` and
+/// `core_types` re-export `duckdb:extension/types.logicaltype`; the arm list
+/// must stay in sync with the WIT (see `convert_core_logicaltype` above for
+/// the reverse direction).
+fn convert_cli_logicaltype_to_core(ty: cli_types::Logicaltype) -> core_types::Logicaltype {
+    match ty {
+        cli_types::Logicaltype::Boolean => core_types::Logicaltype::Boolean,
+        cli_types::Logicaltype::Int64 => core_types::Logicaltype::Int64,
+        cli_types::Logicaltype::Uint64 => core_types::Logicaltype::Uint64,
+        cli_types::Logicaltype::Float64 => core_types::Logicaltype::Float64,
+        cli_types::Logicaltype::Text => core_types::Logicaltype::Text,
+        cli_types::Logicaltype::Blob => core_types::Logicaltype::Blob,
+        cli_types::Logicaltype::Int32 => core_types::Logicaltype::Int32,
+        cli_types::Logicaltype::Timestamp => core_types::Logicaltype::Timestamp,
+        cli_types::Logicaltype::Int8 => core_types::Logicaltype::Int8,
+        cli_types::Logicaltype::Int16 => core_types::Logicaltype::Int16,
+        cli_types::Logicaltype::Uint8 => core_types::Logicaltype::Uint8,
+        cli_types::Logicaltype::Uint16 => core_types::Logicaltype::Uint16,
+        cli_types::Logicaltype::Uint32 => core_types::Logicaltype::Uint32,
+        cli_types::Logicaltype::Float32 => core_types::Logicaltype::Float32,
+        cli_types::Logicaltype::Date => core_types::Logicaltype::Date,
+        cli_types::Logicaltype::Time => core_types::Logicaltype::Time,
+        cli_types::Logicaltype::Timestamptz => core_types::Logicaltype::Timestamptz,
+        cli_types::Logicaltype::Decimal(shape) => {
+            core_types::Logicaltype::Decimal(core_types::Decimalshape {
+                width: shape.width,
+                scale: shape.scale,
+            })
+        }
+        cli_types::Logicaltype::Interval => core_types::Logicaltype::Interval,
+        cli_types::Logicaltype::Uuid => core_types::Logicaltype::Uuid,
+        cli_types::Logicaltype::Hugeint => core_types::Logicaltype::Hugeint,
+        cli_types::Logicaltype::Uhugeint => core_types::Logicaltype::Uhugeint,
+        cli_types::Logicaltype::Complex(expr) => core_types::Logicaltype::Complex(expr),
     }
 }
 
