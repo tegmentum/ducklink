@@ -2370,6 +2370,52 @@ impl ExtensionManager {
         instance.storage_update_rows(handle, txn, table, rowids, rows)
     }
 
+    /// Amendment A5 counterpart to `dispatch_storage_insert_direct`. Wraps a
+    /// single `update-rows` dispatch in an auto-BEGIN/COMMIT so the write
+    /// intercept doesn't manage transaction lifecycles itself. Rolls back on
+    /// failure. Used exclusively by `HostState::intercept_write`.
+    pub fn dispatch_storage_update_direct(
+        &mut self,
+        catalog: u32,
+        table: &str,
+        rowids: &[i64],
+        rows: &[Vec<extension_types::Duckvalue>],
+    ) -> Result<u64, extension_types::Duckerror> {
+        let txn = self.dispatch_storage_begin_transaction(catalog)?;
+        match self.dispatch_storage_update_rows(txn, table, rowids, &[], rows) {
+            Ok(n) => {
+                self.dispatch_storage_commit_transaction(txn)?;
+                Ok(n)
+            }
+            Err(err) => {
+                let _ = self.dispatch_storage_rollback_transaction(txn);
+                Err(err)
+            }
+        }
+    }
+
+    /// Amendment A5 counterpart to `dispatch_storage_insert_direct`. Wraps a
+    /// single `delete-rows` dispatch in an auto-BEGIN/COMMIT. Rolls back on
+    /// failure.
+    pub fn dispatch_storage_delete_direct(
+        &mut self,
+        catalog: u32,
+        table: &str,
+        rowids: &[i64],
+    ) -> Result<u64, extension_types::Duckerror> {
+        let txn = self.dispatch_storage_begin_transaction(catalog)?;
+        match self.dispatch_storage_delete_rows(txn, table, rowids) {
+            Ok(n) => {
+                self.dispatch_storage_commit_transaction(txn)?;
+                Ok(n)
+            }
+            Err(err) => {
+                let _ = self.dispatch_storage_rollback_transaction(txn);
+                Err(err)
+            }
+        }
+    }
+
     // --- Item 3 / M2a: custom index (build + search) routing ---
 
     /// The custom index TYPE names every component has registered (via
@@ -4592,14 +4638,15 @@ impl HostState {
     }
 
     /// Handle a parsed WRITE against an attached foreign catalog. INSERT
-    /// dispatches directly to `storage_insert_rows`; UPDATE/DELETE with a
-    /// WHERE would need the rowid pre-scan design in ADR Amendment A5 --
-    /// v0 defers those to a Phase-2b follow-up and rejects here with a
-    /// clear message. `WriteRoute::Unsupported` variants come from the
-    /// parser (Risk 8 non-goals) and are surfaced with `Unsupported`.
+    /// dispatches directly to `storage_insert_rows`; UPDATE/DELETE run an
+    /// Amendment A5 rowid pre-scan (`SELECT rowid, * FROM alias.table WHERE
+    /// pred`) through the read path, then dispatch `storage_write_update` /
+    /// `storage_write_delete` with the collected rowids (and, for UPDATE, the
+    /// merged full-row payload). `WriteRoute::Unsupported` variants come from
+    /// the parser (Risk 8 non-goals) and are surfaced with `Unsupported`.
     fn intercept_write(
         &mut self,
-        _entry_handle: ResourceAny,
+        entry_handle: ResourceAny,
         route: at5_intercept::WriteRoute,
     ) -> Result<cli_db::QueryResult, cli_types::Duckerror> {
         use at5_intercept::WriteRoute;
@@ -4667,25 +4714,219 @@ impl HostState {
                 );
                 Ok(empty_query_result())
             }
-            WriteRoute::Update { alias, table, .. } => Err(cli_types::Duckerror::Unsupported(
-                format!(
-                    "UPDATE against {alias}.{table} requires the rowid pre-scan \
-                     path (ADR Amendment A5); tracked as Phase 2b, not landed in \
-                     this build. Use the native duckdb build for UPDATEs on \
-                     ATTACHed foreign catalogs."
-                )
-                .into(),
-            )),
-            WriteRoute::Delete { alias, table, .. } => Err(cli_types::Duckerror::Unsupported(
-                format!(
-                    "DELETE against {alias}.{table} requires the rowid pre-scan \
-                     path (ADR Amendment A5); tracked as Phase 2b, not landed in \
-                     this build. Use the native duckdb build for DELETEs on \
-                     ATTACHed foreign catalogs."
-                )
-                .into(),
-            )),
+            WriteRoute::Update {
+                alias,
+                table,
+                assignments,
+                where_clause,
+            } => {
+                let (catalog_handle, columns) =
+                    self.at5_lookup_write_target(&alias, &table)?;
+                let rowid_idx = at5_locate_rowid_column(&columns, &alias, &table)?;
+                // Parse the SET RHS values up-front so an unsupported expression
+                // rejects BEFORE any core round-trip.
+                let assignment_values: Vec<(String, extension_types::Duckvalue)> = assignments
+                    .into_iter()
+                    .map(|(col, expr)| {
+                        let lit = at5_intercept::parse_value_literal(&expr);
+                        literal_to_extension_duckvalue(lit)
+                            .map(|v| (col, v))
+                            .map_err(|reason| {
+                                cli_types::Duckerror::Unsupported(
+                                    format!(
+                                        "Operation not supported on @5 attached tables: {reason}. \
+                                         Use the native duckdb build if this pattern is required."
+                                    )
+                                    .into(),
+                                )
+                            })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                // Map each assignment column name to its index in the extension's
+                // declared column list (case-insensitive).
+                let mut assignment_by_idx: Vec<(usize, extension_types::Duckvalue)> =
+                    Vec::with_capacity(assignment_values.len());
+                for (col, val) in &assignment_values {
+                    let idx = columns
+                        .iter()
+                        .position(|c| c.name.eq_ignore_ascii_case(col))
+                        .ok_or_else(|| {
+                            cli_types::Duckerror::Invalidargument(
+                                format!(
+                                    "UPDATE {alias}.{table}: column '{col}' is not \
+                                     declared by the storage extension"
+                                )
+                                .into(),
+                            )
+                        })?;
+                    assignment_by_idx.push((idx, val.clone()));
+                }
+                // Pre-scan the entire row so we can preserve non-SET columns
+                // verbatim. `SELECT * FROM alias.main.table [WHERE pred]`
+                // resolves against the view registered by intercept_attach,
+                // which routes through the extension's storage-dispatch.
+                let (rowids, current_rows) =
+                    self.at5_prescan_rows(entry_handle.clone(), &alias, &table, rowid_idx, where_clause.as_deref())?;
+                if rowids.is_empty() {
+                    eprintln!(
+                        "[at5-write] UPDATE {alias}.{table}: pre-scan matched 0 row(s); no-op"
+                    );
+                    return Ok(empty_query_result());
+                }
+                // Merge assignment values into each current row.
+                let updated_rows: Vec<Vec<extension_types::Duckvalue>> = current_rows
+                    .into_iter()
+                    .map(|mut row| {
+                        for (idx, val) in &assignment_by_idx {
+                            if let Some(cell) = row.get_mut(*idx) {
+                                *cell = val.clone();
+                            }
+                        }
+                        row
+                    })
+                    .collect();
+                let mut manager = self
+                    .extension_manager
+                    .lock()
+                    .expect("extension manager mutex poisoned");
+                let n = manager
+                    .dispatch_storage_update_direct(
+                        catalog_handle,
+                        &table,
+                        &rowids,
+                        &updated_rows,
+                    )
+                    .map_err(cli_extension_duckerror)?;
+                eprintln!(
+                    "[at5-write] UPDATE {alias}.{table}: {n} row(s) dispatched to \
+                     storage-write-dispatch (rowids={rowids:?})"
+                );
+                Ok(empty_query_result())
+            }
+            WriteRoute::Delete {
+                alias,
+                table,
+                where_clause,
+            } => {
+                let (catalog_handle, columns) =
+                    self.at5_lookup_write_target(&alias, &table)?;
+                let rowid_idx = at5_locate_rowid_column(&columns, &alias, &table)?;
+                let (rowids, _rows) =
+                    self.at5_prescan_rows(entry_handle.clone(), &alias, &table, rowid_idx, where_clause.as_deref())?;
+                if rowids.is_empty() {
+                    eprintln!(
+                        "[at5-write] DELETE {alias}.{table}: pre-scan matched 0 row(s); no-op"
+                    );
+                    return Ok(empty_query_result());
+                }
+                let mut manager = self
+                    .extension_manager
+                    .lock()
+                    .expect("extension manager mutex poisoned");
+                let n = manager
+                    .dispatch_storage_delete_direct(catalog_handle, &table, &rowids)
+                    .map_err(cli_extension_duckerror)?;
+                eprintln!(
+                    "[at5-write] DELETE {alias}.{table}: {n} row(s) dispatched to \
+                     storage-write-dispatch (rowids={rowids:?})"
+                );
+                Ok(empty_query_result())
+            }
         }
+    }
+
+    /// Fetch (catalog-handle, extension-declared columns) for an attached
+    /// alias.table pair, briefly acquiring the manager lock. Errors are
+    /// mapped to CLI Duckerror so the caller can `?` them.
+    fn at5_lookup_write_target(
+        &mut self,
+        alias: &str,
+        table: &str,
+    ) -> Result<(u32, Vec<extension_types::Columndef>), cli_types::Duckerror> {
+        let catalog_handle = self
+            .attached_aliases
+            .get(alias)
+            .map(|c| c.catalog_handle)
+            .ok_or_else(|| {
+                cli_types::Duckerror::Internal(
+                    format!("alias {alias} disappeared before dispatch").into(),
+                )
+            })?;
+        let cols = {
+            let mut manager = self
+                .extension_manager
+                .lock()
+                .expect("extension manager mutex poisoned");
+            manager
+                .dispatch_storage_table_columns(catalog_handle, table)
+                .map_err(cli_extension_duckerror)?
+        };
+        Ok((catalog_handle, cols))
+    }
+
+    /// Amendment A5 pre-scan: execute `SELECT * FROM alias.main.table [WHERE
+    /// pred]` through the read path (which routes through the intercept_attach
+    /// view + synthetic table function), returning parallel `(rowids, rows)`
+    /// vectors. `rowid_idx` is the position of the rowid column in the
+    /// extension's declared column list; the returned rows retain the full
+    /// column set (rowid included) so UPDATE can splice SET values into any
+    /// non-rowid position without touching rowid itself.
+    fn at5_prescan_rows(
+        &mut self,
+        entry_handle: ResourceAny,
+        alias: &str,
+        table: &str,
+        rowid_idx: usize,
+        where_clause: Option<&str>,
+    ) -> Result<(Vec<i64>, Vec<Vec<extension_types::Duckvalue>>), cli_types::Duckerror> {
+        let where_sql = where_clause
+            .map(|p| format!(" WHERE {p}"))
+            .unwrap_or_default();
+        let sql = format!("SELECT * FROM {alias}.main.{table}{where_sql}");
+        let result = self
+            .with_core(|core| {
+                core.with_database(|guest, store| {
+                    guest.call_execute(store, entry_handle, &sql)
+                })
+            })
+            .map_err(convert_trap_to_duckerror)?;
+        let qr = match result {
+            Ok(v) => v,
+            Err(err) => return Err(convert_core_duckerror(err)),
+        };
+        let mut rowids: Vec<i64> = Vec::with_capacity(qr.rows.len());
+        let mut rows_ext: Vec<Vec<extension_types::Duckvalue>> =
+            Vec::with_capacity(qr.rows.len());
+        for row in qr.rows.into_iter() {
+            let row_vec: Vec<core_types::Duckvalue> = row.into_iter().collect();
+            let rowid_cell = row_vec.get(rowid_idx).ok_or_else(|| {
+                cli_types::Duckerror::Internal(
+                    format!(
+                        "pre-scan row for {alias}.{table} lacks rowid column at \
+                         index {rowid_idx} (row has {} cells)",
+                        row_vec.len()
+                    )
+                    .into(),
+                )
+            })?;
+            let rowid = at5_duckvalue_to_i64(rowid_cell).map_err(|reason| {
+                cli_types::Duckerror::Internal(
+                    format!(
+                        "pre-scan row for {alias}.{table}: rowid column is not \
+                         an integer ({reason})"
+                    )
+                    .into(),
+                )
+            })?;
+            rowids.push(rowid);
+            rows_ext.push(
+                row_vec
+                    .into_iter()
+                    .map(convert_core_duckvalue_to_extension)
+                    .collect(),
+            );
+        }
+        Ok((rowids, rows_ext))
     }
 }
 
@@ -4702,6 +4943,53 @@ fn empty_query_result() -> cli_db::QueryResult {
 /// (`at5_intercept::is_bare_ident`), so this is a pure concat.
 fn at5_synth_fn_name(alias: &str, table: &str) -> String {
     format!("__{alias}_{table}")
+}
+
+/// Amendment A5: find the extension-declared `rowid` column (case-insensitive)
+/// in a storage-dispatch column list. Missing = the extension doesn't expose
+/// a stable row identifier; UPDATE/DELETE can't run against it.
+fn at5_locate_rowid_column(
+    columns: &[extension_types::Columndef],
+    alias: &str,
+    table: &str,
+) -> Result<usize, cli_types::Duckerror> {
+    columns
+        .iter()
+        .position(|c| c.name.eq_ignore_ascii_case("rowid"))
+        .ok_or_else(|| {
+            cli_types::Duckerror::Unsupported(
+                format!(
+                    "UPDATE/DELETE against {alias}.{table} requires the storage \
+                     extension to expose a 'rowid' column (ADR Amendment A5); \
+                     the extension declared columns [{}]",
+                    columns
+                        .iter()
+                        .map(|c| c.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+                .into(),
+            )
+        })
+}
+
+/// Amendment A5: coerce a `Duckvalue` returned by the pre-scan's rowid column
+/// into a plain i64. Accepts every signed / unsigned integer arm; other arms
+/// are rejected (returning a reason string the caller wraps in a Duckerror).
+fn at5_duckvalue_to_i64(v: &core_types::Duckvalue) -> Result<i64, String> {
+    Ok(match v {
+        core_types::Duckvalue::Int64(n) => *n,
+        core_types::Duckvalue::Int32(n) => *n as i64,
+        core_types::Duckvalue::Int16(n) => *n as i64,
+        core_types::Duckvalue::Int8(n) => *n as i64,
+        core_types::Duckvalue::Uint64(n) => {
+            i64::try_from(*n).map_err(|_| format!("u64 rowid {n} overflows i64"))?
+        }
+        core_types::Duckvalue::Uint32(n) => *n as i64,
+        core_types::Duckvalue::Uint16(n) => *n as i64,
+        core_types::Duckvalue::Uint8(n) => *n as i64,
+        other => return Err(format!("rowid duckvalue arm {other:?} is not an integer")),
+    })
 }
 
 
