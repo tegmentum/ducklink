@@ -1,4 +1,4 @@
-package duckdb:extension@4.0.0;
+package duckdb:extension@5.0.0;
 
 interface catalog {
   use runtime.{cast-callback};
@@ -21,6 +21,22 @@ interface catalog {
     %from: string,
     to: string,
     kind: cast-kind,
+    // T2-4: DuckDB's cast-function implicit-conversion cost, forwarded to
+    // `duckdb_cast_function_set_implicit_cost` at native-registration time.
+    //   * `none`        -> use ducklink's default of 100. (DuckDB's C API
+    //                       default is -1 / explicit-only, per
+    //                       cast_function-c.cpp:20 CCastFunction::
+    //                       implicit_cast_cost, but ducklink treats unset as
+    //                       implicit-cost 100 to match the typical
+    //                       scalar-registration ergonomic.)
+    //   * `some(s32)`   -> cost value; `-1` marks the cast explicit-only
+    //                       (parity with the C API's convention)
+    // NOTE: this is a breaking WIT change even though `option<T>` defaults to
+    // `none` on the caller side — the Component Model canonical ABI lowers
+    // records to a flat field sequence with fixed offsets, so adding a field
+    // changes the record's binary layout. Any consumer built against the
+    // prior WIT will fail to instantiate against the new host.
+    implicit-cost: option<s32>,
   }
 
   record macro-def {
