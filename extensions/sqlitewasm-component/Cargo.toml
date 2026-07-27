@@ -27,4 +27,4 @@ package = "duckdb:extension"
 
 [package.metadata.component.target]
 path = "./wit"
-world = "duckdb:extension/duckdb-extension-storage"
+world = "duckdb:extension/duckdb-extension-storage-write"

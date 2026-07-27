@@ -73,6 +73,12 @@ arrow-array = { version = "53", default-features = false }
 # a hand-rolled minimal wasm module (via wat) is enough to prove/refute the
 # memo's claim that wasmtime rejects re-entering a store from a host callback.
 wat = "1"
+# Phase 2d (ADR Amendment A5) e2e tests: the AT5 write tests stage a native
+# SQLite file, drive UPDATE/DELETE through ducklink -> sqlitewasm-component,
+# then reopen the file with a native sqlite3 client to assert durability.
+# `bundled` compiles sqlite3 statically so the test doesn't need a system
+# libsqlite3 on the CI runner.
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 [[bin]]
 name = "ducklink"

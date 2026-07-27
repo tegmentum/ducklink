@@ -15,10 +15,10 @@ use std::collections::HashMap;
 use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 
-wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension-storage" });
+wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension-storage-write" });
 
 use duckdb::extension::{runtime, storage, types};
-use exports::duckdb::extension::{callback_dispatch, guest, storage_dispatch};
+use exports::duckdb::extension::{callback_dispatch, guest, storage_dispatch, storage_write_dispatch};
 
 use rusqlite::types::ValueRef;
 use rusqlite::Connection;
@@ -295,13 +295,22 @@ impl storage_dispatch::Guest for Extension {
                 .get(&catalog)
                 .ok_or_else(|| types::Duckerror::Invalidstate("unknown catalog".into()))?;
             let cols = table_columns(conn, &table)?;
-            Ok(cols
-                .into_iter()
-                .map(|(name, ty)| types::Columndef {
+            // ADR Amendment A5: prepend a synthetic `rowid` (Int64) column at
+            // index 0 so the host's `at5_locate_rowid_column` finds it and
+            // the write-path pre-scan can extract SQLite's native ROWID from
+            // the emitted rows (see docs/at5-rowid-mechanism.md).
+            let mut out: Vec<types::Columndef> = Vec::with_capacity(cols.len() + 1);
+            out.push(types::Columndef {
+                name: "rowid".into(),
+                logical: types::Logicaltype::Int64,
+            });
+            for (name, ty) in cols {
+                out.push(types::Columndef {
                     name: name.into(),
                     logical: ty,
-                })
-                .collect())
+                });
+            }
+            Ok(out)
         })
     }
 
@@ -360,6 +369,287 @@ impl storage_dispatch::Guest for Extension {
     }
 }
 
+// ---------------------------------------------------------------------------
+// (d) storage-write-dispatch: transactions + DDL + DML (ADR Amendment A5)
+// ---------------------------------------------------------------------------
+
+thread_local! {
+    /// Open write-transactions keyed by txn-id. Each entry stores the
+    /// catalog-id the transaction was begun on, so the write-side calls
+    /// (insert/update/delete/create-table) can find the right sqlite
+    /// Connection under the CATALOGS map without the host having to hand
+    /// the catalog back on every call.
+    static TXNS: RefCell<HashMap<u32, u32>> = RefCell::new(HashMap::new());
+    static NEXT_TXN: RefCell<u32> = const { RefCell::new(1) };
+}
+
+impl storage_write_dispatch::Guest for Extension {
+    fn begin_transaction(handle: u32, catalog: u32) -> Result<u32, types::Duckerror> {
+        check_handle(handle)?;
+        CATALOGS.with(|c| {
+            let c = c.borrow();
+            let conn = c.get(&catalog).ok_or_else(|| {
+                types::Duckerror::Invalidstate("unknown catalog".into())
+            })?;
+            conn.execute_batch("BEGIN").map_err(map_sqlite_err)
+        })?;
+        let id = NEXT_TXN.with(|n| {
+            let mut n = n.borrow_mut();
+            let id = *n;
+            *n += 1;
+            id
+        });
+        TXNS.with(|t| t.borrow_mut().insert(id, catalog));
+        Ok(id)
+    }
+
+    fn commit_transaction(handle: u32, txn: u32) -> Result<(), types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = take_txn(txn)?;
+        with_catalog_conn(catalog, |conn| {
+            conn.execute_batch("COMMIT").map_err(map_sqlite_err)
+        })
+    }
+
+    fn rollback_transaction(handle: u32, txn: u32) -> Result<(), types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = take_txn(txn)?;
+        with_catalog_conn(catalog, |conn| {
+            conn.execute_batch("ROLLBACK").map_err(map_sqlite_err)
+        })
+    }
+
+    fn create_table(
+        handle: u32,
+        txn: u32,
+        table: String,
+        columns: Vec<types::Columndef>,
+    ) -> Result<(), types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = txn_catalog(txn)?;
+        let col_defs: std::vec::Vec<std::string::String> = columns
+            .iter()
+            .map(|c| format!("{} {}", quote_ident(&c.name), logical_to_sqlite(&c.logical)))
+            .collect();
+        let sql = format!(
+            "CREATE TABLE {} ({})",
+            quote_ident(&table),
+            col_defs.join(", ")
+        );
+        with_catalog_conn(catalog, |conn| {
+            conn.execute_batch(&sql).map_err(map_sqlite_err)
+        })
+    }
+
+    fn insert_rows(
+        handle: u32,
+        txn: u32,
+        table: String,
+        rows: Vec<Vec<types::Duckvalue>>,
+    ) -> Result<u64, types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = txn_catalog(txn)?;
+        if rows.is_empty() {
+            return Ok(0);
+        }
+        // Rows arrive with the extension's advertised column shape --
+        // [rowid, col1, col2, ...] per ADR Amendment A5. Strip the leading
+        // rowid slot when it is present: an INSERT lets SQLite mint the
+        // rowid, we do not overwrite it. If the caller emits a bare N-col
+        // shape (== underlying_cols) we pass through unchanged.
+        let n_underlying = with_catalog_conn_result(catalog, |conn| {
+            Ok(table_columns(conn, &table)?.len())
+        })?;
+        let width = rows[0].len();
+        let strip_rowid = width == n_underlying + 1;
+        if !strip_rowid && width != n_underlying {
+            return Err(types::Duckerror::Invalidargument(format!(
+                "insert-rows into '{table}': expected {n_underlying} or \
+                 {} values per row, got {width}",
+                n_underlying + 1
+            )));
+        }
+        let n = with_catalog_conn_result(catalog, |conn| {
+            let cols = table_columns(conn, &table)?;
+            let col_list: std::vec::Vec<std::string::String> =
+                cols.iter().map(|(n, _)| quote_ident(n)).collect();
+            let placeholders: std::vec::Vec<std::string::String> =
+                (0..cols.len()).map(|_| "?".to_string()).collect();
+            let sql = format!(
+                "INSERT INTO {} ({}) VALUES ({})",
+                quote_ident(&table),
+                col_list.join(", "),
+                placeholders.join(", ")
+            );
+            let mut inserted: u64 = 0;
+            for row in &rows {
+                let payload: &[types::Duckvalue] = if strip_rowid {
+                    &row[1..]
+                } else {
+                    &row[..]
+                };
+                let mut stmt = conn.prepare(&sql).map_err(map_sqlite_err)?;
+                for (i, v) in payload.iter().enumerate() {
+                    bind_value(&mut stmt, i + 1, v)?;
+                }
+                stmt.raw_execute().map_err(map_sqlite_err)?;
+                inserted += 1;
+            }
+            Ok(inserted)
+        })?;
+        Ok(n)
+    }
+
+    fn delete_rows(
+        handle: u32,
+        txn: u32,
+        table: String,
+        rowids: Vec<i64>,
+    ) -> Result<u64, types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = txn_catalog(txn)?;
+        if rowids.is_empty() {
+            return Ok(0);
+        }
+        with_catalog_conn_result(catalog, |conn| {
+            let sql = format!("DELETE FROM {} WHERE rowid = ?", quote_ident(&table));
+            let mut deleted: u64 = 0;
+            for rid in &rowids {
+                let mut stmt = conn.prepare(&sql).map_err(map_sqlite_err)?;
+                stmt.raw_bind_parameter(1, *rid).map_err(map_sqlite_err)?;
+                stmt.raw_execute().map_err(map_sqlite_err)?;
+                deleted += 1;
+            }
+            Ok(deleted)
+        })
+    }
+
+    fn update_rows(
+        handle: u32,
+        txn: u32,
+        table: String,
+        rowids: Vec<i64>,
+        rows: Vec<Vec<types::Duckvalue>>,
+    ) -> Result<u64, types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = txn_catalog(txn)?;
+        if rowids.len() != rows.len() {
+            return Err(types::Duckerror::Invalidargument(format!(
+                "update-rows for '{table}': {} rowids vs {} row payloads",
+                rowids.len(),
+                rows.len()
+            )));
+        }
+        if rowids.is_empty() {
+            return Ok(0);
+        }
+        let n_underlying = with_catalog_conn_result(catalog, |conn| {
+            Ok(table_columns(conn, &table)?.len())
+        })?;
+        let width = rows[0].len();
+        // The intercept_write path passes ROWS at the extension's advertised
+        // width (rowid + underlying cols). The rowid slot at index 0 is
+        // ignored -- WHERE rowid = ? routes the write, not the row payload.
+        let strip_rowid = width == n_underlying + 1;
+        if !strip_rowid && width != n_underlying {
+            return Err(types::Duckerror::Invalidargument(format!(
+                "update-rows for '{table}': expected {n_underlying} or \
+                 {} values per row, got {width}",
+                n_underlying + 1
+            )));
+        }
+        with_catalog_conn_result(catalog, |conn| {
+            let cols = table_columns(conn, &table)?;
+            let set_list: std::vec::Vec<std::string::String> = cols
+                .iter()
+                .map(|(n, _)| format!("{} = ?", quote_ident(n)))
+                .collect();
+            let sql = format!(
+                "UPDATE {} SET {} WHERE rowid = ?",
+                quote_ident(&table),
+                set_list.join(", "),
+            );
+            let mut updated: u64 = 0;
+            for (rid, row) in rowids.iter().zip(rows.iter()) {
+                let payload: &[types::Duckvalue] = if strip_rowid {
+                    &row[1..]
+                } else {
+                    &row[..]
+                };
+                let mut stmt = conn.prepare(&sql).map_err(map_sqlite_err)?;
+                for (i, v) in payload.iter().enumerate() {
+                    bind_value(&mut stmt, i + 1, v)?;
+                }
+                stmt.raw_bind_parameter(payload.len() + 1, *rid)
+                    .map_err(map_sqlite_err)?;
+                stmt.raw_execute().map_err(map_sqlite_err)?;
+                updated += 1;
+            }
+            Ok(updated)
+        })
+    }
+}
+
+/// Fetch the catalog a transaction was begun on; error if the txn is unknown
+/// (double-commit / stray rollback). Leaves the entry in place -- the caller
+/// takes it out via `take_txn` on commit/rollback.
+fn txn_catalog(txn: u32) -> Result<u32, types::Duckerror> {
+    TXNS.with(|t| {
+        t.borrow()
+            .get(&txn)
+            .copied()
+            .ok_or_else(|| types::Duckerror::Invalidstate(format!("unknown txn {txn}")))
+    })
+}
+
+fn take_txn(txn: u32) -> Result<u32, types::Duckerror> {
+    TXNS.with(|t| {
+        t.borrow_mut()
+            .remove(&txn)
+            .ok_or_else(|| types::Duckerror::Invalidstate(format!("unknown txn {txn}")))
+    })
+}
+
+fn with_catalog_conn<F, T>(catalog: u32, f: F) -> Result<T, types::Duckerror>
+where
+    F: FnOnce(&Connection) -> Result<T, types::Duckerror>,
+{
+    CATALOGS.with(|c| {
+        let c = c.borrow();
+        let conn = c
+            .get(&catalog)
+            .ok_or_else(|| types::Duckerror::Invalidstate("unknown catalog".into()))?;
+        f(conn)
+    })
+}
+
+fn with_catalog_conn_result<F, T>(catalog: u32, f: F) -> Result<T, types::Duckerror>
+where
+    F: FnOnce(&Connection) -> Result<T, types::Duckerror>,
+{
+    with_catalog_conn(catalog, f)
+}
+
+/// Map an extension logicaltype to a SQLite column type name for CREATE TABLE.
+/// SQLite's declared type is advisory (type affinity) so we lean on a small
+/// canonical set -- INTEGER / REAL / TEXT / BLOB / BOOLEAN.
+fn logical_to_sqlite(ty: &types::Logicaltype) -> &'static str {
+    match ty {
+        types::Logicaltype::Boolean => "INTEGER",
+        types::Logicaltype::Int8
+        | types::Logicaltype::Int16
+        | types::Logicaltype::Int32
+        | types::Logicaltype::Int64
+        | types::Logicaltype::Uint8
+        | types::Logicaltype::Uint16
+        | types::Logicaltype::Uint32
+        | types::Logicaltype::Uint64 => "INTEGER",
+        types::Logicaltype::Float32 | types::Logicaltype::Float64 => "REAL",
+        types::Logicaltype::Blob => "BLOB",
+        _ => "TEXT",
+    }
+}
+
 fn check_handle(handle: u32) -> Result<(), types::Duckerror> {
     if handle == STORAGE_HANDLE {
         Ok(())
@@ -408,28 +698,48 @@ fn map_decl_type(decl: &str) -> types::Logicaltype {
 }
 
 /// Build + execute the pushdown SQL for a scan-request, materializing all rows.
+///
+/// Host-side column indices (`request.projection` and `request.filters[*].column`)
+/// are 1-based into the underlying SQLite table's columns: index 0 references
+/// the synthetic `rowid` column the extension advertises in
+/// `storage_table_columns` (ADR Amendment A5 / docs/at5-rowid-mechanism.md).
+/// index >= 1 references `cols[i-1]`.
 fn run_scan(
     conn: &Connection,
     request: &storage::ScanRequest,
 ) -> Result<std::vec::Vec<std::vec::Vec<types::Duckvalue>>, types::Duckerror> {
     let cols = table_columns(conn, &request.table)?;
+    // The synthetic column list the host sees: [rowid, cols[0], cols[1], ...].
+    // `n_host_cols` includes the rowid slot at position 0.
+    let n_host_cols = cols.len() + 1;
 
-    // Projection: indices into the full column list, in emit order. Empty = all.
+    // Projection: indices into the synthetic column list, in emit order.
+    // Empty = all columns (including rowid).
     let proj: std::vec::Vec<usize> = if request.projection.is_empty() {
-        (0..cols.len()).collect()
+        (0..n_host_cols).collect()
     } else {
         request.projection.iter().map(|&i| i as usize).collect()
     };
     for &i in &proj {
-        if i >= cols.len() {
+        if i >= n_host_cols {
             return Err(types::Duckerror::Invalidargument(
                 "projection index out of range".into(),
             ));
         }
     }
 
+    // Map a synthetic-list index to a bare SQL expression: `rowid` for index 0,
+    // otherwise the quoted underlying column name.
+    let sql_col = |host_idx: usize| -> std::string::String {
+        if host_idx == 0 {
+            "rowid".to_string()
+        } else {
+            quote_ident(&cols[host_idx - 1].0)
+        }
+    };
+
     let select_list: std::vec::Vec<std::string::String> =
-        proj.iter().map(|&i| quote_ident(&cols[i].0)).collect();
+        proj.iter().map(|&i| sql_col(i)).collect();
     let mut sql = format!(
         "SELECT {} FROM {}",
         select_list.join(", "),
@@ -441,12 +751,12 @@ fn run_scan(
     let mut conds: std::vec::Vec<std::string::String> = std::vec::Vec::new();
     for f in &request.filters {
         let idx = f.column as usize;
-        if idx >= cols.len() {
+        if idx >= n_host_cols {
             return Err(types::Duckerror::Invalidargument(
                 "filter column index out of range".into(),
             ));
         }
-        let col = quote_ident(&cols[idx].0);
+        let col = sql_col(idx);
         match f.op {
             storage::CompareOp::IsNull => conds.push(format!("{col} IS NULL")),
             storage::CompareOp::IsNotNull => conds.push(format!("{col} IS NOT NULL")),
@@ -484,9 +794,15 @@ fn run_scan(
     let mut out: std::vec::Vec<std::vec::Vec<types::Duckvalue>> = std::vec::Vec::new();
     while let Some(row) = rows.next().map_err(map_sqlite_err)? {
         let mut emit: std::vec::Vec<types::Duckvalue> = std::vec::Vec::with_capacity(proj.len());
-        for (slot, &ci) in proj.iter().enumerate() {
+        for (slot, &host_idx) in proj.iter().enumerate() {
             let v = row.get_ref(slot).map_err(map_sqlite_err)?;
-            emit.push(value_to_duck(v, &cols[ci].1));
+            let rowid_logical = types::Logicaltype::Int64;
+            let logical = if host_idx == 0 {
+                &rowid_logical
+            } else {
+                &cols[host_idx - 1].1
+            };
+            emit.push(value_to_duck(v, logical));
         }
         out.push(emit);
     }
@@ -762,21 +1078,24 @@ mod tests {
         let cols = table_columns(&conn, "t").unwrap();
         assert_eq!(cols.len(), 2);
         assert_eq!(cols[0].0, "a");
-        assert_eq!(cols[0].1, types::Logicaltype::Int64);
+        assert!(matches!(cols[0].1, types::Logicaltype::Int64));
         assert_eq!(cols[1].0, "b");
-        assert_eq!(cols[1].1, types::Logicaltype::Text);
+        assert!(matches!(cols[1].1, types::Logicaltype::Text));
     }
 
     #[test]
     fn scan_projection_and_filter() {
         let bytes = sample_db_bytes();
         let conn = open_blob(&bytes).unwrap();
-        // projection [0] (column `a`); filter: column 0 (`a`) > 1  -> only row 2.
+        // Host-side column indices are 1-based over the sqlite columns; index 0
+        // is the synthetic `rowid` column added per ADR Amendment A5. So the
+        // projection [1] asks for the sqlite column `a`; filter column 1
+        // ("a") > 1 -> only row 2.
         let req = storage::ScanRequest {
             table: "t".into(),
-            projection: vec![0],
+            projection: vec![1],
             filters: vec![storage::ScanFilter {
-                column: 0,
+                column: 1,
                 op: storage::CompareOp::Gt,
                 value: types::Duckvalue::Int64(1),
             }],
@@ -788,6 +1107,33 @@ mod tests {
         match &rows[0][0] {
             types::Duckvalue::Int64(v) => assert_eq!(*v, 2),
             other => panic!("expected Int64(2), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn scan_returns_rowid_at_index_zero() {
+        // Empty projection = all columns; the emitted rows must be
+        // [rowid, a, b] with rowid at index 0 (ADR Amendment A5).
+        let bytes = sample_db_bytes();
+        let conn = open_blob(&bytes).unwrap();
+        let req = storage::ScanRequest {
+            table: "t".into(),
+            projection: Vec::new(),
+            filters: Vec::new(),
+            limit: None,
+        };
+        let rows = run_scan(&conn, &req).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].len(), 3, "cols: [rowid, a, b]");
+        // rowid is index 0; a is index 1; b is index 2. First inserted row
+        // has SQLite rowid = 1 by default.
+        match &rows[0][0] {
+            types::Duckvalue::Int64(v) => assert_eq!(*v, 1),
+            other => panic!("expected rowid Int64(1), got {other:?}"),
+        }
+        match &rows[1][0] {
+            types::Duckvalue::Int64(v) => assert_eq!(*v, 2),
+            other => panic!("expected rowid Int64(2), got {other:?}"),
         }
     }
 

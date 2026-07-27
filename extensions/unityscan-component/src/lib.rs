@@ -207,13 +207,25 @@ impl storage_dispatch::Guest for Extension {
                 .get_mut(&catalog)
                 .ok_or_else(|| types::Duckerror::Invalidstate("unknown catalog".into()))?;
             let cols = resolve_columns(cat, &table)?;
-            Ok(cols
-                .iter()
-                .map(|col| types::Columndef {
+            // ADR Amendment A5: prepend a synthetic `rowid` (Int64) at index 0
+            // for contract consistency across storage extensions. The unityscan
+            // component's storage_scan_next always returns EOF (data reads flow
+            // through the composed s3fs/azfs + delta/parquet stack, not here),
+            // so no rowid values are ever emitted -- but the columndef list
+            // still advertises one so `at5_locate_rowid_column` succeeds
+            // uniformly. See docs/at5-rowid-mechanism.md.
+            let mut out: Vec<types::Columndef> = Vec::with_capacity(cols.len() + 1);
+            out.push(types::Columndef {
+                name: "rowid".into(),
+                logical: types::Logicaltype::Int64,
+            });
+            for col in cols {
+                out.push(types::Columndef {
                     name: col.name.clone().into(),
                     logical: map_uc_type(&col.type_text),
-                })
-                .collect())
+                });
+            }
+            Ok(out)
         })
     }
 
