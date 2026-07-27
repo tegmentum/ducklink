@@ -4217,6 +4217,20 @@ impl HostState {
         // `ducklink.search(query)` is a MACRO (takes a bound query argument)
         // — the other eight are VIEWs. Statements are executed one at a time
         // because the CLI's `execute` boundary is a single-statement call.
+        //
+        // The `CREATE OR REPLACE MACRO PREFIX(alias, namespace) AS
+        // ducklink_prefix(...)` DDL is HOISTED out of this list and handled
+        // below — it depends on the synthetic `ducklink_prefix` scalar being
+        // present in the catalog. That scalar is registered lazily by
+        // `ExtensionManager::drain_pending_registrations`, which only runs
+        // when the wasm core requests pending registrations (post-LOAD
+        // handshake). On a lean host where no autoloaded extension is
+        // present (e.g. `jsonfns` + `ducklink_scalars` artifacts missing on
+        // a fresh worktree), `drain_pending_registrations` never fires, and
+        // the DuckDB binder rejects the macro body with "Scalar Function
+        // with name ducklink_prefix does not exist!". Gate the DDL below on
+        // an explicit `duckdb_functions()` probe so that noisy failure never
+        // hits the AT5 e2e tests' captured stderr.
         const DDL: &[&str] = &[
             "CREATE SCHEMA IF NOT EXISTS ducklink",
             // prefixes — persistent table (NOT a view). Populated by
@@ -4225,12 +4239,6 @@ impl HostState {
             "CREATE TABLE IF NOT EXISTS ducklink.prefixes ( \
                 alias VARCHAR PRIMARY KEY, \
                 namespace VARCHAR NOT NULL)",
-            // PREFIX(alias, namespace) — shorter macro that delegates to
-            // the `ducklink_prefix` scalar sentinel (STABILITY.md § 1.1).
-            // Mirrors the extension's `reg_duckdb.rs` registration at
-            // `ducklink_load(name)` time.
-            "CREATE OR REPLACE MACRO PREFIX(alias, namespace) AS \
-             ducklink_prefix(alias, namespace)",
             // modules — 11 cols
             "CREATE OR REPLACE VIEW ducklink.modules AS \
              SELECT CAST(NULL AS VARCHAR) AS name, \
@@ -4329,6 +4337,67 @@ impl HostState {
                     sql, trap
                 ),
             }
+        }
+        // PREFIX(alias, namespace) — shorter macro that delegates to the
+        // `ducklink_prefix` scalar sentinel (STABILITY.md § 1.1). Mirrors
+        // the extension's `reg_duckdb.rs` registration at `ducklink_load`
+        // time. Skipped when the scalar sentinel is not yet in the core
+        // catalog (see the block-comment on the DDL constant above) — the
+        // macro is a UX convenience; its absence downgrades cleanly to
+        // `SELECT ducklink_prefix(...)` calls, which are the STABILITY.md
+        // committed shape anyway.
+        const PREFIX_MACRO_DDL: &str =
+            "CREATE OR REPLACE MACRO PREFIX(alias, namespace) AS \
+             ducklink_prefix(alias, namespace)";
+        if self.ducklink_prefix_scalar_registered(handle) {
+            let res = self.with_core(|core| {
+                core.with_database(|guest, store| {
+                    guest.call_execute(store, handle.clone(), PREFIX_MACRO_DDL)
+                })
+            });
+            match res {
+                Ok(Ok(_)) => {}
+                Ok(Err(err)) => eprintln!(
+                    "[ducklink] discovery-view DDL failed: {}: {}",
+                    PREFIX_MACRO_DDL,
+                    core_duckerror_message(err)
+                ),
+                Err(trap) => eprintln!(
+                    "[ducklink] discovery-view DDL trapped: {}: {}",
+                    PREFIX_MACRO_DDL, trap
+                ),
+            }
+        } else {
+            eprintln!(
+                "[ducklink] discovery-view: skipping `CREATE OR REPLACE MACRO \
+                 PREFIX(...)` — the `ducklink_prefix` scalar sentinel is not \
+                 yet in the core catalog (autoloaded `ducklink_scalars` / \
+                 `jsonfns` artifacts missing?). `SELECT ducklink_prefix(...)` \
+                 remains available and the macro will bind on the next \
+                 connection after the first successful extension LOAD."
+            );
+        }
+    }
+
+    /// Probe the core catalog for the synthetic `ducklink_prefix` scalar
+    /// (STABILITY.md § 1.1). Returns `false` if `duckdb_functions()` shows
+    /// no matching entry, or if the probe itself fails (best-effort — never
+    /// fatal). Used to gate the `CREATE OR REPLACE MACRO PREFIX(...)` DDL
+    /// so a lean host that never triggered `drain_pending_registrations`
+    /// (no autoloaded extension) doesn't surface a scary "Scalar Function
+    /// does not exist" error at connection open.
+    fn ducklink_prefix_scalar_registered(&self, handle: &ResourceAny) -> bool {
+        const PROBE: &str =
+            "SELECT 1 FROM duckdb_functions() \
+             WHERE function_name = 'ducklink_prefix' \
+               AND function_type = 'scalar' \
+             LIMIT 1";
+        let res = self.with_core(|core| {
+            core.with_database(|guest, store| guest.call_execute(store, handle.clone(), PROBE))
+        });
+        match res {
+            Ok(Ok(qr)) => !qr.rows.is_empty(),
+            Ok(Err(_)) | Err(_) => false,
         }
     }
 
