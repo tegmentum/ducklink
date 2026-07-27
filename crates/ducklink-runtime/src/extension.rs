@@ -4271,6 +4271,29 @@ impl ExtensionInstance {
             .map_err(storage_duckerror_to_ext)
     }
 
+    /// AT5 write-back: serialize the extension's in-memory representation of
+    /// `catalog` back to a byte blob. The host writes those bytes back to the
+    /// ATTACH DSN file path after each successful INSERT/UPDATE/DELETE dispatch
+    /// so the mutation persists on disk (sqlitewasm's storage lives in an
+    /// in-memory `sqlite3_deserialize`d copy; without this the writes never
+    /// leave the wasm heap). Extensions whose backend isn't a serializable blob
+    /// (e.g. remote MySQL/Postgres connections) return
+    /// `Duckerror::Unsupported`, which the host treats as a silent no-op.
+    pub fn storage_serialize(
+        &mut self,
+        handle: u32,
+        catalog: u32,
+    ) -> Result<Vec<u8>, extension_types::Duckerror> {
+        self.storage_bindings()?;
+        let bindings = self.storage_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_storage_dispatch();
+        let store = &mut self.store;
+        guest
+            .call_serialize(store.as_context_mut(), handle, catalog)
+            .map_err(map_extension_trap)?
+            .map_err(storage_duckerror_to_ext)
+    }
+
     // --- Item 3 / M2a: index-dispatch (custom index build + search) re-entry ---
     // Mirrors the storage-dispatch `storage_*` methods but drives the component's
     // exported `index-dispatch` interface. The HNSW (or other ANN) build happens
