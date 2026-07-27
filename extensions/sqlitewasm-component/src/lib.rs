@@ -384,6 +384,45 @@ impl storage_dispatch::Guest for Extension {
         CATALOGS.with(|c| c.borrow_mut().remove(&catalog));
         Ok(true)
     }
+
+    /// AT5 write-back: serialize the in-memory SQLite database back to raw
+    /// database-file bytes via `sqlite3_serialize`. The host writes the returned
+    /// blob back to the ATTACH DSN path after each successful INSERT/UPDATE/
+    /// DELETE so the mutation persists on disk (the in-memory copy is opened
+    /// via `sqlite3_deserialize` in `open_blob`; without this it never leaves
+    /// the wasm heap).
+    fn serialize(handle: u32, catalog: u32) -> Result<Vec<u8>, types::Duckerror> {
+        check_handle(handle)?;
+        CATALOGS.with(|c| {
+            let c = c.borrow();
+            let conn = c.get(&catalog).ok_or_else(|| {
+                types::Duckerror::Invalidstate("unknown catalog".into())
+            })?;
+            // SAFETY: sqlite owns the returned buffer; we memcpy into a Rust
+            // Vec and then `sqlite3_free` the sqlite side. A null return means
+            // OOM or a serialize failure; both surface as a duckerror. `main`
+            // is the same schema label sqlite3_deserialize used in open_blob.
+            unsafe {
+                let db = conn.handle();
+                let mut len: i64 = 0;
+                let p = libsqlite3_sys::sqlite3_serialize(
+                    db,
+                    b"main\0".as_ptr() as *const _,
+                    &mut len as *mut i64,
+                    0,
+                );
+                if p.is_null() {
+                    return Err(types::Duckerror::Io(
+                        "sqlite3_serialize returned null".into(),
+                    ));
+                }
+                let bytes = std::slice::from_raw_parts(p as *const u8, len as usize)
+                    .to_vec();
+                libsqlite3_sys::sqlite3_free(p as *mut _);
+                Ok(bytes.into())
+            }
+        })
+    }
 }
 
 // ---------------------------------------------------------------------------

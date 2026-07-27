@@ -2350,6 +2350,23 @@ impl ExtensionManager {
         instance.storage_scan_close(handle, scan)
     }
 
+    /// AT5 write-back: serialize the extension's in-memory representation of
+    /// `catalog` back to a byte blob. The host calls this after every
+    /// successful INSERT/UPDATE/DELETE dispatch and writes the returned bytes
+    /// back to the ATTACH DSN file so the mutation persists on disk. Backends
+    /// whose storage isn't a serializable blob return
+    /// `Duckerror::Unsupported`, which the caller treats as a silent no-op.
+    pub fn dispatch_storage_serialize(
+        &mut self,
+        catalog: u32,
+    ) -> Result<Vec<u8>, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_serialize(handle, catalog)
+    }
+
     // --- Phase 2c (@5): AT5 attach-scan callback registry ---
 
     /// Allocate a fresh AT5 attach-scan callback handle (inside the reserved
@@ -4028,6 +4045,18 @@ pub(crate) struct AttachedForeignCatalog {
     /// `database.register-table-function` (see `ExtensionManager::at5_scan_targets`
     /// for the reverse mapping the manager consults on dispatch).
     pub table_callbacks: HashMap<String, u32>,
+    /// AT5 write-back destination: the resolved local file path the ATTACH DSN
+    /// pointed at, or None when the DSN wasn't a file (connection strings,
+    /// remote URIs). After every INSERT/UPDATE/DELETE dispatch the host calls
+    /// `dispatch_storage_serialize` and, if the backend returns bytes AND this
+    /// path is set, writes the blob back so the mutation persists on disk.
+    /// See `intercept_write` for the wiring.
+    pub dsn_path: Option<PathBuf>,
+    /// AT5 write-back suppression: an ATTACH made with `READ_ONLY` (or its
+    /// synonyms) skips the write-back path so a read-only mount stays read-
+    /// only. The write-intercept still rejects mutations at parse-time; this
+    /// belt-and-braces guard covers any future codepath that bypasses that.
+    pub read_only: bool,
 }
 
 /// Phase 2c (@5): routing target for a single AT5 attach-scan callback
@@ -4931,6 +4960,7 @@ impl HostState {
             .iter()
             .map(|s| (s.name.clone(), s.callback))
             .collect();
+        let dsn_path = resolve_attach_dsn_path(&spec.dsn);
         self.attached_aliases.insert(
             spec.alias.clone(),
             AttachedForeignCatalog {
@@ -4940,6 +4970,8 @@ impl HostState {
                 type_name: spec.type_name.clone(),
                 tables,
                 table_callbacks,
+                dsn_path,
+                read_only: spec.read_only,
             },
         );
         Ok(empty_query_result())
@@ -5009,17 +5041,20 @@ impl HostState {
                     }
                     ext_rows.push(cells);
                 }
-                let mut manager = self
-                    .extension_manager
-                    .lock()
-                    .expect("extension manager mutex poisoned");
-                let n = manager
-                    .dispatch_storage_insert_direct(catalog_handle, &table, &ext_rows)
-                    .map_err(cli_extension_duckerror)?;
+                let n = {
+                    let mut manager = self
+                        .extension_manager
+                        .lock()
+                        .expect("extension manager mutex poisoned");
+                    manager
+                        .dispatch_storage_insert_direct(catalog_handle, &table, &ext_rows)
+                        .map_err(cli_extension_duckerror)?
+                };
                 eprintln!(
                     "[at5-write] INSERT {alias}.{table}: {n} row(s) dispatched to \
                      storage-write-dispatch"
                 );
+                self.at5_write_back(&alias, catalog_handle)?;
                 Ok(empty_query_result())
             }
             WriteRoute::Update {
@@ -5093,22 +5128,25 @@ impl HostState {
                         row
                     })
                     .collect();
-                let mut manager = self
-                    .extension_manager
-                    .lock()
-                    .expect("extension manager mutex poisoned");
-                let n = manager
-                    .dispatch_storage_update_direct(
-                        catalog_handle,
-                        &table,
-                        &rowids,
-                        &updated_rows,
-                    )
-                    .map_err(cli_extension_duckerror)?;
+                let n = {
+                    let mut manager = self
+                        .extension_manager
+                        .lock()
+                        .expect("extension manager mutex poisoned");
+                    manager
+                        .dispatch_storage_update_direct(
+                            catalog_handle,
+                            &table,
+                            &rowids,
+                            &updated_rows,
+                        )
+                        .map_err(cli_extension_duckerror)?
+                };
                 eprintln!(
                     "[at5-write] UPDATE {alias}.{table}: {n} row(s) dispatched to \
                      storage-write-dispatch (rowids={rowids:?})"
                 );
+                self.at5_write_back(&alias, catalog_handle)?;
                 Ok(empty_query_result())
             }
             WriteRoute::Delete {
@@ -5127,20 +5165,92 @@ impl HostState {
                     );
                     return Ok(empty_query_result());
                 }
-                let mut manager = self
-                    .extension_manager
-                    .lock()
-                    .expect("extension manager mutex poisoned");
-                let n = manager
-                    .dispatch_storage_delete_direct(catalog_handle, &table, &rowids)
-                    .map_err(cli_extension_duckerror)?;
+                let n = {
+                    let mut manager = self
+                        .extension_manager
+                        .lock()
+                        .expect("extension manager mutex poisoned");
+                    manager
+                        .dispatch_storage_delete_direct(catalog_handle, &table, &rowids)
+                        .map_err(cli_extension_duckerror)?
+                };
                 eprintln!(
                     "[at5-write] DELETE {alias}.{table}: {n} row(s) dispatched to \
                      storage-write-dispatch (rowids={rowids:?})"
                 );
+                self.at5_write_back(&alias, catalog_handle)?;
                 Ok(empty_query_result())
             }
         }
+    }
+
+    /// AT5 write-back: called after every successful INSERT/UPDATE/DELETE
+    /// dispatch on an attached foreign catalog. Serializes the extension's
+    /// in-memory representation via `storage-dispatch.serialize` and writes
+    /// the resulting blob back to the ATTACH DSN file so the mutation persists
+    /// on disk.
+    ///
+    /// Skips silently when:
+    ///  - the alias vanished (race with DETACH, defensive),
+    ///  - the ATTACH used a non-file DSN (connection string, remote URI) — no
+    ///    local path to write to,
+    ///  - the ATTACH was READ_ONLY (belt-and-braces; the parser already
+    ///    rejects the write, but a future codepath might not),
+    ///  - the extension returns `Duckerror::Unsupported` (its backend isn't a
+    ///    serializable blob — the mutation already round-tripped over the wire
+    ///    via storage-write-dispatch).
+    ///
+    /// Other extension errors (I/O, internal) propagate as CLI Duckerrors so
+    /// the write is reported as failed even though the in-memory copy was
+    /// mutated. Callers must treat this as fatal.
+    fn at5_write_back(
+        &mut self,
+        alias: &str,
+        catalog_handle: u32,
+    ) -> Result<(), cli_types::Duckerror> {
+        let (dsn_path, read_only) = match self.attached_aliases.get(alias) {
+            Some(c) => (c.dsn_path.clone(), c.read_only),
+            None => return Ok(()),
+        };
+        if read_only {
+            return Ok(());
+        }
+        let Some(dsn_path) = dsn_path else {
+            // DSN wasn't a local file — nothing to write back to.
+            return Ok(());
+        };
+        let bytes = {
+            let mut manager = self
+                .extension_manager
+                .lock()
+                .expect("extension manager mutex poisoned");
+            match manager.dispatch_storage_serialize(catalog_handle) {
+                Ok(bytes) => bytes,
+                Err(extension_types::Duckerror::Unsupported(_)) => {
+                    eprintln!(
+                        "[at5-writeback] {alias}: serialize Unsupported; \
+                         skipping fs write (backend is not a serializable blob)"
+                    );
+                    return Ok(());
+                }
+                Err(err) => return Err(cli_extension_duckerror(err)),
+            }
+        };
+        std::fs::write(&dsn_path, &bytes).map_err(|e| {
+            cli_types::Duckerror::Io(
+                format!(
+                    "AT5 write-back to {}: {e}",
+                    dsn_path.display()
+                )
+                .into(),
+            )
+        })?;
+        eprintln!(
+            "[at5-writeback] {alias}: wrote {} byte(s) back to {}",
+            bytes.len(),
+            dsn_path.display()
+        );
+        Ok(())
     }
 
     /// Fetch (catalog-handle, extension-declared columns) for an attached
@@ -5251,6 +5361,39 @@ fn empty_query_result() -> cli_db::QueryResult {
 /// (`at5_intercept::is_bare_ident`), so this is a pure concat.
 fn at5_synth_fn_name(alias: &str, table: &str) -> String {
     format!("__{alias}_{table}")
+}
+
+/// AT5 write-back path resolver. Turns the raw ATTACH DSN into a local file
+/// path when the DSN plausibly names a local file: bare paths, and the
+/// `file://` URL form. Returns None for connection strings, remote URIs, or
+/// paths that don't exist (so a remote-only backend never triggers a
+/// write-back fs write). The path is not required to exist at attach time —
+/// callers may create it — but this best-effort resolution mirrors the same
+/// "is this a file dsn?" test `dispatch_storage_attach` uses when staging
+/// blob bytes: if there's no reasonable local path, there's no write-back.
+fn resolve_attach_dsn_path(dsn: &str) -> Option<PathBuf> {
+    let raw = dsn.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    // file:// URL form: strip the scheme, leaving whatever the URL held
+    // (typically an absolute path). Percent-decoding is not attempted — every
+    // caller today (the AT5 tests, the smoke suite) hands us plain filesystem
+    // paths that don't need it, so implementing decode here would be dead
+    // code the first bug is likely to expose.
+    let path_str = if let Some(rest) = raw.strip_prefix("file://") {
+        // Two-slash `file:` (with an empty authority) collapses to `/…`; the
+        // three-slash `file:///…` form drops the authority entirely and keeps
+        // the leading `/`. Both land here as `rest` starting with `/`.
+        rest.to_string()
+    } else if raw.contains("://") {
+        // Any other URI scheme (http, s3, mysql, postgres, ...) is not a
+        // local file — no write-back for these.
+        return None;
+    } else {
+        raw.to_string()
+    };
+    Some(PathBuf::from(path_str))
 }
 
 /// Amendment A5: find the extension-declared `rowid` column (case-insensitive)

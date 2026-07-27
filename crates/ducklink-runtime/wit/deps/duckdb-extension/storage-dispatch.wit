@@ -44,4 +44,12 @@ interface storage-dispatch {
 
   storage-scan-close: func(handle: u32, scan: u32) -> result<bool, duckerror>;
   storage-detach: func(handle: u32, catalog: u32) -> result<bool, duckerror>;
+
+  /// Serialize the extension's in-memory representation of the foreign
+  /// catalog back to a byte blob suitable for writing to the ATTACH DSN
+  /// file path. Called by the host after any successful write dispatch
+  /// on this catalog handle. Extensions whose backend isn't a
+  /// serializable blob (e.g. remote MySQL / Postgres connections) return
+  /// Duckerror::Unsupported.
+  serialize: func(handle: u32, catalog: u32) -> result<list<u8>, duckerror>;
 }

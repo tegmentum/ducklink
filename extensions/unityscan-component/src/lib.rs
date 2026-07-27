@@ -281,6 +281,16 @@ impl storage_dispatch::Guest for Extension {
         CATALOGS.with(|c| c.borrow_mut().remove(&catalog));
         Ok(true)
     }
+
+    /// AT5 write-back stub: Unity Catalog is a remote REST catalog, not a
+    /// serializable blob. Return Unsupported so the host's write-back path
+    /// silently proceeds.
+    fn serialize(handle: u32, _catalog: u32) -> Result<Vec<u8>, types::Duckerror> {
+        check_handle(handle)?;
+        Err(types::Duckerror::Unsupported(
+            "serialize not applicable to this backend".into(),
+        ))
+    }
 }
 
 fn check_handle(handle: u32) -> Result<(), types::Duckerror> {
