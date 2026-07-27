@@ -5670,101 +5670,33 @@ impl cli_db::Host for HostState {
             .ok_or_else(|| cli_types::Duckerror::Internal("unknown connection".into()))?
             .handle
             .clone();
-        // `ducklink_load(name)` deferred drain: if the user's PREVIOUS
-        // statement went through `dispatch_table`'s native `ducklink_load`
-        // path, an extension was loaded but its pending registrations are
-        // stashed in the manager (that path can't re-enter `call_execute`
-        // from a wasm-store-mid-call callback). Replay an idempotent
-        // `LOAD <name>;` here — `ensure_extension_loaded` short-circuits
-        // (already in `self.extensions`) and the core then calls
-        // `get_pending_registrations`, which drains our `deferred_registrations`
-        // into the DuckDB catalog. The user's actual SQL runs after.
-        self.flush_deferred_ducklink_loads(entry_handle.clone());
-        // Same deferral rationale as `ducklink_load`: the native
-        // `ducklink_prefix(alias, namespace)` sentinel handler validates
-        // + queues the pair but can't run the associated `CREATE SCHEMA
-        // / CREATE OR REPLACE MACRO / INSERT INTO ducklink.prefixes` DDL
-        // in-band (mid-callback re-entry into `call_execute` deadlocks
-        // the core mutex). Drain the queue here — the core is idle again
-        // — so `<alias>.<fn>` resolves for the user's next statement.
-        self.flush_deferred_prefix_declarations(entry_handle.clone());
-        // Phase 2 (@5): ATTACH + write intercept for foreign catalogs backed
-        // by a storage-capable extension. Both branches run BEFORE the SQL
-        // reaches the core (see ADR Decision 3 + Amendment A1 + A5).
-        //
-        // ATTACH: parse `ATTACH '<dsn>' AS <alias> (TYPE <name> [, k=v ...])`,
-        // route to the extension's storage-dispatch, materialize the foreign
-        // catalog into an in-memory attached DB on the core, and record the
-        // alias in `attached_aliases` so subsequent writes are routed here too.
-        // Falls through to the core for any ATTACH shape we don't recognize.
-        if let Some(spec) = at5_intercept::parse_attach(sql.as_ref()) {
-            match self.intercept_attach(entry_handle.clone(), spec) {
-                Ok(result) => {
-                    self.refresh_catalog_snapshot();
-                    return Ok(result);
-                }
-                Err(err) => return Err(err),
+        // Phase 2 (@5) multi-statement AT5 intercept: `-c "LOAD ext; ATTACH …
+        // (TYPE ext); SELECT * FROM alias.tbl;"` reaches us as a SINGLE
+        // execute() call (the wasm CLI's `run_script` accumulates lines until
+        // a `;`, so a one-line multi-statement payload is dispatched as one
+        // blob). `parse_attach` / `resolve_write_target` only recognize a
+        // single statement, so a mid-batch ATTACH would fall through to the
+        // core and be rejected as "Unrecognized storage type <name>". Split
+        // top-level statements HERE (respecting quotes + comments) and
+        // dispatch each through `execute_single_statement` — the intercept
+        // path runs against each statement in turn, and non-intercept
+        // statements pass through to the core exactly as before. Only the
+        // LAST statement's result is returned (matches DuckDB's own
+        // multi-statement-script semantics).
+        let sql_ref: &str = sql.as_ref();
+        if at5_intercept::is_multi_statement(sql_ref) {
+            let pieces: Vec<String> = at5_intercept::split_statements(sql_ref)
+                .into_iter()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            let mut last: cli_db::QueryResult = empty_query_result();
+            for piece in pieces {
+                last = self.execute_single_statement(entry_handle.clone(), &piece)?;
             }
+            return Ok(last);
         }
-        // WRITE: parse INSERT/UPDATE/DELETE against an attached alias. See
-        // `resolve_write_target` for the accept/reject matrix (Amendment A2
-        // Risk 8 non-goals return `Unsupported` here).
-        if !self.attached_aliases.is_empty() {
-            let alias_map: HashMap<String, String> =
-                self.attached_aliases.keys().map(|k| (k.clone(), String::new())).collect();
-            if let Some(route) = at5_intercept::resolve_write_target(sql.as_ref(), &alias_map) {
-                match self.intercept_write(entry_handle.clone(), route) {
-                    Ok(result) => {
-                        self.refresh_catalog_snapshot();
-                        return Ok(result);
-                    }
-                    Err(err) => return Err(err),
-                }
-            }
-        }
-        // One-query `delta_scan('dir')`: the wasm core can't take a subquery-
-        // valued table-fn arg, so the host reads the table's _delta_log off the
-        // real filesystem, resolves the active files (add minus remove), and
-        // rewrites the call to a read_parquet([...]) the core can scan. No-op
-        // when the SQL has no rewritable delta_scan call.
-        let sql = delta_rewrite::rewrite_delta_scan(&sql, &self.preopens);
-        let result = self
-            .with_core(|core| {
-                // Option (a) nested-exec (docs/nested-exec-direction-1-plan.md
-                // §7.8): snapshot raw pointers to the primary core so a
-                // scalar/table callback firing inside this call_execute can
-                // re-enter the SAME store via
-                // `PrimaryReentryGuard`/`primary_nested_exec` instead of the
-                // shipped (b.1) sibling. RAII restores TLS on any path
-                // (Ok, Err, panic), so a nested_exec never sees a stale
-                // pointer to a freed CoreExecution.
-                //
-                // Borrow-checker note: the raw-pointer coercions (`&mut
-                // core.store as *mut _`, `&core.bindings as *const _`) drop
-                // their borrows at the end of the coercion expression, so
-                // the subsequent `core.with_database(...)` &mut re-borrow
-                // is unaliased.
-                let store_ptr: *mut Store<CoreStoreState> = &mut core.store;
-                let bindings_ptr: *const duckdb_core_bindings::Libduckdb =
-                    &core.bindings;
-                let _reentry = PrimaryReentryGuard::set(PrimaryReentry {
-                    store: store_ptr,
-                    bindings: bindings_ptr,
-                    connection: entry_handle,
-                });
-                core.with_database(|guest, store| {
-                    guest.call_execute(store, entry_handle, &sql)
-                })
-            })
-            .map_err(convert_trap_to_duckerror)?;
-        // v1.1: the core is idle again here -> refresh the catalog snapshot so a
-        // query-capable component's `query` import (which runs INSIDE a later
-        // query, when the core is busy) can still answer catalog SELECTs.
-        self.refresh_catalog_snapshot();
-        match result {
-            Ok(value) => Ok(convert_core_query_result(value)),
-            Err(err) => Err(convert_core_duckerror(err)),
-        }
+        self.execute_single_statement(entry_handle, sql_ref)
     }
 
     fn query_arrow(
@@ -5991,6 +5923,115 @@ impl cli_db::Host for HostState {
         match result {
             Ok(()) => Ok(()),
             Err(err) => Err(err.into()),
+        }
+    }
+}
+
+impl HostState {
+    /// One-statement execute-body: intercept ATTACH / write-against-attached
+    /// first, then fall through to the core's `call_execute`. Extracted so
+    /// the multi-statement dispatch in `cli_db::Host::execute` above can
+    /// loop over pre-split statements without recursing through the WIT
+    /// `Resource<Connection>` boundary (which is not `Clone`).
+    fn execute_single_statement(
+        &mut self,
+        entry_handle: ResourceAny,
+        sql: &str,
+    ) -> Result<cli_db::QueryResult, cli_types::Duckerror> {
+        // `ducklink_load(name)` deferred drain: if the user's PREVIOUS
+        // statement went through `dispatch_table`'s native `ducklink_load`
+        // path, an extension was loaded but its pending registrations are
+        // stashed in the manager (that path can't re-enter `call_execute`
+        // from a wasm-store-mid-call callback). Replay an idempotent
+        // `LOAD <name>;` here — `ensure_extension_loaded` short-circuits
+        // (already in `self.extensions`) and the core then calls
+        // `get_pending_registrations`, which drains our `deferred_registrations`
+        // into the DuckDB catalog. The user's actual SQL runs after.
+        self.flush_deferred_ducklink_loads(entry_handle.clone());
+        // Same deferral rationale as `ducklink_load`: the native
+        // `ducklink_prefix(alias, namespace)` sentinel handler validates
+        // + queues the pair but can't run the associated `CREATE SCHEMA
+        // / CREATE OR REPLACE MACRO / INSERT INTO ducklink.prefixes` DDL
+        // in-band (mid-callback re-entry into `call_execute` deadlocks
+        // the core mutex). Drain the queue here — the core is idle again
+        // — so `<alias>.<fn>` resolves for the user's next statement.
+        self.flush_deferred_prefix_declarations(entry_handle.clone());
+        // Phase 2 (@5): ATTACH + write intercept for foreign catalogs backed
+        // by a storage-capable extension. Both branches run BEFORE the SQL
+        // reaches the core (see ADR Decision 3 + Amendment A1 + A5).
+        //
+        // ATTACH: parse `ATTACH '<dsn>' AS <alias> (TYPE <name> [, k=v ...])`,
+        // route to the extension's storage-dispatch, materialize the foreign
+        // catalog into an in-memory attached DB on the core, and record the
+        // alias in `attached_aliases` so subsequent writes are routed here too.
+        // Falls through to the core for any ATTACH shape we don't recognize.
+        if let Some(spec) = at5_intercept::parse_attach(sql) {
+            match self.intercept_attach(entry_handle.clone(), spec) {
+                Ok(result) => {
+                    self.refresh_catalog_snapshot();
+                    return Ok(result);
+                }
+                Err(err) => return Err(err),
+            }
+        }
+        // WRITE: parse INSERT/UPDATE/DELETE against an attached alias. See
+        // `resolve_write_target` for the accept/reject matrix (Amendment A2
+        // Risk 8 non-goals return `Unsupported` here).
+        if !self.attached_aliases.is_empty() {
+            let alias_map: HashMap<String, String> =
+                self.attached_aliases.keys().map(|k| (k.clone(), String::new())).collect();
+            if let Some(route) = at5_intercept::resolve_write_target(sql, &alias_map) {
+                match self.intercept_write(entry_handle.clone(), route) {
+                    Ok(result) => {
+                        self.refresh_catalog_snapshot();
+                        return Ok(result);
+                    }
+                    Err(err) => return Err(err),
+                }
+            }
+        }
+        // One-query `delta_scan('dir')`: the wasm core can't take a subquery-
+        // valued table-fn arg, so the host reads the table's _delta_log off the
+        // real filesystem, resolves the active files (add minus remove), and
+        // rewrites the call to a read_parquet([...]) the core can scan. No-op
+        // when the SQL has no rewritable delta_scan call.
+        let sql = delta_rewrite::rewrite_delta_scan(sql, &self.preopens);
+        let result = self
+            .with_core(|core| {
+                // Option (a) nested-exec (docs/nested-exec-direction-1-plan.md
+                // §7.8): snapshot raw pointers to the primary core so a
+                // scalar/table callback firing inside this call_execute can
+                // re-enter the SAME store via
+                // `PrimaryReentryGuard`/`primary_nested_exec` instead of the
+                // shipped (b.1) sibling. RAII restores TLS on any path
+                // (Ok, Err, panic), so a nested_exec never sees a stale
+                // pointer to a freed CoreExecution.
+                //
+                // Borrow-checker note: the raw-pointer coercions (`&mut
+                // core.store as *mut _`, `&core.bindings as *const _`) drop
+                // their borrows at the end of the coercion expression, so
+                // the subsequent `core.with_database(...)` &mut re-borrow
+                // is unaliased.
+                let store_ptr: *mut Store<CoreStoreState> = &mut core.store;
+                let bindings_ptr: *const duckdb_core_bindings::Libduckdb =
+                    &core.bindings;
+                let _reentry = PrimaryReentryGuard::set(PrimaryReentry {
+                    store: store_ptr,
+                    bindings: bindings_ptr,
+                    connection: entry_handle,
+                });
+                core.with_database(|guest, store| {
+                    guest.call_execute(store, entry_handle, &sql)
+                })
+            })
+            .map_err(convert_trap_to_duckerror)?;
+        // v1.1: the core is idle again here -> refresh the catalog snapshot so a
+        // query-capable component's `query` import (which runs INSIDE a later
+        // query, when the core is busy) can still answer catalog SELECTs.
+        self.refresh_catalog_snapshot();
+        match result {
+            Ok(value) => Ok(convert_core_query_result(value)),
+            Err(err) => Err(convert_core_duckerror(err)),
         }
     }
 }

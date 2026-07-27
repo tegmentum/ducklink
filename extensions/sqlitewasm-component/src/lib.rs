@@ -348,7 +348,24 @@ impl storage_dispatch::Guest for Extension {
             let cur = s
                 .get_mut(&scan)
                 .ok_or_else(|| types::Duckerror::Invalidstate("unknown scan".into()))?;
-            let end = (cur.pos + max_rows as usize).min(cur.rows.len());
+            // wasm32 target: `usize` is 32-bit, so `cur.pos + max_rows` (with
+            // e.g. `max_rows = u32::MAX`, which the host uses to mean "drain
+            // everything") overflows and wraps modulo 2^32. In release the
+            // wrap is silent — the wrapped `end` compares less than `cur.pos`
+            // and `cur.rows[cur.pos..end]` panics with
+            // "slice index starts at N but ends at M". `saturating_add`
+            // (paired with `.min(rows.len())` for the ceiling) matches the
+            // documented "give me up to `max_rows`" contract cleanly, and the
+            // explicit `pos >= rows.len()` short-circuit turns end-of-cursor
+            // into an empty batch instead of a zero-width slice, so the
+            // host's drain loop terminates on the first EOF call.
+            if cur.pos >= cur.rows.len() {
+                return Ok(std::vec::Vec::<std::vec::Vec<types::Duckvalue>>::new().into());
+            }
+            let end = cur
+                .pos
+                .saturating_add(max_rows as usize)
+                .min(cur.rows.len());
             let batch: std::vec::Vec<std::vec::Vec<types::Duckvalue>> =
                 cur.rows[cur.pos..end].to_vec();
             cur.pos = end;

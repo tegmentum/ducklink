@@ -166,6 +166,76 @@ pub(crate) fn strip_trailing_semicolon(s: &str) -> &str {
     s.strip_suffix(';').unwrap_or(s).trim_end()
 }
 
+/// Split `sql` into individual statements at top-level `;` boundaries,
+/// respecting string literals (`'...'`, `"..."`) and SQL comments (`--…\n`,
+/// `/* … */`) — the same walker `is_multi_statement` uses.
+///
+/// Empty statements (whitespace / comment-only) are dropped; each returned
+/// slice is a borrowed substring of `sql` and does NOT include the trailing
+/// `;`. If `sql` contains a single statement, returns a one-element vec.
+///
+/// This is Phase 2's fix for the multi-statement AT5 intercept: `HostState::execute`
+/// splits its incoming SQL and dispatches statement-at-a-time through the
+/// intercept + core paths, so `LOAD ext; ATTACH … (TYPE ext); SELECT …` (a
+/// single-line `-c` payload the wasm CLI passes verbatim) routes ATTACH to
+/// the intercept even when it sits mid-batch.
+pub(crate) fn split_statements(sql: &str) -> Vec<&str> {
+    let bytes = sql.as_bytes();
+    let mut out: Vec<&str> = Vec::new();
+    let mut start: usize = 0;
+    let mut i: usize = 0;
+    let mut in_single = false;
+    let mut in_double = false;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if in_single {
+            if c == b'\'' {
+                in_single = false;
+            }
+            i += 1;
+            continue;
+        }
+        if in_double {
+            if c == b'"' {
+                in_double = false;
+            }
+            i += 1;
+            continue;
+        }
+        let after_comment = skip_comment(bytes, i);
+        if after_comment != i {
+            i = after_comment;
+            continue;
+        }
+        match c {
+            b'\'' => {
+                in_single = true;
+                i += 1;
+            }
+            b'"' => {
+                in_double = true;
+                i += 1;
+            }
+            b';' => {
+                let piece = &sql[start..i];
+                if !piece.trim().is_empty() {
+                    out.push(piece);
+                }
+                i += 1;
+                start = i;
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+    let tail = &sql[start..];
+    if !tail.trim().is_empty() {
+        out.push(tail);
+    }
+    out
+}
+
 /// True if `sql` contains more than one non-empty statement separated by `;`.
 pub(crate) fn is_multi_statement(sql: &str) -> bool {
     let bytes = sql.as_bytes();
@@ -1311,5 +1381,68 @@ mod tests {
             }
             other => panic!("expected Delete, got {other:?}"),
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // split_statements — the multi-statement splitter that lets
+    // `HostState::execute` route a single-line `-c` payload
+    // (`LOAD ext; ATTACH … (TYPE ext); SELECT …`) through the intercept
+    // path one statement at a time.
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn split_statements_single_no_semicolon() {
+        assert_eq!(split_statements("SELECT 1"), vec!["SELECT 1"]);
+    }
+
+    #[test]
+    fn split_statements_single_with_semicolon() {
+        assert_eq!(split_statements("SELECT 1;"), vec!["SELECT 1"]);
+    }
+
+    #[test]
+    fn split_statements_multi_on_one_line() {
+        assert_eq!(
+            split_statements(
+                "LOAD sqlitewasm; ATTACH 'x.db' AS mydb (TYPE sqlitewasm); SELECT * FROM mydb.foo;"
+            ),
+            vec![
+                "LOAD sqlitewasm",
+                " ATTACH 'x.db' AS mydb (TYPE sqlitewasm)",
+                " SELECT * FROM mydb.foo",
+            ]
+        );
+    }
+
+    #[test]
+    fn split_statements_ignores_semicolons_in_strings() {
+        assert_eq!(
+            split_statements("INSERT INTO t VALUES ('a;b'); SELECT 1;"),
+            vec!["INSERT INTO t VALUES ('a;b')", " SELECT 1"]
+        );
+    }
+
+    #[test]
+    fn split_statements_ignores_semicolons_in_line_comments() {
+        assert_eq!(
+            split_statements("-- one; two;\nSELECT 1;"),
+            vec!["-- one; two;\nSELECT 1"]
+        );
+    }
+
+    #[test]
+    fn split_statements_ignores_semicolons_in_block_comments() {
+        assert_eq!(
+            split_statements("SELECT /* ;;; */ 1; SELECT 2;"),
+            vec!["SELECT /* ;;; */ 1", " SELECT 2"]
+        );
+    }
+
+    #[test]
+    fn split_statements_drops_empty_pieces() {
+        assert_eq!(
+            split_statements(";;SELECT 1;; ; ;SELECT 2;;"),
+            vec!["SELECT 1", "SELECT 2"]
+        );
     }
 }

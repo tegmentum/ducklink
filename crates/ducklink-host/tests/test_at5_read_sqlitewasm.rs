@@ -78,18 +78,36 @@ fn write_sample_sqlite_db(path: &Path) {
     .expect("populate foo");
 }
 
-/// Extract lines that look like CSV data rows (drop CLI banner/prompt noise).
+/// Extract lines that look like data rows for `foo(id INTEGER, name TEXT)`.
+/// The wasm CLI defaults to `table`/box output — `| 1  | a    |` — but
+/// `.mode csv` prints `1,a`; accept either shape so the test doesn't
+/// couple to the current default output mode.
 fn count_data_rows(stdout: &[u8]) -> usize {
     String::from_utf8_lossy(stdout)
         .lines()
         .filter(|l| {
             let t = l.trim();
-            // A data row here looks like "1,a" / "42,z" / "99,x" — has a comma
-            // and every non-punct char is either a digit, a comma, or an
-            // ASCII letter.
-            t.contains(',')
+            // CSV row: "1,a" / "42,z" / "99,x" — digits + letters + `,.-` only.
+            let csv_row = t.contains(',')
                 && t.bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b',' || b == b'.' || b == b'-')
+                    .all(|b| b.is_ascii_alphanumeric() || b == b',' || b == b'.' || b == b'-');
+            // Box row: "| 1  | a    |" — starts with `|` and after stripping the
+            // pipes + whitespace looks like `1<sep>a` where sep is arbitrary
+            // (spaces). We accept the row if it has an integer id token AND a
+            // one-char name token drawn from the table's inserted values.
+            let box_row = t.starts_with('|')
+                && !t.contains("id")   // skip the header row
+                && !t.contains("---")  // skip the separator row
+                && {
+                    let cells: Vec<&str> =
+                        t.trim_matches('|').split('|').map(str::trim).collect();
+                    cells.len() >= 2
+                        && cells[0].bytes().all(|b| b.is_ascii_digit())
+                        && !cells[0].is_empty()
+                        && cells[1].bytes().all(|b| b.is_ascii_alphabetic())
+                        && !cells[1].is_empty()
+                };
+            csv_row || box_row
         })
         .count()
 }
