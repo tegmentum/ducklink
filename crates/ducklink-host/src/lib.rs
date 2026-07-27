@@ -1730,6 +1730,26 @@ struct ExtensionManager {
     // component's `CoreServices` at load so first `nested_exec` lazy-inits the
     // shared sibling core.
     sibling: Option<Arc<SiblingState>>,
+    // Phase 3 (@5 host-import wiring): registry of secret TYPE / PROVIDER
+    // backings declared by extensions via `secret.register-secret-type` /
+    // `register-secret-provider`. Keyed by `(type_name, provider)` — `provider`
+    // is `None` for a bare type registration (the type's default/config
+    // provider). The value is `(extension_name, callback_handle)` — the same
+    // shape as `storage_backends`. A future `CREATE SECRET (TYPE ..., PROVIDER
+    // ..., k v)` interceptor will consult this map and dispatch to the backing
+    // component's `secret-dispatch::create-secret` export via
+    // `ExtensionInstance::create_secret`.
+    secret_backends: HashMap<(String, Option<String>), (String, u32)>,
+    // Phase 3 (@5 host-import wiring): registry of configuration options
+    // declared by extensions via `settings.register-option`. Keyed by option
+    // name; the value carries the full [`reg::SettingReg`] (extension name,
+    // description, type, default, scope). A future `SET <name> = <value>`
+    // interceptor will consult this map and forward the change to the backing
+    // component's `settings-dispatch::on-setting-set` export via
+    // `ExtensionInstance::setting_set` (once handle allocation for
+    // register-option lands — see the field doc on
+    // `reg::SettingReg`).
+    settings_registry: HashMap<String, (String, reg::SettingReg)>,
 }
 
 impl ExtensionManager {
@@ -1793,6 +1813,8 @@ impl ExtensionManager {
             sibling: None,
             at5_scan_targets: HashMap::new(),
             next_at5_scan_handle: AT5_ATTACH_SCAN_HANDLE_MIN,
+            secret_backends: HashMap::new(),
+            settings_registry: HashMap::new(),
         }
     }
 
@@ -2040,6 +2062,46 @@ impl ExtensionManager {
         self.storage_backends
             .get(type_name)
             .map(|(ext, handle)| (ext.clone(), *handle))
+    }
+
+    /// Phase 3 (@5) host-import lookup: the backing extension + callback
+    /// handle for a `(type_name, provider)` secret registration, or `None`
+    /// when no extension declared one. `provider = None` looks up the type's
+    /// default/config provider; `Some(p)` looks up the named provider first
+    /// and falls back to the default when no named-provider entry exists (a
+    /// component may declare only the type without any named provider). The
+    /// future `CREATE SECRET` interceptor uses this to route to the backing
+    /// component's `secret-dispatch::create-secret` export via
+    /// [`ExtensionInstance::create_secret`].
+    #[allow(dead_code)]
+    pub fn secret_backend_for(
+        &self,
+        type_name: &str,
+        provider: Option<&str>,
+    ) -> Option<(String, u32)> {
+        if let Some(p) = provider {
+            if let Some((ext, handle)) =
+                self.secret_backends.get(&(type_name.to_string(), Some(p.to_string())))
+            {
+                return Some((ext.clone(), *handle));
+            }
+        }
+        self.secret_backends
+            .get(&(type_name.to_string(), None))
+            .map(|(ext, handle)| (ext.clone(), *handle))
+    }
+
+    /// Phase 3 (@5) host-import lookup: the backing extension + full
+    /// [`reg::SettingReg`] for an option name previously declared via
+    /// `settings.register-option`, or `None` when no extension declared it.
+    /// The future `SET <name> = <value>` interceptor uses this to route the
+    /// change to the declaring component's `settings-dispatch::on-setting-set`
+    /// export via [`ExtensionInstance::setting_set`].
+    #[allow(dead_code)]
+    pub fn setting_backend_for(&self, name: &str) -> Option<(String, reg::SettingReg)> {
+        self.settings_registry
+            .get(name)
+            .map(|(ext, reg)| (ext.clone(), reg.clone()))
     }
 
     /// Resolve the storage backend that should service an ATTACH. For M2a the
@@ -3555,6 +3617,40 @@ impl ExtensionManager {
             self.storage_backends.insert(
                 storage.type_name.clone(),
                 (storage.extension.clone(), storage.callback_handle),
+            );
+        }
+        // Phase 3 (@5 host-import wiring): capture secret TYPE + PROVIDER
+        // backings so a future `CREATE SECRET (TYPE ..., PROVIDER ..., k v)`
+        // interceptor can route into the backing component's
+        // `secret-dispatch::create-secret` export. Mirrors the storage_backends
+        // pattern above: `secrets` never crosses the core-hook boundary
+        // (secrets are consumed on the host side only, via `create_secret`),
+        // so we record the mapping here before the field is dropped downstream.
+        for secret in &aggregated.secrets {
+            let provider_txt = secret.provider.as_deref().unwrap_or("<default>");
+            eprintln!(
+                "[extension-manager] secret backend '{}'/'{provider_txt}' -> extension '{}' (callback={})",
+                secret.type_name, secret.extension, secret.callback_handle,
+            );
+            self.secret_backends.insert(
+                (secret.type_name.clone(), secret.provider.clone()),
+                (secret.extension.clone(), secret.callback_handle),
+            );
+        }
+        // Phase 3 (@5 host-import wiring): capture option declarations so a
+        // future `SET <name> = <value>` interceptor can consult the map and
+        // forward the change to the declaring component's
+        // `settings-dispatch::on-setting-set` export. The `SettingReg` still
+        // rides through `PendingRegistrationsData::settings` for the core's
+        // OPTION registration path; the registry is the SECOND consumer.
+        for setting in &aggregated.settings {
+            eprintln!(
+                "[extension-manager] setting option '{}' -> extension '{}' (type={}, scope={})",
+                setting.name, setting.extension, setting.ty, setting.scope,
+            );
+            self.settings_registry.insert(
+                setting.name.clone(),
+                (setting.extension.clone(), setting.clone()),
             );
         }
         // One-shot: append the synthetic `ducklink_load` table function
