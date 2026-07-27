@@ -182,13 +182,24 @@ impl storage_dispatch::Guest for Extension {
         check_handle(handle)?;
         with_catalog(catalog, |cat| {
             let cols = fetch_columns(cat, &table)?;
-            Ok(cols
-                .iter()
-                .map(|c| types::Columndef {
+            // ADR Amendment A5: prepend a synthetic `rowid` (Int64) column at
+            // index 0. MySQL has no universally-selectable rowid pseudo-column,
+            // so the scan emits a 1-based row-number as the rowid value. This
+            // is stable within one scan and satisfies the READ path; the write
+            // path is not enabled for mysqlwasm at v1
+            // (see docs/at5-rowid-mechanism.md).
+            let mut out: Vec<types::Columndef> = Vec::with_capacity(cols.len() + 1);
+            out.push(types::Columndef {
+                name: "rowid".into(),
+                logical: types::Logicaltype::Int64,
+            });
+            for c in cols {
+                out.push(types::Columndef {
                     name: c.name.clone().into(),
                     logical: coltype_to_logical(c.ty),
-                })
-                .collect())
+                });
+            }
+            Ok(out)
         })
     }
 
@@ -307,23 +318,40 @@ fn run_scan(
     request: &storage::ScanRequest,
 ) -> Result<std::vec::Vec<std::vec::Vec<types::Duckvalue>>, types::Duckerror> {
     let cols: std::vec::Vec<Column> = fetch_columns(cat, &request.table)?.clone();
+    // Host-side indices are 1-based into MySQL's columns: index 0 refers to
+    // the synthetic `rowid` slot the extension advertises in
+    // `storage_table_columns` (ADR Amendment A5). n_host_cols includes it.
+    let n_host_cols = cols.len() + 1;
 
-    // Projection: indices into the full column list, in emit order. Empty = all.
+    // Projection: indices into the synthetic column list, in emit order.
+    // Empty = all columns (including rowid).
     let proj: std::vec::Vec<usize> = if request.projection.is_empty() {
-        (0..cols.len()).collect()
+        (0..n_host_cols).collect()
     } else {
         request.projection.iter().map(|&i| i as usize).collect()
     };
     for &i in &proj {
-        if i >= cols.len() {
+        if i >= n_host_cols {
             return Err(types::Duckerror::Invalidargument(
                 "projection index out of range".into(),
             ));
         }
     }
 
+    // SELECT list: MySQL has no native selectable rowid, so the rowid column
+    // is materialized post-fetch as a running counter. On the SQL side we
+    // still need to emit *something* for the rowid slot when it is projected;
+    // pick a stable literal (NULL) that survives the wire codec, and overwrite
+    // it with the running counter when materializing the batch below.
+    let sql_col = |host_idx: usize| -> std::string::String {
+        if host_idx == 0 {
+            "NULL".to_string()
+        } else {
+            backtick(&cols[host_idx - 1].name)
+        }
+    };
     let select_list: std::vec::Vec<std::string::String> =
-        proj.iter().map(|&i| backtick(&cols[i].name)).collect();
+        proj.iter().map(|&i| sql_col(i)).collect();
     let mut sql = format!(
         "SELECT {} FROM {}",
         select_list.join(", "),
@@ -331,16 +359,23 @@ fn run_scan(
     );
 
     // WHERE: AND-join the filters, binding values inline (numbers raw, strings
-    // single-quoted with '' escaping).
+    // single-quoted with '' escaping). Filters on the synthetic rowid column
+    // (index 0) are unsupported at v1 -- the extension has no stable
+    // sql-visible rowid to compare against; the host re-applies filters on
+    // the read side anyway, so declining pushdown is safe.
     let mut conds: std::vec::Vec<std::string::String> = std::vec::Vec::new();
     for fltr in &request.filters {
         let idx = fltr.column as usize;
-        if idx >= cols.len() {
+        if idx >= n_host_cols {
             return Err(types::Duckerror::Invalidargument(
                 "filter column index out of range".into(),
             ));
         }
-        let col = backtick(&cols[idx].name);
+        if idx == 0 {
+            // Rowid filter: decline pushdown; the host re-applies filters.
+            continue;
+        }
+        let col = backtick(&cols[idx - 1].name);
         match fltr.op {
             storage::CompareOp::IsNull => conds.push(format!("{col} IS NULL")),
             storage::CompareOp::IsNotNull => conds.push(format!("{col} IS NOT NULL")),
@@ -374,11 +409,18 @@ fn run_scan(
 
     let mut out: std::vec::Vec<std::vec::Vec<types::Duckvalue>> =
         std::vec::Vec::with_capacity(rs.rows.len());
+    let mut row_counter: i64 = 0;
     for row in &rs.rows {
+        row_counter += 1;
         let mut emit: std::vec::Vec<types::Duckvalue> = std::vec::Vec::with_capacity(proj.len());
-        for (slot, &ci) in proj.iter().enumerate() {
-            let cell = row.get(slot).and_then(|c| c.as_ref());
-            emit.push(text_to_duck(cell, cols[ci].ty));
+        for (slot, &host_idx) in proj.iter().enumerate() {
+            if host_idx == 0 {
+                emit.push(types::Duckvalue::Int64(row_counter));
+            } else {
+                let ci = host_idx - 1;
+                let cell = row.get(slot).and_then(|c| c.as_ref());
+                emit.push(text_to_duck(cell, cols[ci].ty));
+            }
         }
         out.push(emit);
     }
