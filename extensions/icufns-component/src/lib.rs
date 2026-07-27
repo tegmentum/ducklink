@@ -146,7 +146,14 @@ fn register_scalars() -> Result<(), types::Duckerror> {
                 tags: vec!["text".into()], attributes: det }))?;
         // Declare the collation reusing the scalar just registered. Non-combinable
         // (a locale collation replaces, not stacks with, another locale's).
-        collation::register_collation(&format!("icu_{loc}"), &scalar_name, false)?;
+        //
+        // @5 (ducklink 5.0.0): register_collation returns Duckerror::Unsupported
+        // -- duckdb_create_collation is not part of the DuckDB stable C API and
+        // there is no host-side path to wire the transform scalar into a real
+        // COLLATE binding. Swallow the error so the sort-key scalars still land;
+        // `ORDER BY icu_sortkey_<loc>(x)` remains the working alternative to
+        // `COLLATE icu_<loc>`. See README's "@5 status" section.
+        let _ = collation::register_collation(&format!("icu_{loc}"), &scalar_name, false);
     }
     Ok(())
 }
