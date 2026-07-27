@@ -1,17 +1,31 @@
-# Local-only override for the native ducklink extension submodule.
+# Cargo config for the monorepo.
 #
-# native-extension/ducklink is a git submodule of the standalone, published
-# ducklink-extension repo, whose Cargo.toml resolves the shared engine
-# `ducklink-runtime` over git (a pinned rev) so the community-extensions CI can
-# build it on its own. Inside this monorepo we want the extension to build
-# against the LOCAL working-tree crate so runtime edits are picked up without a
-# commit + re-pin round trip. This config lives at the monorepo root (outside the
-# submodule), so the standalone repo / CI never sees it and uses the git dep.
+# HISTORY: this file previously carried a root-level path override
 #
-# NOTE: since submodule commit 5fdcf42 the submodule's local runtime/ is
-# byte-equivalent to crates/ducklink-runtime (both at @5.0.0), so the override
-# is no longer required for correctness -- monorepo builds work without it.
-# It stays purely for the ergonomic benefit above (edit runtime code, submodule
-# picks it up on next build without a re-vendor step). Remove if you'd rather
-# force the submodule to always resolve its git-pinned runtime.
-paths = ["crates/ducklink-runtime"]
+#     paths = ["crates/ducklink-runtime"]
+#
+# so that the `native-extension/ducklink` submodule (whose Cargo.toml resolves
+# `ducklink-runtime` over git for community-extensions CI) would build against
+# the local working-tree crate inside this monorepo, letting runtime edits flow
+# into the submodule build without a re-vendor step.
+#
+# The override was retired because:
+#   1. Since submodule commit 5fdcf42 the submodule's own `runtime/` crate is
+#      byte-equivalent to `crates/ducklink-runtime` (both at @5.0.0), so it is
+#      no longer needed for correctness -- monorepo builds work without it.
+#   2. A root-level `paths = [...]` also applies to the workspace's own path
+#      dep (`ducklink-runtime = { path = "crates/ducklink-runtime" }`), and
+#      when cargo runs from a git worktree it walks up to find configs, so
+#      the shared repo's `.cargo/config.toml` merges with the worktree's
+#      copy. The shared-repo absolute path won, redirecting the workspace's
+#      runtime out of the worktree and back into the shared checkout -- a
+#      stale-source leak between worktrees.
+#
+# If you want the ergonomic behaviour back for a specific submodule build,
+# pass the override on the command line (scoped to that invocation):
+#
+#     cargo --config 'paths=["../../crates/ducklink-runtime"]' \
+#           build --manifest-path native-extension/ducklink/Cargo.toml
+#
+# The workspace's own `ducklink-runtime` is already a path dep, so it needs
+# no override to pick up local edits.
