@@ -1,36 +1,39 @@
 //! Phase 2 (@5) integration test: `ATTACH '...' AS mydb (TYPE sqlitewasm)`
 //! then `SELECT` roundtrips through the host's storage-dispatch shim.
 //!
-//! STATUS: `#[ignore]`d in this build. The ATTACH intercept + dispatch
-//! plumbing is wired end-to-end in `ducklink-host` (see
-//! `HostState::intercept_attach` + `ExtensionManager::dispatch_storage_*`),
-//! but making SELECT roundtrip requires:
-//!   1. A `sqlitewasm-component` .wasm built against the @5 WIT surface
-//!      (the artifact under `artifacts/extensions/sqlitewasm.wasm` in the
-//!      main checkout is @4 and cannot be loaded by the @5 host).
-//!   2. The read-path MATERIALIZATION (ADR Decision 3 second half): populate
-//!      an in-memory attached DB on the core from `storage_scan_open/next/
-//!      close` output so `SELECT * FROM mydb.foo` resolves against real
-//!      tables rather than requiring a `duckdb_create_table_function`
-//!      registration path routed through the host as a synthetic extension.
-//!      Deferred to a Phase-2b follow-up per the coordinator's guidance
-//!      (see this session's report).
+//! STATUS: `#[ignore]`d. The host-side ATTACH intercept + dispatch plumbing
+//! is wired end-to-end in `ducklink-host` (see `HostState::intercept_attach`
+//! + `ExtensionManager::dispatch_storage_*` + Phase 2c's per-table
+//! `register-table-function` view materialization). The @5 read-path
+//! machinery is ready.
 //!
-//! Run with `cargo test -p ducklink-host -- --ignored` once (1) and (2) land.
+//! The remaining blocker is the extension side: the shipped
+//! `extensions/sqlitewasm-component` still targets `duckdb:extension@4.0.0`
+//! and depends on the out-of-workspace `datalink-extcore` crate, so it cannot
+//! be loaded by the @5 host. Porting sqlitewasm to @5 is a Phase 2d task in
+//! its own right (the write side flows through `storage-write-dispatch` and
+//! must gain a synthetic `rowid` column per ADR Amendment A5).
+//!
+//! Run with `cargo test -p ducklink-host -- --ignored` once sqlitewasm ships
+//! at @5 (or once a purpose-built mock storage-dispatch component lands in
+//! `extensions/`).
 
 #[test]
-#[ignore = "requires sqlitewasm-component rebuilt at @5 and Phase-2b materialized-scan read path"]
+#[ignore = "requires sqlitewasm-component (or an equivalent mock) rebuilt at duckdb:extension@5.0.0"]
 fn attach_sqlitewasm_and_select_roundtrip() {
-    // Intentional no-op body. When Phase 2b lands, replace with the
-    // e2e flow described in ADR Decision 3 + Amendment A1:
+    // Intended flow once the @5 sqlitewasm component (or a mock storage
+    // extension) is available:
     //   1. Build a small SQLite file at `test.db` with `(id INTEGER, name TEXT)`
-    //      populated with a handful of rows.
-    //   2. `let cli = CliHarness::new(&[...], &[...])?;`
-    //   3. `cli.execute("LOAD sqlitewasm;")` -- requires sqlitewasm.wasm.
+    //      populated with `(1,'a'), (42,'z'), (99,'x')`.
+    //   2. Boot the ducklink CLI harness (see `cron_wasm_driver::run_ducklink`
+    //      for the pattern), with cwd = repo root so
+    //      `target/wasm32-wasip2/release/ducklink_core.wasm` resolves.
+    //   3. `cli.execute("LOAD sqlitewasm;")`.
     //   4. `cli.execute("ATTACH 'test.db' AS mydb (TYPE sqlitewasm)")`.
-    //   5. Assert `cli.execute("SELECT * FROM mydb.foo")` returns the rows.
+    //   5. Assert `cli.execute("SELECT * FROM mydb.foo")` returns 3 rows in
+    //      declared order.
     //   6. Assert `cli.execute("SELECT * FROM mydb.foo WHERE id = 42")`
-    //      returns the filtered row (correctness only -- the C-API pushdown
-    //      gap in ADR A2 Risk 2 means every row still crosses the boundary).
-    unreachable!("test body deferred to Phase 2b — see the module docs");
+    //      returns exactly the one matching row (correctness only -- ADR
+    //      A2 Risk 2 documents the C-API-pushdown perf regression).
+    unreachable!("test body deferred to Phase 2d — see the module docs");
 }

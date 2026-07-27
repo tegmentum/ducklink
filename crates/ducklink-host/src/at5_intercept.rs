@@ -1249,4 +1249,67 @@ mod tests {
         // A `;` inside a string doesn't count.
         assert!(!is_multi_statement("SELECT 'a;b'"));
     }
+
+    // ---- Amendment A5 coverage: WHERE-clause payload on Update/Delete ----
+
+    #[test]
+    fn resolve_update_no_where_yields_none_predicate() {
+        let att = attached_map(&["mydb"]);
+        let r = resolve_write_target("UPDATE mydb.foo SET name = 'y'", &att).unwrap();
+        match r {
+            WriteRoute::Update { alias, table, assignments, where_clause } => {
+                assert_eq!(alias, "mydb");
+                assert_eq!(table, "foo");
+                assert_eq!(assignments, vec![("name".into(), "'y'".into())]);
+                assert!(
+                    where_clause.is_none(),
+                    "update-all should produce None where_clause, got {where_clause:?}"
+                );
+            }
+            other => panic!("expected Update, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_update_multi_assignment_captures_where_verbatim() {
+        let att = attached_map(&["mydb"]);
+        let r = resolve_write_target(
+            "UPDATE mydb.foo SET name = 'y', age = 30 WHERE id > 1 AND name = 'x'",
+            &att,
+        )
+        .unwrap();
+        match r {
+            WriteRoute::Update { assignments, where_clause, .. } => {
+                assert_eq!(
+                    assignments,
+                    vec![
+                        ("name".into(), "'y'".into()),
+                        ("age".into(), "30".into()),
+                    ]
+                );
+                // Verbatim: preserves whitespace and case as written.
+                assert_eq!(
+                    where_clause.as_deref(),
+                    Some("id > 1 AND name = 'x'"),
+                );
+            }
+            other => panic!("expected Update, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_delete_where_with_quoted_keyword_preserved() {
+        let att = attached_map(&["mydb"]);
+        let r = resolve_write_target(
+            "DELETE FROM mydb.foo WHERE label = 'WHERE me'",
+            &att,
+        )
+        .unwrap();
+        match r {
+            WriteRoute::Delete { where_clause, .. } => {
+                assert_eq!(where_clause.as_deref(), Some("label = 'WHERE me'"));
+            }
+            other => panic!("expected Delete, got {other:?}"),
+        }
+    }
 }
