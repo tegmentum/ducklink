@@ -16,13 +16,15 @@
 //! fallback where it takes precedence) at the CLI boundary — a smoke that
 //! catches regressions the unit tests would miss.
 //!
-//! STATUS: `#[ignore]`d — requires the built `target/release/ducklink` binary
-//! and the built fieldbook.wasm extension in the workspace `artifacts/`
-//! directory. Run with:
+//! STATUS: un-ignored as of FU4 (2026-07-27). The test self-skips when the
+//! required binaries are missing, so it runs cleanly on any workspace layout
+//! — but a full-artifact CI (`cargo build --release && make ext EXT=fieldbook`)
+//! exercises the whole shared-manager + replay-archive stack end to end.
+//! Manual run:
 //!
 //!   cargo build --release
 //!   make ext EXT=fieldbook
-//!   cargo test -p ducklink-host --test test_phase4_sibling_ext_nested_exec -- --ignored --nocapture
+//!   cargo test -p ducklink-host --test test_phase4_sibling_ext_nested_exec -- --nocapture
 //!
 //! ADR reference: `docs/wasm-ecosystem-at-5-adr.md` Decision 6 (blocked-items
 //! un-block criteria) + Amendment A5 Risk 5 (deadlock boundary when the
@@ -68,7 +70,6 @@ fn dump(label: &str, out: &Output) -> String {
 /// call end-to-end proves the shared-manager path works for the
 /// fieldbook/mosaic bootstrap-SQL shape.
 #[test]
-#[ignore = "requires target/release/ducklink + artifacts/extensions/fieldbook.wasm"]
 fn phase4_fieldbook_bootstrap_via_nested_exec_ok() {
     let root = repo_root();
     let bin = root.join("target").join("release").join("ducklink");
