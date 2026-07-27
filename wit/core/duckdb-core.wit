@@ -12,7 +12,17 @@ use wasi:filesystem/preopens@0.2.6;
 use wasi:io/streams@0.2.6;
 
 interface database {
-    use types.{capabilitykind, columndef, duckerror, duckvalue};
+    use types.{capabilitykind, columndef, duckerror, duckvalue, logicaltype};
+
+    /// Column shape for a host-registered table function. Mirrors the
+    /// per-column pair carried by the `columndef` record but named to make
+    /// the `register-table-function` call site self-explanatory (the caller
+    /// is declaring the schema of a synthetic table, not returning result
+    /// columns).
+    record column-descriptor {
+        name: string,
+        ty: logicaltype,
+    }
 
     resource connection;
     type row = list<duckvalue>;
@@ -54,6 +64,31 @@ interface database {
 
     handle-ui-request: func(method: string, path: string, headers: string, body: list<u8>) -> option<ui-response>;
     handle-quack-request: func(body: list<u8>) -> option<list<u8>>;
+
+    /// Register a zero-argument table function on this database instance.
+    /// Backs the Phase 2 (@5) ATTACH lift: the host reads `<alias>.<table>`
+    /// column shapes via `storage-dispatch.table-columns`, mints a callback
+    /// handle in its own registry, and calls this to graft an in-catalog
+    /// name (e.g. `__mydb_foo`) that the host later fronts with a plain
+    /// `CREATE VIEW mydb.foo AS SELECT * FROM __mydb_foo()`.
+    ///
+    /// When DuckDB executes the table function, the core drives the
+    /// existing `callback-dispatch.call-table(callback-handle, args)` import
+    /// with the supplied `callback-handle` (bind phase) and the streaming
+    /// scan callbacks it registered internally (same C-API trampolines as
+    /// extension-declared table functions -- see the precedent on
+    /// `extension-loader-hooks.table-registration`).
+    ///
+    /// `columns` gives the table's schema; the arity must be >= 1. Returns
+    /// `err(message)` when the underlying `duckdb_register_table_function`
+    /// fails (name collision, invalid type, etc.) so the host can surface
+    /// the message on the intercepting ATTACH.
+    register-table-function: func(
+        conn: borrow<connection>,
+        name: string,
+        columns: list<column-descriptor>,
+        callback-handle: u32,
+    ) -> result<_, string>;
 }
 
 interface host-extension-loader {
