@@ -1,7 +1,17 @@
-package duckdb:extension@4.0.0;
+package duckdb:extension@5.0.0;
 
 use types;
 
+// DEPRECATED (ducklink 5.0.0) — scheduled for removal at the next
+// duckdb:extension major bump.
+//
+// No host consumes registrations made through this interface: ducklink is now
+// C-API-only on every platform, and DuckDB's `ParserExtension` sits on the
+// unstable internal C++ ABI with no equivalent in the stable C API. A component
+// that calls `register-parser-extension` today still loads, but the declaration
+// is silently no-op'd — parser-dispatch will never be driven. See the ducklink
+// v4.6.0 refactor removing the advanced tier.
+//
 // Parser-extension registration surface (additive, 2.3.0 / v3). A component that
 // wants to intercept SQL the built-in parser rejects declares a parser extension
 // here in load(); the host wires a DuckDB `ParserExtension` that forwards the
