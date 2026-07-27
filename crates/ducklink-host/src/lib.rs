@@ -307,6 +307,23 @@ struct CoreStoreState {
     // freed or freed-then-reused slot is rejected instead of hitting the block
     // that reused the slot. See web/tvm-host.mjs for the browser-host mirror.
     tvm_slots: std::collections::HashMap<(u16, u32), (u16, Option<tvm_core::Handle>)>,
+    /// Phase 4 follow-up (FU4): shared archive of every registration the
+    /// PRIMARY's post-LOAD drain has emitted. Populated on the primary side by
+    /// `impl core_extension_hooks::Host::get_pending_registrations` (append a
+    /// clone before returning the drained value); read on the SIBLING side by
+    /// the same trait method, which serves the archive instead of a drain so
+    /// the sibling's DuckDB catalog acquires the same UDFs the primary did.
+    ///
+    /// `None` on stores that neither write to nor read from the archive (the
+    /// narrow test paths that never opt into a `SiblingState`). See
+    /// `SiblingState::replay_archive` for the shared Arc identity.
+    replay_archive: Option<Arc<Mutex<ducklink_runtime::PendingRegistrationsData>>>,
+    /// Phase 4 follow-up (FU4): true iff this store belongs to a lazy sibling
+    /// [`CoreExecution`] built by [`sibling_ensure_slot`]. Sibling stores serve
+    /// registrations from `replay_archive` on `get_pending_registrations`;
+    /// primary stores drain the shared [`ExtensionManager`] as before and
+    /// append the drained batch into `replay_archive` (when present).
+    is_sibling: bool,
 }
 
 impl WasiView for CoreStoreState {
@@ -349,12 +366,52 @@ impl core_host_loader::Host for CoreStoreState {
 }
 
 impl core_extension_hooks::Host for CoreStoreState {
+    /// Phase 4 follow-up (FU4): serve the sibling core's post-LOAD
+    /// registrations from the shared archive so extension-registered scalars
+    /// / tables / aggregates reach the sibling's DuckDB catalog.
+    ///
+    /// * PRIMARY stores (`is_sibling == false`) drain the shared
+    ///   [`ExtensionManager`] as before AND append a clone of the drained batch
+    ///   into `replay_archive` (when wired) so a later sibling boot can replay
+    ///   the same registrations without re-invoking each extension's `load()`.
+    /// * SIBLING stores (`is_sibling == true`) serve `replay_archive` verbatim
+    ///   and never touch the extension manager's own drain buffers — the
+    ///   primary already consumed them, and re-draining would return nothing.
+    ///
+    /// Falls back to the historical drain-only behaviour when `replay_archive`
+    /// is `None` (narrow test paths that never opt into a `SiblingState`).
     fn get_pending_registrations(&mut self) -> core_extension_hooks::PendingRegistrations {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        convert_pending_registrations(manager.drain_pending_registrations())
+        if self.is_sibling {
+            // Sibling read path: clone-out the archive under its own mutex so
+            // this call never touches the shared `ExtensionManager` mutex.
+            // Avoids deadlock when the sibling is materialized from inside a
+            // primary extension load thread that already holds the manager
+            // mutex (see the shared-manager deadlock boundary in ADR
+            // Amendment A5 Risk 5 + the sibling_ensure_slot comment block).
+            if let Some(archive) = self.replay_archive.as_ref() {
+                let guard = archive.lock().unwrap_or_else(|e| e.into_inner());
+                return convert_pending_registrations(guard.clone());
+            }
+            return convert_pending_registrations(
+                ducklink_runtime::PendingRegistrationsData::default(),
+            );
+        }
+        // Primary write path: drain the shared manager, THEN append a snapshot
+        // into the archive. Locks are acquired in order (manager → archive)
+        // and released before the wit-bindgen conversion so any downstream
+        // side-effect can't re-enter either mutex through a callback.
+        let drained = {
+            let mut manager = self
+                .extension_manager
+                .lock()
+                .expect("extension manager mutex poisoned");
+            manager.drain_pending_registrations()
+        };
+        if let Some(archive) = self.replay_archive.as_ref() {
+            let mut guard = archive.lock().unwrap_or_else(|e| e.into_inner());
+            guard.append(drained.clone());
+        }
+        convert_pending_registrations(drained)
     }
 }
 
@@ -723,6 +780,31 @@ struct SiblingState {
     /// the historical fresh-manager behaviour). See the struct-level doc for
     /// the un-block criteria + risk boundary.
     extension_manager: Option<Arc<Mutex<ExtensionManager>>>,
+    /// Phase 4 follow-up (FU4): shared archive of every registration the
+    /// primary's post-LOAD drain has emitted. Clone of this Arc is threaded
+    /// into BOTH the primary's [`CoreStoreState`] (write path — appended on
+    /// every drain) and the sibling's [`CoreStoreState`] (read path — served
+    /// verbatim on the sibling's post-LOAD `get_pending_registrations`).
+    ///
+    /// A dedicated `Mutex<_>` (separate from the shared `ExtensionManager`
+    /// mutex) so the sibling's read path never has to lock the manager. That
+    /// matters when the sibling is materialized from inside a primary
+    /// `ensure_extension_loaded` load thread — the primary thread is holding
+    /// the manager mutex across the load, so a sibling-side manager lock
+    /// would deadlock (ADR Amendment A5 Risk 5).
+    replay_archive: Arc<Mutex<ducklink_runtime::PendingRegistrationsData>>,
+    /// Phase 4 follow-up (FU4): names of extensions the primary's
+    /// [`ExtensionManager`] has fully loaded, kept here so
+    /// [`sibling_ensure_slot`] can decide which `LOAD <name>` to issue on the
+    /// sibling to trigger the wasm shim's `get_pending_registrations` call
+    /// (which serves the archive above). Populated by
+    /// [`ExtensionManager::ensure_extension_loaded`] after a successful
+    /// `self.extensions.insert(...)`.
+    ///
+    /// A separate `Mutex<Vec<String>>` (rather than snooping
+    /// `manager.extensions.keys()`) is required for the same deadlock reason
+    /// as `replay_archive`.
+    loaded_extensions: Mutex<Vec<String>>,
     /// Lazily-materialized second core executor + connection into it, cached
     /// for the process lifetime after first successful `nested_exec`.
     slot: Mutex<Option<SiblingSlot>>,
@@ -741,6 +823,10 @@ impl SiblingState {
             preopens,
             primary_db_path: Mutex::new(None),
             extension_manager,
+            replay_archive: Arc::new(Mutex::new(
+                ducklink_runtime::PendingRegistrationsData::default(),
+            )),
+            loaded_extensions: Mutex::new(Vec::new()),
             slot: Mutex::new(None),
         }
     }
@@ -752,6 +838,21 @@ impl SiblingState {
             .primary_db_path
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = Some(path);
+    }
+
+    /// Phase 4 follow-up (FU4): record that the primary just fully loaded
+    /// `name`, so [`sibling_ensure_slot`] can later issue a `LOAD <name>` on
+    /// the sibling to trigger its wasm shim to pull the replay archive.
+    /// Idempotent — a repeated LOAD of the same extension only records it
+    /// once.
+    fn record_extension_loaded(&self, name: &str) {
+        let mut list = self
+            .loaded_extensions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if !list.iter().any(|n| n == name) {
+            list.push(name.to_string());
+        }
     }
 }
 
@@ -905,6 +1006,24 @@ impl Drop for PrimaryReentryGuard {
 }
 
 impl CoreExecution {
+    /// Phase 4 follow-up (FU4): wire this store to the shared post-LOAD
+    /// registration archive. Callers pass `is_sibling = false` when this is
+    /// the PRIMARY store (append-only writer) and `is_sibling = true` when
+    /// this is a sibling core built by [`sibling_ensure_slot`] (read-only,
+    /// serves the archive on the sibling's post-LOAD
+    /// `get_pending_registrations`). Idempotent: replacing the archive
+    /// mid-run would only happen in tests, and callers are expected to
+    /// invoke this once right after `instantiate_core`.
+    fn attach_replay_archive(
+        &mut self,
+        archive: Arc<Mutex<ducklink_runtime::PendingRegistrationsData>>,
+        is_sibling: bool,
+    ) {
+        let data = self.store.data_mut();
+        data.replay_archive = Some(archive);
+        data.is_sibling = is_sibling;
+    }
+
     fn with_database<F, R>(&mut self, f: F) -> R
     where
         F: FnOnce(&core_db_exports::Guest, wasmtime::StoreContextMut<'_, CoreStoreState>) -> R,
@@ -3600,6 +3719,14 @@ impl ExtensionManager {
         eprintln!(
             "[extension-manager] extension '{loaded_name}' loaded successfully and ready for registrations"
         );
+        // Phase 4 follow-up (FU4): if a `SiblingState` is wired, record the
+        // successful load. `sibling_ensure_slot` reads this list to choose a
+        // valid extension name for the single LOAD it issues on the sibling
+        // (which primes the sibling's `get_pending_registrations` to serve
+        // `SiblingState::replay_archive`).
+        if let Some(sibling) = self.sibling.as_ref() {
+            sibling.record_extension_loaded(&loaded_name);
+        }
         Ok(true)
     }
 
@@ -6973,13 +7100,21 @@ fn sibling_ensure_slot(
             false,
         ),
     };
-    let core_exec = instantiate_core(
+    let mut core_exec = instantiate_core(
         &sibling.engine,
         &sibling.core_component_path,
         wasi,
         sibling_manager.clone(),
     )
     .map_err(|e| format!("nested-exec: sibling instantiate_core: {e}"))?;
+    // Phase 4 follow-up (FU4): wire this sibling store to the shared replay
+    // archive so its post-LOAD `get_pending_registrations` returns the
+    // primary's accumulated registrations instead of an empty drain. Wiring
+    // even in the `!is_shared` fallback keeps `is_sibling == true` at the
+    // dispatch layer — the fresh manager's drain buffer will just be empty
+    // for that path (backward-compatible: no regressions in the fresh-manager
+    // tests, which don't LOAD any extension on the sibling).
+    core_exec.attach_replay_archive(sibling.replay_archive.clone(), true);
     let core = Arc::new(Mutex::new(core_exec));
     if !is_shared {
         // Only wire the sibling's own core reference onto its OWN fresh
@@ -6998,6 +7133,58 @@ fn sibling_ensure_slot(
             .map_err(|trap| format!("nested-exec: sibling call_open trapped: {trap}"))?;
         result.map_err(|e| format!("nested-exec: sibling open failed: {e}"))?
     };
+
+    // Phase 4 follow-up (FU4): replay the primary's extension registrations
+    // onto the sibling's DuckDB catalog. A single `LOAD <name>` on the
+    // sibling triggers its wasm shim's `get_pending_registrations` host
+    // import, which now returns the archive above — one call registers every
+    // scalar / table / aggregate / macro / cast / replacement-scan the
+    // primary drained, in one shot, via the shim's normal C-API path. Any
+    // subsequent extension name in the list is skipped: a second LOAD would
+    // ask for the archive again and DuckDB would reject the re-registration.
+    //
+    // Best-effort:
+    //   * an empty `loaded_extensions` list (no extensions loaded yet on the
+    //     primary) → skip, sibling can still serve pure-DDL/DML nested_exec.
+    //   * a LOAD trap / duckerror is logged and skipped — the sibling's
+    //     bootstrap SQL takes precedence over the replay convenience.
+    let replay_name = sibling
+        .loaded_extensions
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .first()
+        .cloned();
+    if let Some(name) = replay_name {
+        // Basic identifier hygiene (matches `flush_deferred_ducklink_loads`).
+        if name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        {
+            let sql = format!("LOAD {name};");
+            let mut c = core.lock().unwrap_or_else(|e| e.into_inner());
+            let outcome = c.with_database(|guest, store| guest.call_execute(store, connection, &sql));
+            drop(c);
+            match outcome {
+                Ok(Ok(_)) => eprintln!(
+                    "[sibling-replay] LOAD {name} on sibling primed \
+                     get_pending_registrations from the shared archive"
+                ),
+                Ok(Err(err)) => eprintln!(
+                    "[sibling-replay] LOAD {name} on sibling returned duckerror: {} \
+                     (registration replay may be partial)",
+                    core_duckerror_message(err)
+                ),
+                Err(trap) => eprintln!(
+                    "[sibling-replay] LOAD {name} on sibling trapped: {trap} \
+                     (registration replay skipped)"
+                ),
+            }
+        } else {
+            eprintln!(
+                "[sibling-replay] refusing to LOAD '{name}' on sibling (bad identifier)"
+            );
+        }
+    }
 
     *slot = Some(SiblingSlot {
         core: core.clone(),
@@ -7141,6 +7328,14 @@ fn instantiate_core(
             extension_manager,
             tvm: tvm_core::RegionDirectory::new(),
             tvm_slots: std::collections::HashMap::new(),
+            // Phase 4 follow-up (FU4): defaults — a primary caller wires the
+            // shared archive via `CoreExecution::attach_replay_archive(archive,
+            // false)` once its `SiblingState` exists; `sibling_ensure_slot`
+            // does the same with `is_sibling = true` on the sibling store.
+            // Test paths that never wire a SiblingState keep both defaults,
+            // reproducing the pre-FU4 behaviour (plain drain, no archive).
+            replay_archive: None,
+            is_sibling: false,
         },
     );
 
@@ -8234,6 +8429,16 @@ impl CliHarness {
             owned_preopens.clone(),
             Some(extension_manager.clone()),
         ));
+        // Phase 4 follow-up (FU4): give the primary's `CoreStoreState` the
+        // shared archive so every post-LOAD drain appends a snapshot. When a
+        // sibling later boots, its `get_pending_registrations` reads from this
+        // same Arc — the sibling's DuckDB catalog then acquires the same UDFs
+        // the primary registered, letting `nested-exec` SQL reach extension
+        // scalars/tables/aggregates.
+        {
+            let mut c = core.lock().unwrap_or_else(|e| e.into_inner());
+            c.attach_replay_archive(sibling.replay_archive.clone(), false);
+        }
         {
             let mut manager = extension_manager
                 .lock()
@@ -8441,6 +8646,12 @@ pub fn run_shell_with_stdio(
             extension_manager: extension_manager.clone(),
             tvm: tvm_core::RegionDirectory::new(),
             tvm_slots: std::collections::HashMap::new(),
+            // Phase 4 follow-up (FU4): the standalone-shell driver never
+            // constructs a SiblingState, so the archive stays disabled.
+            // `is_sibling = false` keeps the shell's core on the historical
+            // drain path (identical pre-FU4 behaviour).
+            replay_archive: None,
+            is_sibling: false,
         },
     );
 
@@ -8539,6 +8750,13 @@ fn run_cli_inner(
         owned_preopens.clone(),
         Some(extension_manager.clone()),
     ));
+    // Phase 4 follow-up (FU4): mirror of the block in `CliHarness::with_artifacts`
+    // — wire the primary CoreExecution to the shared replay archive so the
+    // sibling can serve extension registrations on its post-LOAD drain.
+    {
+        let mut c = core.lock().unwrap_or_else(|e| e.into_inner());
+        c.attach_replay_archive(sibling.replay_archive.clone(), false);
+    }
     {
         let mut manager = extension_manager
             .lock()
@@ -10887,27 +11105,258 @@ mod tests {
         Ok(())
     }
 
-    // Phase 4 follow-ups (out of scope for this test file):
-    //   * End-to-end extension-scalar dispatch on the sibling ALSO requires
-    //     that the sibling's DuckDB catalog carry the extension-registered
-    //     UDFs. The primary's post-LOAD replay of `get_pending_registrations`
-    //     drains from the shared manager and lands the UDFs on the PRIMARY's
-    //     Database only; the sibling's Database sees an empty function
-    //     catalog unless the same registrations are replayed against it. A
-    //     follow-up must add sibling-side registration replay (either by
-    //     issuing `LOAD <name>` on the sibling, or by explicitly walking the
-    //     manager's `deferred_registrations` and calling
-    //     `guest.call_register_scalar_function(...)` etc. on the sibling
-    //     core). Tracked by `docs/wasm-ecosystem-at-5-adr.md` Decision 6.
+    /// Phase 4 follow-up (FU4) lock-in: prove the sibling's replay archive is
+    /// Arc-identical to the primary's write target, that the primary's drain
+    /// path appends into it, and that a sibling `CoreStoreState`
+    /// materialized by `sibling_ensure_slot` reads back exactly what was
+    /// deposited — WITHOUT going through the shared manager mutex.
+    ///
+    /// This isolates FU4's plumbing from any wasm-shim behaviour: no LOAD is
+    /// driven, no real extension is present, we just push a synthetic
+    /// `PendingRegistrationsData` into the archive and confirm the sibling
+    /// `impl core_extension_hooks::Host` serves it verbatim on
+    /// `get_pending_registrations`.
+    #[test]
+    fn phase4_fu4_sibling_replay_archive_populated_from_primary_drain() -> Result<()> {
+        use ducklink_runtime::reg;
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let tmp = tempdir()?;
+        let (primary_core, primary_mgr, sibling, mut services) =
+            build_direction1_services_shared(&artifacts, tmp.path(), "./p4-fu4-archive.duckdb")?;
+
+        // Wire the primary CoreExecution's `replay_archive` field to the
+        // SAME Arc the sibling holds — this mirrors the production
+        // `run_cli_inner` / `CliHarness::with_artifacts` wiring the FU4
+        // patch installed. Without this, the primary would silently drop
+        // its drained batch on the floor (archive stays empty).
+        {
+            let mut c = primary_core.lock().unwrap();
+            c.attach_replay_archive(sibling.replay_archive.clone(), false);
+        }
+
+        // Seed the manager's `deferred_registrations` with a synthetic
+        // scalar + table + aggregate so the next drain has something to
+        // return. `deferred_registrations` is prepended verbatim by
+        // `drain_pending_registrations` (see the field doc), so this
+        // completely sidesteps needing a real ExtensionInstance.
+        //
+        // Handles are within the extension-callback range (< the top-of-u32
+        // sentinels) so no synthetic-sentinel branch fires.
+        {
+            let mut mgr = primary_mgr.lock().unwrap();
+            mgr.deferred_registrations.scalars.push(reg::ScalarReg {
+                extension: "fu4_stub".to_string(),
+                name: "fu4_stub_scalar".to_string(),
+                arguments: vec![reg::FuncArg {
+                    name: Some("x".to_string()),
+                    logical: reg::LogicalType::Int64,
+                }],
+                returns: reg::LogicalType::Int64,
+                callback_handle: 0x0000_1001,
+                options: None,
+            });
+            mgr.deferred_registrations.tables.push(reg::TableReg {
+                extension: "fu4_stub".to_string(),
+                name: "fu4_stub_table".to_string(),
+                arguments: vec![reg::FuncArg {
+                    name: Some("n".to_string()),
+                    logical: reg::LogicalType::Int64,
+                }],
+                columns: vec![reg::ColumnDef {
+                    name: "value".to_string(),
+                    logical: reg::LogicalType::Text,
+                }],
+                callback_handle: 0x0000_1002,
+                options: None,
+            });
+            mgr.deferred_registrations
+                .aggregates
+                .push(reg::AggregateReg {
+                    extension: "fu4_stub".to_string(),
+                    name: "fu4_stub_agg".to_string(),
+                    arguments: vec![reg::FuncArg {
+                        name: Some("y".to_string()),
+                        logical: reg::LogicalType::Int64,
+                    }],
+                    returns: reg::LogicalType::Int64,
+                    callback_handle: 0x0000_1003,
+                    options: None,
+                });
+            // Record a stub name on the sibling — `sibling_ensure_slot` uses
+            // this to pick which `LOAD <name>` to issue. In this test we
+            // don't drive that path (no real extension binary), but a
+            // non-empty list matches the shape of what
+            // `ExtensionManager::ensure_extension_loaded` would deposit.
+            sibling.record_extension_loaded("fu4_stub");
+        }
+
+        // Trigger the PRIMARY-side drain via its own
+        // `core_extension_hooks::Host::get_pending_registrations` impl. This
+        // is exactly what the wasm shim would call inside a real LOAD; here
+        // we drive it synchronously by borrowing the primary store's data.
+        {
+            let mut c = primary_core.lock().unwrap();
+            let data: &mut CoreStoreState = c.store.data_mut();
+            assert!(
+                data.replay_archive.is_some(),
+                "primary CoreStoreState must have `replay_archive = Some(...)` \
+                 after `attach_replay_archive` — FU4 wiring"
+            );
+            let _returned =
+                <CoreStoreState as core_extension_hooks::Host>::get_pending_registrations(data);
+        }
+
+        // Inspect the shared archive directly: the synthetic scalar / table
+        // / aggregate must be present after the primary drain lands.
+        {
+            let archive = sibling
+                .replay_archive
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let scalar_names: Vec<&str> =
+                archive.scalars.iter().map(|s| s.name.as_str()).collect();
+            let table_names: Vec<&str> =
+                archive.tables.iter().map(|t| t.name.as_str()).collect();
+            let agg_names: Vec<&str> = archive
+                .aggregates
+                .iter()
+                .map(|a| a.name.as_str())
+                .collect();
+            assert!(
+                scalar_names.contains(&"fu4_stub_scalar"),
+                "primary drain must have appended scalar into sibling archive; got {scalar_names:?}"
+            );
+            assert!(
+                table_names.contains(&"fu4_stub_table"),
+                "primary drain must have appended table into sibling archive; got {table_names:?}"
+            );
+            assert!(
+                agg_names.contains(&"fu4_stub_agg"),
+                "primary drain must have appended aggregate into sibling archive; got {agg_names:?}"
+            );
+        }
+
+        // Materialize the sibling by driving one plain-SQL nested_exec. This
+        // takes the shared-manager path (unchanged) and lazily builds the
+        // sibling CoreExecution. Post-materialisation, its `CoreStoreState`
+        // must carry `is_sibling = true` + the shared `replay_archive`.
+        let r = services
+            .nested_exec("SELECT 1 AS n")
+            .expect("plain SELECT via shared-manager sibling ok");
+        let rows = r.rows.expect("SELECT populates rows");
+        assert_eq!(rows[0][0], "1");
+
+        // Reach into the sibling slot: `is_sibling` flag set + `replay_archive`
+        // Arc-identical to `SiblingState::replay_archive`.
+        {
+            let slot_guard = sibling.slot.lock().unwrap_or_else(|e| e.into_inner());
+            let slot = slot_guard
+                .as_ref()
+                .expect("sibling slot populated after nested_exec");
+            let sibling_core_guard = slot.core.lock().unwrap_or_else(|e| e.into_inner());
+            let data = sibling_core_guard.store.data();
+            assert!(
+                data.is_sibling,
+                "sibling CoreStoreState must have `is_sibling = true` \
+                 after `attach_replay_archive(_, true)` — FU4 wiring"
+            );
+            let archive = data
+                .replay_archive
+                .as_ref()
+                .expect("sibling CoreStoreState must have `replay_archive = Some(...)`");
+            assert!(
+                Arc::ptr_eq(archive, &sibling.replay_archive),
+                "sibling's replay_archive must be Arc-identical to \
+                 `SiblingState::replay_archive` — FU4 wiring"
+            );
+        }
+
+        // Now drive the sibling's `get_pending_registrations` directly and
+        // confirm it serves the archive (not an empty drain). We call the
+        // trait method on the sibling `CoreStoreState` — mirroring what the
+        // wasm shim would invoke inside a `LOAD <name>` on the sibling.
+        {
+            let slot_guard = sibling.slot.lock().unwrap_or_else(|e| e.into_inner());
+            let slot = slot_guard.as_ref().unwrap();
+            let mut sibling_core = slot.core.lock().unwrap_or_else(|e| e.into_inner());
+            let data: &mut CoreStoreState = sibling_core.store.data_mut();
+            let served =
+                <CoreStoreState as core_extension_hooks::Host>::get_pending_registrations(data);
+            let scalar_names: Vec<String> =
+                served.scalars.iter().map(|s| s.name.to_string()).collect();
+            let table_names: Vec<String> =
+                served.tables.iter().map(|t| t.name.to_string()).collect();
+            let agg_names: Vec<String> = served
+                .aggregates
+                .iter()
+                .map(|a| a.name.to_string())
+                .collect();
+            assert!(
+                scalar_names.iter().any(|n| n == "fu4_stub_scalar"),
+                "sibling get_pending_registrations must serve archived scalar; \
+                 got {scalar_names:?}"
+            );
+            assert!(
+                table_names.iter().any(|n| n == "fu4_stub_table"),
+                "sibling get_pending_registrations must serve archived table; \
+                 got {table_names:?}"
+            );
+            assert!(
+                agg_names.iter().any(|n| n == "fu4_stub_agg"),
+                "sibling get_pending_registrations must serve archived aggregate; \
+                 got {agg_names:?}"
+            );
+        }
+
+        // Regression guard: on the sibling read path, the shared manager's
+        // `deferred_registrations` must NOT have been drained a second time.
+        // The primary drain above already emptied it, so it should still be
+        // empty here — and importantly, this proves the sibling read didn't
+        // touch the manager mutex to drain (it read from the archive Arc).
+        {
+            let mgr = primary_mgr.lock().unwrap();
+            assert!(
+                mgr.deferred_registrations.scalars.is_empty(),
+                "sibling read path must not re-drain manager (deferred_registrations)"
+            );
+        }
+        Ok(())
+    }
+
+    // Phase 4 follow-ups:
+    //   * [ADDRESSED — FU4 2026-07-27] End-to-end extension-scalar dispatch on
+    //     the sibling ALSO requires that the sibling's DuckDB catalog carry
+    //     the extension-registered UDFs. The primary's post-LOAD
+    //     `get_pending_registrations` drains from the shared manager and
+    //     lands the UDFs on the PRIMARY's Database only; the sibling's
+    //     Database sees an empty function catalog unless the same
+    //     registrations are replayed against it.
+    //     FU4 introduces a shared `Arc<Mutex<PendingRegistrationsData>>`
+    //     archive on `SiblingState::replay_archive`. The primary's
+    //     `impl core_extension_hooks::Host::get_pending_registrations`
+    //     appends a snapshot of every drained batch into the archive; the
+    //     sibling's `impl core_extension_hooks::Host::get_pending_registrations`
+    //     (recognised via `CoreStoreState::is_sibling`) serves the archive
+    //     verbatim without touching the shared manager mutex — dodging the
+    //     Risk-5 deadlock below. `sibling_ensure_slot` issues one
+    //     idempotent `LOAD <name>` on the freshly-opened sibling connection
+    //     (using an extension name recorded on
+    //     `SiblingState::loaded_extensions`), which prompts the sibling's
+    //     wasm shim to pull the archive and register every accumulated
+    //     scalar / table / aggregate / macro through the C API in a single
+    //     shot. See `phase4_fu4_sibling_replay_archive_populated_from_primary_drain`
+    //     (unit test) + `test_phase4_sibling_ext_nested_exec` (E2E lock-in).
     //   * Deadlock boundary (ADR Amendment A5 Risk 5): when the primary is
     //     mid-callback (its `CoreStoreState::call_scalar` holds the manager
     //     mutex — `crates/ducklink-host/src/lib.rs:373`) and the sibling's
     //     dispatch path tries to lock the same mutex, the shared thread
-    //     self-deadlocks. Safe for pure-DML sibling SQL (no callback → no
-    //     lock); unsafe if the sibling SQL invokes any extension scalar.
-    //     A future §8.5-style `resolve_dispatch_target` refactor drops the
-    //     manager mutex before entering the extension instance, closing
-    //     the deadlock window.
+    //     self-deadlocks. FU4's `get_pending_registrations` path avoids the
+    //     boundary (archive lives on its own Mutex), but every OTHER shared
+    //     `callback-dispatch` host trait still hits the manager mutex. Safe
+    //     for pure-DML sibling SQL (no callback → no lock); unsafe if the
+    //     sibling SQL invokes any extension scalar. A future §8.5-style
+    //     `resolve_dispatch_target` refactor drops the manager mutex before
+    //     entering the extension instance, closing the deadlock window.
 
     // ------------------------------------------------------------------
     // nested-exec Direction-1 §8.5: ExtensionManager mutex reentrancy tests.

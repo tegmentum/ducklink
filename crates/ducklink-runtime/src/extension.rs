@@ -569,7 +569,14 @@ struct PendingAggregateRegistry {
 
 /// The full set of registrations captured from one or more components, ready
 /// for a direction-specific sink to forward into the database.
-#[derive(Default)]
+///
+/// `Clone` is derived so [`ExtensionManager::drain_pending_registrations`] can
+/// stash a snapshot into `SiblingState::replay_archive` before returning the
+/// drained value to the primary core. The archive lets a lazily-materialized
+/// sibling core (Direction-1 §5.(b.1)) replay the primary's post-LOAD C-API
+/// registrations against its own DuckDB catalog — see the Phase 4 follow-ups
+/// note in `crates/ducklink-host/src/lib.rs`.
+#[derive(Clone, Default)]
 pub struct PendingRegistrationsData {
     pub scalars: Vec<PendingScalar>,
     pub tables: Vec<PendingTable>,
