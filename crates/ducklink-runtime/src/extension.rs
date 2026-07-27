@@ -585,6 +585,12 @@ pub struct PendingRegistrationsData {
     // `drain_pending` into the .duckdb_extension shim.
     pub pragmas: Vec<PendingPragma>,
     pub settings: Vec<PendingSetting>,
+    /// Secret TYPE + PROVIDER registrations (Phase 3 host-import wiring). A
+    /// secret-capable component declares its type(s)/provider(s) here via the
+    /// `secret` interface; the host drains them into `ExtensionManager::secret_backends`
+    /// so `CREATE SECRET (TYPE ..., PROVIDER ...)` can route to the backing
+    /// extension's `secret-dispatch::create-secret` export.
+    pub secrets: Vec<PendingSecret>,
     pub copy_handlers: Vec<PendingCopyHandler>,
     pub arrow_tables: Vec<PendingArrowTable>,
     pub scalar_ex: Vec<PendingScalarEx>,
@@ -620,6 +626,7 @@ impl PendingRegistrationsData {
         // Additive fields (Phase: drain-plumbing).
         self.pragmas.append(&mut other.pragmas);
         self.settings.append(&mut other.settings);
+        self.secrets.append(&mut other.secrets);
         self.copy_handlers.append(&mut other.copy_handlers);
         self.arrow_tables.append(&mut other.arrow_tables);
         self.scalar_ex.append(&mut other.scalar_ex);
@@ -976,6 +983,7 @@ impl ExtensionStoreState {
         // .duckdb_extension shim without touching any register_* host impl.
         let pragmas = self.take_pending_pragmas();
         let settings = self.take_pending_settings();
+        let secrets = self.take_pending_secrets();
         let copy_handlers = self.take_pending_copy_handlers();
         let arrow_tables = self.take_pending_arrow_tables();
         let scalar_ex = self.take_pending_scalar_ex();
@@ -995,6 +1003,7 @@ impl ExtensionStoreState {
             storages,
             pragmas,
             settings,
+            secrets,
             copy_handlers,
             arrow_tables,
             scalar_ex,
@@ -1754,26 +1763,63 @@ impl extension_files::Host for ExtensionStoreState {
 impl extension_secret::Host for ExtensionStoreState {
     fn register_secret_type(
         &mut self,
-        _type_name: String,
-        _params: BindgenVec<extension_secret::SecretParam>,
-        _callback_handle: u32,
+        type_name: String,
+        params: BindgenVec<extension_secret::SecretParam>,
+        callback_handle: u32,
     ) -> Result<u32, extension_types::Duckerror> {
-        Err(extension_types::Duckerror::Unsupported(
-            "duckdb_register_secret_type is not part of the DuckDB stable C API in this build"
-                .to_string(),
-        ))
+        // Phase 3 (@5 host-import wiring): capture the secret TYPE declaration
+        // into the neutral pending buffer. The host drains it into
+        // `ExtensionManager::secret_backends` so `CREATE SECRET (TYPE ...)` can
+        // route to this component's `secret-dispatch::create-secret` export
+        // via `ExtensionInstance::create_secret`. Returns a locally-allocated
+        // resource id (opaque to the guest) mirroring the pattern used for
+        // parser / optimizer / filterable-table registration.
+        let registry_id = self.alloc_resource_id();
+        let params: Vec<extension_secret::SecretParam> = params.into();
+        let params: Vec<(String, bool)> = params
+            .into_iter()
+            .map(|p| (p.name, p.redacted))
+            .collect();
+        verbose_log!(
+            "[extension-runtime:{}] registered secret type '{type_name}' \
+             (registry={registry_id}, callback={callback_handle}, params={})",
+            self.extension_name,
+            params.len()
+        );
+        self.pending_secrets.push(PendingSecret {
+            extension: self.extension_name.clone(),
+            type_name,
+            provider: None,
+            params,
+            callback_handle,
+        });
+        Ok(registry_id)
     }
 
     fn register_secret_provider(
         &mut self,
-        _type_name: String,
-        _provider: String,
-        _callback_handle: u32,
+        type_name: String,
+        provider: String,
+        callback_handle: u32,
     ) -> Result<u32, extension_types::Duckerror> {
-        Err(extension_types::Duckerror::Unsupported(
-            "duckdb_register_secret_type is not part of the DuckDB stable C API in this build"
-                .to_string(),
-        ))
+        // Phase 3 (@5 host-import wiring): capture a named PROVIDER for an
+        // already-declared secret TYPE (e.g. the "credential_chain" provider
+        // for "s3"). Drained into `ExtensionManager::secret_backends` keyed by
+        // `(type_name, Some(provider))`.
+        let registry_id = self.alloc_resource_id();
+        verbose_log!(
+            "[extension-runtime:{}] registered secret provider '{type_name}'/'{provider}' \
+             (registry={registry_id}, callback={callback_handle})",
+            self.extension_name
+        );
+        self.pending_secrets.push(PendingSecret {
+            extension: self.extension_name.clone(),
+            type_name,
+            provider: Some(provider),
+            params: Vec::new(),
+            callback_handle,
+        });
+        Ok(registry_id)
     }
 }
 
@@ -4967,7 +5013,12 @@ mod tests {
     }
 
     #[test]
-    fn register_storage_and_files_return_unsupported() {
+    fn register_storage_captures_files_returns_unsupported() {
+        // Phase 2 (@5): register_storage now CAPTURES into pending_storages
+        // (drained into `ExtensionManager::storage_backends`) rather than
+        // rejecting as Unsupported. The host's ATTACH intercept dispatches
+        // through the captured mapping. `register_files` still returns
+        // Unsupported (httpfs-shape backends are not yet wired at @5).
         let mut state = test_state();
         let storage_res = extension_storage::Host::register_storage(
             &mut state,
@@ -4975,11 +5026,11 @@ mod tests {
             7,
             None,
         );
-        assert!(matches!(
-            storage_res,
-            Err(extension_types::Duckerror::Unsupported(_))
-        ));
-        assert!(state.take_pending_storages().is_empty());
+        assert_eq!(storage_res.ok(), Some(7));
+        let storages = state.take_pending_storages();
+        assert_eq!(storages.len(), 1);
+        assert_eq!(storages[0].type_name, "sqlitewasm");
+        assert_eq!(storages[0].callback_handle, 7);
 
         let files_res = extension_files_reg::Host::register_files(&mut state, 9);
         assert!(matches!(
@@ -5040,10 +5091,10 @@ mod tests {
 
     #[test]
     fn registers_2_1_0_additive_capabilities_into_pending() {
-        // 2.1.0: secret type + provider are now rejected as Unsupported (the
-        // stable DuckDB C API in this build has no duckdb_register_secret_type
-        // hook); settings option, table macro, modified logical type, and enum
-        // still CAPTURE into their neutral pending buffers.
+        // Phase 3 (@5 host-import wiring): secret type + provider now CAPTURE
+        // into `pending_secrets` (drained into `ExtensionManager::secret_backends`
+        // by the host) instead of returning Unsupported; settings option, table
+        // macro, modified logical type, and enum also capture as before.
         let mut state = test_state();
 
         let secret_type_res = extension_secret::Host::register_secret_type(
@@ -5056,20 +5107,17 @@ mod tests {
             .into(),
             11,
         );
-        assert!(matches!(
-            secret_type_res,
-            Err(extension_types::Duckerror::Unsupported(_))
-        ));
+        assert!(secret_type_res.is_ok(), "register_secret_type should capture (Phase 3)");
         let secret_provider_res = extension_secret::Host::register_secret_provider(
             &mut state,
             "s3".to_string(),
             "credential_chain".to_string(),
             12,
         );
-        assert!(matches!(
-            secret_provider_res,
-            Err(extension_types::Duckerror::Unsupported(_))
-        ));
+        assert!(
+            secret_provider_res.is_ok(),
+            "register_secret_provider should capture (Phase 3)"
+        );
 
         extension_settings::Host::register_option(
             &mut state,
@@ -5103,10 +5151,27 @@ mod tests {
         )
         .expect("register_enum");
 
-        // Both register_secret_* calls above returned Err(Unsupported), so
-        // nothing should have landed in pending_secrets.
+        // Phase 3: both register_secret_* calls capture into pending_secrets.
+        // The type registration has params + `provider = None`; the provider
+        // registration carries `Some(provider)` and no params.
         let secrets = state.take_pending_secrets();
-        assert!(secrets.is_empty());
+        assert_eq!(secrets.len(), 2);
+        let (type_regs, provider_regs): (Vec<_>, Vec<_>) =
+            secrets.iter().partition(|s| s.provider.is_none());
+        assert_eq!(type_regs.len(), 1);
+        assert_eq!(type_regs[0].type_name, "s3");
+        assert_eq!(type_regs[0].callback_handle, 11);
+        assert_eq!(type_regs[0].params.len(), 2);
+        assert_eq!(type_regs[0].params[0], ("key_id".to_string(), false));
+        assert_eq!(type_regs[0].params[1], ("secret".to_string(), true));
+        assert_eq!(provider_regs.len(), 1);
+        assert_eq!(provider_regs[0].type_name, "s3");
+        assert_eq!(
+            provider_regs[0].provider.as_deref(),
+            Some("credential_chain")
+        );
+        assert_eq!(provider_regs[0].callback_handle, 12);
+        assert!(provider_regs[0].params.is_empty());
 
         let settings = state.take_pending_settings();
         assert_eq!(settings.len(), 1);
