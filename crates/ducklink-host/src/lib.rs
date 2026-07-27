@@ -688,12 +688,20 @@ struct CoreExecution {
 /// take the primary's contended mutex. See `nested-exec-direction-1-plan.md`
 /// §5.(b.1).
 ///
-/// **Known limitation.** The sibling has NONE of the primary core's extensions
-/// loaded. `nested-exec` SQL that references an extension-provided function
-/// (scalar / table / aggregate) fails; [`CoreServices::nested_exec`] detects
-/// that failure shape and prepends [`NESTED_EXEC_DIRECTION2_REDIRECT`] so the
-/// caller knows to reach for the native `ducklink` DuckDB extension (Direction
-/// 2) instead.
+/// **Phase 4 (2026-07-26).** When `extension_manager` is `Some`, the sibling's
+/// [`CoreStoreState`] is wired to the PRIMARY's [`ExtensionManager`] instead of
+/// a fresh one — so `nested-exec` SQL run through the sibling can dispatch
+/// against the extensions the primary has loaded (their [`ExtensionInstance`]
+/// map + shared callback registry). When `None` (narrow test paths that never
+/// opt in), the sibling falls back to the historical fresh-manager behaviour;
+/// [`CoreServices::nested_exec`] then prepends
+/// [`NESTED_EXEC_DIRECTION2_REDIRECT`] on catalog-miss errors as before.
+///
+/// See ADR Decision 6 (`docs/wasm-ecosystem-at-5-adr.md`) + Amendment A5 Risk 5
+/// for the design rationale + the deadlock-risk boundary (a sibling-side
+/// callback firing while the primary is mid-callback would try to reacquire the
+/// shared `Mutex<ExtensionManager>` — safe for pure-DML sibling SQL, unsafe if
+/// the sibling SQL itself invokes an extension scalar).
 struct SiblingState {
     engine: Engine,
     core_component_path: PathBuf,
@@ -709,6 +717,12 @@ struct SiblingState {
     ///   `nested-exec` returns a clear error.
     /// * `Some(Some(path))` — file-backed database; sibling opens the same path.
     primary_db_path: Mutex<Option<Option<String>>>,
+    /// Phase 4: the PRIMARY's [`ExtensionManager`] shared with the sibling.
+    /// `Some` in the CLI / harness paths so the sibling's dispatch surface
+    /// mirrors the primary's; `None` in narrow tests (backward-compatible with
+    /// the historical fresh-manager behaviour). See the struct-level doc for
+    /// the un-block criteria + risk boundary.
+    extension_manager: Option<Arc<Mutex<ExtensionManager>>>,
     /// Lazily-materialized second core executor + connection into it, cached
     /// for the process lifetime after first successful `nested_exec`.
     slot: Mutex<Option<SiblingSlot>>,
@@ -719,12 +733,14 @@ impl SiblingState {
         engine: Engine,
         core_component_path: PathBuf,
         preopens: Vec<(PathBuf, String)>,
+        extension_manager: Option<Arc<Mutex<ExtensionManager>>>,
     ) -> Self {
         Self {
             engine,
             core_component_path,
             preopens,
             primary_db_path: Mutex::new(None),
+            extension_manager,
             slot: Mutex::new(None),
         }
     }
@@ -6935,10 +6951,28 @@ fn sibling_ensure_slot(
         .collect();
     let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core-sibling")], &preopen_refs)
         .map_err(|e| format!("nested-exec: sibling WASI ctx: {e}"))?;
-    // Fresh ExtensionManager for the sibling. The primary's is a different
-    // wasmtime store and cannot be shared. The sibling never loads
-    // extensions — that is the whole (b.1) limitation.
-    let sibling_manager = Arc::new(Mutex::new(ExtensionManager::new(sibling.engine.clone())));
+    // Phase 4: if the harness wired the primary's `ExtensionManager` onto this
+    // `SiblingState`, the sibling core's `CoreStoreState` binds to that SHARED
+    // manager — its `callback-dispatch` host import then routes to the
+    // primary's loaded [`ExtensionInstance`] map (via the shared
+    // `callback_registry`), so `nested-exec` SQL can reach extension-provided
+    // functions. Fall back to a fresh manager for narrow test paths that
+    // never opt in (preserves the historical §5.(b.1) fresh-sibling
+    // behaviour + the [`NESTED_EXEC_DIRECTION2_REDIRECT`] error shape).
+    //
+    // NOTE: when the SHARED path is taken, we intentionally do NOT call
+    // `attach_core(sibling_core)` on the manager — that would overwrite the
+    // primary's `self.core` reference (used by `ensure_extension_loaded` to
+    // build extension `CoreServices`). The sibling's own core reference is
+    // held on `SiblingSlot` below; the shared manager's `self.core` keeps
+    // pointing at the primary as intended.
+    let (sibling_manager, is_shared) = match sibling.extension_manager.as_ref() {
+        Some(shared) => (shared.clone(), true),
+        None => (
+            Arc::new(Mutex::new(ExtensionManager::new(sibling.engine.clone()))),
+            false,
+        ),
+    };
     let core_exec = instantiate_core(
         &sibling.engine,
         &sibling.core_component_path,
@@ -6947,7 +6981,10 @@ fn sibling_ensure_slot(
     )
     .map_err(|e| format!("nested-exec: sibling instantiate_core: {e}"))?;
     let core = Arc::new(Mutex::new(core_exec));
-    {
+    if !is_shared {
+        // Only wire the sibling's own core reference onto its OWN fresh
+        // manager. When sharing, the manager's `core` field already names the
+        // primary — do not clobber it (see NOTE above).
         let mut mgr = sibling_manager
             .lock()
             .expect("sibling extension manager mutex poisoned");
@@ -8187,10 +8224,15 @@ impl CliHarness {
         // received (so the sibling resolves user-facing paths identically).
         // `open` writes the primary's path here; the first `nested_exec`
         // lazy-inits the sibling.
+        //
+        // Phase 4: pass the primary's ExtensionManager into the sibling so the
+        // sibling's `callback-dispatch` host import routes to the primary's
+        // loaded extension instances (see `SiblingState` doc + ADR Decision 6).
         let sibling = Arc::new(SiblingState::new(
             engine.clone(),
             artifacts.core_component.clone(),
             owned_preopens.clone(),
+            Some(extension_manager.clone()),
         ));
         {
             let mut manager = extension_manager
@@ -8489,11 +8531,13 @@ fn run_cli_inner(
     )?;
     let core = Arc::new(Mutex::new(core_exec));
     // nested-exec Direction-1 §5.(b.1): see the mirror block in
-    // `CliHarness::with_artifacts`.
+    // `CliHarness::with_artifacts`. Phase 4: pass the primary's
+    // ExtensionManager (see the mirror comment there for rationale).
     let sibling = Arc::new(SiblingState::new(
         engine.clone(),
         artifacts.core_component.clone(),
         owned_preopens.clone(),
+        Some(extension_manager.clone()),
     ));
     {
         let mut manager = extension_manager
@@ -10313,12 +10357,16 @@ mod tests {
         )?));
 
         // Sibling gets a single preopen so it can reach the file the test
-        // wrote at `preopen_dir/db_guest_path`.
+        // wrote at `preopen_dir/db_guest_path`. `None` extension_manager
+        // preserves the historical fresh-sibling behaviour these tests were
+        // written against (Phase 4's shared-manager path is exercised by
+        // `tests/test_phase4_sibling_ext_nested_exec.rs`).
         let preopens = vec![(preopen_dir.to_path_buf(), ".".to_string())];
         let sibling = Arc::new(SiblingState::new(
             engine.clone(),
             artifacts.core_component.clone(),
             preopens,
+            None,
         ));
         // The test skips going through HostState::open, so record the DB path
         // directly (exactly what `open`/`open_with_config` do in the CLI path).
@@ -10629,11 +10677,14 @@ mod tests {
 
         // Build a `CoreServices` on the primary. Sibling wired as a safety
         // net (test asserts nested_exec DID NOT go through it by checking
-        // the primary catalog).
+        // the primary catalog). Fresh-manager (`None`) preserves this
+        // safety-net semantic (Phase 4's shared-manager path is out of scope
+        // for this reentry test).
         let sibling = Arc::new(SiblingState::new(
             engine.clone(),
             artifacts.core_component.clone(),
             vec![(tmp.path().to_path_buf(), ".".to_string())],
+            None,
         ));
         sibling.record_primary_open(Some(db_path.to_string()));
         let mut services = CoreServices {
