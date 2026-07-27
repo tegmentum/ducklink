@@ -239,6 +239,22 @@ pub const DUCKLINK_LOAD_HANDLE: u32 = 0xFFFF_FFFD;
 /// then-idle core.
 pub const DUCKLINK_PREFIX_TABLE_HANDLE: u32 = 0xFFFF_FFFC;
 pub const DUCKLINK_PREFIX_SCALAR_HANDLE: u32 = 0xFFFF_FFFB;
+
+/// Phase 2c (@5): reserved handle range for host-owned table functions
+/// synthesised by the ATTACH intercept. Each `<alias>.<table>` pair grafted
+/// by `HostState::intercept_attach` allocates a fresh handle in this range
+/// and registers `(extension, catalog_handle, table)` with the manager. When
+/// the core fires `call-table(handle, args)` for the synthesised
+/// `__<alias>_<table>()` name, `ExtensionManager::dispatch_table` recognises
+/// the handle and routes to the storage-dispatch scan path instead of a
+/// component-side `call-table`.
+///
+/// Kept well clear of the small-int extension callback space (which grows
+/// from 1) and the five named top-of-u32 sentinels above. `0xFFC0_0000..=
+/// 0xFFFE_FFFF` gives ~4 million distinct AT5 table-fn callbacks.
+pub const AT5_ATTACH_SCAN_HANDLE_MIN: u32 = 0xFFC0_0000;
+pub const AT5_ATTACH_SCAN_HANDLE_MAX: u32 = 0xFFFE_FFFF;
+
 pub use ui_server::{serve_ui, UiMode};
 mod quack_server;
 pub use quack_server::serve_quack;
@@ -1617,6 +1633,18 @@ struct ExtensionManager {
     // flattened plan via `optimizer-host.call-optimize`. Keyed by rule name ->
     // (extension, callback-handle).
     optimizers: HashMap<String, (String, u32)>,
+    // Phase 2c (@5): host-owned table-fn callback registry backing the ATTACH
+    // intercept's read-path materialisation. Keyed by callback handle
+    // (allocated inside the [`AT5_ATTACH_SCAN_HANDLE_MIN`]..[`AT5_ATTACH_SCAN_HANDLE_MAX`]
+    // range so `dispatch_table` distinguishes them from ordinary extension
+    // handles), value is the `(extension, catalog_handle, table)` triple the
+    // handler needs to route into `ExtensionInstance::storage_scan_*`.
+    at5_scan_targets: HashMap<u32, At5ScanTarget>,
+    /// Next AT5 attach-scan handle to hand out. Grows monotonically inside
+    /// the reserved sentinel range; wraps back to [`AT5_ATTACH_SCAN_HANDLE_MIN`]
+    /// on overflow (~4M in-flight ATTACHed tables before overlap — well beyond
+    /// any realistic workload).
+    next_at5_scan_handle: u32,
     // 3.1.0 additive minor: streaming + filter-pushdown table functions components
     // have declared via `table-stream.register-filterable-table`. The core pulls
     // this list (through `table-stream-host.filterable-table-list`), registers a
@@ -1763,6 +1791,8 @@ impl ExtensionManager {
             deferred_drain_names: Vec::new(),
             deferred_registrations: PendingRegistrationsData::default(),
             sibling: None,
+            at5_scan_targets: HashMap::new(),
+            next_at5_scan_handle: AT5_ATTACH_SCAN_HANDLE_MIN,
         }
     }
 
@@ -2121,6 +2151,100 @@ impl ExtensionManager {
             extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
         })?;
         instance.storage_scan_close(handle, scan)
+    }
+
+    // --- Phase 2c (@5): AT5 attach-scan callback registry ---
+
+    /// Allocate a fresh AT5 attach-scan callback handle (inside the reserved
+    /// [`AT5_ATTACH_SCAN_HANDLE_MIN`]..[`AT5_ATTACH_SCAN_HANDLE_MAX`] range) and
+    /// remember what `(extension, catalog, table)` the core should route to
+    /// when it fires `call-table(handle, _)`. Returns the handle to give to
+    /// `database.register-table-function`.
+    fn register_at5_scan(
+        &mut self,
+        extension: String,
+        storage_handle: u32,
+        catalog_handle: u32,
+        table: String,
+    ) -> u32 {
+        let mut handle = self.next_at5_scan_handle;
+        // Advance; wrap back to MIN once we cross MAX. Scan the map to skip
+        // any still-live handle after a wrap so we never collide (~4M range
+        // makes wrap-around a theoretical concern only).
+        let mut next = handle.wrapping_add(1);
+        if next > AT5_ATTACH_SCAN_HANDLE_MAX || next < AT5_ATTACH_SCAN_HANDLE_MIN {
+            next = AT5_ATTACH_SCAN_HANDLE_MIN;
+        }
+        while self.at5_scan_targets.contains_key(&handle) {
+            handle = next;
+            next = next.wrapping_add(1);
+            if next > AT5_ATTACH_SCAN_HANDLE_MAX || next < AT5_ATTACH_SCAN_HANDLE_MIN {
+                next = AT5_ATTACH_SCAN_HANDLE_MIN;
+            }
+        }
+        self.next_at5_scan_handle = next;
+        self.at5_scan_targets.insert(
+            handle,
+            At5ScanTarget {
+                extension,
+                storage_handle,
+                catalog_handle,
+                table,
+            },
+        );
+        handle
+    }
+
+    /// Dispatch handler for handles allocated by `register_at5_scan`. The
+    /// core has just fired `call-table(handle, _args)` for a
+    /// `__<alias>_<table>()` name; we drain the extension's
+    /// storage-dispatch scan and return the full resultset. Row-by-row
+    /// streaming is a Phase-2d follow-up (see ADR Amendment A5 §3).
+    fn native_at5_attach_scan(
+        &mut self,
+        handle: u32,
+        _args: &[extension_types::Duckvalue],
+    ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
+        let target = self.at5_scan_targets.get(&handle).cloned().ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!(
+                "unknown AT5 attach-scan handle {handle}"
+            ))
+        })?;
+        // Build a "scan everything" request: empty projection = all columns,
+        // no filters, no limit. Filter/projection pushdown from the wasm core
+        // through `register-table-function` is a Phase-2d follow-up.
+        let request = storage_scan::ScanRequest {
+            table: target.table.clone(),
+            projection: Vec::new(),
+            filters: Vec::new(),
+            limit: None,
+        };
+        let instance = self.extensions.get_mut(&target.extension).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!(
+                "AT5 attach-scan handle {handle} points at extension '{}', which is not loaded",
+                target.extension
+            ))
+        })?;
+        let scan = instance.storage_scan_open(target.storage_handle, target.catalog_handle, request)?;
+        // Drain in one batch. The MAX u32 acts as "give me everything you have";
+        // extensions that honour it (sqlitewasm does) return the whole cursor.
+        let mut out: Vec<Vec<extension_types::Duckvalue>> = Vec::new();
+        loop {
+            let batch = instance.storage_scan_next(target.storage_handle, scan, u32::MAX)?;
+            if batch.is_empty() {
+                break;
+            }
+            let batch_len = batch.len();
+            out.extend(batch);
+            // Belt-and-braces: guard against a mis-implementing extension
+            // that keeps returning the same tail forever. u32::MAX bound
+            // means the second call should observe EOF.
+            if batch_len == 0 {
+                break;
+            }
+        }
+        let _ = instance.storage_scan_close(target.storage_handle, scan);
+        Ok(out)
     }
 
     // --- M2c write surface: transactions + DDL + DML ---
@@ -2547,6 +2671,13 @@ impl ExtensionManager {
         handle: u32,
         args: &[extension_types::Duckvalue],
     ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
+        // Phase 2c (@5) AT5 attach-scan sentinel range: handles minted by
+        // `register_at5_scan` (from `HostState::intercept_attach`) route
+        // straight to the storage-dispatch scan path — no wasm component's
+        // `call-table` is involved. See `native_at5_attach_scan`.
+        if (AT5_ATTACH_SCAN_HANDLE_MIN..=AT5_ATTACH_SCAN_HANDLE_MAX).contains(&handle) {
+            return self.native_at5_attach_scan(handle, args);
+        }
         // `ducklink_load` sentinel: STABILITY.md § 1.1's `ducklink_load(name
         // [, kind])` is surfaced as a table function registered under
         // [`DUCKLINK_LOAD_HANDLE`] in `drain_pending_registrations`. No wasm
@@ -3606,6 +3737,33 @@ pub(crate) struct AttachedForeignCatalog {
     pub callback_handle: u32,
     pub type_name: String,
     pub tables: Vec<String>,
+    /// Phase 2c: per-table AT5 attach-scan callback handles allocated at
+    /// `intercept_attach` time. Keyed by table name; the value is the handle
+    /// stashed in the core catalog under `__<alias>_<table>` via
+    /// `database.register-table-function` (see `ExtensionManager::at5_scan_targets`
+    /// for the reverse mapping the manager consults on dispatch).
+    pub table_callbacks: HashMap<String, u32>,
+}
+
+/// Phase 2c (@5): routing target for a single AT5 attach-scan callback
+/// handle. The manager consults this via `at5_scan_targets` when
+/// `dispatch_table` receives a handle in the `AT5_ATTACH_SCAN_HANDLE_*`
+/// range. Owning the (extension, catalog_handle) pair here (rather than
+/// re-looking it up through `attached_aliases` on HostState — which
+/// `dispatch_table` doesn't have a reference to) keeps the manager
+/// self-contained.
+#[derive(Debug, Clone)]
+struct At5ScanTarget {
+    /// Which loaded extension owns the storage backend for this scan.
+    extension: String,
+    /// The storage-dispatch callback handle the extension declared in
+    /// `register-storage`. Passed as the `handle` argument to every
+    /// `storage-dispatch.*` re-entry.
+    storage_handle: u32,
+    /// The catalog handle returned by the extension's `storage-attach`.
+    catalog_handle: u32,
+    /// The table name to scan.
+    table: String,
 }
 
 impl WasiView for HostState {
@@ -4255,7 +4413,7 @@ impl HostState {
     /// return). The caller unwraps into `Ok(...)` at `execute`'s bottom.
     fn intercept_attach(
         &mut self,
-        _entry_handle: ResourceAny,
+        entry_handle: ResourceAny,
         spec: at5_intercept::AttachSpec,
     ) -> Result<cli_db::QueryResult, cli_types::Duckerror> {
         let attach_note = format!(
@@ -4286,8 +4444,18 @@ impl HostState {
         if spec.if_not_exists && self.attached_aliases.contains_key(&spec.alias) {
             return Ok(empty_query_result());
         }
-        // Call the extension's storage-dispatch to open the foreign catalog.
-        let (catalog_handle, tables) = {
+        // Call the extension's storage-dispatch to open the foreign catalog +
+        // enumerate the tables + gather each table's schema. All under one
+        // manager lock so no interleaved manipulation of the extension state
+        // races us. Row descriptors are converted to the core's
+        // `column-descriptor` shape for the subsequent register-table-function
+        // call outside the lock.
+        struct TableShape {
+            name: String,
+            columns: Vec<core_db_exports::ColumnDescriptor>,
+            callback: u32,
+        }
+        let (catalog_handle, tables, table_shapes) = {
             let mut manager = self
                 .extension_manager
                 .lock()
@@ -4298,12 +4466,117 @@ impl HostState {
             let tables = manager
                 .dispatch_storage_list_tables(catalog_handle)
                 .map_err(cli_extension_duckerror)?;
-            (catalog_handle, tables)
+            let mut shapes: Vec<TableShape> = Vec::with_capacity(tables.len());
+            for table in &tables {
+                let cols = manager
+                    .dispatch_storage_table_columns(catalog_handle, table)
+                    .map_err(cli_extension_duckerror)?;
+                let descriptors: Vec<core_db_exports::ColumnDescriptor> = cols
+                    .into_iter()
+                    .map(|c| core_db_exports::ColumnDescriptor {
+                        name: c.name.into(),
+                        ty: convert_extension_logicaltype_to_core(c.logical),
+                    })
+                    .collect();
+                let handle = manager.register_at5_scan(
+                    ext.clone(),
+                    callback_handle,
+                    catalog_handle,
+                    table.clone(),
+                );
+                shapes.push(TableShape {
+                    name: table.clone(),
+                    columns: descriptors,
+                    callback: handle,
+                });
+            }
+            (catalog_handle, tables, shapes)
         };
         eprintln!(
             "[at5-attach] extension='{}' callback={} catalog={} tables={:?}",
             ext, callback_handle, catalog_handle, tables
         );
+
+        // Materialise the read path on the core:
+        //   1. Register a synthetic table function `__<alias>_<table>()` per
+        //      table backed by an AT5 attach-scan callback handle.
+        //   2. `ATTACH ':memory:' AS <alias>` (unless the alias already exists).
+        //   3. `CREATE OR REPLACE VIEW <alias>.main.<table> AS SELECT * FROM
+        //      __<alias>_<table>()` per table so `SELECT * FROM alias.table`
+        //      resolves.
+        // These three steps happen inside `with_core` so the mutex is briefly
+        // acquired but not held across register-table-function boundaries
+        // (each `guest.call_*` reads + releases in-band).
+        let alias_ident = spec.alias.clone();
+        for shape in &table_shapes {
+            let fn_name = at5_synth_fn_name(&alias_ident, &shape.name);
+            let result = self.with_core(|core| {
+                core.with_database(|guest, store| {
+                    guest.call_register_table_function(
+                        store,
+                        entry_handle.clone(),
+                        &fn_name,
+                        shape.columns.as_slice(),
+                        shape.callback,
+                    )
+                })
+            });
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(msg)) => {
+                    return Err(cli_types::Duckerror::Internal(
+                        format!(
+                            "register_table_function for '{fn_name}' failed: {msg}"
+                        )
+                        .into(),
+                    ));
+                }
+                Err(trap) => return Err(convert_trap_to_duckerror(trap)),
+            }
+        }
+
+        // Only ATTACH ':memory:' on the FIRST attach for this alias; subsequent
+        // re-attaches (with IF NOT EXISTS ruled out above) inherit the same
+        // catalog. A second `ATTACH ':memory:' AS x` errors on the core, which
+        // is the correct behaviour — duplicate alias.
+        if !self.attached_aliases.contains_key(&alias_ident) {
+            let attach_sql = format!("ATTACH ':memory:' AS {alias_ident}");
+            let attach_res = self.with_core(|core| {
+                core.with_database(|guest, store| {
+                    guest.call_execute(store, entry_handle.clone(), &attach_sql)
+                })
+            });
+            match attach_res {
+                Ok(Ok(_)) => {}
+                Ok(Err(err)) => return Err(convert_core_duckerror(err)),
+                Err(trap) => return Err(convert_trap_to_duckerror(trap)),
+            }
+        }
+
+        for shape in &table_shapes {
+            let fn_name = at5_synth_fn_name(&alias_ident, &shape.name);
+            let view_sql = format!(
+                "CREATE OR REPLACE VIEW {alias_ident}.main.{table} AS SELECT * FROM {fn_name}()",
+                alias_ident = alias_ident,
+                table = shape.name,
+                fn_name = fn_name,
+            );
+            let view_res = self.with_core(|core| {
+                core.with_database(|guest, store| {
+                    guest.call_execute(store, entry_handle.clone(), &view_sql)
+                })
+            });
+            match view_res {
+                Ok(Ok(_)) => {}
+                Ok(Err(err)) => return Err(convert_core_duckerror(err)),
+                Err(trap) => return Err(convert_trap_to_duckerror(trap)),
+            }
+        }
+
+        let table_callbacks: HashMap<String, u32> = table_shapes
+            .iter()
+            .map(|s| (s.name.clone(), s.callback))
+            .collect();
         self.attached_aliases.insert(
             spec.alias.clone(),
             AttachedForeignCatalog {
@@ -4312,6 +4585,7 @@ impl HostState {
                 callback_handle,
                 type_name: spec.type_name.clone(),
                 tables,
+                table_callbacks,
             },
         );
         Ok(empty_query_result())
@@ -4421,6 +4695,15 @@ fn empty_query_result() -> cli_db::QueryResult {
         rows: Vec::new().into(),
     }
 }
+
+/// Phase 2c: synthetic table-function name for the ATTACH intercept's
+/// per-table shim. `__<alias>_<table>` — clean identifier chars only;
+/// callers must have already validated alias + table via the AT5 parser
+/// (`at5_intercept::is_bare_ident`), so this is a pure concat.
+fn at5_synth_fn_name(alias: &str, table: &str) -> String {
+    format!("__{alias}_{table}")
+}
+
 
 fn cli_extension_duckerror(err: extension_types::Duckerror) -> cli_types::Duckerror {
     match err {
