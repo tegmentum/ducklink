@@ -866,11 +866,29 @@ fn format_duckvalue(value: duckdb::Duckvalue) -> String {
         duckdb::Duckvalue::Decimal(d) => format_decimal_value(d.lower, d.upper, d.scale),
         duckdb::Duckvalue::Interval(iv) => format_interval(iv.months, iv.days, iv.micros),
         duckdb::Duckvalue::Uuid(u) => format_uuid_value(u.hi, u.lo),
+        // @5.0.0: first-class 128-bit integer scalars. Reassemble the two 64-bit
+        // halves the WIT record splits them into and render as a plain integer
+        // literal, matching DuckDB's VARCHAR cast for HUGEINT / UHUGEINT.
+        duckdb::Duckvalue::Hugeint(h) => format_hugeint_value(h.lower, h.upper),
+        duckdb::Duckvalue::Uhugeint(h) => format_uhugeint_value(h.lower, h.upper),
         // ESCAPE-HATCH: a NESTED LIST/STRUCT value carried as JSON. The core
         // normally materializes these as a real vector so the CLI receives the
         // native rendering; if a raw `complex` reaches here, show the JSON.
         duckdb::Duckvalue::Complex(c) => c.json,
     }
+}
+
+/// Render a HUGEINT: unscaled int128 = (upper<<64 | lower), where `upper` is
+/// signed so the top bit propagates when reassembling the 128-bit value.
+fn format_hugeint_value(lower: u64, upper: i64) -> String {
+    let raw = (((upper as u64 as u128) << 64) | lower as u128) as i128;
+    raw.to_string()
+}
+
+/// Render a UHUGEINT: unsigned 128-bit int = (upper<<64 | lower).
+fn format_uhugeint_value(lower: u64, upper: u64) -> String {
+    let raw = ((upper as u128) << 64) | lower as u128;
+    raw.to_string()
 }
 
 /// Render a HUGEINT-backed DECIMAL: unscaled int128 = (upper<<64 | lower) with
