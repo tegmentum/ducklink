@@ -5063,6 +5063,31 @@ impl cli_db::Host for HostState {
             .collect::<Vec<_>>()
             .into()
     }
+
+    /// Phase 2b: the WIT for `database.register-table-function` landed on the
+    /// core (see Phase 2b's cross-repo work + docs/wasm-ecosystem-at-5-adr.md
+    /// Amendment A1). No CLI-component call site drives it today; Phase 2c
+    /// will call the core directly from `HostState::intercept_attach` rather
+    /// than routing through the CLI's imported view of `database`. Until then
+    /// this stub keeps the trait surface satisfied. When Phase 2c needs a
+    /// component-facing forward, replace the body with a `with_core` +
+    /// `call_register_table_function` bridge mirroring `register_extension`
+    /// above (adding a `convert_cli_columndescriptor_to_core` helper alongside
+    /// `convert_core_columndef` at line ~5083).
+    fn register_table_function(
+        &mut self,
+        _conn: Resource<cli_db::Connection>,
+        _name: CliString,
+        _columns: wasmtime::component::__internal::Vec<cli_db::ColumnDescriptor>,
+        _callback_handle: u32,
+    ) -> Result<(), CliString> {
+        Err(
+            "register_table_function is not exposed through the ducklink CLI; \
+             use the core's database.register-table-function directly (Phase 2c)"
+                .to_string()
+                .into(),
+        )
+    }
 }
 
 fn convert_core_query_result(result: core_db_exports::QueryResult) -> cli_db::QueryResult {
