@@ -7,18 +7,17 @@ standard `duckdb:extension` wasm component; imports
 (mosaic-spec + vgplot + Observable Plot) so a `.duckdb` file is a
 self-contained Mosaic distribution.
 
-## SQL surface (shipped)
+## SQL surface
 
 | Function | Notes |
 | --- | --- |
-| `mosaic_create(name, spec_json)` -> TEXT | Aspirational API — currently blocked by the nested-exec re-entry issue documented below. |
+| `mosaic_create(name, spec_json)` -> TEXT | Installs an app + its routes; returns the app URL. Uses `nested-exec` to write `__mosaic_apps` + `routes`. |
 | `mosaic_create(name, spec_json, opts_json)` -> TEXT | Same, arity-3 overload. |
-| `mosaic_drop(name)` -> BOOL | Same blocker. |
-| `mosaic_url(name)` -> TEXT | Same blocker (reads `__mosaic_apps`). |
-| `mosaic_spec(name)` -> TEXT | Same blocker. |
-| `mosaic_plot(sql, kind, opts_json)` -> TEXT | Same blocker (calls `mosaic_create` internally). |
-| **`mosaic_plot_spec(sql, kind, opts_json)`** -> TEXT | **Pure** — returns the canonical vgplot spec JSON. No nested-exec. |
-| **`mosaic_install_sql(name, spec_json, opts_json)`** -> TEXT | **Pure** — returns the semicolon-batched SQL an operator can `POST /sql` back to install an app without needing nested-exec re-entry. This is the Phase 1 workaround the E2E script uses; see below. |
+| `mosaic_drop(name)` -> BOOL | Removes the app + its routes. |
+| `mosaic_url(name)` -> TEXT | Returns the installed app URL (with embedded token, if any). |
+| `mosaic_spec(name)` -> TEXT | Returns the stored vgplot spec JSON. |
+| `mosaic_plot(sql, kind, opts_json)` -> TEXT | Convenience: builds a plot spec + calls `mosaic_create` internally; returns the URL. |
+| `mosaic_plot_spec(sql, kind, opts_json)` -> TEXT | **Pure** — returns the canonical vgplot spec JSON. No nested-exec. |
 
 `opts_json` (all optional):
 
@@ -42,30 +41,18 @@ Per-app query routes (not a shared one) because DuckDB's `query()`
 table function doesn't accept subqueries in its argument — see
 `mosaic-core::build_app_query_route_sql` for the SQL shape.
 
-## Known limitation — nested-exec re-entry
+## Prerequisites for `mosaic_create`
 
-`mosaic_create` internally issues `INSERT INTO routes` + `INSERT INTO
-__mosaic_apps` via the `duckdb:extension/nested-exec@5.0.0` host
-import. Against the current standalone-ducklink CLI this traps with:
+`mosaic_create` inserts into a `routes` table (the httpd router). The
+table must exist before the first call — either run `ducklink serve
+--init-routes` once, or `CREATE TABLE routes (...)` manually. The
+end-to-end script (`scripts/mosaic-phase1-e2e.sh`) creates it inline.
 
-```
-Invalid Input Error: invalid argument: nested-exec: primary
-call_execute trapped: wasm trap: cannot enter component instance
-```
-
-The same trap affects `fieldbook_create` today — the primary-store
-re-entry path (commit `d06c7d7`) landed but is blocked pending an
-ecosystem-wide core-wasm rebuild (see the commit body). Not fixed
-here because the constraint is _do not touch
-`crates/ducklink-{host,runtime,cli}`_.
-
-**Workaround shipped in Phase 1**: `mosaic_install_sql(...)` returns the
-exact SQL `mosaic_create` would execute internally. Callers `POST /sql`
-that string back to a running `ducklink serve` (whose httpd connection
-is outside the scalar-callback stack, so the same INSERTs succeed
-there). `scripts/mosaic-phase1-e2e.sh` demonstrates the full flow end
-to end. Once the trap is lifted, `mosaic_create` starts working with
-zero code changes here.
+Historical note: Phase 1 originally shipped a pure `mosaic_install_sql`
+scalar as a workaround for a nested-exec re-entry trap at @4. That trap
+was unblocked in the @5 host (ADR Decision 6 + shared-`ExtensionManager`
+sibling connection), and the workaround scalar has been removed
+upstream — `mosaic_create` is the only supported install path now.
 
 ## Building
 
@@ -81,12 +68,14 @@ lines is one option) or use pre-built artifacts.
 
 ## Testing
 
-* `python3 tooling/smoke.py mosaic` — pure-surface smoke (URL / spec /
-  install-SQL builders + the vgplot spec generator).
-* `bash scripts/mosaic-phase1-e2e.sh` — full round-trip: starts
-  `ducklink serve`, builds install SQL via `mosaic_install_sql`, POSTs
-  it, curls every route, asserts the auth branches. Prints an
-  openable URL at the end (`KEEP_ALIVE=1` leaves the server up).
+* `python3 tooling/smoke.py mosaic` — pure-surface smoke: exercises the
+  four supported `mosaic_plot_spec` mark kinds (line|bar|dot|area). No
+  nested-exec, no filesystem — runs on the default `:memory:` harness.
+* `bash scripts/mosaic-phase1-e2e.sh` — full round-trip: CLI seeds a
+  fixture table + calls `mosaic_create` directly, then `ducklink serve`
+  is started on the same DB and every route is curled (auth branches
+  included). Prints an openable URL at the end (`KEEP_ALIVE=1` leaves
+  the server up).
 
 ## Repo layout
 
