@@ -528,6 +528,17 @@ fn bind_value(
         types::Duckvalue::Uuid(u) => {
             Value::Text(format!("{:016x}{:016x}", u.hi, u.lo))
         }
+        // major-5 T2-1: HUGEINT / UHUGEINT 128-bit integers. SQLite has no
+        // native 128-bit scalar, so we bind the reassembled value as text (the
+        // decimal representation is faithful and round-trippable).
+        types::Duckvalue::Hugeint(h) => {
+            let v = ((h.upper as i128) << 64) | (h.lower as i128);
+            Value::Text(v.to_string())
+        }
+        types::Duckvalue::Uhugeint(u) => {
+            let v = ((u.upper as u128) << 64) | (u.lower as u128);
+            Value::Text(v.to_string())
+        }
         // ESCAPE-HATCH: a nested value -- bind its JSON text into sqlite.
         types::Duckvalue::Complex(c) => Value::Text(c.json.to_string()),
     };
@@ -770,7 +781,6 @@ mod tests {
                 value: types::Duckvalue::Int64(1),
             }],
             limit: None,
-            wants_rowid: false,
         };
         let rows = run_scan(&conn, &req).unwrap();
         assert_eq!(rows.len(), 1);
