@@ -13,6 +13,7 @@ use ducklink_host::{
     name = "ducklink",
     about = "Host runner for the DuckDB WebAssembly CLI component",
     after_help = "SUBCOMMANDS (run `ducklink <cmd> --help`):\n  \
+        sql <SQL>        Evaluate a SQL script and exit (shorthand for `-- -c SQL`)\n  \
         extension, ext   Manage extensions (list/search/info/install/uninstall)\n  \
         compose          Build a custom core with extensions embedded\n  \
         run-tool         Run a wasi:cli/run tool component through the runtime\n  \
@@ -462,6 +463,48 @@ fn main() -> Result<()> {
     // sqlite-wasm's `sqlink compose --embed`.
     if raw.get(1).map(String::as_str) == Some("compose") {
         return run_compose(&raw[2..]);
+    }
+
+    // `ducklink sql <SQL>` — evaluate a (possibly multi-statement) SQL script
+    // string against a fresh in-memory database and exit. Convenience shorthand
+    // for `ducklink -- -c "<SQL>"` — without this dispatch, the two positional
+    // args would fall through to `Opts::parse()` and be forwarded verbatim to
+    // the wasm CLI as `["sql", "<SQL>"]`, whose arg parser then treats both as
+    // positionals (database path + trailing script) and rejects the second with
+    // `unexpected additional positional arguments`. Wiring `sql` as an explicit
+    // host subcommand (matching `cron` / `ui` / `serve` / `extension`) turns it
+    // into a well-defined `-c` dispatch that mirrors what the AT5 e2e tests
+    // expect (`crates/ducklink-host/tests/test_at5_{read,write}_sqlitewasm.rs`).
+    if raw.get(1).map(String::as_str) == Some("sql") {
+        let sql = match raw.get(2) {
+            Some(s) => s.clone(),
+            None => {
+                eprintln!("usage: ducklink sql <SQL>");
+                std::process::exit(2);
+            }
+        };
+        if raw.len() > 3 {
+            eprintln!(
+                "ducklink sql: unexpected extra arguments after <SQL>: {:?}",
+                &raw[3..]
+            );
+            std::process::exit(2);
+        }
+        let artifacts = ComponentArtifacts::resolve_default()?;
+        let extensions_dir = std::env::current_dir()?.join("artifacts/extensions");
+        set_extension_root(extensions_dir);
+        let cwd = std::env::current_dir()?;
+        // DuckDB's wasm home is "/"; pre-create cwd/.duckdb/extension_data
+        // (the fs shim resolves "/X" relative to the cwd preopen and its
+        // mkdir isn't recursive enough on its own).
+        std::fs::create_dir_all(cwd.join(".duckdb/extension_data")).ok();
+        let preopens: Vec<(&Path, &str)> = vec![(cwd.as_path(), ".")];
+        // argv[0] must be the program name — the wasm CLI does `skip(1)` on
+        // `environment::get_arguments()`, so without it the first user arg is
+        // dropped (see the CLI-passthrough path below and its comment).
+        let argv: Vec<String> = vec!["ducklink".to_string(), "-c".to_string(), sql];
+        let status = run_cli_with_stdio(&artifacts, &argv, &preopens)?;
+        std::process::exit(if status.is_ok() { 0 } else { 1 });
     }
 
     // `ducklink ui [--port N] [--online|--console] [--no-open] [--assets DIR] [DB]`
