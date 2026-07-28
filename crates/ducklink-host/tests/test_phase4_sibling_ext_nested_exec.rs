@@ -45,12 +45,26 @@ fn repo_root() -> PathBuf {
 
 /// Run `ducklink <args...>` with cwd = repo root so the CLI's default
 /// `artifacts/extensions/` resolution finds the built components.
+///
+/// Redirects stderr to a temp file (not the captured `Output`) because
+/// the wasm core emits unconditional `[wasi-fs]` debug traces per file
+/// operation, and Bug 4b's sqlite-lib SPI drives many operations —
+/// enough to overflow `Command::output()`'s pipe buffer and hang the
+/// child. Post-run we slurp the temp file back into `Output.stderr`
+/// so error messages still reach the assertion's `dump()`.
 fn run_ducklink(bin: &Path, root: &Path, args: &[&str]) -> Output {
-    Command::new(bin)
+    let stderr_file = tempfile::NamedTempFile::new().expect("tempfile for stderr");
+    let stderr_write = stderr_file
+        .reopen()
+        .expect("reopen stderr tempfile for writing");
+    let mut out = Command::new(bin)
         .args(args)
         .current_dir(root)
+        .stderr(stderr_write)
         .output()
-        .unwrap_or_else(|e| panic!("spawn ducklink {args:?}: {e}"))
+        .unwrap_or_else(|e| panic!("spawn ducklink {args:?}: {e}"));
+    out.stderr = std::fs::read(stderr_file.path()).unwrap_or_default();
+    out
 }
 
 fn dump(label: &str, out: &Output) -> String {
@@ -95,17 +109,14 @@ fn phase4_fieldbook_bootstrap_via_nested_exec_ok() {
     // to unblock (pure-DDL sibling SQL touching plain tables; no callback
     // dispatch on the sibling, so the shared-manager deadlock boundary
     // isn't crossed).
-    let sql = format!(
-        "PRAGMA disable_progress_bar; \
-         OPEN '{db_str}'; \
-         LOAD fieldbook; \
-         SELECT 1 AS boot_ok;"
-    );
-    let run = run_ducklink(&bin, &root, &["-c", &sql]);
+    let sql = "PRAGMA disable_progress_bar; \
+               LOAD fieldbook; \
+               SELECT 1 AS boot_ok;";
+    let run = run_ducklink(&bin, &root, &["sql", "--db", db_str, sql]);
     assert!(
         run.status.success(),
         "{}",
-        dump("ducklink -c 'LOAD fieldbook; ...' failed", &run)
+        dump("ducklink sql --db … 'LOAD fieldbook; ...' failed", &run)
     );
     let stderr = String::from_utf8_lossy(&run.stderr);
     assert!(

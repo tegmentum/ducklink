@@ -476,20 +476,40 @@ fn main() -> Result<()> {
     // into a well-defined `-c` dispatch that mirrors what the AT5 e2e tests
     // expect (`crates/ducklink-host/tests/test_at5_{read,write}_sqlitewasm.rs`).
     if raw.get(1).map(String::as_str) == Some("sql") {
-        let sql = match raw.get(2) {
-            Some(s) => s.clone(),
+        // Parse: `ducklink sql [--db <path>] <SQL>`. `--db` is optional; when
+        // present it names a persistent DuckDB file the CLI opens before
+        // running <SQL> (mirrors the OPEN dot-command's role). When absent the
+        // CLI runs against an in-memory DB.
+        let mut db_path: Option<String> = None;
+        let mut sql: Option<String> = None;
+        let mut i = 2;
+        while i < raw.len() {
+            match raw[i].as_str() {
+                "--db" => {
+                    i += 1;
+                    match raw.get(i) {
+                        Some(p) => db_path = Some(p.clone()),
+                        None => {
+                            eprintln!("ducklink sql: --db expects a path");
+                            std::process::exit(2);
+                        }
+                    }
+                }
+                other if sql.is_none() => sql = Some(other.to_string()),
+                other => {
+                    eprintln!("ducklink sql: unexpected extra argument: {other:?}");
+                    std::process::exit(2);
+                }
+            }
+            i += 1;
+        }
+        let sql = match sql {
+            Some(s) => s,
             None => {
-                eprintln!("usage: ducklink sql <SQL>");
+                eprintln!("usage: ducklink sql [--db <path>] <SQL>");
                 std::process::exit(2);
             }
         };
-        if raw.len() > 3 {
-            eprintln!(
-                "ducklink sql: unexpected extra arguments after <SQL>: {:?}",
-                &raw[3..]
-            );
-            std::process::exit(2);
-        }
         let artifacts = ComponentArtifacts::resolve_default()?;
         let extensions_dir = std::env::current_dir()?.join("artifacts/extensions");
         set_extension_root(extensions_dir);
@@ -498,11 +518,39 @@ fn main() -> Result<()> {
         // (the fs shim resolves "/X" relative to the cwd preopen and its
         // mkdir isn't recursive enough on its own).
         std::fs::create_dir_all(cwd.join(".duckdb/extension_data")).ok();
-        let preopens: Vec<(&Path, &str)> = vec![(cwd.as_path(), ".")];
+        // If --db is an absolute path outside cwd, preopen its parent with the
+        // guest name == abspath (same technique as the `serve` subcommand's
+        // db_abs_preopen at line 834+; needed so guest-side OPEN <abspath>
+        // resolves through wasi:filesystem).
+        let db_abs_preopen: Option<(PathBuf, String)> = match db_path.as_deref() {
+            Some(p) if !p.is_empty() && p != ":memory:" => {
+                let dp = PathBuf::from(p);
+                if dp.is_absolute() {
+                    let parent = dp.parent().unwrap_or(Path::new("/")).to_path_buf();
+                    std::fs::create_dir_all(&parent).ok();
+                    let guest = parent.to_string_lossy().into_owned();
+                    Some((parent, guest))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+        let mut preopens: Vec<(&Path, &str)> = vec![(cwd.as_path(), ".")];
+        if let Some((ref parent, ref guest)) = db_abs_preopen {
+            preopens.push((parent.as_path(), guest.as_str()));
+        }
         // argv[0] must be the program name — the wasm CLI does `skip(1)` on
         // `environment::get_arguments()`, so without it the first user arg is
         // dropped (see the CLI-passthrough path below and its comment).
-        let argv: Vec<String> = vec!["ducklink".to_string(), "-c".to_string(), sql];
+        // The wasm CLI treats a bare positional before -c as a DB path, so
+        // `["ducklink", "<dbpath>", "-c", "<SQL>"]` opens then executes.
+        let mut argv: Vec<String> = vec!["ducklink".to_string()];
+        if let Some(p) = db_path {
+            argv.push(p);
+        }
+        argv.push("-c".to_string());
+        argv.push(sql);
         let status = run_cli_with_stdio(&artifacts, &argv, &preopens)?;
         std::process::exit(if status.is_ok() { 0 } else { 1 });
     }
