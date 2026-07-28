@@ -9,6 +9,7 @@ use files;
 use guest;
 use storage;
 use storage-dispatch;
+use storage-write-dispatch;
 
 world duckdb-extension {
   import runtime;
@@ -32,4 +33,21 @@ world duckdb-extension-storage {
   export guest;
   export callback-dispatch;
   export storage-dispatch;
+}
+
+// Writable-storage world (2.1.0): additionally exports storage-write-dispatch
+// on top of the read-only storage-dispatch. The host instantiates its bindings
+// lazily -- read-only backends satisfy `duckdb-extension-storage` and never
+// touch the write-side.
+world duckdb-extension-storage-write {
+  import runtime;
+  import config;
+  import logging;
+  import catalog;
+  import files;
+  import storage;
+  export guest;
+  export callback-dispatch;
+  export storage-dispatch;
+  export storage-write-dispatch;
 }
