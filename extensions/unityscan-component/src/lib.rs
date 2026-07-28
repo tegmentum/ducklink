@@ -19,6 +19,18 @@
 //!
 //! Network access requires the host's network grant (DUCKLINK_NETWORK_GRANT).
 //! Nothing panics across the FFI boundary -- every failure maps to a duckerror.
+//!
+//! READ-ONLY AT duckdb:extension@5.0.0. Unity Catalog is a remote REST catalog,
+//! not a serializable blob, and this component is the enumeration surface only:
+//!   * storage-scan-next always returns EOF (data files are read by the composed
+//!     s3fs/azfs + delta/parquet stack, not this component).
+//!   * serialize returns Duckerror::Unsupported ("unityscan is read-only ...").
+//!     The @5 storage-dispatch WIT exposes no storage-insert-rows / -update-rows
+//!     / -delete-rows verbs; the sole write-adjacent entry is serialize, which
+//!     the host silently skips on Unsupported.
+//!   * Metadata mutations (CREATE / DROP against UC) are not implemented -- UC
+//!     admin operations live behind separate REST verbs that this component
+//!     does not surface. See README.md for the full write-path matrix.
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -282,13 +294,19 @@ impl storage_dispatch::Guest for Extension {
         Ok(true)
     }
 
-    /// AT5 write-back stub: Unity Catalog is a remote REST catalog, not a
-    /// serializable blob. Return Unsupported so the host's write-back path
-    /// silently proceeds.
+    /// AT5 write-back stub: unityscan is a READ-ONLY catalog enumeration
+    /// backend at duckdb:extension@5. Unity Catalog is a remote REST endpoint
+    /// (not a serializable blob), and the @5 storage-dispatch WIT exposes no
+    /// storage-insert-rows / -update-rows / -delete-rows verbs, so nothing in
+    /// this component can produce mutated bytes to hand back. Returning
+    /// Unsupported here makes the read-only intent explicit and lets the host's
+    /// write-back path silently proceed.
     fn serialize(handle: u32, _catalog: u32) -> Result<Vec<u8>, types::Duckerror> {
         check_handle(handle)?;
         Err(types::Duckerror::Unsupported(
-            "serialize not applicable to this backend".into(),
+            "unityscan is read-only: Unity Catalog is a remote REST endpoint, \
+             not a serializable blob; no write-back is emitted"
+                .into(),
         ))
     }
 }
