@@ -474,6 +474,16 @@ impl storage_write_dispatch::Guest for Extension {
         })
     }
 
+    /// Postgres round-trips every mutation over the wire (see the DML methods
+    /// above); the host has nothing left to persist. Returning `false` tells
+    /// the host to skip its native file-backed replay path (which is
+    /// meaningless for a remote server) and rely on the extension's own
+    /// serialize -> Unsupported short-circuit for the legacy write-back path.
+    fn writes_persist_directly(handle: u32) -> Result<bool, types::Duckerror> {
+        check_handle(handle)?;
+        Ok(false)
+    }
+
     fn update_rows(
         handle: u32,
         txn: u32,
