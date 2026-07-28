@@ -2292,7 +2292,7 @@ impl ExtensionManager {
         instance.storage_attach(handle, dsn, &bytes)
     }
 
-    fn dispatch_storage_list_tables(
+    pub fn dispatch_storage_list_tables(
         &mut self,
         catalog: u32,
     ) -> Result<Vec<String>, extension_types::Duckerror> {
@@ -2626,10 +2626,9 @@ impl ExtensionManager {
         }
     }
 
-    /// Amendment A5 counterpart to `dispatch_storage_insert_direct`. Wraps a
-    /// single `create-table` dispatch in an auto-BEGIN/COMMIT so the write
-    /// intercept doesn't manage transaction lifecycles itself. Rolls back on
-    /// failure. Used exclusively by `HostState::intercept_write`.
+    /// Auto-BEGIN/COMMIT wrapper around `storage-write-dispatch.create-table`
+    /// for the write-intercept path. Used exclusively by
+    /// `HostState::intercept_write`.
     pub fn dispatch_storage_create_table_direct(
         &mut self,
         catalog: u32,
@@ -5278,6 +5277,81 @@ impl HostState {
                 self.at5_write_back(&alias, catalog_handle)?;
                 Ok(empty_query_result())
             }
+            WriteRoute::CreateTable {
+                alias,
+                table,
+                columns,
+                if_not_exists,
+            } => {
+                let catalog = self.attached_aliases.get(&alias).ok_or_else(|| {
+                    cli_types::Duckerror::Internal(
+                        format!("alias {alias} disappeared before dispatch").into(),
+                    )
+                })?;
+                let catalog_handle = catalog.catalog_handle;
+                // Bail out cleanly for IF NOT EXISTS when the table is already
+                // there. The extension's `storage_list_tables` reflects the
+                // remote schema, so we don't need to teach the extension a
+                // separate "exists" probe.
+                if if_not_exists {
+                    let existing = {
+                        let mut manager = self
+                            .extension_manager
+                            .lock()
+                            .expect("extension manager mutex poisoned");
+                        manager
+                            .dispatch_storage_list_tables(catalog_handle)
+                            .map_err(cli_extension_duckerror)?
+                    };
+                    if existing.iter().any(|t| t.eq_ignore_ascii_case(&table)) {
+                        eprintln!(
+                            "[at5-write] CREATE TABLE IF NOT EXISTS {alias}.{table}: \
+                             table already exists; no-op"
+                        );
+                        return Ok(empty_query_result());
+                    }
+                }
+                let mut ext_cols: Vec<extension_types::Columndef> =
+                    Vec::with_capacity(columns.len());
+                for col in &columns {
+                    let name = &col.name;
+                    let type_text = &col.type_name;
+                    let logical = sql_type_to_extension_logical(type_text).map_err(|reason| {
+                        cli_types::Duckerror::Unsupported(
+                            format!(
+                                "Operation not supported on @5 attached tables: \
+                                 CREATE TABLE {alias}.{table}: column '{name}' type \
+                                 '{type_text}' -- {reason}. Use the native duckdb \
+                                 build if this pattern is required."
+                            )
+                            .into(),
+                        )
+                    })?;
+                    ext_cols.push(extension_types::Columndef {
+                        name: name.clone(),
+                        logical,
+                    });
+                }
+                {
+                    let mut manager = self
+                        .extension_manager
+                        .lock()
+                        .expect("extension manager mutex poisoned");
+                    manager
+                        .dispatch_storage_create_table_direct(catalog_handle, &table, &ext_cols)
+                        .map_err(cli_extension_duckerror)?
+                }
+                eprintln!(
+                    "[at5-write] CREATE TABLE {alias}.{table}: {} column(s) dispatched \
+                     to storage-write-dispatch",
+                    ext_cols.len()
+                );
+                // The catalog snapshot refresh after intercept_write returns
+                // (see the call site in call_execute) will pick up the new
+                // table via a re-listing on the next scan.
+                self.at5_write_back(&alias, catalog_handle)?;
+                Ok(empty_query_result())
+            }
             WriteRoute::Delete {
                 alias,
                 table,
@@ -5955,6 +6029,113 @@ fn literal_to_extension_duckvalue(
             return Err(format!(
                 "unsupported expression `{expr}` in VALUES tuple (only literals \
                  NULL/int/float/'string'/X'hex' are routed to the extension)"
+            ));
+        }
+    })
+}
+
+/// Map a raw SQL column-type text (e.g. `INTEGER`, `TEXT`, `VARCHAR(20)`,
+/// `DECIMAL(10,2)`, `DOUBLE PRECISION`) to the extension's `Logicaltype`.
+/// Only the leading TYPE tokens are considered — column constraints (PRIMARY
+/// KEY / NOT NULL / DEFAULT ...) must be stripped by the caller. Length /
+/// width / scale specifiers are accepted and mostly ignored (the exception
+/// is DECIMAL, which parses `(width,scale)` into the DECIMAL arm).
+///
+/// Used by `HostState::intercept_write`'s `CreateTable` branch to convert
+/// parsed columns into `extension_types::Columndef` before dispatching
+/// through `storage-write-dispatch.create-table`. Returns `Err(reason)` for
+/// unrecognized types so the caller can surface a clean `Unsupported` error.
+fn sql_type_to_extension_logical(
+    type_text: &str,
+) -> Result<extension_types::Logicaltype, String> {
+    let s = type_text.trim();
+    if s.is_empty() {
+        return Err("empty type text".to_string());
+    }
+    // Peel off the trailing `(...)` specifier so `VARCHAR(20)` matches
+    // `VARCHAR`. DECIMAL is handled specially below (needs width+scale).
+    let (base, spec) = match s.find('(') {
+        Some(open) => {
+            let close = s.rfind(')').ok_or_else(|| {
+                format!("unbalanced parentheses in type '{s}'")
+            })?;
+            if close < open {
+                return Err(format!("mismatched parentheses in type '{s}'"));
+            }
+            let base = s[..open].trim();
+            let inside = s[open + 1..close].trim();
+            let tail = s[close + 1..].trim();
+            let full_base = if tail.is_empty() {
+                base.to_string()
+            } else {
+                // e.g. `DOUBLE PRECISION` — keep both words when the
+                // specifier is empty; won't hit this arm since `DOUBLE
+                // PRECISION` has no `(...)`.
+                format!("{base} {tail}")
+            };
+            (full_base, Some(inside.to_string()))
+        }
+        None => (s.to_string(), None),
+    };
+    let up: String = base.split_whitespace().collect::<Vec<_>>().join(" ").to_ascii_uppercase();
+    Ok(match up.as_str() {
+        "BOOLEAN" | "BOOL" => extension_types::Logicaltype::Boolean,
+        "TINYINT" | "INT1" => extension_types::Logicaltype::Int8,
+        "SMALLINT" | "INT2" => extension_types::Logicaltype::Int16,
+        "INT" | "INTEGER" | "INT4" => extension_types::Logicaltype::Int32,
+        "BIGINT" | "INT8" | "INT64" => extension_types::Logicaltype::Int64,
+        "HUGEINT" | "INT128" => extension_types::Logicaltype::Hugeint,
+        "UTINYINT" | "UINT1" => extension_types::Logicaltype::Uint8,
+        "USMALLINT" | "UINT2" => extension_types::Logicaltype::Uint16,
+        "UINTEGER" | "UINT4" => extension_types::Logicaltype::Uint32,
+        "UBIGINT" | "UINT8" => extension_types::Logicaltype::Uint64,
+        "UHUGEINT" | "UINT128" => extension_types::Logicaltype::Uhugeint,
+        "REAL" | "FLOAT" | "FLOAT4" => extension_types::Logicaltype::Float32,
+        "DOUBLE" | "DOUBLE PRECISION" | "FLOAT8" => extension_types::Logicaltype::Float64,
+        "TEXT" | "VARCHAR" | "CHAR" | "CHARACTER" | "STRING" | "CLOB" => {
+            extension_types::Logicaltype::Text
+        }
+        "BLOB" | "BYTEA" | "BYTES" | "BINARY" | "VARBINARY" => {
+            extension_types::Logicaltype::Blob
+        }
+        "DATE" => extension_types::Logicaltype::Date,
+        "TIME" => extension_types::Logicaltype::Time,
+        "TIMESTAMP" | "DATETIME" => extension_types::Logicaltype::Timestamp,
+        "TIMESTAMPTZ" | "TIMESTAMP_TZ" | "TIMESTAMP WITH TIME ZONE" => {
+            extension_types::Logicaltype::Timestamptz
+        }
+        "INTERVAL" => extension_types::Logicaltype::Interval,
+        "UUID" => extension_types::Logicaltype::Uuid,
+        "DECIMAL" | "NUMERIC" => {
+            let (width, scale) = match spec.as_deref() {
+                Some(inside) => {
+                    let parts: Vec<&str> = inside.split(',').map(|p| p.trim()).collect();
+                    match parts.as_slice() {
+                        [w] => (
+                            w.parse::<u8>().map_err(|_| {
+                                format!("DECIMAL width '{w}' is not a small integer")
+                            })?,
+                            0u8,
+                        ),
+                        [w, sc] => (
+                            w.parse::<u8>().map_err(|_| {
+                                format!("DECIMAL width '{w}' is not a small integer")
+                            })?,
+                            sc.parse::<u8>().map_err(|_| {
+                                format!("DECIMAL scale '{sc}' is not a small integer")
+                            })?,
+                        ),
+                        _ => return Err(format!("DECIMAL takes 1 or 2 args, got '{inside}'")),
+                    }
+                }
+                None => (18, 3), // DuckDB's default DECIMAL when unspecified.
+            };
+            extension_types::Logicaltype::Decimal(extension_types::Decimalshape { width, scale })
+        }
+        other => {
+            return Err(format!(
+                "unrecognized SQL type '{other}' (add a mapping in \
+                 sql_type_to_extension_logical if the storage backend supports it)"
             ));
         }
     })

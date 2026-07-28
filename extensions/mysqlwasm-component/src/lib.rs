@@ -260,9 +260,20 @@ impl storage_dispatch::Guest for Extension {
             let cur = s
                 .get_mut(&scan)
                 .ok_or_else(|| types::Duckerror::Invalidstate("unknown scan".into()))?;
-            let end = (cur.pos + max_rows as usize).min(cur.rows.len());
+            // DEFENSIVE (wasm32): `cur.pos + max_rows as usize` can wrap
+            // when `max_rows == u32::MAX` (or a caller passes a huge sentinel
+            // meaning "give me everything") because `usize` is 32-bit under
+            // wasm. `saturating_add` clamps to `usize::MAX` so the subsequent
+            // `.min(cur.rows.len())` collapses to `cur.rows.len()`. Also
+            // clamp `cur.pos` to `cur.rows.len()` in case a prior call left
+            // it past the end (e.g. rows re-computed to be shorter -- not
+            // possible today, but this method is called across scan lifetimes
+            // and safety-first here is cheap).
+            let len = cur.rows.len();
+            let start = cur.pos.min(len);
+            let end = start.saturating_add(max_rows as usize).min(len);
             let batch: std::vec::Vec<std::vec::Vec<types::Duckvalue>> =
-                cur.rows[cur.pos..end].to_vec();
+                cur.rows[start..end].to_vec();
             cur.pos = end;
             Ok(batch.into())
         })
@@ -350,6 +361,20 @@ impl storage_write_dispatch::Guest for Extension {
                 .map_err(|e| types::Duckerror::Io(format!("ROLLBACK: {}", e.0)))?;
             Ok(())
         })
+    }
+
+    /// Bug 4 write-back probe (see storage-write-dispatch.wit).
+    ///
+    /// MySQL persists every INSERT / UPDATE / DELETE over the wire at dispatch
+    /// time -- the server IS the store of record. There is no in-wasm database
+    /// image the host could serialize back to a file, so return `false` and let
+    /// the host's default (serialize + fs write-back) skip via the `serialize`
+    /// stub's `Unsupported` return. Returning `true` here would (incorrectly)
+    /// invite the host to open a "native, file-backed connection to the DSN",
+    /// which is meaningless for a remote server URL.
+    fn writes_persist_directly(handle: u32) -> Result<bool, types::Duckerror> {
+        check_handle(handle)?;
+        Ok(false)
     }
 
     fn create_table(
