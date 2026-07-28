@@ -20,10 +20,10 @@ use wit_bindgen::rt::vec::Vec;
 mod mysql;
 use mysql::{ColType, Column, MyConn};
 
-wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension-storage" });
+wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension-storage-write" });
 
 use duckdb::extension::{storage, types};
-use exports::duckdb::extension::{callback_dispatch, guest, storage_dispatch};
+use exports::duckdb::extension::{callback_dispatch, guest, storage_dispatch, storage_write_dispatch};
 
 /// Opaque callback handle the host passes back to every storage-dispatch call.
 const STORAGE_HANDLE: u32 = 1;
@@ -92,10 +92,29 @@ impl callback_dispatch::Guest for Extension {
 
 /// Per-catalog state: a live connection plus a cache of table -> column list
 /// (so a scan can resolve projection/filter indices to column names without a
-/// round trip).
+/// round trip) plus the AT5 rowid infrastructure.
+///
+/// AT5 rowid model (Amendment A5, docs/at5-rowid-mechanism.md): MySQL has no
+/// universally selectable rowid pseudo-column, so the extension emits a
+/// per-scan monotonic ordinal in the synthetic rowid slot and caches the
+/// row-identifying values it fetched alongside. `row_map` is that cache:
+/// `(table, rowid) -> [(col_name, value), ...]` binds each emitted rowid to
+/// enough underlying-column values to rebuild a WHERE clause for UPDATE /
+/// DELETE. When the table has a PRIMARY KEY, only the PK cols are cached
+/// (single-column index); otherwise every column is cached and writes fall
+/// back to a whole-row match with `LIMIT 1` (duplicates target one row per
+/// dispatched rowid).
 struct Catalog {
     conn: MyConn,
     columns: HashMap<std::string::String, std::vec::Vec<Column>>,
+    /// Table -> indices (into `columns[table]`) of the PRIMARY KEY columns,
+    /// in `Seq_in_index` order. Empty vec = no PK detected.
+    pk_cols: HashMap<std::string::String, std::vec::Vec<usize>>,
+    /// (table, rowid) -> WHERE-clause bindings (see struct doc-comment).
+    row_map: HashMap<(std::string::String, i64), std::vec::Vec<(std::string::String, types::Duckvalue)>>,
+    /// Per-table monotonic counter used both to mint rowid values and as the
+    /// key into `row_map`. Never wraps within a catalog's lifetime.
+    next_rowid: HashMap<std::string::String, i64>,
 }
 
 struct Cursor {
@@ -106,8 +125,13 @@ struct Cursor {
 thread_local! {
     static CATALOGS: RefCell<HashMap<u32, Catalog>> = RefCell::new(HashMap::new());
     static SCANS: RefCell<HashMap<u32, Cursor>> = RefCell::new(HashMap::new());
+    /// Open write-transactions -> catalog-id (mirrors sqlitewasm). We don't
+    /// wrap `MyConn` in a transaction object -- MySQL's server-side txn state
+    /// lives on the connection, so `catalog` is a sufficient key.
+    static TXNS: RefCell<HashMap<u32, u32>> = RefCell::new(HashMap::new());
     static NEXT_CATALOG: RefCell<u32> = const { RefCell::new(1) };
     static NEXT_SCAN: RefCell<u32> = const { RefCell::new(1) };
+    static NEXT_TXN: RefCell<u32> = const { RefCell::new(1) };
 }
 
 impl storage_dispatch::Guest for Extension {
@@ -148,6 +172,9 @@ impl storage_dispatch::Guest for Extension {
                 Catalog {
                     conn,
                     columns: HashMap::new(),
+                    pk_cols: HashMap::new(),
+                    row_map: HashMap::new(),
+                    next_rowid: HashMap::new(),
                 },
             )
         });
@@ -184,10 +211,12 @@ impl storage_dispatch::Guest for Extension {
             let cols = fetch_columns(cat, &table)?;
             // ADR Amendment A5: prepend a synthetic `rowid` (Int64) column at
             // index 0. MySQL has no universally-selectable rowid pseudo-column,
-            // so the scan emits a 1-based row-number as the rowid value. This
-            // is stable within one scan and satisfies the READ path; the write
-            // path is not enabled for mysqlwasm at v1
-            // (see docs/at5-rowid-mechanism.md).
+            // so the scan emits a per-scan monotonic ordinal as the rowid
+            // value and the extension caches the row-identifying column values
+            // (PK cols, or full row for PK-less tables) in `Catalog::row_map`
+            // to translate rowids back into WHERE clauses for UPDATE / DELETE.
+            // See docs/at5-rowid-mechanism.md + this crate's README for the
+            // full mechanism.
             let mut out: Vec<types::Columndef> = Vec::with_capacity(cols.len() + 1);
             out.push(types::Columndef {
                 name: "rowid".into(),
@@ -252,14 +281,304 @@ impl storage_dispatch::Guest for Extension {
         Ok(true)
     }
 
-    /// AT5 write-back stub: MySQL is a live network connection, not a
-    /// serializable blob. Return Unsupported so the host's write-back path
-    /// silently proceeds (mutations already round-tripped over the wire).
+    /// AT5 write-back stub: MySQL is a LIVE network connection, not a
+    /// serializable file blob. The write path already persisted every
+    /// mutation over the wire via `storage-write-dispatch` (INSERT / UPDATE /
+    /// DELETE round-trip through `MyConn::query`), so there is no "in-memory
+    /// image" for the host to re-emit onto disk. Returning `Unsupported` tells
+    /// `HostState::at5_write_back` to silently skip the fs write step, which
+    /// is the correct semantics for a live-connection backend. See the
+    /// crate README + docs/at5-rowid-mechanism.md.
     fn serialize(handle: u32, _catalog: u32) -> Result<Vec<u8>, types::Duckerror> {
         check_handle(handle)?;
         Err(types::Duckerror::Unsupported(
-            "serialize not applicable to this backend".into(),
+            "serialize not applicable to this backend (live MySQL connection; \
+             mutations already persisted server-side via storage-write-dispatch)"
+                .into(),
         ))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// storage-write-dispatch (ADR Amendment A5)
+//
+// The read side (storage-dispatch) emits a per-scan monotonic ordinal in the
+// rowid slot and caches WHERE-clause bindings in `Catalog::row_map`. Every
+// write call below (delete-rows / update-rows) looks the rowid up in that
+// map and reconstructs `WHERE pk_col = val AND ... LIMIT 1` to route the
+// mutation to a single server-side row. Tables with a PK use their PK cols
+// as the WHERE; PK-less tables fall back to matching every column (still
+// LIMIT 1). See docs/at5-rowid-mechanism.md.
+// ---------------------------------------------------------------------------
+
+impl storage_write_dispatch::Guest for Extension {
+    fn begin_transaction(handle: u32, catalog: u32) -> Result<u32, types::Duckerror> {
+        check_handle(handle)?;
+        with_catalog(catalog, |cat| {
+            cat.conn
+                .query("START TRANSACTION")
+                .map_err(|e| types::Duckerror::Io(format!("START TRANSACTION: {}", e.0)))?;
+            Ok(())
+        })?;
+        let id = NEXT_TXN.with(|n| {
+            let mut n = n.borrow_mut();
+            let id = *n;
+            *n += 1;
+            id
+        });
+        TXNS.with(|t| t.borrow_mut().insert(id, catalog));
+        Ok(id)
+    }
+
+    fn commit_transaction(handle: u32, txn: u32) -> Result<(), types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = take_txn(txn)?;
+        with_catalog(catalog, |cat| {
+            cat.conn
+                .query("COMMIT")
+                .map_err(|e| types::Duckerror::Io(format!("COMMIT: {}", e.0)))?;
+            Ok(())
+        })
+    }
+
+    fn rollback_transaction(handle: u32, txn: u32) -> Result<(), types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = take_txn(txn)?;
+        with_catalog(catalog, |cat| {
+            cat.conn
+                .query("ROLLBACK")
+                .map_err(|e| types::Duckerror::Io(format!("ROLLBACK: {}", e.0)))?;
+            Ok(())
+        })
+    }
+
+    fn create_table(
+        handle: u32,
+        txn: u32,
+        table: String,
+        columns: Vec<types::Columndef>,
+    ) -> Result<(), types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = txn_catalog(txn)?;
+        let col_defs: std::vec::Vec<std::string::String> = columns
+            .iter()
+            .map(|c| format!("{} {}", backtick(&c.name), logical_to_mysql(&c.logical)))
+            .collect();
+        let sql = format!(
+            "CREATE TABLE {} ({})",
+            backtick(&table),
+            col_defs.join(", ")
+        );
+        with_catalog(catalog, |cat| {
+            cat.conn
+                .query(&sql)
+                .map_err(|e| types::Duckerror::Io(format!("CREATE TABLE: {}", e.0)))?;
+            Ok(())
+        })
+    }
+
+    fn insert_rows(
+        handle: u32,
+        txn: u32,
+        table: String,
+        rows: Vec<Vec<types::Duckvalue>>,
+    ) -> Result<u64, types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = txn_catalog(txn)?;
+        if rows.is_empty() {
+            return Ok(0);
+        }
+        with_catalog(catalog, |cat| {
+            let cols = fetch_columns(cat, &table)?.clone();
+            let n_underlying = cols.len();
+            let width = rows[0].len();
+            // Rows arrive at the extension's advertised width -- either the
+            // bare underlying columns or `[rowid, col1, col2, ...]` with the
+            // synthetic rowid at index 0 (Amendment A5). Strip the rowid when
+            // present: an INSERT lets MySQL mint any auto-increment PK; we do
+            // not carry the synthetic ordinal across the boundary.
+            let strip_rowid = width == n_underlying + 1;
+            if !strip_rowid && width != n_underlying {
+                return Err(types::Duckerror::Invalidargument(format!(
+                    "insert-rows into '{table}': expected {n_underlying} or \
+                     {} values per row, got {width}",
+                    n_underlying + 1
+                )));
+            }
+            let col_list: std::vec::Vec<std::string::String> =
+                cols.iter().map(|c| backtick(&c.name)).collect();
+            let mut inserted: u64 = 0;
+            for row in &rows {
+                let payload: &[types::Duckvalue] = if strip_rowid { &row[1..] } else { &row[..] };
+                let vals: std::vec::Vec<std::string::String> =
+                    payload.iter().map(literal).collect();
+                let sql = format!(
+                    "INSERT INTO {} ({}) VALUES ({})",
+                    backtick(&table),
+                    col_list.join(", "),
+                    vals.join(", ")
+                );
+                cat.conn
+                    .query(&sql)
+                    .map_err(|e| types::Duckerror::Io(format!("INSERT: {}", e.0)))?;
+                inserted += 1;
+            }
+            Ok(inserted)
+        })
+    }
+
+    fn delete_rows(
+        handle: u32,
+        txn: u32,
+        table: String,
+        rowids: Vec<i64>,
+    ) -> Result<u64, types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = txn_catalog(txn)?;
+        if rowids.is_empty() {
+            return Ok(0);
+        }
+        with_catalog(catalog, |cat| {
+            let mut deleted: u64 = 0;
+            for &rid in &rowids {
+                let bindings = cat
+                    .row_map
+                    .get(&(table.to_string(), rid))
+                    .cloned()
+                    .ok_or_else(|| {
+                        types::Duckerror::Internal(format!(
+                            "delete-rows for '{table}': rowid {rid} not in row_map \
+                             (scan must precede write; each attach caches its own map)"
+                        ))
+                    })?;
+                let where_sql = build_where_clause(&bindings);
+                let sql = format!(
+                    "DELETE FROM {} WHERE {} LIMIT 1",
+                    backtick(&table),
+                    where_sql
+                );
+                cat.conn
+                    .query(&sql)
+                    .map_err(|e| types::Duckerror::Io(format!("DELETE: {}", e.0)))?;
+                deleted += 1;
+            }
+            Ok(deleted)
+        })
+    }
+
+    fn update_rows(
+        handle: u32,
+        txn: u32,
+        table: String,
+        rowids: Vec<i64>,
+        rows: Vec<Vec<types::Duckvalue>>,
+    ) -> Result<u64, types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = txn_catalog(txn)?;
+        if rowids.len() != rows.len() {
+            return Err(types::Duckerror::Invalidargument(format!(
+                "update-rows for '{table}': {} rowids vs {} row payloads",
+                rowids.len(),
+                rows.len()
+            )));
+        }
+        if rowids.is_empty() {
+            return Ok(0);
+        }
+        with_catalog(catalog, |cat| {
+            let cols = fetch_columns(cat, &table)?.clone();
+            let n_underlying = cols.len();
+            let width = rows[0].len();
+            // Same width contract as insert-rows: rowid-prefixed or bare.
+            let strip_rowid = width == n_underlying + 1;
+            if !strip_rowid && width != n_underlying {
+                return Err(types::Duckerror::Invalidargument(format!(
+                    "update-rows for '{table}': expected {n_underlying} or \
+                     {} values per row, got {width}",
+                    n_underlying + 1
+                )));
+            }
+            let mut updated: u64 = 0;
+            for (rid, row) in rowids.iter().zip(rows.iter()) {
+                let bindings = cat
+                    .row_map
+                    .get(&(table.to_string(), *rid))
+                    .cloned()
+                    .ok_or_else(|| {
+                        types::Duckerror::Internal(format!(
+                            "update-rows for '{table}': rowid {rid} not in row_map \
+                             (scan must precede write; each attach caches its own map)"
+                        ))
+                    })?;
+                let where_sql = build_where_clause(&bindings);
+                let payload: &[types::Duckvalue] = if strip_rowid { &row[1..] } else { &row[..] };
+                let set_list: std::vec::Vec<std::string::String> = cols
+                    .iter()
+                    .zip(payload.iter())
+                    .map(|(c, v)| format!("{} = {}", backtick(&c.name), literal(v)))
+                    .collect();
+                let sql = format!(
+                    "UPDATE {} SET {} WHERE {} LIMIT 1",
+                    backtick(&table),
+                    set_list.join(", "),
+                    where_sql
+                );
+                cat.conn
+                    .query(&sql)
+                    .map_err(|e| types::Duckerror::Io(format!("UPDATE: {}", e.0)))?;
+                updated += 1;
+            }
+            Ok(updated)
+        })
+    }
+}
+
+/// Look up a live txn's catalog (leaves the map entry in place; the caller
+/// takes it via `take_txn` on commit/rollback).
+fn txn_catalog(txn: u32) -> Result<u32, types::Duckerror> {
+    TXNS.with(|t| {
+        t.borrow()
+            .get(&txn)
+            .copied()
+            .ok_or_else(|| types::Duckerror::Invalidstate(format!("unknown txn {txn}")))
+    })
+}
+
+fn take_txn(txn: u32) -> Result<u32, types::Duckerror> {
+    TXNS.with(|t| {
+        t.borrow_mut()
+            .remove(&txn)
+            .ok_or_else(|| types::Duckerror::Invalidstate(format!("unknown txn {txn}")))
+    })
+}
+
+/// Build an AND-joined WHERE clause from row_map bindings. NULL cells use
+/// `IS NULL`; every other cell renders via `literal(v)`.
+fn build_where_clause(
+    bindings: &[(std::string::String, types::Duckvalue)],
+) -> std::string::String {
+    bindings
+        .iter()
+        .map(|(col, val)| match val {
+            types::Duckvalue::Null => format!("{} IS NULL", backtick(col)),
+            _ => format!("{} = {}", backtick(col), literal(val)),
+        })
+        .collect::<std::vec::Vec<_>>()
+        .join(" AND ")
+}
+
+/// Map an extension logicaltype to a MySQL column type name for CREATE TABLE.
+fn logical_to_mysql(ty: &types::Logicaltype) -> &'static str {
+    match ty {
+        types::Logicaltype::Boolean => "TINYINT(1)",
+        types::Logicaltype::Int8 | types::Logicaltype::Uint8 => "TINYINT",
+        types::Logicaltype::Int16 | types::Logicaltype::Uint16 => "SMALLINT",
+        types::Logicaltype::Int32 | types::Logicaltype::Uint32 => "INT",
+        types::Logicaltype::Int64 | types::Logicaltype::Uint64 => "BIGINT",
+        types::Logicaltype::Float32 => "FLOAT",
+        types::Logicaltype::Float64 => "DOUBLE",
+        types::Logicaltype::Blob => "BLOB",
+        _ => "TEXT",
     }
 }
 
@@ -322,12 +641,21 @@ fn fetch_columns<'a>(
     Ok(cat.columns.get(table).unwrap())
 }
 
-/// Build + run the pushdown query, materializing rows mapped to logical types.
+/// Build + run the pushdown query, materializing rows mapped to logical types
+/// and populating the AT5 rowid map for any subsequent UPDATE / DELETE.
+///
+/// Unlike a "SELECT only the projected columns" implementation, this scan
+/// ALWAYS fetches every underlying column (`SELECT c1, c2, ..., cN FROM t`)
+/// regardless of `request.projection`. The extra cells are needed to seed
+/// `Catalog::row_map` so that a rowid dispatched back through the write
+/// path can be resolved to a WHERE clause. Emission still honors the
+/// projection -- only the requested cells leave the extension.
 fn run_scan(
     cat: &mut Catalog,
     request: &storage::ScanRequest,
 ) -> Result<std::vec::Vec<std::vec::Vec<types::Duckvalue>>, types::Duckerror> {
     let cols: std::vec::Vec<Column> = fetch_columns(cat, &request.table)?.clone();
+    let pk_indices: std::vec::Vec<usize> = fetch_pk_indices(cat, &request.table)?;
     // Host-side indices are 1-based into MySQL's columns: index 0 refers to
     // the synthetic `rowid` slot the extension advertises in
     // `storage_table_columns` (ADR Amendment A5). n_host_cols includes it.
@@ -348,20 +676,12 @@ fn run_scan(
         }
     }
 
-    // SELECT list: MySQL has no native selectable rowid, so the rowid column
-    // is materialized post-fetch as a running counter. On the SQL side we
-    // still need to emit *something* for the rowid slot when it is projected;
-    // pick a stable literal (NULL) that survives the wire codec, and overwrite
-    // it with the running counter when materializing the batch below.
-    let sql_col = |host_idx: usize| -> std::string::String {
-        if host_idx == 0 {
-            "NULL".to_string()
-        } else {
-            backtick(&cols[host_idx - 1].name)
-        }
-    };
+    // Always fetch every underlying column, in declared order, so `row_map`
+    // can bind the row-identifying values. The rowid slot itself is
+    // materialized post-fetch (a per-scan monotonic ordinal); MySQL has no
+    // sql-selectable rowid pseudo-column.
     let select_list: std::vec::Vec<std::string::String> =
-        proj.iter().map(|&i| sql_col(i)).collect();
+        cols.iter().map(|c| backtick(&c.name)).collect();
     let mut sql = format!(
         "SELECT {} FROM {}",
         select_list.join(", "),
@@ -370,9 +690,9 @@ fn run_scan(
 
     // WHERE: AND-join the filters, binding values inline (numbers raw, strings
     // single-quoted with '' escaping). Filters on the synthetic rowid column
-    // (index 0) are unsupported at v1 -- the extension has no stable
-    // sql-visible rowid to compare against; the host re-applies filters on
-    // the read side anyway, so declining pushdown is safe.
+    // (index 0) are declined at the SQL layer -- the ordinal is minted
+    // post-fetch and has no server-side counterpart. The host re-applies
+    // filters above the scan, so declining pushdown for rowid is safe.
     let mut conds: std::vec::Vec<std::string::String> = std::vec::Vec::new();
     for fltr in &request.filters {
         let idx = fltr.column as usize;
@@ -419,22 +739,97 @@ fn run_scan(
 
     let mut out: std::vec::Vec<std::vec::Vec<types::Duckvalue>> =
         std::vec::Vec::with_capacity(rs.rows.len());
-    let mut row_counter: i64 = 0;
+    let table_key = request.table.to_string();
     for row in &rs.rows {
-        row_counter += 1;
-        let mut emit: std::vec::Vec<types::Duckvalue> = std::vec::Vec::with_capacity(proj.len());
-        for (slot, &host_idx) in proj.iter().enumerate() {
-            if host_idx == 0 {
-                emit.push(types::Duckvalue::Int64(row_counter));
+        // Materialize every underlying column, in declared order, so the
+        // rowid map can index into a stable per-row vector.
+        let materialized: std::vec::Vec<types::Duckvalue> = cols
+            .iter()
+            .enumerate()
+            .map(|(i, c)| text_to_duck(row.get(i).and_then(|v| v.as_ref()), c.ty))
+            .collect();
+
+        // Mint the next per-(catalog, table) rowid.
+        let rid = {
+            let ctr = cat
+                .next_rowid
+                .entry(table_key.clone())
+                .or_insert(0);
+            *ctr += 1;
+            *ctr
+        };
+
+        // Populate the rowid map: PK cols when the table has a PK (compact
+        // WHERE), otherwise the full column set (fallback WHERE with LIMIT 1
+        // in the write dispatch).
+        let bindings: std::vec::Vec<(std::string::String, types::Duckvalue)> =
+            if !pk_indices.is_empty() {
+                pk_indices
+                    .iter()
+                    .map(|&i| (cols[i].name.clone(), materialized[i].clone()))
+                    .collect()
             } else {
-                let ci = host_idx - 1;
-                let cell = row.get(slot).and_then(|c| c.as_ref());
-                emit.push(text_to_duck(cell, cols[ci].ty));
+                cols.iter()
+                    .enumerate()
+                    .map(|(i, c)| (c.name.clone(), materialized[i].clone()))
+                    .collect()
+            };
+        cat.row_map.insert((table_key.clone(), rid), bindings);
+
+        // Emit only the projected cells.
+        let mut emit: std::vec::Vec<types::Duckvalue> = std::vec::Vec::with_capacity(proj.len());
+        for &host_idx in &proj {
+            if host_idx == 0 {
+                emit.push(types::Duckvalue::Int64(rid));
+            } else {
+                emit.push(materialized[host_idx - 1].clone());
             }
         }
         out.push(emit);
     }
     Ok(out)
+}
+
+/// Fetch the ordered PRIMARY KEY column indices for `table` (indices into the
+/// list returned by `fetch_columns`). Empty vec = no PK. Cached per-catalog.
+///
+/// Uses `SHOW KEYS FROM t WHERE Key_name = 'PRIMARY'`, which is universal
+/// across MySQL 5.x/8.x and MariaDB. `Column_name` lives at index 4 of the
+/// result set (0-based); `Seq_in_index` at index 3.
+fn fetch_pk_indices(
+    cat: &mut Catalog,
+    table: &str,
+) -> Result<std::vec::Vec<usize>, types::Duckerror> {
+    if !cat.pk_cols.contains_key(table) {
+        let cols = fetch_columns(cat, table)?.clone();
+        let sql = format!(
+            "SHOW KEYS FROM {} WHERE Key_name = 'PRIMARY'",
+            backtick(table)
+        );
+        let rs = cat
+            .conn
+            .query(&sql)
+            .map_err(|e| types::Duckerror::Io(format!("SHOW KEYS: {}", e.0)))?;
+        // Sort by Seq_in_index (parsed as an int; skip on parse failure).
+        let mut pk_names: std::vec::Vec<(u32, std::string::String)> = std::vec::Vec::new();
+        for row in &rs.rows {
+            let seq = row
+                .get(3)
+                .and_then(|c| c.as_ref())
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(0);
+            if let Some(Some(name)) = row.get(4) {
+                pk_names.push((seq, name.clone()));
+            }
+        }
+        pk_names.sort_by_key(|(s, _)| *s);
+        let pk_indices: std::vec::Vec<usize> = pk_names
+            .into_iter()
+            .filter_map(|(_, name)| cols.iter().position(|c| c.name == name))
+            .collect();
+        cat.pk_cols.insert(table.to_string(), pk_indices);
+    }
+    Ok(cat.pk_cols.get(table).unwrap().clone())
 }
 
 // ---------------------------------------------------------------------------
