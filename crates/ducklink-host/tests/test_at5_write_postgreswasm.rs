@@ -105,7 +105,7 @@ fn drop_table(bin: &Path, root: &Path, dsn: &str, table: &str) {
             &format!(
                 "LOAD postgreswasm; \
                  ATTACH '{dsn}' AS pg (TYPE postgreswasm); \
-                 DROP TABLE IF EXISTS pg.\"{table}\";"
+                 DROP TABLE IF EXISTS pg.{table};"
             ),
         ],
     );
@@ -131,7 +131,7 @@ fn insert_into_attached_dispatches_to_storage_write() {
             &format!(
                 "LOAD postgreswasm; \
                  ATTACH '{dsn}' AS pg (TYPE postgreswasm); \
-                 CREATE TABLE pg.\"{table}\" (id INTEGER, name TEXT);"
+                 CREATE TABLE pg.{table} (id INTEGER, name TEXT);"
             ),
         ],
     );
@@ -145,7 +145,7 @@ fn insert_into_attached_dispatches_to_storage_write() {
             &format!(
                 "LOAD postgreswasm; \
                  ATTACH '{dsn}' AS pg (TYPE postgreswasm); \
-                 INSERT INTO pg.\"{table}\" (id, name) VALUES (100, 'new');"
+                 INSERT INTO pg.{table} (id, name) VALUES (100, 'new');"
             ),
         ],
     );
@@ -165,7 +165,7 @@ fn insert_into_attached_dispatches_to_storage_write() {
             &format!(
                 "LOAD postgreswasm; \
                  ATTACH '{dsn}' AS pg (TYPE postgreswasm); \
-                 SELECT id, name FROM pg.\"{table}\" WHERE id = 100;"
+                 SELECT id, name FROM pg.{table} WHERE id = 100;"
             ),
         ],
     );
@@ -195,8 +195,8 @@ fn update_attached_via_where_dispatches_after_rowid_prescan() {
             &format!(
                 "LOAD postgreswasm; \
                  ATTACH '{dsn}' AS pg (TYPE postgreswasm); \
-                 CREATE TABLE pg.\"{table}\" (id INTEGER, name TEXT); \
-                 INSERT INTO pg.\"{table}\" (id, name) VALUES (100, 'new');"
+                 CREATE TABLE pg.{table} (id INTEGER, name TEXT); \
+                 INSERT INTO pg.{table} (id, name) VALUES (100, 'new');"
             ),
         ],
     );
@@ -214,7 +214,7 @@ fn update_attached_via_where_dispatches_after_rowid_prescan() {
             &format!(
                 "LOAD postgreswasm; \
                  ATTACH '{dsn}' AS pg (TYPE postgreswasm); \
-                 UPDATE pg.\"{table}\" SET name = 'updated' WHERE id = 100;"
+                 UPDATE pg.{table} SET name = 'updated' WHERE id = 100;"
             ),
         ],
     );
@@ -231,7 +231,7 @@ fn update_attached_via_where_dispatches_after_rowid_prescan() {
             &format!(
                 "LOAD postgreswasm; \
                  ATTACH '{dsn}' AS pg (TYPE postgreswasm); \
-                 SELECT name FROM pg.\"{table}\" WHERE id = 100;"
+                 SELECT name FROM pg.{table} WHERE id = 100;"
             ),
         ],
     );
@@ -261,8 +261,8 @@ fn delete_attached_via_where_dispatches_after_rowid_prescan() {
             &format!(
                 "LOAD postgreswasm; \
                  ATTACH '{dsn}' AS pg (TYPE postgreswasm); \
-                 CREATE TABLE pg.\"{table}\" (id INTEGER, name TEXT); \
-                 INSERT INTO pg.\"{table}\" (id, name) VALUES (100, 'new');"
+                 CREATE TABLE pg.{table} (id INTEGER, name TEXT); \
+                 INSERT INTO pg.{table} (id, name) VALUES (100, 'new');"
             ),
         ],
     );
@@ -280,7 +280,7 @@ fn delete_attached_via_where_dispatches_after_rowid_prescan() {
             &format!(
                 "LOAD postgreswasm; \
                  ATTACH '{dsn}' AS pg (TYPE postgreswasm); \
-                 DELETE FROM pg.\"{table}\" WHERE id = 100;"
+                 DELETE FROM pg.{table} WHERE id = 100;"
             ),
         ],
     );
@@ -297,7 +297,7 @@ fn delete_attached_via_where_dispatches_after_rowid_prescan() {
             &format!(
                 "LOAD postgreswasm; \
                  ATTACH '{dsn}' AS pg (TYPE postgreswasm); \
-                 SELECT COUNT(*) FROM pg.\"{table}\" WHERE id = 100;"
+                 SELECT COUNT(*) FROM pg.{table} WHERE id = 100;"
             ),
         ],
     );
