@@ -45,4 +45,19 @@ interface storage-write-dispatch {
                     table: string,
                     rowids: list<s64>,
                     rows: list<list<duckvalue>>) -> result<u64, duckerror>;
+
+  /// Declare whether the host should skip its default full-DB serialize +
+  /// fs write-back after each mutation on this backend. An extension whose
+  /// backend runs in a wasm sandbox with no filesystem access (e.g.
+  /// sqlitewasm's in-memory sqlite) has NO native persistence and needs
+  /// SOMETHING to durable-write. Returning `true` here signals "the host is
+  /// authoritative for durability -- open a NATIVE, file-backed connection
+  /// to the ATTACH DSN and replay each write against it after the extension
+  /// dispatch succeeds", which turns the write-back path from O(N) per
+  /// write (full serialize + full rewrite; Bug 4 quadratic footgun) into
+  /// O(diff). Returning `false` (the default for backends that persist
+  /// natively -- e.g. a real remote MySQL / Postgres connection) keeps the
+  /// legacy serialize + fs write-back path (also a silent no-op for those
+  /// backends since serialize returns Unsupported).
+  writes-persist-directly: func(handle: u32) -> result<bool, duckerror>;
 }
