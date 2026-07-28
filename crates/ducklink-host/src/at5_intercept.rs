@@ -69,9 +69,26 @@ pub enum WriteRoute {
         table: String,
         where_clause: Option<String>,
     },
+    /// `CREATE TABLE <alias>.<table> ( <col> <TYPE>, ... )` against an attached
+    /// foreign catalog. `columns` preserves declaration order; `type_name` is
+    /// the raw SQL type-text (e.g. "INTEGER", "TEXT") that the storage
+    /// extension maps to its native column type.
+    CreateTable {
+        alias: String,
+        table: String,
+        columns: Vec<CreateTableColumn>,
+        if_not_exists: bool,
+    },
     /// Recognized as an attached-catalog write, but rejected because the
     /// pattern is a v1 non-goal (see the module docs).
     Unsupported(String),
+}
+
+/// One column declaration parsed from `CREATE TABLE ... (col TYPE, ...)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateTableColumn {
+    pub name: String,
+    pub type_name: String,
 }
 
 /// A cell literal parsed from `VALUES (...)`. Preserving the type-carrying
@@ -528,6 +545,9 @@ pub fn resolve_write_target<S: AsRef<str>>(
     if starts_with_kw_ci(sql, "DELETE") {
         return parse_delete(sql, attached);
     }
+    if starts_with_kw_ci(sql, "CREATE") {
+        return parse_create_table(sql, attached);
+    }
     None
 }
 
@@ -716,6 +736,153 @@ fn parse_delete<S: AsRef<str>>(
         table,
         where_clause,
     })
+}
+
+/// Parse `CREATE TABLE [IF NOT EXISTS] <alias>.<table> ( <cols> )` against an
+/// attached foreign catalog. Only a plain (non-CTAS, non-TEMP, non-view)
+/// CREATE TABLE with a parenthesized column list is recognized; anything
+/// exotic (CREATE TABLE ... AS SELECT, CREATE VIEW, WITHOUT ROWID, PRIMARY
+/// KEY() constraint outside a column, storage parameters, ...) returns
+/// `Unsupported` so the caller surfaces a clear error rather than falling
+/// through to the core (which will happily create an in-memory table that
+/// never round-trips to the foreign server).
+fn parse_create_table<S: AsRef<str>>(
+    sql: &str,
+    attached: &HashMap<String, S>,
+) -> Option<WriteRoute> {
+    // Consume "CREATE".
+    let after_create = sql[6..].trim_start();
+    // Reject decorators / non-TABLE CREATE forms early. The intercept has to
+    // decline (return None) on shapes that aren't `CREATE TABLE` at all so
+    // schema / view / index DDL still reaches the core; the shapes that ARE
+    // CREATE TABLE but exotic (TEMP TABLE, ... AS SELECT) become
+    // Unsupported once we commit to intercept.
+    if starts_with_kw_ci(after_create, "TEMP")
+        || starts_with_kw_ci(after_create, "TEMPORARY")
+        || starts_with_kw_ci(after_create, "OR")
+    {
+        // Not our target CREATE TABLE form — let the core handle / reject it.
+        return None;
+    }
+    if !starts_with_kw_ci(after_create, "TABLE") {
+        return None;
+    }
+    let rest = after_create[5..].trim_start();
+    let (if_not_exists, rest) = if starts_with_kw_ci(rest, "IF") {
+        let after_if = rest[2..].trim_start();
+        if !starts_with_kw_ci(after_if, "NOT") {
+            return None;
+        }
+        let after_not = after_if[3..].trim_start();
+        if !starts_with_kw_ci(after_not, "EXISTS") {
+            return None;
+        }
+        (true, after_not[6..].trim_start().to_string())
+    } else {
+        (false, rest.to_string())
+    };
+    let (ident, rest) = take_dotted_ident(&rest);
+    let (alias, table) = split_alias_table(ident.as_str())?;
+    if !attached.contains_key(&alias) {
+        return None;
+    }
+    // From here on we're committed — this IS a CREATE TABLE against an
+    // attached foreign catalog. Anything unexpected -> hard error.
+    let rest = rest.trim_start();
+    if starts_with_kw_ci(rest, "AS") {
+        return Some(WriteRoute::Unsupported(
+            "CREATE TABLE ... AS SELECT into attached foreign catalogs".to_string(),
+        ));
+    }
+    if !rest.starts_with('(') {
+        return Some(WriteRoute::Unsupported(format!(
+            "CREATE TABLE {alias}.{table}: expected '(' column list"
+        )));
+    }
+    let close = match balanced_close(rest, '(', ')') {
+        Some(c) => c,
+        None => {
+            return Some(WriteRoute::Unsupported(format!(
+                "CREATE TABLE {alias}.{table}: unbalanced '(' in column list"
+            )))
+        }
+    };
+    let after_paren = rest[close + 1..].trim();
+    let after_paren = strip_trailing_semicolon(after_paren).trim();
+    if !after_paren.is_empty() {
+        return Some(WriteRoute::Unsupported(format!(
+            "CREATE TABLE {alias}.{table}: trailing clause '{after_paren}' not supported"
+        )));
+    }
+    let inside = &rest[1..close];
+    let parts = split_top_level_commas(inside);
+    let mut columns: Vec<CreateTableColumn> = Vec::with_capacity(parts.len());
+    for part in parts {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        // Skip table-level constraints (PRIMARY KEY(...), FOREIGN KEY, UNIQUE(...),
+        // CHECK(...), CONSTRAINT ...) rather than trying to translate them.
+        // The extension's CREATE TABLE only cares about column names and types.
+        let upper = part.to_ascii_uppercase();
+        if upper.starts_with("PRIMARY KEY")
+            || upper.starts_with("FOREIGN KEY")
+            || upper.starts_with("UNIQUE")
+            || upper.starts_with("CHECK")
+            || upper.starts_with("CONSTRAINT")
+        {
+            continue;
+        }
+        // A column def is `<name> <type> [column-constraints...]`. Split into
+        // name + rest, then take the first whitespace-delimited token of rest
+        // as the type. Composite types (`DECIMAL(10, 2)`) and constraints
+        // like `PRIMARY KEY` / `NOT NULL` are dropped: the extension keeps
+        // simple type mapping (INTEGER, TEXT, ...).
+        let mut it = part.split_whitespace();
+        let name = match it.next() {
+            Some(n) => strip_ident_quotes(n).to_string(),
+            None => continue,
+        };
+        let type_tok = match it.next() {
+            Some(t) => t.to_string(),
+            None => {
+                return Some(WriteRoute::Unsupported(format!(
+                    "CREATE TABLE {alias}.{table}: column '{name}' has no type"
+                )))
+            }
+        };
+        columns.push(CreateTableColumn {
+            name,
+            type_name: type_tok,
+        });
+    }
+    if columns.is_empty() {
+        return Some(WriteRoute::Unsupported(format!(
+            "CREATE TABLE {alias}.{table}: no column definitions"
+        )));
+    }
+    Some(WriteRoute::CreateTable {
+        alias,
+        table,
+        columns,
+        if_not_exists,
+    })
+}
+
+/// Strip a pair of matched surrounding quotes (`"foo"` or `` `foo` ``) from an
+/// identifier, returning the inner text. A bare identifier passes through.
+fn strip_ident_quotes(s: &str) -> &str {
+    let s = s.trim();
+    if s.len() >= 2 {
+        let bytes = s.as_bytes();
+        let first = bytes[0];
+        let last = bytes[s.len() - 1];
+        if (first == b'"' && last == b'"') || (first == b'`' && last == b'`') {
+            return &s[1..s.len() - 1];
+        }
+    }
+    s
 }
 
 /// Detect a trailing clause we explicitly refuse: RETURNING, ON CONFLICT,

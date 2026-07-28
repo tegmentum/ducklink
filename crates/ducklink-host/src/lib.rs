@@ -2627,6 +2627,29 @@ impl ExtensionManager {
     }
 
     /// Amendment A5 counterpart to `dispatch_storage_insert_direct`. Wraps a
+    /// single `create-table` dispatch in an auto-BEGIN/COMMIT so the write
+    /// intercept doesn't manage transaction lifecycles itself. Rolls back on
+    /// failure. Used exclusively by `HostState::intercept_write`.
+    pub fn dispatch_storage_create_table_direct(
+        &mut self,
+        catalog: u32,
+        table: &str,
+        columns: &[extension_types::Columndef],
+    ) -> Result<(), extension_types::Duckerror> {
+        let txn = self.dispatch_storage_begin_transaction(catalog)?;
+        match self.dispatch_storage_create_table(txn, table, columns) {
+            Ok(()) => {
+                self.dispatch_storage_commit_transaction(txn)?;
+                Ok(())
+            }
+            Err(err) => {
+                let _ = self.dispatch_storage_rollback_transaction(txn);
+                Err(err)
+            }
+        }
+    }
+
+    /// Amendment A5 counterpart to `dispatch_storage_insert_direct`. Wraps a
     /// single `delete-rows` dispatch in an auto-BEGIN/COMMIT. Rolls back on
     /// failure.
     pub fn dispatch_storage_delete_direct(
@@ -5293,6 +5316,69 @@ impl HostState {
                 self.at5_write_back(&alias, catalog_handle)?;
                 Ok(empty_query_result())
             }
+            WriteRoute::CreateTable {
+                alias,
+                table,
+                columns,
+                if_not_exists,
+            } => {
+                let catalog = self.attached_aliases.get(&alias).ok_or_else(|| {
+                    cli_types::Duckerror::Internal(
+                        format!("alias {alias} disappeared before dispatch").into(),
+                    )
+                })?;
+                let catalog_handle = catalog.catalog_handle;
+                // Convert the parsed (name, type_name-string) pairs into the
+                // extension's Columndef shape. The extension is responsible
+                // for mapping its own logical types back to native column
+                // types on the wire (see e.g. postgreswasm's
+                // `logical_to_postgres`).
+                let ext_columns: Vec<extension_types::Columndef> = columns
+                    .iter()
+                    .map(|c| extension_types::Columndef {
+                        name: c.name.clone(),
+                        logical: parse_sql_type_to_logical(&c.type_name),
+                    })
+                    .collect();
+                let dispatch = {
+                    let mut manager = self
+                        .extension_manager
+                        .lock()
+                        .expect("extension manager mutex poisoned");
+                    manager.dispatch_storage_create_table_direct(
+                        catalog_handle,
+                        &table,
+                        &ext_columns,
+                    )
+                };
+                match dispatch {
+                    Ok(()) => {
+                        eprintln!(
+                            "[at5-write] CREATE TABLE {alias}.{table}: dispatched to \
+                             storage-write-dispatch ({} cols)",
+                            ext_columns.len()
+                        );
+                    }
+                    Err(err) => {
+                        // With IF NOT EXISTS, tolerate a duplicate-table
+                        // error (each backend spells it differently — match
+                        // on message text). Anything else propagates.
+                        if if_not_exists {
+                            let msg = extension_duckerror_message(&err).to_ascii_lowercase();
+                            if msg.contains("already exists") || msg.contains("duplicate") {
+                                eprintln!(
+                                    "[at5-write] CREATE TABLE IF NOT EXISTS {alias}.{table}: \
+                                     table already present; skipping"
+                                );
+                                return Ok(empty_query_result());
+                            }
+                        }
+                        return Err(cli_extension_duckerror(err));
+                    }
+                }
+                self.at5_write_back(&alias, catalog_handle)?;
+                Ok(empty_query_result())
+            }
         }
     }
 
@@ -5800,6 +5886,58 @@ fn cli_extension_duckerror(err: extension_types::Duckerror) -> cli_types::Ducker
         extension_types::Duckerror::Invalidstate(m) => cli_types::Duckerror::Invalidstate(m.into()),
         extension_types::Duckerror::Io(m) => cli_types::Duckerror::Io(m.into()),
         extension_types::Duckerror::Internal(m) => cli_types::Duckerror::Internal(m.into()),
+    }
+}
+
+/// Extract the human-readable text out of an extension `Duckerror`. Used by
+/// the write intercept's `CREATE TABLE IF NOT EXISTS` arm to detect the
+/// backend-specific "table already exists" wording without cracking every
+/// variant open individually.
+fn extension_duckerror_message(err: &extension_types::Duckerror) -> &str {
+    match err {
+        extension_types::Duckerror::Invalidargument(m)
+        | extension_types::Duckerror::Unsupported(m)
+        | extension_types::Duckerror::Invalidstate(m)
+        | extension_types::Duckerror::Io(m)
+        | extension_types::Duckerror::Internal(m) => m.as_str(),
+    }
+}
+
+/// Map a raw SQL type token from a `CREATE TABLE alias.table (col TYPE, ...)`
+/// intercept into an extension `Logicaltype`. Only the common SQL type spellings
+/// used by the AT5 test suite (INTEGER / BIGINT / SMALLINT / TEXT / VARCHAR /
+/// BOOL / REAL / DOUBLE / BYTEA / BLOB) are mapped here — everything else is
+/// forwarded as `Complex` so an extension that supports it can decide.
+/// Case-insensitive; strips a trailing width/scale specifier
+/// (`VARCHAR(255)` -> `VARCHAR`) before matching.
+fn parse_sql_type_to_logical(ty: &str) -> extension_types::Logicaltype {
+    let mut t = ty.trim();
+    if let Some(paren) = t.find('(') {
+        t = t[..paren].trim();
+    }
+    let up = t.to_ascii_uppercase();
+    match up.as_str() {
+        "INT" | "INTEGER" | "INT4" => extension_types::Logicaltype::Int32,
+        "BIGINT" | "INT8" => extension_types::Logicaltype::Int64,
+        "SMALLINT" | "INT2" => extension_types::Logicaltype::Int16,
+        "TINYINT" => extension_types::Logicaltype::Int8,
+        "UBIGINT" => extension_types::Logicaltype::Uint64,
+        "UINTEGER" => extension_types::Logicaltype::Uint32,
+        "USMALLINT" => extension_types::Logicaltype::Uint16,
+        "UTINYINT" => extension_types::Logicaltype::Uint8,
+        "REAL" | "FLOAT4" => extension_types::Logicaltype::Float32,
+        "DOUBLE" | "FLOAT" | "FLOAT8" | "DOUBLE PRECISION" => {
+            extension_types::Logicaltype::Float64
+        }
+        "BOOL" | "BOOLEAN" => extension_types::Logicaltype::Boolean,
+        "TEXT" | "STRING" | "VARCHAR" | "CHAR" => extension_types::Logicaltype::Text,
+        "BLOB" | "BYTEA" | "BYTES" => extension_types::Logicaltype::Blob,
+        "DATE" => extension_types::Logicaltype::Date,
+        "TIME" => extension_types::Logicaltype::Time,
+        "TIMESTAMP" | "DATETIME" => extension_types::Logicaltype::Timestamp,
+        "TIMESTAMPTZ" => extension_types::Logicaltype::Timestamptz,
+        "UUID" => extension_types::Logicaltype::Uuid,
+        _ => extension_types::Logicaltype::Complex(t.to_string()),
     }
 }
 
