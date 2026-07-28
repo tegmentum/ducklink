@@ -164,13 +164,34 @@ For each of the four in-tree storage extensions we own:
 ### postgreswasm-component
 
 - **Native concept:** Postgres exposes `ctid` (block + offset), a
-  `tid` scalar. Not an `int8` — casting to text yields `(0,1)` and to
-  int8 is illegal. Could parse it out but that couples the extension
-  to Postgres's on-disk representation, which is not portable across
-  heap vs. compressed vs. columnar table AMs.
+  `tid` scalar. Not an `int8` — casting to text yields `(0,1)` and
+  direct-to-int8 is illegal. We parse it out on the scan side and pack
+  `(block:u32, offset:u16)` into an i64 as
+  `((block as u64) << 16) | (offset as u64)` (48 bits total, always
+  positive). The write side reverses the packing and formats
+  `WHERE ctid = '(block,offset)'::tid`.
 - **table-columns:** prepend synthetic `rowid: Int64` at index 0.
-- **scan:** row-position in the materialized batch, same as mysqlwasm.
-- **write path:** deferred (no E2E tests).
+- **scan:** SELECT `ctid` alongside projected columns; parse
+  `(block,offset)` and pack to i64 into the rowid slot. A `NULL` in
+  the slot (non-heap AM whose ctid we can't parse) short-circuits the
+  host's pre-scan with a clear "not a valid rowid" error.
+- **write path:** UPDATE/DELETE dispatch via
+  `storage-write-dispatch.{update-rows,delete-rows}`. Each unpacks
+  the s64 back to `(block,offset)` and issues
+  `UPDATE t SET ... WHERE ctid = '(b,o)'::tid` /
+  `DELETE FROM t WHERE ctid = '(b,o)'::tid`. INSERT lets Postgres
+  mint the ctid (rowid slot in the payload is stripped). Serialize
+  returns `Unsupported`: the mutation already round-tripped over the
+  wire, no file blob to write back.
+- **Caveats:** ctid is a **physical** row identifier — VACUUM FULL,
+  CLUSTER, and any concurrent UPDATE that rewrites the row invalidate
+  old ctids. Within one host-driven statement (prescan -> dispatch ->
+  commit) this is fine; between statements a concurrent
+  VACUUM FULL / CLUSTER can invalidate the packed rowid. The packing
+  assumes block < 2^32 and offset < 2^16, which matches Postgres's
+  on-disk representation for the default heap AM. Custom access
+  methods that mint synthetic ctids outside those ranges or hide
+  ctid entirely would need a different mechanism.
 
 ### unityscan-component
 
