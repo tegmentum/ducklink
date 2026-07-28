@@ -2367,6 +2367,24 @@ impl ExtensionManager {
         instance.storage_serialize(handle, catalog)
     }
 
+    /// Bug 4 fix: probe the extension's `writes_persist_directly` capability.
+    /// Returns Ok(true) for a backend that opts into host-side incremental
+    /// write-through (e.g. sqlitewasm -- the host owns a native file-backed
+    /// rusqlite connection to the DSN and replays writes there, bypassing the
+    /// quadratic full-DB serialize + rewrite path). Returns Ok(false) or an
+    /// Unsupported/Internal error for backends that either persist natively
+    /// or predate the probe -- the caller falls back to the legacy
+    /// serialize + write-back path in both cases.
+    pub fn dispatch_storage_writes_persist_directly(
+        &mut self,
+    ) -> Result<bool, extension_types::Duckerror> {
+        let (ext, handle) = self.resolve_storage_backend()?;
+        let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
+            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+        })?;
+        instance.storage_writes_persist_directly(handle)
+    }
+
     // --- Phase 2c (@5): AT5 attach-scan callback registry ---
 
     /// Allocate a fresh AT5 attach-scan callback handle (inside the reserved
@@ -4032,7 +4050,7 @@ pub struct HostState {
 
 /// Metadata the ATTACH intercept records for an `<alias>` bound to a storage
 /// extension. See `HostState::attached_aliases`.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct AttachedForeignCatalog {
     pub extension: String,
     pub catalog_handle: u32,
@@ -4057,6 +4075,18 @@ pub(crate) struct AttachedForeignCatalog {
     /// only. The write-intercept still rejects mutations at parse-time; this
     /// belt-and-braces guard covers any future codepath that bypasses that.
     pub read_only: bool,
+    /// Bug 4 incremental write-back: when the extension advertises
+    /// `writes_persist_directly = true` at ATTACH AND the DSN resolves to a
+    /// local file, the host opens a NATIVE, file-backed rusqlite connection
+    /// to that path and replays each dispatched INSERT/UPDATE/DELETE against
+    /// it (`at5_replay_*` in `intercept_write`). The `at5_write_back` path
+    /// then SKIPS the O(N) full-serialize + rewrite (which is what made
+    /// N writes quadratic in the pre-Bug-4 shape). `None` means the
+    /// extension either doesn't opt in, isn't a writable backend, or the
+    /// dsn wasn't a file -- write-back falls back to the legacy path.
+    /// `Arc<Mutex<...>>` so `AttachedForeignCatalog` stays `Clone` (the
+    /// aliases map is cloned on every mutation-batch handoff).
+    pub file_conn: Option<Arc<Mutex<rusqlite::Connection>>>,
 }
 
 /// Phase 2c (@5): routing target for a single AT5 attach-scan callback
@@ -4961,6 +4991,58 @@ impl HostState {
             .map(|s| (s.name.clone(), s.callback))
             .collect();
         let dsn_path = resolve_attach_dsn_path(&spec.dsn);
+
+        // Bug 4 incremental write-back opt-in: probe the extension for
+        // `writes_persist_directly`. Extensions (e.g. sqlitewasm) that live
+        // in the wasm sandbox and have no fs access return Ok(true); the
+        // host opens a NATIVE file-backed rusqlite connection to the DSN
+        // and replays each dispatched write there, skipping the quadratic
+        // serialize + full-file rewrite in `at5_write_back`. Everything
+        // else (Ok(false), Unsupported / Internal / non-writable backend,
+        // read-only attach, non-file DSN) falls through to the legacy
+        // path. Probe is best-effort: errors just mean "not opting in".
+        let opt_in_direct_persist = if spec.read_only {
+            false
+        } else {
+            let mut manager = self
+                .extension_manager
+                .lock()
+                .expect("extension manager mutex poisoned");
+            matches!(
+                manager.dispatch_storage_writes_persist_directly(),
+                Ok(true)
+            )
+        };
+        let file_conn = if opt_in_direct_persist {
+            match dsn_path.as_ref() {
+                Some(p) => match rusqlite::Connection::open(p) {
+                    Ok(c) => {
+                        eprintln!(
+                            "[at5-writeback] {}: opened native file-backed rusqlite \
+                             connection for incremental replay ({})",
+                            spec.alias,
+                            p.display()
+                        );
+                        Some(Arc::new(Mutex::new(c)))
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[at5-writeback] {}: failed to open file-backed rusqlite \
+                             connection at {} ({}); falling back to full-serialize \
+                             write-back",
+                            spec.alias,
+                            p.display(),
+                            e
+                        );
+                        None
+                    }
+                },
+                None => None,
+            }
+        } else {
+            None
+        };
+
         self.attached_aliases.insert(
             spec.alias.clone(),
             AttachedForeignCatalog {
@@ -4972,6 +5054,7 @@ impl HostState {
                 table_callbacks,
                 dsn_path,
                 read_only: spec.read_only,
+                file_conn,
             },
         );
         Ok(empty_query_result())
@@ -5054,6 +5137,16 @@ impl HostState {
                     "[at5-write] INSERT {alias}.{table}: {n} row(s) dispatched to \
                      storage-write-dispatch"
                 );
+                // Bug 4 fast path: replay against the host-owned file-backed
+                // rusqlite connection when the extension opted into direct
+                // persistence at ATTACH time. When the fast path fires,
+                // `at5_write_back` sees `file_conn` and skips the O(N)
+                // serialize + rewrite.
+                if let Some(conn) = self.at5_file_conn(&alias) {
+                    let (_ch, cols) = self.at5_lookup_write_target(&alias, &table)?;
+                    let guard = conn.lock().expect("file_conn mutex poisoned");
+                    Self::at5_replay_insert(&guard, &table, &cols, &ext_rows)?;
+                }
                 self.at5_write_back(&alias, catalog_handle)?;
                 Ok(empty_query_result())
             }
@@ -5146,6 +5239,19 @@ impl HostState {
                     "[at5-write] UPDATE {alias}.{table}: {n} row(s) dispatched to \
                      storage-write-dispatch (rowids={rowids:?})"
                 );
+                // Bug 4 fast path: replay against the host-owned file-backed
+                // rusqlite connection when opted in. `columns` already carries
+                // the extension's advertised shape (rowid + underlying cols).
+                if let Some(conn) = self.at5_file_conn(&alias) {
+                    let guard = conn.lock().expect("file_conn mutex poisoned");
+                    Self::at5_replay_update(
+                        &guard,
+                        &table,
+                        &columns,
+                        &rowids,
+                        &updated_rows,
+                    )?;
+                }
                 self.at5_write_back(&alias, catalog_handle)?;
                 Ok(empty_query_result())
             }
@@ -5178,6 +5284,12 @@ impl HostState {
                     "[at5-write] DELETE {alias}.{table}: {n} row(s) dispatched to \
                      storage-write-dispatch (rowids={rowids:?})"
                 );
+                // Bug 4 fast path: replay against the host-owned file-backed
+                // rusqlite connection when opted in.
+                if let Some(conn) = self.at5_file_conn(&alias) {
+                    let guard = conn.lock().expect("file_conn mutex poisoned");
+                    Self::at5_replay_delete(&guard, &table, &rowids)?;
+                }
                 self.at5_write_back(&alias, catalog_handle)?;
                 Ok(empty_query_result())
             }
@@ -5208,11 +5320,20 @@ impl HostState {
         alias: &str,
         catalog_handle: u32,
     ) -> Result<(), cli_types::Duckerror> {
-        let (dsn_path, read_only) = match self.attached_aliases.get(alias) {
-            Some(c) => (c.dsn_path.clone(), c.read_only),
+        let (dsn_path, read_only, has_file_conn) = match self.attached_aliases.get(alias) {
+            Some(c) => (c.dsn_path.clone(), c.read_only, c.file_conn.is_some()),
             None => return Ok(()),
         };
         if read_only {
+            return Ok(());
+        }
+        // Bug 4 fast path: the extension advertised writes_persist_directly at
+        // ATTACH time and the host opened a NATIVE file-backed rusqlite
+        // connection (see intercept_attach). Each dispatched INSERT/UPDATE/
+        // DELETE was already replayed against that connection in
+        // intercept_write, so the DSN file is already up to date -- SKIP the
+        // O(N) full-serialize + rewrite entirely.
+        if has_file_conn {
             return Ok(());
         }
         let Some(dsn_path) = dsn_path else {
@@ -5250,6 +5371,177 @@ impl HostState {
             bytes.len(),
             dsn_path.display()
         );
+        Ok(())
+    }
+
+    /// Bug 4 fast path: fetch the file-backed rusqlite Connection the host
+    /// opened at ATTACH time for aliases whose extension opted into
+    /// `writes_persist_directly` (see `intercept_attach`). Returns `None`
+    /// when no such connection is present (alias vanished, read-only, non-
+    /// file DSN, backend didn't opt in) -- callers fall through to the
+    /// legacy full-serialize write-back path in `at5_write_back`.
+    fn at5_file_conn(&self, alias: &str) -> Option<Arc<Mutex<rusqlite::Connection>>> {
+        self.attached_aliases
+            .get(alias)
+            .and_then(|c| c.file_conn.as_ref().map(Arc::clone))
+    }
+
+    /// Bug 4 helpers: replay a dispatched INSERT/UPDATE/DELETE against the
+    /// native file-backed rusqlite connection held on the AttachedForeignCatalog.
+    /// Each helper mirrors the SQL the sqlitewasm-component would run on its
+    /// in-memory copy: INSERT with a stripped-rowid payload, UPDATE by rowid
+    /// with all non-rowid columns, DELETE by rowid. Kept as small, obvious
+    /// SQL builders because the type-adapter (duck_to_sqlite) does the heavy
+    /// lifting; every failure surfaces as an Io error so the caller can `?`.
+    fn at5_replay_insert(
+        conn: &rusqlite::Connection,
+        table: &str,
+        columns: &[extension_types::Columndef],
+        rows: &[Vec<extension_types::Duckvalue>],
+    ) -> Result<(), cli_types::Duckerror> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+        // The extension advertises [rowid, col1, col2, ...] per Amendment A5,
+        // so `columns` includes the synthetic rowid at index 0 -- strip it for
+        // the INSERT (let sqlite mint the rowid). If the caller passed an
+        // N-cols-wide payload matching the underlying schema, pass through.
+        let has_synthetic_rowid = columns
+            .first()
+            .map(|c| c.name.eq_ignore_ascii_case("rowid"))
+            .unwrap_or(false);
+        let underlying: Vec<&extension_types::Columndef> = if has_synthetic_rowid {
+            columns.iter().skip(1).collect()
+        } else {
+            columns.iter().collect()
+        };
+        let n_underlying = underlying.len();
+        let col_list = underlying
+            .iter()
+            .map(|c| sqlite_quote_ident(&c.name))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let placeholders = std::iter::repeat("?")
+            .take(n_underlying)
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "INSERT INTO {} ({}) VALUES ({})",
+            sqlite_quote_ident(table),
+            col_list,
+            placeholders
+        );
+        let mut stmt = conn.prepare_cached(&sql).map_err(sqlite_err_io)?;
+        for row in rows {
+            let payload = if has_synthetic_rowid && row.len() == n_underlying + 1 {
+                &row[1..]
+            } else if row.len() == n_underlying {
+                &row[..]
+            } else {
+                return Err(cli_types::Duckerror::Invalidargument(
+                    format!(
+                        "at5-writeback INSERT replay {table}: got {} cells for {} \
+                         underlying columns (rowid-stripped)",
+                        row.len(),
+                        n_underlying
+                    )
+                    .into(),
+                ));
+            };
+            for (i, v) in payload.iter().enumerate() {
+                let val = duck_to_sqlite_value(v);
+                stmt.raw_bind_parameter(i + 1, val).map_err(sqlite_err_io)?;
+            }
+            stmt.raw_execute().map_err(sqlite_err_io)?;
+        }
+        Ok(())
+    }
+
+    fn at5_replay_update(
+        conn: &rusqlite::Connection,
+        table: &str,
+        columns: &[extension_types::Columndef],
+        rowids: &[i64],
+        rows: &[Vec<extension_types::Duckvalue>],
+    ) -> Result<(), cli_types::Duckerror> {
+        if rowids.is_empty() {
+            return Ok(());
+        }
+        if rowids.len() != rows.len() {
+            return Err(cli_types::Duckerror::Invalidargument(
+                format!(
+                    "at5-writeback UPDATE replay {table}: {} rowids vs {} row payloads",
+                    rowids.len(),
+                    rows.len()
+                )
+                .into(),
+            ));
+        }
+        let has_synthetic_rowid = columns
+            .first()
+            .map(|c| c.name.eq_ignore_ascii_case("rowid"))
+            .unwrap_or(false);
+        let underlying: Vec<&extension_types::Columndef> = if has_synthetic_rowid {
+            columns.iter().skip(1).collect()
+        } else {
+            columns.iter().collect()
+        };
+        let n_underlying = underlying.len();
+        let set_list = underlying
+            .iter()
+            .map(|c| format!("{} = ?", sqlite_quote_ident(&c.name)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "UPDATE {} SET {} WHERE rowid = ?",
+            sqlite_quote_ident(table),
+            set_list
+        );
+        let mut stmt = conn.prepare_cached(&sql).map_err(sqlite_err_io)?;
+        for (rid, row) in rowids.iter().zip(rows.iter()) {
+            let payload = if has_synthetic_rowid && row.len() == n_underlying + 1 {
+                &row[1..]
+            } else if row.len() == n_underlying {
+                &row[..]
+            } else {
+                return Err(cli_types::Duckerror::Invalidargument(
+                    format!(
+                        "at5-writeback UPDATE replay {table}: got {} cells for {} \
+                         underlying columns",
+                        row.len(),
+                        n_underlying
+                    )
+                    .into(),
+                ));
+            };
+            for (i, v) in payload.iter().enumerate() {
+                let val = duck_to_sqlite_value(v);
+                stmt.raw_bind_parameter(i + 1, val).map_err(sqlite_err_io)?;
+            }
+            stmt.raw_bind_parameter(payload.len() + 1, *rid)
+                .map_err(sqlite_err_io)?;
+            stmt.raw_execute().map_err(sqlite_err_io)?;
+        }
+        Ok(())
+    }
+
+    fn at5_replay_delete(
+        conn: &rusqlite::Connection,
+        table: &str,
+        rowids: &[i64],
+    ) -> Result<(), cli_types::Duckerror> {
+        if rowids.is_empty() {
+            return Ok(());
+        }
+        let sql = format!(
+            "DELETE FROM {} WHERE rowid = ?",
+            sqlite_quote_ident(table)
+        );
+        let mut stmt = conn.prepare_cached(&sql).map_err(sqlite_err_io)?;
+        for rid in rowids {
+            stmt.raw_bind_parameter(1, *rid).map_err(sqlite_err_io)?;
+            stmt.raw_execute().map_err(sqlite_err_io)?;
+        }
         Ok(())
     }
 
@@ -5361,6 +5653,61 @@ fn empty_query_result() -> cli_db::QueryResult {
 /// (`at5_intercept::is_bare_ident`), so this is a pure concat.
 fn at5_synth_fn_name(alias: &str, table: &str) -> String {
     format!("__{alias}_{table}")
+}
+
+/// Bug 4 fast-path helpers. `sqlite_quote_ident` mirrors the sqlitewasm
+/// extension's own quoter (double-quotes with embedded `"` doubled) so the
+/// replay path emits IDENTICAL SQL identifiers. `sqlite_err_io` wraps a
+/// rusqlite error into a CLI Duckerror::Io so the write path can `?`.
+/// `duck_to_sqlite_value` converts an extension `Duckvalue` into a
+/// `rusqlite::types::Value` -- the same mapping the sqlitewasm extension
+/// applies inside the wasm sandbox, so round-tripped writes match the
+/// extension's in-memory copy on every column type.
+fn sqlite_quote_ident(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
+}
+
+fn sqlite_err_io(e: rusqlite::Error) -> cli_types::Duckerror {
+    cli_types::Duckerror::Io(format!("sqlite (at5 writeback replay): {e}").into())
+}
+
+fn duck_to_sqlite_value(v: &extension_types::Duckvalue) -> rusqlite::types::Value {
+    use extension_types::Duckvalue as D;
+    use rusqlite::types::Value;
+    match v {
+        D::Null => Value::Null,
+        D::Boolean(b) => Value::Integer(if *b { 1 } else { 0 }),
+        D::Int64(i) => Value::Integer(*i),
+        D::Uint64(u) => Value::Integer(*u as i64),
+        D::Float64(f) => Value::Real(*f),
+        D::Text(s) => Value::Text(s.clone().into()),
+        D::Blob(b) => Value::Blob(b.clone().into()),
+        D::Int8(i) => Value::Integer(*i as i64),
+        D::Int16(i) => Value::Integer(*i as i64),
+        D::Int32(i) => Value::Integer(*i as i64),
+        D::Uint8(u) => Value::Integer(*u as i64),
+        D::Uint16(u) => Value::Integer(*u as i64),
+        D::Uint32(u) => Value::Integer(*u as i64),
+        D::Float32(f) => Value::Real(*f as f64),
+        D::Date(d) => Value::Integer(*d as i64),
+        D::Time(t) => Value::Integer(*t),
+        D::Timestamp(t) => Value::Integer(*t),
+        D::Timestamptz(t) => Value::Integer(*t),
+        D::Decimal(d) => {
+            Value::Integer((((d.upper as u128) << 64) | d.lower as u128) as i64)
+        }
+        D::Interval(iv) => Value::Integer(iv.micros),
+        D::Uuid(u) => Value::Text(format!("{:016x}{:016x}", u.hi, u.lo)),
+        D::Hugeint(h) => {
+            let v = ((h.upper as i128) << 64) | (h.lower as i128);
+            Value::Text(v.to_string())
+        }
+        D::Uhugeint(u) => {
+            let v = ((u.upper as u128) << 64) | (u.lower as u128);
+            Value::Text(v.to_string())
+        }
+        D::Complex(c) => Value::Text(c.json.clone().into()),
+    }
 }
 
 /// AT5 write-back path resolver. Turns the raw ATTACH DSN into a local file
