@@ -352,6 +352,20 @@ impl storage_write_dispatch::Guest for Extension {
         })
     }
 
+    /// Bug 4 write-back probe (see storage-write-dispatch.wit).
+    ///
+    /// MySQL persists every INSERT / UPDATE / DELETE over the wire at dispatch
+    /// time -- the server IS the store of record. There is no in-wasm database
+    /// image the host could serialize back to a file, so return `false` and let
+    /// the host's default (serialize + fs write-back) skip via the `serialize`
+    /// stub's `Unsupported` return. Returning `true` here would (incorrectly)
+    /// invite the host to open a "native, file-backed connection to the DSN",
+    /// which is meaningless for a remote server URL.
+    fn writes_persist_directly(handle: u32) -> Result<bool, types::Duckerror> {
+        check_handle(handle)?;
+        Ok(false)
+    }
+
     fn create_table(
         handle: u32,
         txn: u32,
