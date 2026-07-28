@@ -834,7 +834,36 @@ fn main() -> Result<()> {
         // DuckDB's wasm home is "/"; pre-create cwd/.duckdb/extension_data (the
         // fs shim resolves "/X" relative to the cwd preopen).
         std::fs::create_dir_all(cwd.join(".duckdb/extension_data")).ok();
-        let preopens: Vec<(&Path, &str)> = vec![(cwd.as_path(), ".")];
+        // If --db is an absolute path, its parent directory won't be reachable
+        // through the cwd preopen (the fs shim would resolve /a/b/x under
+        // cwd/a/b/x, which is the wrong file). Preopen the parent with the
+        // guest name equal to that same absolute path — the technique
+        // `cache_env_preopens()` uses so `<abs>/objects` etc. resolve verbatim
+        // through a matching preopen. Papercut noted in
+        // docs/mosaic-phase0-findings.md.
+        let db_abs_preopen: Option<(PathBuf, String)> = match db.as_deref() {
+            Some(p) if !p.is_empty() && p != ":memory:" => {
+                let dp = PathBuf::from(p);
+                if dp.is_absolute() {
+                    let parent = dp.parent().unwrap_or(Path::new("/")).to_path_buf();
+                    if let Err(e) = std::fs::create_dir_all(&parent) {
+                        anyhow::bail!(
+                            "ducklink serve: cannot preopen parent dir for --db {}: {e}",
+                            dp.display()
+                        );
+                    }
+                    let guest = parent.to_string_lossy().into_owned();
+                    Some((parent, guest))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+        let mut preopens: Vec<(&Path, &str)> = vec![(cwd.as_path(), ".")];
+        if let Some((ref parent, ref guest)) = db_abs_preopen {
+            preopens.push((parent.as_path(), guest.as_str()));
+        }
         // Build the request-handler registry from --load NAME=PATH (kind='wasm'
         // routes dispatch to these). --env KEY[=VAL] forwards env into handlers.
         let handlers = if loads.is_empty() {
