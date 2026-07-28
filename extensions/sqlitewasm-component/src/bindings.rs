@@ -21195,6 +21195,170 @@ pub mod exports {
                         }
                     }
                 }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_writes_persist_directly_cabi<T: Guest>(
+                    arg0: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::writes_persist_directly(arg0 as u32);
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result0 {
+                        Ok(e) => {
+                            *ptr1.add(0).cast::<u8>() = (0i32) as u8;
+                            *ptr1
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (match e {
+                                true => 1,
+                                false => 0,
+                            }) as u8;
+                        }
+                        Err(e) => {
+                            *ptr1.add(0).cast::<u8>() = (1i32) as u8;
+                            use super::super::super::super::duckdb::extension::types::Duckerror as V7;
+                            match e {
+                                V7::Invalidargument(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                    let vec2 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                                    let len2 = vec2.len();
+                                    ::core::mem::forget(vec2);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len2;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr2.cast_mut();
+                                }
+                                V7::Unsupported(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec3 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                                    let len3 = vec3.len();
+                                    ::core::mem::forget(vec3);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len3;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr3.cast_mut();
+                                }
+                                V7::Invalidstate(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (2i32) as u8;
+                                    let vec4 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                                    let len4 = vec4.len();
+                                    ::core::mem::forget(vec4);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len4;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr4.cast_mut();
+                                }
+                                V7::Io(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (3i32) as u8;
+                                    let vec5 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr5 = vec5.as_ptr().cast::<u8>();
+                                    let len5 = vec5.len();
+                                    ::core::mem::forget(vec5);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len5;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr5.cast_mut();
+                                }
+                                V7::Internal(e) => {
+                                    *ptr1
+                                        .add(::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (4i32) as u8;
+                                    let vec6 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr6 = vec6.as_ptr().cast::<u8>();
+                                    let len6 = vec6.len();
+                                    ::core::mem::forget(vec6);
+                                    *ptr1
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len6;
+                                    *ptr1
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr6.cast_mut();
+                                }
+                            }
+                        }
+                    };
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_writes_persist_directly<T: Guest>(
+                    arg0: *mut u8,
+                ) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = i32::from(
+                                *arg0.add(::core::mem::size_of::<*const u8>()).cast::<u8>(),
+                            );
+                            match l1 {
+                                0 => {
+                                    let l2 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                1 => {
+                                    let l4 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l5 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l4, l5, 1);
+                                }
+                                2 => {
+                                    let l6 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l7 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l6, l7, 1);
+                                }
+                                3 => {
+                                    let l8 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l9 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l8, l9, 1);
+                                }
+                                _ => {
+                                    let l10 = *arg0
+                                        .add(2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l11 = *arg0
+                                        .add(3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l10, l11, 1);
+                                }
+                            }
+                        }
+                    }
+                }
                 pub trait Guest {
                     /// Begin a transaction on `catalog`; returns a transaction handle.
                     fn begin_transaction(
@@ -21239,6 +21403,20 @@ pub mod exports {
                         rowids: _rt::Vec<i64>,
                         rows: _rt::Vec<_rt::Vec<Duckvalue>>,
                     ) -> Result<u64, Duckerror>;
+                    /// Declare whether the host should skip its default full-DB serialize +
+                    /// fs write-back after each mutation on this backend. An extension whose
+                    /// backend runs in a wasm sandbox with no filesystem access (e.g.
+                    /// sqlitewasm's in-memory sqlite) has NO native persistence and needs
+                    /// SOMETHING to durable-write. Returning `true` here signals "the host is
+                    /// authoritative for durability -- open a NATIVE, file-backed connection
+                    /// to the ATTACH DSN and replay each write against it after the extension
+                    /// dispatch succeeds", which turns the write-back path from O(N) per
+                    /// write (full serialize + full rewrite; Bug 4 quadratic footgun) into
+                    /// O(diff). Returning `false` (the default for backends that persist
+                    /// natively -- e.g. a real remote MySQL / Postgres connection) keeps the
+                    /// legacy serialize + fs write-back path (also a silent no-op for those
+                    /// backends since serialize returns Unsupported).
+                    fn writes_persist_directly(handle: u32) -> Result<bool, Duckerror>;
                 }
                 #[doc(hidden)]
                 macro_rules! __export_duckdb_extension_storage_write_dispatch_5_0_0_cabi {
@@ -21314,7 +21492,16 @@ pub mod exports {
                         "cabi_post_duckdb:extension/storage-write-dispatch@5.0.0#update-rows")]
                         unsafe extern "C" fn _post_return_update_rows(arg0 : * mut u8,) {
                         unsafe { $($path_to_types)*:: __post_return_update_rows::<$ty >
-                        (arg0) } } };
+                        (arg0) } } #[unsafe (export_name =
+                        "duckdb:extension/storage-write-dispatch@5.0.0#writes-persist-directly")]
+                        unsafe extern "C" fn export_writes_persist_directly(arg0 : i32,)
+                        -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_writes_persist_directly_cabi::<$ty > (arg0) } } #[unsafe
+                        (export_name =
+                        "cabi_post_duckdb:extension/storage-write-dispatch@5.0.0#writes-persist-directly")]
+                        unsafe extern "C" fn _post_return_writes_persist_directly(arg0 :
+                        * mut u8,) { unsafe { $($path_to_types)*::
+                        __post_return_writes_persist_directly::<$ty > (arg0) } } };
                     };
                 }
                 #[doc(hidden)]
@@ -21613,8 +21800,8 @@ pub(crate) use __export_duckdb_extension_storage_write_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 7696] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xfb:\x01A\x02\x01A*\x01\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 7743] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xaa;\x01A\x02\x01A*\x01\
 B4\x01r\x02\x05width}\x05scale}\x04\0\x0cdecimalshape\x03\0\0\x01q\x17\x07boolea\
 n\0\0\x05int64\0\0\x06uint64\0\0\x07float64\0\0\x04text\0\0\x04blob\0\0\x05int32\
 \0\0\x09timestamp\0\0\x04int8\0\0\x05int16\0\0\x05uint8\0\0\x06uint16\0\0\x06uin\
@@ -21773,7 +21960,7 @@ scany\x08max-rowsy\0\x16\x04\0\x11storage-scan-next\x01\x17\x01j\x01\x7f\x01\x01
 \x01@\x02\x06handley\x04scany\0\x18\x04\0\x12storage-scan-close\x01\x19\x01@\x02\
 \x06handley\x07catalogy\0\x18\x04\0\x0estorage-detach\x01\x1a\x01j\x01\x0c\x01\x01\
 \x01@\x02\x06handley\x07catalogy\0\x1b\x04\0\x09serialize\x01\x1c\x04\0'duckdb:e\
-xtension/storage-dispatch@5.0.0\x05\x1c\x01B\x1a\x02\x03\x02\x01\x02\x04\0\x09du\
+xtension/storage-dispatch@5.0.0\x05\x1c\x01B\x1d\x02\x03\x02\x01\x02\x04\0\x09du\
 ckerror\x03\0\0\x02\x03\x02\x01\x03\x04\0\x09duckvalue\x03\0\x02\x02\x03\x02\x01\
 \x0b\x04\0\x09columndef\x03\0\x04\x01j\x01y\x01\x01\x01@\x02\x06handley\x07catal\
 ogy\0\x06\x04\0\x11begin-transaction\x01\x07\x01j\0\x01\x01\x01@\x02\x06handley\x03\
@@ -21783,10 +21970,11 @@ create-table\x01\x0b\x01p\x03\x01p\x0c\x01j\x01w\x01\x01\x01@\x04\x06handley\x03
 txny\x05tables\x04rows\x0d\0\x0e\x04\0\x0binsert-rows\x01\x0f\x01px\x01@\x04\x06\
 handley\x03txny\x05tables\x06rowids\x10\0\x0e\x04\0\x0bdelete-rows\x01\x11\x01@\x05\
 \x06handley\x03txny\x05tables\x06rowids\x10\x04rows\x0d\0\x0e\x04\0\x0bupdate-ro\
-ws\x01\x12\x04\0-duckdb:extension/storage-write-dispatch@5.0.0\x05\x1d\x04\05duc\
-kdb:extension/duckdb-extension-storage-write@5.0.0\x04\0\x0b$\x01\0\x1educkdb-ex\
-tension-storage-write\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-com\
-ponent\x070.227.1\x10wit-bindgen-rust\x060.41.0";
+ws\x01\x12\x01j\x01\x7f\x01\x01\x01@\x01\x06handley\0\x13\x04\0\x17writes-persis\
+t-directly\x01\x14\x04\0-duckdb:extension/storage-write-dispatch@5.0.0\x05\x1d\x04\
+\05duckdb:extension/duckdb-extension-storage-write@5.0.0\x04\0\x0b$\x01\0\x1educ\
+kdb-extension-storage-write\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dw\
+it-component\x070.227.1\x10wit-bindgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

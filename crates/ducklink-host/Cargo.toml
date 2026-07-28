@@ -64,6 +64,17 @@ dirs = "5"
 #     (datalink-prefix was retired here in commit a048b7a — workspace now
 #     adopts the extension v5.0.0 prefix.name model via ducklink_prefix.)
 datalink-policy = { git = "https://github.com/tegmentum/datalink.git", rev = "80010adf7c9ec3d07674bba12585c787328217f5" }
+# Bug 4 incremental write-back for sqlitewasm-typed attaches: the extension
+# lives in the wasm sandbox with no fs access, so the OLD write-back path was
+# `sqlite3_serialize` the WHOLE db and rewrite the DSN file after every INSERT/
+# UPDATE/DELETE -- O(N) per write, quadratic across N writes. The host now
+# opens a NATIVE, file-backed rusqlite connection at ATTACH time (when the
+# extension advertises `writes_persist_directly = true`) and replays each write
+# there directly -- O(diff) per write. `bundled` compiles sqlite3 in-tree so
+# no system libsqlite3 is required. The AT5 write tests (dev-dep below) already
+# use rusqlite to reopen the DSN file; this is the same crate, promoted to a
+# main dep so the host code can depend on it.
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 [dev-dependencies]
 tempfile = "3"
@@ -73,12 +84,6 @@ arrow-array = { version = "53", default-features = false }
 # a hand-rolled minimal wasm module (via wat) is enough to prove/refute the
 # memo's claim that wasmtime rejects re-entering a store from a host callback.
 wat = "1"
-# Phase 2d (ADR Amendment A5) e2e tests: the AT5 write tests stage a native
-# SQLite file, drive UPDATE/DELETE through ducklink -> sqlitewasm-component,
-# then reopen the file with a native sqlite3 client to assert durability.
-# `bundled` compiles sqlite3 statically so the test doesn't need a system
-# libsqlite3 on the CI runner.
-rusqlite = { version = "0.32", features = ["bundled"] }
 
 [[bin]]
 name = "ducklink"

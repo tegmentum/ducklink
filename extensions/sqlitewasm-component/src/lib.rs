@@ -580,6 +580,20 @@ impl storage_write_dispatch::Guest for Extension {
         })
     }
 
+    /// Bug 4 fix: sqlite lives in the wasm sandbox with no filesystem, so
+    /// SQLite-native durability is impossible here. The old write-back path
+    /// forced the host to `sqlite3_serialize` the whole database + rewrite
+    /// the ATTACH DSN file after every INSERT/UPDATE/DELETE -- O(N) per
+    /// write, quadratic across N writes. Returning `true` here opts into
+    /// the O(diff) host-side replay path: the host opens a NATIVE
+    /// (non-wasm) rusqlite connection to the DSN file at ATTACH time and
+    /// replays each dispatched write against it, skipping the full
+    /// serialize + rewrite entirely.
+    fn writes_persist_directly(handle: u32) -> Result<bool, types::Duckerror> {
+        check_handle(handle)?;
+        Ok(true)
+    }
+
     fn update_rows(
         handle: u32,
         txn: u32,

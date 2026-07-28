@@ -3624,6 +3624,30 @@ impl ExtensionInstance {
             .map_err(map_extension_trap)?
     }
 
+    /// Bug 4 fix: probe whether this backend expects the host to write
+    /// through to the DSN file DIRECTLY (via a native file-backed
+    /// connection) rather than round-tripping through
+    /// `storage_serialize` + a full-file rewrite after each mutation. An
+    /// extension whose backend runs in the wasm sandbox with no filesystem
+    /// (e.g. sqlitewasm) returns `Ok(true)`; the host opens its own
+    /// native file-backed connection at ATTACH time and replays each
+    /// write there. Backends that persist natively (or that don't export
+    /// storage-write-dispatch at all) return `Ok(false)` / an error;
+    /// callers should treat those the same and keep the legacy
+    /// serialize + write-back path.
+    pub fn storage_writes_persist_directly(
+        &mut self,
+        handle: u32,
+    ) -> Result<bool, extension_types::Duckerror> {
+        self.storage_write_bindings()?;
+        let bindings = self.storage_write_bindings.as_ref().unwrap();
+        let guest = bindings.duckdb_extension_storage_write_dispatch();
+        let store = &mut self.store;
+        guest
+            .call_writes_persist_directly(store.as_context_mut(), handle)
+            .map_err(map_extension_trap)?
+    }
+
     // --- 2.2.0 (Item 6): table-stream-dispatch re-entry ---
     // Drives a registered streaming/pushdown table function's exported
     // `table-stream-dispatch`. Types are remapped to base `extension_types` /
