@@ -11,6 +11,33 @@
 //!
 //! Network access requires the host's network grant (DUCKLINK_NETWORK_GRANT).
 //! Nothing panics across the FFI boundary -- every failure maps to a duckerror.
+//!
+//! ## rowid semantics: Postgres native `ctid`
+//!
+//! Amendment A5 requires every storage-dispatch extension that wants
+//! UPDATE/DELETE support to advertise an integer `rowid` column that the
+//! host's write pre-scan can extract and later hand back to
+//! `storage-write-dispatch.update-rows` / `.delete-rows`. Postgres does not
+//! have an integer rowid pseudo-column, but every heap-tuple has a **`ctid`**
+//! (a `(block, offset)` tuple identifier) that IS unique within the table.
+//! We pack it into an i64 as `((block as u64) << 16) | (offset as u64)`
+//! (block fits in u32; offset fits in u16 — 48 bits total, comfortably in
+//! positive i64 range).
+//!
+//! ### Caveats
+//!
+//! - `ctid` is a **physical** row identifier. VACUUM FULL, CLUSTER, and any
+//!   `UPDATE` that rewrites the row invalidate old ctids. Within a single
+//!   SQL statement (host does prescan -> immediate dispatch -> commit) this
+//!   is fine; between statements a concurrent VACUUM FULL / CLUSTER can
+//!   invalidate the packed rowid.
+//! - The packing assumes block < 2^32 and offset < 2^16, which matches
+//!   Postgres's on-disk representation (BlockNumber = uint32,
+//!   OffsetNumber = uint16). Non-heap access methods that mint synthetic
+//!   ctids outside those ranges would need a different mechanism.
+//! - Custom access methods (e.g. columnar / compressed) that do not expose
+//!   ctid at all will error out on `SELECT ctid`. This backend is designed
+//!   for the default heap AM.
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -20,10 +47,12 @@ use wit_bindgen::rt::vec::Vec;
 mod postgres;
 use postgres::{ColType, Column, PgConn};
 
-wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension-storage" });
+wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension-storage-write" });
 
 use duckdb::extension::{storage, types};
-use exports::duckdb::extension::{callback_dispatch, guest, storage_dispatch};
+use exports::duckdb::extension::{
+    callback_dispatch, guest, storage_dispatch, storage_write_dispatch,
+};
 
 /// Opaque callback handle the host passes back to every storage-dispatch call.
 const STORAGE_HANDLE: u32 = 1;
@@ -108,6 +137,13 @@ thread_local! {
     static SCANS: RefCell<HashMap<u32, Cursor>> = RefCell::new(HashMap::new());
     static NEXT_CATALOG: RefCell<u32> = const { RefCell::new(1) };
     static NEXT_SCAN: RefCell<u32> = const { RefCell::new(1) };
+    /// Open write-transactions keyed by txn-id. Each entry stores the
+    /// catalog-id the transaction was begun on, so the write-side calls
+    /// (insert/update/delete/create-table) can find the right PgConn
+    /// under the CATALOGS map without the host having to hand
+    /// the catalog back on every call.
+    static TXNS: RefCell<HashMap<u32, u32>> = RefCell::new(HashMap::new());
+    static NEXT_TXN: RefCell<u32> = const { RefCell::new(1) };
 }
 
 impl storage_dispatch::Guest for Extension {
@@ -186,11 +222,10 @@ impl storage_dispatch::Guest for Extension {
         with_catalog(catalog, |cat| {
             let cols = fetch_columns(cat, &table)?;
             // ADR Amendment A5: prepend a synthetic `rowid` (Int64) column at
-            // index 0. Postgres has `ctid` (a text-formatted tid, not an
-            // int8), so the scan emits a 1-based row-number as the rowid
-            // value. Stable within one scan; satisfies the READ path. Write
-            // path is not enabled for postgreswasm at v1 (see
-            // docs/at5-rowid-mechanism.md).
+            // index 0 so the host's `at5_locate_rowid_column` finds it and
+            // the write-path pre-scan can extract the packed ctid value from
+            // the emitted rows (see docs/at5-rowid-mechanism.md). The value
+            // in that slot is `((ctid.block as u64) << 16) | ctid.offset`.
             let mut out: Vec<types::Columndef> = Vec::with_capacity(cols.len() + 1);
             out.push(types::Columndef {
                 name: "rowid".into(),
@@ -234,7 +269,17 @@ impl storage_dispatch::Guest for Extension {
             let cur = s
                 .get_mut(&scan)
                 .ok_or_else(|| types::Duckerror::Invalidstate("unknown scan".into()))?;
-            let end = (cur.pos + max_rows as usize).min(cur.rows.len());
+            // wasm32: `usize` is 32-bit, so `cur.pos + max_rows` (with e.g.
+            // `max_rows = u32::MAX`, which the host uses to mean "drain
+            // everything") wraps. Mirror sqlitewasm's saturating_add + explicit
+            // EOF short-circuit so the drain loop terminates cleanly.
+            if cur.pos >= cur.rows.len() {
+                return Ok(std::vec::Vec::<std::vec::Vec<types::Duckvalue>>::new().into());
+            }
+            let end = cur
+                .pos
+                .saturating_add(max_rows as usize)
+                .min(cur.rows.len());
             let batch: std::vec::Vec<std::vec::Vec<types::Duckvalue>> =
                 cur.rows[cur.pos..end].to_vec();
             cur.pos = end;
@@ -256,13 +301,273 @@ impl storage_dispatch::Guest for Extension {
     }
 
     /// AT5 write-back stub: Postgres is a live network connection, not a
-    /// serializable blob. Return Unsupported so the host's write-back path
-    /// silently proceeds (mutations already round-tripped over the wire).
+    /// serializable blob. The host's `at5_write_back` treats
+    /// `Duckerror::Unsupported` as "backend already round-tripped the
+    /// mutation over the wire; skip the fs write" -- exactly the semantics
+    /// we want here.
     fn serialize(handle: u32, _catalog: u32) -> Result<Vec<u8>, types::Duckerror> {
         check_handle(handle)?;
         Err(types::Duckerror::Unsupported(
-            "serialize not applicable to this backend".into(),
+            "postgreswasm: mutations persist over the wire; no blob to serialize"
+                .into(),
         ))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// storage-write-dispatch: transactions + DDL + DML (ADR Amendment A5)
+// ---------------------------------------------------------------------------
+
+impl storage_write_dispatch::Guest for Extension {
+    fn begin_transaction(handle: u32, catalog: u32) -> Result<u32, types::Duckerror> {
+        check_handle(handle)?;
+        with_catalog(catalog, |cat| {
+            cat.conn
+                .query("BEGIN")
+                .map(|_| ())
+                .map_err(|e| types::Duckerror::Io(format!("BEGIN: {}", e.0)))
+        })?;
+        let id = NEXT_TXN.with(|n| {
+            let mut n = n.borrow_mut();
+            let id = *n;
+            *n += 1;
+            id
+        });
+        TXNS.with(|t| t.borrow_mut().insert(id, catalog));
+        Ok(id)
+    }
+
+    fn commit_transaction(handle: u32, txn: u32) -> Result<(), types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = take_txn(txn)?;
+        with_catalog(catalog, |cat| {
+            cat.conn
+                .query("COMMIT")
+                .map(|_| ())
+                .map_err(|e| types::Duckerror::Io(format!("COMMIT: {}", e.0)))
+        })
+    }
+
+    fn rollback_transaction(handle: u32, txn: u32) -> Result<(), types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = take_txn(txn)?;
+        with_catalog(catalog, |cat| {
+            cat.conn
+                .query("ROLLBACK")
+                .map(|_| ())
+                .map_err(|e| types::Duckerror::Io(format!("ROLLBACK: {}", e.0)))
+        })
+    }
+
+    fn create_table(
+        handle: u32,
+        txn: u32,
+        table: String,
+        columns: Vec<types::Columndef>,
+    ) -> Result<(), types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = txn_catalog(txn)?;
+        // Skip the leading synthetic `rowid` slot if it was echoed back:
+        // Postgres mints its own tuple ctids; we do not persist a duck rowid.
+        let mut col_slice: &[types::Columndef] = &columns;
+        if let Some(first) = columns.first() {
+            if first.name.eq_ignore_ascii_case("rowid") {
+                col_slice = &columns[1..];
+            }
+        }
+        let col_defs: std::vec::Vec<std::string::String> = col_slice
+            .iter()
+            .map(|c| format!("{} {}", quote_ident(&c.name), logical_to_postgres(&c.logical)))
+            .collect();
+        let sql = format!(
+            "CREATE TABLE {} ({})",
+            quote_ident(&table),
+            col_defs.join(", ")
+        );
+        with_catalog(catalog, |cat| {
+            cat.conn
+                .query(&sql)
+                .map(|_| ())
+                .map_err(|e| types::Duckerror::Io(format!("CREATE TABLE: {}", e.0)))
+        })
+    }
+
+    fn insert_rows(
+        handle: u32,
+        txn: u32,
+        table: String,
+        rows: Vec<Vec<types::Duckvalue>>,
+    ) -> Result<u64, types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = txn_catalog(txn)?;
+        if rows.is_empty() {
+            return Ok(0);
+        }
+        // Rows arrive at the extension's advertised width (rowid + underlying
+        // cols) per ADR Amendment A5. Strip the leading rowid slot: an
+        // INSERT lets Postgres mint the ctid itself.
+        let underlying_cols = with_catalog(catalog, |cat| Ok(fetch_columns(cat, &table)?.clone()))?;
+        let n_underlying = underlying_cols.len();
+        let width = rows[0].len();
+        let strip_rowid = width == n_underlying + 1;
+        if !strip_rowid && width != n_underlying {
+            return Err(types::Duckerror::Invalidargument(format!(
+                "insert-rows into '{table}': expected {n_underlying} or \
+                 {} values per row, got {width}",
+                n_underlying + 1
+            )));
+        }
+        let col_list: std::vec::Vec<std::string::String> = underlying_cols
+            .iter()
+            .map(|c| quote_ident(&c.name))
+            .collect();
+        with_catalog(catalog, |cat| {
+            let mut inserted: u64 = 0;
+            for row in &rows {
+                let payload: &[types::Duckvalue] = if strip_rowid {
+                    &row[1..]
+                } else {
+                    &row[..]
+                };
+                let vals: std::vec::Vec<std::string::String> =
+                    payload.iter().map(literal).collect();
+                let sql = format!(
+                    "INSERT INTO {} ({}) VALUES ({})",
+                    quote_ident(&table),
+                    col_list.join(", "),
+                    vals.join(", "),
+                );
+                cat.conn
+                    .query(&sql)
+                    .map_err(|e| types::Duckerror::Io(format!("INSERT: {}", e.0)))?;
+                inserted += 1;
+            }
+            Ok(inserted)
+        })
+    }
+
+    fn delete_rows(
+        handle: u32,
+        txn: u32,
+        table: String,
+        rowids: Vec<i64>,
+    ) -> Result<u64, types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = txn_catalog(txn)?;
+        if rowids.is_empty() {
+            return Ok(0);
+        }
+        with_catalog(catalog, |cat| {
+            let mut deleted: u64 = 0;
+            for rid in &rowids {
+                let (block, off) = unpack_ctid(*rid);
+                let sql = format!(
+                    "DELETE FROM {} WHERE ctid = '({block},{off})'::tid",
+                    quote_ident(&table),
+                );
+                cat.conn
+                    .query(&sql)
+                    .map_err(|e| types::Duckerror::Io(format!("DELETE: {}", e.0)))?;
+                deleted += 1;
+            }
+            Ok(deleted)
+        })
+    }
+
+    fn update_rows(
+        handle: u32,
+        txn: u32,
+        table: String,
+        rowids: Vec<i64>,
+        rows: Vec<Vec<types::Duckvalue>>,
+    ) -> Result<u64, types::Duckerror> {
+        check_handle(handle)?;
+        let catalog = txn_catalog(txn)?;
+        if rowids.len() != rows.len() {
+            return Err(types::Duckerror::Invalidargument(format!(
+                "update-rows for '{table}': {} rowids vs {} row payloads",
+                rowids.len(),
+                rows.len()
+            )));
+        }
+        if rowids.is_empty() {
+            return Ok(0);
+        }
+        let underlying_cols = with_catalog(catalog, |cat| Ok(fetch_columns(cat, &table)?.clone()))?;
+        let n_underlying = underlying_cols.len();
+        let width = rows[0].len();
+        // The intercept_write path passes ROWS at the extension's advertised
+        // width (rowid + underlying cols). The rowid slot at index 0 is
+        // ignored -- WHERE ctid = ...::tid routes the write, not the payload.
+        let strip_rowid = width == n_underlying + 1;
+        if !strip_rowid && width != n_underlying {
+            return Err(types::Duckerror::Invalidargument(format!(
+                "update-rows for '{table}': expected {n_underlying} or \
+                 {} values per row, got {width}",
+                n_underlying + 1
+            )));
+        }
+        with_catalog(catalog, |cat| {
+            let mut updated: u64 = 0;
+            for (rid, row) in rowids.iter().zip(rows.iter()) {
+                let payload: &[types::Duckvalue] = if strip_rowid {
+                    &row[1..]
+                } else {
+                    &row[..]
+                };
+                let sets: std::vec::Vec<std::string::String> = underlying_cols
+                    .iter()
+                    .zip(payload.iter())
+                    .map(|(c, v)| format!("{} = {}", quote_ident(&c.name), literal(v)))
+                    .collect();
+                let (block, off) = unpack_ctid(*rid);
+                let sql = format!(
+                    "UPDATE {} SET {} WHERE ctid = '({block},{off})'::tid",
+                    quote_ident(&table),
+                    sets.join(", "),
+                );
+                cat.conn
+                    .query(&sql)
+                    .map_err(|e| types::Duckerror::Io(format!("UPDATE: {}", e.0)))?;
+                updated += 1;
+            }
+            Ok(updated)
+        })
+    }
+}
+
+fn txn_catalog(txn: u32) -> Result<u32, types::Duckerror> {
+    TXNS.with(|t| {
+        t.borrow()
+            .get(&txn)
+            .copied()
+            .ok_or_else(|| types::Duckerror::Invalidstate(format!("unknown txn {txn}")))
+    })
+}
+
+fn take_txn(txn: u32) -> Result<u32, types::Duckerror> {
+    TXNS.with(|t| {
+        t.borrow_mut()
+            .remove(&txn)
+            .ok_or_else(|| types::Duckerror::Invalidstate(format!("unknown txn {txn}")))
+    })
+}
+
+/// Map an extension logicaltype to a Postgres column type for CREATE TABLE.
+fn logical_to_postgres(ty: &types::Logicaltype) -> &'static str {
+    match ty {
+        types::Logicaltype::Boolean => "BOOLEAN",
+        types::Logicaltype::Int8 | types::Logicaltype::Int16 => "SMALLINT",
+        types::Logicaltype::Int32 => "INTEGER",
+        types::Logicaltype::Int64 => "BIGINT",
+        // Postgres has no unsigned types; widen one step (Uint32 fits BIGINT,
+        // Uint64 doesn't -- the caller loses one bit of range on Uint64).
+        types::Logicaltype::Uint8 | types::Logicaltype::Uint16 => "SMALLINT",
+        types::Logicaltype::Uint32 | types::Logicaltype::Uint64 => "BIGINT",
+        types::Logicaltype::Float32 => "REAL",
+        types::Logicaltype::Float64 => "DOUBLE PRECISION",
+        types::Logicaltype::Blob => "BYTEA",
+        _ => "TEXT",
     }
 }
 
@@ -336,8 +641,8 @@ fn run_scan(
 ) -> Result<std::vec::Vec<std::vec::Vec<types::Duckvalue>>, types::Duckerror> {
     let cols: std::vec::Vec<Column> = fetch_columns(cat, &request.table)?.clone();
     // Host-side indices are 1-based into Postgres's columns: index 0 is the
-    // synthetic `rowid` slot advertised by `storage_table_columns` (ADR
-    // Amendment A5). n_host_cols includes it.
+    // synthetic `rowid` slot (ctid packed as s64) advertised by
+    // `storage_table_columns` (ADR Amendment A5). n_host_cols includes it.
     let n_host_cols = cols.len() + 1;
 
     // Projection: indices into the synthetic column list, in emit order.
@@ -355,27 +660,42 @@ fn run_scan(
         }
     }
 
-    // Postgres has no int8-friendly rowid pseudo-column; emit NULL over the
-    // wire for the rowid slot and overwrite it with the running counter when
-    // materializing the batch below.
-    let sql_col = |host_idx: usize| -> std::string::String {
+    // Postgres has no int8 rowid pseudo-column, but every heap row has a
+    // `ctid` (a `(block,offset)` tuple identifier). We SELECT ctid alongside
+    // the projected columns and pack it into an i64 when materializing the
+    // batch below. The projection may reference the rowid slot at index 0
+    // multiple times -- de-duplicate the SQL SELECT and remember the mapping
+    // so the emit loop can copy the ctid into every rowid slot.
+    let mut sql_cols: std::vec::Vec<std::string::String> = std::vec::Vec::new();
+    let mut projection_slot_to_sql_slot: std::vec::Vec<usize> =
+        std::vec::Vec::with_capacity(proj.len());
+    let mut ctid_sql_slot: Option<usize> = None;
+    for &host_idx in &proj {
         if host_idx == 0 {
-            "NULL".to_string()
+            if let Some(s) = ctid_sql_slot {
+                projection_slot_to_sql_slot.push(s);
+            } else {
+                let s = sql_cols.len();
+                sql_cols.push("ctid".to_string());
+                ctid_sql_slot = Some(s);
+                projection_slot_to_sql_slot.push(s);
+            }
         } else {
-            quote_ident(&cols[host_idx - 1].name)
+            let s = sql_cols.len();
+            sql_cols.push(quote_ident(&cols[host_idx - 1].name));
+            projection_slot_to_sql_slot.push(s);
         }
-    };
-    let select_list: std::vec::Vec<std::string::String> =
-        proj.iter().map(|&i| sql_col(i)).collect();
+    }
     let mut sql = format!(
         "SELECT {} FROM {}",
-        select_list.join(", "),
+        sql_cols.join(", "),
         quote_ident(&request.table)
     );
 
     // WHERE: AND-join the filters, binding values inline (numbers raw, strings
     // single-quoted with '' escaping). Filters on the synthetic rowid column
-    // (index 0) are declined -- the host re-applies filters anyway.
+    // (index 0) turn into `ctid = '(block,off)'::tid` predicates; other ops
+    // on the rowid slot are declined (the host re-applies filters anyway).
     let mut conds: std::vec::Vec<std::string::String> = std::vec::Vec::new();
     for fltr in &request.filters {
         let idx = fltr.column as usize;
@@ -385,6 +705,14 @@ fn run_scan(
             ));
         }
         if idx == 0 {
+            // A rowid EQ filter can be lowered to a ctid predicate; skip
+            // anything else and let the host re-apply.
+            if let (storage::CompareOp::Eq, types::Duckvalue::Int64(v)) =
+                (fltr.op, &fltr.value)
+            {
+                let (block, off) = unpack_ctid(*v);
+                conds.push(format!("ctid = '({block},{off})'::tid"));
+            }
             continue;
         }
         let col = quote_ident(&cols[idx - 1].name);
@@ -421,22 +749,55 @@ fn run_scan(
 
     let mut out: std::vec::Vec<std::vec::Vec<types::Duckvalue>> =
         std::vec::Vec::with_capacity(rs.rows.len());
-    let mut row_counter: i64 = 0;
     for row in &rs.rows {
-        row_counter += 1;
         let mut emit: std::vec::Vec<types::Duckvalue> = std::vec::Vec::with_capacity(proj.len());
         for (slot, &host_idx) in proj.iter().enumerate() {
+            let sql_slot = projection_slot_to_sql_slot[slot];
+            let cell = row.get(sql_slot).and_then(|c| c.as_ref());
             if host_idx == 0 {
-                emit.push(types::Duckvalue::Int64(row_counter));
+                // Parse `(block,offset)` and pack to i64. A ctid we can't
+                // parse -> Null (the host's `at5_duckvalue_to_i64` will
+                // reject it, so this only affects `SELECT rowid` for rows
+                // that came from a non-heap AM).
+                emit.push(match cell.and_then(|s| parse_ctid(s)) {
+                    Some((block, off)) => types::Duckvalue::Int64(pack_ctid(block, off)),
+                    None => types::Duckvalue::Null,
+                });
             } else {
                 let ci = host_idx - 1;
-                let cell = row.get(slot).and_then(|c| c.as_ref());
                 emit.push(text_to_duck(cell, cols[ci].ty));
             }
         }
         out.push(emit);
     }
     Ok(out)
+}
+
+// ---------------------------------------------------------------------------
+// ctid <-> i64 packing
+// ---------------------------------------------------------------------------
+
+/// Pack a Postgres ctid `(block, offset)` into a positive i64. The layout is
+/// `(block as u64) << 16 | offset` — block fits in 32 bits, offset in 16, so
+/// the total is 48 bits and always fits in the positive i64 range.
+pub(crate) fn pack_ctid(block: u32, offset: u16) -> i64 {
+    (((block as u64) << 16) | (offset as u64)) as i64
+}
+
+/// Reverse of `pack_ctid`.
+pub(crate) fn unpack_ctid(v: i64) -> (u32, u16) {
+    let u = v as u64;
+    ((u >> 16) as u32, (u & 0xFFFF) as u16)
+}
+
+/// Parse Postgres's text-formatted ctid `(block,offset)` into a `(u32, u16)`
+/// pair. Whitespace and non-matching input -> None.
+pub(crate) fn parse_ctid(s: &str) -> Option<(u32, u16)> {
+    let inner = s.trim().strip_prefix('(')?.strip_suffix(')')?;
+    let (b, o) = inner.split_once(',')?;
+    let block: u32 = b.trim().parse().ok()?;
+    let offset: u16 = o.trim().parse().ok()?;
+    Some((block, offset))
 }
 
 // ---------------------------------------------------------------------------
@@ -625,7 +986,7 @@ fn parse_dsn(dsn: &str) -> Result<DsnConfig, types::Duckerror> {
 export!(Extension);
 
 // ---------------------------------------------------------------------------
-// Native unit tests (DSN parsing + type mapping; no network needed).
+// Native unit tests (DSN parsing + type mapping + ctid packing; no network).
 // ---------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
@@ -721,5 +1082,41 @@ mod tests {
             text_to_duck(Some(&"7".to_string()), ColType::Int),
             types::Duckvalue::Int64(7)
         ));
+    }
+
+    #[test]
+    fn ctid_pack_roundtrip() {
+        for (block, offset) in [(0u32, 1u16), (1, 2), (42, 7), (u32::MAX, u16::MAX)] {
+            let v = pack_ctid(block, offset);
+            assert!(v >= 0, "pack_ctid({block},{offset}) must be positive");
+            assert_eq!(unpack_ctid(v), (block, offset));
+        }
+    }
+
+    #[test]
+    fn ctid_parse_matches_pg_text_format() {
+        assert_eq!(parse_ctid("(0,1)"), Some((0u32, 1u16)));
+        assert_eq!(parse_ctid("(42,7)"), Some((42, 7)));
+        assert_eq!(parse_ctid("  (12,3)\n"), Some((12, 3)));
+        assert_eq!(parse_ctid("(0, 1)"), Some((0, 1)));
+        // Non-heap AMs might produce values we can't parse; return None,
+        // never panic. The read path emits Null in the rowid slot then.
+        assert_eq!(parse_ctid(""), None);
+        assert_eq!(parse_ctid("bogus"), None);
+        assert_eq!(parse_ctid("(1,"), None);
+        assert_eq!(parse_ctid("(1)"), None);
+    }
+
+    #[test]
+    fn logical_to_postgres_maps_expected() {
+        assert_eq!(logical_to_postgres(&types::Logicaltype::Int64), "BIGINT");
+        assert_eq!(logical_to_postgres(&types::Logicaltype::Int32), "INTEGER");
+        assert_eq!(logical_to_postgres(&types::Logicaltype::Text), "TEXT");
+        assert_eq!(logical_to_postgres(&types::Logicaltype::Boolean), "BOOLEAN");
+        assert_eq!(
+            logical_to_postgres(&types::Logicaltype::Float64),
+            "DOUBLE PRECISION"
+        );
+        assert_eq!(logical_to_postgres(&types::Logicaltype::Blob), "BYTEA");
     }
 }
