@@ -260,9 +260,20 @@ impl storage_dispatch::Guest for Extension {
             let cur = s
                 .get_mut(&scan)
                 .ok_or_else(|| types::Duckerror::Invalidstate("unknown scan".into()))?;
-            let end = (cur.pos + max_rows as usize).min(cur.rows.len());
+            // DEFENSIVE (wasm32): `cur.pos + max_rows as usize` can wrap
+            // when `max_rows == u32::MAX` (or a caller passes a huge sentinel
+            // meaning "give me everything") because `usize` is 32-bit under
+            // wasm. `saturating_add` clamps to `usize::MAX` so the subsequent
+            // `.min(cur.rows.len())` collapses to `cur.rows.len()`. Also
+            // clamp `cur.pos` to `cur.rows.len()` in case a prior call left
+            // it past the end (e.g. rows re-computed to be shorter -- not
+            // possible today, but this method is called across scan lifetimes
+            // and safety-first here is cheap).
+            let len = cur.rows.len();
+            let start = cur.pos.min(len);
+            let end = start.saturating_add(max_rows as usize).min(len);
             let batch: std::vec::Vec<std::vec::Vec<types::Duckvalue>> =
-                cur.rows[cur.pos..end].to_vec();
+                cur.rows[start..end].to_vec();
             cur.pos = end;
             Ok(batch.into())
         })
