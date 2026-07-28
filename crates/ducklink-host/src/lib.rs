@@ -2367,14 +2367,15 @@ impl ExtensionManager {
         instance.storage_serialize(handle, catalog)
     }
 
-    /// Bug 4 fix: probe the extension's `writes_persist_directly` capability.
-    /// Returns Ok(true) for a backend that opts into host-side incremental
-    /// write-through (e.g. sqlitewasm -- the host owns a native file-backed
-    /// rusqlite connection to the DSN and replays writes there, bypassing the
-    /// quadratic full-DB serialize + rewrite path). Returns Ok(false) or an
-    /// Unsupported/Internal error for backends that either persist natively
-    /// or predate the probe -- the caller falls back to the legacy
-    /// serialize + write-back path in both cases.
+    /// Bug 4b: probe the extension's `writes_persist_directly` capability.
+    /// Returns Ok(true) for a backend that is authoritative for durability
+    /// on its own — e.g. sqlitewasm which self-persists via wasivfs into the
+    /// host's preopens, or mysql/postgres which write over the wire. The
+    /// caller (intercept_attach) caches the flag on AttachedForeignCatalog;
+    /// at5_write_back short-circuits when it's true. Ok(false) or an
+    /// Unsupported/Internal error means "not self-persisting" — the legacy
+    /// serialize + host-side fs write-back path applies (silent no-op for
+    /// backends whose serialize also returns Unsupported).
     pub fn dispatch_storage_writes_persist_directly(
         &mut self,
     ) -> Result<bool, extension_types::Duckerror> {
@@ -3606,6 +3607,14 @@ impl ExtensionManager {
             // (guest name == absolute host path) WASI rejects
             // `<abs>/objects` etc. with `No such file or directory`.
             attach_cache_env_preopens(&mut builder);
+            // Grant sqlitewasm access to ATTACH DSN paths so it can self-persist
+            // through wasivfs (sqlite-lib SPI) rather than shuttling bytes across
+            // the wasm boundary. Preopens cwd (as ".") so relative DSNs Just
+            // Work; DUCKLINK_SQLITEWASM_DATADIR (absolute path, guest name ==
+            // abspath) extends the reach to any dir the operator names — mirrors
+            // the `DUCKLINK_LOCAL_CACHE` shape. Skipped for extensions other
+            // than sqlitewasm to keep the fs grant scoped.
+            attach_sqlitewasm_preopens(&mut builder, &extension_name);
             let wasi = builder.build();
             let component = Component::from_file(&engine, &artifact_path).map_err(|err| {
                 wasmtime::Error::msg(format!(
@@ -4097,18 +4106,18 @@ pub(crate) struct AttachedForeignCatalog {
     /// only. The write-intercept still rejects mutations at parse-time; this
     /// belt-and-braces guard covers any future codepath that bypasses that.
     pub read_only: bool,
-    /// Bug 4 incremental write-back: when the extension advertises
-    /// `writes_persist_directly = true` at ATTACH AND the DSN resolves to a
-    /// local file, the host opens a NATIVE, file-backed rusqlite connection
-    /// to that path and replays each dispatched INSERT/UPDATE/DELETE against
-    /// it (`at5_replay_*` in `intercept_write`). The `at5_write_back` path
-    /// then SKIPS the O(N) full-serialize + rewrite (which is what made
-    /// N writes quadratic in the pre-Bug-4 shape). `None` means the
-    /// extension either doesn't opt in, isn't a writable backend, or the
-    /// dsn wasn't a file -- write-back falls back to the legacy path.
-    /// `Arc<Mutex<...>>` so `AttachedForeignCatalog` stays `Clone` (the
-    /// aliases map is cloned on every mutation-batch handoff).
-    pub file_conn: Option<Arc<Mutex<rusqlite::Connection>>>,
+    /// Bug 4b: an extension that advertises `writes_persist_directly = true`
+    /// (currently sqlitewasm via sqlite-lib + wasivfs) is authoritative for
+    /// durability — the host skips its own serialize + rewrite. There's no
+    /// host-side rusqlite connection anymore: the write goes wasm-side
+    /// through the SPI, wasivfs turns it into wasi:filesystem calls, and
+    /// the extension loader's per-extension WasiCtx preopens the target
+    /// dir (see `attach_sqlitewasm_preopens`). The `writes_persist_directly`
+    /// probe result is cached here so `at5_write_back` can short-circuit
+    /// without re-dispatching. `false` = probe returned false / errored /
+    /// wasn't run (read-only attach); the legacy full-serialize write-back
+    /// path applies.
+    pub writes_persist_directly: bool,
 }
 
 /// Phase 2c (@5): routing target for a single AT5 attach-scan callback
@@ -5014,55 +5023,33 @@ impl HostState {
             .collect();
         let dsn_path = resolve_attach_dsn_path(&spec.dsn);
 
-        // Bug 4 incremental write-back opt-in: probe the extension for
-        // `writes_persist_directly`. Extensions (e.g. sqlitewasm) that live
-        // in the wasm sandbox and have no fs access return Ok(true); the
-        // host opens a NATIVE file-backed rusqlite connection to the DSN
-        // and replays each dispatched write there, skipping the quadratic
-        // serialize + full-file rewrite in `at5_write_back`. Everything
-        // else (Ok(false), Unsupported / Internal / non-writable backend,
-        // read-only attach, non-file DSN) falls through to the legacy
-        // path. Probe is best-effort: errors just mean "not opting in".
-        let opt_in_direct_persist = if spec.read_only {
+        // Bug 4b: probe the extension for `writes_persist_directly`. `true`
+        // means the extension is authoritative for durability (sqlitewasm
+        // self-persists via wasivfs, mysql/postgres write to the remote
+        // server); the host skips its own serialize + fs write-back in
+        // `at5_write_back`. `false` / errors keep the legacy path. Read-only
+        // attaches always fall through. No host-side rusqlite connection is
+        // opened; the old Bug 4 replay path was removed once sqlitewasm
+        // switched to sqlite-lib.
+        let writes_persist_directly = if spec.read_only {
             false
         } else {
             let mut manager = self
                 .extension_manager
                 .lock()
                 .expect("extension manager mutex poisoned");
-            matches!(
+            let flag = matches!(
                 manager.dispatch_storage_writes_persist_directly(),
                 Ok(true)
-            )
-        };
-        let file_conn = if opt_in_direct_persist {
-            match dsn_path.as_ref() {
-                Some(p) => match rusqlite::Connection::open(p) {
-                    Ok(c) => {
-                        eprintln!(
-                            "[at5-writeback] {}: opened native file-backed rusqlite \
-                             connection for incremental replay ({})",
-                            spec.alias,
-                            p.display()
-                        );
-                        Some(Arc::new(Mutex::new(c)))
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "[at5-writeback] {}: failed to open file-backed rusqlite \
-                             connection at {} ({}); falling back to full-serialize \
-                             write-back",
-                            spec.alias,
-                            p.display(),
-                            e
-                        );
-                        None
-                    }
-                },
-                None => None,
+            );
+            if flag {
+                eprintln!(
+                    "[at5-writeback] {}: extension self-persists (writes_persist_directly=true); \
+                     host will skip serialize+writeback",
+                    spec.alias
+                );
             }
-        } else {
-            None
+            flag
         };
 
         self.attached_aliases.insert(
@@ -5076,7 +5063,7 @@ impl HostState {
                 table_callbacks,
                 dsn_path,
                 read_only: spec.read_only,
-                file_conn,
+                writes_persist_directly,
             },
         );
         Ok(empty_query_result())
@@ -5159,16 +5146,11 @@ impl HostState {
                     "[at5-write] INSERT {alias}.{table}: {n} row(s) dispatched to \
                      storage-write-dispatch"
                 );
-                // Bug 4 fast path: replay against the host-owned file-backed
-                // rusqlite connection when the extension opted into direct
-                // persistence at ATTACH time. When the fast path fires,
-                // `at5_write_back` sees `file_conn` and skips the O(N)
-                // serialize + rewrite.
-                if let Some(conn) = self.at5_file_conn(&alias) {
-                    let (_ch, cols) = self.at5_lookup_write_target(&alias, &table)?;
-                    let guard = conn.lock().expect("file_conn mutex poisoned");
-                    Self::at5_replay_insert(&guard, &table, &cols, &ext_rows)?;
-                }
+                // Bug 4b: no host-side replay. The extension self-persists via
+                // wasivfs when it advertised writes_persist_directly at ATTACH;
+                // `at5_write_back` no-ops in that case. Backends that persist
+                // over the wire (mysql/postgres) also skip (serialize returns
+                // Unsupported).
                 self.at5_write_back(&alias, catalog_handle)?;
                 Ok(empty_query_result())
             }
@@ -5261,19 +5243,7 @@ impl HostState {
                     "[at5-write] UPDATE {alias}.{table}: {n} row(s) dispatched to \
                      storage-write-dispatch (rowids={rowids:?})"
                 );
-                // Bug 4 fast path: replay against the host-owned file-backed
-                // rusqlite connection when opted in. `columns` already carries
-                // the extension's advertised shape (rowid + underlying cols).
-                if let Some(conn) = self.at5_file_conn(&alias) {
-                    let guard = conn.lock().expect("file_conn mutex poisoned");
-                    Self::at5_replay_update(
-                        &guard,
-                        &table,
-                        &columns,
-                        &rowids,
-                        &updated_rows,
-                    )?;
-                }
+                // Bug 4b: no host-side replay — see the INSERT arm's comment.
                 self.at5_write_back(&alias, catalog_handle)?;
                 Ok(empty_query_result())
             }
@@ -5381,12 +5351,7 @@ impl HostState {
                     "[at5-write] DELETE {alias}.{table}: {n} row(s) dispatched to \
                      storage-write-dispatch (rowids={rowids:?})"
                 );
-                // Bug 4 fast path: replay against the host-owned file-backed
-                // rusqlite connection when opted in.
-                if let Some(conn) = self.at5_file_conn(&alias) {
-                    let guard = conn.lock().expect("file_conn mutex poisoned");
-                    Self::at5_replay_delete(&guard, &table, &rowids)?;
-                }
+                // Bug 4b: no host-side replay — see the INSERT arm's comment.
                 self.at5_write_back(&alias, catalog_handle)?;
                 Ok(empty_query_result())
             }
@@ -5480,20 +5445,19 @@ impl HostState {
         alias: &str,
         catalog_handle: u32,
     ) -> Result<(), cli_types::Duckerror> {
-        let (dsn_path, read_only, has_file_conn) = match self.attached_aliases.get(alias) {
-            Some(c) => (c.dsn_path.clone(), c.read_only, c.file_conn.is_some()),
+        let (dsn_path, read_only, self_persists) = match self.attached_aliases.get(alias) {
+            Some(c) => (c.dsn_path.clone(), c.read_only, c.writes_persist_directly),
             None => return Ok(()),
         };
         if read_only {
             return Ok(());
         }
-        // Bug 4 fast path: the extension advertised writes_persist_directly at
-        // ATTACH time and the host opened a NATIVE file-backed rusqlite
-        // connection (see intercept_attach). Each dispatched INSERT/UPDATE/
-        // DELETE was already replayed against that connection in
-        // intercept_write, so the DSN file is already up to date -- SKIP the
-        // O(N) full-serialize + rewrite entirely.
-        if has_file_conn {
+        // Bug 4b: the extension advertised `writes_persist_directly = true`
+        // at ATTACH time (sqlitewasm self-persists via wasivfs into a host
+        // preopen; mysql/postgres write over the wire). Nothing to write back
+        // from the host — the DSN file / remote server is already up to date.
+        // Skip the O(N) full-serialize + rewrite entirely.
+        if self_persists {
             return Ok(());
         }
         let Some(dsn_path) = dsn_path else {
@@ -5534,176 +5498,13 @@ impl HostState {
         Ok(())
     }
 
-    /// Bug 4 fast path: fetch the file-backed rusqlite Connection the host
-    /// opened at ATTACH time for aliases whose extension opted into
-    /// `writes_persist_directly` (see `intercept_attach`). Returns `None`
-    /// when no such connection is present (alias vanished, read-only, non-
-    /// file DSN, backend didn't opt in) -- callers fall through to the
-    /// legacy full-serialize write-back path in `at5_write_back`.
-    fn at5_file_conn(&self, alias: &str) -> Option<Arc<Mutex<rusqlite::Connection>>> {
-        self.attached_aliases
-            .get(alias)
-            .and_then(|c| c.file_conn.as_ref().map(Arc::clone))
-    }
+    // Bug 4b: the at5_file_conn / at5_replay_{insert,update,delete} helpers
+    // that lived here (~150 LOC) were dropped when sqlitewasm moved to
+    // sqlite-lib + wasivfs. The extension self-persists inside the wasm
+    // sandbox, so the host has no serialize-and-rewrite work to do and no
+    // native rusqlite dependency. See `at5_write_back`'s self_persists
+    // short-circuit.
 
-    /// Bug 4 helpers: replay a dispatched INSERT/UPDATE/DELETE against the
-    /// native file-backed rusqlite connection held on the AttachedForeignCatalog.
-    /// Each helper mirrors the SQL the sqlitewasm-component would run on its
-    /// in-memory copy: INSERT with a stripped-rowid payload, UPDATE by rowid
-    /// with all non-rowid columns, DELETE by rowid. Kept as small, obvious
-    /// SQL builders because the type-adapter (duck_to_sqlite) does the heavy
-    /// lifting; every failure surfaces as an Io error so the caller can `?`.
-    fn at5_replay_insert(
-        conn: &rusqlite::Connection,
-        table: &str,
-        columns: &[extension_types::Columndef],
-        rows: &[Vec<extension_types::Duckvalue>],
-    ) -> Result<(), cli_types::Duckerror> {
-        if rows.is_empty() {
-            return Ok(());
-        }
-        // The extension advertises [rowid, col1, col2, ...] per Amendment A5,
-        // so `columns` includes the synthetic rowid at index 0 -- strip it for
-        // the INSERT (let sqlite mint the rowid). If the caller passed an
-        // N-cols-wide payload matching the underlying schema, pass through.
-        let has_synthetic_rowid = columns
-            .first()
-            .map(|c| c.name.eq_ignore_ascii_case("rowid"))
-            .unwrap_or(false);
-        let underlying: Vec<&extension_types::Columndef> = if has_synthetic_rowid {
-            columns.iter().skip(1).collect()
-        } else {
-            columns.iter().collect()
-        };
-        let n_underlying = underlying.len();
-        let col_list = underlying
-            .iter()
-            .map(|c| sqlite_quote_ident(&c.name))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let placeholders = std::iter::repeat("?")
-            .take(n_underlying)
-            .collect::<Vec<_>>()
-            .join(", ");
-        let sql = format!(
-            "INSERT INTO {} ({}) VALUES ({})",
-            sqlite_quote_ident(table),
-            col_list,
-            placeholders
-        );
-        let mut stmt = conn.prepare_cached(&sql).map_err(sqlite_err_io)?;
-        for row in rows {
-            let payload = if has_synthetic_rowid && row.len() == n_underlying + 1 {
-                &row[1..]
-            } else if row.len() == n_underlying {
-                &row[..]
-            } else {
-                return Err(cli_types::Duckerror::Invalidargument(
-                    format!(
-                        "at5-writeback INSERT replay {table}: got {} cells for {} \
-                         underlying columns (rowid-stripped)",
-                        row.len(),
-                        n_underlying
-                    )
-                    .into(),
-                ));
-            };
-            for (i, v) in payload.iter().enumerate() {
-                let val = duck_to_sqlite_value(v);
-                stmt.raw_bind_parameter(i + 1, val).map_err(sqlite_err_io)?;
-            }
-            stmt.raw_execute().map_err(sqlite_err_io)?;
-        }
-        Ok(())
-    }
-
-    fn at5_replay_update(
-        conn: &rusqlite::Connection,
-        table: &str,
-        columns: &[extension_types::Columndef],
-        rowids: &[i64],
-        rows: &[Vec<extension_types::Duckvalue>],
-    ) -> Result<(), cli_types::Duckerror> {
-        if rowids.is_empty() {
-            return Ok(());
-        }
-        if rowids.len() != rows.len() {
-            return Err(cli_types::Duckerror::Invalidargument(
-                format!(
-                    "at5-writeback UPDATE replay {table}: {} rowids vs {} row payloads",
-                    rowids.len(),
-                    rows.len()
-                )
-                .into(),
-            ));
-        }
-        let has_synthetic_rowid = columns
-            .first()
-            .map(|c| c.name.eq_ignore_ascii_case("rowid"))
-            .unwrap_or(false);
-        let underlying: Vec<&extension_types::Columndef> = if has_synthetic_rowid {
-            columns.iter().skip(1).collect()
-        } else {
-            columns.iter().collect()
-        };
-        let n_underlying = underlying.len();
-        let set_list = underlying
-            .iter()
-            .map(|c| format!("{} = ?", sqlite_quote_ident(&c.name)))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let sql = format!(
-            "UPDATE {} SET {} WHERE rowid = ?",
-            sqlite_quote_ident(table),
-            set_list
-        );
-        let mut stmt = conn.prepare_cached(&sql).map_err(sqlite_err_io)?;
-        for (rid, row) in rowids.iter().zip(rows.iter()) {
-            let payload = if has_synthetic_rowid && row.len() == n_underlying + 1 {
-                &row[1..]
-            } else if row.len() == n_underlying {
-                &row[..]
-            } else {
-                return Err(cli_types::Duckerror::Invalidargument(
-                    format!(
-                        "at5-writeback UPDATE replay {table}: got {} cells for {} \
-                         underlying columns",
-                        row.len(),
-                        n_underlying
-                    )
-                    .into(),
-                ));
-            };
-            for (i, v) in payload.iter().enumerate() {
-                let val = duck_to_sqlite_value(v);
-                stmt.raw_bind_parameter(i + 1, val).map_err(sqlite_err_io)?;
-            }
-            stmt.raw_bind_parameter(payload.len() + 1, *rid)
-                .map_err(sqlite_err_io)?;
-            stmt.raw_execute().map_err(sqlite_err_io)?;
-        }
-        Ok(())
-    }
-
-    fn at5_replay_delete(
-        conn: &rusqlite::Connection,
-        table: &str,
-        rowids: &[i64],
-    ) -> Result<(), cli_types::Duckerror> {
-        if rowids.is_empty() {
-            return Ok(());
-        }
-        let sql = format!(
-            "DELETE FROM {} WHERE rowid = ?",
-            sqlite_quote_ident(table)
-        );
-        let mut stmt = conn.prepare_cached(&sql).map_err(sqlite_err_io)?;
-        for rid in rowids {
-            stmt.raw_bind_parameter(1, *rid).map_err(sqlite_err_io)?;
-            stmt.raw_execute().map_err(sqlite_err_io)?;
-        }
-        Ok(())
-    }
 
     /// Fetch (catalog-handle, extension-declared columns) for an attached
     /// alias.table pair, briefly acquiring the manager lock. Errors are
@@ -5815,60 +5616,13 @@ fn at5_synth_fn_name(alias: &str, table: &str) -> String {
     format!("__{alias}_{table}")
 }
 
-/// Bug 4 fast-path helpers. `sqlite_quote_ident` mirrors the sqlitewasm
-/// extension's own quoter (double-quotes with embedded `"` doubled) so the
-/// replay path emits IDENTICAL SQL identifiers. `sqlite_err_io` wraps a
-/// rusqlite error into a CLI Duckerror::Io so the write path can `?`.
-/// `duck_to_sqlite_value` converts an extension `Duckvalue` into a
-/// `rusqlite::types::Value` -- the same mapping the sqlitewasm extension
-/// applies inside the wasm sandbox, so round-tripped writes match the
-/// extension's in-memory copy on every column type.
-fn sqlite_quote_ident(name: &str) -> String {
-    format!("\"{}\"", name.replace('"', "\"\""))
-}
+// Bug 4b: `sqlite_quote_ident`, `sqlite_err_io`, `duck_to_sqlite_value`
+// (formerly ~50 LOC of Duckvalue -> rusqlite::Value type-adapter) were
+// dropped when the host-side rusqlite replay path was removed. The
+// sqlitewasm extension now runs the equivalent conversion inside the wasm
+// sandbox against sqlite-lib's SPI value type (see
+// extensions/sqlitewasm-component/src/lib.rs::duck_to_sqlite_value).
 
-fn sqlite_err_io(e: rusqlite::Error) -> cli_types::Duckerror {
-    cli_types::Duckerror::Io(format!("sqlite (at5 writeback replay): {e}").into())
-}
-
-fn duck_to_sqlite_value(v: &extension_types::Duckvalue) -> rusqlite::types::Value {
-    use extension_types::Duckvalue as D;
-    use rusqlite::types::Value;
-    match v {
-        D::Null => Value::Null,
-        D::Boolean(b) => Value::Integer(if *b { 1 } else { 0 }),
-        D::Int64(i) => Value::Integer(*i),
-        D::Uint64(u) => Value::Integer(*u as i64),
-        D::Float64(f) => Value::Real(*f),
-        D::Text(s) => Value::Text(s.clone().into()),
-        D::Blob(b) => Value::Blob(b.clone().into()),
-        D::Int8(i) => Value::Integer(*i as i64),
-        D::Int16(i) => Value::Integer(*i as i64),
-        D::Int32(i) => Value::Integer(*i as i64),
-        D::Uint8(u) => Value::Integer(*u as i64),
-        D::Uint16(u) => Value::Integer(*u as i64),
-        D::Uint32(u) => Value::Integer(*u as i64),
-        D::Float32(f) => Value::Real(*f as f64),
-        D::Date(d) => Value::Integer(*d as i64),
-        D::Time(t) => Value::Integer(*t),
-        D::Timestamp(t) => Value::Integer(*t),
-        D::Timestamptz(t) => Value::Integer(*t),
-        D::Decimal(d) => {
-            Value::Integer((((d.upper as u128) << 64) | d.lower as u128) as i64)
-        }
-        D::Interval(iv) => Value::Integer(iv.micros),
-        D::Uuid(u) => Value::Text(format!("{:016x}{:016x}", u.hi, u.lo)),
-        D::Hugeint(h) => {
-            let v = ((h.upper as i128) << 64) | (h.lower as i128);
-            Value::Text(v.to_string())
-        }
-        D::Uhugeint(u) => {
-            let v = ((u.upper as u128) << 64) | (u.lower as u128);
-            Value::Text(v.to_string())
-        }
-        D::Complex(c) => Value::Text(c.json.clone().into()),
-    }
-}
 
 /// AT5 write-back path resolver. Turns the raw ATTACH DSN into a local file
 /// path when the DSN plausibly names a local file: bare paths, and the
@@ -12544,6 +12298,78 @@ fn attach_cache_env_preopens(builder: &mut WasiCtxBuilder) {
             eprintln!(
                 "ducklink-host: failed to preopen cache root {}: {e}",
                 host.display()
+            );
+        }
+    }
+}
+
+/// Grant the sqlitewasm extension filesystem preopens so it can open the
+/// ATTACH DSN through wasivfs (sqlite-lib SPI) instead of receiving bytes
+/// pre-read from the host. Scoped to the sqlitewasm extension by name so
+/// unrelated extensions don't inherit fs reach they didn't declare.
+///
+/// Two preopens are wired:
+///
+/// 1. cwd (host = std::env::current_dir(), guest = ".") — the ATTACH tests
+///    (and the CLI's typical usage) hand relative DSNs like `foo.db` or
+///    `target/.tmpXXX/bar.db`; a cwd preopen resolves them directly.
+///
+/// 2. DUCKLINK_SQLITEWASM_DATADIR (absolute, guest name == abspath) — for
+///    DBs outside cwd. Mirrors the DUCKLINK_LOCAL_CACHE shape so a wasivfs
+///    open of `<abs>/…` resolves through a matching preopen. Invalid /
+///    non-materialisable settings log-and-skip rather than aborting load.
+///
+/// DSNs that fall outside both preopens surface as a wasivfs open error at
+/// ATTACH time. No dynamic preopens — wasmtime preopens are static per
+/// WasiCtx — so an operator with DBs outside cwd sets
+/// DUCKLINK_SQLITEWASM_DATADIR before LOAD sqlitewasm.
+fn attach_sqlitewasm_preopens(builder: &mut WasiCtxBuilder, extension_name: &str) {
+    if extension_name != "sqlitewasm" {
+        return;
+    }
+    match std::env::current_dir() {
+        Ok(cwd) => {
+            if let Err(e) =
+                builder.preopened_dir(&cwd, ".", DirPerms::all(), FilePerms::all())
+            {
+                eprintln!(
+                    "ducklink-host: failed to preopen cwd for sqlitewasm ({}): {e}",
+                    cwd.display()
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!("ducklink-host: sqlitewasm preopens: cannot read cwd ({e})");
+        }
+    }
+    if let Ok(raw) = std::env::var("DUCKLINK_SQLITEWASM_DATADIR") {
+        let raw = raw.trim().to_string();
+        if raw.is_empty() {
+            return;
+        }
+        let path = PathBuf::from(&raw);
+        if !path.is_absolute() {
+            eprintln!(
+                "ducklink-host: ignoring DUCKLINK_SQLITEWASM_DATADIR={raw:?}: \
+                 not an absolute path (WASI preopen requires an absolute path)"
+            );
+            return;
+        }
+        if let Err(e) = std::fs::create_dir_all(&path) {
+            eprintln!(
+                "ducklink-host: ignoring DUCKLINK_SQLITEWASM_DATADIR={}: \
+                 cannot create directory: {e}",
+                path.display()
+            );
+            return;
+        }
+        let guest = path.to_string_lossy().into_owned();
+        if let Err(e) =
+            builder.preopened_dir(&path, &guest, DirPerms::all(), FilePerms::all())
+        {
+            eprintln!(
+                "ducklink-host: failed to preopen sqlitewasm datadir {}: {e}",
+                path.display()
             );
         }
     }
