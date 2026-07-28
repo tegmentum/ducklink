@@ -69,6 +69,20 @@ pub enum WriteRoute {
         table: String,
         where_clause: Option<String>,
     },
+    /// `CREATE TABLE [IF NOT EXISTS] <alias>.<table> ( col type [constraint...] , ... )`
+    /// against an attached foreign catalog. The extension's storage-write-
+    /// dispatch.create-table is the target: the host converts each `(name,
+    /// sql-type-text)` pair into an `extension_types::Columndef` before
+    /// dispatch, so column constraints (PRIMARY KEY, NOT NULL, UNIQUE, DEFAULT ...)
+    /// are TEXT-only here and only the leading TYPE token(s) count.
+    CreateTable {
+        alias: String,
+        table: String,
+        /// (column-name, raw SQL type-text as it appeared after the name,
+        /// with trailing constraints stripped).
+        columns: Vec<(String, String)>,
+        if_not_exists: bool,
+    },
     /// Recognized as an attached-catalog write, but rejected because the
     /// pattern is a v1 non-goal (see the module docs).
     Unsupported(String),
@@ -528,7 +542,260 @@ pub fn resolve_write_target<S: AsRef<str>>(
     if starts_with_kw_ci(sql, "DELETE") {
         return parse_delete(sql, attached);
     }
+    if starts_with_kw_ci(sql, "CREATE") {
+        return parse_create_table(sql, attached);
+    }
     None
+}
+
+/// Recognize `CREATE TABLE [IF NOT EXISTS] <alias>.<table> ( <col-defs> )`
+/// against an attached alias. Anything else (`CREATE VIEW`, `CREATE
+/// SCHEMA`, missing dotted-alias, RETURNING/AS SELECT/LIKE) returns
+/// `None` so the statement falls through to the core.
+fn parse_create_table<S: AsRef<str>>(
+    sql: &str,
+    attached: &HashMap<String, S>,
+) -> Option<WriteRoute> {
+    // CREATE [OR REPLACE] TABLE [IF NOT EXISTS] <ident> (...)
+    let after_create = sql[6..].trim_start();
+    // Reject CREATE OR REPLACE early: DuckDB accepts it but for a foreign
+    // catalog we would need to DROP+CREATE which is a v1 non-goal.
+    let after_or = if starts_with_kw_ci(after_create, "OR") {
+        let after = after_create[2..].trim_start();
+        if !starts_with_kw_ci(after, "REPLACE") {
+            return None;
+        }
+        // Attach-target check first: if the identifier isn't attached, fall
+        // through to core; if it IS, reject with a clear reason.
+        let after_kw = after[7..].trim_start();
+        if !starts_with_kw_ci(after_kw, "TABLE") {
+            return None;
+        }
+        let rest = after_kw[5..].trim_start();
+        let (_, temp_rest) = strip_optional_if_not_exists(rest);
+        let (ident, _) = take_dotted_ident(temp_rest);
+        let (alias, _) = split_alias_table(ident.as_str())?;
+        if !attached.contains_key(&alias) {
+            return None;
+        }
+        return Some(WriteRoute::Unsupported(
+            "CREATE OR REPLACE TABLE on attached foreign catalogs".to_string(),
+        ));
+    } else {
+        after_create
+    };
+    if !starts_with_kw_ci(after_or, "TABLE") {
+        // CREATE VIEW / CREATE SCHEMA / CREATE INDEX / etc. — not ours.
+        return None;
+    }
+    let rest = after_or[5..].trim_start();
+    let (if_not_exists, rest) = strip_optional_if_not_exists(rest);
+    let (ident, rest) = take_dotted_ident(rest);
+    let (alias, table) = split_alias_table(ident.as_str())?;
+    if !attached.contains_key(&alias) {
+        return None;
+    }
+    // We've committed: anything unexpected past this point is a hard error.
+    let rest = rest.trim_start();
+    // Reject AS SELECT and LIKE (v1 non-goals).
+    if starts_with_kw_ci(rest, "AS") {
+        return Some(WriteRoute::Unsupported(
+            "CREATE TABLE ... AS SELECT into attached foreign catalogs".to_string(),
+        ));
+    }
+    if starts_with_kw_ci(rest, "LIKE") {
+        return Some(WriteRoute::Unsupported(
+            "CREATE TABLE ... LIKE on attached foreign catalogs".to_string(),
+        ));
+    }
+    if !rest.starts_with('(') {
+        return Some(WriteRoute::Unsupported(format!(
+            "CREATE TABLE {alias}.{table}: expected column list in parentheses"
+        )));
+    }
+    let close = balanced_close(rest, '(', ')')?;
+    let inside = &rest[1..close];
+    let tail = rest[close + 1..].trim_start();
+    // Reject partitioning / options tails; MySQL-side defaults are fine.
+    if !tail.is_empty() && !tail.trim_end_matches(';').trim().is_empty() {
+        return Some(WriteRoute::Unsupported(format!(
+            "CREATE TABLE {alias}.{table}: trailing clause '{tail}' not supported"
+        )));
+    }
+    // Split the inside on top-level commas. Skip pure table-level constraint
+    // clauses (PRIMARY KEY (...), UNIQUE (...), FOREIGN KEY ...) — they carry
+    // no columns, and the extension's create-table already targets a fresh
+    // table so we only need the column shape at v1.
+    let mut columns: Vec<(String, String)> = Vec::new();
+    for piece in split_top_level_commas(inside) {
+        let piece = piece.trim();
+        if piece.is_empty() {
+            continue;
+        }
+        let up = piece.to_ascii_uppercase();
+        if up.starts_with("PRIMARY KEY")
+            || up.starts_with("UNIQUE ")
+            || up.starts_with("UNIQUE(")
+            || up.starts_with("FOREIGN KEY")
+            || up.starts_with("CONSTRAINT ")
+            || up.starts_with("CHECK ")
+            || up.starts_with("CHECK(")
+        {
+            continue;
+        }
+        // First token = column name; remainder = type + optional constraints.
+        let (name, rest) = split_first_token(piece);
+        if !is_bare_ident(&name) {
+            return Some(WriteRoute::Unsupported(format!(
+                "CREATE TABLE {alias}.{table}: column name '{name}' not a bare identifier"
+            )));
+        }
+        let type_text = strip_column_constraints(rest.trim());
+        if type_text.is_empty() {
+            return Some(WriteRoute::Unsupported(format!(
+                "CREATE TABLE {alias}.{table}: column '{name}' missing type"
+            )));
+        }
+        columns.push((name, type_text));
+    }
+    if columns.is_empty() {
+        return Some(WriteRoute::Unsupported(format!(
+            "CREATE TABLE {alias}.{table}: no columns after constraint filter"
+        )));
+    }
+    Some(WriteRoute::CreateTable {
+        alias,
+        table,
+        columns,
+        if_not_exists,
+    })
+}
+
+/// `IF NOT EXISTS` prefix stripper. Returns `(present?, remainder)`.
+fn strip_optional_if_not_exists(sql: &str) -> (bool, &str) {
+    if !starts_with_kw_ci(sql, "IF") {
+        return (false, sql);
+    }
+    let after_if = sql[2..].trim_start();
+    if !starts_with_kw_ci(after_if, "NOT") {
+        return (false, sql);
+    }
+    let after_not = after_if[3..].trim_start();
+    if !starts_with_kw_ci(after_not, "EXISTS") {
+        return (false, sql);
+    }
+    (true, after_not[6..].trim_start())
+}
+
+/// Split the first whitespace-delimited token off `s`.
+fn split_first_token(s: &str) -> (String, String) {
+    let s = s.trim_start();
+    let bytes = s.as_bytes();
+    let mut end = 0;
+    while end < bytes.len() {
+        let c = bytes[end];
+        if c.is_ascii_whitespace() {
+            break;
+        }
+        end += 1;
+    }
+    (s[..end].to_string(), s[end..].to_string())
+}
+
+/// Isolate the leading TYPE tokens from a column-def RHS by dropping the
+/// tail once we hit a constraint keyword (PRIMARY, NOT, UNIQUE, DEFAULT,
+/// CHECK, REFERENCES, COLLATE, GENERATED, AUTO_INCREMENT). Balanced
+/// parentheses (e.g. `VARCHAR(20)`, `DECIMAL(10,2)`) stay attached to the
+/// type. If the string is empty the caller reports a missing-type error.
+fn strip_column_constraints(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    let mut cut = bytes.len();
+    let mut depth: i32 = 0;
+    let mut in_single = false;
+    let mut in_double = false;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if in_single {
+            if c == b'\'' {
+                if bytes.get(i + 1) == Some(&b'\'') {
+                    i += 2;
+                    continue;
+                }
+                in_single = false;
+            }
+            i += 1;
+            continue;
+        }
+        if in_double {
+            if c == b'"' {
+                in_double = false;
+            }
+            i += 1;
+            continue;
+        }
+        match c {
+            b'\'' => {
+                in_single = true;
+                i += 1;
+                continue;
+            }
+            b'"' => {
+                in_double = true;
+                i += 1;
+                continue;
+            }
+            b'(' | b'[' => {
+                depth += 1;
+                i += 1;
+                continue;
+            }
+            b')' | b']' => {
+                depth -= 1;
+                i += 1;
+                continue;
+            }
+            _ => {}
+        }
+        if depth == 0 {
+            let is_word_start =
+                i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+            if is_word_start {
+                for kw in [
+                    "PRIMARY",
+                    "NOT",
+                    "UNIQUE",
+                    "DEFAULT",
+                    "CHECK",
+                    "REFERENCES",
+                    "COLLATE",
+                    "GENERATED",
+                    "AUTO_INCREMENT",
+                    "AUTOINCREMENT",
+                    "NULL",
+                ] {
+                    let klen = kw.len();
+                    if i + klen <= bytes.len()
+                        && bytes[i..i + klen].eq_ignore_ascii_case(kw.as_bytes())
+                    {
+                        let is_word_end = bytes
+                            .get(i + klen)
+                            .map(|b| !(b.is_ascii_alphanumeric() || *b == b'_'))
+                            .unwrap_or(true);
+                        if is_word_end {
+                            cut = i;
+                            break;
+                        }
+                    }
+                }
+                if cut != bytes.len() {
+                    break;
+                }
+            }
+        }
+        i += 1;
+    }
+    s[..cut].trim().to_string()
 }
 
 fn any_write_touches_attached<S: AsRef<str>>(
