@@ -39,6 +39,15 @@ world duckdb-extension-storage {
 // on top of the read-only storage-dispatch. The host instantiates its bindings
 // lazily -- read-only backends satisfy `duckdb-extension-storage` and never
 // touch the write-side.
+//
+// Bug 4b: this world additionally imports `sqlite:extension/spi` — the same
+// composition surface `cache-component` uses. sqlitewasm no longer bundles
+// its own libsqlite3-sys; instead sqlite-lib.wasm is plugged into sqlitewasm
+// at build time (`wac plug`), and the extension runs every SQL statement
+// through the SPI's shared connection. `spi.open-db(<dsn>)` swaps the
+// connection to a file-backed sqlite DB via wasivfs — the host preopens
+// cwd and DUCKLINK_SQLITEWASM_DATADIR for this extension so writes hit the
+// underlying file directly (writes-persist-directly = true).
 world duckdb-extension-storage-write {
   import runtime;
   import config;
@@ -46,6 +55,7 @@ world duckdb-extension-storage-write {
   import catalog;
   import files;
   import storage;
+  import sqlite:extension/spi@0.1.0;
   export guest;
   export callback-dispatch;
   export storage-dispatch;

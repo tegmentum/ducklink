@@ -119,6 +119,27 @@ print(f"{pkg}\t{lib}")
 PY
 }
 
+# Per-extension compose step: if `extensions/<name>-component/.compose-plugs`
+# exists, each non-blank / non-comment line names a component to wac-plug into
+# the built artifact BEFORE strip. Used by sqlitewasm to satisfy its
+# `sqlite:extension/spi` import at build time (Bug 4b) — see
+# extensions/sqlitewasm-component/.compose-plugs. Missing plug artifacts fail
+# the compose (and thus the build) with a clear message rather than silently
+# producing a wasm with unresolved imports.
+compose_plugs_for() {
+  local name="$1"
+  local plugs_file="$HERE/extensions/${name}-component/.compose-plugs"
+  [ -f "$plugs_file" ] || return 0
+  while IFS= read -r line; do
+    case "$line" in
+      ''|'#'*) continue ;;
+    esac
+    # Allow `${VAR}` expansion so sibling-repo paths stay editable per env.
+    eval "expanded=\"$line\""
+    printf '%s\n' "$expanded"
+  done < "$plugs_file"
+}
+
 for n in "${names[@]}"; do
   meta="$(crate_meta "$n")"
   pkg="${meta%%$'\t'*}"
@@ -128,10 +149,40 @@ for n in "${names[@]}"; do
   if [ "$ok" = 1 ]; then
     lib="${meta##*$'\t'}"
     src="$TARGET_DIR/$TARGET/release/${lib}.wasm"
-    if [ -f "$src" ] && wasm-tools strip --all "$src" -o "$ART_DIR/${n}.wasm" 2>/dev/null; then
+    if [ ! -f "$src" ]; then
+      echo "   FAILED: $pkg (no artifact $src)" >&2
+      failed+=("$n")
+      continue
+    fi
+    # Optional wac-plug composition step. Each plug is chained: the output of
+    # step k becomes the input of step k+1. If nothing to plug, the strip
+    # source is the raw cargo-component output.
+    compose_src="$src"
+    plugs="$(compose_plugs_for "$n")"
+    if [ -n "$plugs" ]; then
+      mkdir -p "$TARGET_DIR/compose"
+      i=0
+      while IFS= read -r plug; do
+        [ -f "$plug" ] || {
+          echo "   FAILED: $pkg (plug artifact missing: $plug)" >&2
+          echo "     hint: run \`make sqlite-lib-self-contained\` (or the appropriate Makefile target) first" >&2
+          ok=0
+          break
+        }
+        i=$((i + 1))
+        out="$TARGET_DIR/compose/${n}.plugged.$i.wasm"
+        if ! wac plug "$compose_src" --plug "$plug" -o "$out" 2>/dev/null; then
+          echo "   FAILED: $pkg (wac plug failed with $plug)" >&2
+          ok=0
+          break
+        fi
+        compose_src="$out"
+      done <<< "$plugs"
+    fi
+    if [ "$ok" = 1 ] && wasm-tools strip --all "$compose_src" -o "$ART_DIR/${n}.wasm" 2>/dev/null; then
       built=$((built + 1))
     else
-      echo "   FAILED: $pkg (no artifact $src or strip error)" >&2
+      echo "   FAILED: $pkg (compose/strip error)" >&2
       failed+=("$n")
     fi
   else

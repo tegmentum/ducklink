@@ -6,7 +6,7 @@ BROWSER_TARGET?=wasm32-unknown-unknown
 # ducklink_core.wasm at the usual path.
 DUCKDB_WASM_DIR?=../duckdb-wasm
 
-.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk smoke-dotcmd sample-extension smoke-extension pintest-probes echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds cron-driver cache cache-clean sqlite-lib sqlite-loader-stub s3-wasm aws-sigv4-wasm azure-wasm gcs-wasm mosaic mosaic-browser mosaic-clean fieldbook-loader fieldbook-cli fieldbook-cli-clean fieldbook-cli-smoke fieldbook-browser fieldbook-browser-clean
+.PHONY: all core core-embed core-browser standalone-cli loader-stub smoke-cli smoke-cli-disk smoke-dotcmd sample-extension smoke-extension pintest-probes echo-handler smoke-httpd site site-serve ci-local clean host ext ext-smoke-all ext-list-broken ext-scaffold ext-ship iceberg-smoke tvm-test tvm-test-host precompile dotcmds cron-driver cache cache-clean sqlite-lib sqlite-lib-self-contained sqlite-loader-stub sqlitewasm s3-wasm aws-sigv4-wasm azure-wasm gcs-wasm mosaic mosaic-browser mosaic-clean fieldbook-loader fieldbook-cli fieldbook-cli-clean fieldbook-cli-smoke fieldbook-browser fieldbook-browser-clean
 
 all: core standalone-cli loader-stub dotcmds
 
@@ -122,6 +122,29 @@ sqlite-lib:
 # so the composed cache.wasm has no unresolved sqlite:* dependency.
 sqlite-loader-stub:
 	cargo component build -p sqlite-loader-stub --target $(WASI_TARGET) --release
+
+# sqlite-lib composed with the loader stub — a single self-contained artifact
+# with no unresolved sqlite:* imports. Used both by the `cache` recipe and by
+# det-build.sh's `sqlitewasm` compose step (see .compose-plugs). Splitting
+# the stage out of `cache` means the sqlitewasm build can request just the
+# sqlite-lib composite without dragging in s3-wasm / azure-wasm / gcs-wasm.
+sqlite-lib-self-contained: sqlite-lib sqlite-loader-stub
+	mkdir -p target/compose
+	wac plug $(SQLITE_LIB_COMPONENT) \
+	  --plug target/wasm32-wasip1/release/sqlite_loader_stub.wasm \
+	  -o target/compose/sqlite_lib_self_contained.wasm
+	@echo "sqlite-lib-self-contained: -> target/compose/sqlite_lib_self_contained.wasm"
+
+# Build sqlitewasm.wasm with sqlite-lib composed in. sqlite-lib supplies the
+# `sqlite:extension/spi` import through `wac plug` — the composition is
+# handled by scripts/det-build.sh via extensions/sqlitewasm-component/.compose-plugs.
+# End result: artifacts/extensions/sqlitewasm.wasm is fully self-contained
+# wrt sqlite:* and can be loaded by the ducklink host with only WASI +
+# duckdb:extension surfaces provided.
+sqlitewasm: sqlite-lib-self-contained
+	mkdir -p artifacts/extensions
+	bash scripts/det-build.sh sqlitewasm
+	@echo "sqlitewasm: -> artifacts/extensions/sqlitewasm.wasm"
 
 # --- s3-wasm + aws-sigv4-wasm: the S3 backend the cache-component
 # imports at compose time. Structurally the same story as sqlite-lib

@@ -3,9 +3,13 @@ name = "sqlitewasm-component"
 version = "0.1.0"
 edition = "2021"
 description = """
-SQLite scanner: SQLite (C) compiled to wasm inside the component, serving DuckDB
-through the storage (ATTACH/pushdown-scan) WIT interface plus a sqlite_scan
-table function. Reads a SQLite DB handed over as a BLOB (sqlite3_deserialize).
+SQLite scanner serving DuckDB through the storage (ATTACH/pushdown-scan +
+storage-write-dispatch) WIT interface. Bug 4b: SQLite itself no longer lives
+inside this component — sqlite-lib (from the tegmentum/sqlite-wasm repo) is
+composed in at build time via `wac plug`, and every SQL statement runs
+through `sqlite:extension/spi`. File-backed DSNs open through wasivfs, so
+writes persist directly (writes-persist-directly = true) with no host-side
+serialize/deserialize dance.
 """
 license = "MIT"
 publish = false
@@ -17,8 +21,6 @@ crate-type = ["cdylib"]
 [dependencies]
 wit-bindgen = "0.41"
 wit-bindgen-rt = "0.41"
-rusqlite = { version = "0.32", features = ["bundled", "column_decltype"] }
-libsqlite3-sys = "0.30"
 # major-4 columnar stub for hand-written table components.
 datalink-extcore = { path = "../../../datalink/crates/datalink-extcore" }
 
@@ -28,3 +30,6 @@ package = "duckdb:extension"
 [package.metadata.component.target]
 path = "./wit"
 world = "duckdb:extension/duckdb-extension-storage-write"
+
+[package.metadata.component.target.dependencies]
+"sqlite:extension" = { path = "wit/deps/sqlite-extension.wit" }

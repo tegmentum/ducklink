@@ -1,0 +1,68 @@
+package sqlite:extension@0.1.0;
+
+/// Shared types used by the `sqlite:extension/spi` surface the
+/// `sqlitewasm-component` imports. Structurally identical to the
+/// canonical `sqlite:extension` types (see sqlite-wasm's
+/// wit/deps/sqlite-extension/types.wit) — only the arms sqlitewasm
+/// names are kept, so the WIT set stays small. Structural subset of
+/// the upstream, so `wac plug sqlite_lib.component.wasm` resolves the
+/// import at compose time.
+interface types {
+    /// Unified SQL value representation. Used for parameter binding
+    /// and row data on the SPI catalog connection.
+    variant sql-value {
+        null,
+        integer(s64),
+        real(f64),
+        text(string),
+        blob(list<u8>),
+    }
+
+    /// SQLite error carrying both primary and extended result codes.
+    record sqlite-error {
+        code: s32,
+        extended-code: s32,
+        message: string,
+    }
+
+    /// Result of an `execute` call: column names, row data, change
+    /// counts. Matches the shape sqlite-lib returns from `execute`.
+    record query-result {
+        columns: list<string>,
+        rows: list<list<sql-value>>,
+        changes: s64,
+        last-insert-rowid: s64,
+    }
+}
+
+/// The subset of the canonical `sqlite:extension/spi` surface the
+/// sqlitewasm extension needs. Kept as a proper subset of the upstream
+/// (see sqlite-wasm's wit/deps/sqlite-extension/host-spi.wit) so the
+/// composed artifact resolves the import directly against sqlite-lib
+/// via `wac plug`.
+interface spi {
+    use types.{sql-value, query-result, sqlite-error};
+
+    /// Execute a statement; return columns, rows, and change counters.
+    execute: func(sql: string, params: list<sql-value>) -> result<query-result, sqlite-error>;
+
+    /// Execute a statement expected to return one scalar value.
+    execute-scalar: func(sql: string, params: list<sql-value>) -> result<sql-value, sqlite-error>;
+
+    /// Execute one or more statements as a batch; return total rows
+    /// changed.
+    execute-batch: func(sql: string) -> result<s64, sqlite-error>;
+
+    /// Swap the SPI's shared connection to the sqlite DB at `path`.
+    /// Empty path or `:memory:` opens a fresh in-memory DB. A
+    /// filesystem path opens (or creates) a file-backed DB via
+    /// wasivfs — the ducklink host preopens cwd + optionally
+    /// DUCKLINK_SQLITEWASM_DATADIR so paths under those roots resolve.
+    open-db: func(path: string) -> result<_, sqlite-error>;
+
+    /// `sqlite3_deserialize` on the shared SPI connection. Used by the
+    /// `sqlite_blob_scan` table function to load a foreign DB from raw
+    /// bytes into an in-memory catalog. `db-name` is typically "main".
+    deserialize-db: func(db-name: string, bytes: list<u8>)
+        -> result<_, sqlite-error>;
+}

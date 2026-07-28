@@ -1,0 +1,12 @@
+# det-build.sh reads this file to satisfy sqlitewasm's `sqlite:extension/spi`
+# import at build time via `wac plug`. Each non-blank / non-# line names an
+# absolute path (env-var expansion allowed) to a wasm component that will be
+# plugged into the built sqlitewasm.wasm before strip.
+#
+# sqlite_lib_self_contained.wasm is sqlite-lib composed with the loader stub
+# (see the `sqlite-lib-self-contained` Makefile target) — it exports the
+# full sqlite:extension/spi surface with no unresolved sqlite:* imports.
+# Build it with:
+#     make sqlite-lib-self-contained
+# (or `make sqlitewasm` which builds both stages).
+target/compose/sqlite_lib_self_contained.wasm
