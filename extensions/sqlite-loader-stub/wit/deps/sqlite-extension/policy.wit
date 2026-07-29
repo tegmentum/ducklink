@@ -1,0 +1,161 @@
+package sqlite:extension@1.0.0;
+
+/// Per-host-interface capability identifiers. An extension declares
+/// which of these it uses via `manifest.declared-capabilities`; the
+/// host's `load-options.grant` is an allow-list of which it permits.
+/// Anything declared but not granted causes load to fail; anything
+/// the extension tries to use that is not declared returns a
+/// capability-not-granted error at call time.
+///
+/// Utility interfaces (`text`, `hashing`, `encoding`, `random`) are
+/// represented as capabilities for transparency even though hosts will
+/// usually grant them by default.
+interface policy {
+    use http.{method};
+
+    /// One capability per host-imported interface.
+    variant capability {
+        /// Basic SQL execution (sqlite:extension/spi).
+        spi,
+        /// Prepared statement handles (sqlite:extension/prepared).
+        prepared,
+        /// Transaction control (sqlite:extension/transaction). Mutating.
+        transaction,
+        /// Schema introspection (sqlite:extension/schema).
+        schema,
+        /// Persistent per-extension state (sqlite:extension/state).
+        state,
+        /// Bounded in-memory cache (sqlite:extension/cache).
+        cache,
+        /// Random number generation (sqlite:extension/random).
+        random,
+        /// Unicode text utilities (sqlite:extension/text).
+        text,
+        /// Cryptographic hashing (sqlite:extension/hashing).
+        hashing,
+        /// Encoding helpers (sqlite:extension/encoding).
+        encoding,
+        /// Outbound HTTP (sqlite:extension/http).
+        http,
+        /// Outbound DNS resolution (sqlite:extension/dns).
+        dns,
+        /// Raw WAL frame access (sqlite:extension/wal-frames).
+        /// Substrate for the wal-archive extension; gated separately
+        /// from `spi` so an extension can read WAL bytes without also
+        /// holding the full SQL surface (and vice versa).
+        wal-frames,
+        /// S3-compatible object storage (sqlite:extension/s3-base).
+        /// Substrate for the wal-archive extension's off-box sink.
+        /// Granting this lets the extension call get/put/delete/head/
+        /// list/copy against any S3-compatible endpoint (AWS S3,
+        /// MinIO, Cloudflare R2, etc.); the endpoint URL + credentials
+        /// are arguments to each call, not part of the policy  the
+        /// extension itself decides which bucket / region to hit. The
+        /// operator's grant is purely an allow-the-surface bit.
+        s3,
+        /// Host-resident cargo build (sqlite:extension/build).
+        /// Substrate for the `bundle-cli` extension's baked-binary
+        /// path (PLAN-bundles.md). Granting this lets the extension
+        /// spawn `cargo build` against a generated crate root;
+        /// no rich policy fields  the operator's grant is purely
+        /// an allow-the-surface bit. Browser deployments fail-closed
+        /// at the WIT contract (the sqlite-lib stub returns a clear
+        /// SQLITE_PERM-shaped error).
+        spawn-build,
+        /// Bundle storage (sqlite:extension/bundles). Read/write
+        /// the host's cas-cache bundle registry: insert / find /
+        /// list / show / delete / gc / record-binary / touch.
+        /// Granting this lets the extension manage the bundle
+        /// metadata layer above cas-cache; pairs with `spawn-build`
+        /// for the `.bundle save NAME` (with-build) path.
+        /// PLAN-bundles.md (#446).
+        bundles,
+    }
+
+    /// Outbound HTTP policy. Applied by the host's `http::handle`
+    /// implementation to every request the extension makes.
+    record http-policy {
+        /// Allowlist of hostnames the extension may connect to. Entries
+        /// may use a leading `*.` for a wildcard suffix. Empty list
+        /// means no hosts permitted.
+        allowed-hosts: list<string>,
+        /// Optional method restriction. None = any method allowed.
+        allowed-methods: option<list<method>>,
+        /// Maximum response body bytes the host will return to the
+        /// extension. Larger responses are truncated or errored.
+        max-body-bytes: option<u64>,
+        /// Per-request wall-clock timeout. Overrides any timeout the
+        /// extension passes in the request.
+        timeout-ms: option<u32>,
+    }
+
+    /// Outbound DNS policy. Applied by the host's `dns::resolve`
+    /// implementation to every lookup the extension makes.
+    record dns-policy {
+        /// Allowlist of domain suffixes the extension may resolve.
+        /// Entries may use a leading `*.` for a wildcard suffix
+        /// (same semantics as http-policy.allowed-hosts). Empty list
+        /// means no domains permitted.
+        allowed-domains: list<string>,
+        /// Per-request wall-clock timeout. Overrides any timeout the
+        /// extension passes.
+        timeout-ms: option<u32>,
+    }
+
+    /// Filesystem policy. Reserved for future use; no host interfaces
+    /// currently grant fs access. The shape is sketched so consumers
+    /// can prepare for it.
+    record fs-policy {
+        /// Allowlist of host-path prefixes the extension may read from.
+        readable-prefixes: list<string>,
+        /// Allowlist of host-path prefixes the extension may write to.
+        writable-prefixes: list<string>,
+        /// Cap on cumulative bytes the extension may write per call.
+        max-write-bytes-per-call: option<u64>,
+    }
+
+    /// Options the host passes at load time.
+    record load-options {
+        /// wasmtime fuel budget. Reset before each guest invocation
+        /// (per-call semantics). None = unlimited.
+        fuel-per-call: option<u64>,
+        /// Hard cap on the extension's linear memory in bytes.
+        memory-limit-bytes: option<u64>,
+        /// Wall-clock deadline per guest invocation. Enforced via
+        /// epoch interruption on runtimes that support it; advisory
+        /// only on those that don't.
+        epoch-deadline-ms: option<u64>,
+        /// HTTP policy. Required if `grant` contains `capability::http`.
+        http-policy: option<http-policy>,
+        /// DNS policy. Required if `grant` contains `capability::dns`.
+        dns-policy: option<dns-policy>,
+        /// Filesystem policy. Reserved.
+        fs-policy: option<fs-policy>,
+        /// Allow-list of capabilities granted to this extension.
+        /// Anything not in this list is denied. Fail-closed.
+        grant: list<capability>,
+    }
+
+    /// Errors a loader may raise when policy refuses a load or call.
+    variant policy-error {
+        /// Extension declared a capability the host did not grant.
+        /// The variant payload is the missing capability.
+        capability-not-granted(capability),
+        /// Extension tried to use a capability it never declared.
+        capability-not-declared(capability),
+        /// An HTTP request was refused by `http-policy.allowed-hosts`.
+        host-not-allowed(string),
+        /// An HTTP request used a method outside `allowed-methods`.
+        method-not-allowed(method),
+        /// `grant` includes `http` but `http-policy` was None.
+        missing-http-policy,
+        /// A DNS query targeted a domain outside `dns-policy.allowed-domains`.
+        dns-domain-not-allowed(string),
+        /// `grant` includes `dns` but `dns-policy` was None.
+        missing-dns-policy,
+        /// Resource limit reached.
+        fuel-exhausted,
+        memory-limit-exceeded,
+        epoch-deadline-exceeded,
+    }
+}

@@ -1,0 +1,410 @@
+package sqlite:extension@1.0.0;
+
+/// Minimal extension — read-only SQL + scalar functions. Suitable for
+/// stateless pure functions: text transforms, math, hashing.
+///
+/// `wal-frames` + `s3-base` + `build` + `bundles` are imported into
+/// every world (not just `wal-aware` / `hookprobe` / `bundle-cli`)
+/// so the host's per-shape bindgen (`minimal`, `authorizing`,
+/// `hooked`, `tabular`, ...) consistently has the
+/// `wal_frames::Host` + `s3_base::Host` + `build::Host` +
+/// `bundles::Host` traits to satisfy on `LoadedState`. Per-world
+/// `with:` clauses share one trait impl across every bindgen. The
+/// import surfaces are free for extensions that don't call them;
+/// the host's per-method capability gate (`capability::wal-frames`,
+/// `capability::s3`, `capability::spawn-build`,
+/// `capability::bundles`) fails calls without the grant.
+world minimal {
+    import types;
+    import spi;
+    import session;
+    import logging;
+    import config;
+    import wal-frames;
+    import s3-base;
+    import build;
+    import bundles;
+
+    export metadata;
+    export scalar-function;
+}
+
+/// Minimal + outbound HTTP. For extensions whose scalars need
+/// to call out to the network (http_get / jwks_fetch / etc.).
+/// The host gates every request through the manifest's
+/// declared `capability::http` and the load-time http-policy
+/// (allowed-hosts, allowed-methods, max-body-bytes,
+/// timeout-ms).
+world minimal-http {
+    import types;
+    import spi;
+    import session;
+    import logging;
+    import config;
+    import http;
+    import wal-frames;
+    import s3-base;
+    import build;
+    import bundles;
+
+    export metadata;
+    export scalar-function;
+}
+
+/// Minimal + outbound DNS. For extensions whose scalars need to
+/// resolve hostnames (dns_resolve / dns_lookup_mx / etc.). Same
+/// shape as `minimal-http` but with the `dns` import; gated by
+/// `capability::dns` + load-time `dns-policy.allowed-domains`.
+world minimal-dns {
+    import types;
+    import spi;
+    import session;
+    import logging;
+    import config;
+    // `http` is imported because `policy.wit` does `use http.{method}`
+    // for its method-allowlist field; bindgen wants the interface
+    // resolvable even when this world doesn't directly use it.
+    import http;
+    import dns;
+    import wal-frames;
+    import s3-base;
+    import build;
+    import bundles;
+
+    export metadata;
+    export scalar-function;
+}
+
+/// Stateful extension — adds aggregate functions, host-managed state,
+/// and an in-memory cache.
+world stateful {
+    import types;
+    import spi;
+    import session;
+    import logging;
+    import config;
+    import state;
+    import cache;
+    import wal-frames;
+    import s3-base;
+    import build;
+    import bundles;
+
+    export metadata;
+    export scalar-function;
+    export aggregate-function;
+}
+
+/// Extension with full lifecycle awareness. Builds on `stateful` by
+/// adding prepared statements (for setup queries in on-load) and the
+/// lifecycle export.
+world lifecycle-aware {
+    import types;
+    import spi;
+    import session;
+    import prepared;
+    import logging;
+    import config;
+    import state;
+    import cache;
+    import wal-frames;
+    import s3-base;
+    import build;
+    import bundles;
+
+    export metadata;
+    export lifecycle;
+    export scalar-function;
+    export aggregate-function;
+}
+
+/// Extension that resolves URIs to component bytes. Imports `http`
+/// for network-fetching resolvers; the host's capability gate is
+/// what enforces which hosts the resolver can hit (no resolver-
+/// internal policy). scalar-function is exported for the same
+/// metadata-bootstrap reason as `authorizing` / `hooked`.
+world resolving {
+    import types;
+    import spi;
+    import session;
+    import logging;
+    import config;
+    import http;
+    import wal-frames;
+    import s3-base;
+    import build;
+    import bundles;
+
+    export metadata;
+    export scalar-function;
+    export resolver;
+}
+
+/// Extension that adds a custom collation. Inherits the minimal
+/// import set; adds the collation export. Same shape as `minimal`
+/// plus collation — keeps the import surface small for extensions
+/// that only need to compare strings, without forcing them into
+/// the full world's kitchen sink.
+world collating {
+    import types;
+    import spi;
+    import session;
+    import logging;
+    import config;
+    import wal-frames;
+    import s3-base;
+    import build;
+    import bundles;
+
+    export metadata;
+    export scalar-function;
+    export collation;
+}
+
+/// Extension that authorizes SQL actions. scalar-function is
+/// exported alongside the authorizer so the host's metadata
+/// bootstrap path (which always instantiates against the minimal
+/// world to read manifest.describe) can resolve the component;
+/// extensions that don't expose SQL functions just return an error
+/// from `call`.
+world authorizing {
+    import types;
+    import spi;
+    import session;
+    import logging;
+    import config;
+    import wal-frames;
+    import s3-base;
+    import build;
+    import bundles;
+
+    export metadata;
+    export scalar-function;
+    export authorizer;
+}
+
+/// Extension that observes row-level changes and transaction
+/// boundaries. scalar-function exported for the same reason as in
+/// `authorizing` — uniform metadata bootstrap shape.
+///
+/// Also exports `wal-hook` so extensions that only need the WAL
+/// substrate (the wal-archive extension being the canonical
+/// example) can pick this same world; the host's substrate routes
+/// dispatch by the manifest's `has-*-hook` flags so unused
+/// exports cost nothing.
+world hooked {
+    import types;
+    import spi;
+    import session;
+    import logging;
+    import config;
+    import wal-frames;
+    import s3-base;
+    import build;
+    import bundles;
+
+    export metadata;
+    export scalar-function;
+    export update-hook;
+    export commit-hook;
+    export wal-hook;
+}
+
+/// Hook-aware extension that ALSO needs raw WAL-frame access  the
+/// canonical shape of the wal-archive extension (and the test-bench
+/// `hookprobe`-style probes that exercise the same substrate).
+/// Builds on `hooked` by adding the capability-gated WAL-frames SPI
+/// import introduced in PLAN-wal-archive substrate #439.
+///
+/// Snapshot-serialize is available via the existing `spi.serialize-db`
+/// (gated by `capability::spi`); no separate `backup` interface.
+world wal-aware {
+    import types;
+    import spi;
+    import session;
+    import logging;
+    import config;
+    import wal-frames;
+    import s3-base;
+    import build;
+    import bundles;
+
+    export metadata;
+    export scalar-function;
+    export update-hook;
+    export commit-hook;
+    export wal-hook;
+}
+
+/// Test-bench world that wires every hook surface in one
+/// component: authorizer + update-hook + commit-hook (the latter
+/// also covers rollback per `commit-hook`'s WIT contract) +
+/// wal-hook. Used by extensions like `hookprobe` that exercise
+/// the dispatch-bridge hook trampolines from end-to-end browser
+/// tests. Not intended for production extensions  pick `hooked`
+/// or `authorizing` if you only need one of the three slots.
+world hookprobe {
+    import types;
+    import spi;
+    import session;
+    import logging;
+    import config;
+    import wal-frames;
+    import s3-base;
+    import build;
+    import bundles;
+
+    export metadata;
+    export scalar-function;
+    export authorizer;
+    export update-hook;
+    export commit-hook;
+    export wal-hook;
+}
+
+/// Extension that exposes one or more virtual-table modules
+/// (read-only). scalar-function is exported alongside vtab for
+/// the same metadata-bootstrap reason as `authorizing`. For vtabs
+/// that mutate (INSERT/UPDATE/DELETE), use `tabular-mutating`.
+world tabular {
+    import types;
+    import spi;
+    import session;
+    import logging;
+    import config;
+    import wal-frames;
+    import s3-base;
+    import build;
+    import bundles;
+
+    export metadata;
+    export scalar-function;
+    export vtab;
+}
+
+/// Extension that exposes one or more *mutating* virtual-table
+/// modules. Adds the `vtab-update` export on top of `tabular`'s
+/// read surface. The extension declares `vtab-spec.mutable = true`
+/// for each module that participates; vtabs whose spec leaves
+/// `mutable = false` still route through the read-only `vtab`
+/// surface even within this world.
+world tabular-mutating {
+    import types;
+    import spi;
+    import session;
+    import logging;
+    import config;
+    import wal-frames;
+    import s3-base;
+    import build;
+    import bundles;
+
+    export metadata;
+    export scalar-function;
+    export vtab;
+    export vtab-update;
+}
+
+/// Extension that registers one or more CLI dot commands.
+/// See dotcmd.wit + PLAN-dotcmd-plugins.md.
+///
+/// scalar-function is exported alongside dot-command for the
+/// same metadata-bootstrap reason as `authorizing`, `hooked`,
+/// `tabular`. Extensions that only ship dot commands return an
+/// error from `scalar-function.call`.
+world dotcmd-aware {
+    import types;
+    import spi;
+    import session;
+    import logging;
+    import config;
+    import cli-stdout;
+    import cli-stderr;
+    import cli-state;
+    import wal-frames;
+    import s3-base;
+    import build;
+    import bundles;
+    /// Phase 5 / follow-up: gives dot-command extensions a tight
+    /// slice of the loader (just enough to register peer
+    /// extensions). Used by `extensions/sqlink-meta-cli` to
+    /// implement `.sqlink install`; ordinary dot-command
+    /// extensions ignore it.
+    import loader-bridge;
+
+    export metadata;
+    export scalar-function;
+    export dot-command;
+}
+
+/// Purpose-built world for the `.bundle` dot-command extension.
+/// Same shape as `dotcmd-aware` minus `wal-frames` / `s3-base`
+/// (bundle-cli has no use for either) plus
+/// `dispatch-bridge-cas` for direct CAS-cache SQL access.
+///
+/// #554 cleanup: `import bundles;` dropped. Every bundle-cli
+/// call site now drives the CAS-cache through
+/// `dispatch-bridge-cas.bridged-execute-cas` against the
+/// `sqlite_cas_cache::bundles_exec::*_SQL` strings (vendored at
+/// `extensions/bundle-cli/src/sql.rs`); the typed
+/// `bundles::Host` impl is unused on this world's behalf. Other
+/// worlds (minimal, dotcmd-aware, etc.) still import bundles,
+/// so the host's `bundles::Host` impl stays satisfied.
+world bundle-cli {
+    import types;
+    import spi;
+    import session;
+    import logging;
+    import config;
+    import cli-stdout;
+    import cli-stderr;
+    import cli-state;
+    import build;
+    import loader-bridge;
+    import dispatch-bridge-cas;
+
+    export metadata;
+    export scalar-function;
+    export dot-command;
+}
+
+/// Full-featured extension — every host capability available, every
+/// guest hook offered. Use this when an extension genuinely needs the
+/// kitchen sink; prefer a narrower world otherwise.
+world full {
+    import types;
+    import spi;
+    import session;
+    import prepared;
+    import transaction;
+    import schema;
+    import logging;
+    import config;
+    import state;
+    import cache;
+    import random;
+    import text;
+    import hashing;
+    import encoding;
+    import http;
+    import dns;
+    import wal-frames;
+    import s3-base;
+    import build;
+    import bundles;
+    import cli-stdout;
+    import cli-stderr;
+    import cli-state;
+
+    export metadata;
+    export lifecycle;
+    export scalar-function;
+    export aggregate-function;
+    export collation;
+    export authorizer;
+    export update-hook;
+    export commit-hook;
+    export vtab;
+    export vtab-update;
+    export dot-command;
+}

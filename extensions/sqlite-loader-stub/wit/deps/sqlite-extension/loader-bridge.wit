@@ -1,0 +1,139 @@
+package sqlite:extension@1.0.0;
+
+/// loader-bridge  the small, tightly-scoped slice of the host's
+/// extension-loader surface that dot-command extensions are
+/// allowed to call. The host implements this for the
+/// `dotcmd-aware` world's Linker, so an extension like
+/// `sqlink-meta-cli` can do `.sqlink install file://...` from
+/// inside wasm instead of needing a cli built-in.
+///
+/// This is NOT the full extension-loader (which has ~30 methods
+/// covering cache management, runtime registration, resolver
+/// admin, ...). It's the minimum surface for the registry-
+/// management story: read bytes  load + introspect  insert
+/// metadata. The cli still owns auto-resolve, capability grant
+/// policy, and the on-disk wasm cache.
+///
+/// Types are declared LOCALLY rather than `use metadata.{manifest}`
+/// because bindgen treats metadata as an export-side interface
+/// across most worlds and pulling its records into an import gets
+/// tangled. The host translates between the two shapes at the
+/// boundary.
+interface loader-bridge {
+    record loader-error {
+        code: s32,
+        message: string,
+    }
+
+    /// Just enough of the manifest's `dot-command-spec` for
+    /// `.sqlink install` to populate `sqlink_dotcmd`. Other
+    /// manifest fields (scalar functions, vtabs, ...) aren't
+    /// what `.sqlink` needs surfaced  the host installed them
+    /// already as a side effect of `load-extension-from-bytes`.
+    record bridged-dot-command {
+        id: u64,
+        name: string,
+        summary: string,
+        usage: string,
+        help: string,
+        requires-write: bool,
+    }
+
+    record bridged-manifest {
+        name: string,
+        version: string,
+        dot-commands: list<bridged-dot-command>,
+    }
+
+    /// Load an extension from in-memory bytes. Returns a
+    /// trimmed-down manifest with just the dot-commands the
+    /// caller needs to register downstream. Side effect: the
+    /// host's session registry now contains the extension
+    /// under `manifest.name`, so subsequent dispatch calls hit
+    /// it directly.
+    ///
+    /// The host applies its standard load policy. v1 ignores
+    /// the `extra-grants` argument  the cli's policy is used
+    /// as-is. Phase 5+ may surface per-install grant overrides
+    /// here.
+    load-extension-from-bytes: func(
+        name-hint: string,
+        bytes: list<u8>,
+        extra-grants: list<string>,
+    ) -> result<bridged-manifest, loader-error>;
+
+    /// blake3-hex digest the host computed for a loaded
+    /// extension. Returns the empty string for an unknown name.
+    extension-digest: func(name: string) -> string;
+
+    /// One row in the host's loaded-extension registry, as
+    /// observable from inside a dotcmd-aware extension. The
+    /// `bundle-cli` extension snapshots this list at `.bundle
+    /// save` time to derive the bundle's set-hash.
+    record loaded-extension {
+        /// Extension name as the host registered it (matches what
+        /// `extension-digest` keys on).
+        name: string,
+        /// blake3-hex digest of the loaded extension's bytes; the
+        /// same value `extension-digest` returns.
+        digest: string,
+    }
+
+    /// Enumerate every extension currently registered in the host's
+    /// loaded-extension table. Returned in a stable order (name
+    /// ascending) so callers that hash the list can compare set
+    /// identity without sorting client-side. Used by `bundle-cli`'s
+    /// `.bundle save` to capture the live connection's extension
+    /// configuration  the canonical "snapshot from live connection"
+    /// move from PLAN-bundles.md.
+    list-loaded-extensions: func() -> list<loaded-extension>;
+
+    /// The host's current target triple (e.g. `aarch64-apple-darwin`,
+    /// `x86_64-unknown-linux-gnu`). Used by `bundle-cli`'s `.bundle
+    /// build` to (a) tell `spawn-build` which target to ask cargo
+    /// for and (b) record the same value in `bundle-binaries` so
+    /// the launch-flag lookup at exec time matches exactly. The
+    /// host computes this from `std::env::consts` (arch + os).
+    host-target-triple: func() -> string;
+
+    /// Look up a process-environment variable from the host.
+    /// Returns `none` if unset or empty. Capability-gated on the
+    /// existing Spi capability (no new capability needed
+    /// operator already trusts the extension with cas-cache +
+    /// bundle reads via the bridge). Used by `bundle-cli` to honor
+    /// `$SQLINK_DEV_ROOT` when resolving the crate-root for
+    /// `.bundle build`, so an installed sqlink can be pointed at
+    /// the user's source checkout without recompiling bundle-cli.
+    env-var: func(name: string) -> option<string>;
+
+    /// PLAN-followups.md P1 live-prefer: after `prefix-cli` writes
+    /// an `INSERT OR REPLACE` row to `__sqlink_prefix_pin`,
+    /// re-register the bare-name SQLite trampoline against the
+    /// pinned extension's implementation so the dispatch change
+    /// takes effect in the CURRENT session  no restart needed.
+    ///
+    /// Resolution:
+    ///   1. Read `__sqlink_prefix_pin` for (function_name, n_args)
+    ///      to get the target expansion.
+    ///   2. Read `__sqlink_prefix_function` for (expansion,
+    ///      function_name, n_args) to get the owning extension_name.
+    ///   3. Re-call `register_host_loaded_scalar` on
+    ///      shared_spi_conn against that extension's func_id from
+    ///      `ext_scalar_func_ids`, overriding SQLite's last-wins
+    ///      registration.
+    ///
+    /// Errors via loader-error code:
+    ///   * 1: no pin row for (name, n_args)  caller likely
+    ///        skipped the INSERT.
+    ///   * 2: pin row's expansion has no matching entry in
+    ///        `__sqlink_prefix_function`  stale pin.
+    ///   * 3: extension's scalar isn't in `ext_scalar_func_ids`
+    ///        the extension hasn't registered the function yet,
+    ///        OR the pin targets a non-scalar shape
+    ///        (aggregates/collations/vtabs are not live-pinnable
+    ///        in v1).
+    apply-prefix-pin: func(
+        function-name: string,
+        n-args: s32,
+    ) -> result<_, loader-error>;
+}

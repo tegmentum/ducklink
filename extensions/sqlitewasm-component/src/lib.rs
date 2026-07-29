@@ -235,6 +235,11 @@ fn sqlite_value_as_text(v: &sqlite_types::SqlValue) -> types::Duckvalue {
             }
             types::Duckvalue::Text(s.into())
         }
+        // @1.0.0 arm — sqlite-lib never emits it here; render a
+        // diagnostic string rather than crashing on the exhaustive match.
+        sqlite_types::SqlValue::WitValue(p) => types::Duckvalue::Text(
+            format!("<wit-value:{}>", p.symbolic_name).into(),
+        ),
     }
 }
 
@@ -905,6 +910,13 @@ fn sqlite_value_to_duck(v: &sqlite_types::SqlValue, ty: &types::Logicaltype) -> 
             ),
             _ => types::Duckvalue::Blob(b.to_vec().into()),
         },
+        // sqlite-lib never emits wit-value payloads over this component's
+        // scalar traffic (record-ferrying is a Phase-C follow-up); surface
+        // it as text-encoded diagnostic if it ever appears so behaviour is
+        // observable rather than crashy.
+        sqlite_types::SqlValue::WitValue(p) => types::Duckvalue::Text(
+            format!("<wit-value:{}>", p.symbolic_name).into(),
+        ),
     }
 }
 

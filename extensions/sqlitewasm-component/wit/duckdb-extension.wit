@@ -55,7 +55,7 @@ world duckdb-extension-storage-write {
   import catalog;
   import files;
   import storage;
-  import sqlite:extension/spi@0.1.0;
+  import sqlite:extension/spi@1.0.0;
   export guest;
   export callback-dispatch;
   export storage-dispatch;
