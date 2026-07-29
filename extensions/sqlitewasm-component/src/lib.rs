@@ -324,6 +324,22 @@ impl storage_dispatch::Guest for Extension {
         let dsn_str = dsn.to_string();
         sqlite_spi::open_db(&dsn_str)
             .map_err(|e| sqlite_err_to_duck(e, &format!("sqlitewasm: opening '{dsn_str}'")))?;
+        // Bug 8: eliminate the fsync-per-commit ceremony that dominated the
+        // per-row ATTACH-driven INSERT path. The write intercept wraps each
+        // single-row INSERT in BEGIN/insert/COMMIT, so under the default
+        // `journal_mode=DELETE + synchronous=FULL` every COMMIT triggers
+        // >=1 `fd_sync` through wasivfs -> wasi:filesystem. With 10k inserts
+        // that's ~10k real fsyncs (the 10k-INSERT stress test spent ~180s
+        // in ceremony alone). MEMORY keeps the rollback journal in RAM;
+        // synchronous=OFF drops the fsync barrier. Trade-off: on a hard
+        // crash mid-transaction the file may be left partially written --
+        // acceptable for a foreign-catalog ATTACH the user opted into
+        // (single-writer, single-session; the primary DB is unaffected).
+        // Falls through if PRAGMAs are rejected (e.g. a future SPI change)
+        // so the attach still succeeds -- worst case is slow, not broken.
+        let _ = spi_execute_batch(
+            "PRAGMA journal_mode = MEMORY; PRAGMA synchronous = OFF;",
+        );
         let id = NEXT_CATALOG.with(|n| {
             let mut n = n.borrow_mut();
             let id = *n;
