@@ -2301,6 +2301,1718 @@ pub mod sqlite {
                 }
             }
         }
+        /// Virtual-table dispatch. The host calls every method with the
+        /// `vtab-id` declared in the corresponding `vtab-spec` plus a
+        /// host-assigned `instance-id` (per `CREATE VIRTUAL TABLE`) and,
+        /// for cursor calls, a host-assigned `cursor-id` (per `xOpen`).
+        /// Read-only surface: every vtab implements this. Mutating vtabs
+        /// (vtab-spec.mutable = true) additionally export `vtab-update`
+        /// for xUpdate + transactional hooks.
+        #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+        pub mod vtab {
+            #[used]
+            #[doc(hidden)]
+            static __FORCE_SECTION_REF: fn() = super::super::super::__link_custom_section_describing_imports;
+            use super::super::super::_rt;
+            pub type SqlValue = super::super::super::sqlite::extension::types::SqlValue;
+            /// Constraint operators SQLite's query planner pushes down
+            /// through `xBestIndex`. Mirrors `SQLITE_INDEX_CONSTRAINT_*`.
+            #[repr(u8)]
+            #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+            pub enum ConstraintOp {
+                Eq,
+                Gt,
+                Le,
+                Lt,
+                Ge,
+                Ne,
+                Match,
+                Like,
+                Regexp,
+                Glob,
+                IsNull,
+                IsNotNull,
+                Limit,
+                Offset,
+                Function,
+            }
+            impl ::core::fmt::Debug for ConstraintOp {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    match self {
+                        ConstraintOp::Eq => f.debug_tuple("ConstraintOp::Eq").finish(),
+                        ConstraintOp::Gt => f.debug_tuple("ConstraintOp::Gt").finish(),
+                        ConstraintOp::Le => f.debug_tuple("ConstraintOp::Le").finish(),
+                        ConstraintOp::Lt => f.debug_tuple("ConstraintOp::Lt").finish(),
+                        ConstraintOp::Ge => f.debug_tuple("ConstraintOp::Ge").finish(),
+                        ConstraintOp::Ne => f.debug_tuple("ConstraintOp::Ne").finish(),
+                        ConstraintOp::Match => {
+                            f.debug_tuple("ConstraintOp::Match").finish()
+                        }
+                        ConstraintOp::Like => {
+                            f.debug_tuple("ConstraintOp::Like").finish()
+                        }
+                        ConstraintOp::Regexp => {
+                            f.debug_tuple("ConstraintOp::Regexp").finish()
+                        }
+                        ConstraintOp::Glob => {
+                            f.debug_tuple("ConstraintOp::Glob").finish()
+                        }
+                        ConstraintOp::IsNull => {
+                            f.debug_tuple("ConstraintOp::IsNull").finish()
+                        }
+                        ConstraintOp::IsNotNull => {
+                            f.debug_tuple("ConstraintOp::IsNotNull").finish()
+                        }
+                        ConstraintOp::Limit => {
+                            f.debug_tuple("ConstraintOp::Limit").finish()
+                        }
+                        ConstraintOp::Offset => {
+                            f.debug_tuple("ConstraintOp::Offset").finish()
+                        }
+                        ConstraintOp::Function => {
+                            f.debug_tuple("ConstraintOp::Function").finish()
+                        }
+                    }
+                }
+            }
+            impl ConstraintOp {
+                #[doc(hidden)]
+                pub unsafe fn _lift(val: u8) -> ConstraintOp {
+                    if !cfg!(debug_assertions) {
+                        return ::core::mem::transmute(val);
+                    }
+                    match val {
+                        0 => ConstraintOp::Eq,
+                        1 => ConstraintOp::Gt,
+                        2 => ConstraintOp::Le,
+                        3 => ConstraintOp::Lt,
+                        4 => ConstraintOp::Ge,
+                        5 => ConstraintOp::Ne,
+                        6 => ConstraintOp::Match,
+                        7 => ConstraintOp::Like,
+                        8 => ConstraintOp::Regexp,
+                        9 => ConstraintOp::Glob,
+                        10 => ConstraintOp::IsNull,
+                        11 => ConstraintOp::IsNotNull,
+                        12 => ConstraintOp::Limit,
+                        13 => ConstraintOp::Offset,
+                        14 => ConstraintOp::Function,
+                        _ => panic!("invalid enum discriminant"),
+                    }
+                }
+            }
+            /// One constraint from `xBestIndex`'s `aConstraint[]`.
+            /// `column = -1` denotes ROWID.
+            #[repr(C)]
+            #[derive(Clone, Copy)]
+            pub struct Constraint {
+                pub column: i32,
+                pub op: ConstraintOp,
+                pub usable: bool,
+            }
+            impl ::core::fmt::Debug for Constraint {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("Constraint")
+                        .field("column", &self.column)
+                        .field("op", &self.op)
+                        .field("usable", &self.usable)
+                        .finish()
+                }
+            }
+            /// One ORDER BY term from `xBestIndex`'s `aOrderBy[]`.
+            #[repr(C)]
+            #[derive(Clone, Copy)]
+            pub struct Orderby {
+                pub column: i32,
+                pub desc: bool,
+            }
+            impl ::core::fmt::Debug for Orderby {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("Orderby")
+                        .field("column", &self.column)
+                        .field("desc", &self.desc)
+                        .finish()
+                }
+            }
+            /// Input to `best-index`. `col-used` is the SQLite bitmask
+            /// of columns the query touches (bit i = column i; bit 63 =
+            /// "any column ≥ 63"  same encoding SQLite uses).
+            #[derive(Clone)]
+            pub struct IndexInfo {
+                pub constraints: _rt::Vec<Constraint>,
+                pub orderbys: _rt::Vec<Orderby>,
+                pub col_used: u64,
+            }
+            impl ::core::fmt::Debug for IndexInfo {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("IndexInfo")
+                        .field("constraints", &self.constraints)
+                        .field("orderbys", &self.orderbys)
+                        .field("col-used", &self.col_used)
+                        .finish()
+                }
+            }
+            /// Per-constraint output: `argv-index = 0` leaves the
+            /// constraint to SQLite; non-zero binds it to the matching
+            /// argv slot in `filter`. `omit = true` tells SQLite to skip
+            /// the redundant re-check.
+            #[repr(C)]
+            #[derive(Clone, Copy)]
+            pub struct ConstraintUsage {
+                pub argv_index: i32,
+                pub omit: bool,
+            }
+            impl ::core::fmt::Debug for ConstraintUsage {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("ConstraintUsage")
+                        .field("argv-index", &self.argv_index)
+                        .field("omit", &self.omit)
+                        .finish()
+                }
+            }
+            /// Output of `best-index`. The shape mirrors SQLite's
+            /// `sqlite3_index_info`'s output fields.
+            #[derive(Clone)]
+            pub struct IndexPlan {
+                pub constraint_usage: _rt::Vec<ConstraintUsage>,
+                pub idx_num: i32,
+                pub idx_str: Option<_rt::String>,
+                pub estimated_cost: f64,
+                pub estimated_rows: i64,
+                pub orderby_consumed: bool,
+            }
+            impl ::core::fmt::Debug for IndexPlan {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("IndexPlan")
+                        .field("constraint-usage", &self.constraint_usage)
+                        .field("idx-num", &self.idx_num)
+                        .field("idx-str", &self.idx_str)
+                        .field("estimated-cost", &self.estimated_cost)
+                        .field("estimated-rows", &self.estimated_rows)
+                        .field("orderby-consumed", &self.orderby_consumed)
+                        .finish()
+                }
+            }
+            /// One row in a batched fetch result. `rowid` mirrors what
+            /// `vtab.rowid` would have returned; `columns` has every
+            /// column in declared-schema order (use NULL for HIDDEN
+            /// columns the row doesn't carry).
+            #[derive(Clone)]
+            pub struct VtabRow {
+                pub rowid: i64,
+                pub columns: _rt::Vec<SqlValue>,
+            }
+            impl ::core::fmt::Debug for VtabRow {
+                fn fmt(
+                    &self,
+                    f: &mut ::core::fmt::Formatter<'_>,
+                ) -> ::core::fmt::Result {
+                    f.debug_struct("VtabRow")
+                        .field("rowid", &self.rowid)
+                        .field("columns", &self.columns)
+                        .finish()
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Module lifecycle. `create` runs on `CREATE VIRTUAL TABLE`
+            /// and is allowed to materialize backing storage. `connect`
+            /// runs on subsequent loads of the same db. Eponymous vtabs
+            /// (per `vtab-spec.eponymous`) see only `connect`. Both
+            /// return the declared schema as a `CREATE TABLE ...` string.
+            pub fn create(
+                vtab_id: u64,
+                instance_id: u64,
+                db_name: &str,
+                table_name: &str,
+                args: &[_rt::String],
+            ) -> Result<_rt::String, _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let vec0 = db_name;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    let vec1 = table_name;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let vec3 = args;
+                    let len3 = vec3.len();
+                    let layout3 = _rt::alloc::Layout::from_size_align_unchecked(
+                        vec3.len() * (2 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result3 = if layout3.size() != 0 {
+                        let ptr = _rt::alloc::alloc(layout3).cast::<u8>();
+                        if ptr.is_null() {
+                            _rt::alloc::handle_alloc_error(layout3);
+                        }
+                        ptr
+                    } else {
+                        ::core::ptr::null_mut()
+                    };
+                    for (i, e) in vec3.into_iter().enumerate() {
+                        let base = result3
+                            .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                        {
+                            let vec2 = e;
+                            let ptr2 = vec2.as_ptr().cast::<u8>();
+                            let len2 = vec2.len();
+                            *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len2;
+                            *base.add(0).cast::<*mut u8>() = ptr2.cast_mut();
+                        }
+                    }
+                    let ptr4 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "sqlite:extension/vtab@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "create"]
+                        fn wit_import5(
+                            _: i64,
+                            _: i64,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import5(
+                        _: i64,
+                        _: i64,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import5(
+                            _rt::as_i64(&vtab_id),
+                            _rt::as_i64(&instance_id),
+                            ptr0.cast_mut(),
+                            len0,
+                            ptr1.cast_mut(),
+                            len1,
+                            result3,
+                            len3,
+                            ptr4,
+                        )
+                    };
+                    let l6 = i32::from(*ptr4.add(0).cast::<u8>());
+                    let result13 = match l6 {
+                        0 => {
+                            let e = {
+                                let l7 = *ptr4
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l8 = *ptr4
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len9 = l8;
+                                let bytes9 = _rt::Vec::from_raw_parts(
+                                    l7.cast(),
+                                    len9,
+                                    len9,
+                                );
+                                _rt::string_lift(bytes9)
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l10 = *ptr4
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l11 = *ptr4
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len12 = l11;
+                                let bytes12 = _rt::Vec::from_raw_parts(
+                                    l10.cast(),
+                                    len12,
+                                    len12,
+                                );
+                                _rt::string_lift(bytes12)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    if layout3.size() != 0 {
+                        _rt::alloc::dealloc(result3.cast(), layout3);
+                    }
+                    result13
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            pub fn connect(
+                vtab_id: u64,
+                instance_id: u64,
+                db_name: &str,
+                table_name: &str,
+                args: &[_rt::String],
+            ) -> Result<_rt::String, _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let vec0 = db_name;
+                    let ptr0 = vec0.as_ptr().cast::<u8>();
+                    let len0 = vec0.len();
+                    let vec1 = table_name;
+                    let ptr1 = vec1.as_ptr().cast::<u8>();
+                    let len1 = vec1.len();
+                    let vec3 = args;
+                    let len3 = vec3.len();
+                    let layout3 = _rt::alloc::Layout::from_size_align_unchecked(
+                        vec3.len() * (2 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result3 = if layout3.size() != 0 {
+                        let ptr = _rt::alloc::alloc(layout3).cast::<u8>();
+                        if ptr.is_null() {
+                            _rt::alloc::handle_alloc_error(layout3);
+                        }
+                        ptr
+                    } else {
+                        ::core::ptr::null_mut()
+                    };
+                    for (i, e) in vec3.into_iter().enumerate() {
+                        let base = result3
+                            .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                        {
+                            let vec2 = e;
+                            let ptr2 = vec2.as_ptr().cast::<u8>();
+                            let len2 = vec2.len();
+                            *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len2;
+                            *base.add(0).cast::<*mut u8>() = ptr2.cast_mut();
+                        }
+                    }
+                    let ptr4 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "sqlite:extension/vtab@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "connect"]
+                        fn wit_import5(
+                            _: i64,
+                            _: i64,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import5(
+                        _: i64,
+                        _: i64,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import5(
+                            _rt::as_i64(&vtab_id),
+                            _rt::as_i64(&instance_id),
+                            ptr0.cast_mut(),
+                            len0,
+                            ptr1.cast_mut(),
+                            len1,
+                            result3,
+                            len3,
+                            ptr4,
+                        )
+                    };
+                    let l6 = i32::from(*ptr4.add(0).cast::<u8>());
+                    let result13 = match l6 {
+                        0 => {
+                            let e = {
+                                let l7 = *ptr4
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l8 = *ptr4
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len9 = l8;
+                                let bytes9 = _rt::Vec::from_raw_parts(
+                                    l7.cast(),
+                                    len9,
+                                    len9,
+                                );
+                                _rt::string_lift(bytes9)
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l10 = *ptr4
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l11 = *ptr4
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len12 = l11;
+                                let bytes12 = _rt::Vec::from_raw_parts(
+                                    l10.cast(),
+                                    len12,
+                                    len12,
+                                );
+                                _rt::string_lift(bytes12)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    if layout3.size() != 0 {
+                        _rt::alloc::dealloc(result3.cast(), layout3);
+                    }
+                    result13
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Tears down `CREATE`'s backing storage. Eponymous vtabs
+            /// never see this.
+            pub fn destroy(vtab_id: u64, instance_id: u64) -> Result<(), _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "sqlite:extension/vtab@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "destroy"]
+                        fn wit_import1(_: i64, _: i64, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import1(_: i64, _: i64, _: *mut u8) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import1(
+                            _rt::as_i64(&vtab_id),
+                            _rt::as_i64(&instance_id),
+                            ptr0,
+                        )
+                    };
+                    let l2 = i32::from(*ptr0.add(0).cast::<u8>());
+                    let result6 = match l2 {
+                        0 => {
+                            let e = ();
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l3 = *ptr0
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l4 = *ptr0
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len5 = l4;
+                                let bytes5 = _rt::Vec::from_raw_parts(
+                                    l3.cast(),
+                                    len5,
+                                    len5,
+                                );
+                                _rt::string_lift(bytes5)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result6
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Closes the per-instance handle. Always paired with the
+            /// corresponding `create` / `connect`.
+            pub fn disconnect(
+                vtab_id: u64,
+                instance_id: u64,
+            ) -> Result<(), _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "sqlite:extension/vtab@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "disconnect"]
+                        fn wit_import1(_: i64, _: i64, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import1(_: i64, _: i64, _: *mut u8) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import1(
+                            _rt::as_i64(&vtab_id),
+                            _rt::as_i64(&instance_id),
+                            ptr0,
+                        )
+                    };
+                    let l2 = i32::from(*ptr0.add(0).cast::<u8>());
+                    let result6 = match l2 {
+                        0 => {
+                            let e = ();
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l3 = *ptr0
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l4 = *ptr0
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len5 = l4;
+                                let bytes5 = _rt::Vec::from_raw_parts(
+                                    l3.cast(),
+                                    len5,
+                                    len5,
+                                );
+                                _rt::string_lift(bytes5)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result6
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Query planner callback. Receives the constraints + order
+            /// SQLite would use; returns a plan that names which
+            /// constraints go in `filter`'s argv and the chosen idx-num /
+            /// idx-str pair `filter` will see again.
+            pub fn best_index(
+                vtab_id: u64,
+                instance_id: u64,
+                info: &IndexInfo,
+            ) -> Result<IndexPlan, _rt::String> {
+                unsafe {
+                    #[repr(align(8))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 32 + 6 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 32
+                            + 6 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let IndexInfo {
+                        constraints: constraints0,
+                        orderbys: orderbys0,
+                        col_used: col_used0,
+                    } = info;
+                    let vec2 = constraints0;
+                    let len2 = vec2.len();
+                    let layout2 = _rt::alloc::Layout::from_size_align_unchecked(
+                        vec2.len() * 8,
+                        4,
+                    );
+                    let result2 = if layout2.size() != 0 {
+                        let ptr = _rt::alloc::alloc(layout2).cast::<u8>();
+                        if ptr.is_null() {
+                            _rt::alloc::handle_alloc_error(layout2);
+                        }
+                        ptr
+                    } else {
+                        ::core::ptr::null_mut()
+                    };
+                    for (i, e) in vec2.into_iter().enumerate() {
+                        let base = result2.add(i * 8);
+                        {
+                            let Constraint {
+                                column: column1,
+                                op: op1,
+                                usable: usable1,
+                            } = e;
+                            *base.add(0).cast::<i32>() = _rt::as_i32(column1);
+                            *base.add(4).cast::<u8>() = (op1.clone() as i32) as u8;
+                            *base.add(5).cast::<u8>() = (match usable1 {
+                                true => 1,
+                                false => 0,
+                            }) as u8;
+                        }
+                    }
+                    let vec4 = orderbys0;
+                    let len4 = vec4.len();
+                    let layout4 = _rt::alloc::Layout::from_size_align_unchecked(
+                        vec4.len() * 8,
+                        4,
+                    );
+                    let result4 = if layout4.size() != 0 {
+                        let ptr = _rt::alloc::alloc(layout4).cast::<u8>();
+                        if ptr.is_null() {
+                            _rt::alloc::handle_alloc_error(layout4);
+                        }
+                        ptr
+                    } else {
+                        ::core::ptr::null_mut()
+                    };
+                    for (i, e) in vec4.into_iter().enumerate() {
+                        let base = result4.add(i * 8);
+                        {
+                            let Orderby { column: column3, desc: desc3 } = e;
+                            *base.add(0).cast::<i32>() = _rt::as_i32(column3);
+                            *base.add(4).cast::<u8>() = (match desc3 {
+                                true => 1,
+                                false => 0,
+                            }) as u8;
+                        }
+                    }
+                    let ptr5 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "sqlite:extension/vtab@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "best-index"]
+                        fn wit_import6(
+                            _: i64,
+                            _: i64,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: i64,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import6(
+                        _: i64,
+                        _: i64,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: i64,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import6(
+                            _rt::as_i64(&vtab_id),
+                            _rt::as_i64(&instance_id),
+                            result2,
+                            len2,
+                            result4,
+                            len4,
+                            _rt::as_i64(col_used0),
+                            ptr5,
+                        )
+                    };
+                    let l7 = i32::from(*ptr5.add(0).cast::<u8>());
+                    let result24 = match l7 {
+                        0 => {
+                            let e = {
+                                let l8 = *ptr5.add(8).cast::<*mut u8>();
+                                let l9 = *ptr5
+                                    .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let base12 = l8;
+                                let len12 = l9;
+                                let mut result12 = _rt::Vec::with_capacity(len12);
+                                for i in 0..len12 {
+                                    let base = base12.add(i * 8);
+                                    let e12 = {
+                                        let l10 = *base.add(0).cast::<i32>();
+                                        let l11 = i32::from(*base.add(4).cast::<u8>());
+                                        ConstraintUsage {
+                                            argv_index: l10,
+                                            omit: _rt::bool_lift(l11 as u8),
+                                        }
+                                    };
+                                    result12.push(e12);
+                                }
+                                _rt::cabi_dealloc(base12, len12 * 8, 4);
+                                let l13 = *ptr5
+                                    .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<i32>();
+                                let l14 = i32::from(
+                                    *ptr5
+                                        .add(8 + 3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                let l18 = *ptr5
+                                    .add(8 + 6 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<f64>();
+                                let l19 = *ptr5
+                                    .add(16 + 6 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<i64>();
+                                let l20 = i32::from(
+                                    *ptr5
+                                        .add(24 + 6 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>(),
+                                );
+                                IndexPlan {
+                                    constraint_usage: result12,
+                                    idx_num: l13,
+                                    idx_str: match l14 {
+                                        0 => None,
+                                        1 => {
+                                            let e = {
+                                                let l15 = *ptr5
+                                                    .add(8 + 4 * ::core::mem::size_of::<*const u8>())
+                                                    .cast::<*mut u8>();
+                                                let l16 = *ptr5
+                                                    .add(8 + 5 * ::core::mem::size_of::<*const u8>())
+                                                    .cast::<usize>();
+                                                let len17 = l16;
+                                                let bytes17 = _rt::Vec::from_raw_parts(
+                                                    l15.cast(),
+                                                    len17,
+                                                    len17,
+                                                );
+                                                _rt::string_lift(bytes17)
+                                            };
+                                            Some(e)
+                                        }
+                                        _ => _rt::invalid_enum_discriminant(),
+                                    },
+                                    estimated_cost: l18,
+                                    estimated_rows: l19,
+                                    orderby_consumed: _rt::bool_lift(l20 as u8),
+                                }
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l21 = *ptr5.add(8).cast::<*mut u8>();
+                                let l22 = *ptr5
+                                    .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len23 = l22;
+                                let bytes23 = _rt::Vec::from_raw_parts(
+                                    l21.cast(),
+                                    len23,
+                                    len23,
+                                );
+                                _rt::string_lift(bytes23)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    if layout2.size() != 0 {
+                        _rt::alloc::dealloc(result2.cast(), layout2);
+                    }
+                    if layout4.size() != 0 {
+                        _rt::alloc::dealloc(result4.cast(), layout4);
+                    }
+                    result24
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Open a fresh cursor against an existing instance. The
+            /// host allocates `cursor-id`; the guest stores per-cursor
+            /// state keyed by it.
+            pub fn open(
+                vtab_id: u64,
+                instance_id: u64,
+                cursor_id: u64,
+            ) -> Result<(), _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "sqlite:extension/vtab@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "open"]
+                        fn wit_import1(_: i64, _: i64, _: i64, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import1(
+                        _: i64,
+                        _: i64,
+                        _: i64,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import1(
+                            _rt::as_i64(&vtab_id),
+                            _rt::as_i64(&instance_id),
+                            _rt::as_i64(&cursor_id),
+                            ptr0,
+                        )
+                    };
+                    let l2 = i32::from(*ptr0.add(0).cast::<u8>());
+                    let result6 = match l2 {
+                        0 => {
+                            let e = ();
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l3 = *ptr0
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l4 = *ptr0
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len5 = l4;
+                                let bytes5 = _rt::Vec::from_raw_parts(
+                                    l3.cast(),
+                                    len5,
+                                    len5,
+                                );
+                                _rt::string_lift(bytes5)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result6
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Close a cursor. The guest releases per-cursor state.
+            pub fn close(vtab_id: u64, cursor_id: u64) -> Result<(), _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "sqlite:extension/vtab@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "close"]
+                        fn wit_import1(_: i64, _: i64, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import1(_: i64, _: i64, _: *mut u8) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import1(_rt::as_i64(&vtab_id), _rt::as_i64(&cursor_id), ptr0)
+                    };
+                    let l2 = i32::from(*ptr0.add(0).cast::<u8>());
+                    let result6 = match l2 {
+                        0 => {
+                            let e = ();
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l3 = *ptr0
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l4 = *ptr0
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len5 = l4;
+                                let bytes5 = _rt::Vec::from_raw_parts(
+                                    l3.cast(),
+                                    len5,
+                                    len5,
+                                );
+                                _rt::string_lift(bytes5)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result6
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Start iteration. `idx-num` / `idx-str` echo what
+            /// `best-index` returned for this query; `args` carries the
+            /// bound constraint values in `argv-index` order.
+            pub fn filter(
+                vtab_id: u64,
+                cursor_id: u64,
+                idx_num: i32,
+                idx_str: Option<&str>,
+                args: &[SqlValue],
+            ) -> Result<(), _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let (result1_0, result1_1, result1_2) = match idx_str {
+                        Some(e) => {
+                            let vec0 = e;
+                            let ptr0 = vec0.as_ptr().cast::<u8>();
+                            let len0 = vec0.len();
+                            (1i32, ptr0.cast_mut(), len0)
+                        }
+                        None => (0i32, ::core::ptr::null_mut(), 0usize),
+                    };
+                    let vec9 = args;
+                    let len9 = vec9.len();
+                    let layout9 = _rt::alloc::Layout::from_size_align_unchecked(
+                        vec9.len() * (8 + 6 * ::core::mem::size_of::<*const u8>()),
+                        8,
+                    );
+                    let result9 = if layout9.size() != 0 {
+                        let ptr = _rt::alloc::alloc(layout9).cast::<u8>();
+                        if ptr.is_null() {
+                            _rt::alloc::handle_alloc_error(layout9);
+                        }
+                        ptr
+                    } else {
+                        ::core::ptr::null_mut()
+                    };
+                    for (i, e) in vec9.into_iter().enumerate() {
+                        let base = result9
+                            .add(i * (8 + 6 * ::core::mem::size_of::<*const u8>()));
+                        {
+                            use super::super::super::sqlite::extension::types::SqlValue as V8;
+                            match e {
+                                V8::Null => {
+                                    *base.add(0).cast::<u8>() = (0i32) as u8;
+                                }
+                                V8::Integer(e) => {
+                                    *base.add(0).cast::<u8>() = (1i32) as u8;
+                                    *base.add(8).cast::<i64>() = _rt::as_i64(e);
+                                }
+                                V8::Real(e) => {
+                                    *base.add(0).cast::<u8>() = (2i32) as u8;
+                                    *base.add(8).cast::<f64>() = _rt::as_f64(e);
+                                }
+                                V8::Text(e) => {
+                                    *base.add(0).cast::<u8>() = (3i32) as u8;
+                                    let vec2 = e;
+                                    let ptr2 = vec2.as_ptr().cast::<u8>();
+                                    let len2 = vec2.len();
+                                    *base
+                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len2;
+                                    *base.add(8).cast::<*mut u8>() = ptr2.cast_mut();
+                                }
+                                V8::Blob(e) => {
+                                    *base.add(0).cast::<u8>() = (4i32) as u8;
+                                    let vec3 = e;
+                                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                                    let len3 = vec3.len();
+                                    *base
+                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len3;
+                                    *base.add(8).cast::<*mut u8>() = ptr3.cast_mut();
+                                }
+                                V8::WitValue(e) => {
+                                    *base.add(0).cast::<u8>() = (5i32) as u8;
+                                    let super::super::super::sqlite::extension::types::WitValuePayload {
+                                        type_id: type_id4,
+                                        bytes: bytes4,
+                                        symbolic_name: symbolic_name4,
+                                    } = e;
+                                    let vec5 = type_id4;
+                                    let ptr5 = vec5.as_ptr().cast::<u8>();
+                                    let len5 = vec5.len();
+                                    *base
+                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len5;
+                                    *base.add(8).cast::<*mut u8>() = ptr5.cast_mut();
+                                    let vec6 = bytes4;
+                                    let ptr6 = vec6.as_ptr().cast::<u8>();
+                                    let len6 = vec6.len();
+                                    *base
+                                        .add(8 + 3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len6;
+                                    *base
+                                        .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr6.cast_mut();
+                                    let vec7 = symbolic_name4;
+                                    let ptr7 = vec7.as_ptr().cast::<u8>();
+                                    let len7 = vec7.len();
+                                    *base
+                                        .add(8 + 5 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len7;
+                                    *base
+                                        .add(8 + 4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr7.cast_mut();
+                                }
+                            }
+                        }
+                    }
+                    let ptr10 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "sqlite:extension/vtab@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "filter"]
+                        fn wit_import11(
+                            _: i64,
+                            _: i64,
+                            _: i32,
+                            _: i32,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                            _: usize,
+                            _: *mut u8,
+                        );
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import11(
+                        _: i64,
+                        _: i64,
+                        _: i32,
+                        _: i32,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                        _: usize,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import11(
+                            _rt::as_i64(&vtab_id),
+                            _rt::as_i64(&cursor_id),
+                            _rt::as_i32(&idx_num),
+                            result1_0,
+                            result1_1,
+                            result1_2,
+                            result9,
+                            len9,
+                            ptr10,
+                        )
+                    };
+                    let l12 = i32::from(*ptr10.add(0).cast::<u8>());
+                    let result16 = match l12 {
+                        0 => {
+                            let e = ();
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l13 = *ptr10
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l14 = *ptr10
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len15 = l14;
+                                let bytes15 = _rt::Vec::from_raw_parts(
+                                    l13.cast(),
+                                    len15,
+                                    len15,
+                                );
+                                _rt::string_lift(bytes15)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    if layout9.size() != 0 {
+                        _rt::alloc::dealloc(result9.cast(), layout9);
+                    }
+                    result16
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Advance the cursor by one row.
+            pub fn next(vtab_id: u64, cursor_id: u64) -> Result<(), _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "sqlite:extension/vtab@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "next"]
+                        fn wit_import1(_: i64, _: i64, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import1(_: i64, _: i64, _: *mut u8) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import1(_rt::as_i64(&vtab_id), _rt::as_i64(&cursor_id), ptr0)
+                    };
+                    let l2 = i32::from(*ptr0.add(0).cast::<u8>());
+                    let result6 = match l2 {
+                        0 => {
+                            let e = ();
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l3 = *ptr0
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l4 = *ptr0
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len5 = l4;
+                                let bytes5 = _rt::Vec::from_raw_parts(
+                                    l3.cast(),
+                                    len5,
+                                    len5,
+                                );
+                                _rt::string_lift(bytes5)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result6
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// True if the cursor is past the last row.
+            pub fn eof(vtab_id: u64, cursor_id: u64) -> bool {
+                unsafe {
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "sqlite:extension/vtab@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "eof"]
+                        fn wit_import0(_: i64, _: i64) -> i32;
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import0(_: i64, _: i64) -> i32 {
+                        unreachable!()
+                    }
+                    let ret = unsafe {
+                        wit_import0(_rt::as_i64(&vtab_id), _rt::as_i64(&cursor_id))
+                    };
+                    _rt::bool_lift(ret as u8)
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Fetch one column of the current row. `col` is the schema
+            /// column index (`0..N`).
+            pub fn column(
+                vtab_id: u64,
+                cursor_id: u64,
+                col: i32,
+            ) -> Result<SqlValue, _rt::String> {
+                unsafe {
+                    #[repr(align(8))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 16 + 6 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 16
+                            + 6 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "sqlite:extension/vtab@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "column"]
+                        fn wit_import1(_: i64, _: i64, _: i32, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import1(
+                        _: i64,
+                        _: i64,
+                        _: i32,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import1(
+                            _rt::as_i64(&vtab_id),
+                            _rt::as_i64(&cursor_id),
+                            _rt::as_i32(&col),
+                            ptr0,
+                        )
+                    };
+                    let l2 = i32::from(*ptr0.add(0).cast::<u8>());
+                    let result25 = match l2 {
+                        0 => {
+                            let e = {
+                                let l3 = i32::from(*ptr0.add(8).cast::<u8>());
+                                use super::super::super::sqlite::extension::types::SqlValue as V21;
+                                let v21 = match l3 {
+                                    0 => V21::Null,
+                                    1 => {
+                                        let e21 = {
+                                            let l4 = *ptr0.add(16).cast::<i64>();
+                                            l4
+                                        };
+                                        V21::Integer(e21)
+                                    }
+                                    2 => {
+                                        let e21 = {
+                                            let l5 = *ptr0.add(16).cast::<f64>();
+                                            l5
+                                        };
+                                        V21::Real(e21)
+                                    }
+                                    3 => {
+                                        let e21 = {
+                                            let l6 = *ptr0.add(16).cast::<*mut u8>();
+                                            let l7 = *ptr0
+                                                .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len8 = l7;
+                                            let bytes8 = _rt::Vec::from_raw_parts(
+                                                l6.cast(),
+                                                len8,
+                                                len8,
+                                            );
+                                            _rt::string_lift(bytes8)
+                                        };
+                                        V21::Text(e21)
+                                    }
+                                    4 => {
+                                        let e21 = {
+                                            let l9 = *ptr0.add(16).cast::<*mut u8>();
+                                            let l10 = *ptr0
+                                                .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len11 = l10;
+                                            _rt::Vec::from_raw_parts(l9.cast(), len11, len11)
+                                        };
+                                        V21::Blob(e21)
+                                    }
+                                    n => {
+                                        debug_assert_eq!(n, 5, "invalid enum discriminant");
+                                        let e21 = {
+                                            let l12 = *ptr0.add(16).cast::<*mut u8>();
+                                            let l13 = *ptr0
+                                                .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len14 = l13;
+                                            let l15 = *ptr0
+                                                .add(16 + 2 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l16 = *ptr0
+                                                .add(16 + 3 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len17 = l16;
+                                            let l18 = *ptr0
+                                                .add(16 + 4 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<*mut u8>();
+                                            let l19 = *ptr0
+                                                .add(16 + 5 * ::core::mem::size_of::<*const u8>())
+                                                .cast::<usize>();
+                                            let len20 = l19;
+                                            let bytes20 = _rt::Vec::from_raw_parts(
+                                                l18.cast(),
+                                                len20,
+                                                len20,
+                                            );
+                                            super::super::super::sqlite::extension::types::WitValuePayload {
+                                                type_id: _rt::Vec::from_raw_parts(l12.cast(), len14, len14),
+                                                bytes: _rt::Vec::from_raw_parts(l15.cast(), len17, len17),
+                                                symbolic_name: _rt::string_lift(bytes20),
+                                            }
+                                        };
+                                        V21::WitValue(e21)
+                                    }
+                                };
+                                v21
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l22 = *ptr0.add(8).cast::<*mut u8>();
+                                let l23 = *ptr0
+                                    .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len24 = l23;
+                                let bytes24 = _rt::Vec::from_raw_parts(
+                                    l22.cast(),
+                                    len24,
+                                    len24,
+                                );
+                                _rt::string_lift(bytes24)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result25
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Rowid of the current row. SQLite uses this to satisfy
+            /// rowid joins; vtabs that don't have a natural rowid can
+            /// return a monotonic counter.
+            pub fn rowid(vtab_id: u64, cursor_id: u64) -> Result<i64, _rt::String> {
+                unsafe {
+                    #[repr(align(8))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 8 + 2 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 8
+                            + 2 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "sqlite:extension/vtab@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "rowid"]
+                        fn wit_import1(_: i64, _: i64, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import1(_: i64, _: i64, _: *mut u8) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import1(_rt::as_i64(&vtab_id), _rt::as_i64(&cursor_id), ptr0)
+                    };
+                    let l2 = i32::from(*ptr0.add(0).cast::<u8>());
+                    let result7 = match l2 {
+                        0 => {
+                            let e = {
+                                let l3 = *ptr0.add(8).cast::<i64>();
+                                l3
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l4 = *ptr0.add(8).cast::<*mut u8>();
+                                let l5 = *ptr0
+                                    .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len6 = l5;
+                                let bytes6 = _rt::Vec::from_raw_parts(
+                                    l4.cast(),
+                                    len6,
+                                    len6,
+                                );
+                                _rt::string_lift(bytes6)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result7
+                }
+            }
+            #[allow(unused_unsafe, clippy::all)]
+            /// Batched fetch  return up to `max-rows` rows starting from
+            /// the cursor's current position. Each row carries the rowid +
+            /// every column the schema declares. The host caches the
+            /// batch and serves `next` / `eof` / `column` / `rowid` from
+            /// the cache without crossing back into the extension until
+            /// the batch is exhausted, at which point it calls
+            /// `fetch-batch` again.
+            ///
+            /// Returning an empty list signals EOF.
+            ///
+            /// Implementations that don't override this default to
+            /// returning Err("not implemented")  the host's cli
+            /// trampoline detects the error and falls back to the per-row
+            /// path. Per-vtab opt-in via `vtab-spec.batched: true`.
+            pub fn fetch_batch(
+                vtab_id: u64,
+                cursor_id: u64,
+                max_rows: u32,
+            ) -> Result<_rt::Vec<VtabRow>, _rt::String> {
+                unsafe {
+                    #[cfg_attr(target_pointer_width = "64", repr(align(8)))]
+                    #[cfg_attr(target_pointer_width = "32", repr(align(4)))]
+                    struct RetArea(
+                        [::core::mem::MaybeUninit<
+                            u8,
+                        >; 3 * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let mut ret_area = RetArea(
+                        [::core::mem::MaybeUninit::uninit(); 3
+                            * ::core::mem::size_of::<*const u8>()],
+                    );
+                    let ptr0 = ret_area.0.as_mut_ptr().cast::<u8>();
+                    #[cfg(target_arch = "wasm32")]
+                    #[link(wasm_import_module = "sqlite:extension/vtab@1.0.0")]
+                    unsafe extern "C" {
+                        #[link_name = "fetch-batch"]
+                        fn wit_import1(_: i64, _: i64, _: i32, _: *mut u8);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unsafe extern "C" fn wit_import1(
+                        _: i64,
+                        _: i64,
+                        _: i32,
+                        _: *mut u8,
+                    ) {
+                        unreachable!()
+                    }
+                    unsafe {
+                        wit_import1(
+                            _rt::as_i64(&vtab_id),
+                            _rt::as_i64(&cursor_id),
+                            _rt::as_i32(&max_rows),
+                            ptr0,
+                        )
+                    };
+                    let l2 = i32::from(*ptr0.add(0).cast::<u8>());
+                    let result32 = match l2 {
+                        0 => {
+                            let e = {
+                                let l3 = *ptr0
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l4 = *ptr0
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let base28 = l3;
+                                let len28 = l4;
+                                let mut result28 = _rt::Vec::with_capacity(len28);
+                                for i in 0..len28 {
+                                    let base = base28
+                                        .add(i * (8 + 2 * ::core::mem::size_of::<*const u8>()));
+                                    let e28 = {
+                                        let l5 = *base.add(0).cast::<i64>();
+                                        let l6 = *base.add(8).cast::<*mut u8>();
+                                        let l7 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let base27 = l6;
+                                        let len27 = l7;
+                                        let mut result27 = _rt::Vec::with_capacity(len27);
+                                        for i in 0..len27 {
+                                            let base = base27
+                                                .add(i * (8 + 6 * ::core::mem::size_of::<*const u8>()));
+                                            let e27 = {
+                                                let l8 = i32::from(*base.add(0).cast::<u8>());
+                                                use super::super::super::sqlite::extension::types::SqlValue as V26;
+                                                let v26 = match l8 {
+                                                    0 => V26::Null,
+                                                    1 => {
+                                                        let e26 = {
+                                                            let l9 = *base.add(8).cast::<i64>();
+                                                            l9
+                                                        };
+                                                        V26::Integer(e26)
+                                                    }
+                                                    2 => {
+                                                        let e26 = {
+                                                            let l10 = *base.add(8).cast::<f64>();
+                                                            l10
+                                                        };
+                                                        V26::Real(e26)
+                                                    }
+                                                    3 => {
+                                                        let e26 = {
+                                                            let l11 = *base.add(8).cast::<*mut u8>();
+                                                            let l12 = *base
+                                                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                                .cast::<usize>();
+                                                            let len13 = l12;
+                                                            let bytes13 = _rt::Vec::from_raw_parts(
+                                                                l11.cast(),
+                                                                len13,
+                                                                len13,
+                                                            );
+                                                            _rt::string_lift(bytes13)
+                                                        };
+                                                        V26::Text(e26)
+                                                    }
+                                                    4 => {
+                                                        let e26 = {
+                                                            let l14 = *base.add(8).cast::<*mut u8>();
+                                                            let l15 = *base
+                                                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                                .cast::<usize>();
+                                                            let len16 = l15;
+                                                            _rt::Vec::from_raw_parts(l14.cast(), len16, len16)
+                                                        };
+                                                        V26::Blob(e26)
+                                                    }
+                                                    n => {
+                                                        debug_assert_eq!(n, 5, "invalid enum discriminant");
+                                                        let e26 = {
+                                                            let l17 = *base.add(8).cast::<*mut u8>();
+                                                            let l18 = *base
+                                                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                                .cast::<usize>();
+                                                            let len19 = l18;
+                                                            let l20 = *base
+                                                                .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                                                .cast::<*mut u8>();
+                                                            let l21 = *base
+                                                                .add(8 + 3 * ::core::mem::size_of::<*const u8>())
+                                                                .cast::<usize>();
+                                                            let len22 = l21;
+                                                            let l23 = *base
+                                                                .add(8 + 4 * ::core::mem::size_of::<*const u8>())
+                                                                .cast::<*mut u8>();
+                                                            let l24 = *base
+                                                                .add(8 + 5 * ::core::mem::size_of::<*const u8>())
+                                                                .cast::<usize>();
+                                                            let len25 = l24;
+                                                            let bytes25 = _rt::Vec::from_raw_parts(
+                                                                l23.cast(),
+                                                                len25,
+                                                                len25,
+                                                            );
+                                                            super::super::super::sqlite::extension::types::WitValuePayload {
+                                                                type_id: _rt::Vec::from_raw_parts(l17.cast(), len19, len19),
+                                                                bytes: _rt::Vec::from_raw_parts(l20.cast(), len22, len22),
+                                                                symbolic_name: _rt::string_lift(bytes25),
+                                                            }
+                                                        };
+                                                        V26::WitValue(e26)
+                                                    }
+                                                };
+                                                v26
+                                            };
+                                            result27.push(e27);
+                                        }
+                                        _rt::cabi_dealloc(
+                                            base27,
+                                            len27 * (8 + 6 * ::core::mem::size_of::<*const u8>()),
+                                            8,
+                                        );
+                                        VtabRow {
+                                            rowid: l5,
+                                            columns: result27,
+                                        }
+                                    };
+                                    result28.push(e28);
+                                }
+                                _rt::cabi_dealloc(
+                                    base28,
+                                    len28 * (8 + 2 * ::core::mem::size_of::<*const u8>()),
+                                    8,
+                                );
+                                result28
+                            };
+                            Ok(e)
+                        }
+                        1 => {
+                            let e = {
+                                let l29 = *ptr0
+                                    .add(::core::mem::size_of::<*const u8>())
+                                    .cast::<*mut u8>();
+                                let l30 = *ptr0
+                                    .add(2 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<usize>();
+                                let len31 = l30;
+                                let bytes31 = _rt::Vec::from_raw_parts(
+                                    l29.cast(),
+                                    len31,
+                                    len31,
+                                );
+                                _rt::string_lift(bytes31)
+                            };
+                            Err(e)
+                        }
+                        _ => _rt::invalid_enum_discriminant(),
+                    };
+                    result32
+                }
+            }
+        }
     }
 }
 #[rustfmt::skip]
@@ -5383,6 +7095,4490 @@ pub mod exports {
                         + 26 * ::core::mem::size_of::<*const u8>()],
                 );
             }
+            /// Cross-component dispatch for dynamically-loaded extensions.
+            ///
+            /// When SQL invokes a scalar function the in-WASM SQLite registered
+            /// after a `.load`, the matching xFunc trampoline can't reach the
+            /// loaded extension directly — the extension is its own wasm
+            /// component, instantiated by the host inside its own Store. This
+            /// interface is the bridge: the in-WASM CLI imports it; the host
+            /// implements it; the implementation looks up the loaded extension by
+            /// name (the same name returned from extension-loader.load-extension),
+            /// builds a Store with the recorded policy, instantiates the loaded
+            /// extension as a `sqlite:extension/minimal`-world component, calls
+            /// `sqlite:extension/scalar-function.call` with the given func-id and
+            /// args, and returns the result variant.
+            ///
+            /// The static-composition path (the four legacy slots fts5/json1/
+            /// rtree/geopoly + the demo slot) doesn't use this — those go through
+            /// the per-slot direct calls in extension-unified.c. This interface
+            /// only fires for slots registered via the dynamic `.load` path.
+            #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+            pub mod dispatch {
+                #[used]
+                #[doc(hidden)]
+                static __FORCE_SECTION_REF: fn() = super::super::super::super::__link_custom_section_describing_imports;
+                use super::super::super::super::_rt;
+                pub type SqlValue = super::super::super::super::sqlite::extension::types::SqlValue;
+                pub type AuthAction = super::super::super::super::sqlite::extension::types::AuthAction;
+                pub type AuthResult = super::super::super::super::sqlite::extension::types::AuthResult;
+                pub type UpdateOperation = super::super::super::super::sqlite::extension::types::UpdateOperation;
+                pub type IndexInfo = super::super::super::super::sqlite::extension::vtab::IndexInfo;
+                pub type IndexPlan = super::super::super::super::sqlite::extension::vtab::IndexPlan;
+                /// One row carried by a batched vtab fetch.
+                #[derive(Clone)]
+                pub struct VtabRow {
+                    pub rowid: i64,
+                    pub columns: _rt::Vec<SqlValue>,
+                }
+                impl ::core::fmt::Debug for VtabRow {
+                    fn fmt(
+                        &self,
+                        f: &mut ::core::fmt::Formatter<'_>,
+                    ) -> ::core::fmt::Result {
+                        f.debug_struct("VtabRow")
+                            .field("rowid", &self.rowid)
+                            .field("columns", &self.columns)
+                            .finish()
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_scalar_call_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: *mut u8,
+                    arg4: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let base20 = arg3;
+                    let len20 = arg4;
+                    let mut result20 = _rt::Vec::with_capacity(len20);
+                    for i in 0..len20 {
+                        let base = base20
+                            .add(i * (8 + 6 * ::core::mem::size_of::<*const u8>()));
+                        let e20 = {
+                            let l1 = i32::from(*base.add(0).cast::<u8>());
+                            use super::super::super::super::sqlite::extension::types::SqlValue as V19;
+                            let v19 = match l1 {
+                                0 => V19::Null,
+                                1 => {
+                                    let e19 = {
+                                        let l2 = *base.add(8).cast::<i64>();
+                                        l2
+                                    };
+                                    V19::Integer(e19)
+                                }
+                                2 => {
+                                    let e19 = {
+                                        let l3 = *base.add(8).cast::<f64>();
+                                        l3
+                                    };
+                                    V19::Real(e19)
+                                }
+                                3 => {
+                                    let e19 = {
+                                        let l4 = *base.add(8).cast::<*mut u8>();
+                                        let l5 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len6 = l5;
+                                        let bytes6 = _rt::Vec::from_raw_parts(
+                                            l4.cast(),
+                                            len6,
+                                            len6,
+                                        );
+                                        _rt::string_lift(bytes6)
+                                    };
+                                    V19::Text(e19)
+                                }
+                                4 => {
+                                    let e19 = {
+                                        let l7 = *base.add(8).cast::<*mut u8>();
+                                        let l8 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len9 = l8;
+                                        _rt::Vec::from_raw_parts(l7.cast(), len9, len9)
+                                    };
+                                    V19::Blob(e19)
+                                }
+                                n => {
+                                    debug_assert_eq!(n, 5, "invalid enum discriminant");
+                                    let e19 = {
+                                        let l10 = *base.add(8).cast::<*mut u8>();
+                                        let l11 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len12 = l11;
+                                        let l13 = *base
+                                            .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<*mut u8>();
+                                        let l14 = *base
+                                            .add(8 + 3 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len15 = l14;
+                                        let l16 = *base
+                                            .add(8 + 4 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<*mut u8>();
+                                        let l17 = *base
+                                            .add(8 + 5 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len18 = l17;
+                                        let bytes18 = _rt::Vec::from_raw_parts(
+                                            l16.cast(),
+                                            len18,
+                                            len18,
+                                        );
+                                        super::super::super::super::sqlite::extension::types::WitValuePayload {
+                                            type_id: _rt::Vec::from_raw_parts(l10.cast(), len12, len12),
+                                            bytes: _rt::Vec::from_raw_parts(l13.cast(), len15, len15),
+                                            symbolic_name: _rt::string_lift(bytes18),
+                                        }
+                                    };
+                                    V19::WitValue(e19)
+                                }
+                            };
+                            v19
+                        };
+                        result20.push(e20);
+                    }
+                    _rt::cabi_dealloc(
+                        base20,
+                        len20 * (8 + 6 * ::core::mem::size_of::<*const u8>()),
+                        8,
+                    );
+                    let result21 = T::scalar_call(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        result20,
+                    );
+                    let ptr22 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result21 {
+                        Ok(e) => {
+                            *ptr22.add(0).cast::<u8>() = (0i32) as u8;
+                            use super::super::super::super::sqlite::extension::types::SqlValue as V29;
+                            match e {
+                                V29::Null => {
+                                    *ptr22.add(8).cast::<u8>() = (0i32) as u8;
+                                }
+                                V29::Integer(e) => {
+                                    *ptr22.add(8).cast::<u8>() = (1i32) as u8;
+                                    *ptr22.add(16).cast::<i64>() = _rt::as_i64(e);
+                                }
+                                V29::Real(e) => {
+                                    *ptr22.add(8).cast::<u8>() = (2i32) as u8;
+                                    *ptr22.add(16).cast::<f64>() = _rt::as_f64(e);
+                                }
+                                V29::Text(e) => {
+                                    *ptr22.add(8).cast::<u8>() = (3i32) as u8;
+                                    let vec23 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr23 = vec23.as_ptr().cast::<u8>();
+                                    let len23 = vec23.len();
+                                    ::core::mem::forget(vec23);
+                                    *ptr22
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len23;
+                                    *ptr22.add(16).cast::<*mut u8>() = ptr23.cast_mut();
+                                }
+                                V29::Blob(e) => {
+                                    *ptr22.add(8).cast::<u8>() = (4i32) as u8;
+                                    let vec24 = (e).into_boxed_slice();
+                                    let ptr24 = vec24.as_ptr().cast::<u8>();
+                                    let len24 = vec24.len();
+                                    ::core::mem::forget(vec24);
+                                    *ptr22
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len24;
+                                    *ptr22.add(16).cast::<*mut u8>() = ptr24.cast_mut();
+                                }
+                                V29::WitValue(e) => {
+                                    *ptr22.add(8).cast::<u8>() = (5i32) as u8;
+                                    let super::super::super::super::sqlite::extension::types::WitValuePayload {
+                                        type_id: type_id25,
+                                        bytes: bytes25,
+                                        symbolic_name: symbolic_name25,
+                                    } = e;
+                                    let vec26 = (type_id25).into_boxed_slice();
+                                    let ptr26 = vec26.as_ptr().cast::<u8>();
+                                    let len26 = vec26.len();
+                                    ::core::mem::forget(vec26);
+                                    *ptr22
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len26;
+                                    *ptr22.add(16).cast::<*mut u8>() = ptr26.cast_mut();
+                                    let vec27 = (bytes25).into_boxed_slice();
+                                    let ptr27 = vec27.as_ptr().cast::<u8>();
+                                    let len27 = vec27.len();
+                                    ::core::mem::forget(vec27);
+                                    *ptr22
+                                        .add(16 + 3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len27;
+                                    *ptr22
+                                        .add(16 + 2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr27.cast_mut();
+                                    let vec28 = (symbolic_name25.into_bytes())
+                                        .into_boxed_slice();
+                                    let ptr28 = vec28.as_ptr().cast::<u8>();
+                                    let len28 = vec28.len();
+                                    ::core::mem::forget(vec28);
+                                    *ptr22
+                                        .add(16 + 5 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len28;
+                                    *ptr22
+                                        .add(16 + 4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr28.cast_mut();
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            *ptr22.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec30 = (e.into_bytes()).into_boxed_slice();
+                            let ptr30 = vec30.as_ptr().cast::<u8>();
+                            let len30 = vec30.len();
+                            ::core::mem::forget(vec30);
+                            *ptr22
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len30;
+                            *ptr22.add(8).cast::<*mut u8>() = ptr30.cast_mut();
+                        }
+                    };
+                    ptr22
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_scalar_call<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = i32::from(*arg0.add(8).cast::<u8>());
+                            match l1 {
+                                0 => {}
+                                1 => {}
+                                2 => {}
+                                3 => {
+                                    let l2 = *arg0.add(16).cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                4 => {
+                                    let l4 = *arg0.add(16).cast::<*mut u8>();
+                                    let l5 = *arg0
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let base6 = l4;
+                                    let len6 = l5;
+                                    _rt::cabi_dealloc(base6, len6 * 1, 1);
+                                }
+                                _ => {
+                                    let l7 = *arg0.add(16).cast::<*mut u8>();
+                                    let l8 = *arg0
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let base9 = l7;
+                                    let len9 = l8;
+                                    _rt::cabi_dealloc(base9, len9 * 1, 1);
+                                    let l10 = *arg0
+                                        .add(16 + 2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l11 = *arg0
+                                        .add(16 + 3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let base12 = l10;
+                                    let len12 = l11;
+                                    _rt::cabi_dealloc(base12, len12 * 1, 1);
+                                    let l13 = *arg0
+                                        .add(16 + 4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l14 = *arg0
+                                        .add(16 + 5 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l13, l14, 1);
+                                }
+                            }
+                        }
+                        _ => {
+                            let l15 = *arg0.add(8).cast::<*mut u8>();
+                            let l16 = *arg0
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l15, l16, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_aggregate_step_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                    arg4: *mut u8,
+                    arg5: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let base20 = arg4;
+                    let len20 = arg5;
+                    let mut result20 = _rt::Vec::with_capacity(len20);
+                    for i in 0..len20 {
+                        let base = base20
+                            .add(i * (8 + 6 * ::core::mem::size_of::<*const u8>()));
+                        let e20 = {
+                            let l1 = i32::from(*base.add(0).cast::<u8>());
+                            use super::super::super::super::sqlite::extension::types::SqlValue as V19;
+                            let v19 = match l1 {
+                                0 => V19::Null,
+                                1 => {
+                                    let e19 = {
+                                        let l2 = *base.add(8).cast::<i64>();
+                                        l2
+                                    };
+                                    V19::Integer(e19)
+                                }
+                                2 => {
+                                    let e19 = {
+                                        let l3 = *base.add(8).cast::<f64>();
+                                        l3
+                                    };
+                                    V19::Real(e19)
+                                }
+                                3 => {
+                                    let e19 = {
+                                        let l4 = *base.add(8).cast::<*mut u8>();
+                                        let l5 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len6 = l5;
+                                        let bytes6 = _rt::Vec::from_raw_parts(
+                                            l4.cast(),
+                                            len6,
+                                            len6,
+                                        );
+                                        _rt::string_lift(bytes6)
+                                    };
+                                    V19::Text(e19)
+                                }
+                                4 => {
+                                    let e19 = {
+                                        let l7 = *base.add(8).cast::<*mut u8>();
+                                        let l8 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len9 = l8;
+                                        _rt::Vec::from_raw_parts(l7.cast(), len9, len9)
+                                    };
+                                    V19::Blob(e19)
+                                }
+                                n => {
+                                    debug_assert_eq!(n, 5, "invalid enum discriminant");
+                                    let e19 = {
+                                        let l10 = *base.add(8).cast::<*mut u8>();
+                                        let l11 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len12 = l11;
+                                        let l13 = *base
+                                            .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<*mut u8>();
+                                        let l14 = *base
+                                            .add(8 + 3 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len15 = l14;
+                                        let l16 = *base
+                                            .add(8 + 4 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<*mut u8>();
+                                        let l17 = *base
+                                            .add(8 + 5 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len18 = l17;
+                                        let bytes18 = _rt::Vec::from_raw_parts(
+                                            l16.cast(),
+                                            len18,
+                                            len18,
+                                        );
+                                        super::super::super::super::sqlite::extension::types::WitValuePayload {
+                                            type_id: _rt::Vec::from_raw_parts(l10.cast(), len12, len12),
+                                            bytes: _rt::Vec::from_raw_parts(l13.cast(), len15, len15),
+                                            symbolic_name: _rt::string_lift(bytes18),
+                                        }
+                                    };
+                                    V19::WitValue(e19)
+                                }
+                            };
+                            v19
+                        };
+                        result20.push(e20);
+                    }
+                    _rt::cabi_dealloc(
+                        base20,
+                        len20 * (8 + 6 * ::core::mem::size_of::<*const u8>()),
+                        8,
+                    );
+                    let result21 = T::aggregate_step(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                        result20,
+                    );
+                    let ptr22 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result21 {
+                        Ok(_) => {
+                            *ptr22.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr22.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec23 = (e.into_bytes()).into_boxed_slice();
+                            let ptr23 = vec23.as_ptr().cast::<u8>();
+                            let len23 = vec23.len();
+                            ::core::mem::forget(vec23);
+                            *ptr22
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len23;
+                            *ptr22
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr23.cast_mut();
+                        }
+                    };
+                    ptr22
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_aggregate_step<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_aggregate_finalize_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::aggregate_finalize(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            use super::super::super::super::sqlite::extension::types::SqlValue as V9;
+                            match e {
+                                V9::Null => {
+                                    *ptr2.add(8).cast::<u8>() = (0i32) as u8;
+                                }
+                                V9::Integer(e) => {
+                                    *ptr2.add(8).cast::<u8>() = (1i32) as u8;
+                                    *ptr2.add(16).cast::<i64>() = _rt::as_i64(e);
+                                }
+                                V9::Real(e) => {
+                                    *ptr2.add(8).cast::<u8>() = (2i32) as u8;
+                                    *ptr2.add(16).cast::<f64>() = _rt::as_f64(e);
+                                }
+                                V9::Text(e) => {
+                                    *ptr2.add(8).cast::<u8>() = (3i32) as u8;
+                                    let vec3 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                                    let len3 = vec3.len();
+                                    ::core::mem::forget(vec3);
+                                    *ptr2
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len3;
+                                    *ptr2.add(16).cast::<*mut u8>() = ptr3.cast_mut();
+                                }
+                                V9::Blob(e) => {
+                                    *ptr2.add(8).cast::<u8>() = (4i32) as u8;
+                                    let vec4 = (e).into_boxed_slice();
+                                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                                    let len4 = vec4.len();
+                                    ::core::mem::forget(vec4);
+                                    *ptr2
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len4;
+                                    *ptr2.add(16).cast::<*mut u8>() = ptr4.cast_mut();
+                                }
+                                V9::WitValue(e) => {
+                                    *ptr2.add(8).cast::<u8>() = (5i32) as u8;
+                                    let super::super::super::super::sqlite::extension::types::WitValuePayload {
+                                        type_id: type_id5,
+                                        bytes: bytes5,
+                                        symbolic_name: symbolic_name5,
+                                    } = e;
+                                    let vec6 = (type_id5).into_boxed_slice();
+                                    let ptr6 = vec6.as_ptr().cast::<u8>();
+                                    let len6 = vec6.len();
+                                    ::core::mem::forget(vec6);
+                                    *ptr2
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len6;
+                                    *ptr2.add(16).cast::<*mut u8>() = ptr6.cast_mut();
+                                    let vec7 = (bytes5).into_boxed_slice();
+                                    let ptr7 = vec7.as_ptr().cast::<u8>();
+                                    let len7 = vec7.len();
+                                    ::core::mem::forget(vec7);
+                                    *ptr2
+                                        .add(16 + 3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len7;
+                                    *ptr2
+                                        .add(16 + 2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr7.cast_mut();
+                                    let vec8 = (symbolic_name5.into_bytes()).into_boxed_slice();
+                                    let ptr8 = vec8.as_ptr().cast::<u8>();
+                                    let len8 = vec8.len();
+                                    ::core::mem::forget(vec8);
+                                    *ptr2
+                                        .add(16 + 5 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len8;
+                                    *ptr2
+                                        .add(16 + 4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr8.cast_mut();
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec10 = (e.into_bytes()).into_boxed_slice();
+                            let ptr10 = vec10.as_ptr().cast::<u8>();
+                            let len10 = vec10.len();
+                            ::core::mem::forget(vec10);
+                            *ptr2
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len10;
+                            *ptr2.add(8).cast::<*mut u8>() = ptr10.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_aggregate_finalize<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = i32::from(*arg0.add(8).cast::<u8>());
+                            match l1 {
+                                0 => {}
+                                1 => {}
+                                2 => {}
+                                3 => {
+                                    let l2 = *arg0.add(16).cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                4 => {
+                                    let l4 = *arg0.add(16).cast::<*mut u8>();
+                                    let l5 = *arg0
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let base6 = l4;
+                                    let len6 = l5;
+                                    _rt::cabi_dealloc(base6, len6 * 1, 1);
+                                }
+                                _ => {
+                                    let l7 = *arg0.add(16).cast::<*mut u8>();
+                                    let l8 = *arg0
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let base9 = l7;
+                                    let len9 = l8;
+                                    _rt::cabi_dealloc(base9, len9 * 1, 1);
+                                    let l10 = *arg0
+                                        .add(16 + 2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l11 = *arg0
+                                        .add(16 + 3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let base12 = l10;
+                                    let len12 = l11;
+                                    _rt::cabi_dealloc(base12, len12 * 1, 1);
+                                    let l13 = *arg0
+                                        .add(16 + 4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l14 = *arg0
+                                        .add(16 + 5 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l13, l14, 1);
+                                }
+                            }
+                        }
+                        _ => {
+                            let l15 = *arg0.add(8).cast::<*mut u8>();
+                            let l16 = *arg0
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l15, l16, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_aggregate_value_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::aggregate_value(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            use super::super::super::super::sqlite::extension::types::SqlValue as V9;
+                            match e {
+                                V9::Null => {
+                                    *ptr2.add(8).cast::<u8>() = (0i32) as u8;
+                                }
+                                V9::Integer(e) => {
+                                    *ptr2.add(8).cast::<u8>() = (1i32) as u8;
+                                    *ptr2.add(16).cast::<i64>() = _rt::as_i64(e);
+                                }
+                                V9::Real(e) => {
+                                    *ptr2.add(8).cast::<u8>() = (2i32) as u8;
+                                    *ptr2.add(16).cast::<f64>() = _rt::as_f64(e);
+                                }
+                                V9::Text(e) => {
+                                    *ptr2.add(8).cast::<u8>() = (3i32) as u8;
+                                    let vec3 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                                    let len3 = vec3.len();
+                                    ::core::mem::forget(vec3);
+                                    *ptr2
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len3;
+                                    *ptr2.add(16).cast::<*mut u8>() = ptr3.cast_mut();
+                                }
+                                V9::Blob(e) => {
+                                    *ptr2.add(8).cast::<u8>() = (4i32) as u8;
+                                    let vec4 = (e).into_boxed_slice();
+                                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                                    let len4 = vec4.len();
+                                    ::core::mem::forget(vec4);
+                                    *ptr2
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len4;
+                                    *ptr2.add(16).cast::<*mut u8>() = ptr4.cast_mut();
+                                }
+                                V9::WitValue(e) => {
+                                    *ptr2.add(8).cast::<u8>() = (5i32) as u8;
+                                    let super::super::super::super::sqlite::extension::types::WitValuePayload {
+                                        type_id: type_id5,
+                                        bytes: bytes5,
+                                        symbolic_name: symbolic_name5,
+                                    } = e;
+                                    let vec6 = (type_id5).into_boxed_slice();
+                                    let ptr6 = vec6.as_ptr().cast::<u8>();
+                                    let len6 = vec6.len();
+                                    ::core::mem::forget(vec6);
+                                    *ptr2
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len6;
+                                    *ptr2.add(16).cast::<*mut u8>() = ptr6.cast_mut();
+                                    let vec7 = (bytes5).into_boxed_slice();
+                                    let ptr7 = vec7.as_ptr().cast::<u8>();
+                                    let len7 = vec7.len();
+                                    ::core::mem::forget(vec7);
+                                    *ptr2
+                                        .add(16 + 3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len7;
+                                    *ptr2
+                                        .add(16 + 2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr7.cast_mut();
+                                    let vec8 = (symbolic_name5.into_bytes()).into_boxed_slice();
+                                    let ptr8 = vec8.as_ptr().cast::<u8>();
+                                    let len8 = vec8.len();
+                                    ::core::mem::forget(vec8);
+                                    *ptr2
+                                        .add(16 + 5 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len8;
+                                    *ptr2
+                                        .add(16 + 4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr8.cast_mut();
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec10 = (e.into_bytes()).into_boxed_slice();
+                            let ptr10 = vec10.as_ptr().cast::<u8>();
+                            let len10 = vec10.len();
+                            ::core::mem::forget(vec10);
+                            *ptr2
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len10;
+                            *ptr2.add(8).cast::<*mut u8>() = ptr10.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_aggregate_value<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = i32::from(*arg0.add(8).cast::<u8>());
+                            match l1 {
+                                0 => {}
+                                1 => {}
+                                2 => {}
+                                3 => {
+                                    let l2 = *arg0.add(16).cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                4 => {
+                                    let l4 = *arg0.add(16).cast::<*mut u8>();
+                                    let l5 = *arg0
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let base6 = l4;
+                                    let len6 = l5;
+                                    _rt::cabi_dealloc(base6, len6 * 1, 1);
+                                }
+                                _ => {
+                                    let l7 = *arg0.add(16).cast::<*mut u8>();
+                                    let l8 = *arg0
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let base9 = l7;
+                                    let len9 = l8;
+                                    _rt::cabi_dealloc(base9, len9 * 1, 1);
+                                    let l10 = *arg0
+                                        .add(16 + 2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l11 = *arg0
+                                        .add(16 + 3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let base12 = l10;
+                                    let len12 = l11;
+                                    _rt::cabi_dealloc(base12, len12 * 1, 1);
+                                    let l13 = *arg0
+                                        .add(16 + 4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l14 = *arg0
+                                        .add(16 + 5 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l13, l14, 1);
+                                }
+                            }
+                        }
+                        _ => {
+                            let l15 = *arg0.add(8).cast::<*mut u8>();
+                            let l16 = *arg0
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l15, l16, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_aggregate_inverse_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                    arg4: *mut u8,
+                    arg5: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let base20 = arg4;
+                    let len20 = arg5;
+                    let mut result20 = _rt::Vec::with_capacity(len20);
+                    for i in 0..len20 {
+                        let base = base20
+                            .add(i * (8 + 6 * ::core::mem::size_of::<*const u8>()));
+                        let e20 = {
+                            let l1 = i32::from(*base.add(0).cast::<u8>());
+                            use super::super::super::super::sqlite::extension::types::SqlValue as V19;
+                            let v19 = match l1 {
+                                0 => V19::Null,
+                                1 => {
+                                    let e19 = {
+                                        let l2 = *base.add(8).cast::<i64>();
+                                        l2
+                                    };
+                                    V19::Integer(e19)
+                                }
+                                2 => {
+                                    let e19 = {
+                                        let l3 = *base.add(8).cast::<f64>();
+                                        l3
+                                    };
+                                    V19::Real(e19)
+                                }
+                                3 => {
+                                    let e19 = {
+                                        let l4 = *base.add(8).cast::<*mut u8>();
+                                        let l5 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len6 = l5;
+                                        let bytes6 = _rt::Vec::from_raw_parts(
+                                            l4.cast(),
+                                            len6,
+                                            len6,
+                                        );
+                                        _rt::string_lift(bytes6)
+                                    };
+                                    V19::Text(e19)
+                                }
+                                4 => {
+                                    let e19 = {
+                                        let l7 = *base.add(8).cast::<*mut u8>();
+                                        let l8 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len9 = l8;
+                                        _rt::Vec::from_raw_parts(l7.cast(), len9, len9)
+                                    };
+                                    V19::Blob(e19)
+                                }
+                                n => {
+                                    debug_assert_eq!(n, 5, "invalid enum discriminant");
+                                    let e19 = {
+                                        let l10 = *base.add(8).cast::<*mut u8>();
+                                        let l11 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len12 = l11;
+                                        let l13 = *base
+                                            .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<*mut u8>();
+                                        let l14 = *base
+                                            .add(8 + 3 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len15 = l14;
+                                        let l16 = *base
+                                            .add(8 + 4 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<*mut u8>();
+                                        let l17 = *base
+                                            .add(8 + 5 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len18 = l17;
+                                        let bytes18 = _rt::Vec::from_raw_parts(
+                                            l16.cast(),
+                                            len18,
+                                            len18,
+                                        );
+                                        super::super::super::super::sqlite::extension::types::WitValuePayload {
+                                            type_id: _rt::Vec::from_raw_parts(l10.cast(), len12, len12),
+                                            bytes: _rt::Vec::from_raw_parts(l13.cast(), len15, len15),
+                                            symbolic_name: _rt::string_lift(bytes18),
+                                        }
+                                    };
+                                    V19::WitValue(e19)
+                                }
+                            };
+                            v19
+                        };
+                        result20.push(e20);
+                    }
+                    _rt::cabi_dealloc(
+                        base20,
+                        len20 * (8 + 6 * ::core::mem::size_of::<*const u8>()),
+                        8,
+                    );
+                    let result21 = T::aggregate_inverse(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                        result20,
+                    );
+                    let ptr22 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result21 {
+                        Ok(_) => {
+                            *ptr22.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr22.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec23 = (e.into_bytes()).into_boxed_slice();
+                            let ptr23 = vec23.as_ptr().cast::<u8>();
+                            let len23 = vec23.len();
+                            ::core::mem::forget(vec23);
+                            *ptr22
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len23;
+                            *ptr22
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr23.cast_mut();
+                        }
+                    };
+                    ptr22
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_aggregate_inverse<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_collation_compare_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: *mut u8,
+                    arg4: usize,
+                    arg5: *mut u8,
+                    arg6: usize,
+                ) -> i32 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let len1 = arg4;
+                    let bytes1 = _rt::Vec::from_raw_parts(arg3.cast(), len1, len1);
+                    let len2 = arg6;
+                    let bytes2 = _rt::Vec::from_raw_parts(arg5.cast(), len2, len2);
+                    let result3 = T::collation_compare(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        _rt::string_lift(bytes1),
+                        _rt::string_lift(bytes2),
+                    );
+                    _rt::as_i32(result3)
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_authorize_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i32,
+                    arg3: i32,
+                    arg4: *mut u8,
+                    arg5: usize,
+                    arg6: i32,
+                    arg7: *mut u8,
+                    arg8: usize,
+                    arg9: i32,
+                    arg10: *mut u8,
+                    arg11: usize,
+                    arg12: i32,
+                    arg13: *mut u8,
+                    arg14: usize,
+                ) -> i32 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result5 = T::authorize(
+                        _rt::string_lift(bytes0),
+                        super::super::super::super::sqlite::extension::types::AuthAction::_lift(
+                            arg2 as u8,
+                        ),
+                        match arg3 {
+                            0 => None,
+                            1 => {
+                                let e = {
+                                    let len1 = arg5;
+                                    let bytes1 = _rt::Vec::from_raw_parts(
+                                        arg4.cast(),
+                                        len1,
+                                        len1,
+                                    );
+                                    _rt::string_lift(bytes1)
+                                };
+                                Some(e)
+                            }
+                            _ => _rt::invalid_enum_discriminant(),
+                        },
+                        match arg6 {
+                            0 => None,
+                            1 => {
+                                let e = {
+                                    let len2 = arg8;
+                                    let bytes2 = _rt::Vec::from_raw_parts(
+                                        arg7.cast(),
+                                        len2,
+                                        len2,
+                                    );
+                                    _rt::string_lift(bytes2)
+                                };
+                                Some(e)
+                            }
+                            _ => _rt::invalid_enum_discriminant(),
+                        },
+                        match arg9 {
+                            0 => None,
+                            1 => {
+                                let e = {
+                                    let len3 = arg11;
+                                    let bytes3 = _rt::Vec::from_raw_parts(
+                                        arg10.cast(),
+                                        len3,
+                                        len3,
+                                    );
+                                    _rt::string_lift(bytes3)
+                                };
+                                Some(e)
+                            }
+                            _ => _rt::invalid_enum_discriminant(),
+                        },
+                        match arg12 {
+                            0 => None,
+                            1 => {
+                                let e = {
+                                    let len4 = arg14;
+                                    let bytes4 = _rt::Vec::from_raw_parts(
+                                        arg13.cast(),
+                                        len4,
+                                        len4,
+                                    );
+                                    _rt::string_lift(bytes4)
+                                };
+                                Some(e)
+                            }
+                            _ => _rt::invalid_enum_discriminant(),
+                        },
+                    );
+                    result5.clone() as i32
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_on_update_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i32,
+                    arg3: *mut u8,
+                    arg4: usize,
+                    arg5: *mut u8,
+                    arg6: usize,
+                    arg7: i64,
+                ) {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let len1 = arg4;
+                    let bytes1 = _rt::Vec::from_raw_parts(arg3.cast(), len1, len1);
+                    let len2 = arg6;
+                    let bytes2 = _rt::Vec::from_raw_parts(arg5.cast(), len2, len2);
+                    T::on_update(
+                        _rt::string_lift(bytes0),
+                        super::super::super::super::sqlite::extension::types::UpdateOperation::_lift(
+                            arg2 as u8,
+                        ),
+                        _rt::string_lift(bytes1),
+                        _rt::string_lift(bytes2),
+                        arg7,
+                    );
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_on_commit_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                ) -> i32 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::on_commit(_rt::string_lift(bytes0));
+                    match result1 {
+                        true => 1,
+                        false => 0,
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_on_rollback_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                ) {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    T::on_rollback(_rt::string_lift(bytes0));
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_wal_hook_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: *mut u8,
+                    arg4: usize,
+                    arg5: i32,
+                ) -> i32 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let len1 = arg4;
+                    let bytes1 = _rt::Vec::from_raw_parts(arg3.cast(), len1, len1);
+                    let result2 = T::wal_hook(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        _rt::string_lift(bytes1),
+                        arg5 as u32,
+                    );
+                    _rt::as_i32(result2)
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_create_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                    arg4: *mut u8,
+                    arg5: usize,
+                    arg6: *mut u8,
+                    arg7: usize,
+                    arg8: *mut u8,
+                    arg9: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let len1 = arg5;
+                    let bytes1 = _rt::Vec::from_raw_parts(arg4.cast(), len1, len1);
+                    let len2 = arg7;
+                    let bytes2 = _rt::Vec::from_raw_parts(arg6.cast(), len2, len2);
+                    let base6 = arg8;
+                    let len6 = arg9;
+                    let mut result6 = _rt::Vec::with_capacity(len6);
+                    for i in 0..len6 {
+                        let base = base6
+                            .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                        let e6 = {
+                            let l3 = *base.add(0).cast::<*mut u8>();
+                            let l4 = *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let len5 = l4;
+                            let bytes5 = _rt::Vec::from_raw_parts(l3.cast(), len5, len5);
+                            _rt::string_lift(bytes5)
+                        };
+                        result6.push(e6);
+                    }
+                    _rt::cabi_dealloc(
+                        base6,
+                        len6 * (2 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result7 = T::vtab_create(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                        _rt::string_lift(bytes1),
+                        _rt::string_lift(bytes2),
+                        result6,
+                    );
+                    let ptr8 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result7 {
+                        Ok(e) => {
+                            *ptr8.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec9 = (e.into_bytes()).into_boxed_slice();
+                            let ptr9 = vec9.as_ptr().cast::<u8>();
+                            let len9 = vec9.len();
+                            ::core::mem::forget(vec9);
+                            *ptr8
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len9;
+                            *ptr8
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr9.cast_mut();
+                        }
+                        Err(e) => {
+                            *ptr8.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec10 = (e.into_bytes()).into_boxed_slice();
+                            let ptr10 = vec10.as_ptr().cast::<u8>();
+                            let len10 = vec10.len();
+                            ::core::mem::forget(vec10);
+                            *ptr8
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len10;
+                            *ptr8
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr10.cast_mut();
+                        }
+                    };
+                    ptr8
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_create<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                        _ => {
+                            let l3 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l4 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l3, l4, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_connect_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                    arg4: *mut u8,
+                    arg5: usize,
+                    arg6: *mut u8,
+                    arg7: usize,
+                    arg8: *mut u8,
+                    arg9: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let len1 = arg5;
+                    let bytes1 = _rt::Vec::from_raw_parts(arg4.cast(), len1, len1);
+                    let len2 = arg7;
+                    let bytes2 = _rt::Vec::from_raw_parts(arg6.cast(), len2, len2);
+                    let base6 = arg8;
+                    let len6 = arg9;
+                    let mut result6 = _rt::Vec::with_capacity(len6);
+                    for i in 0..len6 {
+                        let base = base6
+                            .add(i * (2 * ::core::mem::size_of::<*const u8>()));
+                        let e6 = {
+                            let l3 = *base.add(0).cast::<*mut u8>();
+                            let l4 = *base
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let len5 = l4;
+                            let bytes5 = _rt::Vec::from_raw_parts(l3.cast(), len5, len5);
+                            _rt::string_lift(bytes5)
+                        };
+                        result6.push(e6);
+                    }
+                    _rt::cabi_dealloc(
+                        base6,
+                        len6 * (2 * ::core::mem::size_of::<*const u8>()),
+                        ::core::mem::size_of::<*const u8>(),
+                    );
+                    let result7 = T::vtab_connect(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                        _rt::string_lift(bytes1),
+                        _rt::string_lift(bytes2),
+                        result6,
+                    );
+                    let ptr8 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result7 {
+                        Ok(e) => {
+                            *ptr8.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec9 = (e.into_bytes()).into_boxed_slice();
+                            let ptr9 = vec9.as_ptr().cast::<u8>();
+                            let len9 = vec9.len();
+                            ::core::mem::forget(vec9);
+                            *ptr8
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len9;
+                            *ptr8
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr9.cast_mut();
+                        }
+                        Err(e) => {
+                            *ptr8.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec10 = (e.into_bytes()).into_boxed_slice();
+                            let ptr10 = vec10.as_ptr().cast::<u8>();
+                            let len10 = vec10.len();
+                            ::core::mem::forget(vec10);
+                            *ptr8
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len10;
+                            *ptr8
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr10.cast_mut();
+                        }
+                    };
+                    ptr8
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_connect<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                        _ => {
+                            let l3 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l4 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l3, l4, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_destroy_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_destroy(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(_) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec3 = (e.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_destroy<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_disconnect_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_disconnect(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(_) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec3 = (e.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_disconnect<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_best_index_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                    arg4: *mut u8,
+                    arg5: usize,
+                    arg6: *mut u8,
+                    arg7: usize,
+                    arg8: i64,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let base4 = arg4;
+                    let len4 = arg5;
+                    let mut result4 = _rt::Vec::with_capacity(len4);
+                    for i in 0..len4 {
+                        let base = base4.add(i * 8);
+                        let e4 = {
+                            let l1 = *base.add(0).cast::<i32>();
+                            let l2 = i32::from(*base.add(4).cast::<u8>());
+                            let l3 = i32::from(*base.add(5).cast::<u8>());
+                            super::super::super::super::sqlite::extension::vtab::Constraint {
+                                column: l1,
+                                op: super::super::super::super::sqlite::extension::vtab::ConstraintOp::_lift(
+                                    l2 as u8,
+                                ),
+                                usable: _rt::bool_lift(l3 as u8),
+                            }
+                        };
+                        result4.push(e4);
+                    }
+                    _rt::cabi_dealloc(base4, len4 * 8, 4);
+                    let base7 = arg6;
+                    let len7 = arg7;
+                    let mut result7 = _rt::Vec::with_capacity(len7);
+                    for i in 0..len7 {
+                        let base = base7.add(i * 8);
+                        let e7 = {
+                            let l5 = *base.add(0).cast::<i32>();
+                            let l6 = i32::from(*base.add(4).cast::<u8>());
+                            super::super::super::super::sqlite::extension::vtab::Orderby {
+                                column: l5,
+                                desc: _rt::bool_lift(l6 as u8),
+                            }
+                        };
+                        result7.push(e7);
+                    }
+                    _rt::cabi_dealloc(base7, len7 * 8, 4);
+                    let result8 = T::vtab_best_index(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                        super::super::super::super::sqlite::extension::vtab::IndexInfo {
+                            constraints: result4,
+                            orderbys: result7,
+                            col_used: arg8 as u64,
+                        },
+                    );
+                    let ptr9 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result8 {
+                        Ok(e) => {
+                            *ptr9.add(0).cast::<u8>() = (0i32) as u8;
+                            let super::super::super::super::sqlite::extension::vtab::IndexPlan {
+                                constraint_usage: constraint_usage10,
+                                idx_num: idx_num10,
+                                idx_str: idx_str10,
+                                estimated_cost: estimated_cost10,
+                                estimated_rows: estimated_rows10,
+                                orderby_consumed: orderby_consumed10,
+                            } = e;
+                            let vec12 = constraint_usage10;
+                            let len12 = vec12.len();
+                            let layout12 = _rt::alloc::Layout::from_size_align_unchecked(
+                                vec12.len() * 8,
+                                4,
+                            );
+                            let result12 = if layout12.size() != 0 {
+                                let ptr = _rt::alloc::alloc(layout12).cast::<u8>();
+                                if ptr.is_null() {
+                                    _rt::alloc::handle_alloc_error(layout12);
+                                }
+                                ptr
+                            } else {
+                                ::core::ptr::null_mut()
+                            };
+                            for (i, e) in vec12.into_iter().enumerate() {
+                                let base = result12.add(i * 8);
+                                {
+                                    let super::super::super::super::sqlite::extension::vtab::ConstraintUsage {
+                                        argv_index: argv_index11,
+                                        omit: omit11,
+                                    } = e;
+                                    *base.add(0).cast::<i32>() = _rt::as_i32(argv_index11);
+                                    *base.add(4).cast::<u8>() = (match omit11 {
+                                        true => 1,
+                                        false => 0,
+                                    }) as u8;
+                                }
+                            }
+                            *ptr9
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len12;
+                            *ptr9.add(8).cast::<*mut u8>() = result12;
+                            *ptr9
+                                .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<i32>() = _rt::as_i32(idx_num10);
+                            match idx_str10 {
+                                Some(e) => {
+                                    *ptr9
+                                        .add(8 + 3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (1i32) as u8;
+                                    let vec13 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr13 = vec13.as_ptr().cast::<u8>();
+                                    let len13 = vec13.len();
+                                    ::core::mem::forget(vec13);
+                                    *ptr9
+                                        .add(8 + 5 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len13;
+                                    *ptr9
+                                        .add(8 + 4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr13.cast_mut();
+                                }
+                                None => {
+                                    *ptr9
+                                        .add(8 + 3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<u8>() = (0i32) as u8;
+                                }
+                            };
+                            *ptr9
+                                .add(8 + 6 * ::core::mem::size_of::<*const u8>())
+                                .cast::<f64>() = _rt::as_f64(estimated_cost10);
+                            *ptr9
+                                .add(16 + 6 * ::core::mem::size_of::<*const u8>())
+                                .cast::<i64>() = _rt::as_i64(estimated_rows10);
+                            *ptr9
+                                .add(24 + 6 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (match orderby_consumed10 {
+                                true => 1,
+                                false => 0,
+                            }) as u8;
+                        }
+                        Err(e) => {
+                            *ptr9.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec14 = (e.into_bytes()).into_boxed_slice();
+                            let ptr14 = vec14.as_ptr().cast::<u8>();
+                            let len14 = vec14.len();
+                            ::core::mem::forget(vec14);
+                            *ptr9
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len14;
+                            *ptr9.add(8).cast::<*mut u8>() = ptr14.cast_mut();
+                        }
+                    };
+                    ptr9
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_best_index<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0.add(8).cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base3 = l1;
+                            let len3 = l2;
+                            _rt::cabi_dealloc(base3, len3 * 8, 4);
+                            let l4 = i32::from(
+                                *arg0
+                                    .add(8 + 3 * ::core::mem::size_of::<*const u8>())
+                                    .cast::<u8>(),
+                            );
+                            match l4 {
+                                0 => {}
+                                _ => {
+                                    let l5 = *arg0
+                                        .add(8 + 4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l6 = *arg0
+                                        .add(8 + 5 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l5, l6, 1);
+                                }
+                            }
+                        }
+                        _ => {
+                            let l7 = *arg0.add(8).cast::<*mut u8>();
+                            let l8 = *arg0
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l7, l8, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_open_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                    arg4: i64,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_open(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                        arg4 as u64,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(_) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec3 = (e.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_open<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_close_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_close(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(_) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec3 = (e.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_close<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_filter_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                    arg4: i32,
+                    arg5: i32,
+                    arg6: *mut u8,
+                    arg7: usize,
+                    arg8: *mut u8,
+                    arg9: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let base21 = arg8;
+                    let len21 = arg9;
+                    let mut result21 = _rt::Vec::with_capacity(len21);
+                    for i in 0..len21 {
+                        let base = base21
+                            .add(i * (8 + 6 * ::core::mem::size_of::<*const u8>()));
+                        let e21 = {
+                            let l2 = i32::from(*base.add(0).cast::<u8>());
+                            use super::super::super::super::sqlite::extension::types::SqlValue as V20;
+                            let v20 = match l2 {
+                                0 => V20::Null,
+                                1 => {
+                                    let e20 = {
+                                        let l3 = *base.add(8).cast::<i64>();
+                                        l3
+                                    };
+                                    V20::Integer(e20)
+                                }
+                                2 => {
+                                    let e20 = {
+                                        let l4 = *base.add(8).cast::<f64>();
+                                        l4
+                                    };
+                                    V20::Real(e20)
+                                }
+                                3 => {
+                                    let e20 = {
+                                        let l5 = *base.add(8).cast::<*mut u8>();
+                                        let l6 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len7 = l6;
+                                        let bytes7 = _rt::Vec::from_raw_parts(
+                                            l5.cast(),
+                                            len7,
+                                            len7,
+                                        );
+                                        _rt::string_lift(bytes7)
+                                    };
+                                    V20::Text(e20)
+                                }
+                                4 => {
+                                    let e20 = {
+                                        let l8 = *base.add(8).cast::<*mut u8>();
+                                        let l9 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len10 = l9;
+                                        _rt::Vec::from_raw_parts(l8.cast(), len10, len10)
+                                    };
+                                    V20::Blob(e20)
+                                }
+                                n => {
+                                    debug_assert_eq!(n, 5, "invalid enum discriminant");
+                                    let e20 = {
+                                        let l11 = *base.add(8).cast::<*mut u8>();
+                                        let l12 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len13 = l12;
+                                        let l14 = *base
+                                            .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<*mut u8>();
+                                        let l15 = *base
+                                            .add(8 + 3 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len16 = l15;
+                                        let l17 = *base
+                                            .add(8 + 4 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<*mut u8>();
+                                        let l18 = *base
+                                            .add(8 + 5 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len19 = l18;
+                                        let bytes19 = _rt::Vec::from_raw_parts(
+                                            l17.cast(),
+                                            len19,
+                                            len19,
+                                        );
+                                        super::super::super::super::sqlite::extension::types::WitValuePayload {
+                                            type_id: _rt::Vec::from_raw_parts(l11.cast(), len13, len13),
+                                            bytes: _rt::Vec::from_raw_parts(l14.cast(), len16, len16),
+                                            symbolic_name: _rt::string_lift(bytes19),
+                                        }
+                                    };
+                                    V20::WitValue(e20)
+                                }
+                            };
+                            v20
+                        };
+                        result21.push(e21);
+                    }
+                    _rt::cabi_dealloc(
+                        base21,
+                        len21 * (8 + 6 * ::core::mem::size_of::<*const u8>()),
+                        8,
+                    );
+                    let result22 = T::vtab_filter(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                        arg4,
+                        match arg5 {
+                            0 => None,
+                            1 => {
+                                let e = {
+                                    let len1 = arg7;
+                                    let bytes1 = _rt::Vec::from_raw_parts(
+                                        arg6.cast(),
+                                        len1,
+                                        len1,
+                                    );
+                                    _rt::string_lift(bytes1)
+                                };
+                                Some(e)
+                            }
+                            _ => _rt::invalid_enum_discriminant(),
+                        },
+                        result21,
+                    );
+                    let ptr23 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result22 {
+                        Ok(_) => {
+                            *ptr23.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr23.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec24 = (e.into_bytes()).into_boxed_slice();
+                            let ptr24 = vec24.as_ptr().cast::<u8>();
+                            let len24 = vec24.len();
+                            ::core::mem::forget(vec24);
+                            *ptr23
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len24;
+                            *ptr23
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr24.cast_mut();
+                        }
+                    };
+                    ptr23
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_filter<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_next_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_next(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(_) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec3 = (e.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_next<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_eof_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                ) -> i32 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_eof(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                    );
+                    match result1 {
+                        true => 1,
+                        false => 0,
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_column_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                    arg4: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_column(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                        arg4,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            use super::super::super::super::sqlite::extension::types::SqlValue as V9;
+                            match e {
+                                V9::Null => {
+                                    *ptr2.add(8).cast::<u8>() = (0i32) as u8;
+                                }
+                                V9::Integer(e) => {
+                                    *ptr2.add(8).cast::<u8>() = (1i32) as u8;
+                                    *ptr2.add(16).cast::<i64>() = _rt::as_i64(e);
+                                }
+                                V9::Real(e) => {
+                                    *ptr2.add(8).cast::<u8>() = (2i32) as u8;
+                                    *ptr2.add(16).cast::<f64>() = _rt::as_f64(e);
+                                }
+                                V9::Text(e) => {
+                                    *ptr2.add(8).cast::<u8>() = (3i32) as u8;
+                                    let vec3 = (e.into_bytes()).into_boxed_slice();
+                                    let ptr3 = vec3.as_ptr().cast::<u8>();
+                                    let len3 = vec3.len();
+                                    ::core::mem::forget(vec3);
+                                    *ptr2
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len3;
+                                    *ptr2.add(16).cast::<*mut u8>() = ptr3.cast_mut();
+                                }
+                                V9::Blob(e) => {
+                                    *ptr2.add(8).cast::<u8>() = (4i32) as u8;
+                                    let vec4 = (e).into_boxed_slice();
+                                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                                    let len4 = vec4.len();
+                                    ::core::mem::forget(vec4);
+                                    *ptr2
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len4;
+                                    *ptr2.add(16).cast::<*mut u8>() = ptr4.cast_mut();
+                                }
+                                V9::WitValue(e) => {
+                                    *ptr2.add(8).cast::<u8>() = (5i32) as u8;
+                                    let super::super::super::super::sqlite::extension::types::WitValuePayload {
+                                        type_id: type_id5,
+                                        bytes: bytes5,
+                                        symbolic_name: symbolic_name5,
+                                    } = e;
+                                    let vec6 = (type_id5).into_boxed_slice();
+                                    let ptr6 = vec6.as_ptr().cast::<u8>();
+                                    let len6 = vec6.len();
+                                    ::core::mem::forget(vec6);
+                                    *ptr2
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len6;
+                                    *ptr2.add(16).cast::<*mut u8>() = ptr6.cast_mut();
+                                    let vec7 = (bytes5).into_boxed_slice();
+                                    let ptr7 = vec7.as_ptr().cast::<u8>();
+                                    let len7 = vec7.len();
+                                    ::core::mem::forget(vec7);
+                                    *ptr2
+                                        .add(16 + 3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len7;
+                                    *ptr2
+                                        .add(16 + 2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr7.cast_mut();
+                                    let vec8 = (symbolic_name5.into_bytes()).into_boxed_slice();
+                                    let ptr8 = vec8.as_ptr().cast::<u8>();
+                                    let len8 = vec8.len();
+                                    ::core::mem::forget(vec8);
+                                    *ptr2
+                                        .add(16 + 5 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len8;
+                                    *ptr2
+                                        .add(16 + 4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>() = ptr8.cast_mut();
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec10 = (e.into_bytes()).into_boxed_slice();
+                            let ptr10 = vec10.as_ptr().cast::<u8>();
+                            let len10 = vec10.len();
+                            ::core::mem::forget(vec10);
+                            *ptr2
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len10;
+                            *ptr2.add(8).cast::<*mut u8>() = ptr10.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_column<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = i32::from(*arg0.add(8).cast::<u8>());
+                            match l1 {
+                                0 => {}
+                                1 => {}
+                                2 => {}
+                                3 => {
+                                    let l2 = *arg0.add(16).cast::<*mut u8>();
+                                    let l3 = *arg0
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l2, l3, 1);
+                                }
+                                4 => {
+                                    let l4 = *arg0.add(16).cast::<*mut u8>();
+                                    let l5 = *arg0
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let base6 = l4;
+                                    let len6 = l5;
+                                    _rt::cabi_dealloc(base6, len6 * 1, 1);
+                                }
+                                _ => {
+                                    let l7 = *arg0.add(16).cast::<*mut u8>();
+                                    let l8 = *arg0
+                                        .add(16 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let base9 = l7;
+                                    let len9 = l8;
+                                    _rt::cabi_dealloc(base9, len9 * 1, 1);
+                                    let l10 = *arg0
+                                        .add(16 + 2 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l11 = *arg0
+                                        .add(16 + 3 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let base12 = l10;
+                                    let len12 = l11;
+                                    _rt::cabi_dealloc(base12, len12 * 1, 1);
+                                    let l13 = *arg0
+                                        .add(16 + 4 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<*mut u8>();
+                                    let l14 = *arg0
+                                        .add(16 + 5 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    _rt::cabi_dealloc(l13, l14, 1);
+                                }
+                            }
+                        }
+                        _ => {
+                            let l15 = *arg0.add(8).cast::<*mut u8>();
+                            let l16 = *arg0
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l15, l16, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_rowid_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_rowid(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            *ptr2.add(8).cast::<i64>() = _rt::as_i64(e);
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec3 = (e.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2.add(8).cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_rowid<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0.add(8).cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_fetch_batch_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                    arg4: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_fetch_batch(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                        arg4 as u32,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec12 = e;
+                            let len12 = vec12.len();
+                            let layout12 = _rt::alloc::Layout::from_size_align_unchecked(
+                                vec12.len() * (8 + 2 * ::core::mem::size_of::<*const u8>()),
+                                8,
+                            );
+                            let result12 = if layout12.size() != 0 {
+                                let ptr = _rt::alloc::alloc(layout12).cast::<u8>();
+                                if ptr.is_null() {
+                                    _rt::alloc::handle_alloc_error(layout12);
+                                }
+                                ptr
+                            } else {
+                                ::core::ptr::null_mut()
+                            };
+                            for (i, e) in vec12.into_iter().enumerate() {
+                                let base = result12
+                                    .add(i * (8 + 2 * ::core::mem::size_of::<*const u8>()));
+                                {
+                                    let VtabRow { rowid: rowid3, columns: columns3 } = e;
+                                    *base.add(0).cast::<i64>() = _rt::as_i64(rowid3);
+                                    let vec11 = columns3;
+                                    let len11 = vec11.len();
+                                    let layout11 = _rt::alloc::Layout::from_size_align_unchecked(
+                                        vec11.len() * (8 + 6 * ::core::mem::size_of::<*const u8>()),
+                                        8,
+                                    );
+                                    let result11 = if layout11.size() != 0 {
+                                        let ptr = _rt::alloc::alloc(layout11).cast::<u8>();
+                                        if ptr.is_null() {
+                                            _rt::alloc::handle_alloc_error(layout11);
+                                        }
+                                        ptr
+                                    } else {
+                                        ::core::ptr::null_mut()
+                                    };
+                                    for (i, e) in vec11.into_iter().enumerate() {
+                                        let base = result11
+                                            .add(i * (8 + 6 * ::core::mem::size_of::<*const u8>()));
+                                        {
+                                            use super::super::super::super::sqlite::extension::types::SqlValue as V10;
+                                            match e {
+                                                V10::Null => {
+                                                    *base.add(0).cast::<u8>() = (0i32) as u8;
+                                                }
+                                                V10::Integer(e) => {
+                                                    *base.add(0).cast::<u8>() = (1i32) as u8;
+                                                    *base.add(8).cast::<i64>() = _rt::as_i64(e);
+                                                }
+                                                V10::Real(e) => {
+                                                    *base.add(0).cast::<u8>() = (2i32) as u8;
+                                                    *base.add(8).cast::<f64>() = _rt::as_f64(e);
+                                                }
+                                                V10::Text(e) => {
+                                                    *base.add(0).cast::<u8>() = (3i32) as u8;
+                                                    let vec4 = (e.into_bytes()).into_boxed_slice();
+                                                    let ptr4 = vec4.as_ptr().cast::<u8>();
+                                                    let len4 = vec4.len();
+                                                    ::core::mem::forget(vec4);
+                                                    *base
+                                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>() = len4;
+                                                    *base.add(8).cast::<*mut u8>() = ptr4.cast_mut();
+                                                }
+                                                V10::Blob(e) => {
+                                                    *base.add(0).cast::<u8>() = (4i32) as u8;
+                                                    let vec5 = (e).into_boxed_slice();
+                                                    let ptr5 = vec5.as_ptr().cast::<u8>();
+                                                    let len5 = vec5.len();
+                                                    ::core::mem::forget(vec5);
+                                                    *base
+                                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>() = len5;
+                                                    *base.add(8).cast::<*mut u8>() = ptr5.cast_mut();
+                                                }
+                                                V10::WitValue(e) => {
+                                                    *base.add(0).cast::<u8>() = (5i32) as u8;
+                                                    let super::super::super::super::sqlite::extension::types::WitValuePayload {
+                                                        type_id: type_id6,
+                                                        bytes: bytes6,
+                                                        symbolic_name: symbolic_name6,
+                                                    } = e;
+                                                    let vec7 = (type_id6).into_boxed_slice();
+                                                    let ptr7 = vec7.as_ptr().cast::<u8>();
+                                                    let len7 = vec7.len();
+                                                    ::core::mem::forget(vec7);
+                                                    *base
+                                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>() = len7;
+                                                    *base.add(8).cast::<*mut u8>() = ptr7.cast_mut();
+                                                    let vec8 = (bytes6).into_boxed_slice();
+                                                    let ptr8 = vec8.as_ptr().cast::<u8>();
+                                                    let len8 = vec8.len();
+                                                    ::core::mem::forget(vec8);
+                                                    *base
+                                                        .add(8 + 3 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>() = len8;
+                                                    *base
+                                                        .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<*mut u8>() = ptr8.cast_mut();
+                                                    let vec9 = (symbolic_name6.into_bytes()).into_boxed_slice();
+                                                    let ptr9 = vec9.as_ptr().cast::<u8>();
+                                                    let len9 = vec9.len();
+                                                    ::core::mem::forget(vec9);
+                                                    *base
+                                                        .add(8 + 5 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>() = len9;
+                                                    *base
+                                                        .add(8 + 4 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<*mut u8>() = ptr9.cast_mut();
+                                                }
+                                            }
+                                        }
+                                    }
+                                    *base
+                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>() = len11;
+                                    *base.add(8).cast::<*mut u8>() = result11;
+                                }
+                            }
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len12;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = result12;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec13 = (e.into_bytes()).into_boxed_slice();
+                            let ptr13 = vec13.as_ptr().cast::<u8>();
+                            let len13 = vec13.len();
+                            ::core::mem::forget(vec13);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len13;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr13.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_fetch_batch<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base20 = l1;
+                            let len20 = l2;
+                            for i in 0..len20 {
+                                let base = base20
+                                    .add(i * (8 + 2 * ::core::mem::size_of::<*const u8>()));
+                                {
+                                    let l3 = *base.add(8).cast::<*mut u8>();
+                                    let l4 = *base
+                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                        .cast::<usize>();
+                                    let base19 = l3;
+                                    let len19 = l4;
+                                    for i in 0..len19 {
+                                        let base = base19
+                                            .add(i * (8 + 6 * ::core::mem::size_of::<*const u8>()));
+                                        {
+                                            let l5 = i32::from(*base.add(0).cast::<u8>());
+                                            match l5 {
+                                                0 => {}
+                                                1 => {}
+                                                2 => {}
+                                                3 => {
+                                                    let l6 = *base.add(8).cast::<*mut u8>();
+                                                    let l7 = *base
+                                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>();
+                                                    _rt::cabi_dealloc(l6, l7, 1);
+                                                }
+                                                4 => {
+                                                    let l8 = *base.add(8).cast::<*mut u8>();
+                                                    let l9 = *base
+                                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>();
+                                                    let base10 = l8;
+                                                    let len10 = l9;
+                                                    _rt::cabi_dealloc(base10, len10 * 1, 1);
+                                                }
+                                                _ => {
+                                                    let l11 = *base.add(8).cast::<*mut u8>();
+                                                    let l12 = *base
+                                                        .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>();
+                                                    let base13 = l11;
+                                                    let len13 = l12;
+                                                    _rt::cabi_dealloc(base13, len13 * 1, 1);
+                                                    let l14 = *base
+                                                        .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<*mut u8>();
+                                                    let l15 = *base
+                                                        .add(8 + 3 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>();
+                                                    let base16 = l14;
+                                                    let len16 = l15;
+                                                    _rt::cabi_dealloc(base16, len16 * 1, 1);
+                                                    let l17 = *base
+                                                        .add(8 + 4 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<*mut u8>();
+                                                    let l18 = *base
+                                                        .add(8 + 5 * ::core::mem::size_of::<*const u8>())
+                                                        .cast::<usize>();
+                                                    _rt::cabi_dealloc(l17, l18, 1);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _rt::cabi_dealloc(
+                                        base19,
+                                        len19 * (8 + 6 * ::core::mem::size_of::<*const u8>()),
+                                        8,
+                                    );
+                                }
+                            }
+                            _rt::cabi_dealloc(
+                                base20,
+                                len20 * (8 + 2 * ::core::mem::size_of::<*const u8>()),
+                                8,
+                            );
+                        }
+                        _ => {
+                            let l21 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l22 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l21, l22, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_update_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                    arg4: *mut u8,
+                    arg5: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let base20 = arg4;
+                    let len20 = arg5;
+                    let mut result20 = _rt::Vec::with_capacity(len20);
+                    for i in 0..len20 {
+                        let base = base20
+                            .add(i * (8 + 6 * ::core::mem::size_of::<*const u8>()));
+                        let e20 = {
+                            let l1 = i32::from(*base.add(0).cast::<u8>());
+                            use super::super::super::super::sqlite::extension::types::SqlValue as V19;
+                            let v19 = match l1 {
+                                0 => V19::Null,
+                                1 => {
+                                    let e19 = {
+                                        let l2 = *base.add(8).cast::<i64>();
+                                        l2
+                                    };
+                                    V19::Integer(e19)
+                                }
+                                2 => {
+                                    let e19 = {
+                                        let l3 = *base.add(8).cast::<f64>();
+                                        l3
+                                    };
+                                    V19::Real(e19)
+                                }
+                                3 => {
+                                    let e19 = {
+                                        let l4 = *base.add(8).cast::<*mut u8>();
+                                        let l5 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len6 = l5;
+                                        let bytes6 = _rt::Vec::from_raw_parts(
+                                            l4.cast(),
+                                            len6,
+                                            len6,
+                                        );
+                                        _rt::string_lift(bytes6)
+                                    };
+                                    V19::Text(e19)
+                                }
+                                4 => {
+                                    let e19 = {
+                                        let l7 = *base.add(8).cast::<*mut u8>();
+                                        let l8 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len9 = l8;
+                                        _rt::Vec::from_raw_parts(l7.cast(), len9, len9)
+                                    };
+                                    V19::Blob(e19)
+                                }
+                                n => {
+                                    debug_assert_eq!(n, 5, "invalid enum discriminant");
+                                    let e19 = {
+                                        let l10 = *base.add(8).cast::<*mut u8>();
+                                        let l11 = *base
+                                            .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len12 = l11;
+                                        let l13 = *base
+                                            .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<*mut u8>();
+                                        let l14 = *base
+                                            .add(8 + 3 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len15 = l14;
+                                        let l16 = *base
+                                            .add(8 + 4 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<*mut u8>();
+                                        let l17 = *base
+                                            .add(8 + 5 * ::core::mem::size_of::<*const u8>())
+                                            .cast::<usize>();
+                                        let len18 = l17;
+                                        let bytes18 = _rt::Vec::from_raw_parts(
+                                            l16.cast(),
+                                            len18,
+                                            len18,
+                                        );
+                                        super::super::super::super::sqlite::extension::types::WitValuePayload {
+                                            type_id: _rt::Vec::from_raw_parts(l10.cast(), len12, len12),
+                                            bytes: _rt::Vec::from_raw_parts(l13.cast(), len15, len15),
+                                            symbolic_name: _rt::string_lift(bytes18),
+                                        }
+                                    };
+                                    V19::WitValue(e19)
+                                }
+                            };
+                            v19
+                        };
+                        result20.push(e20);
+                    }
+                    _rt::cabi_dealloc(
+                        base20,
+                        len20 * (8 + 6 * ::core::mem::size_of::<*const u8>()),
+                        8,
+                    );
+                    let result21 = T::vtab_update(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                        result20,
+                    );
+                    let ptr22 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result21 {
+                        Ok(e) => {
+                            *ptr22.add(0).cast::<u8>() = (0i32) as u8;
+                            *ptr22.add(8).cast::<i64>() = _rt::as_i64(e);
+                        }
+                        Err(e) => {
+                            *ptr22.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec23 = (e.into_bytes()).into_boxed_slice();
+                            let ptr23 = vec23.as_ptr().cast::<u8>();
+                            let len23 = vec23.len();
+                            ::core::mem::forget(vec23);
+                            *ptr22
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len23;
+                            *ptr22.add(8).cast::<*mut u8>() = ptr23.cast_mut();
+                        }
+                    };
+                    ptr22
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_update<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0.add(8).cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_begin_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_begin(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(_) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec3 = (e.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_begin<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_sync_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_sync(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(_) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec3 = (e.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_sync<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_commit_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_commit(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(_) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec3 = (e.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_commit<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_rollback_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_rollback(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(_) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec3 = (e.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_rollback<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_rename_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                    arg4: *mut u8,
+                    arg5: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let len1 = arg5;
+                    let bytes1 = _rt::Vec::from_raw_parts(arg4.cast(), len1, len1);
+                    let result2 = T::vtab_rename(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                        _rt::string_lift(bytes1),
+                    );
+                    let ptr3 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result2 {
+                        Ok(_) => {
+                            *ptr3.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr3.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec4 = (e.into_bytes()).into_boxed_slice();
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            ::core::mem::forget(vec4);
+                            *ptr3
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *ptr3
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr4.cast_mut();
+                        }
+                    };
+                    ptr3
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_rename<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_savepoint_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                    arg4: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_savepoint(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                        arg4,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(_) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec3 = (e.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_savepoint<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_release_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                    arg4: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_release(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                        arg4,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(_) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec3 = (e.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_release<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_rollback_to_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                    arg4: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::vtab_rollback_to(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                        arg4,
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(_) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec3 = (e.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_rollback_to<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_is_shadow_name_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: *mut u8,
+                    arg4: usize,
+                ) -> i32 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let len1 = arg4;
+                    let bytes1 = _rt::Vec::from_raw_parts(arg3.cast(), len1, len1);
+                    let result2 = T::vtab_is_shadow_name(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        _rt::string_lift(bytes1),
+                    );
+                    match result2 {
+                        true => 1,
+                        false => 0,
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_vtab_integrity_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i64,
+                    arg3: i64,
+                    arg4: *mut u8,
+                    arg5: usize,
+                    arg6: *mut u8,
+                    arg7: usize,
+                    arg8: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let len1 = arg5;
+                    let bytes1 = _rt::Vec::from_raw_parts(arg4.cast(), len1, len1);
+                    let len2 = arg7;
+                    let bytes2 = _rt::Vec::from_raw_parts(arg6.cast(), len2, len2);
+                    let result3 = T::vtab_integrity(
+                        _rt::string_lift(bytes0),
+                        arg2 as u64,
+                        arg3 as u64,
+                        _rt::string_lift(bytes1),
+                        _rt::string_lift(bytes2),
+                        arg8 as u32,
+                    );
+                    let ptr4 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result3 {
+                        Ok(_) => {
+                            *ptr4.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr4.add(0).cast::<u8>() = (1i32) as u8;
+                            let vec5 = (e.into_bytes()).into_boxed_slice();
+                            let ptr5 = vec5.as_ptr().cast::<u8>();
+                            let len5 = vec5.len();
+                            ::core::mem::forget(vec5);
+                            *ptr4
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len5;
+                            *ptr4
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr5.cast_mut();
+                        }
+                    };
+                    ptr4
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_vtab_integrity<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                pub trait Guest {
+                    /// Invoke `func-id` on the extension previously loaded under
+                    /// `ext-name`, with the given arguments. Errors out if no such
+                    /// extension is loaded, if the extension's `scalar-function.call`
+                    /// returns an error, or if the loaded component doesn't actually
+                    /// export `sqlite:extension/scalar-function`.
+                    fn scalar_call(
+                        ext_name: _rt::String,
+                        func_id: u64,
+                        args: _rt::Vec<SqlValue>,
+                    ) -> Result<SqlValue, _rt::String>;
+                    /// One row's contribution to an aggregate. `context-id` is
+                    /// per-aggregation and assigned by the in-WASM trampoline (it
+                    /// stashes a u64 counter inside the
+                    /// `sqlite3_aggregate_context` memory the SQLite engine
+                    /// allocates for each pending aggregation). The loaded
+                    /// extension uses `context-id` to thread its own running state
+                    /// between `step` and `finalize`.
+                    fn aggregate_step(
+                        ext_name: _rt::String,
+                        func_id: u64,
+                        context_id: u64,
+                        args: _rt::Vec<SqlValue>,
+                    ) -> Result<(), _rt::String>;
+                    /// Produce the aggregate's final value and release any state
+                    /// keyed by `context-id`. The trampoline calls this once per
+                    /// aggregation after the last `aggregate-step` for that
+                    /// `context-id`.
+                    fn aggregate_finalize(
+                        ext_name: _rt::String,
+                        func_id: u64,
+                        context_id: u64,
+                    ) -> Result<SqlValue, _rt::String>;
+                    /// Window-mode path: produce the current aggregate value
+                    /// WITHOUT releasing the state keyed by `context-id`. SQLite
+                    /// invokes this for `xValue` slots — `agg(x) OVER (...)`
+                    /// queries emit one row at a time and need a mid-frame readout
+                    /// the bare `aggregate-finalize` would clobber. Same
+                    /// extension-routing shape as the other aggregate dispatches.
+                    fn aggregate_value(
+                        ext_name: _rt::String,
+                        func_id: u64,
+                        context_id: u64,
+                    ) -> Result<SqlValue, _rt::String>;
+                    /// Window-mode path: undo one row's contribution to the
+                    /// aggregation context. SQLite invokes this for `xInverse`
+                    /// slots as a row leaves the window frame so the running
+                    /// state matches the new frame bounds. Mirror of
+                    /// `aggregate-step` — same args, opposite direction.
+                    fn aggregate_inverse(
+                        ext_name: _rt::String,
+                        func_id: u64,
+                        context_id: u64,
+                        args: _rt::Vec<SqlValue>,
+                    ) -> Result<(), _rt::String>;
+                    /// Compare two strings under the collation identified by
+                    /// `collation-id`. Return < 0 if a < b, 0 if a == b, > 0 if a > b.
+                    /// The loaded extension's `collation.compare` does the actual
+                    /// comparison; this dispatch wrapper just routes the call.
+                    fn collation_compare(
+                        ext_name: _rt::String,
+                        collation_id: u64,
+                        a: _rt::String,
+                        b: _rt::String,
+                    ) -> i32;
+                    /// Route a SQLite authorizer callback to the loaded extension
+                    /// named `ext-name` (which must have declared `has-authorizer`
+                    /// in its manifest). Return value follows SQLite's auth-action
+                    /// contract: ok = permit, deny = block with error, ignore = no-op.
+                    fn authorize(
+                        ext_name: _rt::String,
+                        action: AuthAction,
+                        arg1: Option<_rt::String>,
+                        arg2: Option<_rt::String>,
+                        database: Option<_rt::String>,
+                        trigger: Option<_rt::String>,
+                    ) -> AuthResult;
+                    /// Route a row-level update notification to the loaded extension
+                    /// (declared `has-update-hook`). Fires after the row write
+                    /// commits to the page cache; the host has no way to veto.
+                    fn on_update(
+                        ext_name: _rt::String,
+                        operation: UpdateOperation,
+                        database: _rt::String,
+                        table: _rt::String,
+                        rowid: i64,
+                    ) -> ();
+                    /// Route a pre-commit hook. Returning false converts the commit
+                    /// to a rollback (SQLite's standard `xCommitHook != 0` semantics).
+                    fn on_commit(ext_name: _rt::String) -> bool;
+                    /// Route a post-rollback notification.
+                    fn on_rollback(ext_name: _rt::String) -> ();
+                    /// Route a WAL-commit notification. Fires AFTER a WAL commit has
+                    /// just appended `n-frames-in-wal` frames to the WAL for the
+                    /// database attached as `db-name`. The host's wal-hook trampoline
+                    /// re-enters the loaded extension's `wal-hook.on-wal-hook` callback
+                    /// keyed by `hook-id`; the returned i32 is the SQLite result code
+                    /// to propagate (SQLITE_OK = 0 for normal continuation, non-zero
+                    /// to propagate an error to the calling SQL statement).
+                    ///
+                    /// Substrate primitive used by the wal-archive extension. SQLite
+                    /// allows only one wal-hook per connection; the loaded extension's
+                    /// `wal-hook` interface is the one currently installed via
+                    /// `dispatch-bridge.register-host-wal-hook`.
+                    fn wal_hook(
+                        ext_name: _rt::String,
+                        hook_id: u64,
+                        db_name: _rt::String,
+                        n_frames_in_wal: u32,
+                    ) -> i32;
+                    /// Vtab dispatches. The in-WASM cli registers an
+                    /// `sqlite3_module` whose xCreate/xConnect/xBestIndex/etc
+                    /// callbacks marshal here. `vtab-id` from the manifest +
+                    /// host-assigned `instance-id` per CREATE VIRTUAL TABLE +
+                    /// `cursor-id` per xOpen.
+                    fn vtab_create(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                        db_name: _rt::String,
+                        table_name: _rt::String,
+                        args: _rt::Vec<_rt::String>,
+                    ) -> Result<_rt::String, _rt::String>;
+                    fn vtab_connect(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                        db_name: _rt::String,
+                        table_name: _rt::String,
+                        args: _rt::Vec<_rt::String>,
+                    ) -> Result<_rt::String, _rt::String>;
+                    fn vtab_destroy(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                    ) -> Result<(), _rt::String>;
+                    fn vtab_disconnect(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                    ) -> Result<(), _rt::String>;
+                    fn vtab_best_index(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                        info: IndexInfo,
+                    ) -> Result<IndexPlan, _rt::String>;
+                    fn vtab_open(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                        cursor_id: u64,
+                    ) -> Result<(), _rt::String>;
+                    fn vtab_close(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        cursor_id: u64,
+                    ) -> Result<(), _rt::String>;
+                    fn vtab_filter(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        cursor_id: u64,
+                        idx_num: i32,
+                        idx_str: Option<_rt::String>,
+                        args: _rt::Vec<SqlValue>,
+                    ) -> Result<(), _rt::String>;
+                    fn vtab_next(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        cursor_id: u64,
+                    ) -> Result<(), _rt::String>;
+                    fn vtab_eof(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        cursor_id: u64,
+                    ) -> bool;
+                    fn vtab_column(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        cursor_id: u64,
+                        col: i32,
+                    ) -> Result<SqlValue, _rt::String>;
+                    fn vtab_rowid(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        cursor_id: u64,
+                    ) -> Result<i64, _rt::String>;
+                    /// Batched vtab fetch. The cli's trampoline calls this once per
+                    /// block instead of looping xColumn/xRowid/xNext per row.
+                    fn vtab_fetch_batch(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        cursor_id: u64,
+                        max_rows: u32,
+                    ) -> Result<_rt::Vec<VtabRow>, _rt::String>;
+                    /// ── Mutating vtab dispatches ──────────────────────────────
+                    ///
+                    /// Routed to extensions that declared `vtab-spec.mutable = true`
+                    /// and export the `vtab-update` interface. The cli's
+                    /// sqlite3_module wires its xUpdate / xBegin / xSync / xCommit /
+                    /// xRollback / xRename / xSavepoint / xRelease / xRollbackTo
+                    /// slots to these; the host instantiates the loaded extension
+                    /// and invokes the matching `vtab-update.*` export.
+                    fn vtab_update(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                        args: _rt::Vec<SqlValue>,
+                    ) -> Result<i64, _rt::String>;
+                    fn vtab_begin(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                    ) -> Result<(), _rt::String>;
+                    fn vtab_sync(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                    ) -> Result<(), _rt::String>;
+                    fn vtab_commit(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                    ) -> Result<(), _rt::String>;
+                    fn vtab_rollback(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                    ) -> Result<(), _rt::String>;
+                    fn vtab_rename(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                        new_name: _rt::String,
+                    ) -> Result<(), _rt::String>;
+                    fn vtab_savepoint(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                        savepoint: i32,
+                    ) -> Result<(), _rt::String>;
+                    fn vtab_release(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                        savepoint: i32,
+                    ) -> Result<(), _rt::String>;
+                    fn vtab_rollback_to(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                        savepoint: i32,
+                    ) -> Result<(), _rt::String>;
+                    /// xShadowName — module-level. SQLite asks via the cli's
+                    /// `xShadowName` slot; the cli routes here. Returns true if
+                    /// `name` is a shadow table owned by this vtab module.
+                    fn vtab_is_shadow_name(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        name: _rt::String,
+                    ) -> bool;
+                    /// xIntegrity — per-instance integrity check.
+                    fn vtab_integrity(
+                        ext_name: _rt::String,
+                        vtab_id: u64,
+                        instance_id: u64,
+                        schema: _rt::String,
+                        table_name: _rt::String,
+                        mode_flags: u32,
+                    ) -> Result<(), _rt::String>;
+                }
+                #[doc(hidden)]
+                macro_rules! __export_sqlite_wasm_dispatch_0_1_0_cabi {
+                    ($ty:ident with_types_in $($path_to_types:tt)*) => {
+                        const _ : () = { #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#scalar-call")] unsafe extern "C" fn
+                        export_scalar_call(arg0 : * mut u8, arg1 : usize, arg2 : i64,
+                        arg3 : * mut u8, arg4 : usize,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_scalar_call_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3, arg4) } } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#scalar-call")] unsafe
+                        extern "C" fn _post_return_scalar_call(arg0 : * mut u8,) { unsafe
+                        { $($path_to_types)*:: __post_return_scalar_call::<$ty > (arg0) }
+                        } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#aggregate-step")] unsafe extern "C"
+                        fn export_aggregate_step(arg0 : * mut u8, arg1 : usize, arg2 :
+                        i64, arg3 : i64, arg4 : * mut u8, arg5 : usize,) -> * mut u8 {
+                        unsafe { $($path_to_types)*:: _export_aggregate_step_cabi::<$ty >
+                        (arg0, arg1, arg2, arg3, arg4, arg5) } } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#aggregate-step")] unsafe
+                        extern "C" fn _post_return_aggregate_step(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_aggregate_step::<$ty
+                        > (arg0) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#aggregate-finalize")] unsafe extern
+                        "C" fn export_aggregate_finalize(arg0 : * mut u8, arg1 : usize,
+                        arg2 : i64, arg3 : i64,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_aggregate_finalize_cabi::<$ty >
+                        (arg0, arg1, arg2, arg3) } } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#aggregate-finalize")]
+                        unsafe extern "C" fn _post_return_aggregate_finalize(arg0 : * mut
+                        u8,) { unsafe { $($path_to_types)*::
+                        __post_return_aggregate_finalize::<$ty > (arg0) } } #[unsafe
+                        (export_name = "sqlite:wasm/dispatch@0.1.0#aggregate-value")]
+                        unsafe extern "C" fn export_aggregate_value(arg0 : * mut u8, arg1
+                        : usize, arg2 : i64, arg3 : i64,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_aggregate_value_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3) } } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#aggregate-value")] unsafe
+                        extern "C" fn _post_return_aggregate_value(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_aggregate_value::<$ty
+                        > (arg0) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#aggregate-inverse")] unsafe extern
+                        "C" fn export_aggregate_inverse(arg0 : * mut u8, arg1 : usize,
+                        arg2 : i64, arg3 : i64, arg4 : * mut u8, arg5 : usize,) -> * mut
+                        u8 { unsafe { $($path_to_types)*::
+                        _export_aggregate_inverse_cabi::<$ty > (arg0, arg1, arg2, arg3,
+                        arg4, arg5) } } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#aggregate-inverse")] unsafe
+                        extern "C" fn _post_return_aggregate_inverse(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*::
+                        __post_return_aggregate_inverse::<$ty > (arg0) } } #[unsafe
+                        (export_name = "sqlite:wasm/dispatch@0.1.0#collation-compare")]
+                        unsafe extern "C" fn export_collation_compare(arg0 : * mut u8,
+                        arg1 : usize, arg2 : i64, arg3 : * mut u8, arg4 : usize, arg5 : *
+                        mut u8, arg6 : usize,) -> i32 { unsafe { $($path_to_types)*::
+                        _export_collation_compare_cabi::<$ty > (arg0, arg1, arg2, arg3,
+                        arg4, arg5, arg6) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#authorize")] unsafe extern "C" fn
+                        export_authorize(arg0 : * mut u8, arg1 : usize, arg2 : i32, arg3
+                        : i32, arg4 : * mut u8, arg5 : usize, arg6 : i32, arg7 : * mut
+                        u8, arg8 : usize, arg9 : i32, arg10 : * mut u8, arg11 : usize,
+                        arg12 : i32, arg13 : * mut u8, arg14 : usize,) -> i32 { unsafe {
+                        $($path_to_types)*:: _export_authorize_cabi::<$ty > (arg0, arg1,
+                        arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11,
+                        arg12, arg13, arg14) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#on-update")] unsafe extern "C" fn
+                        export_on_update(arg0 : * mut u8, arg1 : usize, arg2 : i32, arg3
+                        : * mut u8, arg4 : usize, arg5 : * mut u8, arg6 : usize, arg7 :
+                        i64,) { unsafe { $($path_to_types)*::
+                        _export_on_update_cabi::<$ty > (arg0, arg1, arg2, arg3, arg4,
+                        arg5, arg6, arg7) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#on-commit")] unsafe extern "C" fn
+                        export_on_commit(arg0 : * mut u8, arg1 : usize,) -> i32 { unsafe
+                        { $($path_to_types)*:: _export_on_commit_cabi::<$ty > (arg0,
+                        arg1) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#on-rollback")] unsafe extern "C" fn
+                        export_on_rollback(arg0 : * mut u8, arg1 : usize,) { unsafe {
+                        $($path_to_types)*:: _export_on_rollback_cabi::<$ty > (arg0,
+                        arg1) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#wal-hook")] unsafe extern "C" fn
+                        export_wal_hook(arg0 : * mut u8, arg1 : usize, arg2 : i64, arg3 :
+                        * mut u8, arg4 : usize, arg5 : i32,) -> i32 { unsafe {
+                        $($path_to_types)*:: _export_wal_hook_cabi::<$ty > (arg0, arg1,
+                        arg2, arg3, arg4, arg5) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-create")] unsafe extern "C" fn
+                        export_vtab_create(arg0 : * mut u8, arg1 : usize, arg2 : i64,
+                        arg3 : i64, arg4 : * mut u8, arg5 : usize, arg6 : * mut u8, arg7
+                        : usize, arg8 : * mut u8, arg9 : usize,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_vtab_create_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) } }
+                        #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-create")] unsafe
+                        extern "C" fn _post_return_vtab_create(arg0 : * mut u8,) { unsafe
+                        { $($path_to_types)*:: __post_return_vtab_create::<$ty > (arg0) }
+                        } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-connect")] unsafe extern "C" fn
+                        export_vtab_connect(arg0 : * mut u8, arg1 : usize, arg2 : i64,
+                        arg3 : i64, arg4 : * mut u8, arg5 : usize, arg6 : * mut u8, arg7
+                        : usize, arg8 : * mut u8, arg9 : usize,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_vtab_connect_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) } }
+                        #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-connect")] unsafe
+                        extern "C" fn _post_return_vtab_connect(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_vtab_connect::<$ty >
+                        (arg0) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-destroy")] unsafe extern "C" fn
+                        export_vtab_destroy(arg0 : * mut u8, arg1 : usize, arg2 : i64,
+                        arg3 : i64,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_vtab_destroy_cabi::<$ty > (arg0, arg1, arg2, arg3) } }
+                        #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-destroy")] unsafe
+                        extern "C" fn _post_return_vtab_destroy(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_vtab_destroy::<$ty >
+                        (arg0) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-disconnect")] unsafe extern "C"
+                        fn export_vtab_disconnect(arg0 : * mut u8, arg1 : usize, arg2 :
+                        i64, arg3 : i64,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_vtab_disconnect_cabi::<$ty > (arg0, arg1, arg2, arg3) } }
+                        #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-disconnect")] unsafe
+                        extern "C" fn _post_return_vtab_disconnect(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_vtab_disconnect::<$ty
+                        > (arg0) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-best-index")] unsafe extern "C"
+                        fn export_vtab_best_index(arg0 : * mut u8, arg1 : usize, arg2 :
+                        i64, arg3 : i64, arg4 : * mut u8, arg5 : usize, arg6 : * mut u8,
+                        arg7 : usize, arg8 : i64,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_vtab_best_index_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) } } #[unsafe
+                        (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-best-index")] unsafe
+                        extern "C" fn _post_return_vtab_best_index(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_vtab_best_index::<$ty
+                        > (arg0) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-open")] unsafe extern "C" fn
+                        export_vtab_open(arg0 : * mut u8, arg1 : usize, arg2 : i64, arg3
+                        : i64, arg4 : i64,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_vtab_open_cabi::<$ty > (arg0, arg1, arg2, arg3, arg4) } }
+                        #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-open")] unsafe extern
+                        "C" fn _post_return_vtab_open(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_vtab_open::<$ty > (arg0) } }
+                        #[unsafe (export_name = "sqlite:wasm/dispatch@0.1.0#vtab-close")]
+                        unsafe extern "C" fn export_vtab_close(arg0 : * mut u8, arg1 :
+                        usize, arg2 : i64, arg3 : i64,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_vtab_close_cabi::<$ty > (arg0, arg1,
+                        arg2, arg3) } } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-close")] unsafe extern
+                        "C" fn _post_return_vtab_close(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_vtab_close::<$ty > (arg0) } }
+                        #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-filter")] unsafe extern "C" fn
+                        export_vtab_filter(arg0 : * mut u8, arg1 : usize, arg2 : i64,
+                        arg3 : i64, arg4 : i32, arg5 : i32, arg6 : * mut u8, arg7 :
+                        usize, arg8 : * mut u8, arg9 : usize,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_vtab_filter_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) } }
+                        #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-filter")] unsafe
+                        extern "C" fn _post_return_vtab_filter(arg0 : * mut u8,) { unsafe
+                        { $($path_to_types)*:: __post_return_vtab_filter::<$ty > (arg0) }
+                        } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-next")] unsafe extern "C" fn
+                        export_vtab_next(arg0 : * mut u8, arg1 : usize, arg2 : i64, arg3
+                        : i64,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_vtab_next_cabi::<$ty > (arg0, arg1, arg2, arg3) } }
+                        #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-next")] unsafe extern
+                        "C" fn _post_return_vtab_next(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_vtab_next::<$ty > (arg0) } }
+                        #[unsafe (export_name = "sqlite:wasm/dispatch@0.1.0#vtab-eof")]
+                        unsafe extern "C" fn export_vtab_eof(arg0 : * mut u8, arg1 :
+                        usize, arg2 : i64, arg3 : i64,) -> i32 { unsafe {
+                        $($path_to_types)*:: _export_vtab_eof_cabi::<$ty > (arg0, arg1,
+                        arg2, arg3) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-column")] unsafe extern "C" fn
+                        export_vtab_column(arg0 : * mut u8, arg1 : usize, arg2 : i64,
+                        arg3 : i64, arg4 : i32,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_vtab_column_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3, arg4) } } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-column")] unsafe
+                        extern "C" fn _post_return_vtab_column(arg0 : * mut u8,) { unsafe
+                        { $($path_to_types)*:: __post_return_vtab_column::<$ty > (arg0) }
+                        } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-rowid")] unsafe extern "C" fn
+                        export_vtab_rowid(arg0 : * mut u8, arg1 : usize, arg2 : i64, arg3
+                        : i64,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_vtab_rowid_cabi::<$ty > (arg0, arg1, arg2, arg3) } }
+                        #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-rowid")] unsafe extern
+                        "C" fn _post_return_vtab_rowid(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_vtab_rowid::<$ty > (arg0) } }
+                        #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-fetch-batch")] unsafe extern "C"
+                        fn export_vtab_fetch_batch(arg0 : * mut u8, arg1 : usize, arg2 :
+                        i64, arg3 : i64, arg4 : i32,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_vtab_fetch_batch_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3, arg4) } } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-fetch-batch")] unsafe
+                        extern "C" fn _post_return_vtab_fetch_batch(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*::
+                        __post_return_vtab_fetch_batch::<$ty > (arg0) } } #[unsafe
+                        (export_name = "sqlite:wasm/dispatch@0.1.0#vtab-update")] unsafe
+                        extern "C" fn export_vtab_update(arg0 : * mut u8, arg1 : usize,
+                        arg2 : i64, arg3 : i64, arg4 : * mut u8, arg5 : usize,) -> * mut
+                        u8 { unsafe { $($path_to_types)*:: _export_vtab_update_cabi::<$ty
+                        > (arg0, arg1, arg2, arg3, arg4, arg5) } } #[unsafe (export_name
+                        = "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-update")] unsafe
+                        extern "C" fn _post_return_vtab_update(arg0 : * mut u8,) { unsafe
+                        { $($path_to_types)*:: __post_return_vtab_update::<$ty > (arg0) }
+                        } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-begin")] unsafe extern "C" fn
+                        export_vtab_begin(arg0 : * mut u8, arg1 : usize, arg2 : i64, arg3
+                        : i64,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_vtab_begin_cabi::<$ty > (arg0, arg1, arg2, arg3) } }
+                        #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-begin")] unsafe extern
+                        "C" fn _post_return_vtab_begin(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_vtab_begin::<$ty > (arg0) } }
+                        #[unsafe (export_name = "sqlite:wasm/dispatch@0.1.0#vtab-sync")]
+                        unsafe extern "C" fn export_vtab_sync(arg0 : * mut u8, arg1 :
+                        usize, arg2 : i64, arg3 : i64,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_vtab_sync_cabi::<$ty > (arg0, arg1,
+                        arg2, arg3) } } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-sync")] unsafe extern
+                        "C" fn _post_return_vtab_sync(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_vtab_sync::<$ty > (arg0) } }
+                        #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-commit")] unsafe extern "C" fn
+                        export_vtab_commit(arg0 : * mut u8, arg1 : usize, arg2 : i64,
+                        arg3 : i64,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_vtab_commit_cabi::<$ty > (arg0, arg1, arg2, arg3) } }
+                        #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-commit")] unsafe
+                        extern "C" fn _post_return_vtab_commit(arg0 : * mut u8,) { unsafe
+                        { $($path_to_types)*:: __post_return_vtab_commit::<$ty > (arg0) }
+                        } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-rollback")] unsafe extern "C" fn
+                        export_vtab_rollback(arg0 : * mut u8, arg1 : usize, arg2 : i64,
+                        arg3 : i64,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_vtab_rollback_cabi::<$ty > (arg0, arg1, arg2, arg3) } }
+                        #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-rollback")] unsafe
+                        extern "C" fn _post_return_vtab_rollback(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_vtab_rollback::<$ty >
+                        (arg0) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-rename")] unsafe extern "C" fn
+                        export_vtab_rename(arg0 : * mut u8, arg1 : usize, arg2 : i64,
+                        arg3 : i64, arg4 : * mut u8, arg5 : usize,) -> * mut u8 { unsafe
+                        { $($path_to_types)*:: _export_vtab_rename_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3, arg4, arg5) } } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-rename")] unsafe
+                        extern "C" fn _post_return_vtab_rename(arg0 : * mut u8,) { unsafe
+                        { $($path_to_types)*:: __post_return_vtab_rename::<$ty > (arg0) }
+                        } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-savepoint")] unsafe extern "C"
+                        fn export_vtab_savepoint(arg0 : * mut u8, arg1 : usize, arg2 :
+                        i64, arg3 : i64, arg4 : i32,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_vtab_savepoint_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3, arg4) } } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-savepoint")] unsafe
+                        extern "C" fn _post_return_vtab_savepoint(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_vtab_savepoint::<$ty
+                        > (arg0) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-release")] unsafe extern "C" fn
+                        export_vtab_release(arg0 : * mut u8, arg1 : usize, arg2 : i64,
+                        arg3 : i64, arg4 : i32,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_vtab_release_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3, arg4) } } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-release")] unsafe
+                        extern "C" fn _post_return_vtab_release(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_vtab_release::<$ty >
+                        (arg0) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-rollback-to")] unsafe extern "C"
+                        fn export_vtab_rollback_to(arg0 : * mut u8, arg1 : usize, arg2 :
+                        i64, arg3 : i64, arg4 : i32,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_vtab_rollback_to_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3, arg4) } } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-rollback-to")] unsafe
+                        extern "C" fn _post_return_vtab_rollback_to(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*::
+                        __post_return_vtab_rollback_to::<$ty > (arg0) } } #[unsafe
+                        (export_name = "sqlite:wasm/dispatch@0.1.0#vtab-is-shadow-name")]
+                        unsafe extern "C" fn export_vtab_is_shadow_name(arg0 : * mut u8,
+                        arg1 : usize, arg2 : i64, arg3 : * mut u8, arg4 : usize,) -> i32
+                        { unsafe { $($path_to_types)*::
+                        _export_vtab_is_shadow_name_cabi::<$ty > (arg0, arg1, arg2, arg3,
+                        arg4) } } #[unsafe (export_name =
+                        "sqlite:wasm/dispatch@0.1.0#vtab-integrity")] unsafe extern "C"
+                        fn export_vtab_integrity(arg0 : * mut u8, arg1 : usize, arg2 :
+                        i64, arg3 : i64, arg4 : * mut u8, arg5 : usize, arg6 : * mut u8,
+                        arg7 : usize, arg8 : i32,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_vtab_integrity_cabi::<$ty > (arg0,
+                        arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) } } #[unsafe
+                        (export_name =
+                        "cabi_post_sqlite:wasm/dispatch@0.1.0#vtab-integrity")] unsafe
+                        extern "C" fn _post_return_vtab_integrity(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_vtab_integrity::<$ty
+                        > (arg0) } } };
+                    };
+                }
+                #[doc(hidden)]
+                pub(crate) use __export_sqlite_wasm_dispatch_0_1_0_cabi;
+                #[repr(align(8))]
+                struct _RetArea(
+                    [::core::mem::MaybeUninit<
+                        u8,
+                    >; 32 + 6 * ::core::mem::size_of::<*const u8>()],
+                );
+                static mut _RET_AREA: _RetArea = _RetArea(
+                    [::core::mem::MaybeUninit::uninit(); 32
+                        + 6 * ::core::mem::size_of::<*const u8>()],
+                );
+            }
+            /// Host-implemented file-handle primitives backing the `opfs` VFS
+            /// inside sqlite-vfs-tvm. The composed cli's wasm guest cannot
+            /// reach the OPFS (Origin Private File System) API directly — it
+            /// lives in the JS host — so this interface marshals each VFS
+            /// operation across the wasm/JS boundary.
+            ///
+            /// Architecture (v1.5 round 4):
+            ///
+            /// Browser host implements every function in this interface against
+            /// the OPFS async API (`navigator.storage.getDirectory()` ->
+            /// `getFileHandle()` -> `createWritable()` / `getFile()`). The
+            /// imports are listed in `asyncImports` for the runtime-bindgen JSPI
+            /// transpile, so the wasm guest suspends across each call and
+            /// resumes once the host's Promise resolves. From the Rust VFS
+            /// trampoline's POV, the call is synchronous; JSPI handles the
+            /// suspension under the hood.
+            ///
+            /// Departure from the round-3 spec: the spec mandated a Worker +
+            /// SyncAccessHandle + SharedArrayBuffer + Atomics dance (option α).
+            /// That architecture exists to avoid JSPI. But JSPI is ALREADY
+            /// mandatory on the composed-cli path (sqlink-composed.js builds the
+            /// runtime-bindgen with `asyncMode: 'jspi'`), so reaching for the
+            /// SAB dance buys nothing while adding Worker setup, COOP/COEP
+            /// headers, and ~500 LoC of cross-thread plumbing. Option β
+            /// (suspend-via-JSPI) reuses the existing async-import infrastructure.
+            ///
+            /// Handle model: u64 file handles assigned by the host on `open`,
+            /// keyed into a host-side Map<handle, FileSystemFileHandle>. The
+            /// alternative — wit resource types — would be cleaner but each
+            /// crossing of the Rust VFS trampoline (which holds the handle in a
+            /// `*mut sqlite3_file`) would have to clone the resource handle,
+            /// and SQLite's xClose lifecycle doesn't compose cleanly with wit's
+            /// drop semantics. u64 keeps the contract simple.
+            #[allow(dead_code, async_fn_in_trait, unused_imports, clippy::all)]
+            pub mod opfs_host {
+                #[used]
+                #[doc(hidden)]
+                static __FORCE_SECTION_REF: fn() = super::super::super::super::__link_custom_section_describing_imports;
+                use super::super::super::super::_rt;
+                #[repr(u8)]
+                #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+                pub enum OpfsErrorCode {
+                    /// Generic I/O error. Maps to SQLITE_IOERR.
+                    Io,
+                    /// File does not exist and create was not requested.
+                    /// Maps to SQLITE_CANTOPEN.
+                    NotFound,
+                    /// OPFS quota exhausted. Maps to SQLITE_FULL.
+                    Full,
+                    /// Caller passed an invalid handle or out-of-range
+                    /// argument. Maps to SQLITE_MISUSE.
+                    Invalid,
+                }
+                impl ::core::fmt::Debug for OpfsErrorCode {
+                    fn fmt(
+                        &self,
+                        f: &mut ::core::fmt::Formatter<'_>,
+                    ) -> ::core::fmt::Result {
+                        match self {
+                            OpfsErrorCode::Io => {
+                                f.debug_tuple("OpfsErrorCode::Io").finish()
+                            }
+                            OpfsErrorCode::NotFound => {
+                                f.debug_tuple("OpfsErrorCode::NotFound").finish()
+                            }
+                            OpfsErrorCode::Full => {
+                                f.debug_tuple("OpfsErrorCode::Full").finish()
+                            }
+                            OpfsErrorCode::Invalid => {
+                                f.debug_tuple("OpfsErrorCode::Invalid").finish()
+                            }
+                        }
+                    }
+                }
+                impl OpfsErrorCode {
+                    #[doc(hidden)]
+                    pub unsafe fn _lift(val: u8) -> OpfsErrorCode {
+                        if !cfg!(debug_assertions) {
+                            return ::core::mem::transmute(val);
+                        }
+                        match val {
+                            0 => OpfsErrorCode::Io,
+                            1 => OpfsErrorCode::NotFound,
+                            2 => OpfsErrorCode::Full,
+                            3 => OpfsErrorCode::Invalid,
+                            _ => panic!("invalid enum discriminant"),
+                        }
+                    }
+                }
+                /// Errors a file operation can surface. Generic-by-shape: the
+                /// VFS maps each to a SQLITE_IOERR_*, the host is free to add
+                /// finer-grained discriminators in later revisions.
+                #[derive(Clone)]
+                pub struct OpfsError {
+                    /// Human-readable diagnostic. Surfaced in browser console
+                    /// for debuggability; the Rust trampoline drops it on the
+                    /// floor (SQLite's API has no message channel for VFS
+                    /// errors beyond the return code).
+                    pub message: _rt::String,
+                    /// Coarse error class. See `opfs-error-code`. The Rust
+                    /// VFS uses this to choose between IOERR / CANTOPEN /
+                    /// FULL / NOMEM.
+                    pub code: OpfsErrorCode,
+                }
+                impl ::core::fmt::Debug for OpfsError {
+                    fn fmt(
+                        &self,
+                        f: &mut ::core::fmt::Formatter<'_>,
+                    ) -> ::core::fmt::Result {
+                        f.debug_struct("OpfsError")
+                            .field("message", &self.message)
+                            .field("code", &self.code)
+                            .finish()
+                    }
+                }
+                impl ::core::fmt::Display for OpfsError {
+                    fn fmt(
+                        &self,
+                        f: &mut ::core::fmt::Formatter<'_>,
+                    ) -> ::core::fmt::Result {
+                        write!(f, "{:?}", self)
+                    }
+                }
+                impl std::error::Error for OpfsError {}
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_open_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                    arg2: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::open(
+                        _rt::string_lift(bytes0),
+                        _rt::bool_lift(arg2 as u8),
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            *ptr2.add(8).cast::<i64>() = _rt::as_i64(e);
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let OpfsError { message: message3, code: code3 } = e;
+                            let vec4 = (message3.into_bytes()).into_boxed_slice();
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            ::core::mem::forget(vec4);
+                            *ptr2
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *ptr2.add(8).cast::<*mut u8>() = ptr4.cast_mut();
+                            *ptr2
+                                .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (code3.clone() as i32) as u8;
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_open<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0.add(8).cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_read_cabi<T: Guest>(
+                    arg0: i64,
+                    arg1: i64,
+                    arg2: i32,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::read(arg0 as u64, arg1 as u64, arg2 as u32);
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result0 {
+                        Ok(e) => {
+                            *ptr1.add(0).cast::<u8>() = (0i32) as u8;
+                            let vec2 = (e).into_boxed_slice();
+                            let ptr2 = vec2.as_ptr().cast::<u8>();
+                            let len2 = vec2.len();
+                            ::core::mem::forget(vec2);
+                            *ptr1
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len2;
+                            *ptr1
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr2.cast_mut();
+                        }
+                        Err(e) => {
+                            *ptr1.add(0).cast::<u8>() = (1i32) as u8;
+                            let OpfsError { message: message3, code: code3 } = e;
+                            let vec4 = (message3.into_bytes()).into_boxed_slice();
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            ::core::mem::forget(vec4);
+                            *ptr1
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *ptr1
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr4.cast_mut();
+                            *ptr1
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (code3.clone() as i32) as u8;
+                        }
+                    };
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_read<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            let base3 = l1;
+                            let len3 = l2;
+                            _rt::cabi_dealloc(base3, len3 * 1, 1);
+                        }
+                        _ => {
+                            let l4 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l5 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l4, l5, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_write_cabi<T: Guest>(
+                    arg0: i64,
+                    arg1: i64,
+                    arg2: *mut u8,
+                    arg3: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg3;
+                    let result1 = T::write(
+                        arg0 as u64,
+                        arg1 as u64,
+                        _rt::Vec::from_raw_parts(arg2.cast(), len0, len0),
+                    );
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(e) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<i32>() = _rt::as_i32(e);
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let OpfsError { message: message3, code: code3 } = e;
+                            let vec4 = (message3.into_bytes()).into_boxed_slice();
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            ::core::mem::forget(vec4);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr4.cast_mut();
+                            *ptr2
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (code3.clone() as i32) as u8;
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_write<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_truncate_cabi<T: Guest>(
+                    arg0: i64,
+                    arg1: i64,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::truncate(arg0 as u64, arg1 as u64);
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result0 {
+                        Ok(_) => {
+                            *ptr1.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr1.add(0).cast::<u8>() = (1i32) as u8;
+                            let OpfsError { message: message2, code: code2 } = e;
+                            let vec3 = (message2.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr1
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr1
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                            *ptr1
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (code2.clone() as i32) as u8;
+                        }
+                    };
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_truncate<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_sync_cabi<T: Guest>(arg0: i64) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::sync(arg0 as u64);
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result0 {
+                        Ok(_) => {
+                            *ptr1.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr1.add(0).cast::<u8>() = (1i32) as u8;
+                            let OpfsError { message: message2, code: code2 } = e;
+                            let vec3 = (message2.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr1
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr1
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                            *ptr1
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (code2.clone() as i32) as u8;
+                        }
+                    };
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_sync<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_size_cabi<T: Guest>(arg0: i64) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::size(arg0 as u64);
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result0 {
+                        Ok(e) => {
+                            *ptr1.add(0).cast::<u8>() = (0i32) as u8;
+                            *ptr1.add(8).cast::<i64>() = _rt::as_i64(e);
+                        }
+                        Err(e) => {
+                            *ptr1.add(0).cast::<u8>() = (1i32) as u8;
+                            let OpfsError { message: message2, code: code2 } = e;
+                            let vec3 = (message2.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr1
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr1.add(8).cast::<*mut u8>() = ptr3.cast_mut();
+                            *ptr1
+                                .add(8 + 2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (code2.clone() as i32) as u8;
+                        }
+                    };
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_size<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0.add(8).cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(8 + 1 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_close_cabi<T: Guest>(arg0: i64) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let result0 = T::close(arg0 as u64);
+                    let ptr1 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result0 {
+                        Ok(_) => {
+                            *ptr1.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr1.add(0).cast::<u8>() = (1i32) as u8;
+                            let OpfsError { message: message2, code: code2 } = e;
+                            let vec3 = (message2.into_bytes()).into_boxed_slice();
+                            let ptr3 = vec3.as_ptr().cast::<u8>();
+                            let len3 = vec3.len();
+                            ::core::mem::forget(vec3);
+                            *ptr1
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len3;
+                            *ptr1
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr3.cast_mut();
+                            *ptr1
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (code2.clone() as i32) as u8;
+                        }
+                    };
+                    ptr1
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_close<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn _export_delete_cabi<T: Guest>(
+                    arg0: *mut u8,
+                    arg1: usize,
+                ) -> *mut u8 {
+                    #[cfg(target_arch = "wasm32")] _rt::run_ctors_once();
+                    let len0 = arg1;
+                    let bytes0 = _rt::Vec::from_raw_parts(arg0.cast(), len0, len0);
+                    let result1 = T::delete(_rt::string_lift(bytes0));
+                    let ptr2 = (&raw mut _RET_AREA.0).cast::<u8>();
+                    match result1 {
+                        Ok(_) => {
+                            *ptr2.add(0).cast::<u8>() = (0i32) as u8;
+                        }
+                        Err(e) => {
+                            *ptr2.add(0).cast::<u8>() = (1i32) as u8;
+                            let OpfsError { message: message3, code: code3 } = e;
+                            let vec4 = (message3.into_bytes()).into_boxed_slice();
+                            let ptr4 = vec4.as_ptr().cast::<u8>();
+                            let len4 = vec4.len();
+                            ::core::mem::forget(vec4);
+                            *ptr2
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>() = len4;
+                            *ptr2
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>() = ptr4.cast_mut();
+                            *ptr2
+                                .add(3 * ::core::mem::size_of::<*const u8>())
+                                .cast::<u8>() = (code3.clone() as i32) as u8;
+                        }
+                    };
+                    ptr2
+                }
+                #[doc(hidden)]
+                #[allow(non_snake_case)]
+                pub unsafe fn __post_return_delete<T: Guest>(arg0: *mut u8) {
+                    let l0 = i32::from(*arg0.add(0).cast::<u8>());
+                    match l0 {
+                        0 => {}
+                        _ => {
+                            let l1 = *arg0
+                                .add(::core::mem::size_of::<*const u8>())
+                                .cast::<*mut u8>();
+                            let l2 = *arg0
+                                .add(2 * ::core::mem::size_of::<*const u8>())
+                                .cast::<usize>();
+                            _rt::cabi_dealloc(l1, l2, 1);
+                        }
+                    }
+                }
+                pub trait Guest {
+                    /// Open or create the OPFS file at `path` (relative to the
+                    /// origin's OPFS root, leading `/` allowed and stripped).
+                    /// `create` mirrors SQLITE_OPEN_CREATE: when true the host
+                    /// must materialize the file if it doesn't exist; when false
+                    /// missing files return `not-found`.
+                    ///
+                    /// Returns an opaque u64 handle the caller threads through
+                    /// every subsequent op + `close`. Each call returns a fresh
+                    /// handle even for the same path; the host is responsible
+                    /// for any de-duplication (in practice we don't dedupe —
+                    /// SQLite opens main + journal + wal as separate paths and
+                    /// the VFS's per-path file table sits in the Rust layer).
+                    fn open(path: _rt::String, create: bool) -> Result<u64, OpfsError>;
+                    /// Read `len` bytes starting at `offset`. Returns the actual
+                    /// bytes read (may be shorter than `len` if the read crosses
+                    /// EOF; the VFS trampoline detects short reads and either
+                    /// zero-fills the tail or returns SQLITE_IOERR_SHORT_READ per
+                    /// SQLite's conventions).
+                    ///
+                    /// Bytes flow as a wit `list<u8>` — copy crosses the wasm
+                    /// boundary once. For the size ranges SQLite hits (default
+                    /// page = 4 KiB, occasional larger reads for the header) the
+                    /// copy cost is irrelevant.
+                    fn read(
+                        handle: u64,
+                        offset: u64,
+                        len: u32,
+                    ) -> Result<_rt::Vec<u8>, OpfsError>;
+                    /// Write `data` starting at `offset`. Returns the number of
+                    /// bytes actually written. SQLite expects all-or-nothing
+                    /// writes (a short write triggers IOERR_WRITE); the host
+                    /// should write the full payload or return an error.
+                    fn write(
+                        handle: u64,
+                        offset: u64,
+                        data: _rt::Vec<u8>,
+                    ) -> Result<u32, OpfsError>;
+                    /// Truncate the file to `size` bytes. Growing is allowed
+                    /// (zero-fill); shrinking discards trailing bytes.
+                    fn truncate(handle: u64, size: u64) -> Result<(), OpfsError>;
+                    /// Flush pending writes to durable storage. OPFS guarantees
+                    /// durability after the SyncAccessHandle's `flush()` completes;
+                    /// the async API's `WritableStream.close()` provides the same
+                    /// guarantee. Either is acceptable.
+                    fn sync(handle: u64) -> Result<(), OpfsError>;
+                    /// Current file size in bytes.
+                    fn size(handle: u64) -> Result<u64, OpfsError>;
+                    /// Close the handle. The host releases the underlying
+                    /// FileSystemFileHandle. Idempotent: closing an already-closed
+                    /// handle is `ok(())`.
+                    fn close(handle: u64) -> Result<(), OpfsError>;
+                    /// Unlink the file at `path`. Used by SQLite when it
+                    /// rolls back a journal-only transaction. Idempotent:
+                    /// deleting a missing file returns `ok(())`.
+                    fn delete(path: _rt::String) -> Result<(), OpfsError>;
+                }
+                #[doc(hidden)]
+                macro_rules! __export_sqlite_wasm_opfs_host_0_1_0_cabi {
+                    ($ty:ident with_types_in $($path_to_types:tt)*) => {
+                        const _ : () = { #[unsafe (export_name =
+                        "sqlite:wasm/opfs-host@0.1.0#open")] unsafe extern "C" fn
+                        export_open(arg0 : * mut u8, arg1 : usize, arg2 : i32,) -> * mut
+                        u8 { unsafe { $($path_to_types)*:: _export_open_cabi::<$ty >
+                        (arg0, arg1, arg2) } } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/opfs-host@0.1.0#open")] unsafe extern "C"
+                        fn _post_return_open(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_open::<$ty > (arg0) } }
+                        #[unsafe (export_name = "sqlite:wasm/opfs-host@0.1.0#read")]
+                        unsafe extern "C" fn export_read(arg0 : i64, arg1 : i64, arg2 :
+                        i32,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_read_cabi::<$ty > (arg0, arg1, arg2) } } #[unsafe
+                        (export_name = "cabi_post_sqlite:wasm/opfs-host@0.1.0#read")]
+                        unsafe extern "C" fn _post_return_read(arg0 : * mut u8,) { unsafe
+                        { $($path_to_types)*:: __post_return_read::<$ty > (arg0) } }
+                        #[unsafe (export_name = "sqlite:wasm/opfs-host@0.1.0#write")]
+                        unsafe extern "C" fn export_write(arg0 : i64, arg1 : i64, arg2 :
+                        * mut u8, arg3 : usize,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_write_cabi::<$ty > (arg0, arg1,
+                        arg2, arg3) } } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/opfs-host@0.1.0#write")] unsafe extern "C"
+                        fn _post_return_write(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_write::<$ty > (arg0) } }
+                        #[unsafe (export_name = "sqlite:wasm/opfs-host@0.1.0#truncate")]
+                        unsafe extern "C" fn export_truncate(arg0 : i64, arg1 : i64,) ->
+                        * mut u8 { unsafe { $($path_to_types)*::
+                        _export_truncate_cabi::<$ty > (arg0, arg1) } } #[unsafe
+                        (export_name = "cabi_post_sqlite:wasm/opfs-host@0.1.0#truncate")]
+                        unsafe extern "C" fn _post_return_truncate(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_truncate::<$ty >
+                        (arg0) } } #[unsafe (export_name =
+                        "sqlite:wasm/opfs-host@0.1.0#sync")] unsafe extern "C" fn
+                        export_sync(arg0 : i64,) -> * mut u8 { unsafe {
+                        $($path_to_types)*:: _export_sync_cabi::<$ty > (arg0) } }
+                        #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/opfs-host@0.1.0#sync")] unsafe extern "C"
+                        fn _post_return_sync(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_sync::<$ty > (arg0) } }
+                        #[unsafe (export_name = "sqlite:wasm/opfs-host@0.1.0#size")]
+                        unsafe extern "C" fn export_size(arg0 : i64,) -> * mut u8 {
+                        unsafe { $($path_to_types)*:: _export_size_cabi::<$ty > (arg0) }
+                        } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/opfs-host@0.1.0#size")] unsafe extern "C"
+                        fn _post_return_size(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_size::<$ty > (arg0) } }
+                        #[unsafe (export_name = "sqlite:wasm/opfs-host@0.1.0#close")]
+                        unsafe extern "C" fn export_close(arg0 : i64,) -> * mut u8 {
+                        unsafe { $($path_to_types)*:: _export_close_cabi::<$ty > (arg0) }
+                        } #[unsafe (export_name =
+                        "cabi_post_sqlite:wasm/opfs-host@0.1.0#close")] unsafe extern "C"
+                        fn _post_return_close(arg0 : * mut u8,) { unsafe {
+                        $($path_to_types)*:: __post_return_close::<$ty > (arg0) } }
+                        #[unsafe (export_name = "sqlite:wasm/opfs-host@0.1.0#delete")]
+                        unsafe extern "C" fn export_delete(arg0 : * mut u8, arg1 :
+                        usize,) -> * mut u8 { unsafe { $($path_to_types)*::
+                        _export_delete_cabi::<$ty > (arg0, arg1) } } #[unsafe
+                        (export_name = "cabi_post_sqlite:wasm/opfs-host@0.1.0#delete")]
+                        unsafe extern "C" fn _post_return_delete(arg0 : * mut u8,) {
+                        unsafe { $($path_to_types)*:: __post_return_delete::<$ty > (arg0)
+                        } } };
+                    };
+                }
+                #[doc(hidden)]
+                pub(crate) use __export_sqlite_wasm_opfs_host_0_1_0_cabi;
+                #[repr(align(8))]
+                struct _RetArea(
+                    [::core::mem::MaybeUninit<
+                        u8,
+                    >; 16 + 2 * ::core::mem::size_of::<*const u8>()],
+                );
+                static mut _RET_AREA: _RetArea = _RetArea(
+                    [::core::mem::MaybeUninit::uninit(); 16
+                        + 2 * ::core::mem::size_of::<*const u8>()],
+                );
+            }
         }
     }
 }
@@ -5483,10 +11679,6 @@ mod _rt {
             val != 0
         }
     }
-    #[cfg(target_arch = "wasm32")]
-    pub fn run_ctors_once() {
-        wit_bindgen_rt::run_ctors_once();
-    }
     pub fn as_i64<T: AsI64>(t: T) -> i64 {
         t.as_i64()
     }
@@ -5509,6 +11701,27 @@ mod _rt {
         fn as_i64(self) -> i64 {
             self as i64
         }
+    }
+    pub fn as_f64<T: AsF64>(t: T) -> f64 {
+        t.as_f64()
+    }
+    pub trait AsF64 {
+        fn as_f64(self) -> f64;
+    }
+    impl<'a, T: Copy + AsF64> AsF64 for &'a T {
+        fn as_f64(self) -> f64 {
+            (*self).as_f64()
+        }
+    }
+    impl AsF64 for f64 {
+        #[inline]
+        fn as_f64(self) -> f64 {
+            self as f64
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    pub fn run_ctors_once() {
+        wit_bindgen_rt::run_ctors_once();
     }
     extern crate alloc as alloc_crate;
 }
@@ -5538,6 +11751,12 @@ macro_rules! __export_sqlite_loader_stub_impl {
         $($path_to_types_root)*::
         exports::sqlite::wasm::extension_loader::__export_sqlite_wasm_extension_loader_0_1_0_cabi!($ty
         with_types_in $($path_to_types_root)*:: exports::sqlite::wasm::extension_loader);
+        $($path_to_types_root)*::
+        exports::sqlite::wasm::dispatch::__export_sqlite_wasm_dispatch_0_1_0_cabi!($ty
+        with_types_in $($path_to_types_root)*:: exports::sqlite::wasm::dispatch);
+        $($path_to_types_root)*::
+        exports::sqlite::wasm::opfs_host::__export_sqlite_wasm_opfs_host_0_1_0_cabi!($ty
+        with_types_in $($path_to_types_root)*:: exports::sqlite::wasm::opfs_host);
     };
 }
 #[doc(inline)]
@@ -5548,21 +11767,21 @@ pub(crate) use __export_sqlite_loader_stub_impl as export;
 )]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 3660] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xc3\x1b\x01A\x02\x01\
-A\x0f\x01B\x15\x01q\x0a\x03get\0\0\x04head\0\0\x04post\0\0\x03put\0\0\x06delete\0\
-\0\x07connect\0\0\x07options\0\0\x05trace\0\0\x05patch\0\0\x05other\x01s\0\x04\0\
-\x06method\x03\0\0\x01q\x03\x04http\0\0\x05https\0\0\x05other\x01s\0\x04\0\x06sc\
-heme\x03\0\x02\x01p}\x01o\x02s\x04\x04\0\x05field\x03\0\x05\x01k\x03\x01ks\x01p\x06\
-\x01k\x04\x01ky\x01r\x07\x06method\x01\x06scheme\x07\x09authority\x08\x0fpath-wi\
-th-query\x08\x07headers\x09\x04body\x0a\x0atimeout-ms\x0b\x04\0\x07request\x03\0\
-\x0c\x01r\x03\x06status{\x07headers\x09\x04body\x04\x04\0\x08response\x03\0\x0e\x01\
-q\x05\x0binvalid-url\x01s\0\x09timed-out\0\0\x10connection-error\x01s\0\x0eproto\
-col-error\x01s\0\x05other\x01s\0\x04\0\x0ahttp-error\x03\0\x10\x01j\x01\x0f\x01\x11\
-\x01@\x01\x03req\x0d\0\x12\x04\0\x06handle\x01\x13\x03\0\x1bsqlite:extension/htt\
-p@1.0.0\x05\0\x02\x03\0\0\x06method\x01B\x17\x02\x03\x02\x01\x01\x04\0\x06method\
-\x03\0\0\x01q\x10\x03spi\0\0\x08prepared\0\0\x0btransaction\0\0\x06schema\0\0\x05\
-state\0\0\x05cache\0\0\x06random\0\0\x04text\0\0\x07hashing\0\0\x08encoding\0\0\x04\
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 6972] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xb35\x01A\x02\x01A\x1b\
+\x01B\x15\x01q\x0a\x03get\0\0\x04head\0\0\x04post\0\0\x03put\0\0\x06delete\0\0\x07\
+connect\0\0\x07options\0\0\x05trace\0\0\x05patch\0\0\x05other\x01s\0\x04\0\x06me\
+thod\x03\0\0\x01q\x03\x04http\0\0\x05https\0\0\x05other\x01s\0\x04\0\x06scheme\x03\
+\0\x02\x01p}\x01o\x02s\x04\x04\0\x05field\x03\0\x05\x01k\x03\x01ks\x01p\x06\x01k\
+\x04\x01ky\x01r\x07\x06method\x01\x06scheme\x07\x09authority\x08\x0fpath-with-qu\
+ery\x08\x07headers\x09\x04body\x0a\x0atimeout-ms\x0b\x04\0\x07request\x03\0\x0c\x01\
+r\x03\x06status{\x07headers\x09\x04body\x04\x04\0\x08response\x03\0\x0e\x01q\x05\
+\x0binvalid-url\x01s\0\x09timed-out\0\0\x10connection-error\x01s\0\x0eprotocol-e\
+rror\x01s\0\x05other\x01s\0\x04\0\x0ahttp-error\x03\0\x10\x01j\x01\x0f\x01\x11\x01\
+@\x01\x03req\x0d\0\x12\x04\0\x06handle\x01\x13\x03\0\x1bsqlite:extension/http@1.\
+0.0\x05\0\x02\x03\0\0\x06method\x01B\x17\x02\x03\x02\x01\x01\x04\0\x06method\x03\
+\0\0\x01q\x10\x03spi\0\0\x08prepared\0\0\x0btransaction\0\0\x06schema\0\0\x05sta\
+te\0\0\x05cache\0\0\x06random\0\0\x04text\0\0\x07hashing\0\0\x08encoding\0\0\x04\
 http\0\0\x03dns\0\0\x0awal-frames\0\0\x02s3\0\0\x0bspawn-build\0\0\x07bundles\0\0\
 \x04\0\x0acapability\x03\0\x02\x01ps\x01p\x01\x01k\x05\x01kw\x01ky\x01r\x04\x0da\
 llowed-hosts\x04\x0fallowed-methods\x06\x0emax-body-bytes\x07\x0atimeout-ms\x08\x04\
@@ -5613,16 +11832,87 @@ authorizer\x7f\x0fhas-update-hook\x7f\x0fhas-commit-hook\x7f\x0chas-wal-hook\x7f
 \x0bwal-hook-idw\x15declared-capabilities\x19\x15optional-capabilities\x19\x10pr\
 eferred-prefix\x1a\x10prefix-expansion\x1a\x0ctyped-values\x1b\x04\0\x08manifest\
 \x03\0\x1c\x01@\0\0\x1d\x04\0\x08describe\x01\x1e\x03\0\x1fsqlite:extension/meta\
-data@1.0.0\x05\x06\x02\x03\0\x01\x0cload-options\x02\x03\0\x03\x08manifest\x01B\x0e\
-\x02\x03\x02\x01\x07\x04\0\x0cload-options\x03\0\0\x02\x03\x02\x01\x08\x04\0\x08\
-manifest\x03\0\x02\x01r\x02\x04codez\x07messages\x04\0\x0cloader-error\x03\0\x04\
-\x01j\x01\x03\x01\x05\x01@\x02\x04paths\x07options\x01\0\x06\x04\0\x0eload-exten\
-sion\x01\x07\x01j\0\x01\x05\x01@\x01\x04names\0\x08\x04\0\x10unload-extension\x01\
-\x09\x01@\x02\x03uris\x07options\x01\0\x06\x04\0\x17load-extension-from-uri\x01\x0a\
-\x04\0\"sqlite:wasm/extension-loader@0.1.0\x05\x09\x04\0)sqlite:wasm-stub/sqlite\
--loader-stub@0.1.0\x04\0\x0b\x18\x01\0\x12sqlite-loader-stub\x03\0\0\0G\x09produ\
-cers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x06\
-0.41.0";
+data@1.0.0\x05\x06\x02\x03\0\x02\x09sql-value\x01B4\x02\x03\x02\x01\x07\x04\0\x09\
+sql-value\x03\0\0\x01m\x0f\x02eq\x02gt\x02le\x02lt\x02ge\x02ne\x05match\x04like\x06\
+regexp\x04glob\x07is-null\x0bis-not-null\x05limit\x06offset\x08function\x04\0\x0d\
+constraint-op\x03\0\x02\x01r\x03\x06columnz\x02op\x03\x06usable\x7f\x04\0\x0acon\
+straint\x03\0\x04\x01r\x02\x06columnz\x04desc\x7f\x04\0\x07orderby\x03\0\x06\x01\
+p\x05\x01p\x07\x01r\x03\x0bconstraints\x08\x08orderbys\x09\x08col-usedw\x04\0\x0a\
+index-info\x03\0\x0a\x01r\x02\x0aargv-indexz\x04omit\x7f\x04\0\x10constraint-usa\
+ge\x03\0\x0c\x01p\x0d\x01ks\x01r\x06\x10constraint-usage\x0e\x07idx-numz\x07idx-\
+str\x0f\x0eestimated-costu\x0eestimated-rowsx\x10orderby-consumed\x7f\x04\0\x0ai\
+ndex-plan\x03\0\x10\x01p\x01\x01r\x02\x05rowidx\x07columns\x12\x04\0\x08vtab-row\
+\x03\0\x13\x01ps\x01j\x01s\x01s\x01@\x05\x07vtab-idw\x0binstance-idw\x07db-names\
+\x0atable-names\x04args\x15\0\x16\x04\0\x06create\x01\x17\x04\0\x07connect\x01\x17\
+\x01j\0\x01s\x01@\x02\x07vtab-idw\x0binstance-idw\0\x18\x04\0\x07destroy\x01\x19\
+\x04\0\x0adisconnect\x01\x19\x01j\x01\x11\x01s\x01@\x03\x07vtab-idw\x0binstance-\
+idw\x04info\x0b\0\x1a\x04\0\x0abest-index\x01\x1b\x01@\x03\x07vtab-idw\x0binstan\
+ce-idw\x09cursor-idw\0\x18\x04\0\x04open\x01\x1c\x01@\x02\x07vtab-idw\x09cursor-\
+idw\0\x18\x04\0\x05close\x01\x1d\x01@\x05\x07vtab-idw\x09cursor-idw\x07idx-numz\x07\
+idx-str\x0f\x04args\x12\0\x18\x04\0\x06filter\x01\x1e\x04\0\x04next\x01\x1d\x01@\
+\x02\x07vtab-idw\x09cursor-idw\0\x7f\x04\0\x03eof\x01\x1f\x01j\x01\x01\x01s\x01@\
+\x03\x07vtab-idw\x09cursor-idw\x03colz\0\x20\x04\0\x06column\x01!\x01j\x01x\x01s\
+\x01@\x02\x07vtab-idw\x09cursor-idw\0\"\x04\0\x05rowid\x01#\x01p\x14\x01j\x01$\x01\
+s\x01@\x03\x07vtab-idw\x09cursor-idw\x08max-rowsy\0%\x04\0\x0bfetch-batch\x01&\x03\
+\0\x1bsqlite:extension/vtab@1.0.0\x05\x08\x02\x03\0\x01\x0cload-options\x02\x03\0\
+\x03\x08manifest\x01B\x0e\x02\x03\x02\x01\x09\x04\0\x0cload-options\x03\0\0\x02\x03\
+\x02\x01\x0a\x04\0\x08manifest\x03\0\x02\x01r\x02\x04codez\x07messages\x04\0\x0c\
+loader-error\x03\0\x04\x01j\x01\x03\x01\x05\x01@\x02\x04paths\x07options\x01\0\x06\
+\x04\0\x0eload-extension\x01\x07\x01j\0\x01\x05\x01@\x01\x04names\0\x08\x04\0\x10\
+unload-extension\x01\x09\x01@\x02\x03uris\x07options\x01\0\x06\x04\0\x17load-ext\
+ension-from-uri\x01\x0a\x04\0\"sqlite:wasm/extension-loader@0.1.0\x05\x0b\x02\x03\
+\0\x02\x0bauth-action\x02\x03\0\x02\x0bauth-result\x02\x03\0\x02\x10update-opera\
+tion\x02\x03\0\x04\x0aindex-info\x02\x03\0\x04\x0aindex-plan\x01BS\x02\x03\x02\x01\
+\x07\x04\0\x09sql-value\x03\0\0\x02\x03\x02\x01\x0c\x04\0\x0bauth-action\x03\0\x02\
+\x02\x03\x02\x01\x0d\x04\0\x0bauth-result\x03\0\x04\x02\x03\x02\x01\x0e\x04\0\x10\
+update-operation\x03\0\x06\x02\x03\x02\x01\x0f\x04\0\x0aindex-info\x03\0\x08\x02\
+\x03\x02\x01\x10\x04\0\x0aindex-plan\x03\0\x0a\x01p\x01\x01r\x02\x05rowidx\x07co\
+lumns\x0c\x04\0\x08vtab-row\x03\0\x0d\x01j\x01\x01\x01s\x01@\x03\x08ext-names\x07\
+func-idw\x04args\x0c\0\x0f\x04\0\x0bscalar-call\x01\x10\x01j\0\x01s\x01@\x04\x08\
+ext-names\x07func-idw\x0acontext-idw\x04args\x0c\0\x11\x04\0\x0eaggregate-step\x01\
+\x12\x01@\x03\x08ext-names\x07func-idw\x0acontext-idw\0\x0f\x04\0\x12aggregate-f\
+inalize\x01\x13\x04\0\x0faggregate-value\x01\x13\x04\0\x11aggregate-inverse\x01\x12\
+\x01@\x04\x08ext-names\x0ccollation-idw\x01as\x01bs\0z\x04\0\x11collation-compar\
+e\x01\x14\x01ks\x01@\x06\x08ext-names\x06action\x03\x04arg1\x15\x04arg2\x15\x08d\
+atabase\x15\x07trigger\x15\0\x05\x04\0\x09authorize\x01\x16\x01@\x05\x08ext-name\
+s\x09operation\x07\x08databases\x05tables\x05rowidx\x01\0\x04\0\x09on-update\x01\
+\x17\x01@\x01\x08ext-names\0\x7f\x04\0\x09on-commit\x01\x18\x01@\x01\x08ext-name\
+s\x01\0\x04\0\x0bon-rollback\x01\x19\x01@\x04\x08ext-names\x07hook-idw\x07db-nam\
+es\x0fn-frames-in-waly\0z\x04\0\x08wal-hook\x01\x1a\x01ps\x01j\x01s\x01s\x01@\x06\
+\x08ext-names\x07vtab-idw\x0binstance-idw\x07db-names\x0atable-names\x04args\x1b\
+\0\x1c\x04\0\x0bvtab-create\x01\x1d\x04\0\x0cvtab-connect\x01\x1d\x01@\x03\x08ex\
+t-names\x07vtab-idw\x0binstance-idw\0\x11\x04\0\x0cvtab-destroy\x01\x1e\x04\0\x0f\
+vtab-disconnect\x01\x1e\x01j\x01\x0b\x01s\x01@\x04\x08ext-names\x07vtab-idw\x0bi\
+nstance-idw\x04info\x09\0\x1f\x04\0\x0fvtab-best-index\x01\x20\x01@\x04\x08ext-n\
+ames\x07vtab-idw\x0binstance-idw\x09cursor-idw\0\x11\x04\0\x09vtab-open\x01!\x01\
+@\x03\x08ext-names\x07vtab-idw\x09cursor-idw\0\x11\x04\0\x0avtab-close\x01\"\x01\
+@\x06\x08ext-names\x07vtab-idw\x09cursor-idw\x07idx-numz\x07idx-str\x15\x04args\x0c\
+\0\x11\x04\0\x0bvtab-filter\x01#\x04\0\x09vtab-next\x01\"\x01@\x03\x08ext-names\x07\
+vtab-idw\x09cursor-idw\0\x7f\x04\0\x08vtab-eof\x01$\x01@\x04\x08ext-names\x07vta\
+b-idw\x09cursor-idw\x03colz\0\x0f\x04\0\x0bvtab-column\x01%\x01j\x01x\x01s\x01@\x03\
+\x08ext-names\x07vtab-idw\x09cursor-idw\0&\x04\0\x0avtab-rowid\x01'\x01p\x0e\x01\
+j\x01(\x01s\x01@\x04\x08ext-names\x07vtab-idw\x09cursor-idw\x08max-rowsy\0)\x04\0\
+\x10vtab-fetch-batch\x01*\x01@\x04\x08ext-names\x07vtab-idw\x0binstance-idw\x04a\
+rgs\x0c\0&\x04\0\x0bvtab-update\x01+\x04\0\x0avtab-begin\x01\x1e\x04\0\x09vtab-s\
+ync\x01\x1e\x04\0\x0bvtab-commit\x01\x1e\x04\0\x0dvtab-rollback\x01\x1e\x01@\x04\
+\x08ext-names\x07vtab-idw\x0binstance-idw\x08new-names\0\x11\x04\0\x0bvtab-renam\
+e\x01,\x01@\x04\x08ext-names\x07vtab-idw\x0binstance-idw\x09savepointz\0\x11\x04\
+\0\x0evtab-savepoint\x01-\x04\0\x0cvtab-release\x01-\x04\0\x10vtab-rollback-to\x01\
+-\x01@\x03\x08ext-names\x07vtab-idw\x04names\0\x7f\x04\0\x13vtab-is-shadow-name\x01\
+.\x01@\x06\x08ext-names\x07vtab-idw\x0binstance-idw\x06schemas\x0atable-names\x0a\
+mode-flagsy\0\x11\x04\0\x0evtab-integrity\x01/\x04\0\x1asqlite:wasm/dispatch@0.1\
+.0\x05\x11\x01B\x18\x01m\x04\x02io\x09not-found\x04full\x07invalid\x04\0\x0fopfs\
+-error-code\x03\0\0\x01r\x02\x07messages\x04code\x01\x04\0\x0aopfs-error\x03\0\x02\
+\x01j\x01w\x01\x03\x01@\x02\x04paths\x06create\x7f\0\x04\x04\0\x04open\x01\x05\x01\
+p}\x01j\x01\x06\x01\x03\x01@\x03\x06handlew\x06offsetw\x03leny\0\x07\x04\0\x04re\
+ad\x01\x08\x01j\x01y\x01\x03\x01@\x03\x06handlew\x06offsetw\x04data\x06\0\x09\x04\
+\0\x05write\x01\x0a\x01j\0\x01\x03\x01@\x02\x06handlew\x04sizew\0\x0b\x04\0\x08t\
+runcate\x01\x0c\x01@\x01\x06handlew\0\x0b\x04\0\x04sync\x01\x0d\x01@\x01\x06hand\
+lew\0\x04\x04\0\x04size\x01\x0e\x04\0\x05close\x01\x0d\x01@\x01\x04paths\0\x0b\x04\
+\0\x06delete\x01\x0f\x04\0\x1bsqlite:wasm/opfs-host@0.1.0\x05\x12\x04\0)sqlite:w\
+asm-stub/sqlite-loader-stub@0.1.0\x04\0\x0b\x18\x01\0\x12sqlite-loader-stub\x03\0\
+\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bi\
+ndgen-rust\x060.41.0";
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {

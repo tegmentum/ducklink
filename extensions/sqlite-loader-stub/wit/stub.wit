@@ -1,11 +1,50 @@
 package sqlite:wasm-stub@0.1.0;
 
-/// No-op provider for `sqlite:wasm/extension-loader@0.1.0`. Composed
-/// (via `wac plug`) into cache.wasm after sqlite-lib.wasm so that
-/// sqlite-lib's own extension-loader import is satisfied at
-/// instantiation time. Cache-component never calls `load-extension` on
-/// the SPI surface (it only uses `spi.execute*`), so the functions
-/// return `loader-error` and are never reached in practice.
+/// Declining provider for every function-carrying `sqlite:wasm/*`
+/// surface sqlite-lib imports but standalone-composed consumers
+/// (cache.wasm, sqlitewasm.wasm) never actually invoke at runtime.
+/// Composed via `wac plug` AFTER sqlite-lib.wasm so its
+/// function-carrying imports resolve at instantiation time.
+///
+/// Interfaces exported here:
+///
+///   * `sqlite:wasm/extension-loader@0.1.0`
+///       three methods, all return `loader-error`. Cache/sqlitewasm
+///       don't dynamic-load extensions.
+///
+///   * `sqlite:wasm/dispatch@0.1.0`
+///       34 methods routing scalar / aggregate / vtab / hook calls
+///       into a runtime extension registry. Standalone consumers have
+///       no registry — every `result<T, string>` returns
+///       `Err("...")` and the non-`result` returns pick the most
+///       declining default (`vtab-eof` = true so cursors terminate,
+///       `authorize` = deny to fail-closed, hooks are no-ops, etc.).
+///
+///   * `sqlite:wasm/opfs-host@0.1.0`
+///       8 methods backing the browser's OPFS-backed VFS. Native /
+///       standalone wasm runtimes reach the filesystem via wasi:fs,
+///       not through opfs-host, so every method returns
+///       `opfs-error{code=io, message="not supported in standalone"}`.
+///
+/// Not exported here — kept as unresolved type-only imports on the
+/// composed artifact, honored by wasmtime's component-model
+/// linker without a host provider:
+///
+///   * `sqlite:extension/{types,http,policy,metadata,vtab}@1.0.0`
+///       sqlite-lib imports these purely as TYPE declarations
+///       (`variant method` for http, records for the rest) with no
+///       function members. `wac plug` matches sockets and plugs by
+///       function signature — a type-only interface can't be
+///       plug-provided, only imported at instantiation. This mirrors
+///       the shape already shipped in artifacts/extensions/
+///       sqlitewasm.wasm at @0.1.0, which the ducklink host has
+///       loaded without a native provider since Bug 4b.
+///
+/// All stubs are decline-everything — no state, no side effects. If
+/// a runtime consumer actually calls one of these methods it will
+/// receive a clearly-worded error rather than a wrong answer.
 world sqlite-loader-stub {
     export sqlite:wasm/extension-loader@0.1.0;
+    export sqlite:wasm/dispatch@0.1.0;
+    export sqlite:wasm/opfs-host@0.1.0;
 }
