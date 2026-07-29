@@ -1,4 +1,4 @@
-package sqlite:extension@0.1.0;
+package sqlite:extension@1.0.0;
 
 /// Shared types used by the `sqlite:extension/spi` surface the
 /// `cache-component` imports. Structurally identical to the canonical
@@ -10,12 +10,28 @@ package sqlite:extension@0.1.0;
 interface types {
     /// Unified SQL value representation. Used for parameter binding
     /// and row data on the SPI catalog connection.
+    ///
+    /// The `wit-value` arm (added in @1.0.0) carries a canonical-CBOR-
+    /// encoded WIT record — kept here so this vendored variant is
+    /// arm-compatible with sqlite-lib's export. cache-component's own
+    /// callers never construct or match on it exhaustively; the catch-
+    /// all arms in spi_str/spi_i64 tolerate any future shape drift.
     variant sql-value {
         null,
         integer(s64),
         real(f64),
         text(string),
         blob(list<u8>),
+        wit-value(wit-value-payload),
+    }
+
+    /// Payload for the `sql-value::wit-value` arm. Present for
+    /// structural compatibility with sqlite-lib's @1.0.0 export; not
+    /// consulted by cache-component.
+    record wit-value-payload {
+        type-id: list<u8>,
+        bytes: list<u8>,
+        symbolic-name: string,
     }
 
     /// SQLite error carrying both primary and extended result codes.
