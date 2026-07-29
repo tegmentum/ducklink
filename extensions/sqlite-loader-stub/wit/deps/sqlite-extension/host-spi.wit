@@ -1,0 +1,1012 @@
+package sqlite:extension@1.0.0;
+
+/// Top-level SQL execution. Host imports for extensions that need to
+/// run SQL against the embedding database.
+interface spi {
+    use types.{sql-value, query-result, sqlite-error};
+
+    /// Execute a statement; return columns, rows, and change counters.
+    execute: func(sql: string, params: list<sql-value>) -> result<query-result, sqlite-error>;
+
+    /// Execute a statement expected to return one scalar value.
+    execute-scalar: func(sql: string, params: list<sql-value>) -> result<sql-value, sqlite-error>;
+
+    /// Execute one or more statements as a batch; return total rows changed.
+    execute-batch: func(sql: string) -> result<s64, sqlite-error>;
+
+    /// List the names of every VFS the host has registered. The
+    /// first entry is the default VFS. Process-global state, not
+    /// per-connection. Used by `.vfslist`.
+    list-vfs: func() -> list<string>;
+
+    /// Return the active VFS name for an attached database on
+    /// the extension's spi connection. `db-name` is e.g. "main"
+    /// or "temp". Errors if the db isn't attached or sqlite3
+    /// returns a non-success code. Used by `.vfsname`.
+    vfs-name: func(db-name: string) -> result<string, sqlite-error>;
+
+    /// `sqlite3_serialize` against the extension's spi connection.
+    /// Returns a heap copy of `db-name`'s contents (typically
+    /// "main"). The extension's spi connection opens to the same
+    /// db path as the cli, so the bytes are equivalent to what the
+    /// cli would write. Used by `.serialize`.
+    serialize-db: func(db-name: string) -> result<list<u8>, sqlite-error>;
+
+    // ---- PLAN-cli-shared-conn.md Stage 1 spi additions ----
+    //
+    // The cli's eval_sql + dot helpers use the methods below today
+    // via direct db::Connection calls. Migrating to spi means
+    // exposing each through the wasm boundary. Existing extensions
+    // can also use them (e.g. for the .changes/.last-insert-rowid
+    // helpers some manifest-builders need).
+
+    /// `sqlite3_changes` against the spi connection. Number of
+    /// rows affected by the most recent INSERT/UPDATE/DELETE.
+    changes: func() -> s64;
+    /// `sqlite3_total_changes` against the spi connection.
+    total-changes: func() -> s64;
+    /// `sqlite3_last_insert_rowid` against the spi connection.
+    last-insert-rowid: func() -> s64;
+    /// `sqlite3_memory_used`  process-global counter. Used by
+    /// the cli's `.stats` to print after each statement.
+    current-memory-used: func() -> s64;
+
+    /// `sqlite3_backup_*`  copy the spi connection's `src-db`
+    /// (default "main") into a freshly-opened db at `dst-path`'s
+    /// `dst-db`. Used by `.backup` / `.save` / `.clone`. Host
+    /// opens the destination read-write.
+    backup-into: func(src-db: string, dst-path: string, dst-db: string)
+        -> result<_, sqlite-error>;
+
+    /// Mirror of backup-into  copy FROM a freshly-opened source
+    /// db at `src-path`'s `src-db` INTO the spi connection's
+    /// `dst-db` (default "main"). Used by `.restore`. Host opens
+    /// the source read-only.
+    restore-from: func(src-path: string, src-db: string, dst-db: string)
+        -> result<_, sqlite-error>;
+
+    /// `sqlite3_busy_timeout` on the spi connection. Direct
+    /// replacement for the `conn/busy-timeout` state-delta
+    /// workaround once Stage 4 lands.
+    set-busy-timeout: func(ms: s32) -> result<_, sqlite-error>;
+
+    /// `sqlite3_limit(category, value)`. `value` < 0 reads
+    /// without setting (matches the C API). Direct replacement
+    /// for the `conn/limit/<name>` delta path.
+    limit: func(category: s32, value: s32) -> s32;
+
+    /// `sqlite3_db_config(op, ...)` bool form. When `set` is
+    /// true, sets to `value`; when false, reads without setting.
+    /// Returns the current value either way. Replacement for the
+    /// `conn/db-config/<name>` delta path.
+    db-config-bool: func(op: s32, set: bool, value: bool)
+        -> result<bool, sqlite-error>;
+
+    /// `sqlite3_deserialize` against the spi connection.
+    /// Replaces the `conn/deserialize/<name>` blob-delta path
+    /// (kept around as the v1 channel; Stage 4 migrates the
+    /// extension to use this directly).
+    deserialize-db: func(db-name: string, bytes: list<u8>)
+        -> result<_, sqlite-error>;
+
+    /// One row in a named-parameter binding list  the host
+    /// resolves `:name` / `$name` / `@name` to positions for
+    /// the caller.
+    record named-param {
+        /// Bare name (no sigil; the host adds the leading
+        /// `:` / `$` / `@` when binding).
+        name: string,
+        value: sql-value,
+    }
+
+    /// PLAN-cli-shared-conn.md Stage 3c: execute multi-statement
+    /// SQL with named-parameter bindings. The host walks the
+    /// statement list (using sqlite3_prepare_v2's tail return
+    /// to find statement boundaries), binds named params per
+    /// statement, collects rows, returns one query-result per
+    /// statement. Comment-only / whitespace-only segments are
+    /// skipped silently.
+    ///
+    /// Used by the cli's eval_sql_inner  the multi-statement
+    /// + bind-by-name behavior that prevents a straight
+    /// `spi.execute` migration.
+    execute-multi: func(
+        sql: string,
+        named-params: list<named-param>,
+    ) -> result<list<query-result>, sqlite-error>;
+
+    /// Re-open the host's spi connection against a new database
+    /// `path`. Empty path or `:memory:` opens a fresh in-memory
+    /// database. Used by `.open`  the cli no longer keeps its
+    /// own libsqlite3-sys connection, so `.open` must swap the
+    /// shared connection on the host side. Any pending state
+    /// tied to the prior connection (extensions registered via
+    /// `.load`, prepared statements, transactions) is invalidated.
+    open-db: func(path: string) -> result<_, sqlite-error>;
+}
+
+/// Raw WAL frame access for extensions that ship the WAL bytes
+/// off-box (the canonical consumer is `wal-archive`). Distinct
+/// from `spi` so capability gating can grant WAL access without
+/// also granting the full SQL surface  and vice versa.
+///
+/// Native impl: reads the on-disk `<db_path>-wal` sidecar file
+/// directly. Browser impl: stubbed until vfs-tvm grows WAL
+/// support (#437); `get-wal-header` returns `None` and
+/// `read-frames` errors.
+///
+/// Substrate for PLAN-wal-archive-extension.md (#439).
+interface wal-frames {
+    use types.{sqlite-error};
+
+    /// 32-byte WAL file header (the SQLite WAL format header,
+    /// not the per-frame header). `None` when journal_mode  wal
+    /// or the WAL file doesn't exist yet. Extensions parse
+    /// `page_size` from this header (offset 8, big-endian u32)
+    /// before calling `read-frames`.
+    get-wal-header: func(db-name: string)
+        -> result<option<list<u8>>, sqlite-error>;
+
+    /// `n-frames` frames starting at `start-frame` (1-based per
+    /// SQLite's WAL format). Each frame is `24 + page_size` bytes.
+    /// The caller MUST derive `page_size` from `get-wal-header`
+    /// first; the host won't second-guess the requested range.
+    /// Errors on out-of-bounds reads.
+    read-frames: func(db-name: string, start-frame: u32, n-frames: u32)
+        -> result<list<u8>, sqlite-error>;
+}
+
+/// S3-compatible object storage SPI. Mirrors the `s3-base` interface
+/// from `~/git/s3-wasm` exactly (method signatures + types) so the
+/// native host bridge can pass parameters through untransformed if a
+/// later iteration switches from in-host (aws-sigv4 + reqwest) to
+/// composing the s3-wasm component into the host.
+///
+/// Native impl: signs requests with the aws-sigv4 Rust crate +
+/// dispatches via the host's existing reqwest blocking client.
+/// Browser impl (sqlite-lib): stubbed to a structured "not
+/// implemented" error until the polyfill bridge (fetch+SigV4 in JS)
+/// lands as a follow-up to #437.
+///
+/// Capability gating: every method checks
+/// `manifest.declared-capabilities` for `capability::s3` and
+/// returns `SQLITE_PERM` otherwise. Substrate for PLAN-wal-archive-
+/// extension.md (#440)  the wal-archive extension's primary off-box
+/// sink.
+interface s3-base {
+    use types.{sqlite-error};
+
+    /// S3 error variants. Same shape as s3-wasm's `s3-types.error`
+    /// so the bridge can map both directions without information
+    /// loss.
+    variant s3-error {
+        /// Invalid credentials or signature.
+        access-denied,
+        /// Bucket does not exist.
+        no-such-bucket,
+        /// Object does not exist.
+        no-such-key,
+        /// Invalid bucket name.
+        invalid-bucket-name,
+        /// Invalid request parameters.
+        invalid-request(string),
+        /// Network or connection error.
+        network-error(string),
+        /// XML parsing error.
+        parse-error(string),
+        /// Internal error.
+        internal(string),
+        /// Capability not granted at load time. Distinct from
+        /// access-denied (which is an S3-side authorization
+        /// failure) so callers can tell apart "operator denied
+        /// the grant" vs "the bucket policy rejected the key".
+        capability-not-granted,
+    }
+
+    /// Credentials for S3 authentication. `session-token` carries
+    /// STS-issued temporary credentials' opaque blob.
+    record s3-credentials {
+        access-key-id: string,
+        secret-access-key: string,
+        session-token: option<string>,
+    }
+
+    /// S3 endpoint configuration. `url` is the base endpoint, e.g.
+    /// `https://s3.amazonaws.com` or `http://localhost:9000` for a
+    /// MinIO / mock test server. `path-style` selects path-vs-
+    /// subdomain bucket addressing  required for most localhost
+    /// fixtures.
+    record s3-endpoint-config {
+        url: string,
+        region: string,
+        path-style: bool,
+    }
+
+    /// Object metadata returned by GET / HEAD.
+    record s3-object-metadata {
+        content-type: option<string>,
+        content-length: option<u64>,
+        etag: option<string>,
+        last-modified: option<u64>,
+        custom: list<tuple<string, string>>,
+    }
+
+    /// One row in a list-objects response.
+    record s3-object-info {
+        key: string,
+        size: u64,
+        etag: option<string>,
+        last-modified: option<u64>,
+        storage-class: option<string>,
+    }
+
+    /// Options for get-object.
+    record s3-get-object-options {
+        range: option<tuple<u64, u64>>,
+        if-match: option<string>,
+        if-none-match: option<string>,
+    }
+
+    /// Options for put-object.
+    record s3-put-object-options {
+        content-type: option<string>,
+        metadata: list<tuple<string, string>>,
+        cache-control: option<string>,
+    }
+
+    /// Options for list-objects.
+    record s3-list-objects-options {
+        prefix: option<string>,
+        delimiter: option<string>,
+        max-keys: option<u32>,
+        continuation-token: option<string>,
+    }
+
+    record s3-get-object-output {
+        body: list<u8>,
+        metadata: s3-object-metadata,
+    }
+
+    record s3-put-object-output {
+        etag: string,
+    }
+
+    record s3-head-object-output {
+        metadata: s3-object-metadata,
+    }
+
+    record s3-list-objects-output {
+        objects: list<s3-object-info>,
+        common-prefixes: list<string>,
+        next-continuation-token: option<string>,
+        is-truncated: bool,
+    }
+
+    /// Get an object from a bucket.
+    get-object: func(
+        endpoint: s3-endpoint-config,
+        credentials: s3-credentials,
+        bucket: string,
+        key: string,
+        options: option<s3-get-object-options>,
+    ) -> result<s3-get-object-output, s3-error>;
+
+    /// Put an object into a bucket.
+    put-object: func(
+        endpoint: s3-endpoint-config,
+        credentials: s3-credentials,
+        bucket: string,
+        key: string,
+        body: list<u8>,
+        options: option<s3-put-object-options>,
+    ) -> result<s3-put-object-output, s3-error>;
+
+    /// Delete an object from a bucket.
+    delete-object: func(
+        endpoint: s3-endpoint-config,
+        credentials: s3-credentials,
+        bucket: string,
+        key: string,
+    ) -> result<_, s3-error>;
+
+    /// HEAD an object  metadata without the body.
+    head-object: func(
+        endpoint: s3-endpoint-config,
+        credentials: s3-credentials,
+        bucket: string,
+        key: string,
+    ) -> result<s3-head-object-output, s3-error>;
+
+    /// List objects in a bucket.
+    list-objects: func(
+        endpoint: s3-endpoint-config,
+        credentials: s3-credentials,
+        bucket: string,
+        options: option<s3-list-objects-options>,
+    ) -> result<s3-list-objects-output, s3-error>;
+
+    /// Copy an object within S3 (server-side, no local round-trip).
+    copy-object: func(
+        endpoint: s3-endpoint-config,
+        credentials: s3-credentials,
+        source-bucket: string,
+        source-key: string,
+        dest-bucket: string,
+        dest-key: string,
+    ) -> result<s3-put-object-output, s3-error>;
+}
+
+/// Loader / host-specific extensions to `spi`. Distinct interface
+/// because these methods are about hosting OTHER extensions (the
+/// register-* trampolines + cli-mode toggles), not about querying
+/// SQL  so a "componentized SQLite" library (like sqlite-lib in
+/// the sqlite-wasm repo) implements only `spi`, while a full loader
+/// host (sqlink) implements both `spi` and `spi-loader`.
+///
+/// Extensions that just want to run SQL import `spi`. Extensions
+/// that participate in cli/loader machinery (rare  the cli itself
+/// is the main consumer) import `spi-loader`.
+interface spi-loader {
+    use types.{sqlite-error};
+
+    /// Toggle sqlite3's statement-level trace callback on the
+    /// host's shared connection. When `on` is true, each prepared
+    /// statement's expanded SQL is appended to a host-side buffer;
+    /// `drain-trace-buf` retrieves and clears it. Used by `.trace`.
+    /// Hosted here (not in `spi`) because it pairs with `drain-
+    /// trace-buf`, which is host-state-bound  a pure SQLite
+    /// library has no concept of "the cli's trace buffer."
+    set-stmt-trace: func(on: bool);
+
+    /// Take the buffered trace lines accumulated since the last
+    /// drain. Returns an empty list when tracing is off or nothing
+    /// has fired. Idempotent  draining twice in a row yields the
+    /// same empty result the second time.
+    drain-trace-buf: func() -> list<string>;
+
+    /// Toggle a logging authorizer on the host's shared connection.
+    /// When `on` is true, every authorizer check is written to the
+    /// host's stderr (action code, action-arg, db, trigger). Used
+    /// by `.auth`. Replaces any extension-side authorizer the
+    /// loader installed; reload the extension to restore it.
+    set-auth-log: func(on: bool) -> result<_, sqlite-error>;
+
+    /// Register a scalar function on the host's shared connection.
+    /// The host installs a native sqlite3 callback that crosses
+    /// back into the loaded extension's `scalar-call` via the
+    /// host's dispatch path. `ext-name` + `func-id` identify the
+    /// extension and the entry point inside it.
+    ///
+    /// Used by the cli's `do_load` when a loaded extension's
+    /// manifest enumerates a scalar function. Per
+    /// PLAN-cli-stages-5-6.md Stage 5e.10 the cli no longer
+    /// installs these trampolines on its own libsqlite3-sys
+    /// connection (SELECT from the extension's function would
+    /// otherwise miss  eval_sql runs against the shared spi
+    /// connection, not the cli's).
+    register-scalar: func(
+        ext-name: string,
+        name: string,
+        num-args: s32,
+        func-id: u64,
+    ) -> result<_, sqlite-error>;
+
+    /// Drop every registration the host installed for `ext-name`.
+    /// Scalars, aggregates, collations, hooks  whatever the
+    /// matching register-* methods previously bound. Called by
+    /// the cli's `do_unload` to clean up before the extension's
+    /// wasm component is dropped.
+    unregister-extension: func(ext-name: string);
+
+    /// Register a custom collation on the host's shared connection.
+    /// `coll-id` is the WIT identifier the host's dispatch path
+    /// uses to route `collation-compare` calls back into the
+    /// extension. Stage 5e.10 companion to register-scalar.
+    register-collation: func(
+        ext-name: string,
+        name: string,
+        coll-id: u64,
+    ) -> result<_, sqlite-error>;
+
+    /// Register an aggregate function on the host's shared
+    /// connection. When `window` is true, the function also
+    /// participates in window-frame queries (xValue + xInverse
+    /// in addition to xStep + xFinalize). Stage 5e.10.
+    register-aggregate: func(
+        ext-name: string,
+        name: string,
+        num-args: s32,
+        func-id: u64,
+        window: bool,
+    ) -> result<_, sqlite-error>;
+
+    /// Install the loaded extension as the active authorizer on
+    /// the host's shared connection. Replaces any prior authorizer
+    /// (including .auth's stderr logger). Cleared by
+    /// unregister-extension. Stage 5e.10.
+    register-authorizer: func(ext-name: string) -> result<_, sqlite-error>;
+
+    /// Install the loaded extension as the active update-hook.
+    /// Stage 5e.10.
+    register-update-hook: func(ext-name: string) -> result<_, sqlite-error>;
+
+    /// Install the loaded extension as the active commit + rollback
+    /// hook pair. Stage 5e.10.
+    register-commit-hook: func(ext-name: string) -> result<_, sqlite-error>;
+
+    /// Install the loaded extension's `wal-hook.on-wal-hook` callback
+    /// (selected by `hook-id`) as the active WAL hook on the host's
+    /// shared connection. SQLite fires the wal-hook after each WAL
+    /// commit; the host's trampoline re-enters the extension via the
+    /// imported `dispatch.wal-hook` with the matching `hook-id`.
+    ///
+    /// SQLite allows only one wal-hook per connection; v1 semantics
+    /// are last-write-wins. Cleared by `unregister-extension(ext-name)`.
+    /// Substrate primitive used by the wal-archive extension.
+    register-wal-hook: func(
+        ext-name: string,
+        hook-id: u64,
+    ) -> result<_, sqlite-error>;
+
+    /// Register a virtual-table module on the host's shared
+    /// connection. The host installs a native sqlite3_module whose
+    /// trampolines (xCreate / xConnect / xBestIndex / xFilter /
+    /// xColumn / xRowid / xUpdate / etc.) cross back into the
+    /// loaded extension via the host's `dispatch_vtab_*` path.
+    ///
+    /// `eponymous` selects the no-xCreate template (TVFs like
+    /// `generate_series`). `mutable` picks the iVersion=2 template
+    /// with xUpdate + transactional + xShadowName + xIntegrity
+    /// wired. `batched` enables the fetch-batch fast path  the
+    /// xColumn / xRowid / xNext / xEof trampolines serve from a
+    /// host-side row cache populated by xFilter and refilled by
+    /// xNext, amortizing the WIT crossing cost across ~64 rows.
+    ///
+    /// Stage 5e.10 final companion to register-scalar /
+    /// register-aggregate / register-collation / register-*-hook.
+    register-vtab: func(
+        ext-name: string,
+        name: string,
+        vtab-id: u64,
+        eponymous: bool,
+        mutable: bool,
+        batched: bool,
+    ) -> result<_, sqlite-error>;
+}
+
+/// Prepared statement lifecycle. For extensions that bind once and
+/// step many times.
+interface prepared {
+    use types.{sql-value, sqlite-error, column-info};
+
+    type stmt-handle = u64;
+
+    prepare: func(sql: string) -> result<stmt-handle, sqlite-error>;
+    bind: func(stmt: stmt-handle, params: list<sql-value>) -> result<_, sqlite-error>;
+    step: func(stmt: stmt-handle) -> result<option<list<sql-value>>, sqlite-error>;
+    reset: func(stmt: stmt-handle) -> result<_, sqlite-error>;
+    finalize: func(stmt: stmt-handle) -> result<_, sqlite-error>;
+    column-count: func(stmt: stmt-handle) -> u32;
+    get-column-info: func(stmt: stmt-handle, index: u32) -> result<column-info, sqlite-error>;
+
+    /// PLAN-cli-shared-conn.md Stage 1: like `prepare`, but
+    /// returns the number of input bytes consumed alongside the
+    /// statement handle. The cli's eval loop uses this to walk
+    /// multi-statement input (`.read FILE`, pasted scripts).
+    /// `tail` is a byte offset into `sql`  the next prepare
+    /// starts at `sql[tail..]`.
+    prepare-with-tail: func(sql: string)
+        -> result<tuple<stmt-handle, u32>, sqlite-error>;
+
+    /// Optimized bulk-step. Reads up to `n` rows in one host
+    /// crossing; an empty list means the cursor reached Done.
+    /// Streaming-friendly: the caller pulls in chunks rather
+    /// than paying a wasm boundary cost per row.
+    step-batch: func(stmt: stmt-handle, n: u32)
+        -> result<list<list<sql-value>>, sqlite-error>;
+}
+
+/// Transactions and savepoints.
+interface transaction {
+    use types.{sqlite-error};
+
+    begin: func() -> result<_, sqlite-error>;
+    begin-immediate: func() -> result<_, sqlite-error>;
+    begin-exclusive: func() -> result<_, sqlite-error>;
+    commit: func() -> result<_, sqlite-error>;
+    rollback: func() -> result<_, sqlite-error>;
+    savepoint: func(name: string) -> result<_, sqlite-error>;
+    release: func(name: string) -> result<_, sqlite-error>;
+    rollback-to: func(name: string) -> result<_, sqlite-error>;
+    in-transaction: func() -> bool;
+}
+
+/// Schema introspection.
+interface schema {
+    use types.{table-info, sqlite-error};
+
+    list-tables: func(database: option<string>) -> result<list<string>, sqlite-error>;
+    get-table-info: func(table: string, database: option<string>) -> result<table-info, sqlite-error>;
+    table-exists: func(table: string, database: option<string>) -> bool;
+    list-indexes: func(table: string, database: option<string>) -> result<list<string>, sqlite-error>;
+}
+
+/// Structured logging from extensions back to the host.
+interface logging {
+    use types.{log-level};
+
+    log: func(level: log-level, message: string);
+    error: func(message: string);
+    warn: func(message: string);
+    info: func(message: string);
+    debug: func(message: string);
+}
+
+/// Configuration lookups and version reporting.
+interface config {
+    get: func(key: string) -> option<string>;
+    set: func(key: string, value: string) -> bool;
+    sqlite-version: func() -> string;
+    extension-version: func() -> string;
+}
+
+/// Persistent key/value state managed by the host. Survives across
+/// connections; scoped per extension by the host.
+interface state {
+    use types.{sql-value};
+
+    get: func(key: string) -> option<sql-value>;
+    set: func(key: string, value: sql-value);
+    delete: func(key: string) -> bool;
+    keys: func() -> list<string>;
+    clear: func();
+}
+
+/// Bounded in-memory cache with optional TTL.
+interface cache {
+    use types.{sql-value};
+
+    get: func(key: string) -> option<sql-value>;
+    set: func(key: string, value: sql-value, ttl-seconds: option<u32>);
+    delete: func(key: string) -> bool;
+    exists: func(key: string) -> bool;
+    clear: func();
+}
+
+/// Random number generation. Implementations should use a CSPRNG.
+interface random {
+    random-bytes: func(count: u32) -> list<u8>;
+    random-u64: func() -> u64;
+    /// Uniform in [0.0, 1.0).
+    random-f64: func() -> f64;
+    /// RFC 4122 v4 UUID.
+    random-uuid: func() -> string;
+}
+
+/// Unicode-aware text utilities.
+interface text {
+    upper: func(s: string) -> string;
+    lower: func(s: string) -> string;
+    trim: func(s: string) -> string;
+    ltrim: func(s: string, chars: option<string>) -> string;
+    rtrim: func(s: string, chars: option<string>) -> string;
+    substr: func(s: string, start: s32, length: option<s32>) -> string;
+    replace: func(s: string, pattern: string, replacement: string) -> string;
+    split: func(s: string, delimiter: string) -> list<string>;
+    join: func(parts: list<string>, delimiter: string) -> string;
+    contains: func(s: string, substr: string) -> bool;
+    starts-with: func(s: string, prefix: string) -> bool;
+    ends-with: func(s: string, suffix: string) -> bool;
+    repeat: func(s: string, count: u32) -> string;
+    reverse: func(s: string) -> string;
+    /// Length in Unicode scalar values.
+    char-length: func(s: string) -> u32;
+    /// Length in UTF-8 bytes.
+    byte-length: func(s: string) -> u32;
+}
+
+/// Cryptographic hashing. Outputs are hex-encoded strings except for
+/// HMAC which returns the raw bytes.
+interface hashing {
+    md5: func(data: list<u8>) -> string;
+    sha1: func(data: list<u8>) -> string;
+    sha256: func(data: list<u8>) -> string;
+    sha512: func(data: list<u8>) -> string;
+    hmac-sha256: func(key: list<u8>, data: list<u8>) -> list<u8>;
+}
+
+/// Synchronous HTTP client, shaped after `wasi:http` but flattened
+/// to avoid wasi-http's resource/pollable/stream machinery. A host
+/// may implement this by delegating to `wasi:http/outgoing-handler`
+/// or by hitting the network directly.
+interface http {
+    /// HTTP method. Mirrors `wasi:http/types.method`.
+    variant method {
+        get,
+        head,
+        post,
+        put,
+        delete,
+        connect,
+        options,
+        trace,
+        patch,
+        /// Non-standard / extension method.
+        other(string),
+    }
+
+    /// URL scheme. Mirrors `wasi:http/types.scheme`.
+    variant scheme {
+        http,
+        https,
+        /// Non-standard scheme.
+        other(string),
+    }
+
+    /// Header field — name + raw bytes value (per wasi-http).
+    type field = tuple<string, list<u8>>;
+
+    /// Outgoing request. Mirrors `wasi:http/types.outgoing-request`
+    /// but flattened from the resource-based wasi-http form into a
+    /// single value-typed record.
+    record request {
+        method: method,
+        scheme: option<scheme>,
+        /// Host (with optional port), e.g. "example.com:8443".
+        authority: option<string>,
+        /// Path + query, e.g. "/api/v1/things?id=42".
+        path-with-query: option<string>,
+        headers: list<field>,
+        body: option<list<u8>>,
+        timeout-ms: option<u32>,
+    }
+
+    /// Incoming response. Mirrors `wasi:http/types.incoming-response`
+    /// in flattened form.
+    record response {
+        status: u16,
+        headers: list<field>,
+        body: list<u8>,
+    }
+
+    /// HTTP error variants. Mirrors the shape of
+    /// `wasi:http/types.error-code` at a higher level.
+    variant http-error {
+        invalid-url(string),
+        timed-out,
+        connection-error(string),
+        protocol-error(string),
+        other(string),
+    }
+
+    /// Send the request and wait for the full response.
+    handle: func(req: request) -> result<response, http-error>;
+}
+
+/// Synchronous DNS resolver. The host may delegate to a system
+/// stub resolver, the network (e.g. `hickory-resolver`), or a
+/// fixed-answer mock. Capability-gated: extensions that import
+/// this interface must declare `capability::dns` in their manifest
+/// and pass the policy gate (`dns-policy.allowed-domains`) at
+/// load time.
+interface dns {
+    /// DNS record kind. Mirrors the common subset of RFC 1035 +
+    /// RFC 3596 record types. Unknown variants fall through to
+    /// `other(name)` for extensibility.
+    variant record-type {
+        a,
+        aaaa,
+        cname,
+        mx,
+        ns,
+        txt,
+        ptr,
+        soa,
+        srv,
+        other(string),
+    }
+
+    /// DNS error shape. Mirrors `http-error` in flavor (refused vs
+    /// timed-out vs other) without forcing the extension to depend
+    /// on a runtime-specific error enum.
+    variant dns-error {
+        /// Domain not on the allow-list.
+        refused(string),
+        timed-out,
+        /// Resolver returned NXDOMAIN.
+        nxdomain,
+        other(string),
+    }
+
+    /// Resolve `name` for the given record type. Returns a list of
+    /// string-rendered records:
+    ///   * `a`     `123.45.67.89`
+    ///   * `aaaa`  `2001:db8::1`
+    ///   * `cname` / `ns` / `ptr`  hostname
+    ///   * `mx`    `<preference> <exchange>`
+    ///   * `txt`   joined (semicolon-separated) chunks
+    ///   * `soa`   `<mname> <rname> <serial> <refresh> <retry> <expire> <minimum>`
+    ///   * `srv`   `<priority> <weight> <port> <target>`
+    ///
+    /// Empty list means resolution succeeded but no records of that
+    /// type were returned (distinct from `nxdomain`).
+    resolve: func(name: string, record-type: record-type) -> result<list<string>, dns-error>;
+}
+
+/// Host-resident build SPI. Spawn `cargo` against a generated
+/// crate root and return the produced binary path. Substrate for
+/// PLAN-bundles.md (#445/#446)  the `bundle-cli` extension uses
+/// this to materialize the baked sqlink binary for a saved
+/// bundle.
+///
+/// Native impl: `std::process::Command` against the supplied
+/// `crate-root`. Captures stdout/stderr and returns
+/// `binary-path` resolved under the produced
+/// `target/<triple>/release/` directory. Respects the caller-
+/// supplied env tuples (passed through to the child).
+///
+/// Browser impl (sqlite-lib): stubbed  returns a clear
+/// `sqlite-error` since wasm sandboxes can't spawn cargo.
+///
+/// Capability gating: every method checks
+/// `manifest.declared-capabilities` for `capability::spawn-build`
+/// and returns `SQLITE_PERM` otherwise. The host owns the path
+/// validation hook  the spec keeps this interface narrow on
+/// purpose so the policy gate is the entire access control.
+interface build {
+    use types.{sqlite-error};
+
+    /// Output of a successful build. `binary-path` is an absolute
+    /// path on the host filesystem to the produced binary;
+    /// `stdout` / `stderr` are the captured streams from cargo
+    /// (useful for surfacing build progress / warnings to the
+    /// extension's caller).
+    record build-out {
+        binary-path: string,
+        stdout: string,
+        stderr: string,
+    }
+
+    /// Spawn `cargo build --release` against the supplied
+    /// `crate-root`. When `target-triple` is `some(<triple>)`,
+    /// the host passes `--target <triple>` so the build produces
+    /// the binary under `target/<triple>/release/`; otherwise
+    /// the default host target is used. The `env` tuples are
+    /// merged into the child process's environment (caller
+    /// values override the inherited environment, matching
+    /// `std::process::Command::env`).
+    ///
+    /// When `cargo-package` is `some(<name>)`, the host passes
+    /// `-p <name>` so cargo builds just that workspace member
+    /// rather than the default package. When `features` is
+    /// non-empty, the host passes `--features <comma-joined>`.
+    /// Both default to "off" so the prior single-crate call shape
+    /// keeps working unchanged. (Named `cargo-package` rather than
+    /// `package` because `package` is a reserved keyword in WIT.)
+    ///
+    /// Returns `build-out` on success. Errors carry a
+    /// non-zero SQLITE_* code and a message that includes the
+    /// cargo exit status and the tail of stderr.
+    spawn-build: func(
+        crate-root: string,
+        target-triple: option<string>,
+        env: list<tuple<string, string>>,
+        cargo-package: option<string>,
+        features: list<string>,
+    ) -> result<build-out, sqlite-error>;
+}
+
+/// Bundle storage SPI. Read/write the host's cas-cache bundle
+/// registry. Substrate for PLAN-bundles.md (#446)  the `bundle-cli`
+/// extension calls these methods to record, look up, and prune
+/// named extension sets. The cas-cache lives at
+/// `~/.cache/sqlink/cas.sqlite`; it's host-managed and not
+/// reachable via `spi.execute` (which runs against the user's main
+/// connection), so this dedicated SPI exists.
+///
+/// Identity model: a `set-hash` is the SHA-256 (hex) of the sorted
+/// `(extension-name, content-hash)` tuples. Two bundles with the
+/// same members share the same `set-hash` and the same internal
+/// bundle row; multiple `name`s pointing at the same `set-hash`
+/// is allowed (alias semantics).
+///
+/// Capability gating: every method checks
+/// `manifest.declared-capabilities` for `capability::bundles`
+/// and returns `SQLITE_PERM` otherwise.
+interface bundles {
+    use types.{sqlite-error};
+
+    /// One member in a bundle  an (extension-name, content-hash)
+    /// pair. `content-hash` is the blake3-hex digest the host
+    /// already maintains in cas-cache for the extension bytes
+    /// (matches what `loader-bridge.extension-digest` returns).
+    record bundle-member {
+        extension-name: string,
+        content-hash: string,
+    }
+
+    /// Compact bundle row for `list` / `find-by-*`. Members
+    /// omitted; use `show` to fetch the full member list.
+    record bundle-summary {
+        id: u64,
+        name: option<string>,
+        set-hash: string,
+        created-at: u64,
+        last-used-at: u64,
+        member-count: u32,
+        binary-count: u32,
+    }
+
+    /// One baked binary row in `bundle-detail`.
+    record bundle-binary {
+        target-triple: string,
+        binary-path: string,
+        built-at: u64,
+    }
+
+    /// Full bundle row for `show`  members + binaries.
+    record bundle-detail {
+        summary: bundle-summary,
+        members: list<bundle-member>,
+        binaries: list<bundle-binary>,
+    }
+
+    /// GC policy. Exactly one of the two knobs should be set;
+    /// callers pass `none` for the unused field.
+    record gc-policy {
+        /// LRU eviction: keep at most this many bundles, drop the
+        /// rest in last-used-at ascending order. `none` means no
+        /// LRU cap.
+        keep-last: option<u32>,
+        /// Age eviction: drop bundles whose last-used-at is more
+        /// than this many seconds in the past. `none` means no
+        /// age cap.
+        older-than-secs: option<u64>,
+    }
+
+    /// Insert or alias a bundle. The host computes nothing  the
+    /// caller has already sorted+hashed `members` into `set-hash`.
+    /// Idempotent on `set-hash`: if a row already exists with the
+    /// same `set-hash`, this binds `name` as an alias to that row
+    /// (returning its id) instead of creating a duplicate. Errors
+    /// if `name` is already bound to a DIFFERENT `set-hash`.
+    bundle-save: func(
+        name: option<string>,
+        set-hash: string,
+        members: list<bundle-member>,
+    ) -> result<u64, sqlite-error>;
+
+    /// Exact-name lookup. Returns `none` if no bundle has that name.
+    bundle-find-by-name: func(name: string)
+        -> result<option<bundle-summary>, sqlite-error>;
+
+    /// Hash-prefix lookup. Returns all bundles whose `set-hash`
+    /// starts with `prefix`. Empty list = no matches; multiple
+    /// rows = ambiguous prefix (caller decides whether to error).
+    bundle-find-by-hash-prefix: func(prefix: string)
+        -> result<list<bundle-summary>, sqlite-error>;
+
+    /// Every bundle, ordered last-used-at descending.
+    bundle-list: func() -> result<list<bundle-summary>, sqlite-error>;
+
+    /// Full detail (members + binaries) for the bundle identified
+    /// by id. Errors if no such row.
+    bundle-show: func(id: u64) -> result<bundle-detail, sqlite-error>;
+
+    /// Drop the bundle row + its members + its binary rows.
+    /// Cas-cache artifact bytes are NOT touched  bundles are a
+    /// metadata layer above the cas-cache's content-addressed
+    /// storage. Errors if no such row.
+    bundle-delete: func(id: u64) -> result<_, sqlite-error>;
+
+    /// LRU / age-based prune. Returns the ids of dropped rows.
+    bundle-gc: func(policy: gc-policy) -> result<list<u64>, sqlite-error>;
+
+    /// Record a freshly-built binary against an existing bundle.
+    /// `target-triple` keys the row; re-recording the same triple
+    /// updates `binary-path` + `built-at`.
+    bundle-record-binary: func(
+        id: u64,
+        target-triple: string,
+        binary-path: string,
+    ) -> result<_, sqlite-error>;
+
+    /// Update `last-used-at` for the bundle. Called by `bundle-cli`
+    /// on every `.bundle show` / launch-flag resolve so LRU GC
+    /// reflects actual use.
+    bundle-touch: func(id: u64);
+
+    /// Bind an additional short name to an existing bundle. The
+    /// underlying `bundle-id` doesn't change  the new alias just
+    /// becomes another way to reach the same row through
+    /// `bundle-find-by-name`. Idempotent if `alias` already points
+    /// at `bundle-id`; errors with the alias-conflict shape if it
+    /// points at a different bundle.
+    bundle-add-alias: func(
+        bundle-id: u64,
+        alias: string,
+    ) -> result<_, sqlite-error>;
+
+    /// Remove one short alias. The bundle itself is left intact
+    /// other aliases (and id / set_hash lookups) continue to
+    /// reach the row. Returns `false` if the alias didn't exist.
+    bundle-remove-alias: func(alias: string) -> result<bool, sqlite-error>;
+
+    /// All aliases bound to `bundle-id`, lexicographically.
+    bundle-aliases: func(bundle-id: u64) -> result<list<string>, sqlite-error>;
+}
+
+/// `sqlite3_session_*` API surfaced as named handles. Per
+/// PLAN-cli-stages-5-6.md Stage 6: the cli's old CLI_CONN-based
+/// `.session` was a no-op after Stage 3c (sessions captured
+/// CLI_CONN changes, but eval_sql ran against the host's
+/// shared connection). Sessions now live host-side, keyed by
+/// user-chosen name; the cli's `.session` is a dot-command
+/// extension that calls these methods. The handle map is shared
+/// between extension callers (LoadedState) and the cli
+/// (HostWrap)  in practice only the cli's session-cli
+/// extension uses it.
+interface session {
+    use types.{sqlite-error};
+
+    /// `sqlite3session_create(shared_spi_conn, db-name, ...)`.
+    /// `name` keys the resulting handle. Errors if `name` is
+    /// already in use, the db isn't attached, or sqlite3 returns
+    /// a non-zero code. `db-name` is typically "main".
+    session-create: func(name: string, db-name: string)
+        -> result<_, sqlite-error>;
+
+    /// `sqlite3session_attach`. `table` = none attaches every
+    /// table; `some(t)` attaches only that table. Errors if
+    /// `name` is unknown.
+    session-attach: func(name: string, table: option<string>)
+        -> result<_, sqlite-error>;
+
+    /// `sqlite3session_enable(on)`. Toggles change tracking
+    /// without throwing away accumulated state.
+    session-enable: func(name: string, on: bool)
+        -> result<_, sqlite-error>;
+
+    /// `sqlite3session_indirect(on)`. Marks subsequent changes
+    /// as indirect (i.e., produced by a trigger / fk action).
+    session-indirect: func(name: string, on: bool)
+        -> result<_, sqlite-error>;
+
+    /// `sqlite3session_isempty`. True if no changes have been
+    /// captured.
+    session-isempty: func(name: string)
+        -> result<bool, sqlite-error>;
+
+    /// `sqlite3session_changeset`. Returns the accumulated
+    /// changeset bytes (copied off the sqlite3-allocated buffer
+    /// and freed).
+    session-changeset: func(name: string)
+        -> result<list<u8>, sqlite-error>;
+
+    /// `sqlite3session_patchset`. Same as changeset but emits a
+    /// patchset (omits before-images for UPDATEs).
+    session-patchset: func(name: string)
+        -> result<list<u8>, sqlite-error>;
+
+    /// `sqlite3session_delete`. Releases the handle and removes
+    /// `name` from the host's map.
+    session-delete: func(name: string)
+        -> result<_, sqlite-error>;
+
+    /// Names of every currently-live session handle.
+    session-list: func() -> list<string>;
+}
+
+/// Encoding/decoding helpers.
+interface encoding {
+    base64-encode: func(data: list<u8>) -> string;
+    base64-decode: func(s: string) -> result<list<u8>, string>;
+    hex-encode: func(data: list<u8>) -> string;
+    hex-decode: func(s: string) -> result<list<u8>, string>;
+    url-encode: func(s: string) -> string;
+    url-decode: func(s: string) -> result<string, string>;
+    /// JSON-escape a string (does NOT wrap in quotes).
+    json-encode: func(value: string) -> string;
+    /// Validate JSON and return the canonicalized form.
+    json-decode: func(s: string) -> result<string, string>;
+}

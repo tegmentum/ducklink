@@ -1,147 +1,165 @@
-package sqlite:extension@0.1.0;
+package sqlite:extension@1.0.0;
 
-/// Trimmed types shared with the sqlite:wasm/extension-loader interface
-/// stub. Structurally a subset of the canonical `sqlite:extension` types
-/// (see sqlite-wasm's wit/deps/sqlite-extension/types.wit) — only the
-/// items reachable from the `extension-loader` surface are kept.
-///
-/// Kept structural (same names / same shapes) so a plug component
-/// (this stub) can satisfy sqlite-lib.wasm's `sqlite:wasm/extension-loader`
-/// import when both are wac-composed into a socket that reads its
-/// spi from sqlite-lib.
+/// Shared types used across every interface in this package. Pulled
+/// in via `use types.{...}` from any other interface that needs them.
 interface types {
+    /// Unified SQL value representation. Used for function arguments,
+    /// function results, parameter binding, and row data.
+    ///
+    /// New in @1.0.0: the `wit-value` arm carries a canonical-CBOR-
+    /// encoded WIT record alongside an identifying hash + symbolic
+    /// name. Record-typed shim functions (PLAN-wit-value-extension.md)
+    /// ferry their args/returns through this arm; hosts decode via
+    /// the wasm-side decoder/encoder imports listed in
+    /// `metadata.manifest.typed-values`.
+    variant sql-value {
+        /// SQL NULL.
+        null,
+        /// Signed 64-bit integer.
+        integer(s64),
+        /// IEEE 754 double-precision floating point.
+        real(f64),
+        /// UTF-8 text.
+        text(string),
+        /// Binary blob.
+        blob(list<u8>),
+        /// Canonical-CBOR-encoded WIT record (new in @1.0.0).
+        wit-value(wit-value-payload),
+    }
+
+    /// Payload for the `sql-value::wit-value` arm. Carries a
+    /// structurally-identified, canonical-CBOR-encoded WIT record
+    /// across the host/extension boundary.
+    ///
+    /// Wire format is canonical CBOR per the `canon:cbor` profile
+    /// (#486 substrate). Cross-language interoperable; the encoder
+    /// must produce a payload the decoder accepts regardless of
+    /// host language.
+    record wit-value-payload {
+        /// 32-byte sha256("witcanon:1" || canonical-CBOR(WIT record
+        /// shape)) computed via `canon:wit` normalization. The
+        /// authoritative match key  hosts look this up against
+        /// the per-extension `typed-value-binding` registry to find
+        /// the decoder/encoder imports.
+        type-id: list<u8>,
+        /// Canonical-CBOR encoding of the record per the `canon:cbor`
+        /// profile. Length matches the record shape identified by
+        /// `type-id`.
+        bytes: list<u8>,
+        /// Human-readable symbolic name + version, for diagnostics.
+        /// Example:
+        ///   "mobilitydb:wasm/temporal-types@0.1.0/tfloat-sequence"
+        /// Hosts use this in error messages but NOT for matching;
+        /// `type-id` is the authoritative key.
+        symbolic-name: string,
+    }
+
+    /// SQLite error carrying both primary and extended result codes.
+    record sqlite-error {
+        code: s32,
+        extended-code: s32,
+        message: string,
+    }
+
+    /// Flags describing a SQL function's properties. Mirror SQLite's
+    /// SQLITE_DETERMINISTIC / SQLITE_DIRECTONLY / SQLITE_INNOCUOUS bits.
     flags function-flags {
+        /// Same inputs always produce the same output.
         deterministic,
+        /// May have side effects; cannot be used in indexes, CHECK
+        /// constraints, generated columns, etc.
         direct-only,
+        /// Function is provably safe to use in arbitrary trusted SQL.
         innocuous,
     }
-}
 
-/// Types-only. Sits between `types` and `metadata` because
-/// `policy.load-options` names `http.method` in its allowed-methods
-/// field.
-interface http {
-    variant method {
-        get,
-        head,
-        post,
-        put,
+    /// Authorization action codes. Mirrors SQLite's SQLITE_* action
+    /// constants passed to the authorizer callback.
+    enum auth-action {
+        create-index,
+        create-table,
+        create-temp-index,
+        create-temp-table,
+        create-temp-trigger,
+        create-temp-view,
+        create-trigger,
+        create-view,
         delete,
-        connect,
-        options,
-        trace,
-        patch,
-        other(string),
-    }
-}
-
-interface policy {
-    use http.{method};
-
-    record http-policy {
-        allowed-hosts: list<string>,
-        allowed-methods: option<list<method>>,
-        max-body-bytes: option<u64>,
-        timeout-ms: option<u32>,
-    }
-
-    record dns-policy {
-        allowed-domains: list<string>,
-        timeout-ms: option<u32>,
-    }
-
-    record fs-policy {
-        readable-prefixes: list<string>,
-        writable-prefixes: list<string>,
-        max-write-bytes-per-call: option<u64>,
-    }
-
-    variant capability {
-        spi,
-        prepared,
+        drop-index,
+        drop-table,
+        drop-temp-index,
+        drop-temp-table,
+        drop-temp-trigger,
+        drop-temp-view,
+        drop-trigger,
+        drop-view,
+        insert,
+        pragma,
+        read,
+        select,
         transaction,
-        schema,
-        state,
-        cache,
-        random,
-        text,
-        hashing,
-        encoding,
-        http,
-        dns,
+        update,
+        attach,
+        detach,
+        alter-table,
+        reindex,
+        analyze,
+        create-vtable,
+        drop-vtable,
+        function,
+        savepoint,
+        recursive,
     }
 
-    record load-options {
-        fuel-per-call: option<u64>,
-        memory-limit-bytes: option<u64>,
-        epoch-deadline-ms: option<u64>,
-        http-policy: option<http-policy>,
-        dns-policy: option<dns-policy>,
-        fs-policy: option<fs-policy>,
-        grant: list<capability>,
+    /// Result returned from an authorizer callback.
+    enum auth-result {
+        /// Permit the action.
+        ok,
+        /// Deny the action with an error.
+        deny,
+        /// Silently ignore the action (treat as no-op).
+        ignore,
     }
-}
 
-interface metadata {
-    use types.{function-flags};
-    use policy.{capability};
+    /// Type of row change reported to an update hook.
+    enum update-operation {
+        insert,
+        update,
+        delete,
+    }
 
-    record scalar-function-spec {
-        id: u64,
+    /// Log severity levels.
+    enum log-level {
+        error,
+        warn,
+        info,
+        debug,
+        trace,
+    }
+
+    /// Per-column metadata returned by schema introspection.
+    record column-info {
         name: string,
-        num-args: s32,
-        func-flags: function-flags,
+        decl-type: option<string>,
+        database: option<string>,
+        table: option<string>,
+        origin: option<string>,
     }
 
-    record aggregate-function-spec {
-        id: u64,
+    /// Per-table metadata returned by schema introspection.
+    record table-info {
         name: string,
-        num-args: s32,
-        func-flags: function-flags,
-        is-window: bool,
+        columns: list<column-info>,
+        pk-columns: list<string>,
     }
 
-    record collation-spec {
-        id: u64,
-        name: string,
-    }
-
-    record vtab-spec {
-        id: u64,
-        name: string,
-        eponymous: bool,
-        mutable: bool,
-        batched: bool,
-    }
-
-    record dot-command-example {
-        description: string,
-        command: string,
-    }
-
-    record dot-command-spec {
-        id: u64,
-        name: string,
-        version: string,
-        summary: string,
-        usage: string,
-        help: string,
-        examples: list<dot-command-example>,
-        requires-write: bool,
-        no-args: bool,
-    }
-
-    record manifest {
-        name: string,
-        version: string,
-        scalar-functions: list<scalar-function-spec>,
-        aggregate-functions: list<aggregate-function-spec>,
-        collations: list<collation-spec>,
-        vtabs: list<vtab-spec>,
-        dot-commands: list<dot-command-spec>,
-        has-authorizer: bool,
-        has-update-hook: bool,
-        has-commit-hook: bool,
-        declared-capabilities: list<capability>,
+    /// Result of an `execute` call: column names, row data, change counts.
+    record query-result {
+        columns: list<string>,
+        rows: list<list<sql-value>>,
+        /// Rows changed by INSERT/UPDATE/DELETE.
+        changes: s64,
+        /// Last inserted rowid.
+        last-insert-rowid: s64,
     }
 }

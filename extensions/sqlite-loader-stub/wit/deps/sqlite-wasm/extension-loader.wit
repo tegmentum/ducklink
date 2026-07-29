@@ -9,8 +9,8 @@ package sqlite:wasm@0.1.0;
 /// Cache never actually invokes `load-extension`; the loader-error
 /// arm is a placeholder for any future consumer.
 interface extension-loader {
-    use sqlite:extension/policy@0.1.0.{load-options};
-    use sqlite:extension/metadata@0.1.0.{manifest};
+    use sqlite:extension/policy@1.0.0.{load-options};
+    use sqlite:extension/metadata@1.0.0.{manifest};
 
     record loader-error {
         code: s32,

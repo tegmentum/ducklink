@@ -1,0 +1,40 @@
+package sqlite:extension@1.0.0;
+
+/// CAS-cache SQL slice. Same `(sql, params) -> result<query-result,
+/// sqlite-error>` shape as `spi.execute` but the target is the
+/// host's CAS-cache connection (`~/.cache/sqlink/cas.db` on
+/// native; sqlite-lib's in-WASM cas conn in the composed binary)
+/// rather than the embedding database the extension's spi
+/// connection points at.
+///
+/// Split out of the host-spi surface — and out of
+/// `sqlite:wasm/dispatch-bridge` on the composed binary side —
+/// so consumers that only need CAS reads/writes (the
+/// `bundle-cli` extension; future cache-introspecting cli
+/// extensions) don't carry the register-host-* trampolines that
+/// only make sense inside the composed wasm binary.
+///
+/// Path δ semantics: the native sqlink-host satisfies this
+/// import by routing every call to `Cache::with_bundles_conn`,
+/// the same underlying connection that the typed
+/// `bundles::Host` impl currently uses. The typed surface stays
+/// available as a thin delegate during the transition so existing
+/// `import bundles;` declarations across the world set continue
+/// to link cleanly.
+///
+/// Schema bootstrap is the caller's responsibility (native host
+/// runs it inside `Cache::with_bundles_conn` on first open; the
+/// browser polyfill used to drive it from JS — deletion of that
+/// polyfill is tracked in PLAN-bundle-cli-spi-rewrite.md).
+interface dispatch-bridge-cas {
+    use types.{sqlite-error, sql-value, query-result};
+
+    /// Bridged execute against the CAS-cache connection. SQL
+    /// strings + bind params follow exactly the surface in
+    /// `sqlite_cas_cache::bundles_exec::*_SQL` and
+    /// `sqlite_cas_cache::schema::*_SQL`.
+    bridged-execute-cas: func(
+        sql: string,
+        params: list<sql-value>,
+    ) -> result<query-result, sqlite-error>;
+}

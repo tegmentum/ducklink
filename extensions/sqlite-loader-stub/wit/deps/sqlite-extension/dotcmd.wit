@@ -1,0 +1,151 @@
+package sqlite:extension@1.0.0;
+
+/// Pluggable CLI dot commands. Extensions register dot-command
+/// handlers that the CLI dispatches alongside any built-ins. The
+/// long-term goal is for built-ins themselves to be implemented
+/// as a `core-dotcmd` extension that ships preloaded  the CLI
+/// surface becomes the union of all loaded dot-cmd extensions.
+///
+/// Naming: the extension declares the command name *without* the
+/// leading dot. The CLI matches `.foo` case-insensitively against
+/// `name == "foo"`. Collisions resolve to: built-ins win unless
+/// `--allow-dotcmd-override` is on; user-extension order is
+/// load-order (last wins).
+///
+/// Capabilities: a dot-command extension may also export the
+/// usual scalar/vtab/aggregate worlds. Most won't  the typical
+/// shape is `metadata` + `dot-command` + the imports listed in
+/// the `dotcmd-aware` world.
+interface dot-command {
+    use types.{sql-value, sqlite-error};
+
+    /// What an extension returns from an `invoke`.
+    record invoke-result {
+        /// Trailing text the cli prints AFTER any streamed
+        /// `cli-stdout.write` output. Common case: leave empty
+        /// when the command already streamed everything.
+        text: string,
+        /// State updates to apply once the command returns.
+        /// Empty list = no state change. Keys must be in the
+        /// schema documented in PLAN-dotcmd-plugins.md; unknown
+        /// keys produce a non-fatal warning and are dropped.
+        state-deltas: list<state-delta>,
+        /// True on success; False on graceful failure (cli
+        /// reports the error to stderr but does not abort).
+        /// Hard errors (panics, trap) come through the
+        /// sqlite-error variant of the `invoke` result instead.
+        ok: bool,
+        /// Exit code semantics  for batch / scripted use.
+        /// 0 = success, non-zero = error. Mapped to the cli's
+        /// process exit status only when the command is the
+        /// last thing on the run-line.
+        exit-code: s32,
+    }
+
+    /// What the extension sees about the current cli state at
+    /// dispatch time. Read-only; mutations go through
+    /// `state-deltas` in `invoke-result`.
+    record invoke-context {
+        /// Raw argument string after the command name, with
+        /// leading/trailing whitespace trimmed. The cli does NO
+        /// quoting / tokenization for the extension  splitting
+        /// rules are SQLite-cli's, so the extension owns parsing.
+        args: string,
+        /// True when stdin is a TTY.
+        interactive: bool,
+        /// The cli's current display mode at dispatch time
+        /// ("list", "column", "csv", "json", "insert", ...).
+        /// Hint only; extensions are free to emit any format.
+        display-mode: string,
+        /// True if `.bail on` is active. Affects whether failed
+        /// commands should propagate exit codes.
+        bail-on-error: bool,
+    }
+
+    /// Per-command state change applied after the command returns.
+    record state-delta {
+        /// Slash-namespaced key. See state schema below.
+        key: string,
+        /// New value. Type must match the schema for `key`.
+        value: sql-value,
+    }
+
+    /// Single-shot dispatch. The host calls `invoke` with the
+    /// guest-assigned id (from the dot-command-spec in the
+    /// manifest) plus the raw args.
+    ///
+    /// Streaming output: the extension writes via `cli-stdout`
+    /// import; what comes back in `invoke-result.text` is just
+    /// the trailing chunk.
+    invoke: func(
+        func-id: u64,
+        ctx: invoke-context,
+    ) -> result<invoke-result, sqlite-error>;
+}
+
+/// Host-provided streams the extension uses to push text to the
+/// cli's active output. These respect `.output FILE`, `.once`,
+/// pager pipes, and other cli output routing  the extension
+/// doesn't need to know where bytes ultimately land.
+interface cli-stdout {
+    /// Write a UTF-8 chunk. May span multiple lines. Buffered
+    /// until flush or end-of-invocation.
+    write: func(text: string);
+
+    /// Flush the buffer. Most extensions never call this; the
+    /// cli auto-flushes between row boundaries and at end of
+    /// invoke.
+    flush: func();
+
+    /// Insert a row separator suited to the current display
+    /// mode. In `list` mode emits `\n`; in `column` mode emits
+    /// the column separator + `\n`; in `json` mode emits `,`.
+    row-end: func();
+}
+
+/// Host-provided stderr. Used for non-fatal warnings.
+/// Hard errors should be returned via the `sqlite-error` variant
+/// of `invoke`.
+interface cli-stderr {
+    write: func(text: string);
+}
+
+/// Read-only access to the cli's session state at dispatch time.
+/// Writes happen through `state-deltas` on the invoke result.
+///
+/// State schema (versioned). Unknown keys return empty/default.
+/// See PLAN-dotcmd-plugins.md for the full registry.
+///
+///   display/mode          text   "list" | "column" | "csv" | "json" | "insert" | ...
+///   display/headers       bool   show column headers?
+///   display/nullvalue     text   string printed for NULL
+///   display/separator     text   column / row separator
+///   display/width         text   space-separated per-column widths
+///   io/echo               bool   echo commands before running
+///   io/output             text   current output file ("" = stdout)
+///   io/timer              bool   print wall-time after every statement
+///   io/changes            bool   print row-change counts
+///   stats/enabled         bool   `.stats on/off`
+///   stats/explain         text   "off" | "on" | "auto" (`.explain auto`)
+///   bail/on-error         bool   `.bail on/off`
+///   binary/on             bool   render BLOBs as bytes vs hex
+///   parameter/<name>      sql-value   `.parameter set X Y` bindings
+///   db/path               text   current main-database path
+///   db/readonly           bool
+///   db/changes-total      s64    SQLite total_changes() snapshot
+///   prompt/main           text   `.prompt MAIN`
+///   prompt/cont           text   `.prompt MAIN CONT`
+interface cli-state {
+    use types.{sql-value};
+
+    get-text:  func(key: string) -> string;
+    get-int:   func(key: string) -> s64;
+    get-bool:  func(key: string) -> bool;
+    get-real:  func(key: string) -> f64;
+    /// Generic getter  returns the typed sql-value variant.
+    /// Use for `parameter/*` which is heterogeneous.
+    get-value: func(key: string) -> sql-value;
+    /// All keys whose prefix matches. Sorted lexicographically.
+    /// Useful for implementing `.show`.
+    list-keys: func(prefix: string) -> list<string>;
+}
