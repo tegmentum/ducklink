@@ -1,0 +1,335 @@
+package sqlite:wasm@0.1.0;
+
+/// Cross-component dispatch for dynamically-loaded extensions.
+///
+/// When SQL invokes a scalar function the in-WASM SQLite registered
+/// after a `.load`, the matching xFunc trampoline can't reach the
+/// loaded extension directly — the extension is its own wasm
+/// component, instantiated by the host inside its own Store. This
+/// interface is the bridge: the in-WASM CLI imports it; the host
+/// implements it; the implementation looks up the loaded extension by
+/// name (the same name returned from extension-loader.load-extension),
+/// builds a Store with the recorded policy, instantiates the loaded
+/// extension as a `sqlite:extension/minimal`-world component, calls
+/// `sqlite:extension/scalar-function.call` with the given func-id and
+/// args, and returns the result variant.
+///
+/// The static-composition path (the four legacy slots fts5/json1/
+/// rtree/geopoly + the demo slot) doesn't use this — those go through
+/// the per-slot direct calls in extension-unified.c. This interface
+/// only fires for slots registered via the dynamic `.load` path.
+interface dispatch {
+    use sqlite:extension/types@1.0.0.{sql-value, auth-action, auth-result, update-operation};
+    use sqlite:extension/vtab@1.0.0.{index-info, index-plan};
+
+    /// Invoke `func-id` on the extension previously loaded under
+    /// `ext-name`, with the given arguments. Errors out if no such
+    /// extension is loaded, if the extension's `scalar-function.call`
+    /// returns an error, or if the loaded component doesn't actually
+    /// export `sqlite:extension/scalar-function`.
+    scalar-call: func(
+        ext-name: string,
+        func-id: u64,
+        args: list<sql-value>,
+    ) -> result<sql-value, string>;
+
+    /// One row's contribution to an aggregate. `context-id` is
+    /// per-aggregation and assigned by the in-WASM trampoline (it
+    /// stashes a u64 counter inside the
+    /// `sqlite3_aggregate_context` memory the SQLite engine
+    /// allocates for each pending aggregation). The loaded
+    /// extension uses `context-id` to thread its own running state
+    /// between `step` and `finalize`.
+    aggregate-step: func(
+        ext-name: string,
+        func-id: u64,
+        context-id: u64,
+        args: list<sql-value>,
+    ) -> result<_, string>;
+
+    /// Produce the aggregate's final value and release any state
+    /// keyed by `context-id`. The trampoline calls this once per
+    /// aggregation after the last `aggregate-step` for that
+    /// `context-id`.
+    aggregate-finalize: func(
+        ext-name: string,
+        func-id: u64,
+        context-id: u64,
+    ) -> result<sql-value, string>;
+
+    /// Window-mode path: produce the current aggregate value
+    /// WITHOUT releasing the state keyed by `context-id`. SQLite
+    /// invokes this for `xValue` slots — `agg(x) OVER (...)`
+    /// queries emit one row at a time and need a mid-frame readout
+    /// the bare `aggregate-finalize` would clobber. Same
+    /// extension-routing shape as the other aggregate dispatches.
+    aggregate-value: func(
+        ext-name: string,
+        func-id: u64,
+        context-id: u64,
+    ) -> result<sql-value, string>;
+
+    /// Window-mode path: undo one row's contribution to the
+    /// aggregation context. SQLite invokes this for `xInverse`
+    /// slots as a row leaves the window frame so the running
+    /// state matches the new frame bounds. Mirror of
+    /// `aggregate-step` — same args, opposite direction.
+    aggregate-inverse: func(
+        ext-name: string,
+        func-id: u64,
+        context-id: u64,
+        args: list<sql-value>,
+    ) -> result<_, string>;
+
+    /// Compare two strings under the collation identified by
+    /// `collation-id`. Return < 0 if a < b, 0 if a == b, > 0 if a > b.
+    /// The loaded extension's `collation.compare` does the actual
+    /// comparison; this dispatch wrapper just routes the call.
+    collation-compare: func(
+        ext-name: string,
+        collation-id: u64,
+        a: string,
+        b: string,
+    ) -> s32;
+
+    /// Route a SQLite authorizer callback to the loaded extension
+    /// named `ext-name` (which must have declared `has-authorizer`
+    /// in its manifest). Return value follows SQLite's auth-action
+    /// contract: ok = permit, deny = block with error, ignore = no-op.
+    authorize: func(
+        ext-name: string,
+        action: auth-action,
+        arg1: option<string>,
+        arg2: option<string>,
+        database: option<string>,
+        trigger: option<string>,
+    ) -> auth-result;
+
+    /// Route a row-level update notification to the loaded extension
+    /// (declared `has-update-hook`). Fires after the row write
+    /// commits to the page cache; the host has no way to veto.
+    on-update: func(
+        ext-name: string,
+        operation: update-operation,
+        database: string,
+        table: string,
+        rowid: s64,
+    );
+
+    /// Route a pre-commit hook. Returning false converts the commit
+    /// to a rollback (SQLite's standard `xCommitHook != 0` semantics).
+    on-commit: func(ext-name: string) -> bool;
+
+    /// Route a post-rollback notification.
+    on-rollback: func(ext-name: string);
+
+    /// Route a WAL-commit notification. Fires AFTER a WAL commit has
+    /// just appended `n-frames-in-wal` frames to the WAL for the
+    /// database attached as `db-name`. The host's wal-hook trampoline
+    /// re-enters the loaded extension's `wal-hook.on-wal-hook` callback
+    /// keyed by `hook-id`; the returned i32 is the SQLite result code
+    /// to propagate (SQLITE_OK = 0 for normal continuation, non-zero
+    /// to propagate an error to the calling SQL statement).
+    ///
+    /// Substrate primitive used by the wal-archive extension. SQLite
+    /// allows only one wal-hook per connection; the loaded extension's
+    /// `wal-hook` interface is the one currently installed via
+    /// `dispatch-bridge.register-host-wal-hook`.
+    wal-hook: func(
+        ext-name: string,
+        hook-id: u64,
+        db-name: string,
+        n-frames-in-wal: u32,
+    ) -> s32;
+
+    /// Vtab dispatches. The in-WASM cli registers an
+    /// `sqlite3_module` whose xCreate/xConnect/xBestIndex/etc
+    /// callbacks marshal here. `vtab-id` from the manifest +
+    /// host-assigned `instance-id` per CREATE VIRTUAL TABLE +
+    /// `cursor-id` per xOpen.
+    vtab-create: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+        db-name: string,
+        table-name: string,
+        args: list<string>,
+    ) -> result<string, string>;
+
+    vtab-connect: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+        db-name: string,
+        table-name: string,
+        args: list<string>,
+    ) -> result<string, string>;
+
+    vtab-destroy: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+    ) -> result<_, string>;
+
+    vtab-disconnect: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+    ) -> result<_, string>;
+
+    vtab-best-index: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+        info: index-info,
+    ) -> result<index-plan, string>;
+
+    vtab-open: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+        cursor-id: u64,
+    ) -> result<_, string>;
+
+    vtab-close: func(
+        ext-name: string,
+        vtab-id: u64,
+        cursor-id: u64,
+    ) -> result<_, string>;
+
+    vtab-filter: func(
+        ext-name: string,
+        vtab-id: u64,
+        cursor-id: u64,
+        idx-num: s32,
+        idx-str: option<string>,
+        args: list<sql-value>,
+    ) -> result<_, string>;
+
+    vtab-next: func(
+        ext-name: string,
+        vtab-id: u64,
+        cursor-id: u64,
+    ) -> result<_, string>;
+
+    vtab-eof: func(
+        ext-name: string,
+        vtab-id: u64,
+        cursor-id: u64,
+    ) -> bool;
+
+    vtab-column: func(
+        ext-name: string,
+        vtab-id: u64,
+        cursor-id: u64,
+        col: s32,
+    ) -> result<sql-value, string>;
+
+    vtab-rowid: func(
+        ext-name: string,
+        vtab-id: u64,
+        cursor-id: u64,
+    ) -> result<s64, string>;
+
+    /// One row carried by a batched vtab fetch.
+    record vtab-row {
+        rowid: s64,
+        columns: list<sql-value>,
+    }
+
+    /// Batched vtab fetch. The cli's trampoline calls this once per
+    /// block instead of looping xColumn/xRowid/xNext per row.
+    vtab-fetch-batch: func(
+        ext-name: string,
+        vtab-id: u64,
+        cursor-id: u64,
+        max-rows: u32,
+    ) -> result<list<vtab-row>, string>;
+
+    // ── Mutating vtab dispatches ──────────────────────────────
+    //
+    // Routed to extensions that declared `vtab-spec.mutable = true`
+    // and export the `vtab-update` interface. The cli's
+    // sqlite3_module wires its xUpdate / xBegin / xSync / xCommit /
+    // xRollback / xRename / xSavepoint / xRelease / xRollbackTo
+    // slots to these; the host instantiates the loaded extension
+    // and invokes the matching `vtab-update.*` export.
+
+    vtab-update: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+        args: list<sql-value>,
+    ) -> result<s64, string>;
+
+    vtab-begin: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+    ) -> result<_, string>;
+
+    vtab-sync: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+    ) -> result<_, string>;
+
+    vtab-commit: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+    ) -> result<_, string>;
+
+    vtab-rollback: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+    ) -> result<_, string>;
+
+    vtab-rename: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+        new-name: string,
+    ) -> result<_, string>;
+
+    vtab-savepoint: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+        savepoint: s32,
+    ) -> result<_, string>;
+
+    vtab-release: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+        savepoint: s32,
+    ) -> result<_, string>;
+
+    vtab-rollback-to: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+        savepoint: s32,
+    ) -> result<_, string>;
+
+    /// xShadowName — module-level. SQLite asks via the cli's
+    /// `xShadowName` slot; the cli routes here. Returns true if
+    /// `name` is a shadow table owned by this vtab module.
+    vtab-is-shadow-name: func(
+        ext-name: string,
+        vtab-id: u64,
+        name: string,
+    ) -> bool;
+
+    /// xIntegrity — per-instance integrity check.
+    vtab-integrity: func(
+        ext-name: string,
+        vtab-id: u64,
+        instance-id: u64,
+        schema: string,
+        table-name: string,
+        mode-flags: u32,
+    ) -> result<_, string>;
+}
