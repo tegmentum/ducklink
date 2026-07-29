@@ -1,0 +1,119 @@
+package sqlite:wasm@0.1.0;
+
+/// Host-implemented file-handle primitives backing the `opfs` VFS
+/// inside sqlite-vfs-tvm. The composed cli's wasm guest cannot
+/// reach the OPFS (Origin Private File System) API directly — it
+/// lives in the JS host — so this interface marshals each VFS
+/// operation across the wasm/JS boundary.
+///
+/// Architecture (v1.5 round 4):
+///
+/// Browser host implements every function in this interface against
+/// the OPFS async API (`navigator.storage.getDirectory()` ->
+/// `getFileHandle()` -> `createWritable()` / `getFile()`). The
+/// imports are listed in `asyncImports` for the runtime-bindgen JSPI
+/// transpile, so the wasm guest suspends across each call and
+/// resumes once the host's Promise resolves. From the Rust VFS
+/// trampoline's POV, the call is synchronous; JSPI handles the
+/// suspension under the hood.
+///
+/// Departure from the round-3 spec: the spec mandated a Worker +
+/// SyncAccessHandle + SharedArrayBuffer + Atomics dance (option α).
+/// That architecture exists to avoid JSPI. But JSPI is ALREADY
+/// mandatory on the composed-cli path (sqlink-composed.js builds the
+/// runtime-bindgen with `asyncMode: 'jspi'`), so reaching for the
+/// SAB dance buys nothing while adding Worker setup, COOP/COEP
+/// headers, and ~500 LoC of cross-thread plumbing. Option β
+/// (suspend-via-JSPI) reuses the existing async-import infrastructure.
+///
+/// Handle model: u64 file handles assigned by the host on `open`,
+/// keyed into a host-side Map<handle, FileSystemFileHandle>. The
+/// alternative — wit resource types — would be cleaner but each
+/// crossing of the Rust VFS trampoline (which holds the handle in a
+/// `*mut sqlite3_file`) would have to clone the resource handle,
+/// and SQLite's xClose lifecycle doesn't compose cleanly with wit's
+/// drop semantics. u64 keeps the contract simple.
+interface opfs-host {
+    /// Errors a file operation can surface. Generic-by-shape: the
+    /// VFS maps each to a SQLITE_IOERR_*, the host is free to add
+    /// finer-grained discriminators in later revisions.
+    record opfs-error {
+        /// Human-readable diagnostic. Surfaced in browser console
+        /// for debuggability; the Rust trampoline drops it on the
+        /// floor (SQLite's API has no message channel for VFS
+        /// errors beyond the return code).
+        message: string,
+        /// Coarse error class. See `opfs-error-code`. The Rust
+        /// VFS uses this to choose between IOERR / CANTOPEN /
+        /// FULL / NOMEM.
+        code: opfs-error-code,
+    }
+
+    enum opfs-error-code {
+        /// Generic I/O error. Maps to SQLITE_IOERR.
+        io,
+        /// File does not exist and create was not requested.
+        /// Maps to SQLITE_CANTOPEN.
+        not-found,
+        /// OPFS quota exhausted. Maps to SQLITE_FULL.
+        full,
+        /// Caller passed an invalid handle or out-of-range
+        /// argument. Maps to SQLITE_MISUSE.
+        invalid,
+    }
+
+    /// Open or create the OPFS file at `path` (relative to the
+    /// origin's OPFS root, leading `/` allowed and stripped).
+    /// `create` mirrors SQLITE_OPEN_CREATE: when true the host
+    /// must materialize the file if it doesn't exist; when false
+    /// missing files return `not-found`.
+    ///
+    /// Returns an opaque u64 handle the caller threads through
+    /// every subsequent op + `close`. Each call returns a fresh
+    /// handle even for the same path; the host is responsible
+    /// for any de-duplication (in practice we don't dedupe —
+    /// SQLite opens main + journal + wal as separate paths and
+    /// the VFS's per-path file table sits in the Rust layer).
+    open: func(path: string, create: bool) -> result<u64, opfs-error>;
+
+    /// Read `len` bytes starting at `offset`. Returns the actual
+    /// bytes read (may be shorter than `len` if the read crosses
+    /// EOF; the VFS trampoline detects short reads and either
+    /// zero-fills the tail or returns SQLITE_IOERR_SHORT_READ per
+    /// SQLite's conventions).
+    ///
+    /// Bytes flow as a wit `list<u8>` — copy crosses the wasm
+    /// boundary once. For the size ranges SQLite hits (default
+    /// page = 4 KiB, occasional larger reads for the header) the
+    /// copy cost is irrelevant.
+    read: func(handle: u64, offset: u64, len: u32) -> result<list<u8>, opfs-error>;
+
+    /// Write `data` starting at `offset`. Returns the number of
+    /// bytes actually written. SQLite expects all-or-nothing
+    /// writes (a short write triggers IOERR_WRITE); the host
+    /// should write the full payload or return an error.
+    write: func(handle: u64, offset: u64, data: list<u8>) -> result<u32, opfs-error>;
+
+    /// Truncate the file to `size` bytes. Growing is allowed
+    /// (zero-fill); shrinking discards trailing bytes.
+    truncate: func(handle: u64, size: u64) -> result<_, opfs-error>;
+
+    /// Flush pending writes to durable storage. OPFS guarantees
+    /// durability after the SyncAccessHandle's `flush()` completes;
+    /// the async API's `WritableStream.close()` provides the same
+    /// guarantee. Either is acceptable.
+    sync: func(handle: u64) -> result<_, opfs-error>;
+
+    /// Current file size in bytes.
+    size: func(handle: u64) -> result<u64, opfs-error>;
+
+    /// Close the handle. The host releases the underlying
+    /// FileSystemFileHandle. Idempotent: closing an already-closed
+    /// handle is `ok(())`.
+    close: func(handle: u64) -> result<_, opfs-error>;
+
+    /// Unlink the file at `path`. Used by SQLite when it
+    /// rolls back a journal-only transaction. Idempotent:
+    /// deleting a missing file returns `ok(())`.
+    delete: func(path: string) -> result<_, opfs-error>;
+}
