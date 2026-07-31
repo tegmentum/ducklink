@@ -11,17 +11,17 @@ publish = false
 # bindings are ABI-identical across both directions, and so this matches the
 # sqlink host + the webassembly-component-orchestration framework (which is on
 # 45.0.1), letting ducklink later reuse the framework's compose:dynlink host.
-wasmtime = { version = "46.0.1", features = ["component-model", "cache"] }
+wasmtime = { version = "47.0.2", features = ["component-model", "cache"] }
 # The extension store-state holds a WasiCtx and implements WasiView (components
 # target wasip2). Same version as wasmtime.
-wasmtime-wasi = "46.0.1"
+wasmtime-wasi = "47.0.2"
 # wasi:http host imports (types + outgoing-handler @0.2.9). Required because the
 # composed cache.wasm imports wasi:http via the s3-wasm HTTPS transport; without
 # this the extension linker rejects it with "matching implementation was not
 # found". Same version as wasmtime. `add_only_http_to_linker_sync` avoids the
 # double-add wasi:cli/filesystem/etc conflict with `wasmtime_wasi::p2::
 # add_to_linker_sync` (see wasmtime-wasi-http/src/p2/mod.rs).
-wasmtime-wasi-http = "46.0.1"
+wasmtime-wasi-http = "47.0.2"
 # The witcanon contract-digest scheme: sha256("witcanon:1" || canonical WIT
 # bytes), byte-identical to compose-core::blobs::compute_wit_digest in
 # ~/git/webassembly-component-orchestration so digests interoperate. build.rs
@@ -31,12 +31,12 @@ hex = "0.4"
 # former inline `component_contract_major`/`check_component_contract` so the
 # same guard backs both the ducklink and sqlink hosts (datalink is public).
 # The witcanon CONTRACT_DIGEST (above) stays per-repo; this is the @MAJOR proxy.
-datalink-contract = { git = "https://github.com/tegmentum/datalink.git", rev = "80010adf7c9ec3d07674bba12585c787328217f5" }
+datalink-contract = { git = "https://github.com/tegmentum/datalink.git", rev = "c10378e9b15e45ee4a6338812d44509462baf99a" }
 # The shared store-generic compose:dynlink/linker host machinery + the
 # ResidentBackend (instantiate-once-and-reuse provider lifecycle). ducklink's
 # compose_dynlink module is now a thin adapter over this; the resolve/invoke
 # bridge + bindings live here, shared with the other wasm-component hosts.
-datalink-dynlink = { git = "https://github.com/tegmentum/datalink.git", rev = "80010adf7c9ec3d07674bba12585c787328217f5" }
+datalink-dynlink = { git = "https://github.com/tegmentum/datalink.git", rev = "c10378e9b15e45ee4a6338812d44509462baf99a" }
 # `PendingKind::iter()` is derived via `EnumIter` so `PendingKind::all()` stays
 # in lockstep with the enum without a hand-maintained mirror array or a
 # hardcoded variant-count assert. `strum` is stable-Rust (no nightly required)

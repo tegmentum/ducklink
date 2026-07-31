@@ -12,6 +12,6 @@ the source. Imports are satisfied with trapping stubs.
 """
 
 [dependencies]
-wasmtime = { version = "46.0.1", features = ["component-model"] }
-wasmtime-wasi = "46.0.1"
+wasmtime = { version = "47.0.2", features = ["component-model"] }
+wasmtime-wasi = "47.0.2"
 anyhow = "1"

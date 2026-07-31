@@ -9344,7 +9344,6 @@ pub fn run_shell_with_stdio(
     let run = instance
         .get_typed_func::<(), (Result<(), ()>,)>(store.as_context_mut(), run_idx)?;
     let (result,) = run.call(store.as_context_mut(), ())?;
-    run.post_return(store.as_context_mut())?;
     Ok(result)
 }
 

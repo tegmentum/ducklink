@@ -8,15 +8,15 @@ edition = "2021"
 ducklink-runtime = { path = "../ducklink-runtime" }
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
-wasmtime = { version = "46.0.1", features = ["component-model", "cache"] }
-wasmtime-wasi = "46.0.1"
+wasmtime = { version = "47.0.2", features = ["component-model", "cache"] }
+wasmtime-wasi = "47.0.2"
 # wasi:http host imports (types + outgoing-handler @0.2.9). Required because the
 # composed cache.wasm now imports wasi:http via the s3-wasm HTTPS transport
 # (commit d2b8870); without this the linker rejects it with "matching
 # implementation was not found". Same version as wasmtime.
 # `add_only_http_to_linker_sync` is called AFTER `wasmtime_wasi::p2::
 # add_to_linker_sync` at each host store-state linker site to avoid double-add.
-wasmtime-wasi-http = "46.0.1"
+wasmtime-wasi-http = "47.0.2"
 # Tiered Virtual Memory: host-owned regions back DuckDB's >4 GiB spill tier.
 # tvm-core is wasmtime-free; the manager/bytes host traits are implemented in
 # this crate against this host's bindgen. Sourced via a pinned git rev of
@@ -63,7 +63,7 @@ dirs = "5"
 #     adapter (allow-all / deny-all / per-name); behavior is unchanged.
 #     (datalink-prefix was retired here in commit a048b7a — workspace now
 #     adopts the extension v5.0.0 prefix.name model via ducklink_prefix.)
-datalink-policy = { git = "https://github.com/tegmentum/datalink.git", rev = "80010adf7c9ec3d07674bba12585c787328217f5" }
+datalink-policy = { git = "https://github.com/tegmentum/datalink.git", rev = "c10378e9b15e45ee4a6338812d44509462baf99a" }
 # Bug 4b: the host-side rusqlite dep is gone. sqlitewasm now self-persists
 # through wasivfs (sqlite-lib composed in via `wac plug`), so the host never
 # re-opens the DSN file itself — writes cross the wasm boundary, hit the
