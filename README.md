@@ -335,10 +335,48 @@ Beyond `execute` / `open-stream`, the `database` interface exposes:
   arrow-rs in Rust). Zero-copy is not possible across the component boundary, so
   buffers are serialized once into IPC bytes.
 
+## Consuming from Tegmentum / elena-wasm
+
+Beyond the native `ducklink` host and the standalone browser demo in
+`web/`, DuckLink composes with the wider Tegmentum wasm stack through
+elena-wasm's `wasmos:dataset` interface.
+
+- **Browser adapter.** The elena-wasm workspace ships
+  [`@wasmos/dataset-ducklink`](https://github.com/tegmentum/elena-wasm/tree/main/packages/dataset-ducklink) —
+  a browser-side `@wasmos/dataset` provider backed by this exact
+  `ducklink_core.wasm` binary. `createDuckLinkDataset({ corePath?,
+  sqlSeed?, ... })` returns a `Dataset` handle whose `query` /
+  `subscribe` / `apply` verbs adapt `duckdb:component/database` to
+  elena-wasm's `wasmos:dataset` interface, satisfying the shipped
+  D-018 portable dataset ABI. The [vela-dashboard
+  demo](https://github.com/tegmentum/elena-wasm/tree/main/examples/vela-dashboard)
+  wires this into a real analytics dashboard.
+
+- **Shared binding generator.** Both this repo's `web/` demo and
+  elena-wasm's `@wasmos/dataset-ducklink` regenerate their JS bindings
+  from `wit/core/wit` with the same
+  [`wit-js-bindgen`](https://github.com/tegmentum/wit-js-bindgen)
+  invocation. `wit-js-bindgen` is the canonical WIT-to-JS/TS binding
+  generator across the Tegmentum stack (`@wasmos/protocol` +
+  `@wasmos/dataset-ducklink` + `web/bindings/`). See
+  [`wasmos/README.md`](wasmos/README.md) for the full integration
+  story (including build-time asset delivery and the shared toolchain
+  invocation).
+
+- **Rust-side integration.** Server-hosted DuckLink consumers go
+  through the `ducklink-host` crate + the `duckdb:component/database`
+  WIT interface directly — no browser transpile chain. A dedicated
+  `wasmos-dataset-ducklink` Rust adapter (implementing elena-wasm's
+  `wasmos:dataset` trait) is a follow-up landing.
+
 ## Next steps
 
 - Flesh out remaining CLI scripting parity with the native shell
 - Resolve GitHub Actions billing so the smoke-tests workflow can run
+- Land the Rust-side `wasmos-dataset-ducklink` adapter (see
+  [`wasmos/README.md`](wasmos/README.md)) so server hosts can expose
+  DuckLink as a `wasmos:dataset` provider without going through the
+  browser transpile chain.
 
 ## Acknowledgments
 
