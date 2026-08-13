@@ -49,8 +49,9 @@ other `wasmos:dataset` provider implements — the DuckDB-Wasm-based
 future adapters against Postgres / DuckDB-server / whatever. D-019's
 "WIT is the contract; wasm is one implementation strategy" thesis in
 production: the `ducklink_core.wasm` binary runs unchanged native
-under wasmtime as `ducklink_cli`, and in-browser via
-`@tegmentum/wasi-polyfill`.
+under wasmtime as `ducklink_cli`, and in-browser via wasm-cm's
+portable runtime-guest driver (`@tegmentum/wasmos-browser` +
+`@wasmos/runtime-guest-bridge`).
 
 See the full API + parameter-binding semantics in
 [`packages/dataset-ducklink/README.md`](https://github.com/tegmentum/elena-wasm/tree/main/packages/dataset-ducklink/README.md).
@@ -61,45 +62,51 @@ Both the elena-wasm-side `@wasmos/dataset-ducklink` and this repo's
 own `web/` demo share the same boot shape (see `web/run-core.mjs`):
 
 1. `fetch()` the `ducklink_core.wasm` component bytes.
-2. Configure `@tegmentum/wasi-polyfill` with the plugin set the core
-   imports (cli / io / filesystem / clocks / random / sockets) plus a
-   writable in-memory `/` preopen and a pre-created `/.duckdb`
-   directory (DuckDB's non-recursive `CreateDirectory` succeeds on
-   `LOAD`).
-3. Instantiate the component via wasi-polyfill's `RuntimeBindgen`
-   with JSPI async promoted on the poll import + the execute export
-   (Chrome 137+ / Playwright's bundled Chromium).
-4. Open an in-memory `duckdb:component/database.connection`, run
-   any `sqlSeed` statements.
-5. Return a WIT-typed handle whose SQL verbs lower to the WIT
+2. `bootRuntimeGuestFromUrl` (from `@tegmentum/wasmos-browser`) loads
+   `wasmcm_runtime_guest.wasm` — wasm-cm's portable component-model
+   interpreter — and returns a driver speaking the runtime-guest C-ABI
+   (`parseComponent` / `registerHostProvider` / `registerRouter` /
+   `instantiateWithImports` / `callExport`).
+3. Build the host-provider `impls`: WASI byte-frame impls from
+   `@wasmos/runtime-guest-bridge` (`createStandardPolyfill` +
+   `createWasiProviders`) plus inline stubs for the `duckdb:*` +
+   `tvm:memory` interfaces the wasm imports. The polyfill sits behind
+   the bridge — the emitted bindings only see the byte-frame protocol.
+4. `driver.parseComponent(bytes)` → `registerHostProviders(driver, impls)`
+   → `driver.instantiateWithImports(componentHandle, imports)`.
+5. `bindRuntimeGuest(driver, instanceHandle)` wraps the exported
+   `duckdb:component/database` interface as ergonomic JS callables.
+6. Open an in-memory connection, run any `sqlSeed` statements.
+7. Return a WIT-typed handle whose SQL verbs lower to the WIT
    `execute` / `prepare(...).execute(...)` calls.
 
 ## Shared toolchain: `wit-js-bindgen`
 
-Both consumers regenerate their JS bindings from this repo's WIT tree
-with the same [`wit-js-bindgen`](https://github.com/tegmentum/wit-js-bindgen)
-invocation:
+Both consumers regenerate their JS bindings with the same
+[`wit-js-bindgen`](https://github.com/tegmentum/wit-js-bindgen) tool,
+invoked with `--role runtime-guest` against the built wasm binary
+(not the WIT source tree — the WIT tree has drifted ahead of the
+built wasm on prior landings, and driving bindings from the binary
+keeps import names in lockstep):
 
 ```bash
-wit-js-bindgen wit/core/wit \
-    --world libduckdb \
-    --role consumer \
-    --auto-alias-wasi \
+wit-js-bindgen <ducklink_core.wasm> \
+    --world root --role runtime-guest \
     --out <dest>
 ```
 
 - **elena-wasm's `just gen-ducklink`** points at
-  `${DUCKLINK_DIR}/wit/core/wit` (default `~/git/ducklink/wit/core/wit`)
-  and writes to `packages/dataset-ducklink/src/bindings/`.
+  `${DUCKLINK_CORE_WASM}` (default `~/git/ducklink/web/public/ducklink_core.wasm`)
+  and writes to `packages/dataset-ducklink/src/bindings-runtime-guest/`.
 - **This repo's `web/generate.sh`** (or `npm run generate` under
-  `web/`) points at `wit/core/wit` and writes to `web/bindings/`.
+  `web/`) points at `public/ducklink_core.wasm` and writes to
+  `web/bindings-runtime-guest/`.
 
 The generated output is byte-identical when both consumers run against
-the same DuckLink checkout — the tool is deterministic and the WIT
-tree is the single source of truth. See
+the same wasm binary — the tool is deterministic. See
 [the wit-js-bindgen README](https://github.com/tegmentum/wit-js-bindgen/blob/main/README.md)
-for the emitted shape (canonical-ABI marshal, WIT-derived types,
-`instantiate(module, imports)` factory).
+for the emitted shape (inlined byte-frame codec, WIT-derived types,
+`registerHostProviders` + `bindRuntimeGuest` entry points).
 
 ## Consuming ducklink_core.wasm as a build-time asset
 
