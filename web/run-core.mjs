@@ -49,7 +49,7 @@ import {
 // regeneration) — bump these strings if the wasm build shifts to a newer wasi
 // tag.
 // -----------------------------------------------------------------------------
-const WASI_INTERFACES = Object.freeze([
+export const CORE_WASI_INTERFACES = Object.freeze([
   'wasi:cli/environment@0.2.9',
   'wasi:cli/exit@0.2.9',
   'wasi:cli/stdin@0.2.9',
@@ -76,10 +76,10 @@ const WASI_INTERFACES = Object.freeze([
 // tvm:memory/*@0.1.0 interface the wasm imports needs a provider slot; the
 // plain-query smoke path never dispatches through them, so throw-on-call is a
 // legible failure surface if anything trips them. Extension loading + TVM
-// spill are separate lanes (extension-host.mjs, tvm-host.mjs) that still ride
-// wasi-polyfill and remain to be ported in a follow-up.
+// spill are separate lanes (extension-host.mjs, tvm-host.mjs) that plug in
+// via the `additionalImpls` seam on `instantiateCore`.
 // -----------------------------------------------------------------------------
-function duckdbStubImpls() {
+export function duckdbStubImpls() {
   const unavailable = (label) => () => { throw new Error(`${label}: not wired in the runtime-guest smoke boot`) }
   return {
     'duckdb:component/host-extension-loader': { requestLoad: () => false },
@@ -133,10 +133,8 @@ function duckdbStubImpls() {
     },
     'tvm:memory/manager@0.1.0': {
       createRegion: unavailable('tvm:memory/manager.create-region'),
-      destroyRegion: unavailable('tvm:memory/manager.destroy-region'),
       alloc: unavailable('tvm:memory/manager.alloc'),
       dealloc: unavailable('tvm:memory/manager.dealloc'),
-      describeRegion: unavailable('tvm:memory/manager.describe-region'),
     },
   }
 }
@@ -154,7 +152,7 @@ function duckdbStubImpls() {
 // fails to resolve. Constructing the polyfill directly with static imports
 // side-steps that entirely.
 // -----------------------------------------------------------------------------
-function buildPolyfill() {
+export function buildPolyfill() {
   const policy = createPolicy({
     defaultAllow: true,
     preopens: [{ path: '/' }],
@@ -174,21 +172,16 @@ function buildPolyfill() {
 }
 
 // -----------------------------------------------------------------------------
-// Boot the runtime-guest driver, register every host provider (WASI byte-frame
-// impls from the bridge + inline duckdb/tvm stubs), parse the component bytes,
-// instantiate with the resolved import handles, and pull the
-// `duckdb:component/database` interface off the bound export surface.
-//
-// `additionalImpls` is spread OVER the stubs so a caller who has richer
-// duckdb:*/tvm:memory backends (a future extension-host on the runtime-guest
-// lane, for example) can override any subset by interface key.
+// One-shot driver bootstrap. Returns `{driver, polyfill}` — the shared
+// runtime-guest driver every component instantiation in the page rides on,
+// plus the wasi-polyfill instance whose plugins back both core AND extension
+// wasi imports. `instantiateCore` and `extension-host.mjs::createExtensionHost`
+// both accept an optional pre-built bundle here so an entry point that boots
+// several components (core + one or more extensions) shares one driver / one
+// polyfill across all of them.
 // -----------------------------------------------------------------------------
-export async function instantiateCore(componentBytes, additionalImpls = {}) {
+export async function createDuckLinkDriver({ jspi = 'auto' } = {}) {
   const polyfill = buildPolyfill()
-  const wasiImpls = await createWasiProviders({ polyfill, interfaces: WASI_INTERFACES })
-
-  const impls = { ...wasiImpls, ...duckdbStubImpls(), ...additionalImpls }
-
   // `jspi: 'auto'` — Chromium/V8 refuses synchronous `WebAssembly.Compile`
   // on the main thread for buffers >8 MB (the DuckLink core wasm is ~44 MB).
   // JSPI mode routes compile + instantiate through the async host-compile /
@@ -196,7 +189,7 @@ export async function instantiateCore(componentBytes, additionalImpls = {}) {
   // (asynchronous) internally, so the size cap does not trip. Chrome 137+
   // and Playwright's bundled Chromium have JSPI; older runtimes fall back
   // to the sync path and hit the 8 MB wall.
-  const { driver } = await bootRuntimeGuestFromUrl(runtimeGuestUrl, { jspi: 'auto' })
+  const { driver } = await bootRuntimeGuestFromUrl(runtimeGuestUrl, { jspi })
   if (typeof driver.registerRouter !== 'function') {
     throw new Error(
       'run-core: @tegmentum/wasmos-browser boot did not return a driver with a ' +
@@ -204,6 +197,29 @@ export async function instantiateCore(componentBytes, additionalImpls = {}) {
       'Update @tegmentum/wasmos-browser to a build that surfaces registerRouter on the driver.',
     )
   }
+  return { driver, polyfill }
+}
+
+// -----------------------------------------------------------------------------
+// Boot the runtime-guest driver (or reuse a pre-built one), register every
+// host provider (WASI byte-frame impls from the bridge + inline duckdb/tvm
+// stubs), parse the component bytes, instantiate with the resolved import
+// handles, and pull the `duckdb:component/database` interface off the bound
+// export surface.
+//
+// `additionalImpls` is spread OVER the stubs so a caller who has richer
+// duckdb:* / tvm:memory backends (a browser TVM host, an extension-host on the
+// runtime-guest lane) can override any subset by interface key.
+// `options.driverBundle` opts the caller out of building a fresh driver +
+// polyfill — pass one from `createDuckLinkDriver()` when the same page will
+// also boot extension components through the same driver.
+// -----------------------------------------------------------------------------
+export async function instantiateCore(componentBytes, additionalImpls = {}, options = {}) {
+  const bundle = options.driverBundle ?? (await createDuckLinkDriver({ jspi: 'auto' }))
+  const { driver, polyfill } = bundle
+
+  const wasiImpls = await createWasiProviders({ polyfill, interfaces: CORE_WASI_INTERFACES })
+  const impls = { ...wasiImpls, ...duckdbStubImpls(), ...additionalImpls }
 
   const componentHandle = driver.parseComponent(componentBytes)
   const providerHandles = registerHostProviders(driver, impls)
@@ -237,14 +253,14 @@ export async function instantiateCore(componentBytes, additionalImpls = {}) {
 // -----------------------------------------------------------------------------
 export async function runQuery(componentBytes, sql = 'SELECT 42 AS answer, 1 + 1 AS two') {
   const db = await instantiateCore(componentBytes)
-  const openRes = db.open(undefined) // none -> in-memory database
+  const openRes = await db.open(undefined) // none -> in-memory database
   if (openRes.tag === 'err') {
     const msg = typeof openRes.val === 'string' ? openRes.val : (openRes.val?.val ?? JSON.stringify(openRes.val))
     throw new Error(`run-core: database.open() failed: ${msg}`)
   }
   const conn = openRes.val
-  const execRes = db.execute(conn, sql)
-  db.close(conn)
+  const execRes = await db.execute(conn, sql)
+  await db.close(conn)
   if (execRes.tag === 'err') {
     const errPayload = execRes.val
     const msg = typeof errPayload === 'string'

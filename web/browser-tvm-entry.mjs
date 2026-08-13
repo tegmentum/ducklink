@@ -6,6 +6,7 @@
 // proving >memory_limit data round-tripped through TVM. Open with #2GB to
 // disable spilling as an in-memory control.
 import { instantiateCore } from './run-core.mjs'
+import { createTvmHost, tvmDebugEnabled } from './tvm-host.mjs'
 
 async function main() {
   const out = document.getElementById('out')
@@ -13,23 +14,31 @@ async function main() {
   try {
     const resp = await fetch('./ducklink_core.wasm')
     const bytes = new Uint8Array(await resp.arrayBuffer())
-    const db = await instantiateCore(bytes)
-    const conn = db.open(undefined) // in-memory
+    const tvm = createTvmHost({ debug: tvmDebugEnabled() })
+    // tvm.impls goes in via `additionalImpls` — overrides the throw-on-call
+    // stubs run-core.mjs seeds for the plain-query path.
+    const db = await instantiateCore(bytes, tvm.impls)
+    const openRes = await db.open(undefined)
+    if (openRes.tag === 'err') throw new Error(`open: ${openRes.val}`)
+    const conn = openRes.val
 
     // memory_limit from the URL hash (#2GB disables spilling as a control).
     const limit = (location.hash || '#64MB').slice(1)
     // No temp_directory: TVM availability alone must make blocks evictable.
-    await db.execute(conn, `SET memory_limit='${limit}'`)
+    const setLim = await db.execute(conn, `SET memory_limit='${limit}'`)
+    if (setLim.tag === 'err') throw new Error(`SET memory_limit: ${JSON.stringify(setLim.val)}`)
     await db.execute(conn, 'SET threads=1')
     // 10M int64 sorted ~= 80 MiB > the 64 MiB limit -> forces a spill.
-    const result = await db.execute(
+    const res = await db.execute(
       conn,
       'SELECT count(*) AS n, min(i) AS lo, max(i) AS hi ' +
         'FROM (SELECT i FROM range(10000000) t(i) ORDER BY i DESC) sub',
     )
-    db.close(conn)
+    if (res.tag === 'err') throw new Error(`spill query: ${JSON.stringify(res.val)}`)
+    const result = res.val
+    await db.close(conn)
 
-    const stats = db.__tvmHost.stats()
+    const stats = tvm.stats()
     const ser = (x) => JSON.stringify(x, (_, v) => (typeof v === 'bigint' ? `${v}n` : v))
     const writtenMiB = (stats.bytesWritten / (1 << 20)).toFixed(1)
     const readMiB = (stats.bytesRead / (1 << 20)).toFixed(1)

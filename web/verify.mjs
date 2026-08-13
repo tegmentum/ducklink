@@ -25,11 +25,16 @@ let status = 'timeout'
 let text = ''
 try {
   await page.goto(url, { waitUntil: 'load' })
+  // NOTE: `page.waitForFunction(fn, arg, options)` — the object below is
+  // `arg` (passed into `fn`), not `options`. Passing `null` for arg makes the
+  // third-slot options work; without it, playwright falls back to the 30s
+  // default and long cold-start boots (44 MB wasm compile) time out.
   await page.waitForFunction(
     () => {
       const el = document.getElementById('out')
       return el && (el.dataset.status === 'ok' || el.dataset.status === 'error')
     },
+    null,
     { timeout: 240000 },
   )
   const res = await page.$eval('#out', (el) => ({

@@ -1,41 +1,34 @@
 // Browser-side Tiered Virtual Memory host.
 //
 // Satisfies the core component's `tvm:memory/manager` + `tvm:memory/bytes`
-// imports (package tvm:memory@0.1.0) with regions backed by host JS byte arrays,
-// mirroring the native Rust host (crates/ducklink-host: RegionDirectory
-// over VecBackedRegion). DuckDB spills evicted buffer-pool blocks here, so the
-// spilled working set lives in the page's heap rather than the wasm32 4 GiB
-// linear memory -- the same >4 GiB-spill capability the native host provides.
+// imports (package tvm:memory@0.1.0) with regions backed by host JS byte
+// arrays, mirroring the native Rust host (crates/ducklink-host:
+// RegionDirectory over VecBackedRegion). DuckDB spills evicted buffer-pool
+// blocks here, so the spilled working set lives in the page's heap rather
+// than the wasm32 4 GiB linear memory -- the same >4 GiB-spill capability the
+// native host provides.
 //
-// These imports are UNCONDITIONAL in the component world, so the browser build
-// cannot instantiate without them wired (even for queries that never spill).
+// # Return-shape convention (runtime-guest lane)
 //
-// jco import conventions (both RuntimeBindgen and `jco transpile` use these):
-//   - result<T,E>  -> return T directly on success; for the err case THROW
-//                     `{ payload: <E> }` (jco wraps the return as ok and reads
-//                     `e.payload` as the err value; a bare `Error` re-throws).
-//                     Returning `{tag:'ok',val}` yourself double-wraps and
-//                     corrupts the value -- do not.
-//   - record handle -> { regionId, generation, offset } (jco camelCases fields)
-//   - variant tvm-error -> { tag: '<case>', val? }
-//   - list<u8>      -> Uint8Array
+// The runtime-guest bindings route WIT `result<T, tvm-error>` back and forth
+// as `{tag:'ok', val:T}` / `{tag:'err', val:tvmError}` OBJECTS returned by the
+// impl. This differs from the previous jco lane where callers threw
+// `{payload}` for the err arm — under runtime-guest, throwing is treated as a
+// host-side exception and produces a trap on the guest, NOT a graceful err.
+// Every path that used to `fail(errVariant)` now `return { tag: 'err', val: ...}`.
 // Regions use a coalescing free-list allocator so deleted blocks are reclaimed
 // (footprint tracks the live set, not cumulative spill). Single-threaded: no
 // locking, unlike the native host's Mutex.
 
 const U16_MAX = 0xffff
 
-// Signal a result's err case: throw a `{ payload }` jco unwraps into the err.
-const fail = (variant) => { throw { payload: variant } }
 const ERR_ALLOC = { tag: 'allocation-failed' }
 const ERR_BOUNDS = { tag: 'out-of-bounds' }
 const ERR_STALE = { tag: 'stale-handle' }
 const errRegion = (id) => ({ tag: 'region-not-found', val: id })
 
 // Grow a region's backing array (doubling, capped at its capacity) so it can
-// hold `need` bytes. Regions start empty and grow on demand -- the guest asks
-// for 1 GiB regions but rarely fills them, so reserving up front would waste
-// page memory.
+// hold `need` bytes.
 function ensureCapacity(region, need) {
   if (need <= region.bytes.length) return
   let size = Math.max(region.bytes.length * 2, 1 << 16)
@@ -46,22 +39,9 @@ function ensureCapacity(region, need) {
   region.bytes = grown
 }
 
-// Coalescing free-list allocator (mirrors tvm_core's FreelistAllocator). Holes
-// are `[offset, size]` pairs kept sorted by offset; `live` maps an allocation's
-// offset to its size so dealloc can reclaim it. Reclamation is what keeps a
-// region's footprint at the live set rather than the cumulative spill volume:
-// DuckDB deletes spilled blocks as a sort/hash merge consumes them.
-//
-// `slotGen` maps an offset to a per-slot generation, bumped each time that
-// offset is reallocated. The handle carries this generation, so a stale handle
-// to a freed-then-reused slot is rejected (the slot now has a newer generation)
-// rather than silently reading/writing the block that reused the slot. `slotGen`
-// persists across dealloc (only `live` membership tracks free/allocated).
 function newRegion(capacity) {
   return { bytes: new Uint8Array(0), capacity, free: [[0, capacity]], live: new Map(), slotGen: new Map(), used: 0 }
 }
-// Allocate `size` bytes; returns the slot's `{ offset, generation }`, or null if
-// no contiguous hole is big enough.
 function flAlloc(region, size) {
   for (let i = 0; i < region.free.length; i++) {
     const hole = region.free[i]
@@ -76,11 +56,11 @@ function flAlloc(region, size) {
       return { offset, generation }
     }
   }
-  return null // no contiguous hole big enough
+  return null
 }
 function flDealloc(region, offset) {
   const size = region.live.get(offset)
-  if (size === undefined) return // already free / unknown -- ignore
+  if (size === undefined) return
   region.live.delete(offset)
   region.used -= size
   let i = 0
@@ -97,89 +77,85 @@ function flDealloc(region, offset) {
 }
 
 export function createTvmHost({ debug = false } = {}) {
-  const regions = new Map() // region-id -> region (see newRegion)
+  const regions = new Map()
   let nextRegionId = 0
   const stats = { regionsOpened: 0, bytesWritten: 0, bytesRead: 0 }
   const trace = (msg) => { if (debug) console.error(`[tvm] ${msg}`) }
-  // Resolve a handle to its region, rejecting a stale one: the region must
-  // exist, the offset must currently be allocated (`live`), and the handle's
-  // generation must match the slot's current generation (catches use of a
-  // handle whose slot was freed, or freed and reused by a later allocation).
+
+  // Resolve a handle to its region, or return the err-variant to propagate
+  // through the result<> arm. Callers check `result.err` before dereferencing.
   const regionFor = (handle) => {
     const region = regions.get(handle.regionId)
-    if (!region) fail(errRegion(handle.regionId))
+    if (!region) return { err: errRegion(handle.regionId) }
     if (!region.live.has(handle.offset) || region.slotGen.get(handle.offset) !== handle.generation) {
-      fail(ERR_STALE)
+      return { err: ERR_STALE }
     }
-    return region
+    return { region }
   }
 
+  // tvm:memory/manager@0.1.0 (runtime-guest set: createRegion / alloc /
+  // dealloc; destroyRegion / describeRegion are NOT in the runtime-guest
+  // interface — the wasm-cm interpreter emits providers for only what the
+  // component actually imports).
   const manager = {
-    // Each region is one logical 32-bit address space (offset is u32). The guest
-    // pools regions and opens a fresh one when the active one fills, so total
-    // spill capacity is multi-region and exceeds 4 GiB.
     createRegion(_kind, capacity) {
-      if (nextRegionId > U16_MAX) fail(ERR_ALLOC)
+      if (nextRegionId > U16_MAX) return { tag: 'err', val: ERR_ALLOC }
       const id = nextRegionId++
       regions.set(id, newRegion(capacity))
       stats.regionsOpened++
       trace(`open region #${stats.regionsOpened} id=${id} cap=${capacity >> 20} MiB (host heap, beyond wasm 4 GiB)`)
-      return id
-    },
-    destroyRegion(regionId) {
-      if (!regions.delete(regionId)) fail(errRegion(regionId))
+      return { tag: 'ok', val: id }
     },
     alloc(regionId, size) {
       const region = regions.get(regionId)
-      if (!region) fail(errRegion(regionId))
+      if (!region) return { tag: 'err', val: errRegion(regionId) }
       const slot = flAlloc(region, size)
-      // No hole big enough -> err so the guest opens another region (matches native).
-      if (!slot) fail(ERR_ALLOC)
+      if (!slot) return { tag: 'err', val: ERR_ALLOC }
       ensureCapacity(region, slot.offset + size)
-      return { regionId, generation: slot.generation, offset: slot.offset }
+      return { tag: 'ok', val: { regionId, generation: slot.generation, offset: slot.offset } }
     },
-    // Reclaim the block's space back into the region's free list (validates the
-    // handle first, so a double-free or stale dealloc is rejected).
     dealloc(handle) {
-      flDealloc(regionFor(handle), handle.offset)
-    },
-    // Declared by the interface but never called by the guest spill bridge.
-    describeRegion(regionId) {
-      const region = regions.get(regionId)
-      if (!region) fail(errRegion(regionId))
-      return {
-        id: regionId, generation: 0, kind: 'page-store',
-        capacity: region.capacity, used: region.used, residency: 'cold',
-      }
+      const { region, err } = regionFor(handle)
+      if (err) return { tag: 'err', val: err }
+      flDealloc(region, handle.offset)
+      return { tag: 'ok', val: undefined }
     },
   }
 
+  // tvm:memory/bytes@0.1.0 — 2-func provider (read / write).
   const bytes = {
     write(handle, data) {
-      const region = regionFor(handle)
+      const { region, err } = regionFor(handle)
+      if (err) return { tag: 'err', val: err }
       const end = handle.offset + data.length
-      if (end > region.capacity) fail(ERR_BOUNDS)
+      if (end > region.capacity) return { tag: 'err', val: ERR_BOUNDS }
       ensureCapacity(region, end)
       region.bytes.set(data, handle.offset)
       stats.bytesWritten += data.length
       trace(`write ${data.length} B (cumulative ${stats.bytesWritten >> 20} MiB)`)
+      return { tag: 'ok', val: undefined }
     },
     read(handle, len) {
-      const region = regionFor(handle)
-      if (handle.offset + len > region.bytes.length) fail(ERR_BOUNDS)
+      const { region, err } = regionFor(handle)
+      if (err) return { tag: 'err', val: err }
+      if (handle.offset + len > region.bytes.length) return { tag: 'err', val: ERR_BOUNDS }
       stats.bytesRead += len
       trace(`read ${len} B (cumulative ${stats.bytesRead >> 20} MiB)`)
-      // subarray (a view), not slice (a copy): jco copies the bytes into guest
-      // memory on return anyway, so the extra host-side copy+alloc is wasted.
-      // Safe because the region isn't reallocated during this synchronous call.
-      return region.bytes.subarray(handle.offset, handle.offset + len)
+      // Return a copy — subarray shares backing storage with region.bytes;
+      // the router's list<u8> encoder walks the view but any subsequent
+      // ensureCapacity() would invalidate a shared view. Copy is cheap
+      // compared with the wire hop.
+      return { tag: 'ok', val: region.bytes.slice(handle.offset, handle.offset + len) }
     },
   }
 
   return {
-    imports: {
-      'tvm:memory/manager': manager,
-      'tvm:memory/bytes': bytes,
+    // Shape the extension-host follows: interface-name-keyed impls the
+    // runtime-guest bindings' `registerHostProviders` dispatches on.
+    impls: {
+      'tvm:memory/manager@0.1.0': manager,
+      'tvm:memory/bytes@0.1.0': bytes,
+      'tvm:memory/types@0.1.0': {},
     },
     stats: () => ({ ...stats }),
   }
