@@ -1,15 +1,15 @@
 // Scenario-3 corpus harness: run every wasm extension's smoke.sql through the
 // IN-BROWSER DuckDB and diff the `.mode csv`-shaped output against
 // smoke.expected. Mirrors native-extension/ducklink/tests/scenario1_corpus.rs,
-// but in the browser.
+// but in the browser, on the wasm-cm runtime-guest lane.
 //
-// The in-browser extension host (extension-host.mjs) is single-extension: its
-// callback dispatch routes to the first loaded extension and registrations drain
-// once, and 111 extensions would collide on function names in one DuckDB catalog.
-// So we re-instantiate the core + host FRESH per extension. That is slow (each
-// instantiation transpiles the ~184 MB core), so #out is updated incrementally:
-// a timeout in the driver still yields the partial matrix.
-import { instantiateCore } from './run-core.mjs'
+// The in-browser extension host (extension-host.mjs) is single-extension per
+// dispatch fan-out (callback handles are unique but registrations drain once),
+// and 100+ extensions would collide on function names in one DuckDB catalog.
+// So we re-instantiate the core + host FRESH per extension. Slow (each
+// instantiation reparses the ~44 MB core), so the driver runs one extension
+// per navigation via `?ext=<name>` — see `corpus-verify.mjs`.
+import { createDuckLinkDriver, instantiateCore } from './run-core.mjs'
 import { createExtensionHost } from './extension-host.mjs'
 
 async function bytes(url) {
@@ -57,8 +57,7 @@ function csvField(s) {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-/** Render a duckvalue cell ({tag,val}) like DuckDB's CLI `.mode csv`. SQL NULL
- *  renders as the empty string (a blank expected line is a NULL). */
+/** Render a duckvalue cell ({tag,val}) like DuckDB's CLI `.mode csv`. */
 function fmtCell(cell) {
   if (cell == null) return ''
   const tag = cell.tag
@@ -66,8 +65,6 @@ function fmtCell(cell) {
   switch (tag) {
     case 'null':
     case 'none':
-      // The smoke corpus renders SQL NULL as the literal "NULL" (matching the
-      // Scenario-1 harness / DuckDB CLI used to generate smoke.expected).
       return 'NULL'
     case 'boolean':
       return val ? 'true' : 'false'
@@ -78,14 +75,12 @@ function fmtCell(cell) {
     case 'text':
       return String(val)
     case 'blob': {
-      // DuckDB's CLI `.mode csv` renders BLOB as 0x-hex.
       const bytes = Uint8Array.from(val)
       let hex = '0x'
       for (const b of bytes) hex += b.toString(16).padStart(2, '0')
       return hex
     }
     default:
-      // Primitive fallback (in case a cell is not a variant wrapper).
       if (typeof val === 'bigint') return String(val)
       if (cell.tag === undefined && typeof cell !== 'object') return String(cell)
       return val === undefined ? '' : String(val)
@@ -94,34 +89,25 @@ function fmtCell(cell) {
 
 /** Execute one statement -> CSV lines (header of column names, then rows). */
 async function runStmt(db, conn, sql) {
-  const result = await db.execute(conn, sql) // execute is JSPI-promised (async)
+  const res = await db.execute(conn, sql)
+  if (res.tag === 'err') throw new Error(`${sql.slice(0, 80)}: ${JSON.stringify(res.val)}`)
+  const result = res.val
   const header = (result.columns || []).map((c) => csvField(c.name)).join(',')
   const lines = [header]
   for (const row of result.rows || []) {
     lines.push(row.map((cell) => csvField(fmtCell(cell))).join(','))
   }
-  // A CSV value containing newlines (html2text/markdown/wordwrap) is quoted but
-  // spans multiple PHYSICAL lines, which is how the CLI-seeded smoke.expected
-  // captures it. Split so the produced physical lines align with the expected.
   return lines.flatMap((l) => l.split('\n'))
 }
 
-/** Normalize CLI-shaped output the way smoke.py does (splitlines + rstrip +
- *  drop blanks): rstrip each line (strips the trailing \r from CRLF, which
- *  HTML/markdown extensions emit) and drop blank lines. DuckDB's CLI emits blanks
- *  for empty-string values and inside multi-line values; the corpus drops them
- *  (NULL renders as the literal "NULL", not blank). */
 function normalize(lines) {
   return lines.map((l) => l.replace(/[\r ]+$/, '')).filter((l) => l !== '')
 }
 
-/** Expected lines: drop `#` comments, then normalize (rstrip + drop blanks). */
 function expectedLines(text) {
   return normalize(text.split('\n').filter((l) => !l.trimStart().startsWith('#')))
 }
 
-/** Diff produced vs expected, honoring ~~ (skip) and ? (any non-empty). Both
- *  sides are already normalized (rstripped, blanks dropped). */
 function compare(produced, expected) {
   for (let i = 0; i < expected.length; i++) {
     const exp = expected[i]
@@ -142,13 +128,16 @@ function compare(produced, expected) {
 // --- per-extension run ------------------------------------------------------
 
 async function runExtension(coreBytes, entry) {
-  // Fresh core + host per extension (see file header).
-  const host = createExtensionHost()
+  const driverBundle = await createDuckLinkDriver({ jspi: 'auto' })
+  const host = createExtensionHost(driverBundle)
   await host.preload(entry.name, await bytes(entry.wasmUrl))
-  const db = await instantiateCore(coreBytes, host.coreImports())
-  const conn = db.open(undefined)
+  const db = await instantiateCore(coreBytes, host.coreImports(), { driverBundle })
+  const openRes = await db.open(undefined)
+  if (openRes.tag === 'err') throw new Error(`open: ${openRes.val}`)
+  const conn = openRes.val
   try {
-    await db.execute(conn, `LOAD ${entry.name}`)
+    const load = await db.execute(conn, `LOAD ${entry.name}`)
+    if (load.tag === 'err') throw new Error(`LOAD ${entry.name}: ${JSON.stringify(load.val)}`)
     const produced = []
     for (const stmt of statements(entry.smokeSql)) {
       produced.push(...(await runStmt(db, conn, stmt)))
@@ -161,18 +150,13 @@ async function runExtension(coreBytes, entry) {
       ? { name: entry.name, status: 'MISMATCH', note: diff }
       : { name: entry.name, status: 'PASS' }
   } catch (e) {
-    const msg = (e && (e.payload?.val ?? e.payload ?? e.message)) || String(e)
+    const msg = (e && e.message) || String(e)
     return { name: entry.name, status: 'ERROR', note: String(msg).slice(0, 300) }
   } finally {
-    try {
-      db.close(conn)
-    } catch {}
+    try { await db.close(conn) } catch {}
   }
 }
 
-// Single-extension mode: the driver navigates here with `?ext=<name>` and a
-// per-extension timeout, so one hanging extension (e.g. a virtual socket that
-// never returns) only costs that extension, not the whole corpus.
 async function main() {
   const out = document.getElementById('out')
   out.dataset.status = 'running'

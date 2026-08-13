@@ -1,7 +1,12 @@
-// Browser entry: load the sample extension into the in-browser DuckDB and call
-// one of its registered functions — the full loader pipeline (native host's job)
-// running in the browser.
-import { instantiateCore } from './run-core.mjs'
+// Browser entry: load the sample extension into the in-browser DuckDB and
+// call one of its registered functions — the full loader pipeline (native
+// host's job) running in the browser, on the wasm-cm runtime-guest lane.
+//
+// Depends on `web/public/sample_extension.wasm` — dropped there by
+// `copy-wasm.sh`. Regenerate the extension's runtime-guest bindings alongside
+// the core's with `npm run generate` (which iterates every staged extension
+// wasm) before running.
+import { createDuckLinkDriver, instantiateCore } from './run-core.mjs'
 import { createExtensionHost } from './extension-host.mjs'
 
 async function bytes(url) {
@@ -19,12 +24,19 @@ async function main() {
       bytes('./sample_extension.wasm'),
     ])
 
-    const host = createExtensionHost()
+    // Shared driver + polyfill so core + extension ride the same runtime-guest
+    // and callback dispatch is a direct `driver.callExport` (no cross-runtime
+    // hop). See run-core.mjs::createDuckLinkDriver.
+    const driverBundle = await createDuckLinkDriver({ jspi: 'auto' })
+    const host = createExtensionHost(driverBundle)
     await host.preload('sample_extension', extBytes)
 
-    const db = await instantiateCore(coreBytes, host.coreImports())
-    const conn = db.open(undefined)
-    await db.execute(conn, 'LOAD sample_extension')
+    const db = await instantiateCore(coreBytes, host.coreImports(), { driverBundle })
+    const openRes = await db.open(undefined)
+    if (openRes.tag === 'err') throw new Error(`open: ${openRes.val}`)
+    const conn = openRes.val
+    const loadRes = await db.execute(conn, 'LOAD sample_extension')
+    if (loadRes.tag === 'err') throw new Error(`LOAD sample_extension: ${JSON.stringify(loadRes.val)}`)
 
     // Exercise every capability the sample extension registers — scalar / table
     // / aggregate / cast dispatch back to the loaded extension instance, while
@@ -41,19 +53,22 @@ async function main() {
     let failed = 0
     // BigInt-safe stringify: typed integer columns come back as JS BigInt.
     const ser = (x) => JSON.stringify(x, (_, v) => (typeof v === 'bigint' ? `${v}n` : v))
-    // execute is JSPI-promised (async); run cases sequentially so the await
-    // chain preserves order and the shared connection's statement ordering.
     const lines = []
     for (const [label, sql] of cases) {
       try {
-        const result = await db.execute(conn, sql)
-        lines.push(label.padEnd(38) + ' = ' + ser(result.rows))
+        const res = await db.execute(conn, sql)
+        if (res.tag === 'err') {
+          failed++
+          lines.push(label.padEnd(38) + ' = ERROR ' + ser(res.val))
+        } else {
+          lines.push(label.padEnd(38) + ' = ' + ser(res.val.rows))
+        }
       } catch (e) {
         failed++
-        lines.push(label.padEnd(38) + ' = ERROR ' + ser((e && e.payload) || String(e)))
+        lines.push(label.padEnd(38) + ' = ERROR ' + ser((e && e.message) || String(e)))
       }
     }
-    db.close(conn)
+    await db.close(conn)
 
     out.textContent = lines.join('\n')
     out.dataset.status = failed === 0 ? 'ok' : 'error'

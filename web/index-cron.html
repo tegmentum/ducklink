@@ -28,6 +28,10 @@
     </div>
     <h2>Status</h2>
     <pre id="status" data-status="init">loading…</pre>
+    <!-- headless verify.mjs polls #out for `ok`/`error`; cron is an
+         auto-ticking demo (setInterval) so it never "completes" — treat
+         successful boot as pass. -->
+    <pre id="out" data-status="init" style="display:none"></pre>
     <h2>__cron_jobs</h2>
     <pre id="jobs"></pre>
     <h2>Log</h2>

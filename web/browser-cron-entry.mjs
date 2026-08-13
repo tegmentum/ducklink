@@ -1,9 +1,10 @@
 // Browser entry for the cron demo: load ducklink_core + cron + cron_scheduler
-// into the in-browser DuckDB, seed a job, and drive a tick loop from
-// setInterval. This is the "browser tab is the driver" shape the wasm-driver
-// design pitched; here JavaScript is the wasi-preview2 host, so we run the
-// same SQL the native `ducklink cron run` tick loop runs (see cron_cli::tick).
-import { instantiateCore } from './run-core.mjs'
+// through the wasm-cm runtime-guest driver, seed a job, and drive a tick loop
+// from setInterval. This is the "browser tab is the driver" shape the
+// wasm-driver design pitched; JavaScript is the wasi-preview2 host, so we run
+// the same SQL the native `ducklink cron run` tick loop runs
+// (see cron_cli::tick).
+import { createDuckLinkDriver, instantiateCore } from './run-core.mjs'
 import { createExtensionHost } from './extension-host.mjs'
 
 async function bytes(url) {
@@ -66,41 +67,42 @@ async function main() {
     bytes('./cron_scheduler.wasm'),
   ])
 
-  const host = createExtensionHost()
+  const driverBundle = await createDuckLinkDriver({ jspi: 'auto' })
+  const host = createExtensionHost(driverBundle)
   await host.preload('cron', cronBytes)
   await host.preload('cron_scheduler', cronSchedBytes)
 
-  const db = await instantiateCore(coreBytes, host.coreImports())
-  const conn = db.open(undefined)
-  await db.execute(conn, 'LOAD cron')
-  await db.execute(conn, 'LOAD cron_scheduler')
+  const db = await instantiateCore(coreBytes, host.coreImports(), { driverBundle })
+  const openRes = await db.open(undefined)
+  if (openRes.tag === 'err') throw new Error(`open: ${openRes.val}`)
+  const conn = openRes.val
+  const loadCron = await db.execute(conn, 'LOAD cron')
+  if (loadCron.tag === 'err') throw new Error(`LOAD cron: ${JSON.stringify(loadCron.val)}`)
+  const loadSched = await db.execute(conn, 'LOAD cron_scheduler')
+  if (loadSched.tag === 'err') throw new Error(`LOAD cron_scheduler: ${JSON.stringify(loadSched.val)}`)
   for (const stmt of BOOTSTRAP_SQL.split(';').map((s) => s.trim()).filter(Boolean)) {
-    await db.execute(conn, stmt)
+    const r = await db.execute(conn, stmt)
+    if (r.tag === 'err') throw new Error(`bootstrap '${stmt.slice(0, 40)}…': ${JSON.stringify(r.val)}`)
   }
   status.textContent = 'ready — press a button.'
 
   async function refreshJobs() {
-    const result = await db.execute(
+    const res = await db.execute(
       conn,
       'SELECT name, schedule, next_run_at, last_run_at, last_status FROM __cron_jobs ORDER BY name'
     )
-    jobsBox.textContent = ser(result.rows)
+    if (res.tag === 'err') { jobsBox.textContent = 'ERR: ' + JSON.stringify(res.val); return }
+    jobsBox.textContent = ser(res.val.rows)
   }
 
   // The tick body: read due jobs, pre-advance next_run_at, fire each one,
   // record __cron_runs, release the per-job lease. Identical shape to
-  // cron_cli::tick_body in Rust — this file is the counterpart proof that
-  // "the whole scheduler is pure SQL" holds outside the CLI.
+  // cron_cli::tick_body in Rust.
   async function tick() {
     const now = Date.now()
-    // Per-job lease acquire happens inside the loop below; a global lease
-    // for the whole scheduler is v0 semantics we deliberately do not
-    // reproduce here (see cron.md "Per-job leases").
-    const dueRes = await db.execute(
-      conn,
-      `SELECT id, sql FROM cron_due(${now})`
-    )
-    if (dueRes.rows.length === 0) return { fired: 0, contended: 0 }
+    const dueRes = await db.execute(conn, `SELECT id, sql FROM cron_due(${now})`)
+    if (dueRes.tag === 'err') throw new Error(`cron_due: ${JSON.stringify(dueRes.val)}`)
+    if (dueRes.val.rows.length === 0) return { fired: 0, contended: 0 }
 
     // Pre-advance every due row BEFORE firing (skip-semantics: a crash
     // mid-tick doesn't re-fire the same window).
@@ -114,7 +116,7 @@ async function main() {
 
     let fired = 0
     let contended = 0
-    for (const row of dueRes.rows) {
+    for (const row of dueRes.val.rows) {
       const id = row[0]
       const sql = row[1]
       const leaseKey = `job:${id}`
@@ -129,7 +131,7 @@ async function main() {
          WHERE __cron_leases.expires_at <= ${now}
          RETURNING holder`
       )
-      const heldByUs = acquire.rows[0] && acquire.rows[0][0] === NODE
+      const heldByUs = acquire.tag === 'ok' && acquire.val.rows[0] && acquire.val.rows[0][0] === NODE
       if (!heldByUs) {
         contended++
         continue
@@ -137,18 +139,14 @@ async function main() {
       const t0 = performance.now()
       let ok = true
       let errMsg = null
-      try {
-        await db.execute(conn, sql)
-      } catch (e) {
-        ok = false
-        errMsg = (e && e.payload && e.payload.message) || (e && e.message) || String(e)
-      }
+      const runRes = await db.execute(conn, sql)
+      if (runRes.tag === 'err') { ok = false; errMsg = JSON.stringify(runRes.val) }
       const ms = Math.round(performance.now() - t0)
-      const status = ok ? 'fired' : 'failed'
+      const statusStr = ok ? 'fired' : 'failed'
       const errLit = errMsg ? `'${errMsg.replace(/'/g, "''")}'` : 'NULL'
       await db.execute(
         conn,
-        `UPDATE __cron_jobs SET last_status = '${status}', last_error = ${errLit} WHERE id = ${id};`
+        `UPDATE __cron_jobs SET last_status = '${statusStr}', last_error = ${errLit} WHERE id = ${id};`
       )
       await db.execute(
         conn,
@@ -181,10 +179,8 @@ async function main() {
   }
 
   document.getElementById('schedule').addEventListener('click', async () => {
-    // Schedule (or re-schedule) a demo job that fires every minute. Any
-    // valid DuckDB SQL works here — SELECT now() is safe and observable.
     try {
-      await db.execute(
+      const r = await db.execute(
         conn,
         `INSERT INTO __cron_jobs (id, name, schedule, sql, active, catch_up, next_run_at, nodename, database)
          VALUES (cron_id('demo'), 'demo', '* * * * *', 'SELECT now();', true, 'skip',
@@ -193,6 +189,7 @@ async function main() {
              schedule = excluded.schedule, sql = excluded.sql,
              active = true, next_run_at = cron_next(excluded.schedule, epoch_ms(now()))`
       )
+      if (r.tag === 'err') throw new Error(JSON.stringify(r.val))
       log('scheduled demo job (`* * * * *` → SELECT now())', 'ok')
       await refreshJobs()
     } catch (e) {
@@ -211,10 +208,23 @@ async function main() {
   await refreshJobs()
   let autoTick = setInterval(() => runTick('auto tick'), INTERVAL_MS)
   log(`auto-ticking every ${INTERVAL_MS / 1000}s — press Stop to halt`)
+
+  // Signal the headless verify.mjs harness that boot completed successfully.
+  // The auto-tick keeps running for interactive dev-mode use.
+  const outEl = document.getElementById('out')
+  if (outEl) {
+    outEl.textContent = 'boot ok: cron + cron_scheduler loaded, tick loop armed'
+    outEl.dataset.status = 'ok'
+  }
 }
 
 main().catch((e) => {
   const s = document.getElementById('status')
   s.dataset.status = 'error'
   s.textContent = 'FATAL: ' + (e && (e.stack || e.message) || e)
+  const outEl = document.getElementById('out')
+  if (outEl) {
+    outEl.textContent = 'ERROR: ' + (e && (e.stack || e.message) || e)
+    outEl.dataset.status = 'error'
+  }
 })

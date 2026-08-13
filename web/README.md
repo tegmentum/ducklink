@@ -30,8 +30,26 @@ driver. No jco transpile, no wasi-polyfill `RuntimeBindgen`.
   bundle; `createWasiProviders` returns the interface-keyed impls for
   hand-off to the bindings' `registerHostProviders`.
 - **duckdb:\* + tvm:memory imports** — stubbed for the plain-query
-  path. Extension loading + TVM spill are separate lanes not yet
-  ported to the runtime-guest driver (see "Follow-ups" below).
+  path by `run-core.mjs::duckdbStubImpls`. The two active override
+  seams are:
+  - **`web/tvm-host.mjs`** — a JS TVM host (regions in the page heap,
+    coalescing free-list allocator) that plugs the
+    `tvm:memory/manager@0.1.0` + `tvm:memory/bytes@0.1.0` interfaces
+    with real backends. `browser-tvm-entry.mjs` passes it in as
+    `additionalImpls` to force >memory_limit spill through JS-owned
+    storage. Adapted to the runtime-guest `{tag:'ok',val}` /
+    `{tag:'err',val}` return convention (was previously the
+    `throw {payload}` jco shape).
+  - **`web/extension-host.mjs`** — boots each DuckDB extension
+    component through the SAME runtime-guest driver
+    (`createDuckLinkDriver` returns a `{driver, polyfill}` bundle
+    both consumers share). Per-extension bindings emitted by
+    `generate.sh` (one pair per staged `.wasm` in `public/`) provide
+    the `registerHostProviders` + `bindRuntimeGuest` seam;
+    registrations from `guest.load()` flow into a `pending` record
+    the CORE later drains through `extension-loader-hooks`, and
+    core→extension `callback-dispatch` forwards straight through the
+    driver's `callExport`.
 
 This is the same shape elena-wasm's `@wasmos/dataset-ducklink` uses
 (the W1c commit in that repo's `docs/vela-wasmos-browser-runtime.md`
@@ -56,19 +74,55 @@ plan doc — this landing is the W6 follow-up).
 ## Files
 
 - `bindings-runtime-guest/` — `wit-js-bindgen --role runtime-guest`
-  output. Regenerate with `npm run generate`. Do not hand-edit.
+  output. One `<name>.runtime-guest.mjs` per component: `libduckdb`
+  for the core, plus one per staged extension `.wasm`
+  (`cron`, `cron_scheduler`, `aba`, `sample_extension`). Regenerate
+  with `npm run generate`. Do not hand-edit.
 - `generate.sh` — thin wrapper around the `wit-js-bindgen` binary.
   Reads `WIT_JS_BINDGEN` (path to the binary) and
   `DUCKLINK_CORE_WASM` (path to the wasm; defaults to
-  `public/ducklink_core.wasm`).
-- `run-core.mjs` — `instantiateCore(componentBytes, additionalImpls?)`
-  boots the driver, wires host providers, parses + instantiates the
-  component, and returns the bound `duckdb:component/database`
-  interface. `runQuery(bytes, sql)` is the one-shot helper.
+  `public/ducklink_core.wasm`). Also iterates each known extension
+  wasm staged in `public/` and emits its bindings pair alongside the
+  core's — missing extensions are skipped.
+- `copy-wasm.sh` — resolves `ducklink_core.wasm` +
+  demo-extension wasms into `public/`. Works from a main-repo
+  checkout AND from a git worktree under `.claude/worktrees/<name>/`
+  by asking git for the main repo root (relative `../..` walks land
+  in the worktree tree, not `~/git`).
+- `run-core.mjs` — `createDuckLinkDriver()` boots the shared
+  runtime-guest driver + polyfill bundle;
+  `instantiateCore(bytes, additionalImpls?, {driverBundle?})` wires
+  host providers, parses + instantiates the core component, and
+  returns the bound `duckdb:component/database` interface.
+  `runQuery(bytes, sql)` is the one-shot helper.
+- `extension-host.mjs` — boots DuckDB extension components on the
+  shared driver, exposes `preload(name, bytes)` +
+  `coreImports()` for wire-up into `instantiateCore(..., host.coreImports())`.
+- `tvm-host.mjs` — JS-backed regions satisfying
+  `tvm:memory/{manager,bytes}@0.1.0`. Pass `tvm.impls` as
+  `additionalImpls` to override the throw-on-call stubs. Unit test
+  under `tvm-host.test.mjs` (`npm run test-tvm-host`).
 - `browser-entry.mjs` + `index.html` — the primary smoke: fetch the
   core wasm, run a query, paint the result.
-- `verify.mjs` — headless Chromium driver over `index.html`. Reports
-  `ok` / `error` / `timeout` + the rendered `<pre>` contents.
+- `browser-prepared-entry.mjs` + `index-prepared.html` — exercise the
+  prepared-statement + `openWithConfig` + Arrow IPC surface directly
+  on the core.
+- `browser-tvm-entry.mjs` + `index-tvm.html` — >memory_limit sort
+  spilling into `tvm-host.mjs`'s regions.
+- `browser-ext-entry.mjs` + `index-ext.html` — load
+  `sample_extension.wasm` (requires the wasm; a stub component whose
+  smoke lives in the corpus lane), dispatch each registered
+  capability.
+- `browser-aba-entry.mjs` + `index-aba.html` — load the reconciled
+  `aba` extension, run `aba_validate` cases.
+- `browser-cron-entry.mjs` + `index-cron.html` — the cron demo
+  ("browser tab is the driver"): loads `cron` + `cron_scheduler`,
+  bootstraps the schema, exposes buttons to schedule + tick jobs.
+- `browser-corpus-entry.mjs` + `index-corpus.html` — Scenario-3
+  corpus harness (one extension per navigation, driven by
+  `corpus-verify.mjs`).
+- `verify.mjs` — headless Chromium driver over any `index*.html`.
+  Reports `ok` / `error` / `timeout` + the rendered `<pre>` contents.
 
 ## Setup
 
@@ -91,17 +145,41 @@ npm run generate        # regenerate bindings against the staged wasm
 ## Run it
 
 ```bash
-npm run dev             # vite dev server; open the URL, watch <pre>
-npm run verify          # headless Chromium: instantiates + runs a query
+npm run dev              # vite dev server; open the URL, watch <pre>
+npm run verify           # headless Chromium: instantiates + runs a query
+npm run verify-prepared  # prepared statements + Arrow IPC surface
+npm run verify-tvm-spill # >memory_limit sort through the JS TVM host
+npm run verify-ext       # sample_extension load + dispatch (needs its wasm)
+npm run verify-aba       # reconciled aba extension
+npm run verify-cron      # cron + cron_scheduler boot smoke (interactive dev)
+npm run test-tvm-host    # unit test the TVM host in Node
 ```
 
-Expected `verify` output on success:
+## Current state (August 2026)
+
+Every entry now boots the runtime-guest driver, parses + instantiates
+its wasip2 components, and reaches the first `callExport` on the guest
+side. The primary `verify`, `verify-prepared`, and `verify-tvm-spill`
+paths all fingerprint on the same elena-wasm-side wall:
 
 ```
-=== RESULT status: ok ===
-columns: answer, two
-rows: [[{"tag":"int64","val":"42n"},{"tag":"int64","val":"2n"}]]
+in call_export('duckdb:component/database#open'):
+  host-call: host-create-host-func trampoline (CM dispatch):
+  enum#4: engine trap: wasmcm HostCallback dispatch
+  (memfull, func_idx=0) trapped: engine: io error: [object Object]
 ```
+
+`verify-aba` reaches the same wall on `db.open` AFTER the extension's
+own `guest.load()` succeeded (aba's `duckdb:extension/*@5.0.0` surface
+boots clean through the runtime-guest bridge). `verify-cron` hits the
+same wall inside `guest.load()` for `cron@4.0.0` (the older wasi @0.2.3
+interfaces resolve through the polyfill's version-agnostic router).
+
+This is a strict advancement over the W6 status ("layout walker
+recursion inside `wasm-function[3881]`"): instantiation now completes
+end-to-end; the trap moved forward to the first suspending JSPI
+crossing. Tracked as a parallel elena-wasm concern (JSPI Suspender /
+FuncType wall — agents (a) and (b) in the concurrent workstream).
 
 ## Regenerate bindings
 
@@ -114,27 +192,28 @@ Overrides:
 - `WIT_JS_BINDGEN=/other/path/wit-js-bindgen npm run generate`
 - `DUCKLINK_CORE_WASM=/absolute/path.wasm npm run generate`
 
-## Follow-ups (not in this landing)
+## Follow-ups still deferred
 
-The pre-existing entry points that ride `wasi-polyfill` directly —
-`extension-host.mjs`, `tvm-host.mjs`, `browser-ext-entry.mjs`,
-`browser-tvm-entry.mjs`, `browser-prepared-entry.mjs`,
-`browser-corpus-entry.mjs`, `browser-cron-entry.mjs`,
-`browser-aba-entry.mjs`, `aot-tvm-test.mjs`, `corpus-verify.mjs` — are
-NOT ported to the runtime-guest driver here. They referenced the old
-`configurePolyfill` / `duckdbStubImports` / `hostProviderStubs` helpers
-that this landing removed from `run-core.mjs`, and the wasi-polyfill /
-jco deps they need are no longer declared. They still exist on disk;
-follow-up landings would need to:
-
-1. Rewire `extension-host.mjs` to register per-interface impls into
-   `registerHostProviders` instead of assembling a jco-style `Imports`
-   record (and use the runtime-guest driver's export surface for the
-   extension component's own boot).
-2. Rewire `tvm-host.mjs` similarly for the spill path — the WIT
-   contract is unchanged, only the import wiring differs.
-3. Re-add the removed `verify-*` scripts to `package.json` once each
-   entry point boots on the runtime-guest lane.
+- **`aot-tvm-test.mjs`** — Node-only AOT `jco transpile` +
+  `@bytecodealliance/preview2-shim` lane. Orthogonal to the runtime-
+  guest rewire (a fundamentally different wasip2 compilation path);
+  jco itself is no longer a dep. Kept on disk as a historical
+  reference — restore its verify script only if the jco AOT lane is
+  intentionally revived.
+- **`corpus-verify.mjs`** — the Node-side driver still imports
+  `createTcpGatewayServer` from `@tegmentum/wasi-polyfill` for socket
+  extensions. The BROWSER side (`browser-corpus-entry.mjs`) is on the
+  runtime-guest lane, but the corpus expects a
+  `corpus-manifest.json` built from the repo-root `extensions/` tree,
+  and each per-extension navigation currently trips the same
+  elena-wasm-side `memfull, func_idx=0` wall the primary smoke does.
+  Restoring `corpus-verify` as a full-corpus signal blocks on that
+  wall clearing.
+- **`sample_extension.wasm`** — the artifact at
+  `artifacts/extensions/sample_extension.wasm` is zero-length in the
+  current tree. `copy-wasm.sh` skips it with a warning; `verify-ext`
+  cannot run until the extension is rebuilt. `generate.sh` picks it
+  up automatically when the wasm reappears.
 
 Cross-repo counterpart lives in elena-wasm's plan doc rows W2 (host-
 component) and W3 (sdk) — the same rewire pattern applied to each

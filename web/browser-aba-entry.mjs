@@ -1,8 +1,8 @@
-// Browser entry: load the real `aba` extension (@2.2.0, reconciled) into the
-// in-browser DuckDB core and dispatch its scalar `aba_validate` through jco +
-// extension-host.mjs — the proof that the rebuilt browser core composes with a
-// real reconciled extension in Chromium.
-import { instantiateCore } from './run-core.mjs'
+// Browser entry: load the real `aba` extension (reconciled) into the
+// in-browser DuckDB core and dispatch its scalar `aba_validate` through the
+// runtime-guest driver + extension-host.mjs — the proof that the rebuilt
+// browser core composes with a real reconciled extension in Chromium.
+import { createDuckLinkDriver, instantiateCore } from './run-core.mjs'
 import { createExtensionHost } from './extension-host.mjs'
 
 async function bytes(url) {
@@ -20,12 +20,16 @@ async function main() {
       bytes('./aba.wasm'),
     ])
 
-    const host = createExtensionHost()
+    const driverBundle = await createDuckLinkDriver({ jspi: 'auto' })
+    const host = createExtensionHost(driverBundle)
     await host.preload('aba', extBytes)
 
-    const db = await instantiateCore(coreBytes, host.coreImports())
-    const conn = db.open(undefined)
-    await db.execute(conn, 'LOAD aba')
+    const db = await instantiateCore(coreBytes, host.coreImports(), { driverBundle })
+    const openRes = await db.open(undefined)
+    if (openRes.tag === 'err') throw new Error(`open: ${openRes.val}`)
+    const conn = openRes.val
+    const loadRes = await db.execute(conn, 'LOAD aba')
+    if (loadRes.tag === 'err') throw new Error(`LOAD aba: ${JSON.stringify(loadRes.val)}`)
 
     const cases = [
       ["aba_validate('021000021') (Chase)", "SELECT aba_validate('021000021') AS v"],
@@ -38,14 +42,19 @@ async function main() {
     let failed = 0
     for (const [label, sql] of cases) {
       try {
-        const result = await db.execute(conn, sql)
-        lines.push(label.padEnd(36) + ' = ' + ser(result.rows))
+        const res = await db.execute(conn, sql)
+        if (res.tag === 'err') {
+          failed++
+          lines.push(label.padEnd(36) + ' = ERROR ' + ser(res.val))
+        } else {
+          lines.push(label.padEnd(36) + ' = ' + ser(res.val.rows))
+        }
       } catch (e) {
         failed++
-        lines.push(label.padEnd(36) + ' = ERROR ' + ser((e && e.payload) || String(e)))
+        lines.push(label.padEnd(36) + ' = ERROR ' + ser((e && e.message) || String(e)))
       }
     }
-    db.close(conn)
+    await db.close(conn)
 
     out.textContent = lines.join('\n')
     out.dataset.status = failed === 0 ? 'ok' : 'error'

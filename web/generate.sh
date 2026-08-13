@@ -75,5 +75,33 @@ mv "$OUT_DIR/root.runtime-guest.mjs" "$OUT_DIR/libduckdb.runtime-guest.mjs"
 cp "$OUT_DIR/root.runtime-guest.d.ts" "$OUT_DIR/libduckdb.runtime-guest.d.mts"
 mv "$OUT_DIR/root.runtime-guest.d.ts" "$OUT_DIR/libduckdb.runtime-guest.d.ts"
 
+# --- extension bindings ------------------------------------------------------
+# The extension-host lane boots each demo extension through the SAME
+# runtime-guest driver the core uses. Each extension is its own wasip2
+# component with its own WIT surface (guest.load exports, callback-dispatch
+# exports, runtime/catalog/files imports), so it needs its own generated
+# bindings pair. We emit one bindings pair per staged extension wasm — the
+# `web/public/<name>.wasm` files `copy-wasm.sh` drops next to
+# `ducklink_core.wasm`. Missing wasms are skipped (the plain-query smoke
+# doesn't need them, and not every worktree stages every extension).
+EXT_NAMES=(sample_extension cron cron_scheduler aba)
+for ext in "${EXT_NAMES[@]}"; do
+    ext_wasm="$SCRIPT_DIR/public/${ext}.wasm"
+    if [[ ! -s "$ext_wasm" ]]; then
+        echo "  (skipping $ext — no wasm staged at $ext_wasm)"
+        continue
+    fi
+    ext_out="$OUT_DIR/ext-${ext}"
+    mkdir -p "$ext_out"
+    "$WIT_JS_BINDGEN" "$ext_wasm" \
+        --world root --role runtime-guest \
+        --out "$ext_out"
+    # Rename to a predictable name the extension-host importer can use.
+    mv "$ext_out/root.runtime-guest.mjs" "$OUT_DIR/${ext}.runtime-guest.mjs"
+    cp "$ext_out/root.runtime-guest.d.ts" "$OUT_DIR/${ext}.runtime-guest.d.mts"
+    mv "$ext_out/root.runtime-guest.d.ts" "$OUT_DIR/${ext}.runtime-guest.d.ts"
+    rmdir "$ext_out"
+done
+
 echo "generated (byte-frame runtime-guest bindings, from wasm):"
 ls -1 "$OUT_DIR" | sed 's/^/  /'
