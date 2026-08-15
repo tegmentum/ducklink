@@ -8258,11 +8258,41 @@ pub(crate) struct DriverCoreState {
 /// `db_path` semantics match the WIT contract: `None` (or an empty
 /// string) opens `:memory:`; otherwise the path is interpreted by the
 /// core's WASI ctx against `preopens`.
+///
+/// This is the cron-driver-tool shape (`bootstrap_sql = ["LOAD cron; LOAD
+/// cron_scheduler;"]`). Callers that don't want cron loaded — e.g.
+/// out-of-tree consumers using ducklink-host to run their own SQL
+/// pipelines — should call [`open_driver_core_with_bootstrap`] and pass
+/// their own `bootstrap_sql` (empty slice = no bootstrap).
 pub(crate) fn open_driver_core(
     engine: &Engine,
     artifacts: &ComponentArtifacts,
     preopens: &[(&Path, &str)],
     db_path: Option<&str>,
+) -> Result<DriverCoreState> {
+    open_driver_core_with_bootstrap(
+        engine,
+        artifacts,
+        preopens,
+        db_path,
+        &["LOAD cron; LOAD cron_scheduler;"],
+    )
+}
+
+/// Same as [`open_driver_core`] but with caller-supplied bootstrap SQL.
+/// Each string in `bootstrap_sql` is executed in order on the freshly
+/// opened connection before the state is returned; pass an empty slice
+/// to skip bootstrap entirely (useful for consumers that only want a
+/// bare DuckDB core with no extensions loaded, e.g. an ingest pipeline
+/// that just runs `CREATE TABLE` + `COPY FROM`).
+///
+/// The pub-facing wrapper is `driver_exec::DriverConnection::open_with_bootstrap`.
+pub(crate) fn open_driver_core_with_bootstrap(
+    engine: &Engine,
+    artifacts: &ComponentArtifacts,
+    preopens: &[(&Path, &str)],
+    db_path: Option<&str>,
+    bootstrap_sql: &[&str],
 ) -> Result<DriverCoreState> {
     let core_wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], preopens)?;
     let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
@@ -8291,17 +8321,18 @@ pub(crate) fn open_driver_core(
             .map_err(|e| anyhow::anyhow!("driver-core: open failed: {e}"))?
     };
 
-    // Bootstrap: load the two extensions ONCE. Persisting across calls
-    // (that's the whole point of moving to a persistent core) means later
-    // `cron_next` / `cron_advance` / `cron_due` references just work.
+    // Bootstrap: run each caller-supplied SQL string once on the fresh
+    // connection. For the cron-driver-tool this is
+    // `"LOAD cron; LOAD cron_scheduler;"`; for a bare pipeline it's `[]`.
     {
         let mut c = core.lock().unwrap_or_else(|e| e.into_inner());
-        let bootstrap = "LOAD cron; LOAD cron_scheduler;";
-        c.with_database(|guest, store| guest.call_execute(store, connection.clone(), bootstrap))
-            .map_err(|trap| anyhow::anyhow!("driver-core: bootstrap LOAD trapped: {trap}"))?
-            .map_err(|e| {
-                anyhow::anyhow!("driver-core: bootstrap LOAD failed: {}", core_duckerror_message(e))
-            })?;
+        for sql in bootstrap_sql {
+            c.with_database(|guest, store| guest.call_execute(store, connection.clone(), sql))
+                .map_err(|trap| anyhow::anyhow!("driver-core: bootstrap trapped: {trap}"))?
+                .map_err(|e| {
+                    anyhow::anyhow!("driver-core: bootstrap failed: {}", core_duckerror_message(e))
+                })?;
+        }
     }
 
     Ok(DriverCoreState {

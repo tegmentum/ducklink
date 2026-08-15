@@ -44,7 +44,7 @@ use crate::driver_tool_bindings::duckdb::driver::exec as driver_exec_bindings;
 use crate::driver_tool_bindings::{CronDriverTool, CronDriverToolPre};
 use crate::{
     build_engine_for_driver, driver_core_exec, driver_core_query, open_driver_core,
-    ComponentArtifacts, DriverCoreState,
+    open_driver_core_with_bootstrap, ComponentArtifacts, DriverCoreState,
 };
 
 /// One connection resource, as the wasm tool sees it. Owns the wasm core
@@ -67,6 +67,33 @@ impl DriverConnection {
         // takes `Option<&str>` — a `None` there is the same instruction.
         let db_path = if path.is_empty() { None } else { Some(path) };
         let state = open_driver_core(engine, artifacts, preopens, db_path)?;
+        Ok(Self { state })
+    }
+
+    /// Same as [`open`] but with caller-supplied bootstrap SQL. Each
+    /// string in `bootstrap_sql` is run against the fresh connection
+    /// before the wrapper returns; pass `&[]` to skip bootstrap entirely
+    /// (a bare core, no extensions loaded). Intended entry point for
+    /// out-of-tree embedders that don't want cron loaded — e.g. an
+    /// RxNorm ingest pipeline that runs only `CREATE TABLE` + `COPY FROM`
+    /// + `CREATE INDEX` and does not need any wasm extensions.
+    ///
+    /// [`open`]: DriverConnection::open
+    pub fn open_with_bootstrap(
+        engine: &Engine,
+        artifacts: &ComponentArtifacts,
+        preopens: &[(&Path, &str)],
+        path: &str,
+        bootstrap_sql: &[&str],
+    ) -> Result<Self> {
+        let db_path = if path.is_empty() { None } else { Some(path) };
+        let state = open_driver_core_with_bootstrap(
+            engine,
+            artifacts,
+            preopens,
+            db_path,
+            bootstrap_sql,
+        )?;
         Ok(Self { state })
     }
 
