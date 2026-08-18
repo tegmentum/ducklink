@@ -133,6 +133,19 @@ interface extension-loader-hooks {
         definition-sql: string,
     }
 
+    /// A TABLE macro registered by an extension. Body is a SQL relation
+    /// (SELECT / VALUES / etc.) usable in a FROM clause. Mirrors the
+    /// scalar `macro-registration` shape but the body-sql field is
+    /// named separately from `definition-sql` because the eventual
+    /// DuckDB DDL is `CREATE MACRO name(params) AS TABLE (body-sql)`
+    /// (with `TABLE`), distinct from a scalar macro's `AS (definition-sql)`.
+    record table-macro-registration {
+        schema: string,
+        name: string,
+        parameters: list<string>,
+        body-sql: string,
+    }
+
     record replacement-scan-registration {
         extensions: list<string>,
         function-name: string,
@@ -154,6 +167,7 @@ interface extension-loader-hooks {
         tables: list<table-registration>,
         aggregates: list<aggregate-registration>,
         macros: list<macro-registration>,
+        table-macros: list<table-macro-registration>,
         replacement-scans: list<replacement-scan-registration>,
         logical-types: list<logical-type-registration>,
         casts: list<cast-registration>,

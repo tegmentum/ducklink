@@ -4028,6 +4028,7 @@ type PendingScalar = reg::ScalarReg;
 type PendingTable = reg::TableReg;
 type PendingAggregate = reg::AggregateReg;
 type PendingMacro = reg::MacroReg;
+type PendingTableMacro = reg::TableMacroReg;
 type PendingReplacementScan = reg::ReplacementScanReg;
 type PendingLogicalType = reg::LogicalTypeReg;
 type PendingCast = reg::CastReg;
@@ -6713,6 +6714,12 @@ fn convert_pending_registrations(
             .map(convert_pending_macro_registration)
             .collect::<Vec<_>>()
             .into(),
+        table_macros: data
+            .table_macros
+            .into_iter()
+            .map(convert_pending_table_macro_registration)
+            .collect::<Vec<_>>()
+            .into(),
         replacement_scans: data
             .replacement_scans
             .into_iter()
@@ -6761,6 +6768,22 @@ fn convert_pending_macro_registration(
         name: entry.name,
         parameters: entry.parameters.into(),
         definition_sql: entry.definition_sql,
+    }
+}
+
+/// Forwards a captured table-macro registration to the core wasm. Mirrors
+/// `convert_pending_macro_registration` — the body-sql / definition-sql
+/// split is deliberate: DuckDB's `CREATE MACRO ... AS TABLE (…)` (table
+/// macros) is a distinct catalog concept from `CREATE MACRO ... AS (…)`
+/// (scalar macros).
+fn convert_pending_table_macro_registration(
+    entry: PendingTableMacro,
+) -> core_extension_hooks::TableMacroRegistration {
+    core_extension_hooks::TableMacroRegistration {
+        schema: entry.schema,
+        name: entry.name,
+        parameters: entry.parameters.into(),
+        body_sql: entry.body_sql,
     }
 }
 
