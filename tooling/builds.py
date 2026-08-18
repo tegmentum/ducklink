@@ -16,7 +16,9 @@ A build has TWO embedding layers, which is the ducklink-specific difference:
 Record shape (see registry/builds.json _schema):
   { name, kind: core|composed|bundle,
     core_embedded: [ext...],
-    components: [{name, artifact, hash}...],
+    components: [{name, artifact, hash}...                    (file-based; from `record`)
+                 | {name, hash, size, url?}...] (hash-only; from `record-hash`, no local
+                    artifact file — e.g. a .duckdb release bundle already in R2),
     composed_of: [{name, embeds:[...]}...]   (optional),
     set_hash, created_at }
 
@@ -30,6 +32,11 @@ Subcommands:
   record NAME --embed "a,b,c" [--component name@artifact ...] [--composed-of x=y,z]
                               [--kind core|composed|bundle] [--from-manifest FILE]
                               [--now EPOCH]
+  record-hash NAME --hash HEX --size BYTES [--url URL] [--component-name NAME]
+                              [--kind core|composed|bundle] [--now EPOCH]
+                              — register a bundle entry from a caller-supplied
+                              hash, no local artifact file required (e.g. a
+                              .duckdb release artifact already uploaded to R2).
   list
   show NAME
   gen                 — (re)write BUILDS.md
@@ -38,17 +45,24 @@ Subcommands:
 The env forbids Date.now-style wall-clock reads in scripts, so created_at is taken
 from --now (epoch int) when given, else from the OS clock at record time.
 """
-import argparse, hashlib, json, pathlib, sys, time
+import argparse, hashlib, json, os, pathlib, re, sys, time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BUILDS = ROOT / "registry" / "builds.json"
 ART = ROOT / "artifacts" / "extensions"
 INDEX = ROOT / "registry" / "index.json"
 
+HASH_HEX_LEN = 64  # BLAKE2b-256, digest_size=32 -> 64 hex chars
+HASH_HEX_RE = re.compile(rf"^[0-9a-f]{{{HASH_HEX_LEN}}}$")
+VALID_KINDS = {"core", "composed", "bundle"}
+
 SCHEMA = ("Embedding-tracking for ducklink builds (sqlink Bundles parity). Each "
           "record is a NAMED set of content-hashed embedding members keyed by "
           "set_hash. core_embedded = the wasm core's EMBED_EXTENSIONS set; "
-          "components = loaded/autoloaded/composed component extensions; "
+          "components = loaded/autoloaded/composed component extensions — either "
+          "file-based {name, artifact, hash} (from `record`) or hash-only "
+          "{name, hash, size, url?} with no local artifact file (from `record-hash`, "
+          "e.g. a .duckdb release bundle already in R2); "
           "composed_of = inter-component (wac) compositions and what they embed. "
           "Members are BLAKE2b-256 content hashes; set_hash = BLAKE2b-256 over the "
           "sorted newline-terminated 'name\\thash\\n' member lines.")
@@ -76,7 +90,13 @@ def load_db():
 
 def save_db(db):
     db["updated"] = time.strftime("%Y-%m-%d", time.gmtime())
-    BUILDS.write_text(json.dumps(db, indent=2) + "\n")
+    payload = json.dumps(db, indent=2) + "\n"
+    # atomic write: tmpfile in the same dir + rename, so a crash or a racing CI
+    # job (hash-only registration is meant to be called from CI) can never leave
+    # builds.json truncated or half-written.
+    tmp = BUILDS.with_name(f".{BUILDS.name}.tmp{os.getpid()}")
+    tmp.write_text(payload)
+    tmp.replace(BUILDS)
 
 
 def find(db, name):
@@ -138,6 +158,74 @@ def build_record(name, kind, embed, components, composed_of, now):
     return rec
 
 
+def validate_hash_hex(h):
+    """Fail loudly unless `h` is a 64-char BLAKE2b-256 hex digest."""
+    if not isinstance(h, str) or not HASH_HEX_RE.match(h.lower()):
+        raise ValueError(
+            f"invalid hash: expected a {HASH_HEX_LEN}-char BLAKE2b-256 hex digest, got {h!r}"
+        )
+    return h.lower()
+
+
+def register_hash_only(name, kind, hash_hex, size, url=None, component_name=None, now=None):
+    """Register a bundle entry from a caller-supplied hash — no local file needed.
+
+    Unlike build_record()/cmd_record (which hashes a local artifact on disk),
+    this path takes the (name, kind, hash, size, url) tuple directly: the caller
+    already knows the BLAKE2b-256 digest and size of an artifact that may not be
+    present on this machine at all (e.g. a .duckdb release bundle uploaded
+    straight to R2 by CI). Returns the build record dict — NOT yet persisted;
+    route it through upsert_build() + save_db() to write it.
+    """
+    if kind not in VALID_KINDS:
+        raise ValueError(f"invalid kind: expected one of {sorted(VALID_KINDS)}, got {kind!r}")
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"invalid name: expected a non-empty string, got {name!r}")
+    hash_hex = validate_hash_hex(hash_hex)
+    if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+        raise ValueError(f"invalid size: expected a non-negative int, got {size!r}")
+    if url is not None and not isinstance(url, str):
+        raise ValueError(f"invalid url: expected a string or None, got {url!r}")
+
+    component = {"name": component_name or name, "hash": hash_hex, "size": size}
+    if url:
+        component["url"] = url
+
+    rec = {
+        "name": name,
+        "kind": kind,
+        "core_embedded": [],
+        "components": [component],
+    }
+    rec["set_hash"] = set_hash(members_of(rec))
+    rec["created_at"] = now if now is not None else int(time.time())
+    return rec
+
+
+def upsert_build(db, rec):
+    """Insert/update `rec` in db["builds"] (in place) and return a status message.
+
+    Shared by both the file-based (cmd_record) and hash-only (cmd_record_hash)
+    registration paths — same idempotent-re-record / alias-conflict rules
+    (sqlink parity) either way. Exits the process on a name/set_hash conflict.
+    """
+    existing = find(db, rec["name"])
+    if existing:
+        if existing["set_hash"] == rec["set_hash"]:
+            # idempotent re-record: refresh last_used_at-style touch (keep created_at)
+            rec["created_at"] = existing["created_at"]
+            db["builds"] = [rec if b["name"] == rec["name"] else b for b in db["builds"]]
+            return f"unchanged: {rec['name']} ({rec['set_hash'][:16]}…)"
+        # name exists with a DIFFERENT set_hash — sqlink's alias-conflict rule
+        sys.exit(f"error: build name '{rec['name']}' already exists with a different "
+                 f"set_hash ({existing['set_hash'][:16]}… != {rec['set_hash'][:16]}…). "
+                 f"Pick a new name or delete the old record.")
+    db["builds"].append(rec)
+    return (f"recorded: {rec['name']} [{rec['kind']}] set_hash={rec['set_hash'][:16]}… "
+            f"core_embedded={rec['core_embedded'] or '[]'} "
+            f"components={len(rec['components'])}")
+
+
 def from_manifest(path, name, kind, now):
     """Ingest a self-recording manifest (e.g. spatialproj.compose.json from
     compose.sh, or last-core-build.json from the build script)."""
@@ -163,24 +251,25 @@ def cmd_record(args):
     else:
         rec = build_record(args.name, args.kind, args.embed, args.component,
                            args.composed_of, now)
-    existing = find(db, args.name)
-    if existing:
-        if existing["set_hash"] == rec["set_hash"]:
-            # idempotent re-record: refresh last_used_at-style touch (keep created_at)
-            rec["created_at"] = existing["created_at"]
-            db["builds"] = [rec if b["name"] == args.name else b for b in db["builds"]]
-            save_db(db)
-            print(f"unchanged: {args.name} ({rec['set_hash'][:16]}…)")
-            return
-        # name exists with a DIFFERENT set_hash — sqlink's alias-conflict rule
-        sys.exit(f"error: build name '{args.name}' already exists with a different "
-                 f"set_hash ({existing['set_hash'][:16]}… != {rec['set_hash'][:16]}…). "
-                 f"Pick a new name or delete the old record.")
-    db["builds"].append(rec)
+    msg = upsert_build(db, rec)
     save_db(db)
-    print(f"recorded: {args.name} [{rec['kind']}] set_hash={rec['set_hash'][:16]}… "
-          f"core_embedded={rec['core_embedded'] or '[]'} "
-          f"components={len(rec['components'])}")
+    print(msg)
+
+
+def cmd_record_hash(args):
+    """Hash-only registration: no local artifact file required (CLI wrapper
+    around register_hash_only)."""
+    now = args.now if args.now is not None else int(time.time())
+    db = load_db()
+    try:
+        rec = register_hash_only(args.name, args.kind, args.hash_hex, args.size,
+                                 url=args.url, component_name=args.component_name,
+                                 now=now)
+    except ValueError as e:
+        sys.exit(f"error: {e}")
+    msg = upsert_build(db, rec)
+    save_db(db)
+    print(msg)
 
 
 def cmd_list(args):
@@ -215,7 +304,14 @@ def cmd_show(args):
     comps = b.get("components", [])
     print(f"  components ({len(comps)}):")
     for c in comps:
-        print(f"    - {c['name']:<16} {c['hash'][:16]}…  {c['artifact']}")
+        if "artifact" in c:
+            loc = c["artifact"]
+        else:
+            # hash-only component — no local artifact file
+            loc = c.get("url") or "(hash-only, no local artifact)"
+            if "size" in c:
+                loc += f"  [{c['size']}B]"
+        print(f"    - {c['name']:<16} {c['hash'][:16]}…  {loc}")
     if b.get("composed_of"):
         print(f"  composed_of ({len(b['composed_of'])}):")
         for c in b["composed_of"]:
@@ -234,6 +330,16 @@ def cmd_verify(args):
             issues.append(f"{b['name']}: set_hash mismatch "
                           f"(stored {b['set_hash'][:16]}… != recomputed {recomputed[:16]}…)")
         for c in b.get("components", []):
+            if "artifact" not in c:
+                # hash-only component (e.g. a remote R2 artifact) — nothing local to
+                # recompute against; sanity-check the recorded hash/size shape instead.
+                try:
+                    validate_hash_hex(c.get("hash", ""))
+                except ValueError as e:
+                    issues.append(f"{b['name']}: component '{c['name']}' {e}")
+                if not isinstance(c.get("size"), int) or c["size"] < 0:
+                    issues.append(f"{b['name']}: component '{c['name']}' missing/invalid size")
+                continue
             ap = (ROOT / c["artifact"]) if not pathlib.Path(c["artifact"]).is_absolute() \
                 else pathlib.Path(c["artifact"])
             if not ap.exists():
@@ -308,7 +414,11 @@ def cmd_gen(args):
                  "spatialproj --kind composed --from-manifest "
                  "extensions/spatialproj-component/spatialproj.compose.json`.")
     lines.append("- **Ad-hoc bundles** — `python3 tooling/builds.py record <name> "
-                 "--embed a,b --component jsonfns@artifacts/extensions/jsonfns.wasm`.\n")
+                 "--embed a,b --component jsonfns@artifacts/extensions/jsonfns.wasm`.")
+    lines.append("- **Hash-only bundles** (no local artifact file — e.g. a `.duckdb` "
+                 "release bundle already uploaded to R2) — `python3 tooling/builds.py "
+                 "record-hash <name> --hash <blake2b-256 hex> --size <bytes> "
+                 "[--url <location>]`.\n")
     (ROOT / "BUILDS.md").write_text("\n".join(lines) + "\n")
     print(f"wrote BUILDS.md — {len(builds)} build(s)")
 
@@ -329,6 +439,21 @@ def main():
     p.add_argument("--from-manifest", help="ingest a *.compose.json / last-core-build.json")
     p.add_argument("--now", type=int, default=None, help="created_at epoch (else OS clock)")
     p.set_defaults(func=cmd_record)
+
+    ph = sub.add_parser("record-hash", help="register a bundle entry from a caller-supplied "
+                        "hash — no local artifact file required (e.g. a .duckdb release "
+                        "artifact already uploaded to R2)")
+    ph.add_argument("name")
+    ph.add_argument("--kind", default="bundle", choices=["core", "composed", "bundle"])
+    ph.add_argument("--hash", required=True, dest="hash_hex",
+                    help="BLAKE2b-256 hex digest of the artifact (64 hex chars)")
+    ph.add_argument("--size", required=True, type=int, help="artifact size in bytes")
+    ph.add_argument("--url", default=None, help="optional remote location of the artifact "
+                    "(e.g. an R2 URL)")
+    ph.add_argument("--component-name", default=None, dest="component_name",
+                    help="component name (defaults to NAME)")
+    ph.add_argument("--now", type=int, default=None, help="created_at epoch (else OS clock)")
+    ph.set_defaults(func=cmd_record_hash)
 
     sub.add_parser("list", help="table of all builds").set_defaults(func=cmd_list)
     s = sub.add_parser("show", help="full detail of one build")
