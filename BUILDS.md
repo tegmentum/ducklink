@@ -23,4 +23,5 @@ Inter-component (`wac plug`) compositions and what each sub-component embeds:
 - **Core embedding** — the wasm build script (`../duckdb-wasm/scripts/build-libduckdb-wasm.sh`) writes `registry/last-core-build.json` with the `EMBED_EXTENSIONS` split + the core artifact hash after each build. Ingest with `python3 tooling/builds.py record <name> --kind core --from-manifest registry/last-core-build.json`.
 - **Compositions** — `extensions/spatialproj-component/compose.sh` writes `extensions/spatialproj-component/spatialproj.compose.json` after `wac plug`. Ingest with `python3 tooling/builds.py record spatialproj --kind composed --from-manifest extensions/spatialproj-component/spatialproj.compose.json`.
 - **Ad-hoc bundles** — `python3 tooling/builds.py record <name> --embed a,b --component jsonfns@artifacts/extensions/jsonfns.wasm`.
+- **Hash-only bundles** (no local artifact file — e.g. a `.duckdb` release bundle already uploaded to R2) — `python3 tooling/builds.py record-hash <name> --hash <blake2b-256 hex> --size <bytes> [--url <location>]`.
 
