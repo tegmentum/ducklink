@@ -39,8 +39,8 @@ use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension" });
-use duckdb::extension::{runtime, types};
 use duckdb::extension::column_types as __col;
+use duckdb::extension::{runtime, types};
 use exports::duckdb::extension::{callback_dispatch, guest};
 
 // major-4 colvec<->row adapter (the same one `datalink_extcore::columnar_bridge!`
@@ -64,11 +64,7 @@ impl guest::Guest for Extension {
         Ok(types::Loadresult {
             name: "statsduck".into(),
             version: Some(env!("CARGO_PKG_VERSION").into()),
-            requires: vec![
-                types::Capabilitykind::Scalar,
-                types::Capabilitykind::Table,
-            ]
-            .into(),
+            requires: vec![types::Capabilitykind::Scalar, types::Capabilitykind::Table].into(),
         })
     }
     fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> {
@@ -167,7 +163,10 @@ impl callback_dispatch::Guest for Extension {
             out.push(Self::call_scalar(
                 handle,
                 a,
-                types::Invokeinfo { rowindex: Some(base + i as u64), iswindow: ctx.iswindow },
+                types::Invokeinfo {
+                    rowindex: Some(base + i as u64),
+                    iswindow: ctx.iswindow,
+                },
             )?);
         }
         Ok(__bridge_vals_to_colvec(out))
@@ -176,7 +175,9 @@ impl callback_dispatch::Guest for Extension {
         _handle: u32,
         _args: Vec<callback_dispatch::Colvec>,
     ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("statsduck: no aggregate".into()))
+        Err(types::Duckerror::Unsupported(
+            "statsduck: no aggregate".into(),
+        ))
     }
     fn call_cast_col(
         _handle: u32,
@@ -228,12 +229,11 @@ impl callback_dispatch::Guest for Extension {
         _h: u32,
         _a: Vec<types::Duckvalue>,
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("statsduck: no pragmas".into()))
+        Err(types::Duckerror::Unsupported(
+            "statsduck: no pragmas".into(),
+        ))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("statsduck: no casts".into()))
     }
 }
@@ -244,7 +244,10 @@ fn eval(which: F, args: &[types::Duckvalue]) -> types::Duckvalue {
     use F::*;
     match which {
         Ttest1samp => {
-            match (text_arg(args, 0).as_deref().and_then(parse_vec), f64_arg(args, 1)) {
+            match (
+                text_arg(args, 0).as_deref().and_then(parse_vec),
+                f64_arg(args, 1),
+            ) {
                 (Some(x), Some(mu)) => json_text(stats::ttest_1samp(&x, mu, &alt_arg(args, 2))),
                 _ => types::Duckvalue::Null,
             }
@@ -297,7 +300,10 @@ fn eval(which: F, args: &[types::Duckvalue]) -> types::Duckvalue {
             }
         }
         Sign1samp => {
-            match (text_arg(args, 0).as_deref().and_then(parse_vec), f64_arg(args, 1)) {
+            match (
+                text_arg(args, 0).as_deref().and_then(parse_vec),
+                f64_arg(args, 1),
+            ) {
                 (Some(x), Some(mu)) => json_text(stats::sign_test_1samp(&x, mu, &alt_arg(args, 2))),
                 _ => types::Duckvalue::Null,
             }
@@ -522,10 +528,10 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     };
 
     let reg_fn = |name: &str,
-                      a: std::vec::Vec<runtime::Funcarg>,
-                      ret: types::Logicaltype,
-                      f: F,
-                      desc: &str|
+                  a: std::vec::Vec<runtime::Funcarg>,
+                  ret: types::Logicaltype,
+                  f: F,
+                  desc: &str|
      -> Result<(), types::Duckerror> {
         let h = NEXT.fetch_add(1, Ordering::Relaxed);
         handlers().lock().unwrap().insert(h, f);
@@ -567,14 +573,24 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     )?;
     reg_fn(
         "mann_whitney_u",
-        vec![txt("a"), txt("b"), txt("alternative"), boolean("continuity")],
+        vec![
+            txt("a"),
+            txt("b"),
+            txt("alternative"),
+            boolean("continuity"),
+        ],
         types::Logicaltype::Text,
         F::MannWhitney,
         "Mann-Whitney U (normal approx) -> {u_statistic,z_statistic,p_value}",
     )?;
     reg_fn(
         "wilcoxon_signed_rank",
-        vec![txt("a"), txt("b"), txt("alternative"), boolean("continuity")],
+        vec![
+            txt("a"),
+            txt("b"),
+            txt("alternative"),
+            boolean("continuity"),
+        ],
         types::Logicaltype::Text,
         F::Wilcoxon,
         "Wilcoxon signed-rank test (normal approx) -> JSON result",
@@ -866,11 +882,7 @@ fn corr_matrix_rows(args: &[types::Duckvalue]) -> Rows {
                 stats::pearson_corr(&cols[i].1, &cols[j].1)
             };
             match r {
-                Some(r) => out.push(vec![
-                    txt_v(&cols[i].0),
-                    txt_v(&cols[j].0),
-                    dbl_v(r),
-                ]),
+                Some(r) => out.push(vec![txt_v(&cols[i].0), txt_v(&cols[j].0), dbl_v(r)]),
                 None => {} // skip degenerate / mismatched pairs
             }
         }
@@ -953,10 +965,10 @@ fn register_tables() -> Result<(), types::Duckerror> {
     };
 
     let reg_table = |name: &str,
-                         a: std::vec::Vec<runtime::Funcarg>,
-                         cols: std::vec::Vec<types::Columndef>,
-                         f: F,
-                         desc: &str|
+                     a: std::vec::Vec<runtime::Funcarg>,
+                     cols: std::vec::Vec<types::Columndef>,
+                     f: F,
+                     desc: &str|
      -> Result<(), types::Duckerror> {
         let h = NEXT.fetch_add(1, Ordering::Relaxed);
         handlers().lock().unwrap().insert(h, f);

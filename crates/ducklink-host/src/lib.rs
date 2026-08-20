@@ -98,13 +98,13 @@ use duckdb_core_bindings::duckdb::extension::column_types as core_column_types;
 // directly (see the ATTACH intercept + write intercept in HostState::execute
 // and ADR wasm-ecosystem-at-5-adr.md Decision 3 + Amendment A1).
 use duckdb_core_bindings::duckdb::extension::types as core_types;
-use duckdb_core_bindings::tvm::memory::bytes as core_tvm_bytes;
-use duckdb_core_bindings::tvm::memory::manager as core_tvm_manager;
-use duckdb_core_bindings::tvm::memory::types as core_tvm_types;
 use duckdb_core_bindings::exports::duckdb::component::database as core_db_exports;
 use duckdb_core_bindings::exports::duckdb::extension::{
     config as core_config_exports, logging as core_logging_exports, runtime as core_runtime_exports,
 };
+use duckdb_core_bindings::tvm::memory::bytes as core_tvm_bytes;
+use duckdb_core_bindings::tvm::memory::manager as core_tvm_manager;
+use duckdb_core_bindings::tvm::memory::types as core_tvm_types;
 use ducklink_runtime::duckdb_extension_bindings::duckdb::extension::{
     runtime as extension_runtime, types as extension_types,
 };
@@ -118,8 +118,8 @@ use ducklink_runtime::duckdb_extension_bindings::duckdb::extension::{
 };
 #[cfg(test)]
 use ducklink_runtime::duckdb_extension_bindings::DuckdbExtensionPre;
-use wasmtime::component::__internal::Vec as BindgenVec;
 use ducklink_runtime::{CallbackEntry, CallbackKind, CallbackRegistry};
+use wasmtime::component::__internal::Vec as BindgenVec;
 // M2b: the storage interface's scan types (scan-request / scan-filter /
 // compare-op) used to drive a pushdown scan into a storage component.
 use ducklink_runtime::extension::storage_scan;
@@ -170,7 +170,9 @@ pub use sub_ext::{sub_ext_provider_id, SubExtError, SubExtLoader};
 fn validate_parser_rewrite(ext: &str, query: &str, rewrite: &str) -> Result<(), String> {
     let r = rewrite.trim();
     if r.is_empty() {
-        return Err(format!("parser extension '{ext}' returned an empty rewrite"));
+        return Err(format!(
+            "parser extension '{ext}' returned an empty rewrite"
+        ));
     }
     if r == query.trim() {
         return Err(format!(
@@ -181,9 +183,9 @@ fn validate_parser_rewrite(ext: &str, query: &str, rewrite: &str) -> Result<(), 
 }
 pub mod resolver;
 
+pub mod cron_cli;
 /// `ducklink extension <subcommand>` (alias `ext`) — extension-management CLI UX.
 pub mod extcli;
-pub mod cron_cli;
 // `pub mod driver_exec;` is declared at the top of this file (before the
 // `driver_tool_bindings` bindgen expansion that references its types).
 mod ui_server;
@@ -264,8 +266,8 @@ mod httpd;
 pub use httpd::{serve_httpd, HttpdOptions, TlsMode};
 // duckstream MVP: SigV4 signing (reused verbatim from the wasm s3fs transport)
 // + the native-host checkpoint-snapshot replicator/restore.
-mod sigv4;
 mod replicate;
+mod sigv4;
 pub use replicate::{run_backup, run_restore, ReplicaState, S3Target};
 // `ducklink publish`: upload the catalog + content-addressed artifacts to the
 // shared Cloudflare R2 extension-distribution bucket (reuses `sigv4`).
@@ -592,7 +594,10 @@ impl CoreStoreState {
     // the per-slot generation, and return the WIT handle (carrying the slot
     // generation) to hand back to the guest.
     fn tvm_register(&mut self, region_id: u16, th: tvm_core::Handle) -> core_tvm_types::Handle {
-        let slot = self.tvm_slots.entry((region_id, th.offset)).or_insert((0, None));
+        let slot = self
+            .tvm_slots
+            .entry((region_id, th.offset))
+            .or_insert((0, None));
         slot.0 = slot.0.wrapping_add(1);
         slot.1 = Some(th);
         core_tvm_types::Handle {
@@ -1121,7 +1126,6 @@ struct AppenderEntry {
 // CallbackKind / CallbackEntry / CallbackRegistry moved to the `ducklink-runtime`
 // crate (imported at the top of this file).
 
-
 /// Compile the coarse `DUCKLINK_NETWORK_GRANT` environment variable into a
 /// canonical [`datalink_policy::Policy`] for one extension:
 ///   - unset / empty / "none"  -> `Policy::deny_all()`  (default; secure)
@@ -1136,7 +1140,10 @@ struct AppenderEntry {
 /// later with no behavior change today. Enforcement is unchanged — see
 /// [`network_grant_allows`].
 fn network_grant_policy(extension: &str) -> datalink_policy::Policy {
-    network_grant_policy_for(std::env::var("DUCKLINK_NETWORK_GRANT").ok().as_deref(), extension)
+    network_grant_policy_for(
+        std::env::var("DUCKLINK_NETWORK_GRANT").ok().as_deref(),
+        extension,
+    )
 }
 
 /// Pure adapter: map a `DUCKLINK_NETWORK_GRANT` value (or `None` when unset)
@@ -1203,7 +1210,10 @@ struct DotcmdState {
 }
 impl WasiView for DotcmdState {
     fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView { ctx: &mut self.wasi, table: &mut self.table }
+        WasiCtxView {
+            ctx: &mut self.wasi,
+            table: &mut self.table,
+        }
     }
 }
 impl WasiHttpView for DotcmdState {
@@ -1586,7 +1596,11 @@ impl DotcmdRegistry {
             }
         }
         infos.sort();
-        Self { components, by_name, infos }
+        Self {
+            components,
+            by_name,
+            infos,
+        }
     }
 
     fn load_one(
@@ -2175,7 +2189,9 @@ impl ExtensionManager {
         let nodes = crate::plan_shape::flatten_plan_json(plan_json)
             .map_err(extension_types::Duckerror::Invalidargument)?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("optimizer extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "optimizer extension '{ext}' not loaded"
+            ))
         })?;
         instance.call_optimize(handle, nodes, "")
     }
@@ -2215,8 +2231,9 @@ impl ExtensionManager {
         provider: Option<&str>,
     ) -> Option<(String, u32)> {
         if let Some(p) = provider {
-            if let Some((ext, handle)) =
-                self.secret_backends.get(&(type_name.to_string(), Some(p.to_string())))
+            if let Some((ext, handle)) = self
+                .secret_backends
+                .get(&(type_name.to_string(), Some(p.to_string())))
             {
                 return Some((ext.clone(), *handle));
             }
@@ -2269,10 +2286,7 @@ impl ExtensionManager {
 
     /// Reads the foreign DB file at `dsn`, stages it into the backing component,
     /// and opens the catalog; returns the component-side catalog handle.
-    fn dispatch_storage_attach(
-        &mut self,
-        dsn: &str,
-    ) -> Result<u32, extension_types::Duckerror> {
+    fn dispatch_storage_attach(&mut self, dsn: &str) -> Result<u32, extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         eprintln!("[storage-attach] dispatch_storage_attach ext='{ext}' dsn='{dsn}'");
         // The dsn may be a FILE (sqlite-over-blob) or a CONNECTION STRING
@@ -2287,7 +2301,9 @@ impl ExtensionManager {
             _ => Vec::new(),
         };
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "storage extension '{ext}' not loaded"
+            ))
         })?;
         instance.storage_attach(handle, dsn, &bytes)
     }
@@ -2298,7 +2314,9 @@ impl ExtensionManager {
     ) -> Result<Vec<String>, extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "storage extension '{ext}' not loaded"
+            ))
         })?;
         instance.storage_list_tables(handle, catalog)
     }
@@ -2310,7 +2328,9 @@ impl ExtensionManager {
     ) -> Result<Vec<extension_types::Columndef>, extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "storage extension '{ext}' not loaded"
+            ))
         })?;
         instance.storage_table_columns(handle, catalog, table)
     }
@@ -2322,7 +2342,9 @@ impl ExtensionManager {
     ) -> Result<u32, extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "storage extension '{ext}' not loaded"
+            ))
         })?;
         instance.storage_scan_open(handle, catalog, request)
     }
@@ -2334,7 +2356,9 @@ impl ExtensionManager {
     ) -> Result<Vec<Vec<extension_types::Duckvalue>>, extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "storage extension '{ext}' not loaded"
+            ))
         })?;
         instance.storage_scan_next(handle, scan, max_rows)
     }
@@ -2345,7 +2369,9 @@ impl ExtensionManager {
     ) -> Result<bool, extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "storage extension '{ext}' not loaded"
+            ))
         })?;
         instance.storage_scan_close(handle, scan)
     }
@@ -2362,7 +2388,9 @@ impl ExtensionManager {
     ) -> Result<Vec<u8>, extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "storage extension '{ext}' not loaded"
+            ))
         })?;
         instance.storage_serialize(handle, catalog)
     }
@@ -2381,7 +2409,9 @@ impl ExtensionManager {
     ) -> Result<bool, extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "storage extension '{ext}' not loaded"
+            ))
         })?;
         instance.storage_writes_persist_directly(handle)
     }
@@ -2458,7 +2488,8 @@ impl ExtensionManager {
                 target.extension
             ))
         })?;
-        let scan = instance.storage_scan_open(target.storage_handle, target.catalog_handle, request)?;
+        let scan =
+            instance.storage_scan_open(target.storage_handle, target.catalog_handle, request)?;
         // Drain in one batch. The MAX u32 acts as "give me everything you have";
         // extensions that honour it (sqlitewasm does) return the whole cursor.
         let mut out: Vec<Vec<extension_types::Duckvalue>> = Vec::new();
@@ -2494,7 +2525,9 @@ impl ExtensionManager {
     ) -> Result<u32, extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "storage extension '{ext}' not loaded"
+            ))
         })?;
         instance.storage_begin_transaction(handle, catalog)
     }
@@ -2505,7 +2538,9 @@ impl ExtensionManager {
     ) -> Result<(), extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "storage extension '{ext}' not loaded"
+            ))
         })?;
         instance.storage_commit_transaction(handle, txn)
     }
@@ -2516,7 +2551,9 @@ impl ExtensionManager {
     ) -> Result<(), extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "storage extension '{ext}' not loaded"
+            ))
         })?;
         instance.storage_rollback_transaction(handle, txn)
     }
@@ -2529,7 +2566,9 @@ impl ExtensionManager {
     ) -> Result<(), extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "storage extension '{ext}' not loaded"
+            ))
         })?;
         instance.storage_create_table(handle, txn, table, columns)
     }
@@ -2542,7 +2581,9 @@ impl ExtensionManager {
     ) -> Result<u64, extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "storage extension '{ext}' not loaded"
+            ))
         })?;
         instance.storage_insert_rows(handle, txn, table, rows)
     }
@@ -2580,7 +2621,9 @@ impl ExtensionManager {
     ) -> Result<u64, extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "storage extension '{ext}' not loaded"
+            ))
         })?;
         instance.storage_delete_rows(handle, txn, table, rowids)
     }
@@ -2595,7 +2638,9 @@ impl ExtensionManager {
     ) -> Result<u64, extension_types::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("storage extension '{ext}' not loaded"))
+            extension_types::Duckerror::Invalidstate(format!(
+                "storage extension '{ext}' not loaded"
+            ))
         })?;
         // @5.0.0 dropped the `updated_columns` mask from storage-write-dispatch
         // (the row is now taken as a whole write).
@@ -2684,10 +2729,7 @@ impl ExtensionManager {
     /// Resolve the index backend that should service a `(type_name)` index
     /// operation. Prefer the exact type-name match; otherwise fall back to the
     /// single registered index backend (if unambiguous).
-    fn resolve_index_backend(
-        &self,
-        type_name: &str,
-    ) -> Result<String, extension_types::Duckerror> {
+    fn resolve_index_backend(&self, type_name: &str) -> Result<String, extension_types::Duckerror> {
         if let Some(ext) = self.index_backends.get(type_name) {
             return Ok(ext.clone());
         }
@@ -2777,9 +2819,9 @@ impl ExtensionManager {
     /// a clear message when no files component is loaded, so `http://` without
     /// `LOAD webfs` fails cleanly.
     fn resolve_files_backend(&self) -> Result<(String, u32), String> {
-        self.files_backend
-            .clone()
-            .ok_or_else(|| "no files backend loaded (LOAD a files extension, e.g. webfs)".to_string())
+        self.files_backend.clone().ok_or_else(|| {
+            "no files backend loaded (LOAD a files extension, e.g. webfs)".to_string()
+        })
     }
 
     fn dispatch_file_open(&mut self, url: &str) -> Result<(u32, u64), String> {
@@ -2794,12 +2836,7 @@ impl ExtensionManager {
             .map_err(|e| format!("{e:?}"))
     }
 
-    fn dispatch_file_read(
-        &mut self,
-        file: u32,
-        offset: u64,
-        len: u32,
-    ) -> Result<Vec<u8>, String> {
+    fn dispatch_file_read(&mut self, file: u32, offset: u64, len: u32) -> Result<Vec<u8>, String> {
         let (ext, handle) = self.resolve_files_backend()?;
         let instance = self
             .extensions
@@ -3004,9 +3041,7 @@ impl ExtensionManager {
         let entry = match self.lookup_callback(handle, CallbackKind::Table) {
             Some(entry) => entry,
             None => {
-                eprintln!(
-                    "[extension-manager] dispatch_table received unknown handle {handle}"
-                );
+                eprintln!("[extension-manager] dispatch_table received unknown handle {handle}");
                 return Err(extension_types::Duckerror::Invalidstate(format!(
                     "unknown table callback handle {handle}"
                 )));
@@ -3412,9 +3447,7 @@ impl ExtensionManager {
         let entry = match self.lookup_callback(handle, CallbackKind::Pragma) {
             Some(entry) => entry,
             None => {
-                eprintln!(
-                    "[extension-manager] dispatch_pragma received unknown handle {handle}"
-                );
+                eprintln!("[extension-manager] dispatch_pragma received unknown handle {handle}");
                 return Err(extension_types::Duckerror::Invalidstate(format!(
                     "unknown pragma callback handle {handle}"
                 )));
@@ -3513,10 +3546,7 @@ impl ExtensionManager {
                 );
                 return Ok(false);
             }
-            eprintln!(
-                "[sub-ext] '{sanitized}' bridge wasm: {}",
-                bridge.display()
-            );
+            eprintln!("[sub-ext] '{sanitized}' bridge wasm: {}", bridge.display());
             bridge
         } else {
             // Multi-provider resolution (design A): pick a certified provider via the
@@ -4267,7 +4297,10 @@ impl HostState {
             match res {
                 Ok(Ok(_)) => eprintln!("[autoload] loaded '{name}'"),
                 Ok(Err(err)) => {
-                    eprintln!("[autoload] skipped '{name}': {}", core_duckerror_message(err))
+                    eprintln!(
+                        "[autoload] skipped '{name}': {}",
+                        core_duckerror_message(err)
+                    )
                 }
                 Err(trap) => eprintln!("[autoload] skipped '{name}': {trap}"),
             }
@@ -4423,10 +4456,7 @@ impl HostState {
                     sql,
                     core_duckerror_message(err)
                 ),
-                Err(trap) => eprintln!(
-                    "[ducklink] discovery-view DDL trapped: {}: {}",
-                    sql, trap
-                ),
+                Err(trap) => eprintln!("[ducklink] discovery-view DDL trapped: {}: {}", sql, trap),
             }
         }
         // PREFIX(alias, namespace) — shorter macro that delegates to the
@@ -4437,8 +4467,7 @@ impl HostState {
         // macro is a UX convenience; its absence downgrades cleanly to
         // `SELECT ducklink_prefix(...)` calls, which are the STABILITY.md
         // committed shape anyway.
-        const PREFIX_MACRO_DDL: &str =
-            "CREATE OR REPLACE MACRO PREFIX(alias, namespace) AS \
+        const PREFIX_MACRO_DDL: &str = "CREATE OR REPLACE MACRO PREFIX(alias, namespace) AS \
              ducklink_prefix(alias, namespace)";
         if self.ducklink_prefix_scalar_registered(handle) {
             let res = self.with_core(|core| {
@@ -4478,8 +4507,7 @@ impl HostState {
     /// (no autoloaded extension) doesn't surface a scary "Scalar Function
     /// does not exist" error at connection open.
     fn ducklink_prefix_scalar_registered(&self, handle: &ResourceAny) -> bool {
-        const PROBE: &str =
-            "SELECT 1 FROM duckdb_functions() \
+        const PROBE: &str = "SELECT 1 FROM duckdb_functions() \
              WHERE function_name = 'ducklink_prefix' \
                AND function_type = 'scalar' \
              LIMIT 1";
@@ -4537,16 +4565,16 @@ impl HostState {
                 core.with_database(|guest, store| guest.call_execute(store, conn.clone(), &sql))
             });
             match res {
-                Ok(Ok(_)) => eprintln!(
-                    "[ducklink_load] deferred drain flushed via idempotent `{sql}`"
-                ),
+                Ok(Ok(_)) => {
+                    eprintln!("[ducklink_load] deferred drain flushed via idempotent `{sql}`")
+                }
                 Ok(Err(err)) => eprintln!(
                     "[ducklink_load] deferred drain LOAD for '{name}' returned duckerror: {}",
                     core_duckerror_message(err)
                 ),
-                Err(trap) => eprintln!(
-                    "[ducklink_load] deferred drain LOAD for '{name}' trapped: {trap}"
-                ),
+                Err(trap) => {
+                    eprintln!("[ducklink_load] deferred drain LOAD for '{name}' trapped: {trap}")
+                }
             }
         }
     }
@@ -4658,15 +4686,14 @@ impl HostState {
             if !done_arities.insert((name.clone(), params.len())) {
                 continue;
             }
-            let Some(macro_sql) = build_prefix_alias_macro(&ftype, alias, &name, namespace, &params)
+            let Some(macro_sql) =
+                build_prefix_alias_macro(&ftype, alias, &name, namespace, &params)
             else {
                 continue;
             };
             match self.run_prefix_ddl(conn.clone(), &macro_sql) {
                 Ok(_) => created += 1,
-                Err(err) => eprintln!(
-                    "[ducklink_prefix] alias '{alias}.{name}' skipped: {err}"
-                ),
+                Err(err) => eprintln!("[ducklink_prefix] alias '{alias}.{name}' skipped: {err}"),
             }
         }
 
@@ -4704,11 +4731,7 @@ impl HostState {
     /// `call_execute` wrapper for a query whose rows we need. Returns
     /// each row as `Vec<String>` (stringified via `spi_value_text`, so
     /// NULL becomes "").
-    fn run_prefix_query(
-        &self,
-        conn: ResourceAny,
-        sql: &str,
-    ) -> Result<Vec<Vec<String>>, String> {
+    fn run_prefix_query(&self, conn: ResourceAny, sql: &str) -> Result<Vec<Vec<String>>, String> {
         let res = self.with_core(|core| {
             core.with_database(|guest, store| guest.call_execute(store, conn, sql))
         });
@@ -4970,10 +4993,7 @@ impl HostState {
                 Ok(Ok(())) => {}
                 Ok(Err(msg)) => {
                     return Err(cli_types::Duckerror::Internal(
-                        format!(
-                            "register_table_function for '{fn_name}' failed: {msg}"
-                        )
-                        .into(),
+                        format!("register_table_function for '{fn_name}' failed: {msg}").into(),
                     ));
                 }
                 Err(trap) => return Err(convert_trap_to_duckerror(trap)),
@@ -5039,10 +5059,7 @@ impl HostState {
                 .extension_manager
                 .lock()
                 .expect("extension manager mutex poisoned");
-            let flag = matches!(
-                manager.dispatch_storage_writes_persist_directly(),
-                Ok(true)
-            );
+            let flag = matches!(manager.dispatch_storage_writes_persist_directly(), Ok(true));
             if flag {
                 eprintln!(
                     "[at5-writeback] {}: extension self-persists (writes_persist_directly=true); \
@@ -5161,8 +5178,7 @@ impl HostState {
                 assignments,
                 where_clause,
             } => {
-                let (catalog_handle, columns) =
-                    self.at5_lookup_write_target(&alias, &table)?;
+                let (catalog_handle, columns) = self.at5_lookup_write_target(&alias, &table)?;
                 let rowid_idx = at5_locate_rowid_column(&columns, &alias, &table)?;
                 // Parse the SET RHS values up-front so an unsupported expression
                 // rejects BEFORE any core round-trip.
@@ -5206,8 +5222,13 @@ impl HostState {
                 // verbatim. `SELECT * FROM alias.main.table [WHERE pred]`
                 // resolves against the view registered by intercept_attach,
                 // which routes through the extension's storage-dispatch.
-                let (rowids, current_rows) =
-                    self.at5_prescan_rows(entry_handle.clone(), &alias, &table, rowid_idx, where_clause.as_deref())?;
+                let (rowids, current_rows) = self.at5_prescan_rows(
+                    entry_handle.clone(),
+                    &alias,
+                    &table,
+                    rowid_idx,
+                    where_clause.as_deref(),
+                )?;
                 if rowids.is_empty() {
                     eprintln!(
                         "[at5-write] UPDATE {alias}.{table}: pre-scan matched 0 row(s); no-op"
@@ -5328,11 +5349,15 @@ impl HostState {
                 table,
                 where_clause,
             } => {
-                let (catalog_handle, columns) =
-                    self.at5_lookup_write_target(&alias, &table)?;
+                let (catalog_handle, columns) = self.at5_lookup_write_target(&alias, &table)?;
                 let rowid_idx = at5_locate_rowid_column(&columns, &alias, &table)?;
-                let (rowids, _rows) =
-                    self.at5_prescan_rows(entry_handle.clone(), &alias, &table, rowid_idx, where_clause.as_deref())?;
+                let (rowids, _rows) = self.at5_prescan_rows(
+                    entry_handle.clone(),
+                    &alias,
+                    &table,
+                    rowid_idx,
+                    where_clause.as_deref(),
+                )?;
                 if rowids.is_empty() {
                     eprintln!(
                         "[at5-write] DELETE {alias}.{table}: pre-scan matched 0 row(s); no-op"
@@ -5484,11 +5509,7 @@ impl HostState {
         };
         std::fs::write(&dsn_path, &bytes).map_err(|e| {
             cli_types::Duckerror::Io(
-                format!(
-                    "AT5 write-back to {}: {e}",
-                    dsn_path.display()
-                )
-                .into(),
+                format!("AT5 write-back to {}: {e}", dsn_path.display()).into(),
             )
         })?;
         eprintln!(
@@ -5505,7 +5526,6 @@ impl HostState {
     // sandbox, so the host has no serialize-and-rewrite work to do and no
     // native rusqlite dependency. See `at5_write_back`'s self_persists
     // short-circuit.
-
 
     /// Fetch (catalog-handle, extension-declared columns) for an attached
     /// alias.table pair, briefly acquiring the manager lock. Errors are
@@ -5557,9 +5577,7 @@ impl HostState {
         let sql = format!("SELECT * FROM {alias}.main.{table}{where_sql}");
         let result = self
             .with_core(|core| {
-                core.with_database(|guest, store| {
-                    guest.call_execute(store, entry_handle, &sql)
-                })
+                core.with_database(|guest, store| guest.call_execute(store, entry_handle, &sql))
             })
             .map_err(convert_trap_to_duckerror)?;
         let qr = match result {
@@ -5567,8 +5585,7 @@ impl HostState {
             Err(err) => return Err(convert_core_duckerror(err)),
         };
         let mut rowids: Vec<i64> = Vec::with_capacity(qr.rows.len());
-        let mut rows_ext: Vec<Vec<extension_types::Duckvalue>> =
-            Vec::with_capacity(qr.rows.len());
+        let mut rows_ext: Vec<Vec<extension_types::Duckvalue>> = Vec::with_capacity(qr.rows.len());
         for row in qr.rows.into_iter() {
             let row_vec: Vec<core_types::Duckvalue> = row.into_iter().collect();
             let rowid_cell = row_vec.get(rowid_idx).ok_or_else(|| {
@@ -5623,7 +5640,6 @@ fn at5_synth_fn_name(alias: &str, table: &str) -> String {
 // sqlitewasm extension now runs the equivalent conversion inside the wasm
 // sandbox against sqlite-lib's SPI value type (see
 // extensions/sqlitewasm-component/src/lib.rs::duck_to_sqlite_value).
-
 
 /// AT5 write-back path resolver. Turns the raw ATTACH DSN into a local file
 /// path when the DSN plausibly names a local file: bare paths, and the
@@ -5705,7 +5721,6 @@ fn at5_duckvalue_to_i64(v: &core_types::Duckvalue) -> Result<i64, String> {
     })
 }
 
-
 fn cli_extension_duckerror(err: extension_types::Duckerror) -> cli_types::Duckerror {
     match err {
         extension_types::Duckerror::Invalidargument(m) => {
@@ -5755,9 +5770,7 @@ fn parse_sql_type_to_logical(ty: &str) -> extension_types::Logicaltype {
         "USMALLINT" => extension_types::Logicaltype::Uint16,
         "UTINYINT" => extension_types::Logicaltype::Uint8,
         "REAL" | "FLOAT4" => extension_types::Logicaltype::Float32,
-        "DOUBLE" | "FLOAT" | "FLOAT8" | "DOUBLE PRECISION" => {
-            extension_types::Logicaltype::Float64
-        }
+        "DOUBLE" | "FLOAT" | "FLOAT8" | "DOUBLE PRECISION" => extension_types::Logicaltype::Float64,
         "BOOL" | "BOOLEAN" => extension_types::Logicaltype::Boolean,
         "TEXT" | "STRING" | "VARCHAR" | "CHAR" => extension_types::Logicaltype::Text,
         "BLOB" | "BYTEA" | "BYTES" => extension_types::Logicaltype::Blob,
@@ -5800,9 +5813,7 @@ fn literal_to_extension_duckvalue(
 /// parsed columns into `extension_types::Columndef` before dispatching
 /// through `storage-write-dispatch.create-table`. Returns `Err(reason)` for
 /// unrecognized types so the caller can surface a clean `Unsupported` error.
-fn sql_type_to_extension_logical(
-    type_text: &str,
-) -> Result<extension_types::Logicaltype, String> {
+fn sql_type_to_extension_logical(type_text: &str) -> Result<extension_types::Logicaltype, String> {
     let s = type_text.trim();
     if s.is_empty() {
         return Err("empty type text".to_string());
@@ -5811,9 +5822,9 @@ fn sql_type_to_extension_logical(
     // `VARCHAR`. DECIMAL is handled specially below (needs width+scale).
     let (base, spec) = match s.find('(') {
         Some(open) => {
-            let close = s.rfind(')').ok_or_else(|| {
-                format!("unbalanced parentheses in type '{s}'")
-            })?;
+            let close = s
+                .rfind(')')
+                .ok_or_else(|| format!("unbalanced parentheses in type '{s}'"))?;
             if close < open {
                 return Err(format!("mismatched parentheses in type '{s}'"));
             }
@@ -5832,7 +5843,11 @@ fn sql_type_to_extension_logical(
         }
         None => (s.to_string(), None),
     };
-    let up: String = base.split_whitespace().collect::<Vec<_>>().join(" ").to_ascii_uppercase();
+    let up: String = base
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_uppercase();
     Ok(match up.as_str() {
         "BOOLEAN" | "BOOL" => extension_types::Logicaltype::Boolean,
         "TINYINT" | "INT1" => extension_types::Logicaltype::Int8,
@@ -5850,9 +5865,7 @@ fn sql_type_to_extension_logical(
         "TEXT" | "VARCHAR" | "CHAR" | "CHARACTER" | "STRING" | "CLOB" => {
             extension_types::Logicaltype::Text
         }
-        "BLOB" | "BYTEA" | "BYTES" | "BINARY" | "VARBINARY" => {
-            extension_types::Logicaltype::Blob
-        }
+        "BLOB" | "BYTEA" | "BYTES" | "BINARY" | "VARBINARY" => extension_types::Logicaltype::Blob,
         "DATE" => extension_types::Logicaltype::Date,
         "TIME" => extension_types::Logicaltype::Time,
         "TIMESTAMP" | "DATETIME" => extension_types::Logicaltype::Timestamp,
@@ -6024,9 +6037,7 @@ impl cli_db::HostPreparedStatement for HostState {
             params.into_iter().map(convert_cli_duckvalue).collect();
         let result = self
             .with_core(|core| {
-                core.with_prepared(|guest, store| {
-                    guest.call_execute(store, handle, &core_params)
-                })
+                core.with_prepared(|guest, store| guest.call_execute(store, handle, &core_params))
             })
             .map_err(convert_trap_to_duckerror)?;
         match result {
@@ -6360,12 +6371,7 @@ impl cli_db::Host for HostState {
         let appender = self
             .with_core(|core| {
                 core.with_database(|guest, store| {
-                    guest.call_create_appender(
-                        store,
-                        handle,
-                        owned_schema.as_deref(),
-                        &owned_table,
-                    )
+                    guest.call_create_appender(store, handle, owned_schema.as_deref(), &owned_table)
                 })
             })
             .map_err(convert_trap_to_duckerror)?;
@@ -6461,9 +6467,7 @@ impl cli_db::Host for HostState {
         let entry_handle = self
             .connections
             .get(&conn.rep())
-            .ok_or_else(|| {
-                CliString::from("register_table_function: unknown connection resource")
-            })?
+            .ok_or_else(|| CliString::from("register_table_function: unknown connection resource"))?
             .handle
             .clone();
         let core_name: String = name.into();
@@ -6542,8 +6546,11 @@ impl HostState {
         // `resolve_write_target` for the accept/reject matrix (Amendment A2
         // Risk 8 non-goals return `Unsupported` here).
         if !self.attached_aliases.is_empty() {
-            let alias_map: HashMap<String, String> =
-                self.attached_aliases.keys().map(|k| (k.clone(), String::new())).collect();
+            let alias_map: HashMap<String, String> = self
+                .attached_aliases
+                .keys()
+                .map(|k| (k.clone(), String::new()))
+                .collect();
             if let Some(route) = at5_intercept::resolve_write_target(sql, &alias_map) {
                 match self.intercept_write(entry_handle.clone(), route) {
                     Ok(result) => {
@@ -6577,16 +6584,13 @@ impl HostState {
                 // the subsequent `core.with_database(...)` &mut re-borrow
                 // is unaliased.
                 let store_ptr: *mut Store<CoreStoreState> = &mut core.store;
-                let bindings_ptr: *const duckdb_core_bindings::Libduckdb =
-                    &core.bindings;
+                let bindings_ptr: *const duckdb_core_bindings::Libduckdb = &core.bindings;
                 let _reentry = PrimaryReentryGuard::set(PrimaryReentry {
                     store: store_ptr,
                     bindings: bindings_ptr,
                     connection: entry_handle,
                 });
-                core.with_database(|guest, store| {
-                    guest.call_execute(store, entry_handle, &sql)
-                })
+                core.with_database(|guest, store| guest.call_execute(store, entry_handle, &sql))
             })
             .map_err(convert_trap_to_duckerror)?;
         // v1.1: the core is idle again here -> refresh the catalog snapshot so a
@@ -6750,9 +6754,7 @@ fn convert_pending_logical_type_registration(
     }
 }
 
-fn convert_pending_cast_registration(
-    entry: PendingCast,
-) -> core_extension_hooks::CastRegistration {
+fn convert_pending_cast_registration(entry: PendingCast) -> core_extension_hooks::CastRegistration {
     core_extension_hooks::CastRegistration {
         source: entry.source,
         target: entry.target,
@@ -6866,10 +6868,7 @@ fn neutral_logicaltype_to_core(ty: reg::LogicalType) -> core_runtime_exports::Lo
         // structurally on the variant arm. `core_runtime_exports` re-exports
         // the shared type from core_types.
         reg::LogicalType::Decimal { width, scale } => {
-            core_runtime_exports::Logicaltype::Decimal(core_types::Decimalshape {
-                width,
-                scale,
-            })
+            core_runtime_exports::Logicaltype::Decimal(core_types::Decimalshape { width, scale })
         }
         reg::LogicalType::Interval => core_runtime_exports::Logicaltype::Interval,
         reg::LogicalType::Uuid => core_runtime_exports::Logicaltype::Uuid,
@@ -7059,7 +7058,9 @@ fn neutral_reg_logicaltype_to_core_types(ty: reg::LogicalType) -> core_types::Lo
 // table-filter shape stays intact; the host builds those directly from its
 // intercepted plan (see ATTACH intercept in HostState::execute).
 
-fn convert_funcargs_to_loader(args: Vec<reg::FuncArg>) -> BindgenVec<core_extension_hooks::FuncArg> {
+fn convert_funcargs_to_loader(
+    args: Vec<reg::FuncArg>,
+) -> BindgenVec<core_extension_hooks::FuncArg> {
     args.into_iter()
         .map(|arg| core_extension_hooks::FuncArg {
             name: arg.name,
@@ -7104,12 +7105,14 @@ fn convert_core_duckvalue(value: core_types::Duckvalue) -> cli_types::Duckvalue 
         core_types::Duckvalue::Date(v) => cli_types::Duckvalue::Date(v),
         core_types::Duckvalue::Time(v) => cli_types::Duckvalue::Time(v),
         core_types::Duckvalue::Timestamptz(v) => cli_types::Duckvalue::Timestamptz(v),
-        core_types::Duckvalue::Decimal(d) => cli_types::Duckvalue::Decimal(cli_types::Decimalvalue {
-            lower: d.lower,
-            upper: d.upper,
-            width: d.width,
-            scale: d.scale,
-        }),
+        core_types::Duckvalue::Decimal(d) => {
+            cli_types::Duckvalue::Decimal(cli_types::Decimalvalue {
+                lower: d.lower,
+                upper: d.upper,
+                width: d.width,
+                scale: d.scale,
+            })
+        }
         core_types::Duckvalue::Interval(iv) => {
             cli_types::Duckvalue::Interval(cli_types::Intervalvalue {
                 months: iv.months,
@@ -7121,14 +7124,18 @@ fn convert_core_duckvalue(value: core_types::Duckvalue) -> cli_types::Duckvalue 
             cli_types::Duckvalue::Uuid(cli_types::Uuidvalue { hi: u.hi, lo: u.lo })
         }
         // @5.0.0: first-class 128-bit integer arms carry (lower, upper) halves.
-        core_types::Duckvalue::Hugeint(h) => cli_types::Duckvalue::Hugeint(cli_types::Hugeintvalue {
-            lower: h.lower,
-            upper: h.upper,
-        }),
-        core_types::Duckvalue::Uhugeint(h) => cli_types::Duckvalue::Uhugeint(cli_types::Uhugeintvalue {
-            lower: h.lower,
-            upper: h.upper,
-        }),
+        core_types::Duckvalue::Hugeint(h) => {
+            cli_types::Duckvalue::Hugeint(cli_types::Hugeintvalue {
+                lower: h.lower,
+                upper: h.upper,
+            })
+        }
+        core_types::Duckvalue::Uhugeint(h) => {
+            cli_types::Duckvalue::Uhugeint(cli_types::Uhugeintvalue {
+                lower: h.lower,
+                upper: h.upper,
+            })
+        }
         core_types::Duckvalue::Complex(c) => {
             cli_types::Duckvalue::Complex(cli_types::Complexvalue {
                 type_expr: c.type_expr,
@@ -7177,14 +7184,18 @@ fn convert_cli_duckvalue(value: cli_types::Duckvalue) -> core_types::Duckvalue {
             core_types::Duckvalue::Uuid(core_types::Uuidvalue { hi: u.hi, lo: u.lo })
         }
         // @5.0.0: first-class 128-bit integer arms carry (lower, upper) halves.
-        cli_types::Duckvalue::Hugeint(h) => core_types::Duckvalue::Hugeint(core_types::Hugeintvalue {
-            lower: h.lower,
-            upper: h.upper,
-        }),
-        cli_types::Duckvalue::Uhugeint(h) => core_types::Duckvalue::Uhugeint(core_types::Uhugeintvalue {
-            lower: h.lower,
-            upper: h.upper,
-        }),
+        cli_types::Duckvalue::Hugeint(h) => {
+            core_types::Duckvalue::Hugeint(core_types::Hugeintvalue {
+                lower: h.lower,
+                upper: h.upper,
+            })
+        }
+        cli_types::Duckvalue::Uhugeint(h) => {
+            core_types::Duckvalue::Uhugeint(core_types::Uhugeintvalue {
+                lower: h.lower,
+                upper: h.upper,
+            })
+        }
         cli_types::Duckvalue::Complex(c) => {
             core_types::Duckvalue::Complex(core_types::Complexvalue {
                 type_expr: c.type_expr,
@@ -7441,7 +7452,9 @@ fn core_trap_to_config_error(err: wasmtime::Error) -> ConfigError {
 fn core_config_error_to_neutral(err: core_config_exports::Configerror) -> ConfigError {
     match err {
         core_config_exports::Configerror::Invalidkey(msg) => ConfigError::InvalidKey(msg.into()),
-        core_config_exports::Configerror::Typemismatch(msg) => ConfigError::TypeMismatch(msg.into()),
+        core_config_exports::Configerror::Typemismatch(msg) => {
+            ConfigError::TypeMismatch(msg.into())
+        }
         core_config_exports::Configerror::Unavailable(msg) => ConfigError::Unavailable(msg.into()),
         core_config_exports::Configerror::Internalconfig(msg) => {
             ConfigError::InternalConfig(msg.into())
@@ -7660,20 +7673,16 @@ impl ExtensionServices for CoreServices {
             match guard.as_ref() {
                 Some(Some(p)) => p.clone(),
                 Some(None) => {
-                    return Err(
-                        "nested-exec: primary database is in-memory; \
+                    return Err("nested-exec: primary database is in-memory; \
                          Direction-1 sibling-core cannot share it. \
                          Open a file-backed database or use the native \
                          ducklink DuckDB extension (Direction 2)."
-                            .to_string(),
-                    )
+                        .to_string())
                 }
                 None => {
-                    return Err(
-                        "nested-exec: primary database not yet opened \
+                    return Err("nested-exec: primary database not yet opened \
                          (Direction-1 sibling waits for HostState::open)"
-                            .to_string(),
-                    )
+                        .to_string())
                 }
             }
         };
@@ -7750,10 +7759,7 @@ unsafe fn primary_nested_exec(
 /// connection over `primary_path`, cache them on `sibling`, and return a
 /// clone of the cached [`SiblingSlot`]. Idempotent: after the first success
 /// every call returns the cached slot instantly.
-fn sibling_ensure_slot(
-    sibling: &SiblingState,
-    primary_path: &str,
-) -> Result<SiblingSlot, String> {
+fn sibling_ensure_slot(sibling: &SiblingState, primary_path: &str) -> Result<SiblingSlot, String> {
     let mut slot = sibling.slot.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(existing) = slot.as_ref() {
         return Ok(SiblingSlot {
@@ -7858,7 +7864,8 @@ fn sibling_ensure_slot(
         {
             let sql = format!("LOAD {name};");
             let mut c = core.lock().unwrap_or_else(|e| e.into_inner());
-            let outcome = c.with_database(|guest, store| guest.call_execute(store, connection, &sql));
+            let outcome =
+                c.with_database(|guest, store| guest.call_execute(store, connection, &sql));
             drop(c);
             match outcome {
                 Ok(Ok(_)) => eprintln!(
@@ -7876,9 +7883,7 @@ fn sibling_ensure_slot(
                 ),
             }
         } else {
-            eprintln!(
-                "[sibling-replay] refusing to LOAD '{name}' on sibling (bad identifier)"
-            );
+            eprintln!("[sibling-replay] refusing to LOAD '{name}' on sibling (bad identifier)");
         }
     }
 
@@ -7941,16 +7946,13 @@ fn extract_rows_affected(qr: &core_db_exports::QueryResult) -> Option<u64> {
 /// pay for it. Best-effort: any import name in the `duckdb:extension` namespace
 /// whose interface is `query` (with or without a `@version` suffix) counts.
 fn component_imports_query(engine: &Engine, component: &Component) -> bool {
-    component
-        .component_type()
-        .imports(engine)
-        .any(|(name, _)| {
-            // Instance import names look like `duckdb:extension/query` or
-            // `duckdb:extension/query@1.1.0`.
-            let iface = name.rsplit('/').next().unwrap_or(name);
-            let iface = iface.split('@').next().unwrap_or(iface);
-            name.starts_with("duckdb:extension/") && iface == "query"
-        })
+    component.component_type().imports(engine).any(|(name, _)| {
+        // Instance import names look like `duckdb:extension/query` or
+        // `duckdb:extension/query@1.1.0`.
+        let iface = name.rsplit('/').next().unwrap_or(name);
+        let iface = iface.split('@').next().unwrap_or(iface);
+        name.starts_with("duckdb:extension/") && iface == "query"
+    })
 }
 
 fn run_query_on_core(
@@ -8172,15 +8174,13 @@ mod cwasm_trust {
         // the frame in `write_sealed_cwasm`; parse it here.
         let (digest, frame) = framed.split_at_checked(32)?;
         match cache() {
-            Some(c) => {
-                match c.open(&digest.to_vec(), &engine_version(), &target(), frame) {
-                    Some(bytes) => Some(bytes),
-                    None => {
-                        warn_once(".cwasm failed HMAC verification (tamper or engine mismatch)");
-                        None
-                    }
+            Some(c) => match c.open(&digest.to_vec(), &engine_version(), &target(), frame) {
+                Some(bytes) => Some(bytes),
+                None => {
+                    warn_once(".cwasm failed HMAC verification (tamper or engine mismatch)");
+                    None
                 }
-            }
+            },
             // No key: degraded mode, trust the bytes (legacy behavior). The
             // payload is everything after the 32-byte digest + 32-byte tag.
             None => frame.get(32..).map(|b| b.to_vec()),
@@ -8198,8 +8198,8 @@ mod cwasm_trust {
 /// turned into runnable machine code.
 fn load_component(engine: &Engine, path: &Path) -> Result<Component> {
     if path.extension().and_then(|s| s.to_str()) == Some("cwasm") {
-        let framed = std::fs::read(path)
-            .with_context(|| format!("read precompiled {}", path.display()))?;
+        let framed =
+            std::fs::read(path).with_context(|| format!("read precompiled {}", path.display()))?;
         let trusted = cwasm_trust::open_cwasm(&framed).ok_or_else(|| {
             anyhow::anyhow!(
                 "refusing to load {}: precompiled artifact failed HMAC verification \
@@ -8211,7 +8211,12 @@ fn load_component(engine: &Engine, path: &Path) -> Result<Component> {
         // to this engine identity; deserialize additionally checks
         // version/config and does not execute the contents.
         unsafe { Component::deserialize(engine, &trusted) }
-            .map_err(|e| e.context(format!("failed to deserialize precompiled {}", path.display())))
+            .map_err(|e| {
+                e.context(format!(
+                    "failed to deserialize precompiled {}",
+                    path.display()
+                ))
+            })
             .map_err(Into::into)
     } else {
         Component::from_file(engine, path)
@@ -8230,8 +8235,7 @@ fn load_component(engine: &Engine, path: &Path) -> Result<Component> {
 /// verify it before deserializing.
 pub fn precompile_component_to_file(in_path: &Path, out_path: &Path) -> Result<()> {
     let engine = build_engine()?;
-    let bytes =
-        std::fs::read(in_path).with_context(|| format!("read {}", in_path.display()))?;
+    let bytes = std::fs::read(in_path).with_context(|| format!("read {}", in_path.display()))?;
     let precompiled = engine
         .precompile_component(&bytes)
         .map_err(|e| e.context(format!("precompile {}", in_path.display())))?;
@@ -8242,8 +8246,7 @@ pub fn precompile_component_to_file(in_path: &Path, out_path: &Path) -> Result<(
         out.extend_from_slice(&cwasm_trust::seal_cwasm(&bytes, &precompiled));
         out
     };
-    std::fs::write(out_path, &framed)
-        .with_context(|| format!("write {}", out_path.display()))?;
+    std::fs::write(out_path, &framed).with_context(|| format!("write {}", out_path.display()))?;
     Ok(())
 }
 
@@ -8327,16 +8330,12 @@ pub(crate) fn open_driver_core_with_bootstrap(
     )?;
     let core = Arc::new(Mutex::new(core_exec));
     {
-        let mut mgr = extension_manager
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut mgr = extension_manager.lock().unwrap_or_else(|e| e.into_inner());
         mgr.attach_core(core.clone());
     }
 
     // Open the connection.
-    let path_owned: Option<String> = db_path
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string());
+    let path_owned: Option<String> = db_path.filter(|s| !s.is_empty()).map(|s| s.to_string());
     let connection = {
         let mut c = core.lock().unwrap_or_else(|e| e.into_inner());
         c.with_database(|guest, store| guest.call_open(store, path_owned.as_deref()))
@@ -8353,7 +8352,10 @@ pub(crate) fn open_driver_core_with_bootstrap(
             c.with_database(|guest, store| guest.call_execute(store, connection.clone(), sql))
                 .map_err(|trap| anyhow::anyhow!("driver-core: bootstrap trapped: {trap}"))?
                 .map_err(|e| {
-                    anyhow::anyhow!("driver-core: bootstrap failed: {}", core_duckerror_message(e))
+                    anyhow::anyhow!(
+                        "driver-core: bootstrap failed: {}",
+                        core_duckerror_message(e)
+                    )
                 })?;
         }
     }
@@ -8368,7 +8370,10 @@ pub(crate) fn open_driver_core_with_bootstrap(
 /// Execute `sql` on the persistent connection. Returns rows-affected for
 /// DML (from DuckDB's `Count` shape) or 0 for DDL / SELECT. On failure
 /// returns the DuckDB error text, matching the WIT contract.
-pub(crate) fn driver_core_exec(state: &mut DriverCoreState, sql: &str) -> std::result::Result<u64, String> {
+pub(crate) fn driver_core_exec(
+    state: &mut DriverCoreState,
+    sql: &str,
+) -> std::result::Result<u64, String> {
     let mut c = state.core.lock().unwrap_or_else(|e| e.into_inner());
     let result = c
         .with_database(|guest, store| guest.call_execute(store, state.connection.clone(), sql))
@@ -8674,12 +8679,18 @@ fn convert_core_duckvalue_to_extension(value: core_types::Duckvalue) -> extensio
             extension_types::Duckvalue::Uuid(extension_types::Uuidvalue { hi: u.hi, lo: u.lo })
         }
         // @5.0.0: first-class 128-bit integer arms carry (lower, upper) halves.
-        core_types::Duckvalue::Hugeint(h) => extension_types::Duckvalue::Hugeint(
-            extension_types::Hugeintvalue { lower: h.lower, upper: h.upper },
-        ),
-        core_types::Duckvalue::Uhugeint(h) => extension_types::Duckvalue::Uhugeint(
-            extension_types::Uhugeintvalue { lower: h.lower, upper: h.upper },
-        ),
+        core_types::Duckvalue::Hugeint(h) => {
+            extension_types::Duckvalue::Hugeint(extension_types::Hugeintvalue {
+                lower: h.lower,
+                upper: h.upper,
+            })
+        }
+        core_types::Duckvalue::Uhugeint(h) => {
+            extension_types::Duckvalue::Uhugeint(extension_types::Uhugeintvalue {
+                lower: h.lower,
+                upper: h.upper,
+            })
+        }
         core_types::Duckvalue::Complex(c) => {
             extension_types::Duckvalue::Complex(extension_types::Complexvalue {
                 type_expr: c.type_expr,
@@ -8792,20 +8803,30 @@ fn core_colvec_value_at(c: &core_callback_dispatch::Colvec, r: usize) -> core_ty
         Column::Text(v) => core_types::Duckvalue::Text(v[r].clone()),
         Column::Blob(v) => core_types::Duckvalue::Blob(v[r].clone()),
         Column::Decimal(v) => core_types::Duckvalue::Decimal(core_types::Decimalvalue {
-            lower: v[r].lower, upper: v[r].upper, width: v[r].width, scale: v[r].scale,
+            lower: v[r].lower,
+            upper: v[r].upper,
+            width: v[r].width,
+            scale: v[r].scale,
         }),
         Column::Interval(v) => core_types::Duckvalue::Interval(core_types::Intervalvalue {
-            months: v[r].months, days: v[r].days, micros: v[r].micros,
+            months: v[r].months,
+            days: v[r].days,
+            micros: v[r].micros,
         }),
-        Column::Uuid(v) => core_types::Duckvalue::Uuid(core_types::Uuidvalue { hi: v[r].hi, lo: v[r].lo }),
+        Column::Uuid(v) => core_types::Duckvalue::Uuid(core_types::Uuidvalue {
+            hi: v[r].hi,
+            lo: v[r].lo,
+        }),
         // @5.0.0: first-class hugeint columns + nested logical arms
         // (list/struct/map/array). Nested arms have no first-class Duckvalue
         // representation; escape them through Complex(json).
         Column::Hugeint(v) => core_types::Duckvalue::Hugeint(core_types::Hugeintvalue {
-            lower: v[r].lower, upper: v[r].upper,
+            lower: v[r].lower,
+            upper: v[r].upper,
         }),
         Column::Uhugeint(v) => core_types::Duckvalue::Uhugeint(core_types::Uhugeintvalue {
-            lower: v[r].lower, upper: v[r].upper,
+            lower: v[r].lower,
+            upper: v[r].upper,
         }),
         // @5.0.0 S1 nested arms: payload is an opaque byte buffer
         // (list-col/struct-col wrap `nested-column { encoded }`, map-col wraps
@@ -8838,7 +8859,8 @@ fn core_colvec_value_at(c: &core_callback_dispatch::Colvec, r: usize) -> core_ty
             ),
         }),
         Column::Complex(v) => core_types::Duckvalue::Complex(core_types::Complexvalue {
-            type_expr: v[r].type_expr.clone(), json: v[r].json.clone(),
+            type_expr: v[r].type_expr.clone(),
+            json: v[r].json.clone(),
         }),
     }
 }
@@ -8859,10 +8881,15 @@ fn core_colvecs_to_ext_rows(
 
 /// Build a CORE colvec from EXTENSION result values (arm from the first non-null;
 /// NULLs cleared in the out-of-band validity bitmap).
-fn ext_values_to_core_colvec(vals: Vec<extension_types::Duckvalue>) -> core_callback_dispatch::Colvec {
+fn ext_values_to_core_colvec(
+    vals: Vec<extension_types::Duckvalue>,
+) -> core_callback_dispatch::Colvec {
     use core_column_types::Column;
     use core_types::Duckvalue as D;
-    let core_vals: Vec<D> = vals.into_iter().map(convert_extension_duckvalue_to_core).collect();
+    let core_vals: Vec<D> = vals
+        .into_iter()
+        .map(convert_extension_duckvalue_to_core)
+        .collect();
     let n = core_vals.len();
     let mut validity: Vec<u8> = Vec::new();
     let mut mark_null = |row: usize, validity: &mut Vec<u8>| {
@@ -8876,13 +8903,24 @@ fn ext_values_to_core_colvec(vals: Vec<extension_types::Duckvalue>) -> core_call
         ($arm:ident, $default:expr, $pat:pat => $extract:expr) => {{
             let mut out = Vec::with_capacity(n);
             for (r, v) in core_vals.iter().enumerate() {
-                match v { $pat => out.push($extract), _ => { mark_null(r, &mut validity); out.push($default); } }
+                match v {
+                    $pat => out.push($extract),
+                    _ => {
+                        mark_null(r, &mut validity);
+                        out.push($default);
+                    }
+                }
             }
             Column::$arm(out)
         }};
     }
     let data = match rep {
-        None => { for r in 0..n { mark_null(r, &mut validity); } Column::Int64(vec![0i64; n]) }
+        None => {
+            for r in 0..n {
+                mark_null(r, &mut validity);
+            }
+            Column::Int64(vec![0i64; n])
+        }
         Some(D::Boolean(_)) => build!(Boolean, false, D::Boolean(x) => *x),
         Some(D::Int64(_)) => build!(Int64, 0i64, D::Int64(x) => *x),
         Some(D::Uint64(_)) => build!(Uint64, 0u64, D::Uint64(x) => *x),
@@ -8900,16 +8938,32 @@ fn ext_values_to_core_colvec(vals: Vec<extension_types::Duckvalue>) -> core_call
         Some(D::Date(_)) => build!(Date, 0i32, D::Date(x) => *x),
         Some(D::Text(_)) => build!(Text, String::new(), D::Text(x) => x.clone()),
         Some(D::Blob(_)) => build!(Blob, Vec::new(), D::Blob(x) => x.clone()),
-        Some(D::Decimal(_)) => build!(Decimal, core_column_types::Decimalvalue { lower: 0, upper: 0, width: 0, scale: 0 }, D::Decimal(d) => core_column_types::Decimalvalue { lower: d.lower, upper: d.upper, width: d.width, scale: d.scale }),
-        Some(D::Interval(_)) => build!(Interval, core_column_types::Intervalvalue { months: 0, days: 0, micros: 0 }, D::Interval(d) => core_column_types::Intervalvalue { months: d.months, days: d.days, micros: d.micros }),
-        Some(D::Uuid(_)) => build!(Uuid, core_column_types::Uuidvalue { hi: 0, lo: 0 }, D::Uuid(d) => core_column_types::Uuidvalue { hi: d.hi, lo: d.lo }),
+        Some(D::Decimal(_)) => {
+            build!(Decimal, core_column_types::Decimalvalue { lower: 0, upper: 0, width: 0, scale: 0 }, D::Decimal(d) => core_column_types::Decimalvalue { lower: d.lower, upper: d.upper, width: d.width, scale: d.scale })
+        }
+        Some(D::Interval(_)) => {
+            build!(Interval, core_column_types::Intervalvalue { months: 0, days: 0, micros: 0 }, D::Interval(d) => core_column_types::Intervalvalue { months: d.months, days: d.days, micros: d.micros })
+        }
+        Some(D::Uuid(_)) => {
+            build!(Uuid, core_column_types::Uuidvalue { hi: 0, lo: 0 }, D::Uuid(d) => core_column_types::Uuidvalue { hi: d.hi, lo: d.lo })
+        }
         // @5.0.0: first-class 128-bit integer columnar arms.
-        Some(D::Hugeint(_)) => build!(Hugeint, core_column_types::DuckInt128 { lower: 0, upper: 0 }, D::Hugeint(h) => core_column_types::DuckInt128 { lower: h.lower, upper: h.upper }),
-        Some(D::Uhugeint(_)) => build!(Uhugeint, core_column_types::DuckUint128 { lower: 0, upper: 0 }, D::Uhugeint(h) => core_column_types::DuckUint128 { lower: h.lower, upper: h.upper }),
-        Some(D::Complex(_)) => build!(Complex, core_column_types::Complexvalue { type_expr: String::new(), json: "null".into() }, D::Complex(c) => core_column_types::Complexvalue { type_expr: c.type_expr.clone(), json: c.json.clone() }),
+        Some(D::Hugeint(_)) => {
+            build!(Hugeint, core_column_types::DuckInt128 { lower: 0, upper: 0 }, D::Hugeint(h) => core_column_types::DuckInt128 { lower: h.lower, upper: h.upper })
+        }
+        Some(D::Uhugeint(_)) => {
+            build!(Uhugeint, core_column_types::DuckUint128 { lower: 0, upper: 0 }, D::Uhugeint(h) => core_column_types::DuckUint128 { lower: h.lower, upper: h.upper })
+        }
+        Some(D::Complex(_)) => {
+            build!(Complex, core_column_types::Complexvalue { type_expr: String::new(), json: "null".into() }, D::Complex(c) => core_column_types::Complexvalue { type_expr: c.type_expr.clone(), json: c.json.clone() })
+        }
         Some(D::Null) => unreachable!(),
     };
-    core_callback_dispatch::Colvec { data, validity, rows: n as u32 }
+    core_callback_dispatch::Colvec {
+        data,
+        validity,
+        rows: n as u32,
+    }
 }
 
 fn convert_core_invokeinfo(
@@ -9089,7 +9143,6 @@ fn describe_core_duckvalue(value: &core_types::Duckvalue) -> String {
         core_types::Duckvalue::Complex(c) => format!("{}:{}", c.type_expr, c.json),
     }
 }
-
 
 pub struct CliHarness {
     store: Store<HostState>,
@@ -9395,8 +9448,7 @@ pub fn run_shell_with_stdio(
     let (_, run_idx) = instance
         .get_export(store.as_context_mut(), Some(&run_iface), "run")
         .context("shell component missing run function")?;
-    let run = instance
-        .get_typed_func::<(), (Result<(), ()>,)>(store.as_context_mut(), run_idx)?;
+    let run = instance.get_typed_func::<(), (Result<(), ()>,)>(store.as_context_mut(), run_idx)?;
     let (result,) = run.call(store.as_context_mut(), ())?;
     Ok(result)
 }
@@ -9565,13 +9617,12 @@ fn run_cli_inner(
         |store: StoreContextMut<'_, HostState>, (): ()| Ok((cli_command_infos(&store),)),
     )?;
 
-    let cli_component =
-        load_component(&engine, &artifacts.cli_component).with_context(|| {
-            format!(
-                "failed to load CLI component from {}",
-                artifacts.cli_component.display()
-            )
-        })?;
+    let cli_component = load_component(&engine, &artifacts.cli_component).with_context(|| {
+        format!(
+            "failed to load CLI component from {}",
+            artifacts.cli_component.display()
+        )
+    })?;
     let instance_pre = linker.instantiate_pre(&cli_component)?;
     let cli_pre = duckdb_cli_bindings::DuckdbCliPre::new(instance_pre)?;
     let cli = cli_pre.instantiate(store.as_context_mut())?;
@@ -9748,11 +9799,7 @@ mod tests {
 
         let bytes = core
             .with_database(|guest, store| {
-                guest.call_query_arrow(
-                    store,
-                    conn,
-                    "SELECT i::INTEGER AS n FROM range(5) t(i)",
-                )
+                guest.call_query_arrow(store, conn, "SELECT i::INTEGER AS n FROM range(5) t(i)")
             })?
             .map_err(|e| anyhow::anyhow!("query_arrow failed: {e:?}"))?;
 
@@ -9793,7 +9840,10 @@ mod tests {
             .with_database(|g, s| g.call_open(s, None))?
             .map_err(|e| anyhow::anyhow!("open: {e}"))?;
         let allowed = core.with_database(|g, s| g.call_execute(s, conn, read))?;
-        assert!(allowed.is_ok(), "read_csv should work by default: {allowed:?}");
+        assert!(
+            allowed.is_ok(),
+            "read_csv should work by default: {allowed:?}"
+        );
 
         // Opt-in hardening: enable_external_access=false blocks read_csv.
         let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &preopens)?;
@@ -9827,11 +9877,7 @@ mod tests {
             .map_err(|e| anyhow::anyhow!("open_with_config failed: {e}"))?;
         let result = core
             .with_database(|guest, store| {
-                guest.call_execute(
-                    store,
-                    conn,
-                    "SELECT current_setting('default_order') AS v",
-                )
+                guest.call_execute(store, conn, "SELECT current_setting('default_order') AS v")
             })?
             .map_err(|e| anyhow::anyhow!("execute failed: {e:?}"))?;
         let cell = result
@@ -9845,12 +9891,18 @@ mod tests {
             core_types::Duckvalue::Int64(v) => v.to_string(),
             other => format!("{other:?}"),
         };
-        assert_eq!(rendered, "DESC", "default_order config option should be applied");
+        assert_eq!(
+            rendered, "DESC",
+            "default_order config option should be applied"
+        );
 
         // An invalid value for a known option fails the open.
         let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &[])?;
         let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
-        let bad = vec![("access_mode".to_string(), "definitely_not_a_mode".to_string())];
+        let bad = vec![(
+            "access_mode".to_string(),
+            "definitely_not_a_mode".to_string(),
+        )];
         let outcome =
             core.with_database(|guest, store| guest.call_open_with_config(store, None, &bad))?;
         assert!(
@@ -9882,9 +9934,7 @@ mod tests {
         let status = h.run()?;
         let stdout = h.stdout().unwrap_or_default();
         let stderr = h.stderr().unwrap_or_default();
-        if stderr.to_lowercase().contains("sqlite")
-            && stderr.to_lowercase().contains("not found")
-        {
+        if stderr.to_lowercase().contains("sqlite") && stderr.to_lowercase().contains("not found") {
             eprintln!("sqlite_scanner not embedded in this core; skipping");
             return Ok(());
         }
@@ -9912,9 +9962,7 @@ mod tests {
         // (shipped in the vendored duckdb-delta checkout) is absent.
         let fixture = workspace_root()
             .parent()
-            .map(|p| {
-                p.join("duckdb-wasm/build/duckdb-delta/data/inlined/simple_table/delta_lake")
-            })
+            .map(|p| p.join("duckdb-wasm/build/duckdb-delta/data/inlined/simple_table/delta_lake"))
             .filter(|p| p.join("_delta_log").is_dir());
         let Some(fixture) = fixture else {
             eprintln!("delta simple_table fixture not found; skipping");
@@ -9995,7 +10043,8 @@ mod tests {
         let _ = h.run()?;
         let stderr = h.stderr().unwrap_or_default().to_lowercase();
         assert!(
-            !stderr.contains("unknown catalog type") && !stderr.contains("unsupported")
+            !stderr.contains("unknown catalog type")
+                && !stderr.contains("unsupported")
                 && !stderr.contains("not found for type"),
             "TYPE unity_catalog not registered by the extension; got:\n{stderr}"
         );
@@ -10051,7 +10100,8 @@ mod tests {
         let stderr = h.stderr().unwrap_or_default();
         let low = stderr.to_lowercase();
         if (low.contains("iceberg") || low.contains("iceberg_scan"))
-            && (low.contains("not found") || low.contains("does not exist")
+            && (low.contains("not found")
+                || low.contains("does not exist")
                 || low.contains("catalog error"))
         {
             eprintln!("iceberg not embedded in this core; skipping");
@@ -10084,7 +10134,10 @@ mod tests {
             let status = h.run()?;
             let stdout = h.stdout().unwrap_or_default();
             if status.is_err() {
-                eprintln!("azure extensions query failed; skipping\n{}", h.stderr().unwrap_or_default());
+                eprintln!(
+                    "azure extensions query failed; skipping\n{}",
+                    h.stderr().unwrap_or_default()
+                );
                 return Ok(());
             }
             has_cell(&stdout, "1")
@@ -10321,7 +10374,11 @@ mod tests {
 
         // .tables lists both tables.
         let mut tables = CliHarness::new(&["duckdb-cli", db, "-c", ".tables"], &preopens)?;
-        assert!(tables.run()?.is_ok(), "`.tables` failed: {}", tables.stderr()?);
+        assert!(
+            tables.run()?.is_ok(),
+            "`.tables` failed: {}",
+            tables.stderr()?
+        );
         let tables_out = tables.stdout()?;
         assert!(
             has_cell(&tables_out, "widgets") && has_cell(&tables_out, "gadgets"),
@@ -10330,7 +10387,11 @@ mod tests {
 
         // .schema shows the CREATE statement for a specific table.
         let mut schema = CliHarness::new(&["duckdb-cli", db, "-c", ".schema widgets"], &preopens)?;
-        assert!(schema.run()?.is_ok(), "`.schema` failed: {}", schema.stderr()?);
+        assert!(
+            schema.run()?.is_ok(),
+            "`.schema` failed: {}",
+            schema.stderr()?
+        );
         let schema_out = schema.stdout()?;
         assert!(
             schema_out.contains("CREATE TABLE widgets"),
@@ -10339,7 +10400,11 @@ mod tests {
 
         // .indexes lists the index.
         let mut indexes = CliHarness::new(&["duckdb-cli", db, "-c", ".indexes"], &preopens)?;
-        assert!(indexes.run()?.is_ok(), "`.indexes` failed: {}", indexes.stderr()?);
+        assert!(
+            indexes.run()?.is_ok(),
+            "`.indexes` failed: {}",
+            indexes.stderr()?
+        );
         let indexes_out = indexes.stdout()?;
         assert!(
             has_cell(&indexes_out, "idx_label"),
@@ -11143,7 +11208,10 @@ mod tests {
             L::Date,
             L::Time,
             L::Timestamptz,
-            L::Decimal { width: 18, scale: 3 },
+            L::Decimal {
+                width: 18,
+                scale: 3,
+            },
             L::Interval,
             L::Uuid,
             L::Hugeint,
@@ -11339,7 +11407,10 @@ mod tests {
         assert_eq!(rows.len(), 1, "one row expected, got {rows:?}");
         assert_eq!(rows[0].len(), 1, "one cell expected, got {:?}", rows[0]);
         assert_eq!(rows[0][0], "42");
-        assert!(r.rows_affected.is_none(), "SELECT should not report rows_affected");
+        assert!(
+            r.rows_affected.is_none(),
+            "SELECT should not report rows_affected"
+        );
         Ok(())
     }
 
@@ -11485,10 +11556,16 @@ mod tests {
             fn provider_version(&mut self) -> Result<String, ducklink_runtime::ConfigError> {
                 Ok("test".to_string())
             }
-            fn list_keys(&mut self, _: Option<&str>) -> Result<Vec<String>, ducklink_runtime::ConfigError> {
+            fn list_keys(
+                &mut self,
+                _: Option<&str>,
+            ) -> Result<Vec<String>, ducklink_runtime::ConfigError> {
                 Ok(Vec::new())
             }
-            fn get_string(&mut self, _: &str) -> Result<Option<String>, ducklink_runtime::ConfigError> {
+            fn get_string(
+                &mut self,
+                _: &str,
+            ) -> Result<Option<String>, ducklink_runtime::ConfigError> {
                 Ok(None)
             }
             fn get_bool(&mut self, _: &str) -> Result<Option<bool>, ducklink_runtime::ConfigError> {
@@ -11503,10 +11580,16 @@ mod tests {
             fn get_f64(&mut self, _: &str) -> Result<Option<f64>, ducklink_runtime::ConfigError> {
                 Ok(None)
             }
-            fn get_bytes(&mut self, _: &str) -> Result<Option<Vec<u8>>, ducklink_runtime::ConfigError> {
+            fn get_bytes(
+                &mut self,
+                _: &str,
+            ) -> Result<Option<Vec<u8>>, ducklink_runtime::ConfigError> {
                 Ok(None)
             }
-            fn get_string_list(&mut self, _: &str) -> Result<Option<Vec<String>>, ducklink_runtime::ConfigError> {
+            fn get_string_list(
+                &mut self,
+                _: &str,
+            ) -> Result<Option<Vec<String>>, ducklink_runtime::ConfigError> {
                 Ok(None)
             }
             fn log(&mut self, _: LogLevel, _: &str, _: Option<&str>) {}
@@ -11571,10 +11654,7 @@ mod tests {
         );
         // The depth ceiling is exposed as a pub const; sanity-check it hasn't
         // shifted so a future NESTED_EXEC_MAX_DEPTH change surfaces here.
-        assert!(
-            NESTED_EXEC_MAX_DEPTH >= 1,
-            "depth cap must be positive"
-        );
+        assert!(NESTED_EXEC_MAX_DEPTH >= 1, "depth cap must be positive");
 
         RECURSE_STATE.with(|c| c.set(std::ptr::null_mut()));
         Ok(())
@@ -11676,7 +11756,12 @@ mod tests {
             c.with_database(|g, s| g.call_execute(s, primary_conn, "SELECT count(*) FROM opta_t"))?
                 .map_err(|e| anyhow::anyhow!("primary SELECT failed: {e:?}"))?
         };
-        assert_eq!(sel.rows.len(), 1, "one count row expected, got {:?}", sel.rows);
+        assert_eq!(
+            sel.rows.len(),
+            1,
+            "one count row expected, got {:?}",
+            sel.rows
+        );
         assert_eq!(sel.rows[0].len(), 1);
         let count_cell = spi_value_text(&sel.rows[0][0]);
         assert_eq!(
@@ -11728,10 +11813,8 @@ mod tests {
         // Primary is a throwaway (`nested_exec` never touches it — the sibling
         // slot runs the SQL), but its `ExtensionManager` IS shared onto the
         // sibling below, so it's constructed here as the source of truth.
-        let primary_wasi = build_wasi_ctx_inherit(
-            &[String::from("duckdb-core-primary-shared")],
-            &[],
-        )?;
+        let primary_wasi =
+            build_wasi_ctx_inherit(&[String::from("duckdb-core-primary-shared")], &[])?;
         let primary_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let primary_core = Arc::new(Mutex::new(instantiate_core(
             &engine,
@@ -11784,7 +11867,9 @@ mod tests {
         // must have the PRIMARY's `Arc<Mutex<ExtensionManager>>` as its
         // `extension_manager` field — not a fresh one.
         let slot_guard = sibling.slot.lock().unwrap_or_else(|e| e.into_inner());
-        let slot = slot_guard.as_ref().expect("sibling slot populated after nested_exec");
+        let slot = slot_guard
+            .as_ref()
+            .expect("sibling slot populated after nested_exec");
         let sibling_core_guard = slot.core.lock().unwrap_or_else(|e| e.into_inner());
         let sibling_mgr = &sibling_core_guard.store.data().extension_manager;
         assert!(
@@ -11827,7 +11912,10 @@ mod tests {
             .nested_exec("SELECT count(*) FROM t")
             .expect("SELECT count(*) via shared-manager sibling ok");
         let rows = sel.rows.expect("SELECT populates rows");
-        assert_eq!(rows[0][0], "3", "expected 3 rows in the sibling-created table");
+        assert_eq!(
+            rows[0][0], "3",
+            "expected 3 rows in the sibling-created table"
+        );
         Ok(())
     }
 
@@ -11939,15 +12027,9 @@ mod tests {
                 .replay_archive
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
-            let scalar_names: Vec<&str> =
-                archive.scalars.iter().map(|s| s.name.as_str()).collect();
-            let table_names: Vec<&str> =
-                archive.tables.iter().map(|t| t.name.as_str()).collect();
-            let agg_names: Vec<&str> = archive
-                .aggregates
-                .iter()
-                .map(|a| a.name.as_str())
-                .collect();
+            let scalar_names: Vec<&str> = archive.scalars.iter().map(|s| s.name.as_str()).collect();
+            let table_names: Vec<&str> = archive.tables.iter().map(|t| t.name.as_str()).collect();
+            let agg_names: Vec<&str> = archive.aggregates.iter().map(|a| a.name.as_str()).collect();
             assert!(
                 scalar_names.contains(&"fu4_stub_scalar"),
                 "primary drain must have appended scalar into sibling archive; got {scalar_names:?}"
@@ -12193,9 +12275,9 @@ mod tests {
         // the guard and hold it across the "dispatch body".
         let outer_guard = mgr.lock().expect("outer lock");
         let _ = outer_guard.extensions.len(); // ensure we actually hold it
-        // While the guard is held, a same-thread `try_lock` MUST fail with
-        // `WouldBlock` — same non-reentrancy failure a blocking `lock()`
-        // would encounter as a deadlock.
+                                              // While the guard is held, a same-thread `try_lock` MUST fail with
+                                              // `WouldBlock` — same non-reentrancy failure a blocking `lock()`
+                                              // would encounter as a deadlock.
         match mgr.try_lock() {
             Err(std::sync::TryLockError::WouldBlock) => {}
             Err(std::sync::TryLockError::Poisoned(_)) => {
@@ -12249,9 +12331,7 @@ mod tests {
         assert!(!is_extension_related_error(
             "Catalog Error: Table with name t does not exist"
         )); // table, not function
-        assert!(!is_extension_related_error(
-            "IO Error: cannot open file"
-        ));
+        assert!(!is_extension_related_error("IO Error: cannot open file"));
     }
 
     #[test]
@@ -12310,7 +12390,9 @@ fn resolve_preopens_with_default(preopens: &[(&Path, &str)]) -> Result<Vec<(Path
 fn cache_env_preopens() -> Vec<(PathBuf, String)> {
     let mut out: Vec<(PathBuf, String)> = Vec::new();
     for var in ["DUCKLINK_LOCAL_CACHE", "DUCKLINK_GLOBAL_CACHE"] {
-        let Ok(raw) = std::env::var(var) else { continue };
+        let Ok(raw) = std::env::var(var) else {
+            continue;
+        };
         let raw = raw.trim().to_string();
         if raw.is_empty() {
             continue;
@@ -12345,9 +12427,7 @@ fn cache_env_preopens() -> Vec<(PathBuf, String)> {
 /// vars are already logged inside `cache_env_preopens()`.
 fn attach_cache_env_preopens(builder: &mut WasiCtxBuilder) {
     for (host, guest) in cache_env_preopens() {
-        if let Err(e) =
-            builder.preopened_dir(&host, &guest, DirPerms::all(), FilePerms::all())
-        {
+        if let Err(e) = builder.preopened_dir(&host, &guest, DirPerms::all(), FilePerms::all()) {
             eprintln!(
                 "ducklink-host: failed to preopen cache root {}: {e}",
                 host.display()
@@ -12382,9 +12462,7 @@ fn attach_sqlitewasm_preopens(builder: &mut WasiCtxBuilder, extension_name: &str
     }
     match std::env::current_dir() {
         Ok(cwd) => {
-            if let Err(e) =
-                builder.preopened_dir(&cwd, ".", DirPerms::all(), FilePerms::all())
-            {
+            if let Err(e) = builder.preopened_dir(&cwd, ".", DirPerms::all(), FilePerms::all()) {
                 eprintln!(
                     "ducklink-host: failed to preopen cwd for sqlitewasm ({}): {e}",
                     cwd.display()
@@ -12417,9 +12495,7 @@ fn attach_sqlitewasm_preopens(builder: &mut WasiCtxBuilder, extension_name: &str
             return;
         }
         let guest = path.to_string_lossy().into_owned();
-        if let Err(e) =
-            builder.preopened_dir(&path, &guest, DirPerms::all(), FilePerms::all())
-        {
+        if let Err(e) = builder.preopened_dir(&path, &guest, DirPerms::all(), FilePerms::all()) {
             eprintln!(
                 "ducklink-host: failed to preopen sqlitewasm datadir {}: {e}",
                 path.display()

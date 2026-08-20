@@ -161,7 +161,11 @@ fn parse_load_names(input: &str) -> Vec<String> {
             if !it.next()?.eq_ignore_ascii_case("load") {
                 return None;
             }
-            let name = it.next()?.trim().trim_matches(|c| c == '\'' || c == '"').trim();
+            let name = it
+                .next()?
+                .trim()
+                .trim_matches(|c| c == '\'' || c == '"')
+                .trim();
             (!name.is_empty() && !name.contains(char::is_whitespace)).then(|| name.to_string())
         })
         .collect()
@@ -252,15 +256,12 @@ fn run_meta_command(conn: &duckdb::Connection, rest: &str) -> Result<(), String>
                 .map_err(duckerror_to_string)
         }
         "mode" => {
-            let mode = arg
-                .ok_or_else(|| ".mode requires a format (table|csv|json)".to_string())?;
+            let mode = arg.ok_or_else(|| ".mode requires a format (table|csv|json)".to_string())?;
             let selected = match mode.to_ascii_lowercase().as_str() {
                 "table" | "box" | "column" => OutputMode::Table,
                 "csv" => OutputMode::Csv,
                 "json" => OutputMode::Json,
-                other => {
-                    return Err(format!("unknown output mode '{other}' (table|csv|json)"))
-                }
+                other => return Err(format!("unknown output mode '{other}' (table|csv|json)")),
             };
             OUTPUT_MODE.with(|m| m.set(selected));
             Ok(())
@@ -921,14 +922,23 @@ fn format_interval(months: i32, days: i32, micros: i64) -> String {
         let years = months / 12;
         let mons = months % 12;
         if years != 0 {
-            parts.push(format!("{years} year{}", if years.abs() == 1 { "" } else { "s" }));
+            parts.push(format!(
+                "{years} year{}",
+                if years.abs() == 1 { "" } else { "s" }
+            ));
         }
         if mons != 0 {
-            parts.push(format!("{mons} month{}", if mons.abs() == 1 { "" } else { "s" }));
+            parts.push(format!(
+                "{mons} month{}",
+                if mons.abs() == 1 { "" } else { "s" }
+            ));
         }
     }
     if days != 0 {
-        parts.push(format!("{days} day{}", if days.abs() == 1 { "" } else { "s" }));
+        parts.push(format!(
+            "{days} day{}",
+            if days.abs() == 1 { "" } else { "s" }
+        ));
     }
     if micros != 0 || parts.is_empty() {
         let secs = micros.div_euclid(1_000_000);

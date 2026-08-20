@@ -80,69 +80,69 @@ mod component {
         args: Vec<types::Duckvalue>,
         _c: types::Invokeinfo,
     ) -> Result<types::Duckvalue, types::Duckerror> {
-            let which = handlers()
-                .lock()
-                .unwrap()
-                .get(&handle)
-                .copied()
-                .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
+        let which = handlers()
+            .lock()
+            .unwrap()
+            .get(&handle)
+            .copied()
+            .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
 
-            // First arg is always the json text for every function here.
-            let json = text_arg(&args, 0);
-            // Optional path/needle arg lives at index 1 for the 2-arg overloads.
-            let arg1 = text_arg(&args, 1);
+        // First arg is always the json text for every function here.
+        let json = text_arg(&args, 0);
+        // Optional path/needle arg lives at index 1 for the 2-arg overloads.
+        let arg1 = text_arg(&args, 1);
 
-            Ok(match which {
-                F::Valid => match &json {
-                    Some(s) => types::Duckvalue::Boolean(logic::json_valid(s)),
-                    None => types::Duckvalue::Null,
-                },
-                F::Extract => opt_text(
-                    json.as_deref()
-                        .zip(arg1.as_deref())
-                        .and_then(|(j, p)| logic::json_extract(j, p)),
-                ),
-                F::ExtractString => opt_text(
-                    json.as_deref()
-                        .zip(arg1.as_deref())
-                        .and_then(|(j, p)| logic::json_extract_string(j, p)),
-                ),
-                F::ArrayLen1 => match json
-                    .as_deref()
-                    .and_then(|j| logic::json_array_length(j, None))
-                {
-                    Some(n) => types::Duckvalue::Int64(n),
-                    None => types::Duckvalue::Null,
-                },
-                F::ArrayLen2 => match json
-                    .as_deref()
+        Ok(match which {
+            F::Valid => match &json {
+                Some(s) => types::Duckvalue::Boolean(logic::json_valid(s)),
+                None => types::Duckvalue::Null,
+            },
+            F::Extract => opt_text(
+                json.as_deref()
                     .zip(arg1.as_deref())
-                    .and_then(|(j, p)| logic::json_array_length(j, Some(p)))
-                {
-                    Some(n) => types::Duckvalue::Int64(n),
+                    .and_then(|(j, p)| logic::json_extract(j, p)),
+            ),
+            F::ExtractString => opt_text(
+                json.as_deref()
+                    .zip(arg1.as_deref())
+                    .and_then(|(j, p)| logic::json_extract_string(j, p)),
+            ),
+            F::ArrayLen1 => match json
+                .as_deref()
+                .and_then(|j| logic::json_array_length(j, None))
+            {
+                Some(n) => types::Duckvalue::Int64(n),
+                None => types::Duckvalue::Null,
+            },
+            F::ArrayLen2 => match json
+                .as_deref()
+                .zip(arg1.as_deref())
+                .and_then(|(j, p)| logic::json_array_length(j, Some(p)))
+            {
+                Some(n) => types::Duckvalue::Int64(n),
+                None => types::Duckvalue::Null,
+            },
+            F::Type1 => opt_text(json.as_deref().and_then(|j| logic::json_type(j, None))),
+            F::Type2 => opt_text(
+                json.as_deref()
+                    .zip(arg1.as_deref())
+                    .and_then(|(j, p)| logic::json_type(j, Some(p))),
+            ),
+            F::Keys1 => opt_text(json.as_deref().and_then(|j| logic::json_keys(j, None))),
+            F::Keys2 => opt_text(
+                json.as_deref()
+                    .zip(arg1.as_deref())
+                    .and_then(|(j, p)| logic::json_keys(j, Some(p))),
+            ),
+            F::Contains => match json.as_deref().zip(arg1.as_deref()) {
+                Some((j, n)) => match logic::json_contains(j, n) {
+                    Some(b) => types::Duckvalue::Boolean(b),
                     None => types::Duckvalue::Null,
                 },
-                F::Type1 => opt_text(json.as_deref().and_then(|j| logic::json_type(j, None))),
-                F::Type2 => opt_text(
-                    json.as_deref()
-                        .zip(arg1.as_deref())
-                        .and_then(|(j, p)| logic::json_type(j, Some(p))),
-                ),
-                F::Keys1 => opt_text(json.as_deref().and_then(|j| logic::json_keys(j, None))),
-                F::Keys2 => opt_text(
-                    json.as_deref()
-                        .zip(arg1.as_deref())
-                        .and_then(|(j, p)| logic::json_keys(j, Some(p))),
-                ),
-                F::Contains => match json.as_deref().zip(arg1.as_deref()) {
-                    Some((j, n)) => match logic::json_contains(j, n) {
-                        Some(b) => types::Duckvalue::Boolean(b),
-                        None => types::Duckvalue::Null,
-                    },
-                    None => types::Duckvalue::Null,
-                },
-                F::Quote => opt_text(json.as_deref().map(logic::json_quote)),
-            })
+                None => types::Duckvalue::Null,
+            },
+            F::Quote => opt_text(json.as_deref().map(logic::json_quote)),
+        })
     }
 
     export!(Extension);
@@ -178,10 +178,10 @@ mod component {
         let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
 
         let reg_fn = |name: &str,
-                          f: F,
-                          arg_specs: &[(&str, types::Logicaltype)],
-                          ret: types::Logicaltype,
-                          desc: &str|
+                      f: F,
+                      arg_specs: &[(&str, types::Logicaltype)],
+                      ret: types::Logicaltype,
+                      desc: &str|
          -> Result<(), types::Duckerror> {
             let h = NEXT.fetch_add(1, Ordering::Relaxed);
             handlers().lock().unwrap().insert(h, f);
@@ -210,7 +210,13 @@ mod component {
         let json = ("json", L::Text);
         let path = ("path", L::Text);
 
-        reg_fn("json_valid", F::Valid, &[json.clone()], L::Boolean, "valid JSON?")?;
+        reg_fn(
+            "json_valid",
+            F::Valid,
+            &[json.clone()],
+            L::Boolean,
+            "valid JSON?",
+        )?;
         reg_fn(
             "json_extract",
             F::Extract,
@@ -239,7 +245,13 @@ mod component {
             L::Int64,
             "length of JSON array at path",
         )?;
-        reg_fn("json_type", F::Type1, &[json.clone()], L::Text, "type of JSON value")?;
+        reg_fn(
+            "json_type",
+            F::Type1,
+            &[json.clone()],
+            L::Text,
+            "type of JSON value",
+        )?;
         reg_fn(
             "json_type",
             F::Type2,
@@ -247,7 +259,13 @@ mod component {
             L::Text,
             "type of JSON value at path",
         )?;
-        reg_fn("json_keys", F::Keys1, &[json.clone()], L::Text, "JSON array of keys")?;
+        reg_fn(
+            "json_keys",
+            F::Keys1,
+            &[json.clone()],
+            L::Text,
+            "JSON array of keys",
+        )?;
         reg_fn(
             "json_keys",
             F::Keys2,
@@ -262,8 +280,20 @@ mod component {
             L::Boolean,
             "haystack contains needle?",
         )?;
-        reg_fn("json_quote", F::Quote, &[json.clone()], L::Text, "wrap value as JSON")?;
-        reg_fn("to_json", F::Quote, &[json.clone()], L::Text, "wrap value as JSON")?;
+        reg_fn(
+            "json_quote",
+            F::Quote,
+            &[json.clone()],
+            L::Text,
+            "wrap value as JSON",
+        )?;
+        reg_fn(
+            "to_json",
+            F::Quote,
+            &[json.clone()],
+            L::Text,
+            "wrap value as JSON",
+        )?;
 
         Ok(())
     }
@@ -299,7 +329,10 @@ mod tests {
 
     #[test]
     fn array_length_path() {
-        assert_eq!(json_array_length(r#"{"a":[1,2,3,4]}"#, Some("$.a")), Some(4));
+        assert_eq!(
+            json_array_length(r#"{"a":[1,2,3,4]}"#, Some("$.a")),
+            Some(4)
+        );
         assert_eq!(json_array_length(r#"{"a":[1,2,3,4]}"#, Some("/a")), Some(4));
         assert_eq!(
             json_array_length(r#"{"a":[[1],[2]]}"#, Some("$.a[0]")),
@@ -350,7 +383,10 @@ mod tests {
             Some("hi".to_string())
         );
         // number: textual form
-        assert_eq!(json_extract_string(r#"{"a":1}"#, "$.a"), Some("1".to_string()));
+        assert_eq!(
+            json_extract_string(r#"{"a":1}"#, "$.a"),
+            Some("1".to_string())
+        );
         // bool
         assert_eq!(
             json_extract_string(r#"{"a":true}"#, "$.a"),

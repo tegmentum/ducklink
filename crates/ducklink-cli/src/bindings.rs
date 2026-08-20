@@ -10283,9 +10283,7 @@ macro_rules! __export_duckdb_cli_impl {
 #[doc(inline)]
 pub(crate) use __export_duckdb_cli_impl as export;
 #[cfg(target_arch = "wasm32")]
-#[unsafe(
-    link_section = "component-type:wit-bindgen:0.41.0:duckdb:cli:duckdb-cli:encoded world"
-)]
+#[unsafe(link_section = "component-type:wit-bindgen:0.41.0:duckdb:cli:duckdb-cli:encoded world")]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
 pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 8204] = *b"\

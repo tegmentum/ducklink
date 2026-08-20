@@ -114,7 +114,9 @@ impl S3Config {
             .map_err(|_| anyhow!("AWS_ACCESS_KEY_ID not set in the environment"))?;
         let secret_key = std::env::var("AWS_SECRET_ACCESS_KEY")
             .map_err(|_| anyhow!("AWS_SECRET_ACCESS_KEY not set in the environment"))?;
-        let session_token = std::env::var("AWS_SESSION_TOKEN").ok().filter(|s| !s.is_empty());
+        let session_token = std::env::var("AWS_SESSION_TOKEN")
+            .ok()
+            .filter(|s| !s.is_empty());
         let region = std::env::var("AWS_REGION")
             .or_else(|_| std::env::var("AWS_DEFAULT_REGION"))
             .unwrap_or_else(|_| "us-east-1".to_string());
@@ -154,7 +156,10 @@ impl S3Client {
         } else if let Some(rest) = cfg.endpoint.strip_prefix("http://") {
             ("http", rest.to_string())
         } else {
-            bail!("AWS_ENDPOINT_URL must start with http:// or https://: {:?}", cfg.endpoint);
+            bail!(
+                "AWS_ENDPOINT_URL must start with http:// or https://: {:?}",
+                cfg.endpoint
+            );
         };
         let http = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(300))
@@ -217,7 +222,10 @@ impl S3Client {
         for (k, v) in &headers {
             req = req.header(k.as_str(), v.as_str());
         }
-        let resp = req.body(body).send().with_context(|| format!("PUT {key}"))?;
+        let resp = req
+            .body(body)
+            .send()
+            .with_context(|| format!("PUT {key}"))?;
         let status = resp.status();
         if !status.is_success() {
             let txt = resp.text().unwrap_or_default();
@@ -239,7 +247,10 @@ impl S3Client {
             let txt = resp.text().unwrap_or_default();
             bail!("GET {key} failed: HTTP {status}: {txt}");
         }
-        Ok(resp.bytes().with_context(|| format!("read body of {key}"))?.to_vec())
+        Ok(resp
+            .bytes()
+            .with_context(|| format!("read body of {key}"))?
+            .to_vec())
     }
 }
 
@@ -264,7 +275,10 @@ fn open_persistent(
     let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)
         .context("failed to instantiate the core component")?;
     let open_opts: Vec<(String, String)> = vec![
-        ("autoinstall_known_extensions".to_string(), "false".to_string()),
+        (
+            "autoinstall_known_extensions".to_string(),
+            "false".to_string(),
+        ),
         ("autoload_known_extensions".to_string(), "false".to_string()),
     ];
     let conn = core
@@ -324,7 +338,8 @@ fn snapshot_once(
     s3.put_object(&target.key("latest"), snap_sub.clone().into_bytes())
         .context("update latest pointer")?;
     let state_json = serde_json::to_vec_pretty(&state).context("serialize state.json")?;
-    s3.put_object(&target.key("state.json"), state_json).context("upload state.json")?;
+    s3.put_object(&target.key("state.json"), state_json)
+        .context("upload state.json")?;
 
     eprintln!(
         "ducklink backup: gen {} snapshot {} ({} -> {} bytes lz4) -> s3://{}/{}",
@@ -371,7 +386,9 @@ pub fn run_backup(
         std::thread::sleep(Duration::from_secs(secs));
         match snapshot_once(&mut core, &conn, host_db, &s3, target, &state) {
             Ok(next) => state = next,
-            Err(e) => eprintln!("ducklink backup: snapshot error (will retry next interval): {e:#}"),
+            Err(e) => {
+                eprintln!("ducklink backup: snapshot error (will retry next interval): {e:#}")
+            }
         }
     }
 }

@@ -22,7 +22,8 @@ impl Guest for EchoHandler {
         // the raw request back, and set text/plain via the structured-response
         // shape the host understands ({status, ctype, body}).
         let summary = format!("echo: {} bytes\n{}", request.len(), request);
-        let mut out = String::from("{\"status\":200,\"ctype\":\"text/plain; charset=utf-8\",\"body\":");
+        let mut out =
+            String::from("{\"status\":200,\"ctype\":\"text/plain; charset=utf-8\",\"body\":");
         json_string(&mut out, &summary);
         out.push('}');
         Ok(out)

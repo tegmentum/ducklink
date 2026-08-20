@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use clap::{ArgAction, Parser};
 use ducklink_host::{
-    precompile_component_to_file, run_backup, run_cli_with_stdio, run_restore, run_shell_with_stdio,
-    serve_httpd, serve_quack, serve_ui, set_extension_root, ComponentArtifacts, HandlerRegistry,
-    HttpdOptions, S3Target, TlsMode, UiMode,
+    precompile_component_to_file, run_backup, run_cli_with_stdio, run_restore,
+    run_shell_with_stdio, serve_httpd, serve_quack, serve_ui, set_extension_root,
+    ComponentArtifacts, HandlerRegistry, HttpdOptions, S3Target, TlsMode, UiMode,
 };
 
 #[derive(Parser, Debug)]
@@ -92,14 +92,16 @@ fn run_compose(args: &[String]) -> Result<()> {
             "--output" => {
                 i += 1;
                 output = Some(PathBuf::from(
-                    args.get(i).ok_or_else(|| anyhow::anyhow!("--output expects a path"))?,
+                    args.get(i)
+                        .ok_or_else(|| anyhow::anyhow!("--output expects a path"))?,
                 ));
             }
             "--precompile" => precompile_after = true,
             "--repo-root" => {
                 i += 1;
                 repo_root = PathBuf::from(
-                    args.get(i).ok_or_else(|| anyhow::anyhow!("--repo-root expects a path"))?,
+                    args.get(i)
+                        .ok_or_else(|| anyhow::anyhow!("--repo-root expects a path"))?,
                 );
             }
             other => anyhow::bail!("compose: unknown arg {other:?}"),
@@ -145,7 +147,11 @@ fn run_compose(args: &[String]) -> Result<()> {
         anyhow::bail!(
             "compose: not embeddable: {}\n  Rust: {}\n  C++:  {}",
             unknown.join(", "),
-            if rust_exts.is_empty() { "(none)".into() } else { rust_exts.join(", ") },
+            if rust_exts.is_empty() {
+                "(none)".into()
+            } else {
+                rust_exts.join(", ")
+            },
             cpp_exts.join(", ")
         );
     }
@@ -185,13 +191,20 @@ fn run_compose(args: &[String]) -> Result<()> {
 
     // Map Rust names -> cargo features (hyphenated, as cargo requires on the CLI).
     let mut features = vec!["wasi".to_string()];
-    features.extend(rust_sel.iter().map(|n| format!("embed-{}", n.replace('_', "-"))));
+    features.extend(
+        rust_sel
+            .iter()
+            .map(|n| format!("embed-{}", n.replace('_', "-"))),
+    );
     let features = features.join(",");
 
     // Keep the generated WIT in sync, like the Makefile `core` target.
     let sync = repo_root.join("scripts/sync-core-wit.sh");
     if sync.is_file() {
-        let _ = std::process::Command::new("bash").arg(&sync).current_dir(&repo_root).status();
+        let _ = std::process::Command::new("bash")
+            .arg(&sync)
+            .current_dir(&repo_root)
+            .status();
     }
 
     if !rust_sel.is_empty() {
@@ -200,12 +213,23 @@ fn run_compose(args: &[String]) -> Result<()> {
     eprintln!("  cargo component build -p ducklink-core --target wasm32-wasip2 --release --features {features}");
     let status = std::process::Command::new("cargo")
         .args([
-            "component", "build", "-p", "ducklink-core", "--target", "wasm32-wasip2",
-            "--release", "--features", &features,
+            "component",
+            "build",
+            "-p",
+            "ducklink-core",
+            "--target",
+            "wasm32-wasip2",
+            "--release",
+            "--features",
+            &features,
         ])
         .current_dir(&repo_root)
         .status()
-        .map_err(|e| anyhow::anyhow!("spawn cargo component: {e} (install with `cargo install cargo-component`)"))?;
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "spawn cargo component: {e} (install with `cargo install cargo-component`)"
+            )
+        })?;
     if !status.success() {
         anyhow::bail!("cargo component build failed");
     }
@@ -215,8 +239,9 @@ fn run_compose(args: &[String]) -> Result<()> {
         if let Some(parent) = out.parent() {
             std::fs::create_dir_all(parent).ok();
         }
-        std::fs::copy(&core_wasm, out)
-            .map_err(|e| anyhow::anyhow!("copy {} -> {}: {e}", core_wasm.display(), out.display()))?;
+        std::fs::copy(&core_wasm, out).map_err(|e| {
+            anyhow::anyhow!("copy {} -> {}: {e}", core_wasm.display(), out.display())
+        })?;
         eprintln!("wrote {}", out.display());
         out.clone()
     } else {
@@ -227,7 +252,11 @@ fn run_compose(args: &[String]) -> Result<()> {
     if precompile_after {
         let cwasm = final_wasm.with_extension("cwasm");
         precompile_component_to_file(&final_wasm, &cwasm)?;
-        eprintln!("precompiled {} -> {}", final_wasm.display(), cwasm.display());
+        eprintln!(
+            "precompiled {} -> {}",
+            final_wasm.display(),
+            cwasm.display()
+        );
     }
     Ok(())
 }
@@ -413,14 +442,15 @@ fn main() -> Result<()> {
         let tool = match tool {
             Some(t) => t,
             None => {
-                eprintln!("usage: ducklink run-tool <tool.wasm> [--extensions-dir DIR] [-- args...]");
+                eprintln!(
+                    "usage: ducklink run-tool <tool.wasm> [--extensions-dir DIR] [-- args...]"
+                );
                 std::process::exit(2);
             }
         };
         let artifacts = ComponentArtifacts::resolve_default()?;
         let cwd = std::env::current_dir()?;
-        let extensions_dir =
-            extensions_dir.unwrap_or_else(|| cwd.join("artifacts/extensions"));
+        let extensions_dir = extensions_dir.unwrap_or_else(|| cwd.join("artifacts/extensions"));
         set_extension_root(extensions_dir);
         // DuckDB's wasm home is "/"; pre-create cwd/.duckdb/extension_data (the
         // fs shim's mkdir isn't recursive), mirroring the ui/cli paths.
@@ -440,7 +470,10 @@ fn main() -> Result<()> {
     // Reuses the catalog reader + the resolver candidate pipeline + the
     // ducklink-install flow (it does NOT reimplement resolution). Handled before
     // clap (which uses trailing_var_arg).
-    if matches!(raw.get(1).map(String::as_str), Some("extension") | Some("ext")) {
+    if matches!(
+        raw.get(1).map(String::as_str),
+        Some("extension") | Some("ext")
+    ) {
         return ducklink_host::extcli::run(&raw[2..]);
     }
 
@@ -597,7 +630,15 @@ fn main() -> Result<()> {
         // cwd/.duckdb/extension_data (the shim's mkdir isn't recursive enough).
         std::fs::create_dir_all(cwd.join(".duckdb/extension_data")).ok();
         let preopens: Vec<(&Path, &str)> = vec![(cwd.as_path(), ".")];
-        serve_ui(&artifacts, db.as_deref(), port, mode, open_browser, &assets, &preopens)?;
+        serve_ui(
+            &artifacts,
+            db.as_deref(),
+            port,
+            mode,
+            open_browser,
+            &assets,
+            &preopens,
+        )?;
         return Ok(());
     }
 
@@ -691,7 +732,11 @@ fn main() -> Result<()> {
         // The guest opens the db relative to its "/" home (-> cwd preopen); the
         // host reads the same file at cwd/<db> for the snapshot.
         let db_path = PathBuf::from(&db);
-        let host_db = if db_path.is_absolute() { db_path.clone() } else { cwd.join(&db_path) };
+        let host_db = if db_path.is_absolute() {
+            db_path.clone()
+        } else {
+            cwd.join(&db_path)
+        };
         run_backup(&artifacts, &host_db, &db, &target, interval, &preopens)?;
         return Ok(());
     }
@@ -922,7 +967,10 @@ fn main() -> Result<()> {
             for entry in &loads {
                 let (name, path) = parse_handler_load(entry)?;
                 registry.register(&name, &path)?;
-                eprintln!("duckdb-httpd: loaded handler `{name}` from {}", path.display());
+                eprintln!(
+                    "duckdb-httpd: loaded handler `{name}` from {}",
+                    path.display()
+                );
             }
             Some(registry)
         };

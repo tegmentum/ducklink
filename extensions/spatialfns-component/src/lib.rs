@@ -17,8 +17,8 @@ use duckdb::extension::{runtime, types};
 use exports::duckdb::extension::guest;
 
 use geo::algorithm::{
-    bounding_rect::BoundingRect, centroid::Centroid, contains::Contains,
-    euclidean_distance::EuclideanDistance, euclidean_length::EuclideanLength, area::Area,
+    area::Area, bounding_rect::BoundingRect, centroid::Centroid, contains::Contains,
+    euclidean_distance::EuclideanDistance, euclidean_length::EuclideanLength,
     intersects::Intersects,
 };
 use geo::geometry::Geometry;
@@ -48,13 +48,19 @@ fn total_length(g: &Geometry<f64>) -> f64 {
         Geometry::MultiLineString(mls) => mls.euclidean_length(),
         Geometry::Polygon(p) => {
             p.exterior().euclidean_length()
-                + p.interiors().iter().map(|r| r.euclidean_length()).sum::<f64>()
+                + p.interiors()
+                    .iter()
+                    .map(|r| r.euclidean_length())
+                    .sum::<f64>()
         }
         Geometry::MultiPolygon(mp) => mp
             .iter()
             .map(|p| {
                 p.exterior().euclidean_length()
-                    + p.interiors().iter().map(|r| r.euclidean_length()).sum::<f64>()
+                    + p.interiors()
+                        .iter()
+                        .map(|r| r.euclidean_length())
+                        .sum::<f64>()
             })
             .sum(),
         _ => 0.0,
@@ -146,70 +152,70 @@ fn scalar(
     args: Vec<types::Duckvalue>,
     _c: types::Invokeinfo,
 ) -> Result<types::Duckvalue, types::Duckerror> {
-        let which = handlers()
-            .lock()
-            .unwrap()
-            .get(&handle)
-            .copied()
-            .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
-        let n = types::Duckvalue::Null;
-        Ok(match which {
-            F::Point => match (f64_arg(&args, 0), f64_arg(&args, 1)) {
-                (Some(x), Some(y)) => {
-                    let g: Geometry<f64> = geo::Point::new(x, y).into();
-                    types::Duckvalue::Text(geom_to_wkt(&g))
-                }
-                _ => n,
-            },
-            F::GeomFromText | F::AsText => match geom_arg(&args, 0) {
-                Some(g) => types::Duckvalue::Text(geom_to_wkt(&g)),
-                None => n,
-            },
-            F::X => match geom_arg(&args, 0).and_then(|g| point_xy(&g)) {
-                Some((x, _)) => types::Duckvalue::Float64(x),
-                None => n,
-            },
-            F::Y => match geom_arg(&args, 0).and_then(|g| point_xy(&g)) {
-                Some((_, y)) => types::Duckvalue::Float64(y),
-                None => n,
-            },
-            F::Distance => match (geom_arg(&args, 0), geom_arg(&args, 1)) {
-                (Some(a), Some(b)) => types::Duckvalue::Float64(a.euclidean_distance(&b)),
-                _ => n,
-            },
-            F::Area => match geom_arg(&args, 0) {
-                Some(g) => types::Duckvalue::Float64(total_area(&g)),
-                None => n,
-            },
-            F::Length => match geom_arg(&args, 0) {
-                Some(g) => types::Duckvalue::Float64(total_length(&g)),
-                None => n,
-            },
-            F::Centroid => match geom_arg(&args, 0).and_then(|g| g.centroid()) {
-                Some(p) => types::Duckvalue::Text(geom_to_wkt(&Geometry::Point(p))),
-                None => n,
-            },
-            F::Contains => match (geom_arg(&args, 0), geom_arg(&args, 1)) {
-                (Some(a), Some(b)) => types::Duckvalue::Boolean(a.contains(&b)),
-                _ => n,
-            },
-            F::Within => match (geom_arg(&args, 0), geom_arg(&args, 1)) {
-                (Some(a), Some(b)) => types::Duckvalue::Boolean(b.contains(&a)),
-                _ => n,
-            },
-            F::Intersects => match (geom_arg(&args, 0), geom_arg(&args, 1)) {
-                (Some(a), Some(b)) => types::Duckvalue::Boolean(a.intersects(&b)),
-                _ => n,
-            },
-            F::Envelope => match geom_arg(&args, 0).and_then(|g| envelope_wkt(&g)) {
-                Some(s) => types::Duckvalue::Text(s),
-                None => n,
-            },
-            F::AsGeoJSON => match geom_arg(&args, 0).and_then(|g| geojson_string(&g)) {
-                Some(s) => types::Duckvalue::Text(s),
-                None => n,
-            },
-        })
+    let which = handlers()
+        .lock()
+        .unwrap()
+        .get(&handle)
+        .copied()
+        .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
+    let n = types::Duckvalue::Null;
+    Ok(match which {
+        F::Point => match (f64_arg(&args, 0), f64_arg(&args, 1)) {
+            (Some(x), Some(y)) => {
+                let g: Geometry<f64> = geo::Point::new(x, y).into();
+                types::Duckvalue::Text(geom_to_wkt(&g))
+            }
+            _ => n,
+        },
+        F::GeomFromText | F::AsText => match geom_arg(&args, 0) {
+            Some(g) => types::Duckvalue::Text(geom_to_wkt(&g)),
+            None => n,
+        },
+        F::X => match geom_arg(&args, 0).and_then(|g| point_xy(&g)) {
+            Some((x, _)) => types::Duckvalue::Float64(x),
+            None => n,
+        },
+        F::Y => match geom_arg(&args, 0).and_then(|g| point_xy(&g)) {
+            Some((_, y)) => types::Duckvalue::Float64(y),
+            None => n,
+        },
+        F::Distance => match (geom_arg(&args, 0), geom_arg(&args, 1)) {
+            (Some(a), Some(b)) => types::Duckvalue::Float64(a.euclidean_distance(&b)),
+            _ => n,
+        },
+        F::Area => match geom_arg(&args, 0) {
+            Some(g) => types::Duckvalue::Float64(total_area(&g)),
+            None => n,
+        },
+        F::Length => match geom_arg(&args, 0) {
+            Some(g) => types::Duckvalue::Float64(total_length(&g)),
+            None => n,
+        },
+        F::Centroid => match geom_arg(&args, 0).and_then(|g| g.centroid()) {
+            Some(p) => types::Duckvalue::Text(geom_to_wkt(&Geometry::Point(p))),
+            None => n,
+        },
+        F::Contains => match (geom_arg(&args, 0), geom_arg(&args, 1)) {
+            (Some(a), Some(b)) => types::Duckvalue::Boolean(a.contains(&b)),
+            _ => n,
+        },
+        F::Within => match (geom_arg(&args, 0), geom_arg(&args, 1)) {
+            (Some(a), Some(b)) => types::Duckvalue::Boolean(b.contains(&a)),
+            _ => n,
+        },
+        F::Intersects => match (geom_arg(&args, 0), geom_arg(&args, 1)) {
+            (Some(a), Some(b)) => types::Duckvalue::Boolean(a.intersects(&b)),
+            _ => n,
+        },
+        F::Envelope => match geom_arg(&args, 0).and_then(|g| envelope_wkt(&g)) {
+            Some(s) => types::Duckvalue::Text(s),
+            None => n,
+        },
+        F::AsGeoJSON => match geom_arg(&args, 0).and_then(|g| geojson_string(&g)) {
+            Some(s) => types::Duckvalue::Text(s),
+            None => n,
+        },
+    })
 }
 
 export!(Extension);
@@ -274,9 +280,27 @@ fn register_scalars() -> Result<(), types::Duckerror> {
         txt(),
         "validate/normalize WKT",
     )?;
-    reg_one("ST_AsText", F::AsText, &[("geom", txt())], txt(), "geometry -> WKT")?;
-    reg_one("ST_X", F::X, &[("geom", txt())], dbl(), "point X coordinate")?;
-    reg_one("ST_Y", F::Y, &[("geom", txt())], dbl(), "point Y coordinate")?;
+    reg_one(
+        "ST_AsText",
+        F::AsText,
+        &[("geom", txt())],
+        txt(),
+        "geometry -> WKT",
+    )?;
+    reg_one(
+        "ST_X",
+        F::X,
+        &[("geom", txt())],
+        dbl(),
+        "point X coordinate",
+    )?;
+    reg_one(
+        "ST_Y",
+        F::Y,
+        &[("geom", txt())],
+        dbl(),
+        "point Y coordinate",
+    )?;
     reg_one(
         "ST_Distance",
         F::Distance,

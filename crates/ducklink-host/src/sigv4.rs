@@ -135,10 +135,7 @@ pub fn sign_v4(
         .collect();
     sorted.sort_by(|a, b| a.0.cmp(&b.0));
 
-    let canonical_headers: String = sorted
-        .iter()
-        .map(|(k, v)| format!("{k}:{v}\n"))
-        .collect();
+    let canonical_headers: String = sorted.iter().map(|(k, v)| format!("{k}:{v}\n")).collect();
     let signed_headers: String = sorted
         .iter()
         .map(|(k, _)| k.as_str())
@@ -156,7 +153,10 @@ pub fn sign_v4(
     );
 
     // Derive the signing key.
-    let k_date = hmac(format!("AWS4{}", creds.secret_key).as_bytes(), date_stamp.as_bytes());
+    let k_date = hmac(
+        format!("AWS4{}", creds.secret_key).as_bytes(),
+        date_stamp.as_bytes(),
+    );
     let k_region = hmac(&k_date, region.as_bytes());
     let k_service = hmac(&k_region, service.as_bytes());
     let k_signing = hmac(&k_service, b"aws4_request");
@@ -187,7 +187,10 @@ mod tests {
 
     #[test]
     fn uri_encodes_key() {
-        assert_eq!(uri_encode_path("photos/2015/sample.jpg"), "photos/2015/sample.jpg");
+        assert_eq!(
+            uri_encode_path("photos/2015/sample.jpg"),
+            "photos/2015/sample.jpg"
+        );
         assert_eq!(uri_encode_path("my key.txt"), "my%20key.txt");
         assert_eq!(uri_encode_path("a/b c/d.parquet"), "a/b%20c/d.parquet");
     }
@@ -220,7 +223,10 @@ mod tests {
             session_token: None,
         };
         let headers = vec![
-            ("host".to_string(), "examplebucket.s3.amazonaws.com".to_string()),
+            (
+                "host".to_string(),
+                "examplebucket.s3.amazonaws.com".to_string(),
+            ),
             ("range".to_string(), "bytes=0-9".to_string()),
             (
                 "x-amz-content-sha256".to_string(),
@@ -245,9 +251,9 @@ mod tests {
             ),
             "SigV4 signature mismatch; got: {authz}"
         );
-        assert!(authz.contains(
-            "Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request"
-        ));
+        assert!(
+            authz.contains("Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request")
+        );
         assert!(authz.contains("SignedHeaders=host;range;x-amz-content-sha256;x-amz-date"));
     }
 }

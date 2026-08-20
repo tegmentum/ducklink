@@ -3,34 +3,51 @@
 //!   url_pattern_match(pattern, url) -> text : JSON of matched named groups, or NULL.
 //!   Invalid pattern / no match / non-text args -> NULL. Never panics.
 use std::collections::HashMap;
-use std::sync::{atomic::{AtomicU32, Ordering}, Mutex, OnceLock};
+use std::sync::{
+    atomic::{AtomicU32, Ordering},
+    Mutex, OnceLock,
+};
 use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension" });
 use duckdb::extension::{runtime, types};
 use exports::duckdb::extension::guest;
 use url::Url;
-use urlpattern::{UrlPattern, UrlPatternInit, UrlPatternMatchInput, UrlPatternOptions, UrlPatternComponentResult};
+use urlpattern::{
+    UrlPattern, UrlPatternComponentResult, UrlPatternInit, UrlPatternMatchInput, UrlPatternOptions,
+};
 
 struct Extension;
 impl guest::Guest for Extension {
     fn load() -> Result<types::Loadresult, types::Duckerror> {
         register_scalars()?;
-        Ok(types::Loadresult { name: "urlpattern".into(), version: Some(env!("CARGO_PKG_VERSION").into()), requires: Vec::new().into() })
+        Ok(types::Loadresult {
+            name: "urlpattern".into(),
+            version: Some(env!("CARGO_PKG_VERSION").into()),
+            requires: Vec::new().into(),
+        })
     }
-    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> { Ok(false) }
-    fn shutdown() -> Result<bool, types::Duckerror> { Ok(false) }
+    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
+    fn shutdown() -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
 }
 
 fn text_arg(args: &[types::Duckvalue], i: usize) -> Option<std::string::String> {
-    match args.get(i) { Some(types::Duckvalue::Text(s)) => Some(s.to_string()), _ => None }
+    match args.get(i) {
+        Some(types::Duckvalue::Text(s)) => Some(s.to_string()),
+        _ => None,
+    }
 }
 
 /// Build a compiled pattern + parsed input URL. Returns None on any invalid input.
 fn build(pattern: &str, url_str: &str) -> Option<(UrlPattern, Url)> {
     let url = Url::parse(url_str).ok()?;
     // `url` doubles as the base so relative patterns (no protocol) resolve.
-    let init = UrlPatternInit::parse_constructor_string::<regex::Regex>(pattern, Some(url.clone())).ok()?;
+    let init = UrlPatternInit::parse_constructor_string::<regex::Regex>(pattern, Some(url.clone()))
+        .ok()?;
     let p = UrlPattern::parse(init, UrlPatternOptions::default()).ok()?;
     Some((p, url))
 }
@@ -55,7 +72,9 @@ fn do_match(pattern: &str, url_str: &str) -> Option<std::string::String> {
                 }
             }
         }
-        if !m.is_empty() { top.insert(name.to_string(), serde_json::Value::Object(m)); }
+        if !m.is_empty() {
+            top.insert(name.to_string(), serde_json::Value::Object(m));
+        }
     };
     add("protocol", &res.protocol);
     add("hostname", &res.hostname);
@@ -67,12 +86,23 @@ fn do_match(pattern: &str, url_str: &str) -> Option<std::string::String> {
 }
 
 // Per-row scalar logic, UNCHANGED from the major-3 hand-written impl.
-fn scalar(handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
-    let which = handlers().lock().unwrap().get(&handle).copied()
+fn scalar(
+    handle: u32,
+    args: Vec<types::Duckvalue>,
+    _c: types::Invokeinfo,
+) -> Result<types::Duckvalue, types::Duckerror> {
+    let which = handlers()
+        .lock()
+        .unwrap()
+        .get(&handle)
+        .copied()
         .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
     let pattern = text_arg(&args, 0);
     let url = text_arg(&args, 1);
-    let (pattern, url) = match (pattern, url) { (Some(p), Some(u)) => (p, u), _ => return Ok(types::Duckvalue::Null) };
+    let (pattern, url) = match (pattern, url) {
+        (Some(p), Some(u)) => (p, u),
+        _ => return Ok(types::Duckvalue::Null),
+    };
     Ok(match which {
         F::Test => match do_test(&pattern, &url) {
             Some(b) => types::Duckvalue::Boolean(b),
@@ -97,23 +127,59 @@ datalink_extcore::columnar_bridge! {
 export!(Extension);
 
 fn register_scalars() -> Result<(), types::Duckerror> {
-    let cap = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
-    let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
+    let cap = runtime::get_capability(types::Capabilitykind::Scalar)
+        .ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
+    let reg = match cap {
+        runtime::Capability::Scalar(r) => r,
+        _ => return Err(types::Duckerror::Internal("bad capability".into())),
+    };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     let args = [
-        runtime::Funcarg { name: Some("pattern".into()), logical: types::Logicaltype::Text },
-        runtime::Funcarg { name: Some("url".into()), logical: types::Logicaltype::Text },
+        runtime::Funcarg {
+            name: Some("pattern".into()),
+            logical: types::Logicaltype::Text,
+        },
+        runtime::Funcarg {
+            name: Some("url".into()),
+            logical: types::Logicaltype::Text,
+        },
     ];
-    let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::Test);
-    reg.register("url_pattern_test", &args, &types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
-        Some(&runtime::Funcopts { description: Some("does url match URLPattern pattern?".into()), tags: vec!["networking".into()], attributes: det }))?;
-    let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::Match);
-    reg.register("url_pattern_match", &args, &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
-        Some(&runtime::Funcopts { description: Some("JSON of matched URLPattern named groups".into()), tags: vec!["networking".into()], attributes: det }))?;
+    let h = NEXT.fetch_add(1, Ordering::Relaxed);
+    handlers().lock().unwrap().insert(h, F::Test);
+    reg.register(
+        "url_pattern_test",
+        &args,
+        &types::Logicaltype::Boolean,
+        runtime::ScalarCallback::new(h),
+        Some(&runtime::Funcopts {
+            description: Some("does url match URLPattern pattern?".into()),
+            tags: vec!["networking".into()],
+            attributes: det,
+        }),
+    )?;
+    let h = NEXT.fetch_add(1, Ordering::Relaxed);
+    handlers().lock().unwrap().insert(h, F::Match);
+    reg.register(
+        "url_pattern_match",
+        &args,
+        &types::Logicaltype::Text,
+        runtime::ScalarCallback::new(h),
+        Some(&runtime::Funcopts {
+            description: Some("JSON of matched URLPattern named groups".into()),
+            tags: vec!["networking".into()],
+            attributes: det,
+        }),
+    )?;
     Ok(())
 }
 
-#[derive(Clone, Copy, PartialEq)] enum F { Test, Match }
+#[derive(Clone, Copy, PartialEq)]
+enum F {
+    Test,
+    Match,
+}
 static NEXT: AtomicU32 = AtomicU32::new(1);
 static HANDLERS: OnceLock<Mutex<HashMap<u32, F>>> = OnceLock::new();
-fn handlers() -> &'static Mutex<HashMap<u32, F>> { HANDLERS.get_or_init(|| Mutex::new(HashMap::new())) }
+fn handlers() -> &'static Mutex<HashMap<u32, F>> {
+    HANDLERS.get_or_init(|| Mutex::new(HashMap::new()))
+}

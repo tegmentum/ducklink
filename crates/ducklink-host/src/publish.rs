@@ -396,7 +396,9 @@ fn scan_native_repo(repo: &Path) -> Result<Vec<(String, PathBuf)>> {
 /// `datalink-ext` bucket) without any network or credentials.
 pub fn print_dry_run(plan: &PublishPlan, bucket: &str, db: &str) {
     println!("ducklink publish --dry-run (no upload; no credentials read)");
-    println!("bucket: {bucket}  (single shared bucket; sqlink/ namespace reserved, not written here)");
+    println!(
+        "bucket: {bucket}  (single shared bucket; sqlink/ namespace reserved, not written here)"
+    );
     println!();
     println!("{:<58}  {:>10}  cache", "key", "size");
     println!("{}", "-".repeat(82));
@@ -504,7 +506,10 @@ impl R2Client {
             req = req.header(k.as_str(), v.as_str());
         }
         req = req.header("authorization", authz);
-        let resp = req.body(body).send().with_context(|| format!("PUT {key}"))?;
+        let resp = req
+            .body(body)
+            .send()
+            .with_context(|| format!("PUT {key}"))?;
         let status = resp.status();
         if !status.is_success() {
             let txt = resp.text().unwrap_or_default();
@@ -631,7 +636,11 @@ mod tests {
         // the duplicate provider (same digest+name) was deduped
         assert_eq!(plan.deduped, 1);
         // the catalog object carries the short TTL; the wasm store is immutable
-        let cat = plan.objects.iter().find(|o| o.key == "ducklink/catalog.json").unwrap();
+        let cat = plan
+            .objects
+            .iter()
+            .find(|o| o.key == "ducklink/catalog.json")
+            .unwrap();
         assert_eq!(cat.cache_control, CACHE_CATALOG);
         let wasm = plan
             .objects

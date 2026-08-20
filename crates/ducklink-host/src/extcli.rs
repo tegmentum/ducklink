@@ -97,7 +97,8 @@ pub fn run(args: &[String]) -> Result<()> {
             "--catalog" => {
                 i += 1;
                 g.catalog = Some(PathBuf::from(
-                    args.get(i).ok_or_else(|| anyhow!("--catalog expects a path"))?,
+                    args.get(i)
+                        .ok_or_else(|| anyhow!("--catalog expects a path"))?,
                 ));
             }
             "--extensions-dir" => {
@@ -117,7 +118,9 @@ pub fn run(args: &[String]) -> Result<()> {
             }
             "--deny" => {
                 i += 1;
-                let v = args.get(i).ok_or_else(|| anyhow!("--deny expects id[,id]"))?;
+                let v = args
+                    .get(i)
+                    .ok_or_else(|| anyhow!("--deny expects id[,id]"))?;
                 g.deny = v
                     .split(',')
                     .map(|s| s.trim().to_string())
@@ -211,8 +214,8 @@ fn load_catalog(g: &GlobalOpts) -> Result<Catalog> {
 fn read_catalog_file(path: &Path) -> Result<Catalog> {
     let text = std::fs::read_to_string(path)
         .with_context(|| format!("read catalog {}", path.display()))?;
-    let value: Value = serde_json::from_str(&text)
-        .with_context(|| format!("parse catalog {}", path.display()))?;
+    let value: Value =
+        serde_json::from_str(&text).with_context(|| format!("parse catalog {}", path.display()))?;
     Ok(Catalog {
         value,
         source: path.display().to_string(),
@@ -376,10 +379,11 @@ fn conformance_summary(entry: &Value) -> String {
     }
     if total == 0 {
         // no records; a reference wasm provider is certified by construction.
-        if providers
-            .iter()
-            .any(|p| p.get("reference").and_then(|v| v.as_bool()).unwrap_or(false))
-        {
+        if providers.iter().any(|p| {
+            p.get("reference")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        }) {
             "by-construction".to_string()
         } else {
             "-".to_string()
@@ -472,14 +476,17 @@ fn list_available(g: &GlobalOpts) -> Result<()> {
         })
         .collect();
     render_table(
-        &["name", "version", "categories", "providers", "conformance", "description"],
+        &[
+            "name",
+            "version",
+            "categories",
+            "providers",
+            "conformance",
+            "description",
+        ],
         &rows,
     );
-    println!(
-        "{} extensions in catalog ({})",
-        exts.len(),
-        catalog.source
-    );
+    println!("{} extensions in catalog ({})", exts.len(), catalog.source);
     Ok(())
 }
 
@@ -583,7 +590,10 @@ fn cmd_search(g: &GlobalOpts, pos: &[String]) -> Result<()> {
         }
     }
     // Higher score first, then name.
-    hits.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| s(a.0, "name").cmp(s(b.0, "name"))));
+    hits.sort_by(|a, b| {
+        b.1.cmp(&a.1)
+            .then_with(|| s(a.0, "name").cmp(s(b.0, "name")))
+    });
 
     if g.json {
         let items: Vec<Value> = hits
@@ -656,16 +666,19 @@ fn cmd_info(g: &GlobalOpts, pos: &[String]) -> Result<()> {
         .first()
         .ok_or_else(|| anyhow!("usage: ducklink ext info <name>"))?;
     let catalog = load_catalog(g)?;
-    let entry = catalog
-        .find(name)
-        .ok_or_else(|| anyhow!("extension `{name}` not found in catalog ({})", catalog.source))?;
+    let entry = catalog.find(name).ok_or_else(|| {
+        anyhow!(
+            "extension `{name}` not found in catalog ({})",
+            catalog.source
+        )
+    })?;
 
     // Run the resolver to find the chosen provider + the per-candidate reasoning.
     let manifest = resolver::read_manifest_entry(&catalog.value, name);
     let canonical = canonical_suite_digest(&catalog, name);
-    let resolution = manifest.as_ref().map(|m| {
-        resolver::resolve(m, &resolver_env(), &policy(g), canonical.as_deref())
-    });
+    let resolution = manifest
+        .as_ref()
+        .map(|m| resolver::resolve(m, &resolver_env(), &policy(g), canonical.as_deref()));
 
     if g.json {
         let chosen = match &resolution {
@@ -753,7 +766,10 @@ fn cmd_info(g: &GlobalOpts, pos: &[String]) -> Result<()> {
                     .collect()
             })
             .unwrap_or_default();
-        println!("  Requires    : {} [components, runtime-resolved]", status.join(", "));
+        println!(
+            "  Requires    : {} [components, runtime-resolved]",
+            status.join(", ")
+        );
     }
 
     // Exports (the registered function/type names).
@@ -820,7 +836,10 @@ fn cmd_info(g: &GlobalOpts, pos: &[String]) -> Result<()> {
 fn print_provider(p: &Value, chosen: Option<&str>) {
     let id = s(p, "id");
     let kind = p.get("kind").and_then(|v| v.as_str()).unwrap_or("wasm");
-    let reference = p.get("reference").and_then(|v| v.as_bool()).unwrap_or(false);
+    let reference = p
+        .get("reference")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let marker = if Some(id) == chosen { "* " } else { "  " };
     let mut flags = vec![kind.to_string()];
     if reference {
@@ -851,11 +870,7 @@ fn print_provider(p: &Value, chosen: Option<&str>) {
     }
     if kind == "native" {
         if let Some(plat) = p.get("platform") {
-            println!(
-                "        platform: {}/{}",
-                s(plat, "os"),
-                s(plat, "arch")
-            );
+            println!("        platform: {}/{}", s(plat, "os"), s(plat, "arch"));
         }
     }
     if let Some(digest) = p.get("content_digest").and_then(|v| v.as_str()) {
@@ -879,19 +894,24 @@ fn cmd_install(g: &GlobalOpts, pos: &[String]) -> Result<()> {
     let catalog = load_catalog(g)?;
 
     let manifest = resolver::read_manifest_entry(&catalog.value, name).ok_or_else(|| {
-        anyhow!("extension `{name}` not found (or has no usable provider) in {}", catalog.source)
+        anyhow!(
+            "extension `{name}` not found (or has no usable provider) in {}",
+            catalog.source
+        )
     })?;
     let canonical = canonical_suite_digest(&catalog, name);
-    let resolution = resolver::resolve(&manifest, &resolver_env(), &policy(g), canonical.as_deref())
-        .map_err(|err| {
-            // Surface the resolver's friendly reasoning (uncertified /
-            // contract-mismatch / forced-out / unavailable substrate).
-            anyhow!(
-                "cannot install `{name}`: {}\n  reasoning: {}",
-                err,
-                render_reasoning(&err.reasoning)
-            )
-        })?;
+    let resolution =
+        resolver::resolve(&manifest, &resolver_env(), &policy(g), canonical.as_deref()).map_err(
+            |err| {
+                // Surface the resolver's friendly reasoning (uncertified /
+                // contract-mismatch / forced-out / unavailable substrate).
+                anyhow!(
+                    "cannot install `{name}`: {}\n  reasoning: {}",
+                    err,
+                    render_reasoning(&err.reasoning)
+                )
+            },
+        )?;
 
     let dir = extensions_dir(g)?;
     std::fs::create_dir_all(&dir)
@@ -909,9 +929,7 @@ fn cmd_install(g: &GlobalOpts, pos: &[String]) -> Result<()> {
         .expect("chosen provider present in manifest");
 
     match &chosen.kind {
-        ProviderKind::Wasm {
-            content_digest, ..
-        } => {
+        ProviderKind::Wasm { content_digest, .. } => {
             let dest = dir.join(format!("{name}.wasm"));
             match &resolution.artifact {
                 // Direct-from-R2: the published catalog points the artifact at an
@@ -948,9 +966,14 @@ fn cmd_install(g: &GlobalOpts, pos: &[String]) -> Result<()> {
         resolution.chosen_id,
         resolution.chosen_kind,
         crate::resolver::short_digest_pub(&manifest.wit_contract),
-        s(catalog.find(name).unwrap_or(&Value::Null), "wit_contract_version")
+        s(
+            catalog.find(name).unwrap_or(&Value::Null),
+            "wit_contract_version"
+        )
     );
-    println!("Run it with:  LOAD {name};   (or `ducklink -- duckdb-cli :memory:` then LOAD {name};)");
+    println!(
+        "Run it with:  LOAD {name};   (or `ducklink -- duckdb-cli :memory:` then LOAD {name};)"
+    );
     Ok(())
 }
 
@@ -1049,15 +1072,9 @@ fn install_wasm(src: &Path, dest: &Path, expected_digest: Option<&str>) -> Resul
 /// Drive the transparent-LOAD native install flow (`ducklink-install.sh`), which
 /// runs stock DuckDB's `INSTALL <name> FROM '<repo>'` to populate the extension
 /// dir so a plain `LOAD <name>` works thereafter.
-fn install_native(
-    _catalog: &Catalog,
-    name: &str,
-    dir: &Path,
-    os: &str,
-    arch: &str,
-) -> Result<()> {
-    let script = crate::workspace_root()
-        .join("native-extension/ducklink/tooling/ducklink-install.sh");
+fn install_native(_catalog: &Catalog, name: &str, dir: &Path, os: &str, arch: &str) -> Result<()> {
+    let script =
+        crate::workspace_root().join("native-extension/ducklink/tooling/ducklink-install.sh");
     if !script.is_file() {
         bail!(
             "native install flow unavailable: {} not found",
@@ -1102,8 +1119,7 @@ fn cmd_uninstall(g: &GlobalOpts, pos: &[String]) -> Result<()> {
     for ext in ["wasm", "duckdb_extension"] {
         let path = dir.join(format!("{name}.{ext}"));
         if path.is_file() {
-            std::fs::remove_file(&path)
-                .with_context(|| format!("remove {}", path.display()))?;
+            std::fs::remove_file(&path).with_context(|| format!("remove {}", path.display()))?;
             removed.push(path);
         }
     }

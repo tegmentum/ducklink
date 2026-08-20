@@ -80,15 +80,26 @@ impl callback_dispatch::Guest for Extension {
         let rows = __bridge_colvecs_to_rows(&args);
         let mut out = Vec::with_capacity(rows.len());
         for (i, row) in rows.into_iter().enumerate() {
-            let row_ctx = types::Invokeinfo { rowindex: Some(base + i as u64), iswindow: ctx.iswindow };
+            let row_ctx = types::Invokeinfo {
+                rowindex: Some(base + i as u64),
+                iswindow: ctx.iswindow,
+            };
             out.push(Self::call_scalar(handle, row, row_ctx)?);
         }
         Ok(__bridge_vals_to_colvec(out))
     }
-    fn call_aggregate_col(_h: u32, _a: Vec<callback_dispatch::Colvec>) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("hashfuncs: no aggregates".into()))
+    fn call_aggregate_col(
+        _h: u32,
+        _a: Vec<callback_dispatch::Colvec>,
+    ) -> Result<types::Duckvalue, types::Duckerror> {
+        Err(types::Duckerror::Unsupported(
+            "hashfuncs: no aggregates".into(),
+        ))
     }
-    fn call_cast_col(_h: u32, _a: callback_dispatch::Colvec) -> Result<callback_dispatch::Colvec, types::Duckerror> {
+    fn call_cast_col(
+        _h: u32,
+        _a: callback_dispatch::Colvec,
+    ) -> Result<callback_dispatch::Colvec, types::Duckerror> {
         Err(types::Duckerror::Unsupported("hashfuncs: no casts".into()))
     }
 
@@ -118,11 +129,21 @@ impl callback_dispatch::Guest for Extension {
         })
     }
 
-    fn call_table(_h: u32, _a: Vec<types::Duckvalue>) -> Result<types::Resultset, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("hashfuncs: no table functions".into()))
+    fn call_table(
+        _h: u32,
+        _a: Vec<types::Duckvalue>,
+    ) -> Result<types::Resultset, types::Duckerror> {
+        Err(types::Duckerror::Unsupported(
+            "hashfuncs: no table functions".into(),
+        ))
     }
-    fn call_pragma(_h: u32, _a: Vec<types::Duckvalue>) -> Result<Option<types::Duckvalue>, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("hashfuncs: no pragmas".into()))
+    fn call_pragma(
+        _h: u32,
+        _a: Vec<types::Duckvalue>,
+    ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
+        Err(types::Duckerror::Unsupported(
+            "hashfuncs: no pragmas".into(),
+        ))
     }
     fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("hashfuncs: no casts".into()))
@@ -132,17 +153,46 @@ impl callback_dispatch::Guest for Extension {
 export!(Extension);
 
 fn register_scalars() -> Result<(), types::Duckerror> {
-    let capability = runtime::get_capability(types::Capabilitykind::Scalar)
-        .ok_or_else(|| types::Duckerror::Internal("host did not expose scalar capability".into()))?;
+    let capability = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| {
+        types::Duckerror::Internal("host did not expose scalar capability".into())
+    })?;
     let registry = match capability {
         runtime::Capability::Scalar(registry) => registry,
-        _ => return Err(types::Duckerror::Internal("scalar capability returned unexpected variant".into())),
+        _ => {
+            return Err(types::Duckerror::Internal(
+                "scalar capability returned unexpected variant".into(),
+            ))
+        }
     };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
-    register_one(&registry, "xxh32", types::Logicaltype::Int64, det, ScalarHandler::Xxh32)?;
-    register_one(&registry, "xxh64", types::Logicaltype::Uint64, det, ScalarHandler::Xxh64)?;
-    register_one(&registry, "xxh3", types::Logicaltype::Uint64, det, ScalarHandler::Xxh3)?;
-    register_one(&registry, "murmur3", types::Logicaltype::Int64, det, ScalarHandler::Murmur3)?;
+    register_one(
+        &registry,
+        "xxh32",
+        types::Logicaltype::Int64,
+        det,
+        ScalarHandler::Xxh32,
+    )?;
+    register_one(
+        &registry,
+        "xxh64",
+        types::Logicaltype::Uint64,
+        det,
+        ScalarHandler::Xxh64,
+    )?;
+    register_one(
+        &registry,
+        "xxh3",
+        types::Logicaltype::Uint64,
+        det,
+        ScalarHandler::Xxh3,
+    )?;
+    register_one(
+        &registry,
+        "murmur3",
+        types::Logicaltype::Int64,
+        det,
+        ScalarHandler::Murmur3,
+    )?;
     Ok(())
 }
 
@@ -154,9 +204,15 @@ fn register_one(
     handler: ScalarHandler,
 ) -> Result<(), types::Duckerror> {
     let handle = NEXT_SCALAR_HANDLE.fetch_add(1, Ordering::Relaxed);
-    scalar_handlers().lock().expect("scalar handler mutex poisoned").insert(handle, handler);
+    scalar_handlers()
+        .lock()
+        .expect("scalar handler mutex poisoned")
+        .insert(handle, handler);
     let callback = runtime::ScalarCallback::new(handle);
-    let args = vec![runtime::Funcarg { name: Some("value".into()), logical: types::Logicaltype::Text }];
+    let args = vec![runtime::Funcarg {
+        name: Some("value".into()),
+        logical: types::Logicaltype::Text,
+    }];
     let opts = runtime::Funcopts {
         description: Some("non-cryptographic hash".into()),
         tags: vec!["hashfuncs".into()],

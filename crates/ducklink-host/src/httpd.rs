@@ -91,7 +91,10 @@ pub fn serve_httpd(
     // Match the UI server: point extension-data at the (writable) cwd preopen
     // and disable extension autoinstall/autoload (everything is static).
     let open_opts: Vec<(String, String)> = vec![
-        ("autoinstall_known_extensions".to_string(), "false".to_string()),
+        (
+            "autoinstall_known_extensions".to_string(),
+            "false".to_string(),
+        ),
         ("autoload_known_extensions".to_string(), "false".to_string()),
     ];
     let conn = core
@@ -254,7 +257,11 @@ impl HttpResponse {
         }
     }
     fn text(status: u16, body: &str) -> Self {
-        Self::new(status, "text/plain; charset=utf-8", body.as_bytes().to_vec())
+        Self::new(
+            status,
+            "text/plain; charset=utf-8",
+            body.as_bytes().to_vec(),
+        )
     }
     fn json(status: u16, body: String) -> Self {
         Self::new(status, "application/json", body.into_bytes())
@@ -474,7 +481,11 @@ fn lookup(
     let Some(row) = rows.rows.into_iter().next() else {
         return Ok(None);
     };
-    let handler = row.first().and_then(dv_as_str).unwrap_or_default().to_string();
+    let handler = row
+        .first()
+        .and_then(dv_as_str)
+        .unwrap_or_default()
+        .to_string();
     if handler.is_empty() {
         return Ok(None);
     }
@@ -504,7 +515,11 @@ fn execute_route(
     match m.kind {
         RouteKind::Static => {
             let ctype = m.ctype.as_deref().unwrap_or("text/plain; charset=utf-8");
-            HttpResponse::new(clamp_status(m.status), ctype, m.handler.clone().into_bytes())
+            HttpResponse::new(
+                clamp_status(m.status),
+                ctype,
+                m.handler.clone().into_bytes(),
+            )
         }
         RouteKind::Wasm => execute_wasm(m, req, peer, handlers),
         RouteKind::Sql => execute_sql(core, conn, m, req, peer),
@@ -801,18 +816,23 @@ fn db_query_params(
     sql: &str,
     params: &[core_types::Duckvalue],
 ) -> Result<Rows, String> {
-    let prepared: ResourceAny = match core.with_database(|g, s| g.call_prepare(s, conn.clone(), sql))
-    {
-        Ok(Ok(p)) => p,
-        Ok(Err(e)) => return Err(duckerror_message(&e)),
-        Err(e) => return Err(e.to_string()),
-    };
+    let prepared: ResourceAny =
+        match core.with_database(|g, s| g.call_prepare(s, conn.clone(), sql)) {
+            Ok(Ok(p)) => p,
+            Ok(Err(e)) => return Err(duckerror_message(&e)),
+            Err(e) => return Err(e.to_string()),
+        };
 
     let count = core
         .with_prepared(|g, s| g.call_parameter_count(s, prepared))
         .map_err(|e| e.to_string())? as usize;
     let bound: Vec<core_types::Duckvalue> = (0..count)
-        .map(|i| params.get(i).cloned().unwrap_or(core_types::Duckvalue::Null))
+        .map(|i| {
+            params
+                .get(i)
+                .cloned()
+                .unwrap_or(core_types::Duckvalue::Null)
+        })
         .collect();
 
     let result = core.with_prepared(|g, s| g.call_execute(s, prepared, &bound));
@@ -1006,14 +1026,13 @@ fn build_tls(mode: &TlsMode) -> Result<Option<Arc<ServerConfig>>> {
         }
         TlsMode::Files { cert, key } => {
             install_crypto_provider();
-            let cert_bytes = std::fs::read(cert)
-                .with_context(|| format!("read tls cert {}", cert.display()))?;
+            let cert_bytes =
+                std::fs::read(cert).with_context(|| format!("read tls cert {}", cert.display()))?;
             let key_bytes =
                 std::fs::read(key).with_context(|| format!("read tls key {}", key.display()))?;
-            let certs: Vec<CertificateDer<'static>> =
-                rustls_pemfile::certs(&mut &cert_bytes[..])
-                    .collect::<std::result::Result<_, _>>()
-                    .map_err(|e| anyhow!("parse cert PEM: {e}"))?;
+            let certs: Vec<CertificateDer<'static>> = rustls_pemfile::certs(&mut &cert_bytes[..])
+                .collect::<std::result::Result<_, _>>()
+                .map_err(|e| anyhow!("parse cert PEM: {e}"))?;
             if certs.is_empty() {
                 anyhow::bail!("no certificates found in {}", cert.display());
             }
@@ -1094,10 +1113,7 @@ mod tests {
 
     #[test]
     fn parse_q_finds_decoded_param() {
-        assert_eq!(
-            parse_q("q=SELECT+1"),
-            Some("SELECT 1".to_string())
-        );
+        assert_eq!(parse_q("q=SELECT+1"), Some("SELECT 1".to_string()));
         assert_eq!(
             parse_q("a=1&q=x%20y&b=2"),
             Some("x y".to_string()),
@@ -1139,14 +1155,20 @@ mod tests {
         assert_eq!(RouteKind::parse("WASM"), RouteKind::Wasm);
         assert_eq!(RouteKind::parse("Blob"), RouteKind::Blob);
         assert_eq!(RouteKind::parse("sql"), RouteKind::Sql);
-        assert_eq!(RouteKind::parse("nonsense"), RouteKind::Sql, "unknown → sql");
+        assert_eq!(
+            RouteKind::parse("nonsense"),
+            RouteKind::Sql,
+            "unknown → sql"
+        );
     }
 
     // --- Duckvalue accessors / coercions -----------------------------------
 
     #[test]
     fn opt_text_maps_some_and_none() {
-        assert!(matches!(opt_text(Some("x".to_string())), core_types::Duckvalue::Text(s) if s == "x"));
+        assert!(
+            matches!(opt_text(Some("x".to_string())), core_types::Duckvalue::Text(s) if s == "x")
+        );
         assert!(matches!(opt_text(None), core_types::Duckvalue::Null));
     }
 
@@ -1161,9 +1183,18 @@ mod tests {
 
     #[test]
     fn dv_to_body_bytes_per_variant() {
-        assert_eq!(dv_to_body_bytes(core_types::Duckvalue::Null), Vec::<u8>::new());
-        assert_eq!(dv_to_body_bytes(core_types::Duckvalue::Boolean(true)), b"true");
-        assert_eq!(dv_to_body_bytes(core_types::Duckvalue::Boolean(false)), b"false");
+        assert_eq!(
+            dv_to_body_bytes(core_types::Duckvalue::Null),
+            Vec::<u8>::new()
+        );
+        assert_eq!(
+            dv_to_body_bytes(core_types::Duckvalue::Boolean(true)),
+            b"true"
+        );
+        assert_eq!(
+            dv_to_body_bytes(core_types::Duckvalue::Boolean(false)),
+            b"false"
+        );
         assert_eq!(dv_to_body_bytes(core_types::Duckvalue::Int64(-3)), b"-3");
         assert_eq!(dv_to_body_bytes(core_types::Duckvalue::Uint64(9)), b"9");
         assert_eq!(dv_to_body_bytes(dv_text("body")), b"body");
@@ -1248,10 +1279,19 @@ mod tests {
 
     #[test]
     fn structured_response_rejects_non_structured() {
-        assert!(parse_structured_response(r#"{"other":1}"#).is_none(), "no status/body/ctype keys");
-        assert!(parse_structured_response(r#""plain string""#).is_none(), "JSON string, not object");
+        assert!(
+            parse_structured_response(r#"{"other":1}"#).is_none(),
+            "no status/body/ctype keys"
+        );
+        assert!(
+            parse_structured_response(r#""plain string""#).is_none(),
+            "JSON string, not object"
+        );
         assert!(parse_structured_response("not json").is_none());
-        assert!(parse_structured_response("[1,2]").is_none(), "array, not object");
+        assert!(
+            parse_structured_response("[1,2]").is_none(),
+            "array, not object"
+        );
     }
 
     #[test]
@@ -1309,7 +1349,10 @@ mod tests {
         // $body twice → bound once; $bogus ignored; $query is NULL (no query).
         let bound = ordered_handler_params("SELECT $query, $body, $body, $bogus", &r, "peer");
         assert_eq!(bound.len(), 2, "query + first body only");
-        assert!(matches!(&bound[0], core_types::Duckvalue::Null), "absent query → NULL");
+        assert!(
+            matches!(&bound[0], core_types::Duckvalue::Null),
+            "absent query → NULL"
+        );
         assert!(matches!(&bound[1], core_types::Duckvalue::Text(s) if s.is_empty()));
 
         // No params referenced → empty binding.
@@ -1321,7 +1364,10 @@ mod tests {
     #[test]
     fn http_response_constructors() {
         let t = HttpResponse::text(200, "ok");
-        assert_eq!((t.status, t.ctype.as_str(), t.body), (200, "text/plain; charset=utf-8", b"ok".to_vec()));
+        assert_eq!(
+            (t.status, t.ctype.as_str(), t.body),
+            (200, "text/plain; charset=utf-8", b"ok".to_vec())
+        );
 
         let j = HttpResponse::json(201, r#"{"a":1}"#.to_string());
         assert_eq!(j.ctype, "application/json");

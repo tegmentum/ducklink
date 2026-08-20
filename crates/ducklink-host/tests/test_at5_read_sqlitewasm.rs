@@ -141,10 +141,15 @@ fn attach_sqlitewasm_and_select_roundtrip() {
             ),
         ],
     );
-    assert!(all.status.success(), "{}", dump("ATTACH + full SELECT failed", &all));
+    assert!(
+        all.status.success(),
+        "{}",
+        dump("ATTACH + full SELECT failed", &all)
+    );
     let n_all = count_data_rows(&all.stdout);
     assert_eq!(
-        n_all, 3,
+        n_all,
+        3,
         "{}",
         dump(
             &format!("expected 3 data rows from mydb.foo, got {n_all}"),

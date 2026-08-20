@@ -22,8 +22,8 @@
 use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:dotcmd/dotcmd" });
-use exports::duckdb::dotcmd::registry::{CommandSpec, Guest, InvokeResult};
 use duckdb::dotcmd::spi;
+use exports::duckdb::dotcmd::registry::{CommandSpec, Guest, InvokeResult};
 
 struct Component;
 const FID_BUNDLE: u64 = 1; // bare ".bundle" / ".bundle help"
@@ -31,7 +31,10 @@ const FID_LOADED: u64 = 2; // ".bundle loaded"
 const FID_MEMBERS: u64 = 3; // ".bundle members"
 
 fn plain(text: std::string::String) -> InvokeResult {
-    InvokeResult { text, state_deltas: vec![] }
+    InvokeResult {
+        text,
+        state_deltas: vec![],
+    }
 }
 
 const HELP: &str = "\
@@ -56,7 +59,10 @@ recorder/query tool (the dotcmd has no file access on the lean core):\n\
 impl Guest for Component {
     fn list_commands() -> Vec<CommandSpec> {
         let c = |id, name: &str, summary: &str, usage: &str| CommandSpec {
-            id, name: name.into(), summary: summary.into(), usage: usage.into(),
+            id,
+            name: name.into(),
+            summary: summary.into(),
+            usage: usage.into(),
         };
         vec![c(
             FID_BUNDLE,

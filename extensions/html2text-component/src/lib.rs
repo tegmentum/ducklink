@@ -13,15 +13,29 @@ struct Extension;
 impl guest::Guest for Extension {
     fn load() -> Result<types::Loadresult, types::Duckerror> {
         register_scalars()?;
-        Ok(types::Loadresult { name: "html2text".into(), version: Some(env!("CARGO_PKG_VERSION").into()), requires: Vec::new().into() })
+        Ok(types::Loadresult {
+            name: "html2text".into(),
+            version: Some(env!("CARGO_PKG_VERSION").into()),
+            requires: Vec::new().into(),
+        })
     }
-    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> { Ok(false) }
-    fn shutdown() -> Result<bool, types::Duckerror> { Ok(false) }
+    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
+    fn shutdown() -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
 }
 // Per-row scalar logic, UNCHANGED from the major-3 hand-written impl.
-fn scalar(_handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
+fn scalar(
+    _handle: u32,
+    args: Vec<types::Duckvalue>,
+    _c: types::Invokeinfo,
+) -> Result<types::Duckvalue, types::Duckerror> {
     match args.first() {
-        Some(types::Duckvalue::Text(s)) => Ok(types::Duckvalue::Text(nanohtml2text::html2text(s).into())),
+        Some(types::Duckvalue::Text(s)) => {
+            Ok(types::Duckvalue::Text(nanohtml2text::html2text(s).into()))
+        }
         _ => Ok(types::Duckvalue::Null),
     }
 }
@@ -34,11 +48,26 @@ datalink_extcore::columnar_bridge! {
 }
 export!(Extension);
 fn register_scalars() -> Result<(), types::Duckerror> {
-    let cap = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
-    let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
+    let cap = runtime::get_capability(types::Capabilitykind::Scalar)
+        .ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
+    let reg = match cap {
+        runtime::Capability::Scalar(r) => r,
+        _ => return Err(types::Duckerror::Internal("bad capability".into())),
+    };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
-    reg.register("html_to_text", &[runtime::Funcarg { name: Some("html".into()), logical: types::Logicaltype::Text }],
-        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
-        Some(&runtime::Funcopts { description: Some("strip HTML to text".into()), tags: vec!["html".into()], attributes: det }))?;
+    reg.register(
+        "html_to_text",
+        &[runtime::Funcarg {
+            name: Some("html".into()),
+            logical: types::Logicaltype::Text,
+        }],
+        &types::Logicaltype::Text,
+        runtime::ScalarCallback::new(1),
+        Some(&runtime::Funcopts {
+            description: Some("strip HTML to text".into()),
+            tags: vec!["html".into()],
+            attributes: det,
+        }),
+    )?;
     Ok(())
 }

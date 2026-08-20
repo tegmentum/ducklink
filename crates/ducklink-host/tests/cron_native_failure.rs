@@ -94,7 +94,10 @@ fn cron_run_native_records_per_job_failure() {
     let target = root.join("target");
     std::fs::create_dir_all(&target).expect("create target dir");
     let workdir = tempfile::tempdir_in(&target).expect("tempdir under target");
-    let workdir_rel = workdir.path().strip_prefix(&root).expect("tempdir is under repo root");
+    let workdir_rel = workdir
+        .path()
+        .strip_prefix(&root)
+        .expect("tempdir is under repo root");
     let db_rel = workdir_rel.join("cron.duckdb");
     let db_str = db_rel.to_str().expect("utf-8 tmp path");
 
@@ -219,8 +222,9 @@ fn cron_run_native_records_per_job_failure() {
     // refactor fixed. Prefix match: the DuckDB error line may continue
     // with a hint about candidate table names.
     assert!(
-        list_stdout
-            .contains("\"last_error\":\"Catalog Error: Table with name missing_table does not exist!"),
+        list_stdout.contains(
+            "\"last_error\":\"Catalog Error: Table with name missing_table does not exist!"
+        ),
         "{}",
         dump("cron list missing verbatim Catalog Error text", &list)
     );

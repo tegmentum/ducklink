@@ -109,9 +109,10 @@ fn write_geom<W: Write>(w: &mut W, g: &Geometry<f64>) -> std::io::Result<()> {
         // Rect / Triangle / Line normalize to their polygon/linestring forms.
         Geometry::Rect(r) => write_geom(w, &Geometry::Polygon(r.to_polygon()))?,
         Geometry::Triangle(t) => write_geom(w, &Geometry::Polygon(t.to_polygon()))?,
-        Geometry::Line(l) => {
-            write_geom(w, &Geometry::LineString(LineString::new(vec![l.start, l.end])))?
-        }
+        Geometry::Line(l) => write_geom(
+            w,
+            &Geometry::LineString(LineString::new(vec![l.start, l.end])),
+        )?,
     }
     Ok(())
 }

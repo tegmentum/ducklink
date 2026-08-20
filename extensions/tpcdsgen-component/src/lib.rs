@@ -66,7 +66,9 @@ impl callback_dispatch::Guest for Extension {
         _a: Vec<types::Duckvalue>,
         _c: types::Invokeinfo,
     ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("tpcdsgen: no scalar fns".into()))
+        Err(types::Duckerror::Unsupported(
+            "tpcdsgen: no scalar fns".into(),
+        ))
     }
 
     fn call_table(
@@ -91,10 +93,7 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
         Err(types::Duckerror::Unsupported("tpcdsgen: no pragmas".into()))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("tpcdsgen: no casts".into()))
     }
 }

@@ -68,7 +68,10 @@ pub fn serve_ui(
     // autoinstall/autoload, since everything is statically linked) at open so the
     // open succeeds. "." resolves to the preopened cwd.
     let open_opts: Vec<(String, String)> = vec![
-        ("autoinstall_known_extensions".to_string(), "false".to_string()),
+        (
+            "autoinstall_known_extensions".to_string(),
+            "false".to_string(),
+        ),
         ("autoload_known_extensions".to_string(), "false".to_string()),
     ];
     let conn = core
@@ -78,7 +81,9 @@ pub fn serve_ui(
     if mode != UiMode::Console {
         // Initialize the ui extension's HttpServer singleton (bridge mode -- no
         // listen). The real-UI bridge needs it before handling /ddb/* requests.
-        match core.with_database(|g, s| g.call_execute(s, conn.clone(), "SELECT * FROM start_ui_server()")) {
+        match core.with_database(|g, s| {
+            g.call_execute(s, conn.clone(), "SELECT * FROM start_ui_server()")
+        }) {
             Ok(Ok(_)) => {}
             other => eprintln!("duckdb-ui: start_ui_server() returned {other:?} (continuing)"),
         }
@@ -114,7 +119,11 @@ pub fn serve_ui(
 }
 
 fn open_in_browser(url: &str) {
-    let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
     let _ = std::process::Command::new(opener).arg(url).spawn();
 }
 
@@ -159,15 +168,17 @@ fn read_request(stream: &mut TcpStream) -> Result<Option<Request>> {
     if content_length > 0 {
         reader.read_exact(&mut body)?;
     }
-    Ok(Some(Request { method, path, headers, body }))
+    Ok(Some(Request {
+        method,
+        path,
+        headers,
+        body,
+    }))
 }
 
 /// Paths the duckdb-ui handlers own (everything else is an asset GET).
 fn is_ui_endpoint(path: &str) -> bool {
-    path == "/info"
-        || path == "/localEvents"
-        || path == "/localToken"
-        || path.starts_with("/ddb/")
+    path == "/info" || path == "/localEvents" || path == "/localToken" || path.starts_with("/ddb/")
 }
 
 fn handle_connection(
@@ -184,9 +195,18 @@ fn handle_connection(
 
     match mode {
         UiMode::Console => match (req.method.as_str(), req.path.as_str()) {
-            ("GET", "/") => write_response(stream, 200, "text/html; charset=utf-8", CONSOLE_HTML.as_bytes()),
+            ("GET", "/") => write_response(
+                stream,
+                200,
+                "text/html; charset=utf-8",
+                CONSOLE_HTML.as_bytes(),
+            ),
             ("POST", "/api/query") => {
-                let json = run_query(core, conn, std::str::from_utf8(&req.body).unwrap_or("").trim());
+                let json = run_query(
+                    core,
+                    conn,
+                    std::str::from_utf8(&req.body).unwrap_or("").trim(),
+                );
                 write_response(stream, 200, "application/json", json.as_bytes())
             }
             ("GET", "/favicon.ico") => write_response(stream, 204, "text/plain", b""),
@@ -231,7 +251,11 @@ fn bridge_ui_request(
 
 /// Serve a captured asset from the offline assets directory.
 fn serve_asset(assets_dir: &Path, path: &str) -> (u16, String, Vec<u8>) {
-    let rel = path.split('?').next().unwrap_or("/").trim_start_matches('/');
+    let rel = path
+        .split('?')
+        .next()
+        .unwrap_or("/")
+        .trim_start_matches('/');
     let rel = if rel.is_empty() { "index.html" } else { rel };
     // contain to assets_dir (no traversal)
     let mut full = PathBuf::from(assets_dir);
@@ -250,7 +274,11 @@ fn serve_asset(assets_dir: &Path, path: &str) -> (u16, String, Vec<u8>) {
                     return (200, "text/html; charset=utf-8".to_string(), bytes);
                 }
             }
-            (404, "text/plain".to_string(), format!("not found: {path}").into_bytes())
+            (
+                404,
+                "text/plain".to_string(),
+                format!("not found: {path}").into_bytes(),
+            )
         }
     }
 }
@@ -260,7 +288,14 @@ fn proxy_get(path: &str) -> (u16, String, Vec<u8>) {
     let url = format!("{REMOTE_UI_URL}{}", if path == "/" { "/" } else { path });
     let hdr_file = std::env::temp_dir().join(format!("ddbui-{}", std::process::id()));
     let out = std::process::Command::new("curl")
-        .args(["-s", "-A", "duckdb", "-D", hdr_file.to_str().unwrap_or("/dev/null"), &url])
+        .args([
+            "-s",
+            "-A",
+            "duckdb",
+            "-D",
+            hdr_file.to_str().unwrap_or("/dev/null"),
+            &url,
+        ])
         .output();
     match out {
         Ok(o) if o.status.success() => {
@@ -268,7 +303,10 @@ fn proxy_get(path: &str) -> (u16, String, Vec<u8>) {
             let mut ctype = String::from("application/octet-stream");
             if let Ok(hdrs) = std::fs::read_to_string(&hdr_file) {
                 for line in hdrs.lines() {
-                    if let Some(code) = line.strip_prefix("HTTP/").and_then(|l| l.split_whitespace().nth(1)) {
+                    if let Some(code) = line
+                        .strip_prefix("HTTP/")
+                        .and_then(|l| l.split_whitespace().nth(1))
+                    {
                         status = code.parse().unwrap_or(status);
                     } else if let Some((k, v)) = line.split_once(':') {
                         if k.eq_ignore_ascii_case("content-type") {
@@ -280,7 +318,11 @@ fn proxy_get(path: &str) -> (u16, String, Vec<u8>) {
             let _ = std::fs::remove_file(&hdr_file);
             (status, ctype, o.stdout)
         }
-        _ => (502, "text/plain".to_string(), b"upstream fetch failed".to_vec()),
+        _ => (
+            502,
+            "text/plain".to_string(),
+            b"upstream fetch failed".to_vec(),
+        ),
     }
 }
 
@@ -374,7 +416,9 @@ pub(crate) fn json_value(out: &mut String, val: &core_types::Duckvalue) {
         core_types::Duckvalue::Uuid(u) => json_string(out, &crate::format_uuid(u.hi, u.lo)),
         // @5.0.0: first-class 128-bit integer values.
         core_types::Duckvalue::Hugeint(h) => out.push_str(&crate::format_hugeint(h.lower, h.upper)),
-        core_types::Duckvalue::Uhugeint(h) => out.push_str(&crate::format_uhugeint(h.lower, h.upper)),
+        core_types::Duckvalue::Uhugeint(h) => {
+            out.push_str(&crate::format_uhugeint(h.lower, h.upper))
+        }
         // ESCAPE-HATCH: the value is already JSON; emit it verbatim (unquoted).
         core_types::Duckvalue::Complex(c) => out.push_str(&c.json),
     }
@@ -413,7 +457,12 @@ pub(crate) fn json_string(out: &mut String, s: &str) {
     out.push('"');
 }
 
-fn write_response(stream: &mut TcpStream, status: u16, content_type: &str, body: &[u8]) -> Result<()> {
+fn write_response(
+    stream: &mut TcpStream,
+    status: u16,
+    content_type: &str,
+    body: &[u8],
+) -> Result<()> {
     let reason = match status {
         200 => "OK",
         204 => "No Content",
@@ -522,7 +571,10 @@ mod tests {
         assert_eq!(jv(&core_types::Duckvalue::Boolean(false)), "false");
         assert_eq!(jv(&core_types::Duckvalue::Int64(-7)), "-7");
         assert_eq!(jv(&core_types::Duckvalue::Uint64(7)), "7");
-        assert_eq!(jv(&core_types::Duckvalue::Text("x\"y".to_string())), r#""x\"y""#);
+        assert_eq!(
+            jv(&core_types::Duckvalue::Text("x\"y".to_string())),
+            r#""x\"y""#
+        );
     }
 
     #[test]
@@ -530,7 +582,10 @@ mod tests {
         assert_eq!(jv(&core_types::Duckvalue::Float64(1.5)), "1.5");
         // NaN/Infinity aren't valid JSON numbers, so they're emitted as strings.
         assert_eq!(jv(&core_types::Duckvalue::Float64(f64::NAN)), r#""NaN""#);
-        assert_eq!(jv(&core_types::Duckvalue::Float64(f64::INFINITY)), r#""inf""#);
+        assert_eq!(
+            jv(&core_types::Duckvalue::Float64(f64::INFINITY)),
+            r#""inf""#
+        );
     }
 
     #[test]

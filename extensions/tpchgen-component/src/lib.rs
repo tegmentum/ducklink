@@ -52,11 +52,7 @@ impl guest::Guest for Extension {
         Ok(types::Loadresult {
             name: "tpchgen".into(),
             version: Some(env!("CARGO_PKG_VERSION").into()),
-            requires: vec![
-                types::Capabilitykind::Table,
-                types::Capabilitykind::Scalar,
-            ]
-            .into(),
+            requires: vec![types::Capabilitykind::Table, types::Capabilitykind::Scalar].into(),
         })
     }
     fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> {
@@ -162,10 +158,7 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
         Err(types::Duckerror::Unsupported("tpchgen: no pragmas".into()))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("tpchgen: no casts".into()))
     }
 }
@@ -425,7 +418,13 @@ fn register_tables() -> Result<(), types::Duckerror> {
         col("s_acctbal", Float64),
         col("s_comment", Text),
     ];
-    register_table(&reg, "tpch_supplier", F::Supplier, &sf_arg(), &supplier_cols)?;
+    register_table(
+        &reg,
+        "tpch_supplier",
+        F::Supplier,
+        &sf_arg(),
+        &supplier_cols,
+    )?;
 
     let customer_cols = vec![
         col("c_custkey", Int64),
@@ -437,7 +436,13 @@ fn register_tables() -> Result<(), types::Duckerror> {
         col("c_mktsegment", Text),
         col("c_comment", Text),
     ];
-    register_table(&reg, "tpch_customer", F::Customer, &sf_arg(), &customer_cols)?;
+    register_table(
+        &reg,
+        "tpch_customer",
+        F::Customer,
+        &sf_arg(),
+        &customer_cols,
+    )?;
 
     let part_cols = vec![
         col("p_partkey", Int64),
@@ -459,7 +464,13 @@ fn register_tables() -> Result<(), types::Duckerror> {
         col("ps_supplycost", Float64),
         col("ps_comment", Text),
     ];
-    register_table(&reg, "tpch_partsupp", F::PartSupp, &sf_arg(), &partsupp_cols)?;
+    register_table(
+        &reg,
+        "tpch_partsupp",
+        F::PartSupp,
+        &sf_arg(),
+        &partsupp_cols,
+    )?;
 
     let orders_cols = vec![
         col("o_orderkey", Int64),
@@ -492,7 +503,13 @@ fn register_tables() -> Result<(), types::Duckerror> {
         col("l_shipmode", Text),
         col("l_comment", Text),
     ];
-    register_table(&reg, "tpch_lineitem", F::LineItem, &sf_arg(), &lineitem_cols)?;
+    register_table(
+        &reg,
+        "tpch_lineitem",
+        F::LineItem,
+        &sf_arg(),
+        &lineitem_cols,
+    )?;
 
     Ok(())
 }

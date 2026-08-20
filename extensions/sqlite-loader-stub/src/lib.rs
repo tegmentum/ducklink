@@ -34,20 +34,15 @@ wit_bindgen::generate!({
     generate_all,
 });
 
-use exports::sqlite::wasm::dispatch::{
-    Guest as DispatchGuest, IndexInfo, IndexPlan, VtabRow,
-};
+use exports::sqlite::wasm::dispatch::{Guest as DispatchGuest, IndexInfo, IndexPlan, VtabRow};
 use exports::sqlite::wasm::extension_loader::{
     Guest as LoaderGuest, LoadOptions, LoaderError, Manifest,
 };
-use exports::sqlite::wasm::opfs_host::{
-    Guest as OpfsGuest, OpfsError, OpfsErrorCode,
-};
+use exports::sqlite::wasm::opfs_host::{Guest as OpfsGuest, OpfsError, OpfsErrorCode};
 
 use sqlite::extension::types::{AuthAction, AuthResult, SqlValue, UpdateOperation};
 
-const UNSUPPORTED_MSG: &str =
-    "sqlite-loader-stub: not supported in standalone compose";
+const UNSUPPORTED_MSG: &str = "sqlite-loader-stub: not supported in standalone compose";
 
 struct Stub;
 
@@ -160,12 +155,7 @@ impl DispatchGuest for Stub {
         Err(dispatch_err("aggregate-inverse"))
     }
 
-    fn collation_compare(
-        _ext_name: String,
-        _collation_id: u64,
-        _a: String,
-        _b: String,
-    ) -> i32 {
+    fn collation_compare(_ext_name: String, _collation_id: u64, _a: String, _b: String) -> i32 {
         0
     }
 
@@ -200,12 +190,7 @@ impl DispatchGuest for Stub {
         // No-op: no runtime hooks in standalone.
     }
 
-    fn wal_hook(
-        _ext_name: String,
-        _hook_id: u64,
-        _db_name: String,
-        _n_frames_in_wal: u32,
-    ) -> i32 {
+    fn wal_hook(_ext_name: String, _hook_id: u64, _db_name: String, _n_frames_in_wal: u32) -> i32 {
         0
     }
 
@@ -231,19 +216,11 @@ impl DispatchGuest for Stub {
         Err(dispatch_err("vtab-connect"))
     }
 
-    fn vtab_destroy(
-        _ext_name: String,
-        _vtab_id: u64,
-        _instance_id: u64,
-    ) -> Result<(), String> {
+    fn vtab_destroy(_ext_name: String, _vtab_id: u64, _instance_id: u64) -> Result<(), String> {
         Err(dispatch_err("vtab-destroy"))
     }
 
-    fn vtab_disconnect(
-        _ext_name: String,
-        _vtab_id: u64,
-        _instance_id: u64,
-    ) -> Result<(), String> {
+    fn vtab_disconnect(_ext_name: String, _vtab_id: u64, _instance_id: u64) -> Result<(), String> {
         Err(dispatch_err("vtab-disconnect"))
     }
 
@@ -265,11 +242,7 @@ impl DispatchGuest for Stub {
         Err(dispatch_err("vtab-open"))
     }
 
-    fn vtab_close(
-        _ext_name: String,
-        _vtab_id: u64,
-        _cursor_id: u64,
-    ) -> Result<(), String> {
+    fn vtab_close(_ext_name: String, _vtab_id: u64, _cursor_id: u64) -> Result<(), String> {
         Err(dispatch_err("vtab-close"))
     }
 
@@ -284,11 +257,7 @@ impl DispatchGuest for Stub {
         Err(dispatch_err("vtab-filter"))
     }
 
-    fn vtab_next(
-        _ext_name: String,
-        _vtab_id: u64,
-        _cursor_id: u64,
-    ) -> Result<(), String> {
+    fn vtab_next(_ext_name: String, _vtab_id: u64, _cursor_id: u64) -> Result<(), String> {
         Err(dispatch_err("vtab-next"))
     }
 
@@ -306,11 +275,7 @@ impl DispatchGuest for Stub {
         Err(dispatch_err("vtab-column"))
     }
 
-    fn vtab_rowid(
-        _ext_name: String,
-        _vtab_id: u64,
-        _cursor_id: u64,
-    ) -> Result<i64, String> {
+    fn vtab_rowid(_ext_name: String, _vtab_id: u64, _cursor_id: u64) -> Result<i64, String> {
         Err(dispatch_err("vtab-rowid"))
     }
 
@@ -332,35 +297,19 @@ impl DispatchGuest for Stub {
         Err(dispatch_err("vtab-update"))
     }
 
-    fn vtab_begin(
-        _ext_name: String,
-        _vtab_id: u64,
-        _instance_id: u64,
-    ) -> Result<(), String> {
+    fn vtab_begin(_ext_name: String, _vtab_id: u64, _instance_id: u64) -> Result<(), String> {
         Err(dispatch_err("vtab-begin"))
     }
 
-    fn vtab_sync(
-        _ext_name: String,
-        _vtab_id: u64,
-        _instance_id: u64,
-    ) -> Result<(), String> {
+    fn vtab_sync(_ext_name: String, _vtab_id: u64, _instance_id: u64) -> Result<(), String> {
         Err(dispatch_err("vtab-sync"))
     }
 
-    fn vtab_commit(
-        _ext_name: String,
-        _vtab_id: u64,
-        _instance_id: u64,
-    ) -> Result<(), String> {
+    fn vtab_commit(_ext_name: String, _vtab_id: u64, _instance_id: u64) -> Result<(), String> {
         Err(dispatch_err("vtab-commit"))
     }
 
-    fn vtab_rollback(
-        _ext_name: String,
-        _vtab_id: u64,
-        _instance_id: u64,
-    ) -> Result<(), String> {
+    fn vtab_rollback(_ext_name: String, _vtab_id: u64, _instance_id: u64) -> Result<(), String> {
         Err(dispatch_err("vtab-rollback"))
     }
 

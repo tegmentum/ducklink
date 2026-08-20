@@ -391,10 +391,10 @@ fn pushdown_crosses_wit_boundary() {
 
     // --- load the already-built component artifact ---
     let manifest = env!("CARGO_MANIFEST_DIR");
-    let wasm_path = std::path::Path::new(manifest)
-        .join("../../artifacts/extensions/sqlitewasm.wasm");
-    let bytes = std::fs::read(&wasm_path)
-        .unwrap_or_else(|e| panic!("read {}: {e}", wasm_path.display()));
+    let wasm_path =
+        std::path::Path::new(manifest).join("../../artifacts/extensions/sqlitewasm.wasm");
+    let bytes =
+        std::fs::read(&wasm_path).unwrap_or_else(|e| panic!("read {}: {e}", wasm_path.display()));
     assert_eq!(
         &bytes[0..8],
         &[0x00, 0x61, 0x73, 0x6d, 0x0d, 0x00, 0x01, 0x00],
@@ -402,8 +402,7 @@ fn pushdown_crosses_wit_boundary() {
     );
     let component = Component::new(&engine, &bytes).expect("Component::new");
 
-    let instance =
-        BoundaryTest::instantiate(&mut store, &component, &linker).expect("instantiate");
+    let instance = BoundaryTest::instantiate(&mut store, &component, &linker).expect("instantiate");
 
     let sd = instance.duckdb_extension_storage_dispatch();
 

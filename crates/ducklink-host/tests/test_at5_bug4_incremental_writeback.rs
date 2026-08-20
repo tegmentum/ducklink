@@ -108,9 +108,7 @@ fn ten_thousand_inserts_are_not_quadratic() {
     const N: usize = 10_000;
     let mut sql = String::with_capacity(64 * (N + 4));
     sql.push_str("LOAD sqlitewasm; ");
-    sql.push_str(&format!(
-        "ATTACH '{db_str}' AS mydb (TYPE sqlitewasm); "
-    ));
+    sql.push_str(&format!("ATTACH '{db_str}' AS mydb (TYPE sqlitewasm); "));
     for i in 0..N {
         sql.push_str(&format!(
             "INSERT INTO mydb.foo (id, name) VALUES ({i}, 'row-{i}'); "

@@ -176,7 +176,9 @@ impl callback_dispatch::Guest for Extension {
         _a: Vec<types::Duckvalue>,
         _c: types::Invokeinfo,
     ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("autocomplete: no scalar fns".into()))
+        Err(types::Duckerror::Unsupported(
+            "autocomplete: no scalar fns".into(),
+        ))
     }
 
     fn call_table(
@@ -221,7 +223,10 @@ impl callback_dispatch::Guest for Extension {
         // Never panics.
         for (sql, kind) in [
             ("SELECT table_name FROM duckdb_tables()", "table"),
-            ("SELECT DISTINCT column_name FROM duckdb_columns()", "column"),
+            (
+                "SELECT DISTINCT column_name FROM duckdb_columns()",
+                "column",
+            ),
         ] {
             for name in catalog_names(sql, &partial) {
                 rows.push(vec![
@@ -238,13 +243,14 @@ impl callback_dispatch::Guest for Extension {
         _h: u32,
         _a: Vec<types::Duckvalue>,
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("autocomplete: no pragmas".into()))
+        Err(types::Duckerror::Unsupported(
+            "autocomplete: no pragmas".into(),
+        ))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("autocomplete: no casts".into()))
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
+        Err(types::Duckerror::Unsupported(
+            "autocomplete: no casts".into(),
+        ))
     }
 }
 
@@ -364,7 +370,10 @@ mod tests {
     #[test]
     fn empty_last_token_returns_all() {
         // trailing space -> empty last token -> the whole keyword list.
-        assert_eq!(core::complete("SELECT * FROM t ").len(), core::KEYWORDS.len());
+        assert_eq!(
+            core::complete("SELECT * FROM t ").len(),
+            core::KEYWORDS.len()
+        );
         assert_eq!(core::complete("").len(), core::KEYWORDS.len());
     }
 
@@ -413,6 +422,10 @@ mod tests {
         sorted.sort_unstable();
         assert_eq!(core::KEYWORDS.to_vec(), sorted, "KEYWORDS must be sorted");
         sorted.dedup();
-        assert_eq!(sorted.len(), core::KEYWORDS.len(), "KEYWORDS must be unique");
+        assert_eq!(
+            sorted.len(),
+            core::KEYWORDS.len(),
+            "KEYWORDS must be unique"
+        );
     }
 }

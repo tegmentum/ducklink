@@ -22,17 +22,15 @@ use wasmtime_wasi_http::WasiHttpCtx;
 
 use crate::duckdb_extension_bindings::duckdb::extension::{
     arrow_ext as extension_arrow_ext, catalog as extension_catalog,
-    column_types as extension_column_types,
+    collation as extension_collation, column_types as extension_column_types,
     compression as extension_compression, config as extension_config,
     coordinate_system as extension_coordinate_system, encoding as extension_encoding,
-    files as extension_files, collation as extension_collation, files_reg as extension_files_reg,
-    index as extension_index, lifecycle as extension_lifecycle, log_storage as extension_log_storage,
-    logging as extension_logging,
-    file_lock as extension_file_lock, macro_ext as extension_macro_ext,
-    nested_exec as extension_nested_exec,
-    optimizer as extension_optimizer, parser as extension_parser,
-    query as extension_query, runtime as extension_runtime,
-    runtime_ext as extension_runtime_ext, secret as extension_secret,
+    file_lock as extension_file_lock, files as extension_files, files_reg as extension_files_reg,
+    index as extension_index, lifecycle as extension_lifecycle,
+    log_storage as extension_log_storage, logging as extension_logging,
+    macro_ext as extension_macro_ext, nested_exec as extension_nested_exec,
+    optimizer as extension_optimizer, parser as extension_parser, query as extension_query,
+    runtime as extension_runtime, runtime_ext as extension_runtime_ext, secret as extension_secret,
     settings as extension_settings, storage as extension_storage,
     table_stream as extension_table_stream, types as extension_types,
     types_ext as extension_types_ext,
@@ -117,9 +115,20 @@ fn column_from_values(vals: &[&extension_types::Duckvalue]) -> extension_column_
             for (r, v) in vals.iter().enumerate() {
                 match v {
                     D::Decimal(d) => out.push(extension_column_types::Decimalvalue {
-                        lower: d.lower, upper: d.upper, width: d.width, scale: d.scale,
+                        lower: d.lower,
+                        upper: d.upper,
+                        width: d.width,
+                        scale: d.scale,
                     }),
-                    _ => { mark_null(r, &mut validity); out.push(extension_column_types::Decimalvalue { lower: 0, upper: 0, width: 0, scale: 0 }); }
+                    _ => {
+                        mark_null(r, &mut validity);
+                        out.push(extension_column_types::Decimalvalue {
+                            lower: 0,
+                            upper: 0,
+                            width: 0,
+                            scale: 0,
+                        });
+                    }
                 }
             }
             Column::Decimal(out)
@@ -128,8 +137,19 @@ fn column_from_values(vals: &[&extension_types::Duckvalue]) -> extension_column_
             let mut out = Vec::with_capacity(n);
             for (r, v) in vals.iter().enumerate() {
                 match v {
-                    D::Interval(d) => out.push(extension_column_types::Intervalvalue { months: d.months, days: d.days, micros: d.micros }),
-                    _ => { mark_null(r, &mut validity); out.push(extension_column_types::Intervalvalue { months: 0, days: 0, micros: 0 }); }
+                    D::Interval(d) => out.push(extension_column_types::Intervalvalue {
+                        months: d.months,
+                        days: d.days,
+                        micros: d.micros,
+                    }),
+                    _ => {
+                        mark_null(r, &mut validity);
+                        out.push(extension_column_types::Intervalvalue {
+                            months: 0,
+                            days: 0,
+                            micros: 0,
+                        });
+                    }
                 }
             }
             Column::Interval(out)
@@ -138,8 +158,13 @@ fn column_from_values(vals: &[&extension_types::Duckvalue]) -> extension_column_
             let mut out = Vec::with_capacity(n);
             for (r, v) in vals.iter().enumerate() {
                 match v {
-                    D::Uuid(d) => out.push(extension_column_types::Uuidvalue { hi: d.hi, lo: d.lo }),
-                    _ => { mark_null(r, &mut validity); out.push(extension_column_types::Uuidvalue { hi: 0, lo: 0 }); }
+                    D::Uuid(d) => {
+                        out.push(extension_column_types::Uuidvalue { hi: d.hi, lo: d.lo })
+                    }
+                    _ => {
+                        mark_null(r, &mut validity);
+                        out.push(extension_column_types::Uuidvalue { hi: 0, lo: 0 });
+                    }
                 }
             }
             Column::Uuid(out)
@@ -150,8 +175,14 @@ fn column_from_values(vals: &[&extension_types::Duckvalue]) -> extension_column_
             let mut out = Vec::with_capacity(n);
             for (r, v) in vals.iter().enumerate() {
                 match v {
-                    D::Hugeint(h) => out.push(extension_column_types::DuckInt128 { lower: h.lower, upper: h.upper }),
-                    _ => { mark_null(r, &mut validity); out.push(extension_column_types::DuckInt128 { lower: 0, upper: 0 }); }
+                    D::Hugeint(h) => out.push(extension_column_types::DuckInt128 {
+                        lower: h.lower,
+                        upper: h.upper,
+                    }),
+                    _ => {
+                        mark_null(r, &mut validity);
+                        out.push(extension_column_types::DuckInt128 { lower: 0, upper: 0 });
+                    }
                 }
             }
             Column::Hugeint(out)
@@ -160,8 +191,14 @@ fn column_from_values(vals: &[&extension_types::Duckvalue]) -> extension_column_
             let mut out = Vec::with_capacity(n);
             for (r, v) in vals.iter().enumerate() {
                 match v {
-                    D::Uhugeint(h) => out.push(extension_column_types::DuckUint128 { lower: h.lower, upper: h.upper }),
-                    _ => { mark_null(r, &mut validity); out.push(extension_column_types::DuckUint128 { lower: 0, upper: 0 }); }
+                    D::Uhugeint(h) => out.push(extension_column_types::DuckUint128 {
+                        lower: h.lower,
+                        upper: h.upper,
+                    }),
+                    _ => {
+                        mark_null(r, &mut validity);
+                        out.push(extension_column_types::DuckUint128 { lower: 0, upper: 0 });
+                    }
                 }
             }
             Column::Uhugeint(out)
@@ -170,15 +207,28 @@ fn column_from_values(vals: &[&extension_types::Duckvalue]) -> extension_column_
             let mut out = Vec::with_capacity(n);
             for (r, v) in vals.iter().enumerate() {
                 match v {
-                    D::Complex(c) => out.push(extension_column_types::Complexvalue { type_expr: c.type_expr.clone(), json: c.json.clone() }),
-                    _ => { mark_null(r, &mut validity); out.push(extension_column_types::Complexvalue { type_expr: String::new(), json: "null".into() }); }
+                    D::Complex(c) => out.push(extension_column_types::Complexvalue {
+                        type_expr: c.type_expr.clone(),
+                        json: c.json.clone(),
+                    }),
+                    _ => {
+                        mark_null(r, &mut validity);
+                        out.push(extension_column_types::Complexvalue {
+                            type_expr: String::new(),
+                            json: "null".into(),
+                        });
+                    }
                 }
             }
             Column::Complex(out)
         }
         Some(D::Null) => unreachable!("rep is a non-null value"),
     };
-    extension_column_types::Colvec { data, validity, rows: n as u32 }
+    extension_column_types::Colvec {
+        data,
+        validity,
+        rows: n as u32,
+    }
 }
 
 /// Pivot a row-major batch to one `colvec` per argument column.
@@ -234,22 +284,37 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
         Column::Decimal(v) => {
             for (i, d) in v.into_iter().enumerate() {
                 out.push(if is_valid(i) {
-                    D::Decimal(extension_types::Decimalvalue { lower: d.lower, upper: d.upper, width: d.width, scale: d.scale })
-                } else { D::Null });
+                    D::Decimal(extension_types::Decimalvalue {
+                        lower: d.lower,
+                        upper: d.upper,
+                        width: d.width,
+                        scale: d.scale,
+                    })
+                } else {
+                    D::Null
+                });
             }
         }
         Column::Interval(v) => {
             for (i, d) in v.into_iter().enumerate() {
                 out.push(if is_valid(i) {
-                    D::Interval(extension_types::Intervalvalue { months: d.months, days: d.days, micros: d.micros })
-                } else { D::Null });
+                    D::Interval(extension_types::Intervalvalue {
+                        months: d.months,
+                        days: d.days,
+                        micros: d.micros,
+                    })
+                } else {
+                    D::Null
+                });
             }
         }
         Column::Uuid(v) => {
             for (i, d) in v.into_iter().enumerate() {
                 out.push(if is_valid(i) {
                     D::Uuid(extension_types::Uuidvalue { hi: d.hi, lo: d.lo })
-                } else { D::Null });
+                } else {
+                    D::Null
+                });
             }
         }
         // T2-1 residual (major-5): 128-bit integer columns lift back to the
@@ -257,15 +322,25 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
         Column::Hugeint(v) => {
             for (i, h) in v.into_iter().enumerate() {
                 out.push(if is_valid(i) {
-                    D::Hugeint(extension_types::Hugeintvalue { lower: h.lower, upper: h.upper })
-                } else { D::Null });
+                    D::Hugeint(extension_types::Hugeintvalue {
+                        lower: h.lower,
+                        upper: h.upper,
+                    })
+                } else {
+                    D::Null
+                });
             }
         }
         Column::Uhugeint(v) => {
             for (i, h) in v.into_iter().enumerate() {
                 out.push(if is_valid(i) {
-                    D::Uhugeint(extension_types::Uhugeintvalue { lower: h.lower, upper: h.upper })
-                } else { D::Null });
+                    D::Uhugeint(extension_types::Uhugeintvalue {
+                        lower: h.lower,
+                        upper: h.upper,
+                    })
+                } else {
+                    D::Null
+                });
             }
         }
         // S1 (major-5): nested-column arms carry an opaque byte payload
@@ -286,7 +361,9 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
                         type_expr: "LIST".into(),
                         json: json.clone(),
                     })
-                } else { D::Null });
+                } else {
+                    D::Null
+                });
             }
         }
         Column::StructCol(nc) => {
@@ -297,7 +374,9 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
                         type_expr: "STRUCT".into(),
                         json: json.clone(),
                     })
-                } else { D::Null });
+                } else {
+                    D::Null
+                });
             }
         }
         Column::MapCol(mc) => {
@@ -312,7 +391,9 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
                         type_expr: "MAP".into(),
                         json: json.clone(),
                     })
-                } else { D::Null });
+                } else {
+                    D::Null
+                });
             }
         }
         Column::ArrayCol(ac) => {
@@ -327,14 +408,21 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
                         type_expr: "ARRAY".into(),
                         json: json.clone(),
                     })
-                } else { D::Null });
+                } else {
+                    D::Null
+                });
             }
         }
         Column::Complex(v) => {
             for (i, c) in v.into_iter().enumerate() {
                 out.push(if is_valid(i) {
-                    D::Complex(extension_types::Complexvalue { type_expr: c.type_expr, json: c.json })
-                } else { D::Null });
+                    D::Complex(extension_types::Complexvalue {
+                        type_expr: c.type_expr,
+                        json: c.json,
+                    })
+                } else {
+                    D::Null
+                });
             }
         }
     }
@@ -1206,7 +1294,10 @@ impl extension_runtime::HostAggregateCallback for ExtensionStoreState {
         Err(unsupported_runtime_error())
     }
 
-    fn drop(&mut self, rep: Resource<extension_runtime::AggregateCallback>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        rep: Resource<extension_runtime::AggregateCallback>,
+    ) -> wasmtime::Result<()> {
         self.release_callback_handle(rep.rep());
         Ok(())
     }
@@ -1283,9 +1374,12 @@ impl extension_runtime::HostScalarRegistry for ExtensionStoreState {
         }
 
         let registry_id = self_.rep();
-        let registry = self.scalar_registries.get_mut(&registry_id).ok_or_else(|| {
-            extension_types::Duckerror::Internal("unknown scalar registry handle".to_string())
-        })?;
+        let registry = self
+            .scalar_registries
+            .get_mut(&registry_id)
+            .ok_or_else(|| {
+                extension_types::Duckerror::Internal("unknown scalar registry handle".to_string())
+            })?;
 
         let callback_handle = callback.rep();
         std::mem::forget(callback);
@@ -1468,7 +1562,10 @@ impl extension_runtime::HostAggregateRegistry for ExtensionStoreState {
         Ok(self.alloc_resource_id())
     }
 
-    fn drop(&mut self, rep: Resource<extension_runtime::AggregateRegistry>) -> wasmtime::Result<()> {
+    fn drop(
+        &mut self,
+        rep: Resource<extension_runtime::AggregateRegistry>,
+    ) -> wasmtime::Result<()> {
         if let Some(registry) = self.aggregate_registries.remove(&rep.rep()) {
             self.pending_aggregates.extend(registry.entries);
         }
@@ -1651,10 +1748,7 @@ impl extension_logging::Host for ExtensionStoreState {
 // instantiate and load; the requests are captured into the neutral pending
 // buffers. Forwarding them into DuckDB is the direction-specific sink's job.
 impl extension_catalog::Host for ExtensionStoreState {
-    fn register_logical_type(
-        &mut self,
-        ty: extension_catalog::LogicalType,
-    ) -> Result<u32, String> {
+    fn register_logical_type(&mut self, ty: extension_catalog::LogicalType) -> Result<u32, String> {
         let handle = self.alloc_resource_id();
         verbose_log!(
             "[extension-manager] catalog register-logical-type '{}' (physical={}) for '{}' -> handle {handle}",
@@ -1783,10 +1877,8 @@ impl extension_secret::Host for ExtensionStoreState {
         // parser / optimizer / filterable-table registration.
         let registry_id = self.alloc_resource_id();
         let params: Vec<extension_secret::SecretParam> = params.into();
-        let params: Vec<(String, bool)> = params
-            .into_iter()
-            .map(|p| (p.name, p.redacted))
-            .collect();
+        let params: Vec<(String, bool)> =
+            params.into_iter().map(|p| (p.name, p.redacted)).collect();
         verbose_log!(
             "[extension-runtime:{}] registered secret type '{type_name}' \
              (registry={registry_id}, callback={callback_handle}, params={})",
@@ -2119,14 +2211,17 @@ impl extension_coordinate_system::Host for ExtensionStoreState {
     ) -> Result<u32, extension_types::Duckerror> {
         verbose_log!(
             "[extension-runtime:{}] registered coordinate system {}:{}",
-            self.extension_name, crs.auth_name, crs.code
+            self.extension_name,
+            crs.auth_name,
+            crs.code
         );
-        self.pending_coordinate_systems.push(PendingCoordinateSystem {
-            extension: self.extension_name.clone(),
-            auth_name: crs.auth_name,
-            code: crs.code,
-            wkt: crs.wkt,
-        });
+        self.pending_coordinate_systems
+            .push(PendingCoordinateSystem {
+                extension: self.extension_name.clone(),
+                auth_name: crs.auth_name,
+                code: crs.code,
+                wkt: crs.wkt,
+            });
         Ok(self.alloc_resource_id())
     }
 }
@@ -2279,10 +2374,7 @@ impl extension_index::Host for ExtensionStoreState {
 // neutral pending buffer and driving the component's `file-dispatch` export is
 // the direction-specific sink's job.
 impl extension_files_reg::Host for ExtensionStoreState {
-    fn register_files(
-        &mut self,
-        _callback_handle: u32,
-    ) -> Result<u32, extension_types::Duckerror> {
+    fn register_files(&mut self, _callback_handle: u32) -> Result<u32, extension_types::Duckerror> {
         Err(extension_types::Duckerror::Unsupported(
             "duckdb_register_file_system is not part of the DuckDB stable C API".to_string(),
         ))
@@ -2335,10 +2427,7 @@ impl extension_query::Host for ExtensionStoreState {
 // invokes `fieldbook_run` cannot spiral out of control. Forwards to the
 // direction-specific `ExtensionServices::nested_exec` sink for the actual work.
 impl extension_nested_exec::Host for ExtensionStoreState {
-    fn nested_exec(
-        &mut self,
-        sql: String,
-    ) -> Result<extension_nested_exec::ExecResult, String> {
+    fn nested_exec(&mut self, sql: String) -> Result<extension_nested_exec::ExecResult, String> {
         // RAII: the counter is bumped for the duration of the sibling-connection
         // call, decremented when `_depth` drops (either normal return OR any
         // early Err via `?` below).
@@ -2394,10 +2483,7 @@ impl extension_file_lock::Host for ExtensionStoreState {
 }
 
 impl extension_file_lock::HostLockHandle for ExtensionStoreState {
-    fn release(
-        &mut self,
-        rep: wasmtime::component::Resource<extension_file_lock::LockHandle>,
-    ) {
+    fn release(&mut self, rep: wasmtime::component::Resource<extension_file_lock::LockHandle>) {
         // Drop the state; its Drop impl releases the flock and closes the
         // file. If the guest already released, the entry is gone -- that is
         // fine, the invariant "lock is released" is upheld.
@@ -2436,9 +2522,8 @@ impl LockHandleState {
         let path_buf = std::path::PathBuf::from(path);
         if let Some(parent) = path_buf.parent() {
             if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    format!("file-lock: creating parent {}: {e}", parent.display())
-                })?;
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("file-lock: creating parent {}: {e}", parent.display()))?;
             }
         }
         let file = std::fs::OpenOptions::new()
@@ -2463,9 +2548,8 @@ impl LockHandleState {
         let path_buf = std::path::PathBuf::from(path);
         if let Some(parent) = path_buf.parent() {
             if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    format!("file-lock: creating parent {}: {e}", parent.display())
-                })?;
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("file-lock: creating parent {}: {e}", parent.display()))?;
             }
         }
         let file = std::fs::OpenOptions::new()
@@ -2488,16 +2572,17 @@ impl LockHandleState {
                 if err.kind() == std::io::ErrorKind::WouldBlock {
                     Ok(None)
                 } else {
-                    Err(format!("file-lock: try_flock {}: {err}", path_buf.display()))
+                    Err(format!(
+                        "file-lock: try_flock {}: {err}",
+                        path_buf.display()
+                    ))
                 }
             }
         }
     }
 }
 
-fn neutral_nestedresult_to_wit(
-    r: NestedExecResult,
-) -> extension_nested_exec::ExecResult {
+fn neutral_nestedresult_to_wit(r: NestedExecResult) -> extension_nested_exec::ExecResult {
     let rows: Option<BindgenVec<BindgenVec<String>>> = r.rows.map(|rs| {
         rs.into_iter()
             .map(|row| {
@@ -2674,7 +2759,13 @@ pub fn summarize_runtime_columns(columns: &[reg::ColumnDef]) -> String {
     }
     let parts: Vec<String> = columns
         .iter()
-        .map(|col| format!("{}:{}", col.name, describe_runtime_logicaltype(&col.logical)))
+        .map(|col| {
+            format!(
+                "{}:{}",
+                col.name,
+                describe_runtime_logicaltype(&col.logical)
+            )
+        })
         .collect();
     format!("[{}]", parts.join(", "))
 }
@@ -2768,8 +2859,7 @@ pub struct ExtensionInstance {
         Option<crate::duckdb_extension_log_storage_bindings::DuckdbExtensionLogStorage>,
     // 4.0.0: lazily-built arrow-ext-dispatch bindings (None until first
     // call-arrow-open, or for non-arrow-producer extensions).
-    arrow_ext_bindings:
-        Option<crate::duckdb_extension_arrow_ext_bindings::DuckdbExtensionArrowExt>,
+    arrow_ext_bindings: Option<crate::duckdb_extension_arrow_ext_bindings::DuckdbExtensionArrowExt>,
 }
 
 fn map_extension_trap(err: wasmtime::Error) -> extension_types::Duckerror {
@@ -2858,7 +2948,9 @@ fn storage_duckvalue_to_ext(value: storage_types::Duckvalue) -> extension_types:
 
 fn storage_duckerror_to_ext(err: storage_types::Duckerror) -> extension_types::Duckerror {
     match err {
-        storage_types::Duckerror::Invalidargument(m) => extension_types::Duckerror::Invalidargument(m),
+        storage_types::Duckerror::Invalidargument(m) => {
+            extension_types::Duckerror::Invalidargument(m)
+        }
         storage_types::Duckerror::Unsupported(m) => extension_types::Duckerror::Unsupported(m),
         storage_types::Duckerror::Invalidstate(m) => extension_types::Duckerror::Invalidstate(m),
         storage_types::Duckerror::Io(m) => extension_types::Duckerror::Io(m),
@@ -2888,12 +2980,12 @@ fn storage_logicaltype_to_ext(ty: storage_types::Logicaltype) -> extension_types
         // S2 (major-5): DECIMAL width/scale ride the variant arm. Storage-world
         // `Decimalshape` and base-world `Decimalshape` are structurally
         // identical -- rebuild the base record from the storage-world fields.
-        storage_types::Logicaltype::Decimal(shape) => extension_types::Logicaltype::Decimal(
-            extension_types::Decimalshape {
+        storage_types::Logicaltype::Decimal(shape) => {
+            extension_types::Logicaltype::Decimal(extension_types::Decimalshape {
                 width: shape.width,
                 scale: shape.scale,
-            },
-        ),
+            })
+        }
         storage_types::Logicaltype::Interval => extension_types::Logicaltype::Interval,
         storage_types::Logicaltype::Uuid => extension_types::Logicaltype::Uuid,
         // T2-1 residual (major-5): first-class 128-bit integer logical types.
@@ -2953,7 +3045,9 @@ pub use crate::duckdb_extension_log_storage_bindings::exports::duckdb::extension
 
 fn index_duckerror_to_ext(err: index_types::Duckerror) -> extension_types::Duckerror {
     match err {
-        index_types::Duckerror::Invalidargument(m) => extension_types::Duckerror::Invalidargument(m),
+        index_types::Duckerror::Invalidargument(m) => {
+            extension_types::Duckerror::Invalidargument(m)
+        }
         index_types::Duckerror::Unsupported(m) => extension_types::Duckerror::Unsupported(m),
         index_types::Duckerror::Invalidstate(m) => extension_types::Duckerror::Invalidstate(m),
         index_types::Duckerror::Io(m) => extension_types::Duckerror::Io(m),
@@ -3158,7 +3252,9 @@ impl ExtensionInstance {
     pub fn dispatch_shutdown(&mut self) -> Result<bool, extension_types::Duckerror> {
         let guest = self.bindings.duckdb_extension_guest();
         let mut store = self.store.as_context_mut();
-        guest.call_shutdown(&mut store).map_err(map_extension_trap)?
+        guest
+            .call_shutdown(&mut store)
+            .map_err(map_extension_trap)?
     }
 
     /// Drive the component's `guest.reconfigure` export. The C API installer
@@ -3424,7 +3520,13 @@ impl ExtensionInstance {
         let guest = bindings.duckdb_extension_copy_dispatch();
         let store = &mut self.store;
         guest
-            .call_copy_from_bind(store.as_context_mut(), handle, path, options, target_columns)
+            .call_copy_from_bind(
+                store.as_context_mut(),
+                handle,
+                path,
+                options,
+                target_columns,
+            )
             .map_err(map_extension_trap)?
     }
 
@@ -3706,7 +3808,13 @@ impl ExtensionInstance {
         let guest = bindings.duckdb_extension_table_stream_dispatch();
         let store = &mut self.store;
         guest
-            .call_call_table_open_filtered(store.as_context_mut(), handle, args, projection, filters)
+            .call_call_table_open_filtered(
+                store.as_context_mut(),
+                handle,
+                args,
+                projection,
+                filters,
+            )
             .map_err(map_extension_trap)?
     }
 
@@ -3827,8 +3935,10 @@ impl ExtensionInstance {
 
     fn conn_bindings(
         &mut self,
-    ) -> Result<&crate::duckdb_extension_conn_bindings::DuckdbExtensionConn, extension_types::Duckerror>
-    {
+    ) -> Result<
+        &crate::duckdb_extension_conn_bindings::DuckdbExtensionConn,
+        extension_types::Duckerror,
+    > {
         if self.conn_bindings.is_none() {
             let built = crate::duckdb_extension_conn_bindings::DuckdbExtensionConn::new(
                 self.store.as_context_mut(),
@@ -3948,11 +4058,12 @@ impl ExtensionInstance {
         extension_types::Duckerror,
     > {
         if self.index_write_bindings.is_none() {
-            let built = crate::duckdb_extension_index_write_bindings::DuckdbExtensionIndexWrite::new(
-                self.store.as_context_mut(),
-                &self.instance,
-            )
-            .map_err(map_extension_trap)?;
+            let built =
+                crate::duckdb_extension_index_write_bindings::DuckdbExtensionIndexWrite::new(
+                    self.store.as_context_mut(),
+                    &self.instance,
+                )
+                .map_err(map_extension_trap)?;
             self.index_write_bindings = Some(built);
         }
         Ok(self.index_write_bindings.as_ref().unwrap())
@@ -4118,12 +4229,11 @@ impl ExtensionInstance {
         extension_types::Duckerror,
     > {
         if self.arrow_ext_bindings.is_none() {
-            let built =
-                crate::duckdb_extension_arrow_ext_bindings::DuckdbExtensionArrowExt::new(
-                    self.store.as_context_mut(),
-                    &self.instance,
-                )
-                .map_err(map_extension_trap)?;
+            let built = crate::duckdb_extension_arrow_ext_bindings::DuckdbExtensionArrowExt::new(
+                self.store.as_context_mut(),
+                &self.instance,
+            )
+            .map_err(map_extension_trap)?;
             self.arrow_ext_bindings = Some(built);
         }
         Ok(self.arrow_ext_bindings.as_ref().unwrap())
@@ -4485,11 +4595,7 @@ impl ExtensionInstance {
     }
 
     /// Drop the component-side cache entry for `file`.
-    pub fn file_close(
-        &mut self,
-        handle: u32,
-        file: u32,
-    ) -> Result<(), extension_types::Duckerror> {
+    pub fn file_close(&mut self, handle: u32, file: u32) -> Result<(), extension_types::Duckerror> {
         self.files_bindings()?;
         let bindings = self.files_bindings.as_ref().unwrap();
         let guest = bindings.duckdb_extension_file_dispatch();
@@ -4624,18 +4730,15 @@ impl ExtensionInstance {
 // be the wrong shape (reconfigure is a mid-life event, not shutdown).
 impl Drop for ExtensionInstance {
     fn drop(&mut self) {
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            self.dispatch_shutdown()
-        }));
+        let result =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.dispatch_shutdown()));
         match result {
             Ok(Ok(_)) => {}
             Ok(Err(err)) => {
                 eprintln!("[ducklink] component shutdown failed: {err:?}");
             }
             Err(_) => {
-                eprintln!(
-                    "[ducklink] component shutdown panicked; continuing teardown"
-                );
+                eprintln!("[ducklink] component shutdown panicked; continuing teardown");
             }
         }
     }
@@ -4721,7 +4824,10 @@ mod tests {
             L::Date,
             L::Time,
             L::Timestamptz,
-            L::Decimal(extension_types::Decimalshape { width: 18, scale: 3 }),
+            L::Decimal(extension_types::Decimalshape {
+                width: 18,
+                scale: 3,
+            }),
             L::Hugeint,
             L::Uhugeint,
             L::Interval,
@@ -4745,7 +4851,9 @@ mod tests {
             .join(format!("{name}.wasm"));
         let bytes = std::fs::read(&path).expect("read artifact");
         let component = Component::new(engine, &bytes)?;
-        let wasi = wasmtime_wasi::WasiCtxBuilder::new().inherit_stderr().build();
+        let wasi = wasmtime_wasi::WasiCtxBuilder::new()
+            .inherit_stderr()
+            .build();
         load_component(
             engine,
             &component,
@@ -4815,7 +4923,10 @@ mod tests {
             convert_extension_logicaltype(L::Boolean),
             reg::LogicalType::Boolean
         );
-        assert_eq!(convert_extension_logicaltype(L::Int8), reg::LogicalType::Int8);
+        assert_eq!(
+            convert_extension_logicaltype(L::Int8),
+            reg::LogicalType::Int8
+        );
         assert_eq!(
             convert_extension_logicaltype(L::Uint32),
             reg::LogicalType::Uint32
@@ -4824,7 +4935,10 @@ mod tests {
             convert_extension_logicaltype(L::Timestamptz),
             reg::LogicalType::Timestamptz
         );
-        assert_eq!(convert_extension_logicaltype(L::Uuid), reg::LogicalType::Uuid);
+        assert_eq!(
+            convert_extension_logicaltype(L::Uuid),
+            reg::LogicalType::Uuid
+        );
         // The escape-hatch Complex arm carries its owned type-expr through.
         let cx = convert_extension_logicaltype(L::Complex("INTEGER[]".to_string()));
         assert_eq!(cx, reg::LogicalType::Complex("INTEGER[]".to_string()));
@@ -4971,7 +5085,10 @@ mod tests {
             S::Date,
             S::Time,
             S::Timestamptz,
-            S::Decimal(storage_types::Decimalshape { width: 18, scale: 3 }),
+            S::Decimal(storage_types::Decimalshape {
+                width: 18,
+                scale: 3,
+            }),
             S::Hugeint,
             S::Uhugeint,
             S::Interval,
@@ -5057,8 +5174,7 @@ mod tests {
     #[test]
     fn register_index_type_returns_unsupported() {
         let mut state = test_state();
-        let res =
-            extension_index::Host::register_index_type(&mut state, "wasm_hnsw".to_string());
+        let res = extension_index::Host::register_index_type(&mut state, "wasm_hnsw".to_string());
         assert!(matches!(
             res,
             Err(extension_types::Duckerror::Unsupported(_))
@@ -5155,13 +5271,22 @@ mod tests {
             &mut state,
             "s3".to_string(),
             vec![
-                extension_secret::SecretParam { name: "key_id".to_string(), redacted: false },
-                extension_secret::SecretParam { name: "secret".to_string(), redacted: true },
+                extension_secret::SecretParam {
+                    name: "key_id".to_string(),
+                    redacted: false,
+                },
+                extension_secret::SecretParam {
+                    name: "secret".to_string(),
+                    redacted: true,
+                },
             ]
             .into(),
             11,
         );
-        assert!(secret_type_res.is_ok(), "register_secret_type should capture (Phase 3)");
+        assert!(
+            secret_type_res.is_ok(),
+            "register_secret_type should capture (Phase 3)"
+        );
         let secret_provider_res = extension_secret::Host::register_secret_provider(
             &mut state,
             "s3".to_string(),
@@ -5244,7 +5369,10 @@ mod tests {
 
         let enums = state.take_pending_enum_types();
         assert_eq!(enums.len(), 1);
-        assert_eq!(enums[0].members, vec!["happy".to_string(), "sad".to_string()]);
+        assert_eq!(
+            enums[0].members,
+            vec!["happy".to_string(), "sad".to_string()]
+        );
     }
 
     #[test]
@@ -5259,8 +5387,11 @@ mod tests {
         extension_runtime_ext::Host::register_scalar_ex(
             &mut state,
             "concat_ws".to_string(),
-            vec![extension_runtime_ext::Funcarg { name: Some("sep".to_string()), logical: L::Text }]
-                .into(),
+            vec![extension_runtime_ext::Funcarg {
+                name: Some("sep".to_string()),
+                logical: L::Text,
+            }]
+            .into(),
             Some(L::Text),
             L::Text,
             extension_runtime_ext::NullHandling::Special,
@@ -5296,7 +5427,11 @@ mod tests {
         extension_arrow_ext::Host::register_arrow_table(
             &mut state,
             "feed".to_string(),
-            vec![extension_arrow_ext::Columndef { name: "v".to_string(), logical: L::Int64 }].into(),
+            vec![extension_arrow_ext::Columndef {
+                name: "v".to_string(),
+                logical: L::Int64,
+            }]
+            .into(),
             23,
         )
         .expect("register_arrow_table");
@@ -5329,7 +5464,10 @@ mod tests {
         assert_eq!(scalar_ex.len(), 1);
         assert_eq!(scalar_ex[0].name, "concat_ws");
         assert_eq!(scalar_ex[0].extension, "testext");
-        assert!(scalar_ex[0].special_null, "special NULL handling must be captured");
+        assert!(
+            scalar_ex[0].special_null,
+            "special NULL handling must be captured"
+        );
         assert_eq!(scalar_ex[0].varargs, Some(reg::LogicalType::Text));
         assert_eq!(scalar_ex[0].callback_handle, 21);
 
@@ -5509,9 +5647,8 @@ mod tests {
     #[test]
     fn nested_exec_select_returns_rows() {
         let mut state = scripted_state();
-        let r =
-            extension_nested_exec::Host::nested_exec(&mut state, "SELECT * FROM t".to_string())
-                .expect("select ok");
+        let r = extension_nested_exec::Host::nested_exec(&mut state, "SELECT * FROM t".to_string())
+            .expect("select ok");
         let rows = r.rows.expect("SELECT populates rows");
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0][0].as_str(), "1");
@@ -5582,15 +5719,17 @@ mod tests {
             .map(|d| d.as_nanos())
             .unwrap_or(0);
         let mut p = std::env::temp_dir();
-        p.push(format!("ducklink-runtime-file-lock-{tag}-{pid}-{stamp}.lock"));
+        p.push(format!(
+            "ducklink-runtime-file-lock-{tag}-{pid}-{stamp}.lock"
+        ));
         p
     }
 
     #[test]
     fn file_lock_try_acquire_returns_none_when_held() {
         let path = unique_lock_path("try");
-        let held = LockHandleState::acquire_exclusive(path.to_str().unwrap())
-            .expect("first acquire");
+        let held =
+            LockHandleState::acquire_exclusive(path.to_str().unwrap()).expect("first acquire");
         let contested = LockHandleState::try_acquire_exclusive(path.to_str().unwrap())
             .expect("try-acquire IO ok");
         assert!(
@@ -5633,8 +5772,7 @@ mod tests {
                 let successes = successes.clone();
                 thread::spawn(move || {
                     // Acquiring here blocks until the previous holder drops.
-                    let lock = LockHandleState::acquire_exclusive(&path_str)
-                        .expect("acquire ok");
+                    let lock = LockHandleState::acquire_exclusive(&path_str).expect("acquire ok");
                     let now = held_count.fetch_add(1, Ordering::AcqRel) + 1;
                     // Track the max ever observed inside a held section.
                     let mut cur_max = max_seen.load(Ordering::Acquire);
@@ -5694,8 +5832,7 @@ mod tests {
         // While held, native try-acquire from the same process (different
         // OS-level open) sees WouldBlock -- proves the underlying flock is
         // active.
-        let contested = LockHandleState::try_acquire_exclusive(&path_str)
-            .expect("try IO ok");
+        let contested = LockHandleState::try_acquire_exclusive(&path_str).expect("try IO ok");
         assert!(
             contested.is_none(),
             "flock must exclude a concurrent native try-acquire"
@@ -5709,8 +5846,7 @@ mod tests {
         let handle2 = extension_file_lock::Host::acquire_exclusive(&mut state, path_str)
             .expect("host re-acquire ok");
         // Let drop clean up (also exercise the HostLockHandle::drop path).
-        extension_file_lock::HostLockHandle::drop(&mut state, handle2)
-            .expect("host drop ok");
+        extension_file_lock::HostLockHandle::drop(&mut state, handle2).expect("host drop ok");
         assert_eq!(state.lock_handles.len(), 0);
         let _ = std::fs::remove_file(&path);
     }
@@ -5783,17 +5919,17 @@ pub fn add_extension_interfaces_to_linker(
     // cache-shaped components import it. Backed by fs2::FileExt::lock_exclusive
     // (fcntl(F_SETLKW) on Unix, LockFileEx on Windows) -- the same lock
     // mechanism the native duckdb-cache uses in `store.rs::UriLock`.
-    extension_file_lock::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
-        linker,
-        |s| s,
-    )?;
+    extension_file_lock::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     // 2.1.0 additive registration imports.
     extension_secret::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_settings::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_macro_ext::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_types_ext::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     // 2.2.0 additive registration imports (Items 6-7).
-    extension_runtime_ext::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    extension_runtime_ext::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
+        linker,
+        |s| s,
+    )?;
     extension_lifecycle::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_coordinate_system::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
         linker,
@@ -5801,16 +5937,25 @@ pub fn add_extension_interfaces_to_linker(
     )?;
     extension_arrow_ext::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_encoding::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
-    extension_compression::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    extension_compression::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
+        linker,
+        |s| s,
+    )?;
     // 2.3.0 / v3 additive registration imports.
     extension_parser::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_optimizer::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     // 3.1.0 additive registration import: filterable streaming table-fn marker.
-    extension_table_stream::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    extension_table_stream::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
+        linker,
+        |s| s,
+    )?;
     // 3.2.0 additive registration import: log-storage sink declaration (Class B
     // parity with the stable `duckdb_register_log_storage` C API). The host
     // always PROVIDES this; components import it only if they back a log sink.
-    extension_log_storage::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    extension_log_storage::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
+        linker,
+        |s| s,
+    )?;
     Ok(())
 }
 

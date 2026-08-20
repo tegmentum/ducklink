@@ -14,22 +14,52 @@ struct Extension;
 impl guest::Guest for Extension {
     fn load() -> Result<types::Loadresult, types::Duckerror> {
         register_scalars()?;
-        Ok(types::Loadresult { name: "rot13".into(), version: Some(env!("CARGO_PKG_VERSION").into()), requires: Vec::new().into() })
+        Ok(types::Loadresult {
+            name: "rot13".into(),
+            version: Some(env!("CARGO_PKG_VERSION").into()),
+            requires: Vec::new().into(),
+        })
     }
-    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> { Ok(false) }
-    fn shutdown() -> Result<bool, types::Duckerror> { Ok(false) }
+    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
+    fn shutdown() -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
 }
 fn shift_text(s: &str, shift: i64) -> std::string::String {
     let k = shift.rem_euclid(26) as u8;
-    s.chars().map(|c| {
-        let base = if c.is_ascii_uppercase() { b'A' } else if c.is_ascii_lowercase() { b'a' } else { return c };
-        (((c as u8 - base + k) % 26) + base) as char
-    }).collect()
+    s.chars()
+        .map(|c| {
+            let base = if c.is_ascii_uppercase() {
+                b'A'
+            } else if c.is_ascii_lowercase() {
+                b'a'
+            } else {
+                return c;
+            };
+            (((c as u8 - base + k) % 26) + base) as char
+        })
+        .collect()
 }
 // Per-row scalar logic, UNCHANGED from the major-3 hand-written impl.
-fn scalar(handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
-    let s = match args.first() { Some(types::Duckvalue::Text(s)) => s.clone(), _ => return Ok(types::Duckvalue::Null) };
-    let shift = if handle == 1 { 13 } else { match args.get(1) { Some(types::Duckvalue::Int64(n)) => *n, _ => return Ok(types::Duckvalue::Null) } };
+fn scalar(
+    handle: u32,
+    args: Vec<types::Duckvalue>,
+    _c: types::Invokeinfo,
+) -> Result<types::Duckvalue, types::Duckerror> {
+    let s = match args.first() {
+        Some(types::Duckvalue::Text(s)) => s.clone(),
+        _ => return Ok(types::Duckvalue::Null),
+    };
+    let shift = if handle == 1 {
+        13
+    } else {
+        match args.get(1) {
+            Some(types::Duckvalue::Int64(n)) => *n,
+            _ => return Ok(types::Duckvalue::Null),
+        }
+    };
     Ok(types::Duckvalue::Text(shift_text(&s, shift).into()))
 }
 datalink_extcore::columnar_bridge! {
@@ -41,16 +71,46 @@ datalink_extcore::columnar_bridge! {
 }
 export!(Extension);
 fn register_scalars() -> Result<(), types::Duckerror> {
-    let cap = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
-    let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
+    let cap = runtime::get_capability(types::Capabilitykind::Scalar)
+        .ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
+    let reg = match cap {
+        runtime::Capability::Scalar(r) => r,
+        _ => return Err(types::Duckerror::Internal("bad capability".into())),
+    };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
-    reg.register("rot13", &[runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text }],
-        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
-        Some(&runtime::Funcopts { description: Some("ROT13".into()), tags: vec!["cipher".into()], attributes: det }))?;
-    reg.register("caesar", &[
-        runtime::Funcarg { name: Some("text".into()), logical: types::Logicaltype::Text },
-        runtime::Funcarg { name: Some("shift".into()), logical: types::Logicaltype::Int64 }],
-        &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
-        Some(&runtime::Funcopts { description: Some("Caesar shift".into()), tags: vec!["cipher".into()], attributes: det }))?;
+    reg.register(
+        "rot13",
+        &[runtime::Funcarg {
+            name: Some("text".into()),
+            logical: types::Logicaltype::Text,
+        }],
+        &types::Logicaltype::Text,
+        runtime::ScalarCallback::new(1),
+        Some(&runtime::Funcopts {
+            description: Some("ROT13".into()),
+            tags: vec!["cipher".into()],
+            attributes: det,
+        }),
+    )?;
+    reg.register(
+        "caesar",
+        &[
+            runtime::Funcarg {
+                name: Some("text".into()),
+                logical: types::Logicaltype::Text,
+            },
+            runtime::Funcarg {
+                name: Some("shift".into()),
+                logical: types::Logicaltype::Int64,
+            },
+        ],
+        &types::Logicaltype::Text,
+        runtime::ScalarCallback::new(2),
+        Some(&runtime::Funcopts {
+            description: Some("Caesar shift".into()),
+            tags: vec!["cipher".into()],
+            attributes: det,
+        }),
+    )?;
     Ok(())
 }

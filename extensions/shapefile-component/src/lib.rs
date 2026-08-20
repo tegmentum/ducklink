@@ -55,7 +55,9 @@ impl callback_dispatch::Guest for Extension {
         _a: Vec<types::Duckvalue>,
         _c: types::Invokeinfo,
     ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("shapefile: no scalar fns".into()))
+        Err(types::Duckerror::Unsupported(
+            "shapefile: no scalar fns".into(),
+        ))
     }
 
     fn call_table(
@@ -89,12 +91,11 @@ impl callback_dispatch::Guest for Extension {
         _h: u32,
         _a: Vec<types::Duckvalue>,
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("shapefile: no pragmas".into()))
+        Err(types::Duckerror::Unsupported(
+            "shapefile: no pragmas".into(),
+        ))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("shapefile: no casts".into()))
     }
 }
@@ -172,15 +173,9 @@ fn shape_to_wkt(shape: &Shape) -> Option<std::string::String> {
         Shape::PolygonM(pg) => Some(polygon_wkt(pg.rings().iter().map(ring_points_m))),
         Shape::PolygonZ(pg) => Some(polygon_wkt(pg.rings().iter().map(ring_points_z))),
 
-        Shape::Multipoint(mp) => {
-            Some(multipoint_wkt(mp.points().iter().map(|p| (p.x, p.y))))
-        }
-        Shape::MultipointM(mp) => {
-            Some(multipoint_wkt(mp.points().iter().map(|p| (p.x, p.y))))
-        }
-        Shape::MultipointZ(mp) => {
-            Some(multipoint_wkt(mp.points().iter().map(|p| (p.x, p.y))))
-        }
+        Shape::Multipoint(mp) => Some(multipoint_wkt(mp.points().iter().map(|p| (p.x, p.y)))),
+        Shape::MultipointM(mp) => Some(multipoint_wkt(mp.points().iter().map(|p| (p.x, p.y)))),
+        Shape::MultipointZ(mp) => Some(multipoint_wkt(mp.points().iter().map(|p| (p.x, p.y)))),
 
         // Multipatch is a collection of PointZ parts; emit as MULTIPOLYGON-ish via
         // GEOMETRYCOLLECTION is overkill -- represent its rings like a polygon set.
@@ -204,14 +199,10 @@ fn coord(x: f64, y: f64) -> std::string::String {
 fn ring_points(ring: &PolygonRing<Point>) -> std::vec::Vec<(f64, f64)> {
     ring.points().iter().map(|p| (p.x, p.y)).collect()
 }
-fn ring_points_m(
-    ring: &PolygonRing<shapefile::PointM>,
-) -> std::vec::Vec<(f64, f64)> {
+fn ring_points_m(ring: &PolygonRing<shapefile::PointM>) -> std::vec::Vec<(f64, f64)> {
     ring.points().iter().map(|p| (p.x, p.y)).collect()
 }
-fn ring_points_z(
-    ring: &PolygonRing<shapefile::PointZ>,
-) -> std::vec::Vec<(f64, f64)> {
+fn ring_points_z(ring: &PolygonRing<shapefile::PointZ>) -> std::vec::Vec<(f64, f64)> {
     ring.points().iter().map(|p| (p.x, p.y)).collect()
 }
 
@@ -269,8 +260,7 @@ fn multipoint_wkt<I>(points: I) -> std::string::String
 where
     I: Iterator<Item = (f64, f64)>,
 {
-    let inner: std::vec::Vec<std::string::String> =
-        points.map(|(x, y)| coord(x, y)).collect();
+    let inner: std::vec::Vec<std::string::String> = points.map(|(x, y)| coord(x, y)).collect();
     format!("MULTIPOINT({})", inner.join(", "))
 }
 
@@ -324,7 +314,13 @@ fn register_read_shp() -> Result<(), types::Duckerror> {
         ),
         tags: vec!["shapefile".into(), "shp".into(), "gis".into()],
     };
-    reg.register("read_shp", &args, &columns, runtime::TableCallback::new(h), Some(&opts))?;
+    reg.register(
+        "read_shp",
+        &args,
+        &columns,
+        runtime::TableCallback::new(h),
+        Some(&opts),
+    )?;
     Ok(())
 }
 

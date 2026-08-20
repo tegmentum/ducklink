@@ -38,7 +38,9 @@ wit_bindgen::generate!({
 });
 
 use duckdb::extension::{runtime, storage, types};
-use exports::duckdb::extension::{callback_dispatch, guest, storage_dispatch, storage_write_dispatch};
+use exports::duckdb::extension::{
+    callback_dispatch, guest, storage_dispatch, storage_write_dispatch,
+};
 
 use sqlite::extension::{spi as sqlite_spi, types as sqlite_types};
 
@@ -76,7 +78,10 @@ impl guest::Guest for Extension {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum SpiOwner {
-    Attach { catalog: u32, dsn: std::string::String },
+    Attach {
+        catalog: u32,
+        dsn: std::string::String,
+    },
     BlobScan,
 }
 
@@ -93,10 +98,13 @@ fn spi_owner_set(owner: Option<SpiOwner>) {
 }
 
 fn sqlite_err_to_duck(err: sqlite_types::SqliteError, context: &str) -> types::Duckerror {
-    types::Duckerror::Io(format!(
-        "{context}: sqlite [{}/{}] {}",
-        err.code, err.extended_code, err.message
-    ).into())
+    types::Duckerror::Io(
+        format!(
+            "{context}: sqlite [{}/{}] {}",
+            err.code, err.extended_code, err.message
+        )
+        .into(),
+    )
 }
 
 fn spi_execute(sql: &str) -> Result<sqlite_types::QueryResult, types::Duckerror> {
@@ -128,7 +136,9 @@ impl callback_dispatch::Guest for Extension {
         _a: Vec<types::Duckvalue>,
         _c: types::Invokeinfo,
     ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("sqlite: no scalar fns".into()))
+        Err(types::Duckerror::Unsupported(
+            "sqlite: no scalar fns".into(),
+        ))
     }
 
     fn call_table(
@@ -170,11 +180,14 @@ impl callback_dispatch::Guest for Extension {
         // deserialize target. Reject if an ATTACH already owns it — the two
         // surfaces can't share one connection.
         if let Some(SpiOwner::Attach { catalog, dsn }) = spi_owner_get() {
-            return Err(types::Duckerror::Unsupported(format!(
-                "sqlite_blob_scan cannot run while catalog {catalog} \
+            return Err(types::Duckerror::Unsupported(
+                format!(
+                    "sqlite_blob_scan cannot run while catalog {catalog} \
                  (attached from '{dsn}') is open — sqlite-lib's SPI has \
                  only one shared connection. DETACH the alias first."
-            ).into()));
+                )
+                .into(),
+            ));
         }
         sqlite_spi::open_db("")
             .map_err(|e| sqlite_err_to_duck(e, "sqlite_blob_scan: open in-memory"))?;
@@ -192,16 +205,15 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
         Err(types::Duckerror::Unsupported("sqlite: no pragmas".into()))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("sqlite: no casts".into()))
     }
 }
 
 /// `SELECT * FROM "<table>"`, melting each row into (row_no, col, val) tuples.
-fn scan_melted(table: &str) -> Result<std::vec::Vec<std::vec::Vec<types::Duckvalue>>, types::Duckerror> {
+fn scan_melted(
+    table: &str,
+) -> Result<std::vec::Vec<std::vec::Vec<types::Duckvalue>>, types::Duckerror> {
     let sql = format!("SELECT * FROM {}", quote_ident(table));
     let qr = spi_execute(&sql)?;
     let mut out: std::vec::Vec<std::vec::Vec<types::Duckvalue>> = std::vec::Vec::new();
@@ -237,9 +249,9 @@ fn sqlite_value_as_text(v: &sqlite_types::SqlValue) -> types::Duckvalue {
         }
         // @1.0.0 arm — sqlite-lib never emits it here; render a
         // diagnostic string rather than crashing on the exhaustive match.
-        sqlite_types::SqlValue::WitValue(p) => types::Duckvalue::Text(
-            format!("<wit-value:{}>", p.symbolic_name).into(),
-        ),
+        sqlite_types::SqlValue::WitValue(p) => {
+            types::Duckvalue::Text(format!("<wit-value:{}>", p.symbolic_name).into())
+        }
     }
 }
 
@@ -290,11 +302,7 @@ thread_local! {
 }
 
 impl storage_dispatch::Guest for Extension {
-    fn attach_blob(
-        handle: u32,
-        dsn: String,
-        bytes: Vec<u8>,
-    ) -> Result<(), types::Duckerror> {
+    fn attach_blob(handle: u32, dsn: String, bytes: Vec<u8>) -> Result<(), types::Duckerror> {
         check_handle(handle)?;
         // v1: kept for API parity. The SPI opens by path, so staged bytes
         // never leave the wasm heap once storage_attach fires.
@@ -313,13 +321,19 @@ impl storage_dispatch::Guest for Extension {
         // v1: single-connection SPI ⇒ single-attach.
         if let Some(existing) = spi_owner_get() {
             match existing {
-                SpiOwner::Attach { catalog, dsn: prev_dsn } => {
-                    return Err(types::Duckerror::Unsupported(format!(
-                        "sqlitewasm supports only ONE attached catalog per session \
+                SpiOwner::Attach {
+                    catalog,
+                    dsn: prev_dsn,
+                } => {
+                    return Err(types::Duckerror::Unsupported(
+                        format!(
+                            "sqlitewasm supports only ONE attached catalog per session \
                          (already attached: catalog {catalog} -> '{prev_dsn}'). \
                          Multi-attach is a v-next follow-up needing per-connection \
                          isolation from sqlite-lib. DETACH the current alias first."
-                    ).into()));
+                        )
+                        .into(),
+                    ));
                 }
                 SpiOwner::BlobScan => {
                     spi_owner_set(None);
@@ -342,25 +356,32 @@ impl storage_dispatch::Guest for Extension {
         // (single-writer, single-session; the primary DB is unaffected).
         // Falls through if PRAGMAs are rejected (e.g. a future SPI change)
         // so the attach still succeeds -- worst case is slow, not broken.
-        let _ = spi_execute_batch(
-            "PRAGMA journal_mode = MEMORY; PRAGMA synchronous = OFF;",
-        );
+        let _ = spi_execute_batch("PRAGMA journal_mode = MEMORY; PRAGMA synchronous = OFF;");
         let id = NEXT_CATALOG.with(|n| {
             let mut n = n.borrow_mut();
             let id = *n;
             *n += 1;
             id
         });
-        CATALOGS.with(|c| c.borrow_mut().insert(id, CatalogState { dsn: dsn_str.clone() }));
-        spi_owner_set(Some(SpiOwner::Attach { catalog: id, dsn: dsn_str }));
-        STAGED.with(|s| { s.borrow_mut().remove(&dsn.to_string()); });
+        CATALOGS.with(|c| {
+            c.borrow_mut().insert(
+                id,
+                CatalogState {
+                    dsn: dsn_str.clone(),
+                },
+            )
+        });
+        spi_owner_set(Some(SpiOwner::Attach {
+            catalog: id,
+            dsn: dsn_str,
+        }));
+        STAGED.with(|s| {
+            s.borrow_mut().remove(&dsn.to_string());
+        });
         Ok(id)
     }
 
-    fn storage_list_tables(
-        handle: u32,
-        catalog: u32,
-    ) -> Result<Vec<String>, types::Duckerror> {
+    fn storage_list_tables(handle: u32, catalog: u32) -> Result<Vec<String>, types::Duckerror> {
         check_handle(handle)?;
         ensure_catalog_current(catalog)?;
         let qr = spi_execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")?;
@@ -465,7 +486,8 @@ impl storage_dispatch::Guest for Extension {
     fn serialize(_handle: u32, _catalog: u32) -> Result<Vec<u8>, types::Duckerror> {
         Err(types::Duckerror::Unsupported(
             "sqlitewasm: writes persist directly via wasivfs; \
-             serialize() would double-write and is not implemented".into(),
+             serialize() would double-write and is not implemented"
+                .into(),
         ))
     }
 }
@@ -680,23 +702,21 @@ fn take_txn(txn: u32) -> Result<u32, types::Duckerror> {
 fn ensure_catalog_current(catalog: u32) -> Result<(), types::Duckerror> {
     let owner = spi_owner_get();
     match owner {
-        Some(SpiOwner::Attach { catalog: cur, .. }) if cur == catalog => {
-            CATALOGS.with(|c| {
-                if c.borrow().contains_key(&catalog) {
-                    Ok(())
-                } else {
-                    Err(types::Duckerror::Invalidstate(
-                        format!("unknown catalog {catalog}"),
-                    ))
-                }
-            })
-        }
-        Some(SpiOwner::Attach { catalog: cur, .. }) => Err(types::Duckerror::Invalidstate(format!(
-            "catalog {catalog} is not the currently-attached one ({cur})"
-        ))),
-        _ => Err(types::Duckerror::Invalidstate(
-            format!("catalog {catalog} is no longer attached"),
+        Some(SpiOwner::Attach { catalog: cur, .. }) if cur == catalog => CATALOGS.with(|c| {
+            if c.borrow().contains_key(&catalog) {
+                Ok(())
+            } else {
+                Err(types::Duckerror::Invalidstate(format!(
+                    "unknown catalog {catalog}"
+                )))
+            }
+        }),
+        Some(SpiOwner::Attach { catalog: cur, .. }) => Err(types::Duckerror::Invalidstate(
+            format!("catalog {catalog} is not the currently-attached one ({cur})"),
         )),
+        _ => Err(types::Duckerror::Invalidstate(format!(
+            "catalog {catalog} is no longer attached"
+        ))),
     }
 }
 
@@ -838,7 +858,10 @@ fn run_scan(
     for row in qr.rows.iter() {
         let mut emit: std::vec::Vec<types::Duckvalue> = std::vec::Vec::with_capacity(proj.len());
         for (slot, &host_idx) in proj.iter().enumerate() {
-            let v = row.get(slot).cloned().unwrap_or(sqlite_types::SqlValue::Null);
+            let v = row
+                .get(slot)
+                .cloned()
+                .unwrap_or(sqlite_types::SqlValue::Null);
             let rowid_logical = types::Logicaltype::Int64;
             let logical = if host_idx == 0 {
                 &rowid_logical
@@ -872,11 +895,13 @@ fn duck_to_sqlite_value(v: &types::Duckvalue) -> sqlite_types::SqlValue {
         types::Duckvalue::Time(t) => sqlite_types::SqlValue::Integer(*t),
         types::Duckvalue::Timestamp(t) => sqlite_types::SqlValue::Integer(*t),
         types::Duckvalue::Timestamptz(t) => sqlite_types::SqlValue::Integer(*t),
-        types::Duckvalue::Decimal(d) => sqlite_types::SqlValue::Integer(
-            (((d.upper as u128) << 64) | d.lower as u128) as i64,
-        ),
+        types::Duckvalue::Decimal(d) => {
+            sqlite_types::SqlValue::Integer((((d.upper as u128) << 64) | d.lower as u128) as i64)
+        }
         types::Duckvalue::Interval(iv) => sqlite_types::SqlValue::Integer(iv.micros),
-        types::Duckvalue::Uuid(u) => sqlite_types::SqlValue::Text(format!("{:016x}{:016x}", u.hi, u.lo)),
+        types::Duckvalue::Uuid(u) => {
+            sqlite_types::SqlValue::Text(format!("{:016x}{:016x}", u.hi, u.lo))
+        }
         types::Duckvalue::Hugeint(h) => {
             let v = ((h.upper as i128) << 64) | (h.lower as i128);
             sqlite_types::SqlValue::Text(v.to_string())
@@ -905,18 +930,18 @@ fn sqlite_value_to_duck(v: &sqlite_types::SqlValue, ty: &types::Logicaltype) -> 
         },
         sqlite_types::SqlValue::Text(t) => types::Duckvalue::Text(t.clone().into()),
         sqlite_types::SqlValue::Blob(b) => match ty {
-            types::Logicaltype::Text => types::Duckvalue::Text(
-                std::string::String::from_utf8_lossy(b).into_owned().into(),
-            ),
+            types::Logicaltype::Text => {
+                types::Duckvalue::Text(std::string::String::from_utf8_lossy(b).into_owned().into())
+            }
             _ => types::Duckvalue::Blob(b.to_vec().into()),
         },
         // sqlite-lib never emits wit-value payloads over this component's
         // scalar traffic (record-ferrying is a Phase-C follow-up); surface
         // it as text-encoded diagnostic if it ever appears so behaviour is
         // observable rather than crashy.
-        sqlite_types::SqlValue::WitValue(p) => types::Duckvalue::Text(
-            format!("<wit-value:{}>", p.symbolic_name).into(),
-        ),
+        sqlite_types::SqlValue::WitValue(p) => {
+            types::Duckvalue::Text(format!("<wit-value:{}>", p.symbolic_name).into())
+        }
     }
 }
 

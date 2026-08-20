@@ -88,10 +88,7 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
         Err(types::Duckerror::Unsupported("dbf: no pragmas".into()))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("dbf: no casts".into()))
     }
 }
@@ -195,10 +192,18 @@ fn register_read_dbf() -> Result<(), types::Duckerror> {
         },
     ];
     let opts = runtime::Extopts {
-        description: Some("Read dBASE/.dbf bytes into melted (record_no, field, value) rows".into()),
+        description: Some(
+            "Read dBASE/.dbf bytes into melted (record_no, field, value) rows".into(),
+        ),
         tags: vec!["dbf".into(), "dbase".into()],
     };
-    reg.register("read_dbf", &args, &columns, runtime::TableCallback::new(h), Some(&opts))?;
+    reg.register(
+        "read_dbf",
+        &args,
+        &columns,
+        runtime::TableCallback::new(h),
+        Some(&opts),
+    )?;
     Ok(())
 }
 

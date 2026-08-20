@@ -87,7 +87,10 @@ fn dump(label: &str, out: &Output) -> String {
 fn phase4_fieldbook_bootstrap_via_nested_exec_ok() {
     let root = repo_root();
     let bin = root.join("target").join("release").join("ducklink");
-    let fieldbook_wasm = root.join("artifacts").join("extensions").join("fieldbook.wasm");
+    let fieldbook_wasm = root
+        .join("artifacts")
+        .join("extensions")
+        .join("fieldbook.wasm");
     if !bin.exists() || !fieldbook_wasm.exists() {
         eprintln!(
             "skipping: missing prerequisites\n  bin = {} (exists: {})\n  fieldbook = {} (exists: {})",

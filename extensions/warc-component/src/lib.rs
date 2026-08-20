@@ -94,10 +94,7 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
         Err(types::Duckerror::Unsupported("warc: no pragmas".into()))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("warc: no casts".into()))
     }
 }
@@ -140,10 +137,7 @@ fn parse(bytes: &[u8]) -> std::vec::Vec<std::vec::Vec<types::Duckvalue>> {
 }
 
 /// Render a header value as text. Absent or non-UTF-8 -> Null.
-fn text_field(
-    map: &HashMap<WarcHeader, std::vec::Vec<u8>>,
-    key: &WarcHeader,
-) -> types::Duckvalue {
+fn text_field(map: &HashMap<WarcHeader, std::vec::Vec<u8>>, key: &WarcHeader) -> types::Duckvalue {
     match map.get(key) {
         Some(raw) => match std::str::from_utf8(raw) {
             Ok(s) if !s.trim().is_empty() => types::Duckvalue::Text(s.trim().into()),
@@ -154,10 +148,7 @@ fn text_field(
 }
 
 /// Render a header value as an i64. Absent or unparsable -> Null.
-fn int_field(
-    map: &HashMap<WarcHeader, std::vec::Vec<u8>>,
-    key: &WarcHeader,
-) -> types::Duckvalue {
+fn int_field(map: &HashMap<WarcHeader, std::vec::Vec<u8>>, key: &WarcHeader) -> types::Duckvalue {
     match map.get(key).and_then(|raw| std::str::from_utf8(raw).ok()) {
         Some(s) => match s.trim().parse::<i64>() {
             Ok(v) => types::Duckvalue::Int64(v),

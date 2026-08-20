@@ -12,8 +12,8 @@
 use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:dotcmd/dotcmd" });
-use exports::duckdb::dotcmd::registry::{CommandSpec, Guest, InvokeResult};
 use duckdb::dotcmd::spi;
+use exports::duckdb::dotcmd::registry::{CommandSpec, Guest, InvokeResult};
 
 struct Component;
 
@@ -26,10 +26,17 @@ fn quote_ident(name: &str) -> std::string::String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 fn plain(text: std::string::String) -> InvokeResult {
-    InvokeResult { text, state_deltas: vec![] }
+    InvokeResult {
+        text,
+        state_deltas: vec![],
+    }
 }
 fn note(text: std::string::String) -> InvokeResult {
-    plain(if text.ends_with('\n') { text } else { format!("{text}\n") })
+    plain(if text.ends_with('\n') {
+        text
+    } else {
+        format!("{text}\n")
+    })
 }
 
 /// Split a raw arg string into whitespace-separated tokens.
@@ -52,15 +59,36 @@ fn lit(s: &str) -> std::string::String {
 impl Guest for Component {
     fn list_commands() -> Vec<CommandSpec> {
         let c = |id, name: &str, summary: &str, usage: &str| CommandSpec {
-            id, name: name.into(), summary: summary.into(), usage: usage.into(),
+            id,
+            name: name.into(),
+            summary: summary.into(),
+            usage: usage.into(),
         };
         vec![
-            c(FID_ENABLE, "enable_fts", "Build an FTS index",
-              "enable_fts TABLE ID_COL COL [COL ...]"),
-            c(FID_DISABLE, "disable_fts", "Drop the FTS index", "disable_fts TABLE"),
-            c(FID_REBUILD, "rebuild_fts", "Rebuild (overwrite) the FTS index",
-              "rebuild_fts TABLE ID_COL COL [COL ...]"),
-            c(FID_SEARCH, "search", "BM25 full-text search", "search TABLE ID_COL QUERY..."),
+            c(
+                FID_ENABLE,
+                "enable_fts",
+                "Build an FTS index",
+                "enable_fts TABLE ID_COL COL [COL ...]",
+            ),
+            c(
+                FID_DISABLE,
+                "disable_fts",
+                "Drop the FTS index",
+                "disable_fts TABLE",
+            ),
+            c(
+                FID_REBUILD,
+                "rebuild_fts",
+                "Rebuild (overwrite) the FTS index",
+                "rebuild_fts TABLE ID_COL COL [COL ...]",
+            ),
+            c(
+                FID_SEARCH,
+                "search",
+                "BM25 full-text search",
+                "search TABLE ID_COL QUERY...",
+            ),
         ]
     }
 
@@ -118,7 +146,10 @@ impl Guest for Component {
                 let sql = format!(
                     "SELECT * FROM (SELECT *, fts_main_{table}.match_bm25({qid_col}, {q}) \
                      AS score FROM {qtable}) sq WHERE score IS NOT NULL ORDER BY score DESC",
-                    table = table, qid_col = qid_col, q = lit(query), qtable = qtable,
+                    table = table,
+                    qid_col = qid_col,
+                    q = lit(query),
+                    qtable = qtable,
                 );
                 Ok(plain(spi::query(&sql)?))
             }

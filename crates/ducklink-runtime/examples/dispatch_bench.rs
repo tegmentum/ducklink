@@ -48,7 +48,11 @@ fn main() {
     // few scalar/table/aggregate callbacks.
     let mut handles = Vec::new();
     for ext in ["isin", "luhn", "uuidx", "url", "email", "crypto"] {
-        for k in [CallbackKind::Scalar, CallbackKind::Table, CallbackKind::Aggregate] {
+        for k in [
+            CallbackKind::Scalar,
+            CallbackKind::Table,
+            CallbackKind::Aggregate,
+        ] {
             handles.push(registry.allocate_quiet(ext, k, 7));
         }
     }
@@ -107,10 +111,14 @@ fn main() {
         type_expr: "STRUCT(a INTEGER, b VARCHAR)".to_string(),
         json: r#"{"a":1,"b":"x"}"#.to_string(),
     });
-    bench("marshal complex (nested via Complex arm)", iters / 5, || {
-        let v = clone_duckvalue(black_box(&complex));
-        black_box(v);
-    });
+    bench(
+        "marshal complex (nested via Complex arm)",
+        iters / 5,
+        || {
+            let v = clone_duckvalue(black_box(&complex));
+            black_box(v);
+        },
+    );
 
     // --- 3. expanded marshalling: the rich @3.x value arms -------------------
     // The @3.1.0 surface widened `duckvalue` from the v1 closed set to 22 arms.
@@ -164,18 +172,19 @@ fn main() {
     // ABI). These bench the marshalling each pays so the window re-send cost is
     // quantified (informs whether a 3.2.0 "send partition once" interface earns
     // its keep).
-    let group: Vec<Vec<t::Duckvalue>> =
-        (0..ROWS as i64).map(|i| vec![t::Duckvalue::Int64(i)]).collect();
+    let group: Vec<Vec<t::Duckvalue>> = (0..ROWS as i64)
+        .map(|i| vec![t::Duckvalue::Int64(i)])
+        .collect();
     bench("aggregate: marshal 2048-row group once", 20_000, || {
-        let cloned: Vec<Vec<t::Duckvalue>> =
-            black_box(&group).iter().map(|r| r.clone()).collect();
+        let cloned: Vec<Vec<t::Duckvalue>> = black_box(&group).iter().map(|r| r.clone()).collect();
         black_box(cloned);
     });
 
     // window: a 256-row partition re-marshalled once PER output row = 256 sends.
     const PART: usize = 256;
-    let partition: Vec<Vec<t::Duckvalue>> =
-        (0..PART as i64).map(|i| vec![t::Duckvalue::Int64(i)]).collect();
+    let partition: Vec<Vec<t::Duckvalue>> = (0..PART as i64)
+        .map(|i| vec![t::Duckvalue::Int64(i)])
+        .collect();
     bench("window: re-marshal 256-part PER row x256", 2_000, || {
         for _out_row in 0..PART {
             let sent: Vec<Vec<t::Duckvalue>> =

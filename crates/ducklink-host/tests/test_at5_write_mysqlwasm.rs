@@ -135,13 +135,7 @@ fn drop_table(bin: &Path, root: &Path, url: &str, table: &str) {
 /// `SELECT id, name FROM <table> WHERE id = <id>` through ducklink itself.
 /// Returns the first (id, name) tuple as text so the test can compare
 /// against expected values without pulling in a native mysql client.
-fn read_row_via_ducklink(
-    bin: &Path,
-    root: &Path,
-    url: &str,
-    table: &str,
-    id: i64,
-) -> String {
+fn read_row_via_ducklink(bin: &Path, root: &Path, url: &str, table: &str, id: i64) -> String {
     let out = run_ducklink(
         bin,
         root,
@@ -154,19 +148,17 @@ fn read_row_via_ducklink(
         ],
         "mysqlwasm",
     );
-    assert!(out.status.success(), "{}", dump("SELECT for verification", &out));
+    assert!(
+        out.status.success(),
+        "{}",
+        dump("SELECT for verification", &out)
+    );
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
 /// `SELECT COUNT(*) FROM <table> WHERE id = <id>` via ducklink; returns the
 /// stdout text unmodified (tests grep for '0' or '1').
-fn count_rows_via_ducklink(
-    bin: &Path,
-    root: &Path,
-    url: &str,
-    table: &str,
-    id: i64,
-) -> String {
+fn count_rows_via_ducklink(bin: &Path, root: &Path, url: &str, table: &str, id: i64) -> String {
     let out = run_ducklink(
         bin,
         root,
@@ -179,13 +171,19 @@ fn count_rows_via_ducklink(
         ],
         "mysqlwasm",
     );
-    assert!(out.status.success(), "{}", dump("COUNT for verification", &out));
+    assert!(
+        out.status.success(),
+        "{}",
+        dump("COUNT for verification", &out)
+    );
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
 
 #[test]
 fn insert_into_attached_dispatches_to_storage_write() {
-    let Some((bin, url)) = preflight() else { return };
+    let Some((bin, url)) = preflight() else {
+        return;
+    };
     let root = repo_root();
     let table = unique_table("insert");
 
@@ -203,7 +201,11 @@ fn insert_into_attached_dispatches_to_storage_write() {
         ],
         "mysqlwasm",
     );
-    assert!(create.status.success(), "{}", dump("CREATE TABLE failed", &create));
+    assert!(
+        create.status.success(),
+        "{}",
+        dump("CREATE TABLE failed", &create)
+    );
 
     let ins = run_ducklink(
         &bin,
@@ -230,7 +232,9 @@ fn insert_into_attached_dispatches_to_storage_write() {
 
 #[test]
 fn update_attached_via_where_dispatches_after_rowid_prescan() {
-    let Some((bin, url)) = preflight() else { return };
+    let Some((bin, url)) = preflight() else {
+        return;
+    };
     let root = repo_root();
     let table = unique_table("update");
 
@@ -246,7 +250,11 @@ fn update_attached_via_where_dispatches_after_rowid_prescan() {
         ],
         "mysqlwasm",
     );
-    assert!(create.status.success(), "{}", dump("CREATE TABLE failed", &create));
+    assert!(
+        create.status.success(),
+        "{}",
+        dump("CREATE TABLE failed", &create)
+    );
 
     let upd = run_ducklink(
         &bin,
@@ -274,7 +282,9 @@ fn update_attached_via_where_dispatches_after_rowid_prescan() {
 
 #[test]
 fn delete_attached_via_where_dispatches_after_rowid_prescan() {
-    let Some((bin, url)) = preflight() else { return };
+    let Some((bin, url)) = preflight() else {
+        return;
+    };
     let root = repo_root();
     let table = unique_table("delete");
 
@@ -290,7 +300,11 @@ fn delete_attached_via_where_dispatches_after_rowid_prescan() {
         ],
         "mysqlwasm",
     );
-    assert!(create.status.success(), "{}", dump("CREATE TABLE failed", &create));
+    assert!(
+        create.status.success(),
+        "{}",
+        dump("CREATE TABLE failed", &create)
+    );
 
     let del = run_ducklink(
         &bin,

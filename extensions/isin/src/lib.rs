@@ -55,7 +55,9 @@ fn expected_check_digit(normalized: &str) -> Option<u32> {
     if normalized.len() != 12 {
         return None;
     }
-    expand(&normalized[..11]).as_deref().and_then(luhn_check_digit)
+    expand(&normalized[..11])
+        .as_deref()
+        .and_then(luhn_check_digit)
 }
 
 /// True if `s` (after normalization) is a valid 12-char ISIN with a correct
@@ -83,7 +85,10 @@ pub fn check_digit(s: &str) -> Option<i64> {
     } else {
         return None;
     };
-    expand(body).as_deref().and_then(luhn_check_digit).map(|d| d as i64)
+    expand(body)
+        .as_deref()
+        .and_then(luhn_check_digit)
+        .map(|d| d as i64)
 }
 
 #[cfg(test)]

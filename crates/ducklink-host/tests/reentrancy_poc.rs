@@ -113,14 +113,10 @@ fn wall2_wasmtime_permits_reentry_from_host_callback_with_caller() -> Result<()>
         // Fetch the same instance's `sink` export via the caller's context
         // and invoke it. This is the RE-ENTRANT call the memo §1.3 posits
         // as forbidden.
-        let sink = match caller
-            .get_export("sink")
-            .and_then(|e| e.into_func())
-        {
+        let sink = match caller.get_export("sink").and_then(|e| e.into_func()) {
             Some(f) => f,
             None => {
-                caller.data_mut().nested_call_err =
-                    Some("sink export missing".to_string());
+                caller.data_mut().nested_call_err = Some("sink export missing".to_string());
                 return;
             }
         };

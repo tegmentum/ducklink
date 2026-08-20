@@ -335,7 +335,10 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].dir, "data");
         let c = &calls[0];
-        assert_eq!(&"SELECT * FROM delta_scan('data') ORDER BY 1"[c.start..c.end], "delta_scan('data')");
+        assert_eq!(
+            &"SELECT * FROM delta_scan('data') ORDER BY 1"[c.start..c.end],
+            "delta_scan('data')"
+        );
     }
 
     #[test]
@@ -373,8 +376,12 @@ mod tests {
 
     #[test]
     fn build_read_parquet_list() {
-        let sql = build_read_parquet("data", &["a.parquet".to_string(), "b.parquet".to_string()]).unwrap();
-        assert_eq!(sql, "(SELECT * FROM read_parquet(['data/a.parquet', 'data/b.parquet']))");
+        let sql = build_read_parquet("data", &["a.parquet".to_string(), "b.parquet".to_string()])
+            .unwrap();
+        assert_eq!(
+            sql,
+            "(SELECT * FROM read_parquet(['data/a.parquet', 'data/b.parquet']))"
+        );
     }
 
     #[test]

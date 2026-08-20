@@ -94,90 +94,89 @@ datalink_extcore::columnar_bridge! {
 }
 
 fn scalar(
-        handle: u32,
-        args: Vec<types::Duckvalue>,
-        _c: types::Invokeinfo,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        let which = scalar_handlers()
-            .lock()
-            .unwrap()
-            .get(&handle)
-            .copied()
-            .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
-        let n = types::Duckvalue::Null;
-        // The `geometry`-typed argument arrives physically as a BLOB (WKB bytes).
-        let geom = match args.first() {
-            Some(types::Duckvalue::Blob(b)) => wkb::decode(b),
-            _ => None,
-        };
-        Ok(match (which, geom) {
-            (Scalar::Area, Some(g)) => types::Duckvalue::Float64(total_area(&g)),
-            (Scalar::AsText, Some(g)) => types::Duckvalue::Text(geom_to_wkt(&g)),
-            _ => n,
-        })
+    handle: u32,
+    args: Vec<types::Duckvalue>,
+    _c: types::Invokeinfo,
+) -> Result<types::Duckvalue, types::Duckerror> {
+    let which = scalar_handlers()
+        .lock()
+        .unwrap()
+        .get(&handle)
+        .copied()
+        .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
+    let n = types::Duckvalue::Null;
+    // The `geometry`-typed argument arrives physically as a BLOB (WKB bytes).
+    let geom = match args.first() {
+        Some(types::Duckvalue::Blob(b)) => wkb::decode(b),
+        _ => None,
+    };
+    Ok(match (which, geom) {
+        (Scalar::Area, Some(g)) => types::Duckvalue::Float64(total_area(&g)),
+        (Scalar::AsText, Some(g)) => types::Duckvalue::Text(geom_to_wkt(&g)),
+        _ => n,
+    })
 }
 
 /// The cast dispatch. The core calls this with the SOURCE physical value and
 /// expects the TARGET physical value. We key on the value shape:
 ///   * Text(wkt)  ->  Blob(wkb)   (VARCHAR -> geometry)
 ///   * Blob(wkb)  ->  Text(wkt)   (geometry -> VARCHAR)
-fn cast(
-        handle: u32,
-        value: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        let dir = cast_handlers()
-            .lock()
-            .unwrap()
-            .get(&handle)
-            .copied()
-            .ok_or_else(|| types::Duckerror::Internal("unknown cast handle".into()))?;
-        Ok(match (dir, value) {
-            (CastDir::TextToGeom, types::Duckvalue::Text(s)) => match parse_wkt(&s) {
-                Some(g) => match wkb::encode(&g) {
-                    Some(b) => types::Duckvalue::Blob(b.into()),
-                    None => return Err(types::Duckerror::Invalidargument(
+fn cast(handle: u32, value: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
+    let dir = cast_handlers()
+        .lock()
+        .unwrap()
+        .get(&handle)
+        .copied()
+        .ok_or_else(|| types::Duckerror::Internal("unknown cast handle".into()))?;
+    Ok(match (dir, value) {
+        (CastDir::TextToGeom, types::Duckvalue::Text(s)) => match parse_wkt(&s) {
+            Some(g) => match wkb::encode(&g) {
+                Some(b) => types::Duckvalue::Blob(b.into()),
+                None => {
+                    return Err(types::Duckerror::Invalidargument(
                         "could not encode geometry to WKB".into(),
-                    )),
-                },
-                None => {
-                    return Err(types::Duckerror::Invalidargument(
-                        std::format!("invalid WKT geometry: {s}").into(),
                     ))
                 }
             },
-            (CastDir::GeomToText, types::Duckvalue::Blob(b)) => match wkb::decode(&b) {
-                Some(g) => types::Duckvalue::Text(geom_to_wkt(&g)),
-                None => {
-                    return Err(types::Duckerror::Invalidargument(
-                        "invalid WKB geometry blob".into(),
-                    ))
-                }
-            },
-            // Builtin geometry (delivered as a Blob thanks to the core's
-            // GEOMETRY -> Blob arm) -> geom2: decode + re-encode the WKB.
-            (CastDir::GeomToGeom, types::Duckvalue::Blob(b)) => match wkb::decode(&b) {
-                Some(g) => match wkb::encode(&g) {
-                    Some(out) => types::Duckvalue::Blob(out.into()),
-                    None => {
-                        return Err(types::Duckerror::Invalidargument(
-                            "could not re-encode geometry WKB".into(),
-                        ))
-                    }
-                },
-                None => {
-                    return Err(types::Duckerror::Invalidargument(
-                        "invalid builtin-geometry WKB blob".into(),
-                    ))
-                }
-            },
-            // NULL passes through unchanged.
-            (_, types::Duckvalue::Null) => types::Duckvalue::Null,
-            (_, other) => {
+            None => {
                 return Err(types::Duckerror::Invalidargument(
-                    std::format!("geomtype cast: unexpected value {other:?}").into(),
+                    std::format!("invalid WKT geometry: {s}").into(),
                 ))
             }
-        })
+        },
+        (CastDir::GeomToText, types::Duckvalue::Blob(b)) => match wkb::decode(&b) {
+            Some(g) => types::Duckvalue::Text(geom_to_wkt(&g)),
+            None => {
+                return Err(types::Duckerror::Invalidargument(
+                    "invalid WKB geometry blob".into(),
+                ))
+            }
+        },
+        // Builtin geometry (delivered as a Blob thanks to the core's
+        // GEOMETRY -> Blob arm) -> geom2: decode + re-encode the WKB.
+        (CastDir::GeomToGeom, types::Duckvalue::Blob(b)) => match wkb::decode(&b) {
+            Some(g) => match wkb::encode(&g) {
+                Some(out) => types::Duckvalue::Blob(out.into()),
+                None => {
+                    return Err(types::Duckerror::Invalidargument(
+                        "could not re-encode geometry WKB".into(),
+                    ))
+                }
+            },
+            None => {
+                return Err(types::Duckerror::Invalidargument(
+                    "invalid builtin-geometry WKB blob".into(),
+                ))
+            }
+        },
+        // NULL passes through unchanged.
+        (_, types::Duckvalue::Null) => types::Duckvalue::Null,
+        (_, other) => {
+            return Err(types::Duckerror::Invalidargument(
+                std::format!("geomtype cast: unexpected value {other:?}").into(),
+            ))
+        }
+    })
 }
 
 export!(Extension);
@@ -193,7 +192,9 @@ fn register_type_and_casts() -> Result<(), types::Duckerror> {
         name: TYPE_NAME.into(),
         physical: "BLOB".into(),
     })
-    .map_err(|e| types::Duckerror::Internal(std::format!("register {TYPE_NAME} type: {e}").into()))?;
+    .map_err(|e| {
+        types::Duckerror::Internal(std::format!("register {TYPE_NAME} type: {e}").into())
+    })?;
 
     // 2a. VARCHAR -> geom2  (assignment cast so INSERT '...'::geom2 and implicit
     //     assignment on INSERT both fire). WKT text -> WKB blob.
@@ -274,9 +275,9 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let txt = types::Logicaltype::Text;
 
     let reg_one = |name: &str,
-                       f: Scalar,
-                       ret: types::Logicaltype,
-                       desc: &str|
+                   f: Scalar,
+                   ret: types::Logicaltype,
+                   desc: &str|
      -> Result<(), types::Duckerror> {
         let h = next_handle();
         scalar_handlers().lock().unwrap().insert(h, f);

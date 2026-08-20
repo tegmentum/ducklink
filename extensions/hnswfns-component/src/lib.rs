@@ -128,7 +128,8 @@ impl index_dispatch::Guest for Extension {
     ) -> Result<u32, types::Duckerror> {
         let name = index_name.to_string();
         INDEXES.with(|m| {
-            m.borrow_mut().insert(name.clone(), IndexState::new(dims as usize));
+            m.borrow_mut()
+                .insert(name.clone(), IndexState::new(dims as usize));
         });
         let handle = NEXT_HANDLE.with(|n| {
             let mut n = n.borrow_mut();
@@ -253,7 +254,9 @@ impl callback_dispatch::Guest for Extension {
         _a: Vec<types::Duckvalue>,
         _c: types::Invokeinfo,
     ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("hnswfns: no scalar fns".into()))
+        Err(types::Duckerror::Unsupported(
+            "hnswfns: no scalar fns".into(),
+        ))
     }
 
     fn call_table(
@@ -291,7 +294,9 @@ impl callback_dispatch::Guest for Extension {
             }
         };
         if k < 0 {
-            return Err(types::Duckerror::Invalidargument("hnsw_search: k must be >= 0".into()));
+            return Err(types::Duckerror::Invalidargument(
+                "hnsw_search: k must be >= 0".into(),
+            ));
         }
 
         let query = parse_float_array(&query_json)?;
@@ -315,18 +320,16 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
         Err(types::Duckerror::Unsupported("hnswfns: no pragmas".into()))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("hnswfns: no casts".into()))
     }
 }
 
 /// Parse a JSON array of numbers into a Vec<f32>.
 fn parse_float_array(s: &str) -> Result<std::vec::Vec<f32>, types::Duckerror> {
-    let v: serde_json::Value = serde_json::from_str(s)
-        .map_err(|e| types::Duckerror::Invalidargument(format!("hnsw_search: bad query JSON: {e}")))?;
+    let v: serde_json::Value = serde_json::from_str(s).map_err(|e| {
+        types::Duckerror::Invalidargument(format!("hnsw_search: bad query JSON: {e}"))
+    })?;
     let arr = v.as_array().ok_or_else(|| {
         types::Duckerror::Invalidargument("hnsw_search: query must be a JSON array".into())
     })?;

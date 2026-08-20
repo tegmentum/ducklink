@@ -10,7 +10,10 @@ use std::collections::HashMap;
 use ducklink_host::at5_intercept::{resolve_write_target, WriteRoute};
 
 fn attached_map(aliases: &[&str]) -> HashMap<String, String> {
-    aliases.iter().map(|a| (a.to_string(), String::new())).collect()
+    aliases
+        .iter()
+        .map(|a| (a.to_string(), String::new()))
+        .collect()
 }
 
 fn assert_unsupported(sql: &str, reason_needle: &str) {
@@ -19,7 +22,9 @@ fn assert_unsupported(sql: &str, reason_needle: &str) {
         .unwrap_or_else(|| panic!("expected write-intercept to catch: {sql}"));
     match route {
         WriteRoute::Unsupported(reason) => assert!(
-            reason.to_ascii_lowercase().contains(&reason_needle.to_ascii_lowercase()),
+            reason
+                .to_ascii_lowercase()
+                .contains(&reason_needle.to_ascii_lowercase()),
             "expected reason to mention '{reason_needle}', got: {reason}",
         ),
         other => panic!("expected Unsupported for {sql}, got {other:?}"),
@@ -60,42 +65,27 @@ fn cte_driven_insert_is_rejected() {
 
 #[test]
 fn insert_from_select_is_rejected() {
-    assert_unsupported(
-        "INSERT INTO mydb.foo SELECT * FROM other_source",
-        "SELECT",
-    );
+    assert_unsupported("INSERT INTO mydb.foo SELECT * FROM other_source", "SELECT");
 }
 
 #[test]
 fn insert_or_replace_is_rejected() {
-    assert_unsupported(
-        "INSERT OR REPLACE INTO mydb.foo VALUES (1)",
-        "OR REPLACE",
-    );
+    assert_unsupported("INSERT OR REPLACE INTO mydb.foo VALUES (1)", "OR REPLACE");
 }
 
 #[test]
 fn insert_or_ignore_is_rejected() {
-    assert_unsupported(
-        "INSERT OR IGNORE INTO mydb.foo VALUES (1)",
-        "OR IGNORE",
-    );
+    assert_unsupported("INSERT OR IGNORE INTO mydb.foo VALUES (1)", "OR IGNORE");
 }
 
 #[test]
 fn parameterized_insert_is_rejected() {
-    assert_unsupported(
-        "INSERT INTO mydb.foo VALUES (?)",
-        "prepared/parameterized",
-    );
+    assert_unsupported("INSERT INTO mydb.foo VALUES (?)", "prepared/parameterized");
 }
 
 #[test]
 fn dollar_parameter_insert_is_rejected() {
-    assert_unsupported(
-        "INSERT INTO mydb.foo VALUES ($1)",
-        "prepared/parameterized",
-    );
+    assert_unsupported("INSERT INTO mydb.foo VALUES ($1)", "prepared/parameterized");
 }
 
 #[test]
@@ -116,10 +106,7 @@ fn update_with_returning_is_rejected() {
 
 #[test]
 fn delete_with_returning_is_rejected() {
-    assert_unsupported(
-        "DELETE FROM mydb.foo WHERE id = 1 RETURNING *",
-        "RETURNING",
-    );
+    assert_unsupported("DELETE FROM mydb.foo WHERE id = 1 RETURNING *", "RETURNING");
 }
 
 #[test]
@@ -138,12 +125,8 @@ fn non_attached_alias_falls_through() {
         resolve_write_target("INSERT INTO other_db.foo VALUES (1)", &att).is_none(),
         "non-attached alias must fall through to the core"
     );
-    assert!(
-        resolve_write_target("UPDATE other.t SET x = 1 WHERE id = 2", &att).is_none(),
-    );
-    assert!(
-        resolve_write_target("DELETE FROM other.t WHERE id = 1", &att).is_none(),
-    );
+    assert!(resolve_write_target("UPDATE other.t SET x = 1 WHERE id = 2", &att).is_none(),);
+    assert!(resolve_write_target("DELETE FROM other.t WHERE id = 1", &att).is_none(),);
 }
 
 #[test]

@@ -59,7 +59,11 @@ fn pretty(sql: &str) -> String {
 /// statements) to a single space.
 fn compact(sql: &str) -> String {
     let formatted = format(sql, &QueryParams::None, &base_options(true));
-    formatted.split_whitespace().collect::<std::vec::Vec<_>>().join(" ").into()
+    formatted
+        .split_whitespace()
+        .collect::<std::vec::Vec<_>>()
+        .join(" ")
+        .into()
 }
 
 fn text_arg(args: &[types::Duckvalue], i: usize) -> Option<&str> {
@@ -123,14 +127,25 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
 
     for (name, f, desc) in [
-        ("sql_format", F::Pretty, "Reindent SQL (2-space indent, keyword case preserved)"),
-        ("sql_format_compact", F::Compact, "Condense SQL onto a single line"),
+        (
+            "sql_format",
+            F::Pretty,
+            "Reindent SQL (2-space indent, keyword case preserved)",
+        ),
+        (
+            "sql_format_compact",
+            F::Compact,
+            "Condense SQL onto a single line",
+        ),
     ] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed);
         handlers().lock().unwrap().insert(h, f);
         reg.register(
             name,
-            &[runtime::Funcarg { name: Some("sql".into()), logical: types::Logicaltype::Text }],
+            &[runtime::Funcarg {
+                name: Some("sql".into()),
+                logical: types::Logicaltype::Text,
+            }],
             &types::Logicaltype::Text,
             runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts {

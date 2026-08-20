@@ -25,8 +25,8 @@ wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extensio
 use duckdb::extension::{runtime, types};
 use exports::duckdb::extension::{callback_dispatch, guest};
 
-use pcap_parser::{create_reader, PcapBlockOwned, PcapError};
 use pcap_parser::pcapng::Block;
+use pcap_parser::{create_reader, PcapBlockOwned, PcapError};
 
 struct Extension;
 
@@ -92,10 +92,7 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
         Err(types::Duckerror::Unsupported("pcap: no pragmas".into()))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("pcap: no casts".into()))
     }
 }
@@ -228,7 +225,13 @@ fn register_read_pcap() -> Result<(), types::Duckerror> {
         ),
         tags: vec!["pcap".into(), "pcapng".into(), "network".into()],
     };
-    reg.register("read_pcap", &args, &columns, runtime::TableCallback::new(h), Some(&opts))?;
+    reg.register(
+        "read_pcap",
+        &args,
+        &columns,
+        runtime::TableCallback::new(h),
+        Some(&opts),
+    )?;
     Ok(())
 }
 

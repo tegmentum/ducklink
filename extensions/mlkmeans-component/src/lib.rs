@@ -126,7 +126,9 @@ impl callback_dispatch::Guest for Extension {
         _h: u32,
         _a: Vec<types::Duckvalue>,
     ) -> Result<types::Resultset, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("mlkmeans: no table fns".into()))
+        Err(types::Duckerror::Unsupported(
+            "mlkmeans: no table fns".into(),
+        ))
     }
     fn call_pragma(
         _h: u32,
@@ -134,10 +136,7 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
         Err(types::Duckerror::Unsupported("mlkmeans: no pragmas".into()))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("mlkmeans: no casts".into()))
     }
 }

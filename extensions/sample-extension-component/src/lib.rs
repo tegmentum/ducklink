@@ -12,8 +12,8 @@ wit_bindgen::generate!({
     world: "duckdb:extension/duckdb-extension",
 });
 
-use duckdb::extension::{catalog, files, runtime, types};
 use duckdb::extension::column_types as __col;
+use duckdb::extension::{catalog, files, runtime, types};
 use exports::duckdb::extension::{callback_dispatch, guest};
 
 // major-4 colvec<->row adapter (the same one `datalink_extcore::columnar_bridge!`
@@ -177,7 +177,10 @@ impl callback_dispatch::Guest for SampleExtension {
         ))
     }
 
-    fn call_cast(handle: u32, value: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(
+        handle: u32,
+        value: types::Duckvalue,
+    ) -> Result<types::Duckvalue, types::Duckerror> {
         let handler = cast_handlers()
             .lock()
             .expect("cast handler mutex poisoned")
@@ -325,7 +328,8 @@ fn register_replacement_scan() -> Result<(), types::Duckerror> {
         description: Some("Returns the path it was given (replacement-scan demo)".into()),
         tags: vec!["sample".into()],
     };
-    let table_function = registry.register("sample_read_path", &args, &columns, callback, Some(&opts))?;
+    let table_function =
+        registry.register("sample_read_path", &args, &columns, callback, Some(&opts))?;
 
     files::register_replacement_scan(&files::ReplacementScan {
         extensions: vec!["sample".into()],

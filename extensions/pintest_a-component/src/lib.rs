@@ -16,13 +16,25 @@ struct Extension;
 impl guest::Guest for Extension {
     fn load() -> Result<types::Loadresult, types::Duckerror> {
         register_scalars()?;
-        Ok(types::Loadresult { name: "pintest_a".into(), version: Some(env!("CARGO_PKG_VERSION").into()), requires: Vec::new().into() })
+        Ok(types::Loadresult {
+            name: "pintest_a".into(),
+            version: Some(env!("CARGO_PKG_VERSION").into()),
+            requires: Vec::new().into(),
+        })
     }
-    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> { Ok(false) }
-    fn shutdown() -> Result<bool, types::Duckerror> { Ok(false) }
+    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
+    fn shutdown() -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
 }
 // Per-row scalar logic, UNCHANGED from the major-3 hand-written impl.
-fn scalar(_handle: u32, _args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
+fn scalar(
+    _handle: u32,
+    _args: Vec<types::Duckvalue>,
+    _c: types::Invokeinfo,
+) -> Result<types::Duckvalue, types::Duckerror> {
     Ok(types::Duckvalue::Int32(111))
 }
 datalink_extcore::columnar_bridge! {
@@ -34,10 +46,23 @@ datalink_extcore::columnar_bridge! {
 }
 export!(Extension);
 fn register_scalars() -> Result<(), types::Duckerror> {
-    let cap = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
-    let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
+    let cap = runtime::get_capability(types::Capabilitykind::Scalar)
+        .ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
+    let reg = match cap {
+        runtime::Capability::Scalar(r) => r,
+        _ => return Err(types::Duckerror::Internal("bad capability".into())),
+    };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
-    reg.register("pin_probe", &[], &types::Logicaltype::Int32, runtime::ScalarCallback::new(1),
-        Some(&runtime::Funcopts { description: Some("pin-test probe A -> 111".into()), tags: vec!["test".into()], attributes: det }))?;
+    reg.register(
+        "pin_probe",
+        &[],
+        &types::Logicaltype::Int32,
+        runtime::ScalarCallback::new(1),
+        Some(&runtime::Funcopts {
+            description: Some("pin-test probe A -> 111".into()),
+            tags: vec!["test".into()],
+            attributes: det,
+        }),
+    )?;
     Ok(())
 }

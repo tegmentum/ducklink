@@ -68,7 +68,9 @@ impl callback_dispatch::Guest for Extension {
         _a: Vec<types::Duckvalue>,
         _c: types::Invokeinfo,
     ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("excelfns: no scalar fns".into()))
+        Err(types::Duckerror::Unsupported(
+            "excelfns: no scalar fns".into(),
+        ))
     }
 
     fn call_table(
@@ -117,10 +119,7 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
         Err(types::Duckerror::Unsupported("excelfns: no pragmas".into()))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("excelfns: no casts".into()))
     }
 }
@@ -340,7 +339,13 @@ fn register_all() -> Result<(), types::Duckerror> {
             description: Some("Worksheet names of an .xlsx BLOB: one (sheet) row per sheet".into()),
             tags: vec!["excel".into(), "xlsx".into(), "sheets".into()],
         };
-        reg.register("xlsx_sheets", &args, &columns, runtime::TableCallback::new(h), Some(&opts))?;
+        reg.register(
+            "xlsx_sheets",
+            &args,
+            &columns,
+            runtime::TableCallback::new(h),
+            Some(&opts),
+        )?;
     }
 
     // read_xlsx (MELTED) -------------------------------------------------
@@ -349,10 +354,22 @@ fn register_all() -> Result<(), types::Duckerror> {
         handlers().lock().unwrap().insert(h, T::Read);
         let args = vec![data_arg()];
         let columns = vec![
-            types::Columndef { name: "sheet".into(), logical: types::Logicaltype::Text },
-            types::Columndef { name: "row_no".into(), logical: types::Logicaltype::Int64 },
-            types::Columndef { name: "col".into(), logical: types::Logicaltype::Text },
-            types::Columndef { name: "val".into(), logical: types::Logicaltype::Text },
+            types::Columndef {
+                name: "sheet".into(),
+                logical: types::Logicaltype::Text,
+            },
+            types::Columndef {
+                name: "row_no".into(),
+                logical: types::Logicaltype::Int64,
+            },
+            types::Columndef {
+                name: "col".into(),
+                logical: types::Logicaltype::Text,
+            },
+            types::Columndef {
+                name: "val".into(),
+                logical: types::Logicaltype::Text,
+            },
         ];
         let opts = runtime::Extopts {
             description: Some(
@@ -361,9 +378,20 @@ fn register_all() -> Result<(), types::Duckerror> {
                  the xlsx schema is dynamic)"
                     .into(),
             ),
-            tags: vec!["excel".into(), "xlsx".into(), "read".into(), "melted".into()],
+            tags: vec![
+                "excel".into(),
+                "xlsx".into(),
+                "read".into(),
+                "melted".into(),
+            ],
         };
-        reg.register("read_xlsx", &args, &columns, runtime::TableCallback::new(h), Some(&opts))?;
+        reg.register(
+            "read_xlsx",
+            &args,
+            &columns,
+            runtime::TableCallback::new(h),
+            Some(&opts),
+        )?;
     }
 
     // xlsx_cell ----------------------------------------------------------
@@ -372,8 +400,14 @@ fn register_all() -> Result<(), types::Duckerror> {
         handlers().lock().unwrap().insert(h, T::Cell);
         let args = vec![
             data_arg(),
-            runtime::Funcarg { name: Some("sheet".into()), logical: types::Logicaltype::Text },
-            runtime::Funcarg { name: Some("cell".into()), logical: types::Logicaltype::Text },
+            runtime::Funcarg {
+                name: Some("sheet".into()),
+                logical: types::Logicaltype::Text,
+            },
+            runtime::Funcarg {
+                name: Some("cell".into()),
+                logical: types::Logicaltype::Text,
+            },
         ];
         let columns = vec![types::Columndef {
             name: "val".into(),
@@ -386,7 +420,13 @@ fn register_all() -> Result<(), types::Duckerror> {
             ),
             tags: vec!["excel".into(), "xlsx".into(), "cell".into()],
         };
-        reg.register("xlsx_cell", &args, &columns, runtime::TableCallback::new(h), Some(&opts))?;
+        reg.register(
+            "xlsx_cell",
+            &args,
+            &columns,
+            runtime::TableCallback::new(h),
+            Some(&opts),
+        )?;
     }
 
     Ok(())
@@ -426,8 +466,7 @@ mod tests {
     fn sheets_lists_one_sheet() {
         let bytes = make_xlsx();
         let rows = sheets_rows(&bytes);
-        let got: std::vec::Vec<std::string::String> =
-            rows.iter().map(|r| as_text(&r[0])).collect();
+        let got: std::vec::Vec<std::string::String> = rows.iter().map(|r| as_text(&r[0])).collect();
         assert_eq!(got, vec!["Sheet1".to_string()]);
     }
 
@@ -437,20 +476,37 @@ mod tests {
         let rows = read_melted(&bytes);
         // 2x2 table = 4 non-empty cells.
         assert_eq!(rows.len(), 4);
-        let quads: std::vec::Vec<(std::string::String, i64, std::string::String, std::string::String)> =
-            rows.iter()
-                .map(|r| {
-                    let rn = match &r[1] {
-                        types::Duckvalue::Int64(i) => *i,
-                        _ => panic!("row_no not int"),
-                    };
-                    (as_text(&r[0]), rn, as_text(&r[2]), as_text(&r[3]))
-                })
-                .collect();
-        assert_eq!(quads[0], ("Sheet1".to_string(), 1, "A".to_string(), "a".to_string()));
-        assert_eq!(quads[1], ("Sheet1".to_string(), 1, "B".to_string(), "b".to_string()));
-        assert_eq!(quads[2], ("Sheet1".to_string(), 2, "A".to_string(), "1".to_string()));
-        assert_eq!(quads[3], ("Sheet1".to_string(), 2, "B".to_string(), "2".to_string()));
+        let quads: std::vec::Vec<(
+            std::string::String,
+            i64,
+            std::string::String,
+            std::string::String,
+        )> = rows
+            .iter()
+            .map(|r| {
+                let rn = match &r[1] {
+                    types::Duckvalue::Int64(i) => *i,
+                    _ => panic!("row_no not int"),
+                };
+                (as_text(&r[0]), rn, as_text(&r[2]), as_text(&r[3]))
+            })
+            .collect();
+        assert_eq!(
+            quads[0],
+            ("Sheet1".to_string(), 1, "A".to_string(), "a".to_string())
+        );
+        assert_eq!(
+            quads[1],
+            ("Sheet1".to_string(), 1, "B".to_string(), "b".to_string())
+        );
+        assert_eq!(
+            quads[2],
+            ("Sheet1".to_string(), 2, "A".to_string(), "1".to_string())
+        );
+        assert_eq!(
+            quads[3],
+            ("Sheet1".to_string(), 2, "B".to_string(), "2".to_string())
+        );
     }
 
     #[test]

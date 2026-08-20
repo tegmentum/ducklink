@@ -28,11 +28,11 @@
 //! `commitInfo` action (the conventional first line of a commit). With one
 //! concatenated commit this is 0 for every action; callers who need the true
 //! version should supply one commit's log at a time.
+use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicU32, Ordering},
     Mutex, OnceLock,
 };
-use std::collections::HashMap;
 
 use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
@@ -72,7 +72,9 @@ impl callback_dispatch::Guest for Extension {
         _a: Vec<types::Duckvalue>,
         _c: types::Invokeinfo,
     ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("deltascan: no scalar fns".into()))
+        Err(types::Duckerror::Unsupported(
+            "deltascan: no scalar fns".into(),
+        ))
     }
 
     fn call_table(
@@ -108,12 +110,11 @@ impl callback_dispatch::Guest for Extension {
         _h: u32,
         _a: Vec<types::Duckvalue>,
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("deltascan: no pragmas".into()))
+        Err(types::Duckerror::Unsupported(
+            "deltascan: no pragmas".into(),
+        ))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("deltascan: no casts".into()))
     }
 }

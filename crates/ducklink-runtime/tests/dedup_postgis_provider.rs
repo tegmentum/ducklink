@@ -157,11 +157,7 @@ fn postgis_provider_round_trips_via_dynlink() {
                 "expected dotted version string, got: {}",
                 t
             );
-            assert!(
-                t.starts_with('3'),
-                "expected PostGIS 3.x, got: {}",
-                t
-            );
+            assert!(t.starts_with('3'), "expected PostGIS 3.x, got: {}", t);
         }
         other => panic!("unexpected response body: {:?}", other),
     }

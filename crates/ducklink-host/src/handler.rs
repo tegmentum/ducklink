@@ -71,7 +71,11 @@ impl HandlerRegistry {
     /// Invoke the named handler with `request_json`. Returns the handler's
     /// `Ok(body)` / `Err(message)`. A fresh Store per call keeps handlers
     /// stateless across requests.
-    pub fn invoke(&self, name: &str, request_json: &str) -> Result<std::result::Result<String, String>> {
+    pub fn invoke(
+        &self,
+        name: &str,
+        request_json: &str,
+    ) -> Result<std::result::Result<String, String>> {
         let component = self
             .handlers
             .get(name)

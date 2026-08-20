@@ -476,7 +476,14 @@ fn cmd_schedule(common: &Common, rest: &[String]) -> Result<()> {
     println!(
         "{}",
         rows_to_json(
-            &["id", "name", "next_run_at", "nodename", "database", "readonly"],
+            &[
+                "id",
+                "name",
+                "next_run_at",
+                "nodename",
+                "database",
+                "readonly"
+            ],
             &rows,
         )
     );
@@ -538,16 +545,15 @@ fn cmd_force(common: &Common, rest: &[String]) -> Result<()> {
     let where_clause = if all {
         "active".to_string()
     } else {
-        let target = target
-            .ok_or_else(|| anyhow::anyhow!("force: NAME-OR-ID (or --all) is required"))?;
+        let target =
+            target.ok_or_else(|| anyhow::anyhow!("force: NAME-OR-ID (or --all) is required"))?;
         format!(
             "id = TRY_CAST('{t}' AS BIGINT) OR name = '{t}'",
             t = sql_escape(&target)
         )
     };
     let sql = format!("UPDATE __cron_jobs SET next_run_at = 0 WHERE {where_clause};");
-    driver_core_exec(&mut state, &sql)
-        .map_err(|e| anyhow::anyhow!("cron: force failed: {e}"))?;
+    driver_core_exec(&mut state, &sql).map_err(|e| anyhow::anyhow!("cron: force failed: {e}"))?;
     if all {
         eprintln!("cron: forced all active jobs due");
     } else {
@@ -623,11 +629,9 @@ fn cmd_metrics(common: &Common) -> Result<()> {
     .map_err(|e| anyhow::anyhow!("cron: metrics last-run query failed: {e}"))?;
 
     // Whole-scheduler gauges.
-    let active_rows = driver_core_query(
-        &mut state,
-        "SELECT COUNT(*) FROM __cron_jobs WHERE active;",
-    )
-    .map_err(|e| anyhow::anyhow!("cron: metrics active-count query failed: {e}"))?;
+    let active_rows =
+        driver_core_query(&mut state, "SELECT COUNT(*) FROM __cron_jobs WHERE active;")
+            .map_err(|e| anyhow::anyhow!("cron: metrics active-count query failed: {e}"))?;
     let held_rows = driver_core_query(
         &mut state,
         &format!(
@@ -687,7 +691,9 @@ fn cmd_metrics(common: &Common) -> Result<()> {
     out.push_str("# HELP cron_active_jobs Number of active jobs in __cron_jobs.\n");
     out.push_str("# TYPE cron_active_jobs gauge\n");
     out.push_str(&format!("cron_active_jobs {active}\n"));
-    out.push_str("# HELP cron_leases_held Number of non-expired per-job leases in __cron_leases.\n");
+    out.push_str(
+        "# HELP cron_leases_held Number of non-expired per-job leases in __cron_leases.\n",
+    );
     out.push_str("# TYPE cron_leases_held gauge\n");
     out.push_str(&format!("cron_leases_held {held}\n"));
     print!("{out}");
@@ -759,10 +765,9 @@ fn cmd_run(common: &Common, rest: &[String]) -> Result<()> {
             }
             "--history-limit" => {
                 i += 1;
-                history_limit = rest
-                    .get(i)
-                    .and_then(|s| s.parse().ok())
-                    .ok_or_else(|| anyhow::anyhow!("--history-limit expects a non-negative number"))?;
+                history_limit = rest.get(i).and_then(|s| s.parse().ok()).ok_or_else(|| {
+                    anyhow::anyhow!("--history-limit expects a non-negative number")
+                })?;
             }
             "--attach" => {
                 i += 1;
@@ -770,9 +775,9 @@ fn cmd_run(common: &Common, rest: &[String]) -> Result<()> {
                     .get(i)
                     .cloned()
                     .ok_or_else(|| anyhow::anyhow!("--attach expects PATH=NAME"))?;
-                let (path, name) = spec.split_once('=').ok_or_else(|| {
-                    anyhow::anyhow!("--attach expects PATH=NAME, got `{spec}`")
-                })?;
+                let (path, name) = spec
+                    .split_once('=')
+                    .ok_or_else(|| anyhow::anyhow!("--attach expects PATH=NAME, got `{spec}`"))?;
                 if path.is_empty() || name.is_empty() {
                     bail!("--attach expects a non-empty PATH and NAME, got `{spec}`");
                 }
@@ -798,8 +803,7 @@ fn cmd_run(common: &Common, rest: &[String]) -> Result<()> {
             .iter()
             .map(|(h, g)| (h.as_path(), g.as_str()))
             .collect();
-        let mut extra: Vec<String> =
-            vec!["--interval-secs".to_string(), interval_secs.to_string()];
+        let mut extra: Vec<String> = vec!["--interval-secs".to_string(), interval_secs.to_string()];
         if once {
             extra.push("--once".to_string());
         }
@@ -877,16 +881,23 @@ fn cmd_run(common: &Common, rest: &[String]) -> Result<()> {
         // transient error doesn't tear down a long-running scheduler.
         let outcome = tick(&mut state, &node, lease_ttl_ms);
         match &outcome {
-            Ok(TickOutcome { fired: 0, contended: 0 }) => {}
-            Ok(TickOutcome { fired, contended: 0 }) => {
+            Ok(TickOutcome {
+                fired: 0,
+                contended: 0,
+            }) => {}
+            Ok(TickOutcome {
+                fired,
+                contended: 0,
+            }) => {
                 eprintln!("cron: fired {fired} job(s)")
             }
-            Ok(TickOutcome { fired: 0, contended }) => eprintln!(
-                "cron: {contended} due job(s) already held by another driver; skipped"
-            ),
-            Ok(TickOutcome { fired, contended }) => eprintln!(
-                "cron: fired {fired} job(s), {contended} already held by another driver"
-            ),
+            Ok(TickOutcome {
+                fired: 0,
+                contended,
+            }) => eprintln!("cron: {contended} due job(s) already held by another driver; skipped"),
+            Ok(TickOutcome { fired, contended }) => {
+                eprintln!("cron: fired {fired} job(s), {contended} already held by another driver")
+            }
             Err(err) => eprintln!("cron: tick error: {err:?}"),
         }
         // Trim __cron_runs if requested. Only run when we actually fired
@@ -958,7 +969,10 @@ fn tick_body(
     let rows = driver_core_query(state, &read_sql)
         .map_err(|e| anyhow::anyhow!("cron: reading due jobs: {e}"))?;
     if rows.is_empty() {
-        return Ok(TickOutcome { fired: 0, contended: 0 });
+        return Ok(TickOutcome {
+            fired: 0,
+            contended: 0,
+        });
     }
     let due: Vec<(u64, String, String, bool)> = rows
         .into_iter()
@@ -975,7 +989,10 @@ fn tick_body(
         })
         .collect();
     if due.is_empty() {
-        return Ok(TickOutcome { fired: 0, contended: 0 });
+        return Ok(TickOutcome {
+            fired: 0,
+            contended: 0,
+        });
     }
 
     // 3. Pre-advance `next_run_at` on every due row we're about to fire.
@@ -1000,9 +1017,8 @@ fn tick_body(
     // own catalog.
     let needs_switch = due.iter().any(|(_, _, db, _)| !db.is_empty());
     let original_catalog: Option<String> = if needs_switch {
-        let rows = driver_core_query(state, "SELECT current_database();").map_err(|e| {
-            anyhow::anyhow!("cron: reading current catalog: {e}")
-        })?;
+        let rows = driver_core_query(state, "SELECT current_database();")
+            .map_err(|e| anyhow::anyhow!("cron: reading current catalog: {e}"))?;
         rows.first().and_then(|r| r.first().cloned())
     } else {
         None

@@ -118,15 +118,13 @@ fn passes_filter(v: i64, f: &TableFilter) -> bool {
         return true;
     }
     match f.op {
-        FilterOp::IsNull => false,     // v is never NULL
-        FilterOp::IsNotNull => true,   // v is always NOT NULL
-        FilterOp::IsIn => {
-            f.values.iter().any(|val| match val {
-                Duckvalue::Int64(x) => *x == v,
-                Duckvalue::Int32(x) => *x as i64 == v,
-                _ => false,
-            })
-        }
+        FilterOp::IsNull => false,   // v is never NULL
+        FilterOp::IsNotNull => true, // v is always NOT NULL
+        FilterOp::IsIn => f.values.iter().any(|val| match val {
+            Duckvalue::Int64(x) => *x == v,
+            Duckvalue::Int32(x) => *x as i64 == v,
+            _ => false,
+        }),
         other => {
             let Some(c) = const_i64(&f.values) else {
                 return true; // unshippable constant -> don't prune (stay correct)
@@ -172,10 +170,14 @@ fn open_inner(args: &[Duckvalue], filters: Vec<TableFilter>) -> Result<TableOpen
             filters.len()
         );
     }
-    cursors()
-        .lock()
-        .unwrap()
-        .insert(id, Cursor { n, next: 0, filters });
+    cursors().lock().unwrap().insert(
+        id,
+        Cursor {
+            n,
+            next: 0,
+            filters,
+        },
+    );
     Ok(TableOpenResult {
         cursor: id,
         columns: out_columns(),
@@ -200,11 +202,7 @@ impl table_stream_dispatch::Guest for Extension {
         open_inner(&args, filters)
     }
 
-    fn call_table_next(
-        _handle: u32,
-        cursor: u32,
-        max_rows: u32,
-    ) -> Result<Resultset, Duckerror> {
+    fn call_table_next(_handle: u32, cursor: u32, max_rows: u32) -> Result<Resultset, Duckerror> {
         let mut guard = cursors().lock().unwrap();
         let cur = guard
             .get_mut(&cursor)
@@ -246,10 +244,7 @@ impl callback_dispatch::Guest for Extension {
             "numstream: streams via table-stream-dispatch".into(),
         ))
     }
-    fn call_pragma(
-        _handle: u32,
-        _args: Vec<Duckvalue>,
-    ) -> Result<Option<Duckvalue>, Duckerror> {
+    fn call_pragma(_handle: u32, _args: Vec<Duckvalue>) -> Result<Option<Duckvalue>, Duckerror> {
         Err(Duckerror::Unsupported("numstream: no pragmas".into()))
     }
     fn call_cast(_handle: u32, _value: Duckvalue) -> Result<Duckvalue, Duckerror> {

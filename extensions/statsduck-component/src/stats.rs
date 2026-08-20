@@ -267,9 +267,8 @@ pub fn sign_test_paired(a: &[f64], b: &[f64], alt: &str) -> Option<Value> {
 fn binom_test_p(k: usize, n: usize, alt: &str) -> f64 {
     let pmf = |i: usize| -> f64 {
         // C(n,i) * 0.5^n via log-gamma to stay stable.
-        let log_c = ln_gamma((n + 1) as f64)
-            - ln_gamma((i + 1) as f64)
-            - ln_gamma((n - i + 1) as f64);
+        let log_c =
+            ln_gamma((n + 1) as f64) - ln_gamma((i + 1) as f64) - ln_gamma((n - i + 1) as f64);
         (log_c + (n as f64) * (0.5f64).ln()).exp()
     };
     let cdf_le = |k: usize| (0..=k).map(pmf).sum::<f64>();
@@ -490,9 +489,8 @@ pub fn ks_test_2samp(a: &[f64], b: &[f64]) -> Option<Value> {
     let mut all: Vec<f64> = a.iter().chain(b.iter()).cloned().collect();
     all.sort_by(|p, q| p.partial_cmp(q).unwrap());
     all.dedup();
-    let cdf = |sorted: &[f64], v: f64, n: f64| {
-        sorted.iter().filter(|&&s| s <= v).count() as f64 / n
-    };
+    let cdf =
+        |sorted: &[f64], v: f64, n: f64| sorted.iter().filter(|&&s| s <= v).count() as f64 / n;
     let mut d: f64 = 0.0;
     for &v in &all {
         d = d.max((cdf(&xs, v, n1) - cdf(&ys, v, n2)).abs());
@@ -727,8 +725,7 @@ pub fn shapiro_wilk(x: &[f64]) -> Option<Value> {
     // Royston's normalizing transformation for the p-value.
     let p_value = if n == 3 {
         // exact small-sample (Royston): pi/6 * (asin(sqrt(W)) - asin(sqrt(3/4)))
-        let pw = (std::f64::consts::PI / 6.0)
-            * ((w.sqrt()).asin() - (0.75_f64.sqrt()).asin());
+        let pw = (std::f64::consts::PI / 6.0) * ((w.sqrt()).asin() - (0.75_f64.sqrt()).asin());
         (1.0 - pw).clamp(0.0, 1.0)
     } else if n <= 11 {
         // small-sample branch: gamma transform of (1-W), then standardize.
@@ -791,8 +788,7 @@ pub fn anderson_darling(x: &[f64]) -> Option<Value> {
     } else if a_star < 0.6 {
         (1.2937 - 5.709 * a_star + 0.0186 * a_star * a_star).exp()
     } else if a_star < 10.0 {
-        (1.0776 - 2.30695 * a_star + 0.43424 * a_star * a_star
-            - 0.082433 * a_star.powi(3)
+        (1.0776 - 2.30695 * a_star + 0.43424 * a_star * a_star - 0.082433 * a_star.powi(3)
             + 0.0085481 * a_star.powi(4)
             - 0.00034745 * a_star.powi(5))
         .exp()
@@ -836,7 +832,13 @@ pub fn ks_test_1samp(sample: &[f64], dist: &str, params: &Value) -> Option<Value
             if rate <= 0.0 {
                 return None;
             }
-            Box::new(move |v: f64| if v < 0.0 { 0.0 } else { 1.0 - (-rate * v).exp() })
+            Box::new(move |v: f64| {
+                if v < 0.0 {
+                    0.0
+                } else {
+                    1.0 - (-rate * v).exp()
+                }
+            })
         }
         _ => return None,
     };
@@ -1142,7 +1144,11 @@ pub fn describe(xs: &[f64]) -> Option<(usize, f64, f64, f64, f64, f64)> {
     }
     let n = xs.len();
     let m = mean(xs);
-    let sd = if n >= 2 { var_samp(xs, m).sqrt() } else { f64::NAN };
+    let sd = if n >= 2 {
+        var_samp(xs, m).sqrt()
+    } else {
+        f64::NAN
+    };
     let mut sorted = xs.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let median = if n % 2 == 1 {
@@ -1455,8 +1461,8 @@ mod tests {
         // scipy.stats.ks_1samp(samp, norm.cdf, method='asymp')
         // -> D=0.100000, p=0.988261
         let samp = [
-            0.1, 0.5, -0.3, 1.2, -1.1, 0.4, 0.8, -0.6, 0.2, -0.9, 1.5, -1.3, 0.7, 0.0, 0.3,
-            -0.4, 0.9, -0.7, 1.1, -0.2,
+            0.1, 0.5, -0.3, 1.2, -1.1, 0.4, 0.8, -0.6, 0.2, -0.9, 1.5, -1.3, 0.7, 0.0, 0.3, -0.4,
+            0.9, -0.7, 1.1, -0.2,
         ];
         let params = json!({"mean": 0.0, "std": 1.0});
         let r = ks_test_1samp(&samp, "normal", &params).unwrap();

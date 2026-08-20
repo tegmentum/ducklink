@@ -71,7 +71,11 @@ fn to_text(md: &str) -> std::string::String {
     out.trim().to_string()
 }
 
-fn arg_text(args: &[types::Duckvalue], i: usize, fname: &str) -> Result<Option<String>, types::Duckerror> {
+fn arg_text(
+    args: &[types::Duckvalue],
+    i: usize,
+    fname: &str,
+) -> Result<Option<String>, types::Duckerror> {
     match args.get(i) {
         Some(types::Duckvalue::Text(s)) => Ok(Some(s.clone())),
         Some(types::Duckvalue::Null) => Ok(None),
@@ -116,11 +120,16 @@ datalink_extcore::columnar_bridge! {
 export!(Extension);
 
 fn register_scalars() -> Result<(), types::Duckerror> {
-    let capability = runtime::get_capability(types::Capabilitykind::Scalar)
-        .ok_or_else(|| types::Duckerror::Internal("host did not expose scalar capability".into()))?;
+    let capability = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| {
+        types::Duckerror::Internal("host did not expose scalar capability".into())
+    })?;
     let registry = match capability {
         runtime::Capability::Scalar(registry) => registry,
-        _ => return Err(types::Duckerror::Internal("scalar capability returned unexpected variant".into())),
+        _ => {
+            return Err(types::Duckerror::Internal(
+                "scalar capability returned unexpected variant".into(),
+            ))
+        }
     };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
     register_one(&registry, "md_to_html", det, ScalarHandler::Html)?;
@@ -135,15 +144,27 @@ fn register_one(
     handler: ScalarHandler,
 ) -> Result<(), types::Duckerror> {
     let handle = NEXT_SCALAR_HANDLE.fetch_add(1, Ordering::Relaxed);
-    scalar_handlers().lock().expect("scalar handler mutex poisoned").insert(handle, handler);
+    scalar_handlers()
+        .lock()
+        .expect("scalar handler mutex poisoned")
+        .insert(handle, handler);
     let callback = runtime::ScalarCallback::new(handle);
-    let args = vec![runtime::Funcarg { name: Some("value".into()), logical: types::Logicaltype::Text }];
+    let args = vec![runtime::Funcarg {
+        name: Some("value".into()),
+        logical: types::Logicaltype::Text,
+    }];
     let opts = runtime::Funcopts {
         description: Some("Markdown rendering".into()),
         tags: vec!["markdown".into()],
         attributes,
     };
-    registry.register(name, &args, &types::Logicaltype::Text, callback, Some(&opts))?;
+    registry.register(
+        name,
+        &args,
+        &types::Logicaltype::Text,
+        callback,
+        Some(&opts),
+    )?;
     Ok(())
 }
 

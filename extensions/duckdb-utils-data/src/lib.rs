@@ -15,8 +15,8 @@
 use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:dotcmd/dotcmd" });
-use exports::duckdb::dotcmd::registry::{CommandSpec, Guest, InvokeResult};
 use duckdb::dotcmd::spi;
+use exports::duckdb::dotcmd::registry::{CommandSpec, Guest, InvokeResult};
 
 struct Component;
 
@@ -37,7 +37,12 @@ fn name_from_file(file: &str) -> std::string::String {
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .collect();
-    if cleaned.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(true) {
+    if cleaned
+        .chars()
+        .next()
+        .map(|c| c.is_ascii_digit())
+        .unwrap_or(true)
+    {
         format!("t_{cleaned}")
     } else {
         cleaned
@@ -48,10 +53,17 @@ fn quote_ident(name: &str) -> std::string::String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 fn plain(text: std::string::String) -> InvokeResult {
-    InvokeResult { text, state_deltas: vec![] }
+    InvokeResult {
+        text,
+        state_deltas: vec![],
+    }
 }
 fn note(text: std::string::String) -> InvokeResult {
-    plain(if text.ends_with('\n') { text } else { format!("{text}\n") })
+    plain(if text.ends_with('\n') {
+        text
+    } else {
+        format!("{text}\n")
+    })
 }
 
 /// Split a raw arg string into whitespace-separated tokens.
@@ -103,23 +115,60 @@ fn columns_of(table: &str) -> Result<Vec<std::string::String>, String> {
 impl Guest for Component {
     fn list_commands() -> Vec<CommandSpec> {
         let c = |id, name: &str, summary: &str, usage: &str| CommandSpec {
-            id, name: name.into(), summary: summary.into(), usage: usage.into(),
+            id,
+            name: name.into(),
+            summary: summary.into(),
+            usage: usage.into(),
         };
         vec![
-            c(FID_ROWS, "rows", "Show rows from a table", "rows TABLE [LIMIT]"),
-            c(FID_ANALYZE_TABLES, "analyze_tables", "Per-column stats for a table (or all tables)",
-              "analyze_tables [TABLE]"),
-            c(FID_INSERT, "insert", "Load a json/csv/tsv/parquet file into a table",
-              "insert TABLE FILE"),
-            c(FID_UPSERT, "upsert", "Upsert a file into a table on the given pk",
-              "upsert TABLE FILE --pk COL[,COL]"),
-            c(FID_CONVERT, "convert", "UPDATE TABLE SET COL = EXPR", "convert TABLE COL EXPR ..."),
-            c(FID_INSERT_FILES, "insert_files", "Store files (path, content, size) in a table",
-              "insert_files TABLE FILE [FILE ...]"),
-            c(FID_MEMORY, "memory", "Load a file into a queryable temp table",
-              "memory FILE [NAME]"),
-            c(FID_BULK, "bulk", "Run SQL against a file exposed as relation `data`",
-              "bulk FILE SQL ..."),
+            c(
+                FID_ROWS,
+                "rows",
+                "Show rows from a table",
+                "rows TABLE [LIMIT]",
+            ),
+            c(
+                FID_ANALYZE_TABLES,
+                "analyze_tables",
+                "Per-column stats for a table (or all tables)",
+                "analyze_tables [TABLE]",
+            ),
+            c(
+                FID_INSERT,
+                "insert",
+                "Load a json/csv/tsv/parquet file into a table",
+                "insert TABLE FILE",
+            ),
+            c(
+                FID_UPSERT,
+                "upsert",
+                "Upsert a file into a table on the given pk",
+                "upsert TABLE FILE --pk COL[,COL]",
+            ),
+            c(
+                FID_CONVERT,
+                "convert",
+                "UPDATE TABLE SET COL = EXPR",
+                "convert TABLE COL EXPR ...",
+            ),
+            c(
+                FID_INSERT_FILES,
+                "insert_files",
+                "Store files (path, content, size) in a table",
+                "insert_files TABLE FILE [FILE ...]",
+            ),
+            c(
+                FID_MEMORY,
+                "memory",
+                "Load a file into a queryable temp table",
+                "memory FILE [NAME]",
+            ),
+            c(
+                FID_BULK,
+                "bulk",
+                "Run SQL against a file exposed as relation `data`",
+                "bulk FILE SQL ...",
+            ),
         ]
     }
 
@@ -171,7 +220,8 @@ impl Guest for Component {
                                  COUNT(*) - COUNT({qc}) AS nulls, \
                                  MIN({qc})::VARCHAR AS min, MAX({qc})::VARCHAR AS max \
                                  FROM {qtable}",
-                                tbl_lit, sql_str(c)
+                                tbl_lit,
+                                sql_str(c)
                             )
                         })
                         .collect();
@@ -218,14 +268,21 @@ impl Guest for Component {
                     }
                     found.ok_or("usage: .upsert TABLE FILE --pk COL[,COL]")?
                 };
-                let pks: Vec<&str> =
-                    pk_arg.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+                let pks: Vec<&str> = pk_arg
+                    .split(',')
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    .collect();
                 if pks.is_empty() {
                     return Err("--pk needs at least one column".into());
                 }
                 let qtable = quote_ident(table);
                 let f = sql_str(file);
-                let pk_list = pks.iter().map(|c| quote_ident(c)).collect::<Vec<_>>().join(", ");
+                let pk_list = pks
+                    .iter()
+                    .map(|c| quote_ident(c))
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 let cols = columns_of(table)?;
                 let non_pk: Vec<std::string::String> = cols
                     .iter()
@@ -238,7 +295,10 @@ impl Guest for Component {
                 let conflict = if non_pk.is_empty() {
                     format!("ON CONFLICT ({pk_list}) DO NOTHING")
                 } else {
-                    format!("ON CONFLICT ({pk_list}) DO UPDATE SET {}", non_pk.join(", "))
+                    format!(
+                        "ON CONFLICT ({pk_list}) DO UPDATE SET {}",
+                        non_pk.join(", ")
+                    )
                 };
                 spi::query(&format!(
                     "INSERT INTO {qtable} SELECT * FROM {reader}('{f}') {conflict}"
@@ -261,7 +321,12 @@ impl Guest for Component {
                     return Err("usage: .convert TABLE COL EXPR ...".into());
                 }
                 run(
-                    &format!("UPDATE {} SET {} = {}", quote_ident(table), quote_ident(col), expr),
+                    &format!(
+                        "UPDATE {} SET {} = {}",
+                        quote_ident(table),
+                        quote_ident(col),
+                        expr
+                    ),
                     format!("converted {table}.{col}"),
                 )
             }
@@ -285,17 +350,24 @@ impl Guest for Component {
                     "INSERT INTO {qtable}(path, content, size) \
                      SELECT filename, content, size FROM read_blob([{list}])"
                 ))?;
-                Ok(note(format!("inserted {} file(s) into {table}", files.len())))
+                Ok(note(format!(
+                    "inserted {} file(s) into {table}",
+                    files.len()
+                )))
             }
 
             FID_MEMORY => {
                 let file = t.first().ok_or("usage: .memory FILE [NAME]")?;
                 let reader = reader_for(file)?;
-                let name = t.get(1).map(|s| s.to_string()).unwrap_or_else(|| name_from_file(file));
+                let name = t
+                    .get(1)
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| name_from_file(file));
                 run(
                     &format!(
                         "CREATE OR REPLACE TEMP TABLE {} AS SELECT * FROM {reader}('{}')",
-                        quote_ident(&name), sql_str(file)
+                        quote_ident(&name),
+                        sql_str(file)
                     ),
                     format!("loaded {file} as temp table {name}"),
                 )

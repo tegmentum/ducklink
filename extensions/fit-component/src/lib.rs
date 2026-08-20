@@ -96,10 +96,7 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
         Err(types::Duckerror::Unsupported("fit: no pragmas".into()))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("fit: no casts".into()))
     }
 }
@@ -188,7 +185,13 @@ fn register_read_fit() -> Result<(), types::Duckerror> {
         ),
         tags: vec!["fit".into(), "garmin".into(), "ant".into()],
     };
-    reg.register("read_fit", &args, &columns, runtime::TableCallback::new(h), Some(&opts))?;
+    reg.register(
+        "read_fit",
+        &args,
+        &columns,
+        runtime::TableCallback::new(h),
+        Some(&opts),
+    )?;
     Ok(())
 }
 

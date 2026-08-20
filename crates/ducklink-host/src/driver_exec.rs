@@ -87,13 +87,8 @@ impl DriverConnection {
         bootstrap_sql: &[&str],
     ) -> Result<Self> {
         let db_path = if path.is_empty() { None } else { Some(path) };
-        let state = open_driver_core_with_bootstrap(
-            engine,
-            artifacts,
-            preopens,
-            db_path,
-            bootstrap_sql,
-        )?;
+        let state =
+            open_driver_core_with_bootstrap(engine, artifacts, preopens, db_path, bootstrap_sql)?;
         Ok(Self { state })
     }
 
@@ -173,7 +168,9 @@ impl driver_exec_bindings::HostConnection for DriverStoreState {
         rep: Resource<DriverConnection>,
         sql: wasmtime::component::__internal::String,
     ) -> std::result::Result<
-        wasmtime::component::__internal::Vec<wasmtime::component::__internal::Vec<wasmtime::component::__internal::String>>,
+        wasmtime::component::__internal::Vec<
+            wasmtime::component::__internal::Vec<wasmtime::component::__internal::String>,
+        >,
         String,
     > {
         let conn = self
@@ -250,10 +247,7 @@ pub fn run_driver_tool(
 
     let mut linker = Linker::<DriverStoreState>::new(&engine);
     p2::add_to_linker_sync(&mut linker)?;
-    driver_exec_bindings::add_to_linker::<DriverStoreState, DriverStoreState>(
-        &mut linker,
-        |s| s,
-    )?;
+    driver_exec_bindings::add_to_linker::<DriverStoreState, DriverStoreState>(&mut linker, |s| s)?;
 
     let component = Component::from_file(&engine, tool_wasm).map_err(|e| {
         anyhow::anyhow!(

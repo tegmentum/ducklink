@@ -72,8 +72,10 @@ fn sql_type_name(lt: &reg::LogicalType) -> String {
         // @5 additions: Hugeint / UHugeint / nested (List/Struct/Map/Array).
         reg::LogicalType::Hugeint => "HUGEINT".to_string(),
         reg::LogicalType::UHugeint => "UHUGEINT".to_string(),
-        reg::LogicalType::List(_) | reg::LogicalType::Struct(_)
-        | reg::LogicalType::Map(_, _) | reg::LogicalType::Array(_, _) => {
+        reg::LogicalType::List(_)
+        | reg::LogicalType::Struct(_)
+        | reg::LogicalType::Map(_, _)
+        | reg::LogicalType::Array(_, _) => {
             // Nested types cross the WIT via the complex(string) escape hatch;
             // surface as the string form for now (mirrors reg_duckdb.rs).
             "COMPLEX".to_string()
@@ -144,7 +146,11 @@ fn build_engine() -> Result<Engine> {
 
 /// Load one component and emit its `functions` JSON array (scalars, tables,
 /// aggregates). Returns the array plus a (scalars, tables, aggregates) count.
-fn extract_functions(engine: &Engine, name: &str, path: &Path) -> Result<(Value, (usize, usize, usize))> {
+fn extract_functions(
+    engine: &Engine,
+    name: &str,
+    path: &Path,
+) -> Result<(Value, (usize, usize, usize))> {
     let component = Component::from_file(engine, path)
         .map_err(anyhow::Error::from)
         .with_context(|| format!("loading component at {}", path.display()))?;
@@ -199,7 +205,11 @@ fn extract_functions(engine: &Engine, name: &str, path: &Path) -> Result<(Value,
         }));
     }
 
-    let counts = (pending.scalars.len(), pending.tables.len(), pending.aggregates.len());
+    let counts = (
+        pending.scalars.len(),
+        pending.tables.len(),
+        pending.aggregates.len(),
+    );
     Ok((Value::Array(funcs), counts))
 }
 
@@ -215,9 +225,23 @@ fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
-            "--catalog" => catalog_path = PathBuf::from(args.next().ok_or_else(|| anyhow!("--catalog needs a value"))?),
-            "--out" => out_path = Some(PathBuf::from(args.next().ok_or_else(|| anyhow!("--out needs a value"))?)),
-            "--report" => report_path = Some(PathBuf::from(args.next().ok_or_else(|| anyhow!("--report needs a value"))?)),
+            "--catalog" => {
+                catalog_path = PathBuf::from(
+                    args.next()
+                        .ok_or_else(|| anyhow!("--catalog needs a value"))?,
+                )
+            }
+            "--out" => {
+                out_path = Some(PathBuf::from(
+                    args.next().ok_or_else(|| anyhow!("--out needs a value"))?,
+                ))
+            }
+            "--report" => {
+                report_path = Some(PathBuf::from(
+                    args.next()
+                        .ok_or_else(|| anyhow!("--report needs a value"))?,
+                ))
+            }
             other => return Err(anyhow!("unknown argument: {other}")),
         }
     }
@@ -260,23 +284,35 @@ fn main() -> Result<()> {
             .to_string();
         let source = obj.get("source").and_then(Value::as_str).unwrap_or("");
         let status = obj.get("status").and_then(Value::as_str).unwrap_or("");
-        let artifact = obj.get("artifact").and_then(Value::as_str).map(str::to_string);
+        let artifact = obj
+            .get("artifact")
+            .and_then(Value::as_str)
+            .map(str::to_string);
 
         // builtin / planned entries have no loadable artifact.
         if status == "planned" {
-            skips.push(Skip { name, reason: "status=planned".to_string() });
+            skips.push(Skip {
+                name,
+                reason: "status=planned".to_string(),
+            });
             continue;
         }
         let artifact = match artifact {
             Some(a) if !a.is_empty() => a,
             _ => {
-                skips.push(Skip { name, reason: format!("no artifact (source={source})") });
+                skips.push(Skip {
+                    name,
+                    reason: format!("no artifact (source={source})"),
+                });
                 continue;
             }
         };
         let art_path = catalog_dir.join(&artifact);
         if !art_path.exists() {
-            skips.push(Skip { name, reason: format!("artifact missing locally: {artifact}") });
+            skips.push(Skip {
+                name,
+                reason: format!("artifact missing locally: {artifact}"),
+            });
             continue;
         }
 
@@ -290,7 +326,10 @@ fn main() -> Result<()> {
             }
             Err(e) => {
                 let chain: Vec<String> = e.chain().map(|c| c.to_string()).collect();
-                failures.push(Skip { name, reason: chain.join(": ") });
+                failures.push(Skip {
+                    name,
+                    reason: chain.join(": "),
+                });
             }
         }
     }
@@ -319,7 +358,9 @@ fn main() -> Result<()> {
         std::fs::write(op, out).with_context(|| format!("writing {}", op.display()))?;
         eprintln!("[catalog-sig-extract] wrote sidecar {}", op.display());
     } else {
-        eprintln!("[catalog-sig-extract] dry-run (pass --out <file> to emit the functions sidecar)");
+        eprintln!(
+            "[catalog-sig-extract] dry-run (pass --out <file> to emit the functions sidecar)"
+        );
     }
 
     if let Some(rp) = report_path {

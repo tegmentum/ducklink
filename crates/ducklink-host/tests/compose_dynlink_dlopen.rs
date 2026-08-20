@@ -104,7 +104,8 @@ fn dlopen_guest_invokes_shared_provider_and_prints_uppercase() {
 
     // 3. Drive the guest's wasi:cli/run. It resolves "provider" and invokes
     //    "upper" on "hello from dlopen".
-    let command = Command::instantiate(&mut store, &guest_component, &linker).expect("instantiate guest");
+    let command =
+        Command::instantiate(&mut store, &guest_component, &linker).expect("instantiate guest");
     let run_result = command
         .wasi_cli_run()
         .call_run(&mut store)

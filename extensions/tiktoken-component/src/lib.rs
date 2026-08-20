@@ -19,13 +19,24 @@ struct Extension;
 impl guest::Guest for Extension {
     fn load() -> Result<types::Loadresult, types::Duckerror> {
         register_scalars()?;
-        Ok(types::Loadresult { name: "tiktoken".into(), version: Some(env!("CARGO_PKG_VERSION").into()), requires: Vec::new().into() })
+        Ok(types::Loadresult {
+            name: "tiktoken".into(),
+            version: Some(env!("CARGO_PKG_VERSION").into()),
+            requires: Vec::new().into(),
+        })
     }
-    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> { Ok(false) }
-    fn shutdown() -> Result<bool, types::Duckerror> { Ok(false) }
+    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
+    fn shutdown() -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
 }
 fn text_arg(args: &[types::Duckvalue], i: usize) -> Option<String> {
-    match args.get(i) { Some(types::Duckvalue::Text(s)) => Some(s.clone()), _ => None }
+    match args.get(i) {
+        Some(types::Duckvalue::Text(s)) => Some(s.clone()),
+        _ => None,
+    }
 }
 /// Map an encoding name to a freshly-built BPE (tiktoken-rs caches internally).
 /// Defaults to cl100k_base when the name is empty or unrecognised.
@@ -44,25 +55,50 @@ fn parse_ids(s: &str) -> std::vec::Vec<u32> {
     let mut ids = std::vec::Vec::new();
     let mut cur = std::string::String::new();
     for c in s.chars() {
-        if c.is_ascii_digit() { cur.push(c); }
-        else if !cur.is_empty() { if let Ok(n) = cur.parse::<u32>() { ids.push(n); } cur.clear(); }
+        if c.is_ascii_digit() {
+            cur.push(c);
+        } else if !cur.is_empty() {
+            if let Ok(n) = cur.parse::<u32>() {
+                ids.push(n);
+            }
+            cur.clear();
+        }
     }
-    if let Ok(n) = cur.parse::<u32>() { ids.push(n); }
+    if let Ok(n) = cur.parse::<u32>() {
+        ids.push(n);
+    }
     ids
 }
 // Per-row scalar logic, UNCHANGED from the major-3 hand-written impl.
-fn scalar(handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
+fn scalar(
+    handle: u32,
+    args: Vec<types::Duckvalue>,
+    _c: types::Invokeinfo,
+) -> Result<types::Duckvalue, types::Duckerror> {
     let which = handle;
-    let input = match text_arg(&args, 0) { Some(s) => s, None => return Ok(types::Duckvalue::Null) };
-    let bpe = match bpe_for(text_arg(&args, 1)) { Some(b) => b, None => return Ok(types::Duckvalue::Null) };
+    let input = match text_arg(&args, 0) {
+        Some(s) => s,
+        None => return Ok(types::Duckvalue::Null),
+    };
+    let bpe = match bpe_for(text_arg(&args, 1)) {
+        Some(b) => b,
+        None => return Ok(types::Duckvalue::Null),
+    };
     Ok(match which {
         1 => types::Duckvalue::Int64(bpe.encode_ordinary(&input).len() as i64),
         2 => {
             let ids = bpe.encode_ordinary(&input);
-            let joined = ids.iter().map(|t| t.to_string()).collect::<std::vec::Vec<_>>().join(",");
+            let joined = ids
+                .iter()
+                .map(|t| t.to_string())
+                .collect::<std::vec::Vec<_>>()
+                .join(",");
             types::Duckvalue::Text(format!("[{}]", joined).into())
         }
-        3 => match bpe.decode(parse_ids(&input)) { Ok(s) => types::Duckvalue::Text(s.into()), Err(_) => types::Duckvalue::Null },
+        3 => match bpe.decode(parse_ids(&input)) {
+            Ok(s) => types::Duckvalue::Text(s.into()),
+            Err(_) => types::Duckvalue::Null,
+        },
         _ => return Err(types::Duckerror::Internal("unknown scalar handle".into())),
     })
 }
@@ -78,18 +114,57 @@ datalink_extcore::columnar_bridge! {
 }
 export!(Extension);
 fn register_scalars() -> Result<(), types::Duckerror> {
-    let cap = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
-    let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
+    let cap = runtime::get_capability(types::Capabilitykind::Scalar)
+        .ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
+    let reg = match cap {
+        runtime::Capability::Scalar(r) => r,
+        _ => return Err(types::Duckerror::Internal("bad capability".into())),
+    };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
-    let enc = || vec![
-        runtime::Funcarg { name: Some("input".into()), logical: types::Logicaltype::Text },
-        runtime::Funcarg { name: Some("encoding".into()), logical: types::Logicaltype::Text },
-    ];
-    reg.register("tiktoken_count", &enc(), &types::Logicaltype::Int64, runtime::ScalarCallback::new(1),
-        Some(&runtime::Funcopts { description: Some("BPE token count".into()), tags: vec!["nlp".into(), "llm".into()], attributes: det }))?;
-    reg.register("tiktoken_encode", &enc(), &types::Logicaltype::Text, runtime::ScalarCallback::new(2),
-        Some(&runtime::Funcopts { description: Some("text -> BPE token ids (JSON)".into()), tags: vec!["nlp".into(), "llm".into()], attributes: det }))?;
-    reg.register("tiktoken_decode", &enc(), &types::Logicaltype::Text, runtime::ScalarCallback::new(3),
-        Some(&runtime::Funcopts { description: Some("BPE token ids -> text".into()), tags: vec!["nlp".into(), "llm".into()], attributes: det }))?;
+    let enc = || {
+        vec![
+            runtime::Funcarg {
+                name: Some("input".into()),
+                logical: types::Logicaltype::Text,
+            },
+            runtime::Funcarg {
+                name: Some("encoding".into()),
+                logical: types::Logicaltype::Text,
+            },
+        ]
+    };
+    reg.register(
+        "tiktoken_count",
+        &enc(),
+        &types::Logicaltype::Int64,
+        runtime::ScalarCallback::new(1),
+        Some(&runtime::Funcopts {
+            description: Some("BPE token count".into()),
+            tags: vec!["nlp".into(), "llm".into()],
+            attributes: det,
+        }),
+    )?;
+    reg.register(
+        "tiktoken_encode",
+        &enc(),
+        &types::Logicaltype::Text,
+        runtime::ScalarCallback::new(2),
+        Some(&runtime::Funcopts {
+            description: Some("text -> BPE token ids (JSON)".into()),
+            tags: vec!["nlp".into(), "llm".into()],
+            attributes: det,
+        }),
+    )?;
+    reg.register(
+        "tiktoken_decode",
+        &enc(),
+        &types::Logicaltype::Text,
+        runtime::ScalarCallback::new(3),
+        Some(&runtime::Funcopts {
+            description: Some("BPE token ids -> text".into()),
+            tags: vec!["nlp".into(), "llm".into()],
+            attributes: det,
+        }),
+    )?;
     Ok(())
 }

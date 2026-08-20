@@ -17,26 +17,56 @@ struct Extension;
 impl guest::Guest for Extension {
     fn load() -> Result<types::Loadresult, types::Duckerror> {
         register_scalars()?;
-        Ok(types::Loadresult { name: "httpclient".into(), version: Some(env!("CARGO_PKG_VERSION").into()), requires: Vec::new().into() })
+        Ok(types::Loadresult {
+            name: "httpclient".into(),
+            version: Some(env!("CARGO_PKG_VERSION").into()),
+            requires: Vec::new().into(),
+        })
     }
-    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> { Ok(false) }
-    fn shutdown() -> Result<bool, types::Duckerror> { Ok(false) }
+    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
+    fn shutdown() -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
 }
 fn url_arg(args: &[types::Duckvalue]) -> Option<String> {
-    match args.first() { Some(types::Duckvalue::Text(s)) => Some(s.clone()), _ => None }
+    match args.first() {
+        Some(types::Duckvalue::Text(s)) => Some(s.clone()),
+        _ => None,
+    }
 }
 /// (host, port, path, is_tls)
 fn parse(url: &str) -> Option<(std::string::String, u16, std::string::String, bool)> {
     let url = url.trim();
-    let (tls, rest, default_port) = if let Some(r) = url.strip_prefix("https://") { (true, r, 443) }
-        else if let Some(r) = url.strip_prefix("http://") { (false, r, 80) } else { return None };
-    let (authority, path) = match rest.find('/') { Some(i) => (&rest[..i], &rest[i..]), None => (rest, "/") };
+    let (tls, rest, default_port) = if let Some(r) = url.strip_prefix("https://") {
+        (true, r, 443)
+    } else if let Some(r) = url.strip_prefix("http://") {
+        (false, r, 80)
+    } else {
+        return None;
+    };
+    let (authority, path) = match rest.find('/') {
+        Some(i) => (&rest[..i], &rest[i..]),
+        None => (rest, "/"),
+    };
     let (host, port) = match authority.rsplit_once(':') {
         Some((h, p)) => (h.to_string(), p.parse().ok()?),
         None => (authority.to_string(), default_port),
     };
-    if host.is_empty() { return None; }
-    Some((host, port, if path.is_empty() { "/".into() } else { path.to_string() }, tls))
+    if host.is_empty() {
+        return None;
+    }
+    Some((
+        host,
+        port,
+        if path.is_empty() {
+            "/".into()
+        } else {
+            path.to_string()
+        },
+        tls,
+    ))
 }
 fn request(method: &str, host: &str, path: &str, body: Option<&str>) -> std::string::String {
     match body {
@@ -51,46 +81,87 @@ fn request(method: &str, host: &str, path: &str, body: Option<&str>) -> std::str
 fn parse_response(raw: &[u8]) -> Option<(u16, std::string::String)> {
     let text = std::string::String::from_utf8_lossy(raw);
     let (head, body) = text.split_once("\r\n\r\n")?;
-    let status: u16 = head.lines().next()?.split_whitespace().nth(1)?.parse().ok()?;
+    let status: u16 = head
+        .lines()
+        .next()?
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()?;
     Some((status, body.to_string()))
 }
-fn fetch_plain(method: &str, host: &str, port: u16, path: &str, body: Option<&str>) -> Option<(u16, std::string::String)> {
+fn fetch_plain(
+    method: &str,
+    host: &str,
+    port: u16,
+    path: &str,
+    body: Option<&str>,
+) -> Option<(u16, std::string::String)> {
     let mut stream = TcpStream::connect((host, port)).ok()?;
-    stream.write_all(request(method, host, path, body).as_bytes()).ok()?;
+    stream
+        .write_all(request(method, host, path, body).as_bytes())
+        .ok()?;
     let mut raw = std::vec::Vec::new();
     stream.read_to_end(&mut raw).ok()?;
     parse_response(&raw)
 }
-fn fetch_tls(method: &str, host: &str, port: u16, path: &str, body: Option<&str>) -> Option<(u16, std::string::String)> {
-    let root_store = rustls::RootCertStore { roots: webpki_roots::TLS_SERVER_ROOTS.to_vec() };
-    let config = rustls::ClientConfig::builder_with_provider(Arc::new(rustls_rustcrypto::provider()))
-        .with_safe_default_protocol_versions().ok()?
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
+fn fetch_tls(
+    method: &str,
+    host: &str,
+    port: u16,
+    path: &str,
+    body: Option<&str>,
+) -> Option<(u16, std::string::String)> {
+    let root_store = rustls::RootCertStore {
+        roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+    };
+    let config =
+        rustls::ClientConfig::builder_with_provider(Arc::new(rustls_rustcrypto::provider()))
+            .with_safe_default_protocol_versions()
+            .ok()?
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
     let server_name = rustls::pki_types::ServerName::try_from(host.to_string()).ok()?;
     let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).ok()?;
     let mut sock = TcpStream::connect((host, port)).ok()?;
     let mut tls = rustls::Stream::new(&mut conn, &mut sock);
-    tls.write_all(request(method, host, path, body).as_bytes()).ok()?;
+    tls.write_all(request(method, host, path, body).as_bytes())
+        .ok()?;
     // Servers often close without a TLS close_notify; tolerate that and keep
     // whatever bytes we received.
     let mut raw = std::vec::Vec::new();
     let _ = tls.read_to_end(&mut raw);
-    if raw.is_empty() { return None; }
+    if raw.is_empty() {
+        return None;
+    }
     parse_response(&raw)
 }
 fn fetch(method: &str, url: &str, body: Option<&str>) -> Option<(u16, std::string::String)> {
     let (host, port, path, tls) = parse(url)?;
-    if tls { fetch_tls(method, &host, port, &path, body) } else { fetch_plain(method, &host, port, &path, body) }
+    if tls {
+        fetch_tls(method, &host, port, &path, body)
+    } else {
+        fetch_plain(method, &host, port, &path, body)
+    }
 }
 // Per-row scalar logic, UNCHANGED from the major-3 hand-written impl. The
 // columnar dispatch is generated by `columnar_bridge!` (it folds the colvec
 // row-by-row through this fn, preserving the per-row network semantics).
-fn scalar(handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
-    let url = match url_arg(&args) { Some(s) => s, None => return Ok(types::Duckvalue::Null) };
+fn scalar(
+    handle: u32,
+    args: Vec<types::Duckvalue>,
+    _c: types::Invokeinfo,
+) -> Result<types::Duckvalue, types::Duckerror> {
+    let url = match url_arg(&args) {
+        Some(s) => s,
+        None => return Ok(types::Duckvalue::Null),
+    };
     // http_post (handle 3) takes a second TEXT arg = request body.
     let res = if handle == 3 {
-        let body = match args.get(1) { Some(types::Duckvalue::Text(b)) => b.clone(), _ => return Ok(types::Duckvalue::Null) };
+        let body = match args.get(1) {
+            Some(types::Duckvalue::Text(b)) => b.clone(),
+            _ => return Ok(types::Duckvalue::Null),
+        };
         fetch("POST", &url, Some(&body))
     } else {
         fetch("GET", &url, None)
@@ -111,20 +182,60 @@ datalink_extcore::columnar_bridge! {
 }
 export!(Extension);
 fn register_scalars() -> Result<(), types::Duckerror> {
-    let cap = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
-    let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
+    let cap = runtime::get_capability(types::Capabilitykind::Scalar)
+        .ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
+    let reg = match cap {
+        runtime::Capability::Scalar(r) => r,
+        _ => return Err(types::Duckerror::Internal("bad capability".into())),
+    };
     let net = types::Funcflags::empty();
-    reg.register("http_get", &[runtime::Funcarg { name: Some("url".into()), logical: types::Logicaltype::Text }],
-        &types::Logicaltype::Text, runtime::ScalarCallback::new(1),
-        Some(&runtime::Funcopts { description: Some("HTTP(S) GET body".into()), tags: vec!["network".into()], attributes: net }))?;
-    reg.register("http_status", &[runtime::Funcarg { name: Some("url".into()), logical: types::Logicaltype::Text }],
-        &types::Logicaltype::Int64, runtime::ScalarCallback::new(2),
-        Some(&runtime::Funcopts { description: Some("HTTP(S) status code".into()), tags: vec!["network".into()], attributes: net }))?;
-    reg.register("http_post", &[
-            runtime::Funcarg { name: Some("url".into()), logical: types::Logicaltype::Text },
-            runtime::Funcarg { name: Some("body".into()), logical: types::Logicaltype::Text },
+    reg.register(
+        "http_get",
+        &[runtime::Funcarg {
+            name: Some("url".into()),
+            logical: types::Logicaltype::Text,
+        }],
+        &types::Logicaltype::Text,
+        runtime::ScalarCallback::new(1),
+        Some(&runtime::Funcopts {
+            description: Some("HTTP(S) GET body".into()),
+            tags: vec!["network".into()],
+            attributes: net,
+        }),
+    )?;
+    reg.register(
+        "http_status",
+        &[runtime::Funcarg {
+            name: Some("url".into()),
+            logical: types::Logicaltype::Text,
+        }],
+        &types::Logicaltype::Int64,
+        runtime::ScalarCallback::new(2),
+        Some(&runtime::Funcopts {
+            description: Some("HTTP(S) status code".into()),
+            tags: vec!["network".into()],
+            attributes: net,
+        }),
+    )?;
+    reg.register(
+        "http_post",
+        &[
+            runtime::Funcarg {
+                name: Some("url".into()),
+                logical: types::Logicaltype::Text,
+            },
+            runtime::Funcarg {
+                name: Some("body".into()),
+                logical: types::Logicaltype::Text,
+            },
         ],
-        &types::Logicaltype::Text, runtime::ScalarCallback::new(3),
-        Some(&runtime::Funcopts { description: Some("HTTP(S) POST body -> response body".into()), tags: vec!["network".into()], attributes: net }))?;
+        &types::Logicaltype::Text,
+        runtime::ScalarCallback::new(3),
+        Some(&runtime::Funcopts {
+            description: Some("HTTP(S) POST body -> response body".into()),
+            tags: vec!["network".into()],
+            attributes: net,
+        }),
+    )?;
     Ok(())
 }

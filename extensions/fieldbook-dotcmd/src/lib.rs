@@ -453,10 +453,7 @@ fn format_outcomes(run_id: i64, outcomes: &[Outcome]) -> std::string::String {
         &rows,
     ));
     if let Some(bad) = outcomes.iter().find(|o| o.status == "error") {
-        out.push_str(&std::format!(
-            "stopped at entry {} (error)\n",
-            bad.ordinal
-        ));
+        out.push_str(&std::format!("stopped at entry {} (error)\n", bad.ordinal));
     }
     out
 }
@@ -659,7 +656,10 @@ fn text_table(
     write_border(&mut out, &widths);
     write_row(
         &mut out,
-        &headers.iter().map(|s| s.to_string()).collect::<std::vec::Vec<_>>(),
+        &headers
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<std::vec::Vec<_>>(),
         &widths,
     );
     write_border(&mut out, &widths);

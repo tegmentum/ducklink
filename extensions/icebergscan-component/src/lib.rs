@@ -114,11 +114,10 @@ impl callback_dispatch::Guest for Extension {
             "icebergscan: no pragmas".into(),
         ))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("icebergscan: no casts".into()))
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
+        Err(types::Duckerror::Unsupported(
+            "icebergscan: no casts".into(),
+        ))
     }
 }
 
@@ -216,7 +215,12 @@ fn snapshot_rows(root: &Value) -> std::vec::Vec<std::vec::Vec<types::Duckvalue>>
             .and_then(Value::as_str)
             .map(|m| types::Duckvalue::Text(m.into()))
             .unwrap_or(types::Duckvalue::Null);
-        out.push(vec![snapshot_id, sequence_number, timestamp_ms, manifest_list]);
+        out.push(vec![
+            snapshot_id,
+            sequence_number,
+            timestamp_ms,
+            manifest_list,
+        ]);
     }
     out
 }
@@ -477,10 +481,8 @@ mod tests {
     #[test]
     fn metadata_surfaces_top_level_scalars() {
         let rows = metadata_rows(&parse(META));
-        let map: HashMap<std::string::String, std::string::String> = rows
-            .iter()
-            .map(|r| (text(&r[0]), text(&r[1])))
-            .collect();
+        let map: HashMap<std::string::String, std::string::String> =
+            rows.iter().map(|r| (text(&r[0]), text(&r[1]))).collect();
         assert_eq!(map.get("format-version").map(|s| s.as_str()), Some("2"));
         assert_eq!(
             map.get("table-uuid").map(|s| s.as_str()),

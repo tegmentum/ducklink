@@ -523,8 +523,7 @@ pub fn resolve_write_target<S: AsRef<str>>(
         // in a multi-statement script, that's a v1 non-goal.
         if any_write_touches_attached(sql, attached) {
             return Some(WriteRoute::Unsupported(
-                "multi-statement scripts mixing intercepted and non-intercepted writes"
-                    .to_string(),
+                "multi-statement scripts mixing intercepted and non-intercepted writes".to_string(),
             ));
         }
         return None;
@@ -661,7 +660,10 @@ fn parse_create_table<S: AsRef<str>>(
                 "CREATE TABLE {alias}.{table}: column '{name}' missing type"
             )));
         }
-        columns.push(CreateTableColumn { name, type_name: type_text });
+        columns.push(CreateTableColumn {
+            name,
+            type_name: type_text,
+        });
     }
     if columns.is_empty() {
         return Some(WriteRoute::Unsupported(format!(
@@ -803,10 +805,7 @@ fn strip_column_constraints(s: &str) -> String {
     s[..cut].trim().to_string()
 }
 
-fn any_write_touches_attached<S: AsRef<str>>(
-    sql: &str,
-    attached: &HashMap<String, S>,
-) -> bool {
+fn any_write_touches_attached<S: AsRef<str>>(sql: &str, attached: &HashMap<String, S>) -> bool {
     // Coarse check: does the SQL text mention `<alias>.<table>` for any
     // registered alias, alongside INSERT/UPDATE/DELETE? Used only to
     // classify UNSUPPORTED cases (CTE + multi-statement) — false positives
@@ -824,10 +823,7 @@ fn any_write_touches_attached<S: AsRef<str>>(
     })
 }
 
-fn parse_insert<S: AsRef<str>>(
-    sql: &str,
-    attached: &HashMap<String, S>,
-) -> Option<WriteRoute> {
+fn parse_insert<S: AsRef<str>>(sql: &str, attached: &HashMap<String, S>) -> Option<WriteRoute> {
     // INSERT [OR ...] INTO <ident> [( <cols> )] VALUES (...), (...)
     // or INSERT INTO <ident> [(cols)] SELECT ... (unsupported for v1)
     let after_insert = sql[6..].trim_start();
@@ -896,10 +892,7 @@ fn parse_insert<S: AsRef<str>>(
     })
 }
 
-fn parse_update<S: AsRef<str>>(
-    sql: &str,
-    attached: &HashMap<String, S>,
-) -> Option<WriteRoute> {
+fn parse_update<S: AsRef<str>>(sql: &str, attached: &HashMap<String, S>) -> Option<WriteRoute> {
     let after_update = sql[6..].trim_start();
     let (ident, rest) = take_dotted_ident(after_update);
     let (alias, table) = split_alias_table(ident.as_str())?;
@@ -949,10 +942,7 @@ fn parse_update<S: AsRef<str>>(
     })
 }
 
-fn parse_delete<S: AsRef<str>>(
-    sql: &str,
-    attached: &HashMap<String, S>,
-) -> Option<WriteRoute> {
+fn parse_delete<S: AsRef<str>>(sql: &str, attached: &HashMap<String, S>) -> Option<WriteRoute> {
     let after_delete = sql[6..].trim_start();
     if !starts_with_kw_ci(after_delete, "FROM") {
         return None;
@@ -980,7 +970,8 @@ fn parse_delete<S: AsRef<str>>(
         // Something after the table name that isn't WHERE — probably USING /
         // RETURNING (handled above) / etc. Reject rather than silently drop.
         return Some(WriteRoute::Unsupported(format!(
-            "DELETE clause '{}' isn't a supported plain WHERE form", rest
+            "DELETE clause '{}' isn't a supported plain WHERE form",
+            rest
         )));
     };
     Some(WriteRoute::Delete {
@@ -989,7 +980,6 @@ fn parse_delete<S: AsRef<str>>(
         where_clause,
     })
 }
-
 
 /// Strip a pair of matched surrounding quotes (`"foo"` or `` `foo` ``) from an
 /// identifier, returning the inner text. A bare identifier passes through.
@@ -1054,7 +1044,11 @@ fn contains_param_marker(sql: &str) -> bool {
             b'"' => in_double = true,
             b'?' => return true,
             b'$' => {
-                if bytes.get(i + 1).map(|c| c.is_ascii_digit()).unwrap_or(false) {
+                if bytes
+                    .get(i + 1)
+                    .map(|c| c.is_ascii_digit())
+                    .unwrap_or(false)
+                {
                     return true;
                 }
             }
@@ -1382,13 +1376,15 @@ mod tests {
     #[test]
     fn resolve_insert_values_ok() {
         let att = attached_map(&["mydb"]);
-        let r = resolve_write_target(
-            "INSERT INTO mydb.foo (id, name) VALUES (1, 'x')",
-            &att,
-        )
-        .unwrap();
+        let r =
+            resolve_write_target("INSERT INTO mydb.foo (id, name) VALUES (1, 'x')", &att).unwrap();
         match r {
-            WriteRoute::Insert { alias, table, columns, rows } => {
+            WriteRoute::Insert {
+                alias,
+                table,
+                columns,
+                rows,
+            } => {
                 assert_eq!(alias, "mydb");
                 assert_eq!(table, "foo");
                 assert_eq!(columns, vec!["id", "name"]);
@@ -1422,13 +1418,14 @@ mod tests {
     #[test]
     fn resolve_update_where_ok() {
         let att = attached_map(&["mydb"]);
-        let r = resolve_write_target(
-            "UPDATE mydb.foo SET name = 'y' WHERE id = 1",
-            &att,
-        )
-        .unwrap();
+        let r = resolve_write_target("UPDATE mydb.foo SET name = 'y' WHERE id = 1", &att).unwrap();
         match r {
-            WriteRoute::Update { alias, table, assignments, where_clause } => {
+            WriteRoute::Update {
+                alias,
+                table,
+                assignments,
+                where_clause,
+            } => {
                 assert_eq!(alias, "mydb");
                 assert_eq!(table, "foo");
                 assert_eq!(assignments, vec![("name".into(), "'y'".into())]);
@@ -1443,7 +1440,11 @@ mod tests {
         let att = attached_map(&["mydb"]);
         let r = resolve_write_target("DELETE FROM mydb.foo WHERE id = 1", &att).unwrap();
         match r {
-            WriteRoute::Delete { alias, table, where_clause } => {
+            WriteRoute::Delete {
+                alias,
+                table,
+                where_clause,
+            } => {
                 assert_eq!(alias, "mydb");
                 assert_eq!(table, "foo");
                 assert_eq!(where_clause.as_deref(), Some("id = 1"));
@@ -1481,11 +1482,8 @@ mod tests {
     #[test]
     fn reject_returning() {
         let att = attached_map(&["mydb"]);
-        let r = resolve_write_target(
-            "INSERT INTO mydb.foo (id) VALUES (1) RETURNING id",
-            &att,
-        )
-        .unwrap();
+        let r = resolve_write_target("INSERT INTO mydb.foo (id) VALUES (1) RETURNING id", &att)
+            .unwrap();
         assert!(matches!(r, WriteRoute::Unsupported(reason) if reason.contains("RETURNING")));
     }
 
@@ -1525,33 +1523,22 @@ mod tests {
     #[test]
     fn reject_insert_select() {
         let att = attached_map(&["mydb"]);
-        let r = resolve_write_target(
-            "INSERT INTO mydb.foo SELECT * FROM other_source",
-            &att,
-        )
-        .unwrap();
+        let r =
+            resolve_write_target("INSERT INTO mydb.foo SELECT * FROM other_source", &att).unwrap();
         assert!(matches!(r, WriteRoute::Unsupported(reason) if reason.contains("SELECT")));
     }
 
     #[test]
     fn reject_insert_or_replace() {
         let att = attached_map(&["mydb"]);
-        let r = resolve_write_target(
-            "INSERT OR REPLACE INTO mydb.foo VALUES (1)",
-            &att,
-        )
-        .unwrap();
+        let r = resolve_write_target("INSERT OR REPLACE INTO mydb.foo VALUES (1)", &att).unwrap();
         assert!(matches!(r, WriteRoute::Unsupported(reason) if reason.contains("OR REPLACE")));
     }
 
     #[test]
     fn reject_parameterized() {
         let att = attached_map(&["mydb"]);
-        let r = resolve_write_target(
-            "INSERT INTO mydb.foo VALUES (?)",
-            &att,
-        )
-        .unwrap();
+        let r = resolve_write_target("INSERT INTO mydb.foo VALUES (?)", &att).unwrap();
         assert!(matches!(
             r,
             WriteRoute::Unsupported(reason) if reason.contains("prepared/parameterized")
@@ -1561,11 +1548,7 @@ mod tests {
     #[test]
     fn reject_multi_statement_attached_write() {
         let att = attached_map(&["mydb"]);
-        let r = resolve_write_target(
-            "SELECT 1; INSERT INTO mydb.foo VALUES (1)",
-            &att,
-        )
-        .unwrap();
+        let r = resolve_write_target("SELECT 1; INSERT INTO mydb.foo VALUES (1)", &att).unwrap();
         assert!(matches!(
             r,
             WriteRoute::Unsupported(reason) if reason.contains("multi-statement")
@@ -1587,7 +1570,10 @@ mod tests {
         assert_eq!(parse_value_literal("42"), ValueLiteral::Integer(42));
         assert_eq!(parse_value_literal("-3"), ValueLiteral::Integer(-3));
         assert_eq!(parse_value_literal("3.14"), ValueLiteral::Float(3.14));
-        assert_eq!(parse_value_literal("'hi'"), ValueLiteral::String("hi".into()));
+        assert_eq!(
+            parse_value_literal("'hi'"),
+            ValueLiteral::String("hi".into())
+        );
         assert_eq!(
             parse_value_literal("'it''s'"),
             ValueLiteral::String("it's".into()),
@@ -1615,7 +1601,12 @@ mod tests {
         let att = attached_map(&["mydb"]);
         let r = resolve_write_target("UPDATE mydb.foo SET name = 'y'", &att).unwrap();
         match r {
-            WriteRoute::Update { alias, table, assignments, where_clause } => {
+            WriteRoute::Update {
+                alias,
+                table,
+                assignments,
+                where_clause,
+            } => {
                 assert_eq!(alias, "mydb");
                 assert_eq!(table, "foo");
                 assert_eq!(assignments, vec![("name".into(), "'y'".into())]);
@@ -1637,19 +1628,17 @@ mod tests {
         )
         .unwrap();
         match r {
-            WriteRoute::Update { assignments, where_clause, .. } => {
+            WriteRoute::Update {
+                assignments,
+                where_clause,
+                ..
+            } => {
                 assert_eq!(
                     assignments,
-                    vec![
-                        ("name".into(), "'y'".into()),
-                        ("age".into(), "30".into()),
-                    ]
+                    vec![("name".into(), "'y'".into()), ("age".into(), "30".into()),]
                 );
                 // Verbatim: preserves whitespace and case as written.
-                assert_eq!(
-                    where_clause.as_deref(),
-                    Some("id > 1 AND name = 'x'"),
-                );
+                assert_eq!(where_clause.as_deref(), Some("id > 1 AND name = 'x'"),);
             }
             other => panic!("expected Update, got {other:?}"),
         }
@@ -1658,11 +1647,8 @@ mod tests {
     #[test]
     fn resolve_delete_where_with_quoted_keyword_preserved() {
         let att = attached_map(&["mydb"]);
-        let r = resolve_write_target(
-            "DELETE FROM mydb.foo WHERE label = 'WHERE me'",
-            &att,
-        )
-        .unwrap();
+        let r =
+            resolve_write_target("DELETE FROM mydb.foo WHERE label = 'WHERE me'", &att).unwrap();
         match r {
             WriteRoute::Delete { where_clause, .. } => {
                 assert_eq!(where_clause.as_deref(), Some("label = 'WHERE me'"));

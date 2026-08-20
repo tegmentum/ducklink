@@ -58,7 +58,10 @@ pub fn serve_quack(
     // Static-linked everything: disable autoinstall/autoload + set a writable
     // extension-data home so open succeeds in the sandbox (as the ui server does).
     let open_opts: Vec<(String, String)> = vec![
-        ("autoinstall_known_extensions".to_string(), "false".to_string()),
+        (
+            "autoinstall_known_extensions".to_string(),
+            "false".to_string(),
+        ),
         ("autoload_known_extensions".to_string(), "false".to_string()),
     ];
     let conn = core
@@ -74,7 +77,10 @@ pub fn serve_quack(
     );
     core.with_database(|g, s| g.call_execute(s, conn.clone(), &serve_sql))?
         .map_err(|e| {
-            anyhow::anyhow!("quack_serve bridge init failed: {}", crate::ui_server::duckerror_message(&e))
+            anyhow::anyhow!(
+                "quack_serve bridge init failed: {}",
+                crate::ui_server::duckerror_message(&e)
+            )
         })?;
 
     let listener = TcpListener::bind(("127.0.0.1", port))
@@ -160,7 +166,12 @@ fn handle_connection(
         ("OPTIONS", "/quack") => write_response(stream, 204, "text/plain", b""),
         ("POST", "/quack") => match bridge_quack_request(core, req.body) {
             Some(body) => write_response(stream, 200, QUACK_CONTENT_TYPE, &body),
-            None => write_response(stream, 503, "text/plain", b"quack bridge server not started"),
+            None => write_response(
+                stream,
+                503,
+                "text/plain",
+                b"quack bridge server not started",
+            ),
         },
         _ => write_response(stream, 404, "text/plain", b"not found"),
     }
@@ -173,7 +184,12 @@ fn bridge_quack_request(core: &mut CoreExecution, body: Vec<u8>) -> Option<Vec<u
         .ok()?
 }
 
-fn write_response(stream: &mut TcpStream, status: u16, content_type: &str, body: &[u8]) -> Result<()> {
+fn write_response(
+    stream: &mut TcpStream,
+    status: u16,
+    content_type: &str,
+    body: &[u8],
+) -> Result<()> {
     let reason = match status {
         200 => "OK",
         204 => "No Content",

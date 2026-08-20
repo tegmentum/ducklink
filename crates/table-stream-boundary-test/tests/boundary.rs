@@ -39,7 +39,9 @@ impl Default for State {
     fn default() -> Self {
         State {
             table: ResourceTable::new(),
-            wasi: wasmtime_wasi::WasiCtxBuilder::new().inherit_stderr().build(),
+            wasi: wasmtime_wasi::WasiCtxBuilder::new()
+                .inherit_stderr()
+                .build(),
         }
     }
 }
@@ -357,8 +359,8 @@ fn load_component() -> (Store<State>, BoundaryTest) {
     let manifest = env!("CARGO_MANIFEST_DIR");
     let wasm_path =
         std::path::Path::new(manifest).join("../../artifacts/extensions/numstream.wasm");
-    let bytes = std::fs::read(&wasm_path)
-        .unwrap_or_else(|e| panic!("read {}: {e}", wasm_path.display()));
+    let bytes =
+        std::fs::read(&wasm_path).unwrap_or_else(|e| panic!("read {}: {e}", wasm_path.display()));
     assert_eq!(
         &bytes[0..8],
         &[0x00, 0x61, 0x73, 0x6d, 0x0d, 0x00, 0x01, 0x00],

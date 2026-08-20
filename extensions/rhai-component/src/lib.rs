@@ -6,7 +6,10 @@
 //! The engine is sandboxed: max_operations and max_string_size bound the work a
 //! hostile expression can do, and every error path returns NULL rather than panicking.
 use std::collections::HashMap;
-use std::sync::{atomic::{AtomicU32, Ordering}, Mutex, OnceLock};
+use std::sync::{
+    atomic::{AtomicU32, Ordering},
+    Mutex, OnceLock,
+};
 use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension" });
@@ -25,8 +28,12 @@ impl guest::Guest for Extension {
             requires: Vec::new().into(),
         })
     }
-    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> { Ok(false) }
-    fn shutdown() -> Result<bool, types::Duckerror> { Ok(false) }
+    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
+    fn shutdown() -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
 }
 
 /// Build a sandboxed engine: bound operations and string size so a hostile
@@ -129,15 +136,33 @@ fn register_scalars() -> Result<(), types::Duckerror> {
     let flags = types::Funcflags::empty();
 
     for (name, which, ret, desc) in [
-        ("rhai_eval", R::Eval, types::Logicaltype::Text, "Evaluate a Rhai expression, result as text"),
-        ("rhai_eval_int", R::Int, types::Logicaltype::Int64, "Evaluate a Rhai expression, coerce to BIGINT"),
-        ("rhai_eval_double", R::Double, types::Logicaltype::Float64, "Evaluate a Rhai expression, coerce to DOUBLE"),
+        (
+            "rhai_eval",
+            R::Eval,
+            types::Logicaltype::Text,
+            "Evaluate a Rhai expression, result as text",
+        ),
+        (
+            "rhai_eval_int",
+            R::Int,
+            types::Logicaltype::Int64,
+            "Evaluate a Rhai expression, coerce to BIGINT",
+        ),
+        (
+            "rhai_eval_double",
+            R::Double,
+            types::Logicaltype::Float64,
+            "Evaluate a Rhai expression, coerce to DOUBLE",
+        ),
     ] {
         let h = NEXT.fetch_add(1, Ordering::Relaxed);
         handlers().lock().unwrap().insert(h, which);
         reg.register(
             name,
-            &[runtime::Funcarg { name: Some("expr".into()), logical: types::Logicaltype::Text }],
+            &[runtime::Funcarg {
+                name: Some("expr".into()),
+                logical: types::Logicaltype::Text,
+            }],
             &ret,
             runtime::ScalarCallback::new(h),
             Some(&runtime::Funcopts {

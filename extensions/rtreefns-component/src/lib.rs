@@ -35,8 +35,8 @@ use wit_bindgen::rt::vec::Vec;
 
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension-index" });
 
-use duckdb::extension::{index, runtime, types};
 use duckdb::extension::column_types as __col;
+use duckdb::extension::{index, runtime, types};
 use exports::duckdb::extension::{callback_dispatch, guest, index_dispatch};
 
 // major-4 colvec<->row adapter (the same one `datalink_extcore::columnar_bridge!`
@@ -152,7 +152,8 @@ impl index_dispatch::Guest for Extension {
     ) -> Result<u32, types::Duckerror> {
         let name = index_name.to_string();
         INDEXES.with(|m| {
-            m.borrow_mut().insert(name.clone(), IndexState::new(dims as usize));
+            m.borrow_mut()
+                .insert(name.clone(), IndexState::new(dims as usize));
         });
         let handle = NEXT_HANDLE.with(|n| {
             let mut n = n.borrow_mut();
@@ -196,7 +197,8 @@ impl index_dispatch::Guest for Extension {
                     )));
                 }
                 let bbox = [v[0], v[1], v[2], v[3]];
-                st.items.push(GeomWithData::new(rect_from_bbox(&bbox), *rid));
+                st.items
+                    .push(GeomWithData::new(rect_from_bbox(&bbox), *rid));
             }
             Ok(())
         })
@@ -298,7 +300,10 @@ impl callback_dispatch::Guest for Extension {
             out.push(Self::call_scalar(
                 handle,
                 a,
-                types::Invokeinfo { rowindex: Some(base + i as u64), iswindow: ctx.iswindow },
+                types::Invokeinfo {
+                    rowindex: Some(base + i as u64),
+                    iswindow: ctx.iswindow,
+                },
             )?);
         }
         Ok(__bridge_vals_to_colvec(out))
@@ -307,7 +312,9 @@ impl callback_dispatch::Guest for Extension {
         _handle: u32,
         _args: Vec<callback_dispatch::Colvec>,
     ) -> Result<types::Duckvalue, types::Duckerror> {
-        Err(types::Duckerror::Unsupported("rtreefns: no aggregate".into()))
+        Err(types::Duckerror::Unsupported(
+            "rtreefns: no aggregate".into(),
+        ))
     }
     fn call_cast_col(
         _handle: u32,
@@ -391,10 +398,7 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
         Err(types::Duckerror::Unsupported("rtreefns: no pragmas".into()))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("rtreefns: no casts".into()))
     }
 }

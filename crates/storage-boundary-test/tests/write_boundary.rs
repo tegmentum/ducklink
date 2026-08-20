@@ -135,7 +135,10 @@ fn columns_kv() -> Vec<ext::types::Columndef> {
 }
 
 fn row(k: &str, v: &str) -> Vec<Duckvalue> {
-    vec![Duckvalue::Text(k.to_string()), Duckvalue::Text(v.to_string())]
+    vec![
+        Duckvalue::Text(k.to_string()),
+        Duckvalue::Text(v.to_string()),
+    ]
 }
 
 fn setup() -> (Store<State>, WriteBoundaryTest) {
@@ -158,8 +161,8 @@ fn setup() -> (Store<State>, WriteBoundaryTest) {
     let mut store = Store::new(&engine, State::default());
 
     let wasm_path = locate_writer_bridge_wasm();
-    let bytes = std::fs::read(&wasm_path)
-        .unwrap_or_else(|e| panic!("read {}: {e}", wasm_path.display()));
+    let bytes =
+        std::fs::read(&wasm_path).unwrap_or_else(|e| panic!("read {}: {e}", wasm_path.display()));
     assert_eq!(
         &bytes[0..8],
         &[0x00, 0x61, 0x73, 0x6d, 0x0d, 0x00, 0x01, 0x00],

@@ -44,7 +44,10 @@ fn registry_resolve_borrows_same_entry_as_get() {
     assert_eq!(&*borrowed.extension, "myext");
     assert_eq!(borrowed.dispatcher_handle, 7);
     assert_eq!(borrowed.kind, CallbackKind::Scalar);
-    assert!(reg.resolve(h + 999).is_none(), "unknown handle resolves None");
+    assert!(
+        reg.resolve(h + 999).is_none(),
+        "unknown handle resolves None"
+    );
 }
 
 #[test]
@@ -52,7 +55,10 @@ fn registry_get_unknown_handle_is_none() {
     let mut reg = CallbackRegistry::new();
     let h = reg.allocate("ext", CallbackKind::Scalar, 1);
     assert!(reg.get(h + 999).is_none());
-    assert!(reg.get(0).is_none(), "handle 0 was never allocated by new()");
+    assert!(
+        reg.get(0).is_none(),
+        "handle 0 was never allocated by new()"
+    );
 }
 
 #[test]
@@ -79,7 +85,10 @@ fn registry_handles_are_not_reused_after_remove() {
     let a = reg.allocate("ext", CallbackKind::Scalar, 1);
     reg.remove(a);
     let b = reg.allocate("ext", CallbackKind::Scalar, 2);
-    assert_ne!(a, b, "a freed handle is not reissued; counter keeps advancing");
+    assert_ne!(
+        a, b,
+        "a freed handle is not reissued; counter keeps advancing"
+    );
     assert!(reg.get(a).is_none());
 }
 
@@ -150,7 +159,10 @@ fn func_flags_describe_none_single_and_multiple() {
 
 #[test]
 fn describe_runtime_logicaltype_delegates_to_describe() {
-    assert_eq!(describe_runtime_logicaltype(&reg::LogicalType::Text), "TEXT");
+    assert_eq!(
+        describe_runtime_logicaltype(&reg::LogicalType::Text),
+        "TEXT"
+    );
     assert_eq!(
         describe_runtime_logicaltype(&reg::LogicalType::Blob),
         "BLOB"
@@ -214,10 +226,7 @@ fn summarize_runtime_columns_renders_name_and_type() {
             logical: reg::LogicalType::Text,
         },
     ];
-    assert_eq!(
-        summarize_runtime_columns(&cols),
-        "[id:INT64, label:TEXT]"
-    );
+    assert_eq!(summarize_runtime_columns(&cols), "[id:INT64, label:TEXT]");
 }
 
 #[test]

@@ -87,7 +87,10 @@ fn cron_run_wasm_driver_fires_scheduled_job() {
     let target = root.join("target");
     std::fs::create_dir_all(&target).expect("create target dir");
     let workdir = tempfile::tempdir_in(&target).expect("tempdir under target");
-    let workdir_rel = workdir.path().strip_prefix(&root).expect("tempdir is under repo root");
+    let workdir_rel = workdir
+        .path()
+        .strip_prefix(&root)
+        .expect("tempdir is under repo root");
     let db_rel = workdir_rel.join("cron.duckdb");
     let db_str = db_rel.to_str().expect("utf-8 tmp path");
 
@@ -124,7 +127,11 @@ fn cron_run_wasm_driver_fires_scheduled_job() {
         &root,
         &["cron", "run", "--db", db_str, "--wasm-driver", "--once"],
     );
-    assert!(run.status.success(), "{}", dump("cron run --wasm-driver --once failed", &run));
+    assert!(
+        run.status.success(),
+        "{}",
+        dump("cron run --wasm-driver --once failed", &run)
+    );
     assert!(
         contains(&run.stderr, "fired 1 job(s)"),
         "{}",

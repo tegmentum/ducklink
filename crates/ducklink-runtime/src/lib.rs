@@ -683,7 +683,10 @@ pub mod reg {
         /// S2 (major-5): DECIMAL now carries `width` (total digits) and
         /// `scale` (fractional digits) structurally, matching the WIT
         /// `decimal(decimalshape)` arm. Was fieldless on @4.
-        Decimal { width: u8, scale: u8 },
+        Decimal {
+            width: u8,
+            scale: u8,
+        },
         Interval,
         Uuid,
         /// T2-1 residual (major-5): 128-bit signed integer logical type.
@@ -1301,8 +1304,7 @@ impl CallbackRegistry {
     fn ensure_slot(&mut self, handle: u32) {
         let idx = handle as usize;
         if self.entries.len() <= idx {
-            self.entries
-                .resize_with(idx + 1, CallbackSlot::default);
+            self.entries.resize_with(idx + 1, CallbackSlot::default);
         }
     }
 

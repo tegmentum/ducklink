@@ -382,9 +382,8 @@ impl SubExtLoader {
             // this write, mixed mode (postgis_core prebuilt + postgis_raster
             // plan-driven → postgis_core) fails with `BlobNotFound` when the
             // raster compose walks the derived-from chain.
-            let bytes = std::fs::read(&prebuilt).map_err(|e| {
-                SubExtError::mat(sub_ext, &prebuilt, format!("digest read: {e}"))
-            })?;
+            let bytes = std::fs::read(&prebuilt)
+                .map_err(|e| SubExtError::mat(sub_ext, &prebuilt, format!("digest read: {e}")))?;
             let blobs =
                 BlobStore::new(self.blob_cas_path.clone(), COMPOSE_MAX_BLOB_SIZE).map_err(|e| {
                     SubExtError::mat(
@@ -467,15 +466,14 @@ impl SubExtLoader {
 
         // Compose. compose-core keys on `emit_key = H(plan bytes)`; a repeat
         // compose with the same plan cache-hits.
-        let blobs = BlobStore::new(self.blob_cas_path.clone(), COMPOSE_MAX_BLOB_SIZE).map_err(
-            |e| {
+        let blobs =
+            BlobStore::new(self.blob_cas_path.clone(), COMPOSE_MAX_BLOB_SIZE).map_err(|e| {
                 SubExtError::mat(
                     sub_ext,
                     &plan_path,
                     format!("open blob CAS at {}: {e}", self.blob_cas_path.display()),
                 )
-            },
-        )?;
+            })?;
         let clock = SystemClock::shared();
         let events = EventCollector::new(clock);
         std::fs::create_dir_all(&self.compose_cache_path).map_err(|e| {

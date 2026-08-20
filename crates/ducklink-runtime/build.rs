@@ -21,7 +21,11 @@ use sha2::{Digest, Sha256};
 fn main() {
     // Canonical contract dir, relative to this crate: <repo>/wit/duckdb-extension.
     let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    let wit_dir = manifest.join("..").join("..").join("wit").join("duckdb-extension");
+    let wit_dir = manifest
+        .join("..")
+        .join("..")
+        .join("wit")
+        .join("duckdb-extension");
 
     // Read every top-level `*.wit` file in DETERMINISTIC (sorted-by-filename)
     // order, concatenate the raw bytes, and witcanon-hash them.

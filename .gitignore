@@ -4,6 +4,7 @@ Cargo.lock
 /build/
 /generated/
 .DS_Store
+/.claude/
 
 # Vendored upstream sources and toolchains (read-only, multi-GB)
 /external/

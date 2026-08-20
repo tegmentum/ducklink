@@ -242,8 +242,13 @@ pub fn render_reasoning(reasoning: &[CandidateOutcome]) -> String {
 fn precedence_rank(kind: &ProviderKind) -> u8 {
     match kind {
         ProviderKind::Native { .. } => 0,
-        ProviderKind::Wasm { browser_safe: false, .. } => 1,
-        ProviderKind::Wasm { browser_safe: true, .. } => 2,
+        ProviderKind::Wasm {
+            browser_safe: false,
+            ..
+        } => 1,
+        ProviderKind::Wasm {
+            browser_safe: true, ..
+        } => 2,
         ProviderKind::Remote { .. } => 3,
     }
 }
@@ -666,7 +671,10 @@ fn artifact_ref(artifact: &str) -> ContentRef {
 fn parse_provider(p: &serde_json::Value, default_abi: &str) -> Option<ProviderDescriptor> {
     let id = p.get("id").and_then(|v| v.as_str())?.to_string();
     let kind_tag = p.get("kind").and_then(|v| v.as_str()).unwrap_or("wasm");
-    let reference = p.get("reference").and_then(|v| v.as_bool()).unwrap_or(false);
+    let reference = p
+        .get("reference")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     let kind = match kind_tag {
         "wasm" => {
@@ -720,18 +728,29 @@ fn parse_provider(p: &serde_json::Value, default_abi: &str) -> Option<ProviderDe
     };
 
     let conformance = p.get("conformance").map(|c| Conformance {
-        suite: c.get("suite").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        suite: c
+            .get("suite")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         suite_digest: c
             .get("suite_digest")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string(),
-        contract_digest: c.get("at").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        contract_digest: c
+            .get("at")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
         passed: c.get("passed").and_then(|v| v.as_bool()).unwrap_or(false),
     });
 
     let trust = p.get("trust").map(|t| Trust {
-        signed_by: t.get("signed_by").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        signed_by: t
+            .get("signed_by")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
         attestation: t
             .get("attestation")
             .and_then(|v| v.as_str())
@@ -781,8 +800,13 @@ mod tests {
 
     #[test]
     fn reference_wasm_is_chosen_certified_by_construction() {
-        let r = resolve(&entry(vec![wasm_ref("wasm-component")]), &Env::default(), &ResolvePolicy::default(), None)
-            .expect("resolves");
+        let r = resolve(
+            &entry(vec![wasm_ref("wasm-component")]),
+            &Env::default(),
+            &ResolvePolicy::default(),
+            None,
+        )
+        .expect("resolves");
         assert_eq!(r.chosen_id, "wasm-component");
         assert_eq!(r.chosen_kind, "wasm");
         assert!(matches!(r.reasoning[0].outcome, Outcome::Chosen(_)));
@@ -793,7 +817,10 @@ mod tests {
         let r = resolve(
             &entry(vec![wasm_ref("wasm-component")]),
             &Env::default(),
-            &ResolvePolicy { forced_provider: Some("wasm-component".into()), denied: vec![] },
+            &ResolvePolicy {
+                forced_provider: Some("wasm-component".into()),
+                denied: vec![],
+            },
             None,
         )
         .expect("forced match resolves");
@@ -805,7 +832,10 @@ mod tests {
         let err = resolve(
             &entry(vec![wasm_ref("wasm-component")]),
             &Env::default(),
-            &ResolvePolicy { forced_provider: Some("nope".into()), denied: vec![] },
+            &ResolvePolicy {
+                forced_provider: Some("nope".into()),
+                denied: vec![],
+            },
             None,
         )
         .unwrap_err();
@@ -817,7 +847,10 @@ mod tests {
         let err = resolve(
             &entry(vec![wasm_ref("wasm-component")]),
             &Env::default(),
-            &ResolvePolicy { forced_provider: None, denied: vec!["wasm-component".into()] },
+            &ResolvePolicy {
+                forced_provider: None,
+                denied: vec!["wasm-component".into()],
+            },
             None,
         )
         .unwrap_err();
@@ -836,8 +869,13 @@ mod tests {
             contract_digest: "DEADBEEF".into(), // != wit_contract
             passed: true,
         });
-        let err = resolve(&entry(vec![p]), &Env::default(), &ResolvePolicy::default(), None)
-            .unwrap_err();
+        let err = resolve(
+            &entry(vec![p]),
+            &Env::default(),
+            &ResolvePolicy::default(),
+            None,
+        )
+        .unwrap_err();
         assert!(render_reasoning(&err.reasoning).contains("uncertified"));
     }
 
@@ -845,13 +883,28 @@ mod tests {
     fn native_and_remote_are_unavailable_this_pass() {
         let native = ProviderDescriptor {
             id: "native-linux-x86_64".into(),
-            kind: ProviderKind::Native { os: "linux".into(), arch: "x86_64".into(), artifact: ContentRef::Oci("oci://x".into()) },
+            kind: ProviderKind::Native {
+                os: "linux".into(),
+                arch: "x86_64".into(),
+                artifact: ContentRef::Oci("oci://x".into()),
+            },
             reference: false,
-            conformance: Some(Conformance { suite: "aba@2".into(), suite_digest: "7f3c".into(), contract_digest: "90fdc46a585c".into(), passed: true }),
+            conformance: Some(Conformance {
+                suite: "aba@2".into(),
+                suite_digest: "7f3c".into(),
+                contract_digest: "90fdc46a585c".into(),
+                passed: true,
+            }),
             trust: None,
         };
         // native is certified but unavailable -> wasm reference wins.
-        let r = resolve(&entry(vec![native, wasm_ref("wasm-component")]), &Env::default(), &ResolvePolicy::default(), None).expect("resolves to wasm");
+        let r = resolve(
+            &entry(vec![native, wasm_ref("wasm-component")]),
+            &Env::default(),
+            &ResolvePolicy::default(),
+            None,
+        )
+        .expect("resolves to wasm");
         assert_eq!(r.chosen_id, "wasm-component");
         assert!(render_reasoning(&r.reasoning).contains("native-linux-x86_64"));
     }
@@ -913,7 +966,9 @@ mod tests {
             Some(CANON),
         )
         .unwrap_err();
-        assert!(render_reasoning(&err.reasoning).contains("no conformance record (suite registered)"));
+        assert!(
+            render_reasoning(&err.reasoning).contains("no conformance record (suite registered)")
+        );
     }
 
     #[test]
@@ -982,8 +1037,13 @@ mod tests {
             available_components: vec!["pylon".into()],
             ..Env::default()
         };
-        let r = resolve(&dep_entry(&["pylon"]), &env, &ResolvePolicy::default(), None)
-            .expect("resolves when dep present");
+        let r = resolve(
+            &dep_entry(&["pylon"]),
+            &env,
+            &ResolvePolicy::default(),
+            None,
+        )
+        .expect("resolves when dep present");
         assert_eq!(r.chosen_id, "wasm-component");
     }
 
@@ -1042,9 +1102,7 @@ mod tests {
         match &e.providers[0].kind {
             ProviderKind::Wasm { artifact, .. } => assert_eq!(
                 artifact,
-                &ContentRef::Url(
-                    "https://ext.example.dev/wasm/sha256/366cdf/aba.wasm".to_string()
-                )
+                &ContentRef::Url("https://ext.example.dev/wasm/sha256/366cdf/aba.wasm".to_string())
             ),
             other => panic!("expected wasm provider, got {other:?}"),
         }

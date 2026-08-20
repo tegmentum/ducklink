@@ -11,6 +11,7 @@
 #[allow(warnings)]
 mod bindings;
 
+use bindings::exports::duckdb::cli::dotcmd_host::{CommandInfo, Guest as DotcmdHostGuest, Outcome};
 use bindings::exports::duckdb::component::extension_loader_hooks::{
     Guest as HooksGuest, PendingRegistrations,
 };
@@ -19,11 +20,8 @@ use bindings::exports::duckdb::extension::callback_dispatch::{
     Colvec, Duckerror, Duckvalue, Guest as DispatchGuest, Invokeinfo, Resultset,
 };
 use bindings::exports::duckdb::extension::{
-    collation_host, files_host, index_host, optimizer_host, parser_host, pragma_host,
-    storage_host, table_stream_host,
-};
-use bindings::exports::duckdb::cli::dotcmd_host::{
-    CommandInfo, Guest as DotcmdHostGuest, Outcome,
+    collation_host, files_host, index_host, optimizer_host, parser_host, pragma_host, storage_host,
+    table_stream_host,
 };
 use bindings::exports::tvm::memory::bytes::Guest as TvmBytesGuest;
 use bindings::exports::tvm::memory::manager::{
@@ -94,10 +92,7 @@ impl DispatchGuest for Component {
         Err(unreachable_dispatch())
     }
 
-    fn call_pragma(
-        _handle: u32,
-        _args: Vec<Duckvalue>,
-    ) -> Result<Option<Duckvalue>, Duckerror> {
+    fn call_pragma(_handle: u32, _args: Vec<Duckvalue>) -> Result<Option<Duckvalue>, Duckerror> {
         Err(unreachable_dispatch())
     }
 
@@ -128,10 +123,7 @@ impl storage_host::Guest for Component {
     ) -> Result<u32, Duckerror> {
         Err(unreachable_dispatch())
     }
-    fn storage_scan_next(
-        _scan: u32,
-        _max_rows: u32,
-    ) -> Result<storage_host::Resultset, Duckerror> {
+    fn storage_scan_next(_scan: u32, _max_rows: u32) -> Result<storage_host::Resultset, Duckerror> {
         Err(unreachable_dispatch())
     }
     fn storage_scan_close(_scan: u32) -> Result<bool, Duckerror> {
@@ -163,11 +155,7 @@ impl storage_host::Guest for Component {
     ) -> Result<u64, Duckerror> {
         Err(unreachable_dispatch())
     }
-    fn storage_delete_rows(
-        _txn: u32,
-        _table: String,
-        _rowids: Vec<i64>,
-    ) -> Result<u64, Duckerror> {
+    fn storage_delete_rows(_txn: u32, _table: String, _rowids: Vec<i64>) -> Result<u64, Duckerror> {
         Err(unreachable_dispatch())
     }
     fn storage_update_rows(
@@ -185,11 +173,7 @@ impl index_host::Guest for Component {
     fn index_type_list() -> Vec<String> {
         Vec::new()
     }
-    fn index_create(
-        _type_name: String,
-        _index_name: String,
-        _dims: u32,
-    ) -> Result<u32, Duckerror> {
+    fn index_create(_type_name: String, _index_name: String, _dims: u32) -> Result<u32, Duckerror> {
         Err(unreachable_dispatch())
     }
     fn index_append(

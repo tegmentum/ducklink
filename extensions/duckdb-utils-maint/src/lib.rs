@@ -10,8 +10,8 @@
 use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:dotcmd/dotcmd" });
-use exports::duckdb::dotcmd::registry::{CommandSpec, Guest, InvokeResult};
 use duckdb::dotcmd::spi;
+use exports::duckdb::dotcmd::registry::{CommandSpec, Guest, InvokeResult};
 
 struct Component;
 
@@ -25,10 +25,17 @@ fn quote_ident(name: &str) -> std::string::String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 fn plain(text: std::string::String) -> InvokeResult {
-    InvokeResult { text, state_deltas: vec![] }
+    InvokeResult {
+        text,
+        state_deltas: vec![],
+    }
 }
 fn note(text: std::string::String) -> InvokeResult {
-    plain(if text.ends_with('\n') { text } else { format!("{text}\n") })
+    plain(if text.ends_with('\n') {
+        text
+    } else {
+        format!("{text}\n")
+    })
 }
 
 /// Split a raw arg string into whitespace-separated tokens.
@@ -47,13 +54,31 @@ fn run(sql: &str, ok_msg: std::string::String) -> Result<InvokeResult, String> {
 impl Guest for Component {
     fn list_commands() -> Vec<CommandSpec> {
         let c = |id, name: &str, summary: &str, usage: &str| CommandSpec {
-            id, name: name.into(), summary: summary.into(), usage: usage.into(),
+            id,
+            name: name.into(),
+            summary: summary.into(),
+            usage: usage.into(),
         };
         vec![
             c(FID_VACUUM, "vacuum", "Reclaim space (VACUUM)", "vacuum"),
-            c(FID_ANALYZE, "analyze", "Refresh whole-database statistics (ANALYZE)", "analyze"),
-            c(FID_CHECKPOINT, "checkpoint", "Flush the WAL to the database file (CHECKPOINT)", "checkpoint"),
-            c(FID_DB_SIZE, "db_size", "Database size / block stats", "db_size"),
+            c(
+                FID_ANALYZE,
+                "analyze",
+                "Refresh whole-database statistics (ANALYZE)",
+                "analyze",
+            ),
+            c(
+                FID_CHECKPOINT,
+                "checkpoint",
+                "Flush the WAL to the database file (CHECKPOINT)",
+                "checkpoint",
+            ),
+            c(
+                FID_DB_SIZE,
+                "db_size",
+                "Database size / block stats",
+                "db_size",
+            ),
         ]
     }
 

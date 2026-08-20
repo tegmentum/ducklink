@@ -10,7 +10,10 @@
 //! NULL / invalid -> NULL (never panics). The fts_ prefix avoids colliding with
 //! the existing `stem` component on the lean core.
 use std::collections::HashMap;
-use std::sync::{atomic::{AtomicU32, Ordering}, Mutex, OnceLock};
+use std::sync::{
+    atomic::{AtomicU32, Ordering},
+    Mutex, OnceLock,
+};
 use wit_bindgen::rt::string::String;
 use wit_bindgen::rt::vec::Vec;
 wit_bindgen::generate!({ path: "./wit", world: "duckdb:extension/duckdb-extension" });
@@ -119,7 +122,13 @@ mod core {
         // object-name part (keep it simple/identifier-safe); also quote it.
         let safe: std::string::String = table
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect();
         let terms = quote_ident(&format!("fts_{safe}_terms"));
         let docs = quote_ident(&format!("fts_{safe}_docs"));
@@ -159,10 +168,14 @@ mod core {
     /// English-stemmed tokens (simple AND match).
     pub fn fts_match(doc: &str, query: &str) -> bool {
         let stemmer = Stemmer::create(Algorithm::English);
-        let doc_tokens: std::collections::HashSet<std::string::String> =
-            tokenize(doc).iter().map(|t| stemmer.stem(t).into_owned()).collect();
-        let q: Vec<std::string::String> =
-            tokenize(query).iter().map(|t| stemmer.stem(t).into_owned()).collect();
+        let doc_tokens: std::collections::HashSet<std::string::String> = tokenize(doc)
+            .iter()
+            .map(|t| stemmer.stem(t).into_owned())
+            .collect();
+        let q: Vec<std::string::String> = tokenize(query)
+            .iter()
+            .map(|t| stemmer.stem(t).into_owned())
+            .collect();
         if q.is_empty() {
             return false;
         }
@@ -175,13 +188,24 @@ impl guest::Guest for Extension {
     fn load() -> Result<types::Loadresult, types::Duckerror> {
         register_scalars()?;
         register_pragmas()?;
-        Ok(types::Loadresult { name: "ftsfns".into(), version: Some(env!("CARGO_PKG_VERSION").into()), requires: Vec::new().into() })
+        Ok(types::Loadresult {
+            name: "ftsfns".into(),
+            version: Some(env!("CARGO_PKG_VERSION").into()),
+            requires: Vec::new().into(),
+        })
     }
-    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> { Ok(false) }
-    fn shutdown() -> Result<bool, types::Duckerror> { Ok(false) }
+    fn reconfigure(_k: Vec<String>) -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
+    fn shutdown() -> Result<bool, types::Duckerror> {
+        Ok(false)
+    }
 }
 fn text_arg(args: &[types::Duckvalue], i: usize) -> Option<String> {
-    match args.get(i) { Some(types::Duckvalue::Text(s)) => Some(s.clone()), _ => None }
+    match args.get(i) {
+        Some(types::Duckvalue::Text(s)) => Some(s.clone()),
+        _ => None,
+    }
 }
 fn i64_arg(args: &[types::Duckvalue], i: usize) -> Option<i64> {
     match args.get(i) {
@@ -202,19 +226,48 @@ fn f64_arg(args: &[types::Duckvalue], i: usize) -> Option<f64> {
 impl callback_dispatch::Guest for Extension {
     // major-4 columnar hot path: bridge the typed colvecs to the unchanged
     // per-row `call_scalar` and rebuild the result column.
-    fn call_scalar_batch_col(h: u32, args: Vec<callback_dispatch::Colvec>, ctx: types::Invokeinfo) -> Result<callback_dispatch::Colvec, types::Duckerror> {
+    fn call_scalar_batch_col(
+        h: u32,
+        args: Vec<callback_dispatch::Colvec>,
+        ctx: types::Invokeinfo,
+    ) -> Result<callback_dispatch::Colvec, types::Duckerror> {
         let base = ctx.rowindex.unwrap_or(0);
         let rows = __bridge_colvecs_to_rows(&args);
         let mut out = Vec::with_capacity(rows.len());
         for (i, a) in rows.into_iter().enumerate() {
-            out.push(Self::call_scalar(h, a, types::Invokeinfo { rowindex: Some(base + i as u64), iswindow: ctx.iswindow })?);
+            out.push(Self::call_scalar(
+                h,
+                a,
+                types::Invokeinfo {
+                    rowindex: Some(base + i as u64),
+                    iswindow: ctx.iswindow,
+                },
+            )?);
         }
         Ok(__bridge_vals_to_colvec(out))
     }
-    fn call_aggregate_col(_h: u32, _args: Vec<callback_dispatch::Colvec>) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("ftsfns: no aggs".into())) }
-    fn call_cast_col(_h: u32, _arg: callback_dispatch::Colvec) -> Result<callback_dispatch::Colvec, types::Duckerror> { Err(types::Duckerror::Unsupported("ftsfns: no casts".into())) }
-    fn call_scalar(handle: u32, args: Vec<types::Duckvalue>, _c: types::Invokeinfo) -> Result<types::Duckvalue, types::Duckerror> {
-        let which = handlers().lock().unwrap().get(&handle).copied()
+    fn call_aggregate_col(
+        _h: u32,
+        _args: Vec<callback_dispatch::Colvec>,
+    ) -> Result<types::Duckvalue, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("ftsfns: no aggs".into()))
+    }
+    fn call_cast_col(
+        _h: u32,
+        _arg: callback_dispatch::Colvec,
+    ) -> Result<callback_dispatch::Colvec, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("ftsfns: no casts".into()))
+    }
+    fn call_scalar(
+        handle: u32,
+        args: Vec<types::Duckvalue>,
+        _c: types::Invokeinfo,
+    ) -> Result<types::Duckvalue, types::Duckerror> {
+        let which = handlers()
+            .lock()
+            .unwrap()
+            .get(&handle)
+            .copied()
             .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
         Ok(match which {
             F::Tokenize => match text_arg(&args, 0) {
@@ -222,7 +275,10 @@ impl callback_dispatch::Guest for Extension {
                 None => types::Duckvalue::Null,
             },
             F::Stem => {
-                let word = match text_arg(&args, 0) { Some(s) => s, None => return Ok(types::Duckvalue::Null) };
+                let word = match text_arg(&args, 0) {
+                    Some(s) => s,
+                    None => return Ok(types::Duckvalue::Null),
+                };
                 let lang = text_arg(&args, 1).unwrap_or_else(|| "english".into());
                 match core::stem(&word, &lang) {
                     Some(s) => types::Duckvalue::Text(s.into()),
@@ -234,23 +290,37 @@ impl callback_dispatch::Guest for Extension {
                 None => types::Duckvalue::Null,
             },
             F::Bm25 => {
-                let tf = i64_arg(&args, 0); let df = i64_arg(&args, 1);
-                let doc_len = f64_arg(&args, 2); let avg = f64_arg(&args, 3);
+                let tf = i64_arg(&args, 0);
+                let df = i64_arg(&args, 1);
+                let doc_len = f64_arg(&args, 2);
+                let avg = f64_arg(&args, 3);
                 let n = i64_arg(&args, 4);
                 match (tf, df, doc_len, avg, n) {
-                    (Some(tf), Some(df), Some(dl), Some(adl), Some(n)) =>
-                        types::Duckvalue::Float64(core::bm25_score(tf, df, dl, adl, n)),
+                    (Some(tf), Some(df), Some(dl), Some(adl), Some(n)) => {
+                        types::Duckvalue::Float64(core::bm25_score(tf, df, dl, adl, n))
+                    }
                     _ => types::Duckvalue::Null,
                 }
             }
             F::Match => {
-                let doc = match text_arg(&args, 0) { Some(s) => s, None => return Ok(types::Duckvalue::Null) };
-                let q = match text_arg(&args, 1) { Some(s) => s, None => return Ok(types::Duckvalue::Null) };
+                let doc = match text_arg(&args, 0) {
+                    Some(s) => s,
+                    None => return Ok(types::Duckvalue::Null),
+                };
+                let q = match text_arg(&args, 1) {
+                    Some(s) => s,
+                    None => return Ok(types::Duckvalue::Null),
+                };
                 types::Duckvalue::Boolean(core::fts_match(&doc, &q))
             }
         })
     }
-    fn call_table(_h: u32, _a: Vec<types::Duckvalue>) -> Result<types::Resultset, types::Duckerror> { Err(types::Duckerror::Unsupported("ftsfns: no table fns".into())) }
+    fn call_table(
+        _h: u32,
+        _a: Vec<types::Duckvalue>,
+    ) -> Result<types::Resultset, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("ftsfns: no table fns".into()))
+    }
     // Item 4: `PRAGMA create_fts_index('<table>','<id>','<textcol>')`. The core
     // intercepts the PRAGMA, dispatches here mid-query, and we RETURN a SQL script
     // (we do NOT re-enter SQL ourselves) that the core then runs on the connection:
@@ -258,85 +328,204 @@ impl callback_dispatch::Guest for Extension {
     // English-stemming the text column (reusing our fts_stem_text scalar), and a
     // per-index `match_bm25(docid, query)` macro summing bm25_score over the
     // stemmed query terms. No connection re-entrancy.
-    fn call_pragma(handle: u32, args: Vec<types::Duckvalue>) -> Result<Option<types::Duckvalue>, types::Duckerror> {
-        let which = pragma_handlers().lock().unwrap().get(&handle).copied()
+    fn call_pragma(
+        handle: u32,
+        args: Vec<types::Duckvalue>,
+    ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
+        let which = pragma_handlers()
+            .lock()
+            .unwrap()
+            .get(&handle)
+            .copied()
             .ok_or_else(|| types::Duckerror::Internal("unknown pragma handle".into()))?;
         match which {
             P::CreateFtsIndex => {
-                let table = text_arg(&args, 0)
-                    .ok_or_else(|| types::Duckerror::Invalidargument("create_fts_index: table name (arg 0) required".into()))?;
-                let id = text_arg(&args, 1)
-                    .ok_or_else(|| types::Duckerror::Invalidargument("create_fts_index: id column (arg 1) required".into()))?;
-                let textcol = text_arg(&args, 2)
-                    .ok_or_else(|| types::Duckerror::Invalidargument("create_fts_index: text column (arg 2) required".into()))?;
+                let table = text_arg(&args, 0).ok_or_else(|| {
+                    types::Duckerror::Invalidargument(
+                        "create_fts_index: table name (arg 0) required".into(),
+                    )
+                })?;
+                let id = text_arg(&args, 1).ok_or_else(|| {
+                    types::Duckerror::Invalidargument(
+                        "create_fts_index: id column (arg 1) required".into(),
+                    )
+                })?;
+                let textcol = text_arg(&args, 2).ok_or_else(|| {
+                    types::Duckerror::Invalidargument(
+                        "create_fts_index: text column (arg 2) required".into(),
+                    )
+                })?;
                 let script = core::build_fts_index_sql(&table, &id, &textcol);
                 Ok(Some(types::Duckvalue::Text(script.into())))
             }
         }
     }
-    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> { Err(types::Duckerror::Unsupported("ftsfns: no casts".into())) }
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
+        Err(types::Duckerror::Unsupported("ftsfns: no casts".into()))
+    }
 }
 export!(Extension);
 
 fn register_scalars() -> Result<(), types::Duckerror> {
-    let cap = runtime::get_capability(types::Capabilitykind::Scalar).ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
-    let reg = match cap { runtime::Capability::Scalar(r) => r, _ => return Err(types::Duckerror::Internal("bad capability".into())) };
+    let cap = runtime::get_capability(types::Capabilitykind::Scalar)
+        .ok_or_else(|| types::Duckerror::Internal("no scalar capability".into()))?;
+    let reg = match cap {
+        runtime::Capability::Scalar(r) => r,
+        _ => return Err(types::Duckerror::Internal("bad capability".into())),
+    };
     let det = types::Funcflags::DETERMINISTIC | types::Funcflags::STATELESS;
-    let txt = |name: &str| runtime::Funcarg { name: Some(name.into()), logical: types::Logicaltype::Text };
+    let txt = |name: &str| runtime::Funcarg {
+        name: Some(name.into()),
+        logical: types::Logicaltype::Text,
+    };
 
-    let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::Tokenize);
-    reg.register("fts_tokenize", &[txt("text")], &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
-        Some(&runtime::Funcopts { description: Some("tokenize text -> JSON array of lowercased words".into()), tags: vec!["fts".into(), "nlp".into()], attributes: det }))?;
+    let h = NEXT.fetch_add(1, Ordering::Relaxed);
+    handlers().lock().unwrap().insert(h, F::Tokenize);
+    reg.register(
+        "fts_tokenize",
+        &[txt("text")],
+        &types::Logicaltype::Text,
+        runtime::ScalarCallback::new(h),
+        Some(&runtime::Funcopts {
+            description: Some("tokenize text -> JSON array of lowercased words".into()),
+            tags: vec!["fts".into(), "nlp".into()],
+            attributes: det,
+        }),
+    )?;
 
-    let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::Stem);
-    reg.register("fts_stem", &[txt("word"), txt("language")], &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
-        Some(&runtime::Funcopts { description: Some("Snowball/Porter stem (default english); unknown language -> NULL".into()), tags: vec!["fts".into(), "nlp".into()], attributes: det }))?;
+    let h = NEXT.fetch_add(1, Ordering::Relaxed);
+    handlers().lock().unwrap().insert(h, F::Stem);
+    reg.register(
+        "fts_stem",
+        &[txt("word"), txt("language")],
+        &types::Logicaltype::Text,
+        runtime::ScalarCallback::new(h),
+        Some(&runtime::Funcopts {
+            description: Some(
+                "Snowball/Porter stem (default english); unknown language -> NULL".into(),
+            ),
+            tags: vec!["fts".into(), "nlp".into()],
+            attributes: det,
+        }),
+    )?;
 
-    let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::StemText);
-    reg.register("fts_stem_text", &[txt("text")], &types::Logicaltype::Text, runtime::ScalarCallback::new(h),
-        Some(&runtime::Funcopts { description: Some("tokenize + English-stem each -> JSON array".into()), tags: vec!["fts".into(), "nlp".into()], attributes: det }))?;
+    let h = NEXT.fetch_add(1, Ordering::Relaxed);
+    handlers().lock().unwrap().insert(h, F::StemText);
+    reg.register(
+        "fts_stem_text",
+        &[txt("text")],
+        &types::Logicaltype::Text,
+        runtime::ScalarCallback::new(h),
+        Some(&runtime::Funcopts {
+            description: Some("tokenize + English-stem each -> JSON array".into()),
+            tags: vec!["fts".into(), "nlp".into()],
+            attributes: det,
+        }),
+    )?;
 
-    let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::Bm25);
-    reg.register("bm25_score", &[
-        runtime::Funcarg { name: Some("tf".into()), logical: types::Logicaltype::Int64 },
-        runtime::Funcarg { name: Some("df".into()), logical: types::Logicaltype::Int64 },
-        runtime::Funcarg { name: Some("doc_len".into()), logical: types::Logicaltype::Float64 },
-        runtime::Funcarg { name: Some("avg_doc_len".into()), logical: types::Logicaltype::Float64 },
-        runtime::Funcarg { name: Some("num_docs".into()), logical: types::Logicaltype::Int64 }],
-        &types::Logicaltype::Float64, runtime::ScalarCallback::new(h),
-        Some(&runtime::Funcopts { description: Some("Okapi BM25 term score (k1=1.2, b=0.75)".into()), tags: vec!["fts".into()], attributes: det }))?;
+    let h = NEXT.fetch_add(1, Ordering::Relaxed);
+    handlers().lock().unwrap().insert(h, F::Bm25);
+    reg.register(
+        "bm25_score",
+        &[
+            runtime::Funcarg {
+                name: Some("tf".into()),
+                logical: types::Logicaltype::Int64,
+            },
+            runtime::Funcarg {
+                name: Some("df".into()),
+                logical: types::Logicaltype::Int64,
+            },
+            runtime::Funcarg {
+                name: Some("doc_len".into()),
+                logical: types::Logicaltype::Float64,
+            },
+            runtime::Funcarg {
+                name: Some("avg_doc_len".into()),
+                logical: types::Logicaltype::Float64,
+            },
+            runtime::Funcarg {
+                name: Some("num_docs".into()),
+                logical: types::Logicaltype::Int64,
+            },
+        ],
+        &types::Logicaltype::Float64,
+        runtime::ScalarCallback::new(h),
+        Some(&runtime::Funcopts {
+            description: Some("Okapi BM25 term score (k1=1.2, b=0.75)".into()),
+            tags: vec!["fts".into()],
+            attributes: det,
+        }),
+    )?;
 
-    let h = NEXT.fetch_add(1, Ordering::Relaxed); handlers().lock().unwrap().insert(h, F::Match);
-    reg.register("fts_match", &[txt("doc"), txt("query")], &types::Logicaltype::Boolean, runtime::ScalarCallback::new(h),
-        Some(&runtime::Funcopts { description: Some("true if all stemmed query tokens appear in stemmed doc (AND match)".into()), tags: vec!["fts".into()], attributes: det }))?;
+    let h = NEXT.fetch_add(1, Ordering::Relaxed);
+    handlers().lock().unwrap().insert(h, F::Match);
+    reg.register(
+        "fts_match",
+        &[txt("doc"), txt("query")],
+        &types::Logicaltype::Boolean,
+        runtime::ScalarCallback::new(h),
+        Some(&runtime::Funcopts {
+            description: Some(
+                "true if all stemmed query tokens appear in stemmed doc (AND match)".into(),
+            ),
+            tags: vec!["fts".into()],
+            attributes: det,
+        }),
+    )?;
     Ok(())
 }
-#[derive(Clone, Copy, PartialEq)] enum F { Tokenize, Stem, StemText, Bm25, Match }
+#[derive(Clone, Copy, PartialEq)]
+enum F {
+    Tokenize,
+    Stem,
+    StemText,
+    Bm25,
+    Match,
+}
 static NEXT: AtomicU32 = AtomicU32::new(1);
 static HANDLERS: OnceLock<Mutex<HashMap<u32, F>>> = OnceLock::new();
-fn handlers() -> &'static Mutex<HashMap<u32, F>> { HANDLERS.get_or_init(|| Mutex::new(HashMap::new())) }
+fn handlers() -> &'static Mutex<HashMap<u32, F>> {
+    HANDLERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 // Item 4: pragma capability. `create_fts_index` is the only pragma; it returns a
 // SQL script (see core::build_fts_index_sql) that the core runs on the connection.
-#[derive(Clone, Copy, PartialEq)] enum P { CreateFtsIndex }
+#[derive(Clone, Copy, PartialEq)]
+enum P {
+    CreateFtsIndex,
+}
 static PRAGMA_HANDLERS: OnceLock<Mutex<HashMap<u32, P>>> = OnceLock::new();
-fn pragma_handlers() -> &'static Mutex<HashMap<u32, P>> { PRAGMA_HANDLERS.get_or_init(|| Mutex::new(HashMap::new())) }
+fn pragma_handlers() -> &'static Mutex<HashMap<u32, P>> {
+    PRAGMA_HANDLERS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 fn register_pragmas() -> Result<(), types::Duckerror> {
     let cap = runtime::get_capability(types::Capabilitykind::Pragma)
         .ok_or_else(|| types::Duckerror::Internal("no pragma capability".into()))?;
-    let reg = match cap { runtime::Capability::Pragma(r) => r, _ => return Err(types::Duckerror::Internal("bad pragma capability".into())) };
-    let txt = |name: &str| runtime::Funcarg { name: Some(name.into()), logical: types::Logicaltype::Text };
+    let reg = match cap {
+        runtime::Capability::Pragma(r) => r,
+        _ => return Err(types::Duckerror::Internal("bad pragma capability".into())),
+    };
+    let txt = |name: &str| runtime::Funcarg {
+        name: Some(name.into()),
+        logical: types::Logicaltype::Text,
+    };
 
     let h = NEXT.fetch_add(1, Ordering::Relaxed);
-    pragma_handlers().lock().unwrap().insert(h, P::CreateFtsIndex);
+    pragma_handlers()
+        .lock()
+        .unwrap()
+        .insert(h, P::CreateFtsIndex);
     reg.register_call(
         "create_fts_index",
         &[txt("table_name"), txt("id_column"), txt("text_column")],
         &types::Logicaltype::Text,
         runtime::PragmaCallback::new(h),
         Some(&runtime::Extopts {
-            description: Some("build an inverted FTS index + match_bm25 macro over a text column".into()),
+            description: Some(
+                "build an inverted FTS index + match_bm25 macro over a text column".into(),
+            ),
             tags: vec!["fts".into()],
         }),
     )?;
@@ -356,7 +545,10 @@ mod tests {
     }
     #[test]
     fn tokenize_splits_non_alnum() {
-        assert_eq!(core::tokenize_json("The Quick, brown-fox!"), r#"["the","quick","brown","fox"]"#);
+        assert_eq!(
+            core::tokenize_json("The Quick, brown-fox!"),
+            r#"["the","quick","brown","fox"]"#
+        );
     }
     #[test]
     fn stem_text_json_works() {

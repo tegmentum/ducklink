@@ -77,9 +77,7 @@ fn tick(conn: &sql::Connection) -> Result<usize, String> {
     // 1. Read due jobs. `query()` returns stringified cells; cron_due
     //    projects (id, name, schedule, sql, catch_up, next_run_at, last_run_at).
     let rows = conn
-        .query(&format!(
-            "SELECT id, sql FROM cron_due({now});"
-        ))
+        .query(&format!("SELECT id, sql FROM cron_due({now});"))
         .map_err(|e| format!("read due: {e}"))?;
     if rows.is_empty() {
         return Ok(0);
@@ -147,7 +145,8 @@ fn parse_args() -> Result<(String, u64, bool), String> {
             other => return Err(format!("unexpected argument `{other}`")),
         }
     }
-    let db = db.ok_or_else(|| "usage: cron-driver-tool <db> [--interval-secs N] [--once]".to_string())?;
+    let db =
+        db.ok_or_else(|| "usage: cron-driver-tool <db> [--interval-secs N] [--once]".to_string())?;
     Ok((db, interval, once))
 }
 

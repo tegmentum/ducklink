@@ -58,8 +58,8 @@ use std::sync::{
 use wit_bindgen::rt::string::String as WitString;
 use wit_bindgen::rt::vec::Vec as WitVec;
 
-use datalink_extcore::{ExtCore as _, NeutralType, NeutralValue, NullHandling};
 use cache_core::{Config, Policy};
+use datalink_extcore::{ExtCore as _, NeutralType, NeutralValue, NullHandling};
 
 wit_bindgen::generate!({
     path: "./wit",
@@ -241,10 +241,8 @@ fn spi_bootstrap() -> Result<(), String> {
     // still ride on the per-URI lock the resolver takes around the
     // fetch, and this lock is dropped before any DuckDB scalar runs.
     let bootstrap_lock_path = root.join("locks").join("metadata-bootstrap.lock");
-    let _bootstrap_lock: Option<file_lock::LockHandle> = file_lock::acquire_exclusive(
-        &bootstrap_lock_path.to_string_lossy(),
-    )
-    .ok();
+    let _bootstrap_lock: Option<file_lock::LockHandle> =
+        file_lock::acquire_exclusive(&bootstrap_lock_path.to_string_lossy()).ok();
 
     sqlite_spi::open_db(
         db_path
@@ -291,8 +289,7 @@ fn cache_root() -> Result<std::path::PathBuf, String> {
 fn ensure_dirs(root: &std::path::Path) -> Result<(), String> {
     for sub in ["objects", "locks", "tmp"] {
         let d = root.join(sub);
-        std::fs::create_dir_all(&d)
-            .map_err(|e| format!("cache: creating {}: {e}", d.display()))?;
+        std::fs::create_dir_all(&d).map_err(|e| format!("cache: creating {}: {e}", d.display()))?;
     }
     Ok(())
 }
@@ -346,7 +343,11 @@ fn parse_url(url: &str) -> Option<(Scheme, String, String)> {
     if authority.is_empty() {
         return None;
     }
-    let path_with_query = if path.is_empty() { "/".to_string() } else { path.to_string() };
+    let path_with_query = if path.is_empty() {
+        "/".to_string()
+    } else {
+        path.to_string()
+    };
     Some((scheme, authority.to_string(), path_with_query))
 }
 
@@ -380,8 +381,8 @@ fn fetch_http_via_wasi(
     if_none_match: Option<&str>,
     if_modified_since: Option<&str>,
 ) -> Result<HttpResp, String> {
-    let (scheme, authority, path_with_query) = parse_url(url)
-        .ok_or_else(|| format!("cache http backend: not an http(s) URL: {url}"))?;
+    let (scheme, authority, path_with_query) =
+        parse_url(url).ok_or_else(|| format!("cache http backend: not an http(s) URL: {url}"))?;
 
     // Build the request headers. `Fields::from_list` takes
     // `(name, Vec<u8>)` pairs.
@@ -396,9 +397,8 @@ fn fetch_http_via_wasi(
     if let Some(v) = if_modified_since {
         header_entries.push(("if-modified-since".to_string(), v.as_bytes().to_vec()));
     }
-    let fields = Fields::from_list(&header_entries).map_err(|e| {
-        format!("cache http backend: build headers for {url} failed: {e:?}")
-    })?;
+    let fields = Fields::from_list(&header_entries)
+        .map_err(|e| format!("cache http backend: build headers for {url} failed: {e:?}"))?;
 
     let request = OutgoingRequest::new(fields);
     request
@@ -510,8 +510,7 @@ fn fetch_http_via_wasi(
 // the file split.
 // ---------------------------------------------------------------------------
 
-const NOT_YET_SUPPORTED_HINT: &str =
-    "supported schemes in v0: file://, http://, https://, s3://, \
+const NOT_YET_SUPPORTED_HINT: &str = "supported schemes in v0: file://, http://, https://, s3://, \
      az://, azure://, gs://.";
 
 struct CachedEntry {
@@ -733,9 +732,7 @@ fn resolver(cfg: &Config, uri: &str) -> Result<String, String> {
                     // Blob published by a prior run under a different
                     // (cache_name, uri); re-record.
                     let now = compute_now();
-                    let len = std::fs::metadata(&pinned)
-                        .ok()
-                        .map(|m| m.len() as i64);
+                    let len = std::fs::metadata(&pinned).ok().map(|m| m.len() as i64);
                     upsert(
                         &cfg.name,
                         uri,
@@ -777,7 +774,9 @@ fn resolver(cfg: &Config, uri: &str) -> Result<String, String> {
                 // download while we blocked. If so, return its entry.
                 if let Some(now_cached) = lookup(&cfg.name, uri)? {
                     enforce_sha_pin(cfg, &now_cached.content_hash, uri)?;
-                    return Ok(path_to_file_uri(std::path::Path::new(&now_cached.resolved_path)));
+                    return Ok(path_to_file_uri(std::path::Path::new(
+                        &now_cached.resolved_path,
+                    )));
                 }
                 Some(handle)
             }
@@ -794,8 +793,7 @@ fn resolver(cfg: &Config, uri: &str) -> Result<String, String> {
         Some(e) => (e.etag.clone(), e.last_modified.clone()),
         None => (None, None),
     };
-    let resp =
-        fetch_http_via_wasi(uri, if_none_match.as_deref(), if_modified_since.as_deref())?;
+    let resp = fetch_http_via_wasi(uri, if_none_match.as_deref(), if_modified_since.as_deref())?;
     let now = compute_now();
 
     if resp.status == 304 {
@@ -978,7 +976,13 @@ fn strip_s3_keys(s: &str) -> Result<String, String> {
     let mut v: serde_json::Value =
         serde_json::from_str(s).map_err(|e| format!("cache s3 config: {e}"))?;
     if let Some(obj) = v.as_object_mut() {
-        for k in ["endpoint", "region", "version_id", "anonymous", "path_style"] {
+        for k in [
+            "endpoint",
+            "region",
+            "version_id",
+            "anonymous",
+            "path_style",
+        ] {
             obj.remove(k);
         }
         if obj.is_empty() {
@@ -1068,7 +1072,9 @@ fn resolve_credentials(p: &S3Params) -> s3_types::Credentials {
     }
     let ak = std::env::var("AWS_ACCESS_KEY_ID").unwrap_or_default();
     let sk = std::env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_default();
-    let token = std::env::var("AWS_SESSION_TOKEN").ok().filter(|s| !s.is_empty());
+    let token = std::env::var("AWS_SESSION_TOKEN")
+        .ok()
+        .filter(|s| !s.is_empty());
     s3_types::Credentials {
         access_key_id: ak,
         secret_access_key: sk,
@@ -1085,12 +1091,7 @@ fn resolve_credentials(p: &S3Params) -> s3_types::Credentials {
 ///      row (`revalidate`-style behaviour).
 ///   2. Otherwise `get-object`, hash the body, publish to the
 ///      content-addressed store, and upsert the catalog row.
-fn resolve_s3(
-    cfg: &Config,
-    params: S3Params,
-    uri: &str,
-    scheme: &str,
-) -> Result<String, String> {
+fn resolve_s3(cfg: &Config, params: S3Params, uri: &str, scheme: &str) -> Result<String, String> {
     let (bucket, key) = parse_s3_uri(uri)?;
     let region = resolve_region(&params);
     let endpoint_url = resolve_endpoint(&params, &region);
@@ -1122,8 +1123,16 @@ fn resolve_s3(
                     let now = compute_now();
                     let len = std::fs::metadata(&pinned).ok().map(|m| m.len() as i64);
                     upsert(
-                        &cfg.name, uri, scheme, None, None, expected, len,
-                        &pinned.to_string_lossy(), &now, None,
+                        &cfg.name,
+                        uri,
+                        scheme,
+                        None,
+                        None,
+                        expected,
+                        len,
+                        &pinned.to_string_lossy(),
+                        &now,
+                        None,
                     )?;
                 }
                 return Ok(path_to_file_uri(&pinned));
@@ -1141,7 +1150,9 @@ fn resolve_s3(
             Ok(handle) => {
                 if let Some(now_cached) = lookup(&cfg.name, uri)? {
                     enforce_sha_pin(cfg, &now_cached.content_hash, uri)?;
-                    return Ok(path_to_file_uri(std::path::Path::new(&now_cached.resolved_path)));
+                    return Ok(path_to_file_uri(std::path::Path::new(
+                        &now_cached.resolved_path,
+                    )));
                 }
                 Some(handle)
             }
@@ -1179,7 +1190,9 @@ fn resolve_s3(
                 // cached blob without downloading.
                 let now = compute_now();
                 upsert(
-                    &cfg.name, uri, scheme,
+                    &cfg.name,
+                    uri,
+                    scheme,
                     head_etag.as_deref(),
                     head_last_modified.as_deref(),
                     &existing_row.content_hash,
@@ -1243,18 +1256,16 @@ fn resolve_s3(
             }
         }
     }
-    let etag = got
-        .metadata
-        .etag
-        .clone()
-        .or(head_etag);
+    let etag = got.metadata.etag.clone().or(head_etag);
     let last_modified = got
         .metadata
         .last_modified
         .map(|s| s.to_string())
         .or(head_last_modified);
     upsert(
-        &cfg.name, uri, scheme,
+        &cfg.name,
+        uri,
+        scheme,
         etag.as_deref(),
         last_modified.as_deref(),
         &hash,
@@ -1362,7 +1373,13 @@ fn strip_azure_keys(s: &str) -> Result<String, String> {
     let mut v: serde_json::Value =
         serde_json::from_str(s).map_err(|e| format!("cache azure config: {e}"))?;
     if let Some(obj) = v.as_object_mut() {
-        for k in ["endpoint", "account", "shared_key", "sas_token", "anonymous"] {
+        for k in [
+            "endpoint",
+            "account",
+            "shared_key",
+            "sas_token",
+            "anonymous",
+        ] {
             obj.remove(k);
         }
         if obj.is_empty() {
@@ -1430,10 +1447,7 @@ fn resolve_azure_account(p: &AzureParams) -> Option<String> {
 /// resolved account name. Detects the Azurite emulator by the shape of
 /// the endpoint URL so the signer can canonicalize the resource with
 /// the account double-prefix Azurite requires.
-fn resolve_azure_endpoint(
-    p: &AzureParams,
-    account: &str,
-) -> blob_types::EndpointConfig {
+fn resolve_azure_endpoint(p: &AzureParams, account: &str) -> blob_types::EndpointConfig {
     let (url, emulator) = if let Some(e) = &p.endpoint {
         // Heuristic: any endpoint pointing at a loopback / dev host
         // is an emulator. Matches the Azurite default binding and the
@@ -1469,10 +1483,7 @@ fn resolve_azure_endpoint(
 ///   1. anonymous (skip both key + SAS)
 ///   2. SAS token (config field OR AZURE_STORAGE_SAS_TOKEN env)
 ///   3. SharedKey (config field OR AZURE_STORAGE_KEY env)
-fn resolve_azure_credentials(
-    p: &AzureParams,
-    account: &str,
-) -> blob_types::Credentials {
+fn resolve_azure_credentials(p: &AzureParams, account: &str) -> blob_types::Credentials {
     if p.anonymous {
         return blob_types::Credentials {
             account: account.to_string(),
@@ -1552,8 +1563,16 @@ fn resolve_azure(
                     let now = compute_now();
                     let len = std::fs::metadata(&pinned).ok().map(|m| m.len() as i64);
                     upsert(
-                        &cfg.name, uri, scheme, None, None, expected, len,
-                        &pinned.to_string_lossy(), &now, None,
+                        &cfg.name,
+                        uri,
+                        scheme,
+                        None,
+                        None,
+                        expected,
+                        len,
+                        &pinned.to_string_lossy(),
+                        &now,
+                        None,
                     )?;
                 }
                 return Ok(path_to_file_uri(&pinned));
@@ -1571,7 +1590,9 @@ fn resolve_azure(
             Ok(handle) => {
                 if let Some(now_cached) = lookup(&cfg.name, uri)? {
                     enforce_sha_pin(cfg, &now_cached.content_hash, uri)?;
-                    return Ok(path_to_file_uri(std::path::Path::new(&now_cached.resolved_path)));
+                    return Ok(path_to_file_uri(std::path::Path::new(
+                        &now_cached.resolved_path,
+                    )));
                 }
                 Some(handle)
             }
@@ -1594,7 +1615,9 @@ fn resolve_azure(
         if existing_row.etag.as_deref() == Some(cur.as_str()) {
             let now = compute_now();
             upsert(
-                &cfg.name, uri, scheme,
+                &cfg.name,
+                uri,
+                scheme,
                 head_etag.as_deref(),
                 head_last_modified.as_deref(),
                 &existing_row.content_hash,
@@ -1611,8 +1634,13 @@ fn resolve_azure(
     }
 
     // Step 2: GET.
-    let got = blob_base::get_blob(&endpoint, &creds, &container, &blob_name, None)
-        .map_err(|e| format!("cache azure backend: get {uri}: {}", azure_error_to_string(&e)))?;
+    let got =
+        blob_base::get_blob(&endpoint, &creds, &container, &blob_name, None).map_err(|e| {
+            format!(
+                "cache azure backend: get {uri}: {}",
+                azure_error_to_string(&e)
+            )
+        })?;
     let body_vec: Vec<u8> = got.body.to_vec();
     let now = compute_now();
     let hash = cache_core::sha256_hex(&body_vec);
@@ -1655,7 +1683,9 @@ fn resolve_azure(
         .map(|s| s.to_string())
         .or(head_last_modified);
     upsert(
-        &cfg.name, uri, scheme,
+        &cfg.name,
+        uri,
+        scheme,
         etag.as_deref(),
         last_modified.as_deref(),
         &hash,
@@ -1877,17 +1907,14 @@ fn load_gcs_service_account_json(p: &GcsParams) -> Result<Option<String>, String
         return Ok(Some(s.clone()));
     }
     if let Some(path) = &p.service_account_path {
-        let s = std::fs::read_to_string(path).map_err(|e| {
-            format!("cache gcs backend: reading service_account_path {path}: {e}")
-        })?;
+        let s = std::fs::read_to_string(path)
+            .map_err(|e| format!("cache gcs backend: reading service_account_path {path}: {e}"))?;
         return Ok(Some(s));
     }
     if let Ok(path) = std::env::var("GOOGLE_APPLICATION_CREDENTIALS") {
         if !path.is_empty() {
             let s = std::fs::read_to_string(&path).map_err(|e| {
-                format!(
-                    "cache gcs backend: reading GOOGLE_APPLICATION_CREDENTIALS={path}: {e}"
-                )
+                format!("cache gcs backend: reading GOOGLE_APPLICATION_CREDENTIALS={path}: {e}")
             })?;
             return Ok(Some(s));
         }
@@ -1900,14 +1927,12 @@ fn load_gcs_service_account_json(p: &GcsParams) -> Result<Option<String>, String
 /// Scopes default to devstorage.read_only when the caller doesn't
 /// specify (matches gcs-wasm's own default; cache reads only need
 /// read scope).
-fn parse_gcs_service_account(
-    sa_json: &str,
-) -> Result<gcs_blob_types::ServiceAccount, String> {
+fn parse_gcs_service_account(sa_json: &str) -> Result<gcs_blob_types::ServiceAccount, String> {
     let v: serde_json::Value = serde_json::from_str(sa_json)
         .map_err(|e| format!("cache gcs backend: parsing service-account JSON: {e}"))?;
-    let obj = v.as_object().ok_or_else(|| {
-        String::from("cache gcs backend: service-account JSON must be an object")
-    })?;
+    let obj = v
+        .as_object()
+        .ok_or_else(|| String::from("cache gcs backend: service-account JSON must be an object"))?;
     let email = obj
         .get("client_email")
         .and_then(|v| v.as_str())
@@ -1918,9 +1943,7 @@ fn parse_gcs_service_account(
     let private_key_pem = obj
         .get("private_key")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            String::from("cache gcs backend: service-account JSON missing private_key")
-        })?
+        .ok_or_else(|| String::from("cache gcs backend: service-account JSON missing private_key"))?
         .to_string();
     let token_uri = obj
         .get("token_uri")
@@ -1952,8 +1975,12 @@ fn mint_or_cached_gcs_token(
             }
         }
     }
-    let minted = gcs_blob_oauth::mint_access_token(sa)
-        .map_err(|e| format!("cache gcs backend: mint access token: {}", gcs_error_to_string(&e)))?;
+    let minted = gcs_blob_oauth::mint_access_token(sa).map_err(|e| {
+        format!(
+            "cache gcs backend: mint access token: {}",
+            gcs_error_to_string(&e)
+        )
+    })?;
     {
         let mut cache = gcs_token_cache().lock().expect("poisoned");
         cache.insert(
@@ -2013,12 +2040,7 @@ fn resolve_gcs_credentials(p: &GcsParams) -> Result<gcs_blob_types::Credentials,
 /// `.metadata.last_modified` — no more hand-parsing of the header
 /// list — leaving the three backend harvest paths structurally
 /// identical.
-fn resolve_gcs(
-    cfg: &Config,
-    params: GcsParams,
-    uri: &str,
-    scheme: &str,
-) -> Result<String, String> {
+fn resolve_gcs(cfg: &Config, params: GcsParams, uri: &str, scheme: &str) -> Result<String, String> {
     let (bucket, key) = parse_gcs_uri(uri)?;
     let endpoint = resolve_gcs_endpoint(&params);
     let creds = resolve_gcs_credentials(&params)?;
@@ -2049,8 +2071,16 @@ fn resolve_gcs(
                     let now = compute_now();
                     let len = std::fs::metadata(&pinned).ok().map(|m| m.len() as i64);
                     upsert(
-                        &cfg.name, uri, scheme, None, None, expected, len,
-                        &pinned.to_string_lossy(), &now, None,
+                        &cfg.name,
+                        uri,
+                        scheme,
+                        None,
+                        None,
+                        expected,
+                        len,
+                        &pinned.to_string_lossy(),
+                        &now,
+                        None,
                     )?;
                 }
                 return Ok(path_to_file_uri(&pinned));
@@ -2067,7 +2097,9 @@ fn resolve_gcs(
             Ok(handle) => {
                 if let Some(now_cached) = lookup(&cfg.name, uri)? {
                     enforce_sha_pin(cfg, &now_cached.content_hash, uri)?;
-                    return Ok(path_to_file_uri(std::path::Path::new(&now_cached.resolved_path)));
+                    return Ok(path_to_file_uri(std::path::Path::new(
+                        &now_cached.resolved_path,
+                    )));
                 }
                 Some(handle)
             }
@@ -2091,7 +2123,9 @@ fn resolve_gcs(
         if existing_row.etag.as_deref() == Some(cur.as_str()) {
             let now = compute_now();
             upsert(
-                &cfg.name, uri, scheme,
+                &cfg.name,
+                uri,
+                scheme,
                 head_etag.as_deref(),
                 head_last_modified.as_deref(),
                 &existing_row.content_hash,
@@ -2163,7 +2197,9 @@ fn resolve_gcs(
     let etag = get_etag.or(head_etag);
     let last_modified = get_last_modified.or(head_last_modified);
     upsert(
-        &cfg.name, uri, scheme,
+        &cfg.name,
+        uri,
+        scheme,
         etag.as_deref(),
         last_modified.as_deref(),
         &hash,
@@ -2304,8 +2340,7 @@ fn cache_scalar(
         .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
     let decl = &cache_core::Core::DECLS[idx];
     let neutral: Vec<NeutralValue> = args.iter().map(to_neutral).collect();
-    if matches!(decl.null_handling, NullHandling::Propagate)
-        && neutral.iter().any(|v| v.is_null())
+    if matches!(decl.null_handling, NullHandling::Propagate) && neutral.iter().any(|v| v.is_null())
     {
         return Ok(types::Duckvalue::Null);
     }

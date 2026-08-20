@@ -135,7 +135,11 @@ fn insert_into_attached_dispatches_to_storage_write() {
             ),
         ],
     );
-    assert!(create.status.success(), "{}", dump("CREATE TABLE failed", &create));
+    assert!(
+        create.status.success(),
+        "{}",
+        dump("CREATE TABLE failed", &create)
+    );
 
     let ins = run_ducklink(
         &bin,
@@ -236,7 +240,11 @@ fn update_attached_via_where_dispatches_after_rowid_prescan() {
         ],
     );
     drop_table(&bin, &root, &dsn, &table);
-    assert!(sel.status.success(), "{}", dump("SELECT after UPDATE failed", &sel));
+    assert!(
+        sel.status.success(),
+        "{}",
+        dump("SELECT after UPDATE failed", &sel)
+    );
     let stdout = String::from_utf8_lossy(&sel.stdout);
     assert!(
         stdout.contains("updated"),
@@ -302,7 +310,11 @@ fn delete_attached_via_where_dispatches_after_rowid_prescan() {
         ],
     );
     drop_table(&bin, &root, &dsn, &table);
-    assert!(cnt.status.success(), "{}", dump("SELECT COUNT after DELETE failed", &cnt));
+    assert!(
+        cnt.status.success(),
+        "{}",
+        dump("SELECT COUNT after DELETE failed", &cnt)
+    );
     let stdout = String::from_utf8_lossy(&cnt.stdout);
     // The count row must be 0. Look for "| 0 |" (box output) or a bare "0"
     // line (csv). Rejecting substring "100" is too loose since the DSN may

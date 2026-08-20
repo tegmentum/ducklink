@@ -295,8 +295,7 @@ fn mosaic_scalar(
         .ok_or_else(|| types::Duckerror::Internal("unknown scalar handle".into()))?;
     let decl = &Core::DECLS[idx];
     let neutral: std::vec::Vec<NeutralValue> = args.iter().map(to_neutral).collect();
-    if matches!(decl.null_handling, NullHandling::Propagate)
-        && neutral.iter().any(|v| v.is_null())
+    if matches!(decl.null_handling, NullHandling::Propagate) && neutral.iter().any(|v| v.is_null())
     {
         return Ok(types::Duckvalue::Null);
     }

@@ -181,7 +181,10 @@ fn has_bridge_and_bridge_path_wire_the_load_time_branch() {
         .sub_ext_bridge_paths
         .insert("postgis_core".to_string(), bridge_path.clone());
     assert!(loader.has_bridge("postgis_core"));
-    assert_eq!(loader.bridge_path("postgis_core"), Some(bridge_path.as_path()));
+    assert_eq!(
+        loader.bridge_path("postgis_core"),
+        Some(bridge_path.as_path())
+    );
     assert!(!loader.has_bridge("mobilitydb"));
     assert_eq!(loader.bridge_path("mobilitydb"), None);
 }

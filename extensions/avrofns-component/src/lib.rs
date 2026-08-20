@@ -109,10 +109,7 @@ impl callback_dispatch::Guest for Extension {
     ) -> Result<Option<types::Duckvalue>, types::Duckerror> {
         Err(types::Duckerror::Unsupported("avrofns: no pragmas".into()))
     }
-    fn call_cast(
-        _h: u32,
-        _v: types::Duckvalue,
-    ) -> Result<types::Duckvalue, types::Duckerror> {
+    fn call_cast(_h: u32, _v: types::Duckvalue) -> Result<types::Duckvalue, types::Duckerror> {
         Err(types::Duckerror::Unsupported("avrofns: no casts".into()))
     }
 }
@@ -361,8 +358,14 @@ fn register_all() -> Result<(), types::Duckerror> {
         let h = NEXT.fetch_add(1, Ordering::Relaxed);
         handlers().lock().unwrap().insert(h, T::Schema);
         let columns = vec![
-            types::Columndef { name: "field".into(), logical: types::Logicaltype::Text },
-            types::Columndef { name: "type".into(), logical: types::Logicaltype::Text },
+            types::Columndef {
+                name: "field".into(),
+                logical: types::Logicaltype::Text,
+            },
+            types::Columndef {
+                name: "type".into(),
+                logical: types::Logicaltype::Text,
+            },
         ];
         let opts = runtime::Extopts {
             description: Some(
@@ -384,9 +387,18 @@ fn register_all() -> Result<(), types::Duckerror> {
         let h = NEXT.fetch_add(1, Ordering::Relaxed);
         handlers().lock().unwrap().insert(h, T::Read);
         let columns = vec![
-            types::Columndef { name: "row_no".into(), logical: types::Logicaltype::Int64 },
-            types::Columndef { name: "col".into(), logical: types::Logicaltype::Text },
-            types::Columndef { name: "val".into(), logical: types::Logicaltype::Text },
+            types::Columndef {
+                name: "row_no".into(),
+                logical: types::Logicaltype::Int64,
+            },
+            types::Columndef {
+                name: "col".into(),
+                logical: types::Logicaltype::Text,
+            },
+            types::Columndef {
+                name: "val".into(),
+                logical: types::Logicaltype::Text,
+            },
         ];
         let opts = runtime::Extopts {
             description: Some(

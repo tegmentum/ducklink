@@ -33,7 +33,10 @@ mod tests {
     use super::*;
 
     fn nv<'a>(op: &'a str, params: &'a str) -> NodeView<'a> {
-        NodeView { op_type: op, params_json: params }
+        NodeView {
+            op_type: op,
+            params_json: params,
+        }
     }
 
     #[test]
@@ -44,8 +47,14 @@ mod tests {
 
     #[test]
     fn declines_other_tables_and_ops() {
-        assert!(!matches_optme(&[nv("LOGICAL_GET", "{\"table\":\"other\"}")]));
-        assert!(!matches_optme(&[nv("LOGICAL_PROJECTION", "{\"table\":\"optme\"}")]));
+        assert!(!matches_optme(&[nv(
+            "LOGICAL_GET",
+            "{\"table\":\"other\"}"
+        )]));
+        assert!(!matches_optme(&[nv(
+            "LOGICAL_PROJECTION",
+            "{\"table\":\"optme\"}"
+        )]));
         assert!(!matches_optme(&[]));
     }
 

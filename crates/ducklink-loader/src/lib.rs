@@ -88,10 +88,7 @@ impl DispatchGuest for Component {
         Err(unreachable_dispatch())
     }
 
-    fn call_pragma(
-        _handle: u32,
-        _args: Vec<Duckvalue>,
-    ) -> Result<Option<Duckvalue>, Duckerror> {
+    fn call_pragma(_handle: u32, _args: Vec<Duckvalue>) -> Result<Option<Duckvalue>, Duckerror> {
         Err(unreachable_dispatch())
     }
 
