@@ -17,8 +17,7 @@ use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use wasmtime::component::{Component, Linker, Resource, ResourceTable};
 use wasmtime::{AsContextMut, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
-use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView};
-use wasmtime_wasi_http::WasiHttpCtx;
+use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 use crate::duckdb_extension_bindings::duckdb::extension::{
     arrow_ext as extension_arrow_ext, catalog as extension_catalog,

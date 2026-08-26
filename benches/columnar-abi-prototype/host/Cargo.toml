@@ -5,8 +5,8 @@ edition = "2021"
 publish = false
 
 [dependencies]
-wasmtime = { version = "47.0.2", features = ["component-model", "cache"] }
-wasmtime-wasi = "47.0.2"
+wasmtime = { version = "48.0.0", features = ["component-model", "cache"] }
+wasmtime-wasi = "48.0.0"
 anyhow = "1"
 
 [profile.release]

@@ -15,7 +15,7 @@ path = "src/main.rs"
 # capture model. Same loader the Direction-1 host and the Direction-2 native
 # extension use, so signatures match what gets registered.
 ducklink-runtime = { path = "../../crates/ducklink-runtime" }
-wasmtime = { version = "47.0.2", features = ["component-model", "cache"] }
-wasmtime-wasi = "47.0.2"
+wasmtime = { version = "48.0.0", features = ["component-model", "cache"] }
+wasmtime-wasi = "48.0.0"
 anyhow = "1"
 serde_json = { version = "1", features = ["preserve_order"] }
