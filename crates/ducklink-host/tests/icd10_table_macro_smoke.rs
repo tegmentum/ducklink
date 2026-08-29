@@ -76,68 +76,95 @@ fn run_icd10_variant(variant: &str, sql: &str) -> anyhow::Result<String> {
     Ok(stdout)
 }
 
+/// Sentinel-string pattern: each macro query returns a single `status`
+/// row that resolves to `<TAG>_OK` when the macro produced the expected
+/// shape and content, or `<TAG>_MISSING` otherwise. String matching on
+/// the sentinel is bulletproof against DuckDB CLI box-drawing quirks and
+/// distinguishes "bound but empty" from "returns real rows" — a bare
+/// `COUNT(*) AS n` assertion passes on both.
+fn assert_ok(stdout: &str, ok_tag: &str) {
+    assert!(
+        stdout.contains(ok_tag),
+        "expected `{ok_tag}` in stdout, got:\n{stdout}"
+    );
+}
+
 #[test]
 fn icd10_ancestors_table_macro_end_to_end() -> anyhow::Result<()> {
-    let stdout = run_icd10_variant("cm", "SELECT * FROM icd10.ancestors('E11.9') LIMIT 20;")?;
+    // E11 (block leaf), E08-E13 (block), 4 (chapter root) are all real
+    // ancestors of E11.9 in ICD-10-CM's parent_code hierarchy.
+    let stdout = run_icd10_variant(
+        "cm",
+        "SELECT CASE \
+            WHEN COUNT(*) FILTER (WHERE code = 'E11') > 0 \
+             AND COUNT(*) FILTER (WHERE code = 'E08-E13') > 0 \
+            THEN 'ANCESTORS_OK' ELSE 'ANCESTORS_MISSING' END AS status \
+         FROM icd10.ancestors('E11.9');",
+    )?;
     if stdout.is_empty() {
         return Ok(());
     }
-    assert!(
-        stdout.contains("E11") || stdout.contains("code"),
-        "expected ancestor rows (e.g. E11) in stdout, got:\n{stdout}"
-    );
+    assert_ok(&stdout, "ANCESTORS_OK");
     Ok(())
 }
 
 #[test]
 fn icd10_descendants_table_macro_end_to_end() -> anyhow::Result<()> {
-    // `E11` is the Type-2 diabetes block header — has many descendants on CM.
-    // COUNT(*) form keeps the assertion stable even if row counts drift year-over-year.
-    let stdout = run_icd10_variant("cm", "SELECT COUNT(*) AS n FROM icd10.descendants('E11');")?;
+    // E11.0 (Type 2 with hyperosmolarity) and E11.9 (Type 2 without
+    // complications) are stable direct children of E11 in ICD-10-CM.
+    let stdout = run_icd10_variant(
+        "cm",
+        "SELECT CASE \
+            WHEN COUNT(*) FILTER (WHERE code = 'E11.0') > 0 \
+             AND COUNT(*) FILTER (WHERE code = 'E11.9') > 0 \
+            THEN 'DESCENDANTS_OK' ELSE 'DESCENDANTS_MISSING' END AS status \
+         FROM icd10.descendants('E11');",
+    )?;
     if stdout.is_empty() {
         return Ok(());
     }
-    // Any numeric output beats the header alone; empty descendants would still
-    // print `0` under the `n` header.
-    assert!(
-        stdout.contains('n'),
-        "expected `n` column header in COUNT(*) output, got:\n{stdout}"
-    );
+    assert_ok(&stdout, "DESCENDANTS_OK");
     Ok(())
 }
 
 #[test]
 fn icd10_pcs_axes_table_macro_end_to_end() -> anyhow::Result<()> {
-    // Pull an arbitrary code that actually exists in the loaded pcs_axes table
-    // rather than hard-coding one — decouples the test from PCS-year drift.
+    // Self-select any real PCS code (decouples from PCS-year drift), assert
+    // the macro returns exactly the one row the pcs_axes PK guarantees and
+    // that every axis label came through non-null.
     let stdout = run_icd10_variant(
         "pcs",
-        "SELECT COUNT(*) AS n FROM icd10.pcs_axes((SELECT code FROM main.pcs_axes LIMIT 1));",
+        "SELECT CASE \
+            WHEN COUNT(*) = 1 \
+             AND MIN(section) IS NOT NULL \
+             AND MIN(body_system) IS NOT NULL \
+             AND MIN(root_operation) IS NOT NULL \
+            THEN 'AXES_OK' ELSE 'AXES_MISSING' END AS status \
+         FROM icd10.pcs_axes((SELECT code FROM main.pcs_axes LIMIT 1));",
     )?;
     if stdout.is_empty() {
         return Ok(());
     }
-    assert!(
-        stdout.contains('n'),
-        "expected `n` column header in COUNT(*) output, got:\n{stdout}"
-    );
+    assert_ok(&stdout, "AXES_OK");
     Ok(())
 }
 
 #[test]
 fn icd10_who_xrefs_table_macro_end_to_end() -> anyhow::Result<()> {
-    // Same self-selecting trick as pcs_axes — pull a code from who_metadata
-    // that actually has an xref, so the macro exercises the UNNEST + JOIN path.
+    // Self-select a code that actually has xrefs, then assert the macro
+    // walked UNNEST + JOIN concepts and returned at least one concept-shaped
+    // partner row with a populated display.
     let stdout = run_icd10_variant(
         "who",
-        "SELECT COUNT(*) AS n FROM icd10.who_xrefs((SELECT code FROM main.who_metadata WHERE xref_codes IS NOT NULL LIMIT 1));",
+        "SELECT CASE \
+            WHEN COUNT(*) > 0 AND MIN(display) IS NOT NULL \
+            THEN 'XREFS_OK' ELSE 'XREFS_MISSING' END AS status \
+         FROM icd10.who_xrefs(( \
+            SELECT code FROM main.who_metadata WHERE xref_codes IS NOT NULL LIMIT 1));",
     )?;
     if stdout.is_empty() {
         return Ok(());
     }
-    assert!(
-        stdout.contains('n'),
-        "expected `n` column header in COUNT(*) output, got:\n{stdout}"
-    );
+    assert_ok(&stdout, "XREFS_OK");
     Ok(())
 }

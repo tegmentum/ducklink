@@ -48,10 +48,14 @@ fn snomed_subsumed_by_table_macro_end_to_end() -> anyhow::Result<()> {
         .expect("snomed_ct.duckdb has a parent directory");
     let preopens = [(db_dir, ".")];
 
-    // Self-select an arbitrary child concept from is_a_edges so the test is
-    // stable across SNOMED CT release cycles.
-    let sql = "SELECT COUNT(*) AS n FROM snomed.subsumed_by(\
-        (SELECT child FROM is_a_edges LIMIT 1));";
+    // Self-select any real child SCTID (which by definition has at least one
+    // supertype edge) and assert the recursive walk returned real rows with
+    // populated `sctid` — a bare COUNT(*) would pass even on the potential
+    // `concept_id` parameter-shadow case that d0af965 defended against.
+    let sql = "SELECT CASE \
+            WHEN COUNT(*) > 0 AND MIN(sctid) IS NOT NULL \
+            THEN 'SUBSUMED_OK' ELSE 'SUBSUMED_MISSING' END AS status \
+        FROM snomed.subsumed_by((SELECT child FROM is_a_edges LIMIT 1));";
 
     let args = [
         "duckdb-cli",
@@ -77,8 +81,8 @@ fn snomed_subsumed_by_table_macro_end_to_end() -> anyhow::Result<()> {
     }
 
     assert!(
-        stdout.contains('n'),
-        "expected `n` column header in COUNT(*) output, got:\n{stdout}"
+        stdout.contains("SUBSUMED_OK"),
+        "expected `SUBSUMED_OK` sentinel in stdout, got:\n{stdout}"
     );
     Ok(())
 }

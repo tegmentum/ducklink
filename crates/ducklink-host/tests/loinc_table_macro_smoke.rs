@@ -43,10 +43,15 @@ fn loinc_hierarchy_table_macro_end_to_end() -> anyhow::Result<()> {
         .expect("loinc.duckdb has a parent directory");
     let preopens = [(db_dir, ".")];
 
-    // Self-select an arbitrary leaf LOINC that has at least one ancestor edge
-    // — decouples the test from LOINC-release drift on any specific code.
-    let sql = "SELECT COUNT(*) AS n FROM loinc.hierarchy(\
-        (SELECT child FROM hierarchy_edges LIMIT 1));";
+    // Self-select any child LOINC (which by definition has at least one
+    // parent edge) and assert the macro walked the recursive CTE, joined
+    // concepts + multi_axial_hierarchy, and returned real rows with
+    // populated `loinc_num` — a bare COUNT(*) would pass on the empty case
+    // that shipped the parameter-shadow bug (ba4c389).
+    let sql = "SELECT CASE \
+            WHEN COUNT(*) > 0 AND MIN(loinc_num) IS NOT NULL \
+            THEN 'HIERARCHY_OK' ELSE 'HIERARCHY_MISSING' END AS status \
+        FROM loinc.hierarchy((SELECT child FROM hierarchy_edges LIMIT 1));";
 
     let args = [
         "duckdb-cli",
@@ -72,8 +77,8 @@ fn loinc_hierarchy_table_macro_end_to_end() -> anyhow::Result<()> {
     }
 
     assert!(
-        stdout.contains('n'),
-        "expected `n` column header in COUNT(*) output, got:\n{stdout}"
+        stdout.contains("HIERARCHY_OK"),
+        "expected `HIERARCHY_OK` sentinel in stdout, got:\n{stdout}"
     );
     Ok(())
 }

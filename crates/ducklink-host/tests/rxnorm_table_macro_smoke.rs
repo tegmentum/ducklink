@@ -44,10 +44,14 @@ fn rxnorm_tty_class_table_macro_end_to_end() -> anyhow::Result<()> {
         .expect("rxnorm.duckdb has a parent directory");
     let preopens = [(db_dir, ".")];
 
-    // Self-select an arbitrary rxcui from the concepts table so the test is
-    // stable across RxNorm monthly releases.
-    let sql = "SELECT COUNT(*) AS n FROM rxnorm.tty_class(\
-        (SELECT rxcui FROM concepts LIMIT 1));";
+    // Self-select any real rxcui and assert the macro returned the single
+    // concept row the `concepts` view guarantees with populated `tty` and
+    // `name` — a bare COUNT(*) would pass on the shadow-bug case where the
+    // WHERE filter got rewritten and the macro returned zero rows.
+    let sql = "SELECT CASE \
+            WHEN COUNT(*) > 0 AND MIN(tty) IS NOT NULL AND MIN(name) IS NOT NULL \
+            THEN 'TTY_OK' ELSE 'TTY_MISSING' END AS status \
+        FROM rxnorm.tty_class((SELECT rxcui FROM concepts LIMIT 1));";
 
     let args = [
         "duckdb-cli",
@@ -73,8 +77,8 @@ fn rxnorm_tty_class_table_macro_end_to_end() -> anyhow::Result<()> {
     }
 
     assert!(
-        stdout.contains('n'),
-        "expected `n` column header in COUNT(*) output, got:\n{stdout}"
+        stdout.contains("TTY_OK"),
+        "expected `TTY_OK` sentinel in stdout, got:\n{stdout}"
     );
     Ok(())
 }
