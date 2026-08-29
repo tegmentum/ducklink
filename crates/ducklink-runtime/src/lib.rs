@@ -159,7 +159,11 @@ const CONTRACT_PACKAGE: &str = "duckdb:extension";
 /// Thin wrapper over the shared [`datalink_contract::component_contract_major`]
 /// pinned to this host's [`CONTRACT_PACKAGE`].
 pub fn component_contract_major(engine: &Engine, component: &Component) -> Option<u64> {
-    datalink_contract::component_contract_major(engine, component, CONTRACT_PACKAGE)
+    // Phase 6.1b — datalink-contract migrated to
+    // `(&CompiledComponent, &str)`; bridge the wasmtime types through
+    // our local adapter. See contract_guard_bridge.rs.
+    let wrapped = contract_guard_bridge::wrap_wasmtime_component(engine, component, "");
+    datalink_contract::component_contract_major(&wrapped, CONTRACT_PACKAGE)
 }
 
 /// The `duckdb:extension` contract `(major, minor)` a component targets, read
@@ -175,7 +179,9 @@ pub fn component_contract_major(engine: &Engine, component: &Component) -> Optio
 /// [`component_contract_major`]. Lifted into `datalink-contract` so sqlink
 /// inherits the same minor story from the one shared guard.
 pub fn component_contract_version(engine: &Engine, component: &Component) -> Option<(u64, u64)> {
-    datalink_contract::component_contract_version(engine, component, CONTRACT_PACKAGE)
+    // Phase 6.1b — same bridge pattern as component_contract_major.
+    let wrapped = contract_guard_bridge::wrap_wasmtime_component(engine, component, "");
+    datalink_contract::component_contract_version(&wrapped, CONTRACT_PACKAGE)
 }
 
 /// Loader pre-check: reject a component whose `duckdb:extension` contract major
@@ -359,6 +365,11 @@ mod contract_guard_tests {
 pub use datalink_dynlink;
 
 pub mod compose_dynlink;
+
+// Phase 6.1b bridge — see contract_guard_bridge.rs header for the
+// design. Private; ducklink's public contract-guard wrappers use it
+// internally to delegate to the migrated datalink-contract API.
+mod contract_guard_bridge;
 pub use compose_dynlink::{ProviderPreopen, ProviderRegistry};
 
 pub mod extension;
