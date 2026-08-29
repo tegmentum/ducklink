@@ -38,7 +38,7 @@ use anyhow::Result;
 use wasmtime::component::{Component, Linker, Resource, ResourceTable};
 use wasmtime::{AsContextMut, Engine, Store};
 use wasmtime_wasi::p2::{self, pipe::MemoryInputPipe};
-use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
+use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
 use crate::driver_tool_bindings::duckdb::driver::exec as driver_exec_bindings;
 use crate::driver_tool_bindings::{CronDriverTool, CronDriverToolPre};
@@ -280,7 +280,7 @@ fn build_driver_wasi(args: &[String], preopens: &[(&Path, &str)]) -> Result<Wasi
     builder.allow_ip_name_lookup(true);
     for (host, guest) in preopens {
         builder
-            .preopened_dir(host, guest, DirPerms::all(), FilePerms::all())
+            .preopened_dir(host, guest, FsPerms::ReadWrite)
             .map_err(|e| {
                 e.context(format!(
                     "failed to preopen directory {} as {} for cron-driver-tool",

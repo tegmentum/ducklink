@@ -63,7 +63,7 @@ dirs = "5"
 #     adapter (allow-all / deny-all / per-name); behavior is unchanged.
 #     (datalink-prefix was retired here in commit a048b7a — workspace now
 #     adopts the extension v5.0.0 prefix.name model via ducklink_prefix.)
-datalink-policy = { git = "https://github.com/tegmentum/datalink.git", rev = "c10378e9b15e45ee4a6338812d44509462baf99a" }
+datalink-policy = { git = "https://github.com/tegmentum/datalink.git", rev = "3175f1f3e29e96cdb22ad64a6c26627111dff364" }
 # Bug 4b: the host-side rusqlite dep is gone. sqlitewasm now self-persists
 # through wasivfs (sqlite-lib composed in via `wac plug`), so the host never
 # re-opens the DSN file itself — writes cross the wasm boundary, hit the

@@ -31,12 +31,12 @@ hex = "0.4"
 # former inline `component_contract_major`/`check_component_contract` so the
 # same guard backs both the ducklink and sqlink hosts (datalink is public).
 # The witcanon CONTRACT_DIGEST (above) stays per-repo; this is the @MAJOR proxy.
-datalink-contract = { git = "https://github.com/tegmentum/datalink.git", rev = "c10378e9b15e45ee4a6338812d44509462baf99a" }
+datalink-contract = { git = "https://github.com/tegmentum/datalink.git", rev = "3175f1f3e29e96cdb22ad64a6c26627111dff364" }
 # The shared store-generic compose:dynlink/linker host machinery + the
 # ResidentBackend (instantiate-once-and-reuse provider lifecycle). ducklink's
 # compose_dynlink module is now a thin adapter over this; the resolve/invoke
 # bridge + bindings live here, shared with the other wasm-component hosts.
-datalink-dynlink = { git = "https://github.com/tegmentum/datalink.git", rev = "c10378e9b15e45ee4a6338812d44509462baf99a" }
+datalink-dynlink = { git = "https://github.com/tegmentum/datalink.git", rev = "3175f1f3e29e96cdb22ad64a6c26627111dff364" }
 # `PendingKind::iter()` is derived via `EnumIter` so `PendingKind::all()` stays
 # in lockstep with the enum without a hand-maintained mirror array or a
 # hardcoded variant-count assert. `strum` is stable-Rust (no nightly required)

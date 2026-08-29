@@ -277,7 +277,7 @@ use wasmtime_wasi::p2::{
     self,
     pipe::{MemoryInputPipe, MemoryOutputPipe},
 };
-use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
+use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 // wasi:http/{types,outgoing-handler}@0.2.9 host wiring. The composed
 // cache.wasm imports wasi:http via the s3-wasm HTTPS transport (commit
 // d2b8870); every store type this host builds a linker for must (a) impl
@@ -285,10 +285,11 @@ use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxBuilder, WasiCtxView, W
 // existing `p2::add_to_linker_sync`. Using `add_only_http_to_linker_sync`
 // (not the full `add_to_linker_sync`) avoids re-adding wasi:cli/filesystem/
 // etc, which would clash with the wasmtime_wasi call.
-use wasmtime_wasi_http::p2::{
-    add_only_http_to_linker_sync as add_wasi_http_to_linker, WasiHttpCtxView, WasiHttpView,
-};
-use wasmtime_wasi_http::WasiHttpCtx;
+//
+// wasmtime-wasi-http 48 moved `WasiHttpView` / `WasiHttpCtxView` from
+// `p2` up to the crate root (kept the linker fn under `p2`).
+use wasmtime_wasi_http::p2::add_only_http_to_linker_sync as add_wasi_http_to_linker;
+use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 type CliString = wasmtime::component::__internal::String;
 
@@ -8445,7 +8446,7 @@ fn build_wasi_ctx_with_pipes(
     builder.allow_ip_name_lookup(true);
     for (host, guest) in preopens {
         builder
-            .preopened_dir(host, guest, DirPerms::all(), FilePerms::all())
+            .preopened_dir(host, guest, FsPerms::ReadWrite)
             .map_err(|e| {
                 e.context(format!(
                     "failed to preopen directory {} as {}",
@@ -8468,7 +8469,7 @@ fn build_wasi_ctx_inherit(args: &[String], preopens: &[(&Path, &str)]) -> Result
     builder.allow_ip_name_lookup(true);
     for (host, guest) in preopens {
         builder
-            .preopened_dir(host, guest, DirPerms::all(), FilePerms::all())
+            .preopened_dir(host, guest, FsPerms::ReadWrite)
             .map_err(|e| {
                 e.context(format!(
                     "failed to preopen directory {} as {}",
@@ -12427,7 +12428,7 @@ fn cache_env_preopens() -> Vec<(PathBuf, String)> {
 /// vars are already logged inside `cache_env_preopens()`.
 fn attach_cache_env_preopens(builder: &mut WasiCtxBuilder) {
     for (host, guest) in cache_env_preopens() {
-        if let Err(e) = builder.preopened_dir(&host, &guest, DirPerms::all(), FilePerms::all()) {
+        if let Err(e) = builder.preopened_dir(&host, &guest, FsPerms::ReadWrite) {
             eprintln!(
                 "ducklink-host: failed to preopen cache root {}: {e}",
                 host.display()
@@ -12462,7 +12463,7 @@ fn attach_sqlitewasm_preopens(builder: &mut WasiCtxBuilder, extension_name: &str
     }
     match std::env::current_dir() {
         Ok(cwd) => {
-            if let Err(e) = builder.preopened_dir(&cwd, ".", DirPerms::all(), FilePerms::all()) {
+            if let Err(e) = builder.preopened_dir(&cwd, ".", FsPerms::ReadWrite) {
                 eprintln!(
                     "ducklink-host: failed to preopen cwd for sqlitewasm ({}): {e}",
                     cwd.display()
@@ -12495,7 +12496,7 @@ fn attach_sqlitewasm_preopens(builder: &mut WasiCtxBuilder, extension_name: &str
             return;
         }
         let guest = path.to_string_lossy().into_owned();
-        if let Err(e) = builder.preopened_dir(&path, &guest, DirPerms::all(), FilePerms::all()) {
+        if let Err(e) = builder.preopened_dir(&path, &guest, FsPerms::ReadWrite) {
             eprintln!(
                 "ducklink-host: failed to preopen sqlitewasm datadir {}: {e}",
                 path.display()
