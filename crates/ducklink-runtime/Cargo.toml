@@ -31,7 +31,19 @@ hex = "0.4"
 # former inline `component_contract_major`/`check_component_contract` so the
 # same guard backs both the ducklink and sqlink hosts (datalink is public).
 # The witcanon CONTRACT_DIGEST (above) stays per-repo; this is the @MAJOR proxy.
-datalink-contract = { git = "https://github.com/tegmentum/datalink.git", rev = "3175f1f3e29e96cdb22ad64a6c26627111dff364" }
+datalink-contract = { git = "https://github.com/tegmentum/datalink.git", rev = "9b48e598ae141377e0bfe07e988fb9b224e53b0f" }
+# ADR-0029 Phase 6.1b — datalink-contract migrated its two introspection fns
+# from `(&Engine, &Component, &str)` to `(&CompiledComponent, &str)` (wasmos
+# migration doc: docs/design/runtime-abstraction/phase-6-1-component-metadata-
+# introspection.md). This crate keeps its `(engine, component)`-taking public
+# wrappers (500+ internal call sites at ducklink and downstream consumers)
+# and bridges to the new datalink-contract API via a local
+# `CompiledComponentImpl` wrapper struct in src/contract_guard_bridge.rs.
+# When ducklink-runtime's own compile-side migrates to wasmos-runtime-api
+# (a later phase), this dep continues to serve as the underlying opaque
+# handle vocabulary; when the whole crate migrates, the bridge module
+# retires.
+wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", rev = "2406cc7075dcf1d9c98f054c408f062ebed3c0b0" }
 # The shared store-generic compose:dynlink/linker host machinery + the
 # ResidentBackend (instantiate-once-and-reuse provider lifecycle). ducklink's
 # compose_dynlink module is now a thin adapter over this; the resolve/invoke
