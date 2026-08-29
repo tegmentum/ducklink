@@ -81,9 +81,9 @@ tempfile = "3"
 # wasmos main tip at the time of the migration; bump when the abstraction
 # grows. datalink-dynlink-wasmos is a peer-repo git dep at the datalink
 # main rev that ships it (6fbb890+).
-datalink-dynlink-wasmos = { git = "https://github.com/tegmentum/datalink.git", rev = "731216351118f2acfe416f432db152a5ce7b8d4d" }
-wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", rev = "cf60e2563496ac6a66e843d6afa61050e070aebe" }
-wasmos-runtime-select = { git = "https://github.com/tegmentum/wasmos.git", rev = "cf60e2563496ac6a66e843d6afa61050e070aebe", features = ["wasmtime-lts"] }
+datalink-dynlink-wasmos = { git = "https://github.com/tegmentum/datalink.git", rev = "00fd3e73a63d8ee32b7153c8c4971145e0ba3ea4" }
+wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", rev = "571220d64e765d90cb1b7036c04c7fd6cd6b2911" }
+wasmos-runtime-select = { git = "https://github.com/tegmentum/wasmos.git", rev = "571220d64e765d90cb1b7036c04c7fd6cd6b2911", features = ["wasmtime-lts"] }
 async-trait = "0.1"
 bytes = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
