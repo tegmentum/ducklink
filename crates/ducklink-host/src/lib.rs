@@ -140,13 +140,17 @@ use wasmtime::{AsContextMut, Config, Engine, Store, StoreContextMut};
 /// here under the original path so the dotcmd path + tests are unchanged.
 use ducklink_runtime::compose_dynlink;
 pub use ducklink_runtime::compose_dynlink::{ProviderPreopen, ProviderRegistry};
-/// Test/embedder support surface for the `compose:dynlink/linker` host
-/// import: the `DynState` store state, the `imports_linker` gate, and the
-/// `add_to_linker` wiring. Used by the integration test that drives the
-/// framework's dlopen guest through ducklink-host's wasmtime.
-pub mod compose_dynlink_test_support {
-    pub use ducklink_runtime::compose_dynlink::{add_to_linker, imports_linker, DynState};
-}
+// ADR-0029 Phase 6.2.d.1: compose_dynlink_test_support module removed.
+//
+// The DynState re-export is gone (DynState was deleted in ducklink-runtime
+// alongside this migration). The integration test at
+// tests/compose_dynlink_dlopen.rs no longer uses the wasmtime-linker
+// installer shape (add_to_linker) or ducklink's DynState — it now drives
+// datalink-dynlink-wasmos through the wasmos-runtime-api abstraction
+// end-to-end. add_to_linker + imports_linker are still available as
+// `ducklink_runtime::compose_dynlink::{add_to_linker, imports_linker}`
+// for the production ExtensionStoreState + DotcmdState paths that
+// haven't migrated yet (Phase 6.2.d.2 / 6.2.d.3).
 pub mod at5_intercept;
 mod delta_rewrite;
 mod plan_shape;
