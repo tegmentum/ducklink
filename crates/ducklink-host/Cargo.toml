@@ -75,6 +75,18 @@ datalink-policy = { git = "https://github.com/tegmentum/datalink.git", rev = "31
 
 [dev-dependencies]
 tempfile = "3"
+# ADR-0029 Phase 6.2.d.1 dev-deps: the DynState-migration integration
+# test (tests/compose_dynlink_dlopen.rs) drives datalink-dynlink-wasmos
+# through the wasmos runtime abstraction end-to-end. Pinned to
+# wasmos main tip at the time of the migration; bump when the abstraction
+# grows. datalink-dynlink-wasmos is a peer-repo git dep at the datalink
+# main rev that ships it (6fbb890+).
+datalink-dynlink-wasmos = { git = "https://github.com/tegmentum/datalink.git", rev = "731216351118f2acfe416f432db152a5ce7b8d4d" }
+wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", rev = "cf60e2563496ac6a66e843d6afa61050e070aebe" }
+wasmos-runtime-select = { git = "https://github.com/tegmentum/wasmos.git", rev = "cf60e2563496ac6a66e843d6afa61050e070aebe", features = ["wasmtime-lts"] }
+async-trait = "0.1"
+bytes = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 arrow-ipc = { version = "53", default-features = false }
 arrow-array = { version = "53", default-features = false }
 # PoC for the nested-exec Direction-1 §6 wasmtime re-entrancy experiment:

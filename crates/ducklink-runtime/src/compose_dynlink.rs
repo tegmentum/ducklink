@@ -22,13 +22,17 @@
 //! many function components" property — implemented by
 //! [`datalink_dynlink::ResidentBackend`].
 
-use wasmtime::component::ResourceTable;
-use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
-
 // The shared machinery. ducklink's public surface (ProviderRegistry,
 // ProviderPreopen, imports_linker, add_to_linker, the bindings module) is
 // re-exported verbatim so callers (extension.rs, ducklink-host, the dlopen
 // test) are unchanged.
+//
+// ADR-0029 Phase 6.2.d.1: DynState + `impl WasiView for DynState` +
+// `impl_compose_dynlink_host!(DynState, ...)` moved OUT (see the block
+// below the pub-use). WasiCtx / ResourceTable / WasiView imports are no
+// longer needed at module scope; ExtensionStoreState (extension.rs) +
+// DotcmdState (ducklink-host) still expand the macro but import wasmtime
+// types via their own module-scope use statements.
 pub use datalink_dynlink::{
     add_to_linker, bindings, imports_linker, ProviderPreopen, ProviderRegistry, ResidentBackend,
 };
@@ -61,37 +65,20 @@ macro_rules! impl_compose_dynlink_host {
     };
 }
 
-/// Host-side store state for driving a `compose:dynlink/linker` guest.
-/// Carries WASI (the guest is typically a `wasi:cli/run` component) plus the
-/// dynlink bridge. Used by the standalone dlopen test.
-pub struct DynState {
-    wasi: WasiCtx,
-    wasi_table: ResourceTable,
-    bridge: DynLinkBridge,
-}
-
-impl DynState {
-    pub fn new(wasi: WasiCtx, wasi_table: ResourceTable, registry: ProviderRegistry) -> Self {
-        Self {
-            wasi,
-            wasi_table,
-            bridge: new_resident(registry),
-        }
-    }
-
-    /// Expose the bridge for the trait-impl macro.
-    pub fn dynlink_bridge(&mut self) -> &mut DynLinkBridge {
-        &mut self.bridge
-    }
-}
-
-impl WasiView for DynState {
-    fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView {
-            ctx: &mut self.wasi,
-            table: &mut self.wasi_table,
-        }
-    }
-}
-
-impl_compose_dynlink_host!(DynState, dynlink_bridge);
+// ADR-0029 Phase 6.2.d.1: DynState migrated OUT of this module.
+//
+// DynState was a wasmtime-Store state type used only by the standalone
+// dlopen integration test (crates/ducklink-host/tests/compose_dynlink_dlopen.rs).
+// The test has been rewritten to consume datalink-dynlink-wasmos v0.1.0
+// end-to-end through the wasmos-runtime-api abstraction — no wasmtime
+// Store/Linker/WasiCtx exposed to the test code — so the intermediate
+// DynState wrapper is no longer needed.
+//
+// The impl_compose_dynlink_host!(DynState, dynlink_bridge) macro
+// expansion was also removed; the abstraction-based test constructs
+// its bridge as an Arc<dyn HostCall> via
+// datalink_dynlink_wasmos::install_host_imports.
+//
+// ExtensionStoreState + DotcmdState (production paths) continue to
+// use impl_compose_dynlink_host! and consume this module's
+// wasmtime-shaped surface. They migrate in Phase 6.2.d.2 / 6.2.d.3.
