@@ -1000,6 +1000,11 @@ impl ExtensionStoreState {
         self.services.query(sql)
     }
 
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_secrets`.
+    pub fn push_pending_secret(&mut self, entry: reg::SecretReg) {
+        self.pending_secrets.push(entry);
+    }
+
     /// ADR-0029 Phase 6.2.d.2 accessor — mutable borrow of the
     /// neutral `ExtensionServices` trait object. Lets
     /// `crate::extension_wasmos` handlers reach every services
