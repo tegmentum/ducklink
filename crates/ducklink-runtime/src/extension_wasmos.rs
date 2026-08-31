@@ -2119,29 +2119,13 @@ pub fn install_catalog_imports(
 //        [method]lock-handle.release  — early lock release
 //        [resource-drop]lock-handle    — auto-cleanup destructor
 //
-//      DEFERRED. The wasmos `#[host_iface]` macro treats every
-//      fn as a plain method dispatch on the interface; the WIT
-//      resource-method mangling (`[method]lock-handle.release`)
-//      + destructor (`[resource-drop]lock-handle`) surface
-//      would need either:
-//        (a) a `#[method("[method]lock-handle.release")]`
-//            override on a plain fn (works for the release
-//            method), plus
-//        (b) an adapter-side resource-drop registration
-//            (`HostImports` doesn't currently expose one).
-//
-//      Practical impact: guests that explicitly call
-//      `handle.release()` get "no handler for method
-//      [method]lock-handle.release" until the release override
-//      lands. Guests that just let the handle fall out of
-//      scope leak the underlying LockHandleState (the OS
-//      flock is never released until the process exits). The
-//      wit-bindgen path at `crate::extension` line 2635 stays
-//      the correct choice for consumers who need real lifecycle.
-//
-//      Follow-up: Phase 6.2.d.2-n adds the release override
-//      once wasmos supports the [method]... convention +
-//      documents the destructor gap as a wasmos-side ADR.
+//      LANDED as part of Phase 6.2.d.2-n — both methods added
+//      to `FileLockHost` below via `#[method("[method]lock-
+//      handle.release")]` + `#[method("[resource-drop]lock-
+//      handle")]` overrides. The release method works today;
+//      destructor dispatch depends on the wasmos adapter
+//      surfacing resource-drop events (real wasmos-side gap,
+//      documented in the handler comment below).
 // ────────────────────────────────────────────────────────────────────
 
 /// Wasmos-native marker for the WIT `duckdb:extension/file-lock.
@@ -2193,6 +2177,84 @@ impl FileLockHost {
             Ok(None) => Ok(Ok(None)),
             Err(msg) => Ok(Err(msg)),
         }
+    }
+
+    // ── HostLockHandle resource-lifecycle methods (Phase 6.2.d.2-n) ──
+    //
+    // The wit-bindgen counterpart is a SEPARATE trait
+    // (extension_file_lock::HostLockHandle at `crate::extension`
+    // line 2635) whose two methods are canonically-mangled
+    // resource-method dispatches:
+    //   [method]lock-handle.release(self: lock-handle) -> ()
+    //   [resource-drop]lock-handle(rep) -> ()
+    //
+    // Both call `free_lock_handle(rep.rep())` — the underlying
+    // `LockHandleState` drop releases the OS flock + closes the
+    // file. Wasmos-native mirrors delegate to the
+    // `release_lock_handle` pub accessor added in Phase 6.2.d.2-m
+    // (which wraps the private `free_lock_handle`).
+    //
+    // WASMOS-SIDE DESTRUCTOR GAP
+    //
+    // `[method]lock-handle.release` dispatches under the same
+    // mechanism as the runtime XxxRegistry.register handlers
+    // proven at scale in Phase 6.2.d.2-p+ — guest calls
+    // `handle.release()`, the interface's SyncHostCall receives
+    // the mangled method name, RuntimeHost's #[method]-overridden
+    // handler fires. That path works today.
+    //
+    // `[resource-drop]lock-handle` — the destructor — depends on
+    // the adapter dispatching a resource-drop event when the
+    // guest resource falls out of scope. Whether wasmos's
+    // wasmtime-v48 adapter surfaces this via `HostImports` is a
+    // real wasmos-side question; if not, `[resource-drop]...`
+    // handlers registered here are dead code and the underlying
+    // LockHandleState never gets released on scope-drop
+    // (process exit still releases the OS flock through the
+    // native `Drop` impl).
+    //
+    // Handlers landed regardless so:
+    //   1. The interface surface is COMPLETE at the API level —
+    //      consumers see the wasmos-native FileLockHost matches
+    //      the wit-bindgen counterpart's method inventory.
+    //   2. When wasmos closes the destructor gap, the handler
+    //      wires automatically without touching this module.
+    //   3. Explicit `handle.release()` calls (the fast-path use
+    //      case documented in the WIT — "callers can release
+    //      early after publishing, before slower cleanup") work
+    //      TODAY through the release method.
+    //
+    // Phase 6.2.d.2-n completes the Phase 6.2.d.2 arc — every
+    // wit-bindgen impl block in `crate::extension` now has a
+    // wasmos-native mirror.
+
+    /// `[method]lock-handle.release` — early lock release.
+    /// Byte-identical to `crate::extension` line 2636:
+    /// `free_lock_handle(rep.rep())` + Ok.
+    #[method("[method]lock-handle.release")]
+    fn lock_handle_release(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        self_: Resource<LockHandle>,
+    ) -> RuntimeResult<()> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        g.release_lock_handle(self_.handle());
+        Ok(())
+    }
+
+    /// `[resource-drop]lock-handle` — destructor. Called by the
+    /// adapter when the guest resource falls out of scope (subject
+    /// to the wasmos destructor gap noted in the section
+    /// docstring). Byte-identical to `crate::extension` line 2643.
+    #[method("[resource-drop]lock-handle")]
+    fn lock_handle_drop(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        rep: Resource<LockHandle>,
+    ) -> RuntimeResult<()> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        g.release_lock_handle(rep.handle());
+        Ok(())
     }
 }
 
