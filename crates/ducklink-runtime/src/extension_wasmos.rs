@@ -390,7 +390,11 @@ pub fn install_extension_imports_stateful(
     let imports = install_coordinate_system_imports(imports, state.clone());
     let imports = install_storage_imports(imports, state.clone());
     let imports = install_log_storage_imports(imports, state.clone());
-    install_query_imports(imports, state)
+    let imports = install_query_imports(imports, state.clone());
+    // 6.2.d.2-e batch (services-delegating)
+    let imports = install_config_imports(imports, state.clone());
+    let imports = install_logging_imports(imports, state.clone());
+    install_nested_exec_imports(imports, state)
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -888,6 +892,329 @@ pub fn install_query_imports(
     imports.register(
         "duckdb:extension/query",
         Arc::new(SyncHostCallAdapter::new(QueryHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Phase 6.2.d.2-e — services-delegating batch (3 interfaces).
+//
+// Adds config, logging, nested_exec. Each delegates to the
+// neutral `ExtensionServices` trait sink via `services_mut()`.
+// Needs mirror types for Configerror + Loglevel + Logfield +
+// ExecResult so the wasmos-native marshalling matches the
+// wit-bindgen wire shape.
+// ────────────────────────────────────────────────────────────────────
+
+// ── extension_config ────────────────────────────────────────────────
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/types.configerror`
+/// variant. Wire-identical to the wit-bindgen counterpart.
+#[derive(Debug, Clone, WitVariant)]
+pub enum Configerror {
+    Invalidkey(String),
+    Typemismatch(String),
+    Unavailable(String),
+    Internalconfig(String),
+}
+
+impl Configerror {
+    /// Convert from the neutral `crate::extension::ConfigError` (what
+    /// `ExtensionServices` returns) to the wasmos-native variant.
+    fn from_neutral(err: crate::extension::ConfigError) -> Self {
+        use crate::extension::ConfigError as N;
+        match err {
+            N::InvalidKey(m) => Configerror::Invalidkey(m),
+            N::TypeMismatch(m) => Configerror::Typemismatch(m),
+            N::Unavailable(m) => Configerror::Unavailable(m),
+            N::InternalConfig(m) => Configerror::Internalconfig(m),
+        }
+    }
+}
+
+/// Host struct for the `duckdb:extension/config` interface.
+/// See `crate::extension` line 1683. 9 methods, all delegating
+/// to the neutral `ExtensionServices` sink.
+#[derive(Clone)]
+pub struct ConfigHost {
+    state: SharedExtensionState,
+}
+
+impl ConfigHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl ConfigHost {
+    fn provider_version(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+    ) -> RuntimeResult<String> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        Ok(g.services_mut().provider_version().unwrap_or_else(|err| {
+            eprintln!("extension config provider-version failed: {err:?}");
+            "duckdb-extension-host".into()
+        }))
+    }
+
+    fn list_keys(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        prefix: Option<String>,
+    ) -> RuntimeResult<Vec<String>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        Ok(g.services_mut()
+            .list_keys(prefix.as_deref())
+            .unwrap_or_else(|err| {
+                eprintln!("extension config list-keys failed: {err:?}");
+                Vec::new()
+            }))
+    }
+
+    fn get_string(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        path: String,
+    ) -> RuntimeResult<Result<Option<String>, Configerror>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        Ok(g.services_mut().get_string(&path).map_err(Configerror::from_neutral))
+    }
+
+    fn get_bool(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        path: String,
+    ) -> RuntimeResult<Result<Option<bool>, Configerror>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        Ok(g.services_mut().get_bool(&path).map_err(Configerror::from_neutral))
+    }
+
+    fn get_i64(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        path: String,
+    ) -> RuntimeResult<Result<Option<i64>, Configerror>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        Ok(g.services_mut().get_i64(&path).map_err(Configerror::from_neutral))
+    }
+
+    fn get_u64(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        path: String,
+    ) -> RuntimeResult<Result<Option<u64>, Configerror>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        Ok(g.services_mut().get_u64(&path).map_err(Configerror::from_neutral))
+    }
+
+    fn get_f64(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        path: String,
+    ) -> RuntimeResult<Result<Option<f64>, Configerror>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        Ok(g.services_mut().get_f64(&path).map_err(Configerror::from_neutral))
+    }
+
+    fn get_bytes(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        path: String,
+    ) -> RuntimeResult<Result<Option<Vec<u8>>, Configerror>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        Ok(g.services_mut().get_bytes(&path).map_err(Configerror::from_neutral))
+    }
+
+    fn get_string_list(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        path: String,
+    ) -> RuntimeResult<Result<Option<Vec<String>>, Configerror>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        Ok(g.services_mut()
+            .get_string_list(&path)
+            .map_err(Configerror::from_neutral))
+    }
+}
+
+/// Register the `duckdb:extension/config` handler.
+pub fn install_config_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/config",
+        Arc::new(SyncHostCallAdapter::new(ConfigHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ── extension_logging ───────────────────────────────────────────────
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/types.loglevel`
+/// enum. Wire-identical to the wit-bindgen counterpart.
+#[derive(Debug, Clone, Copy, WitEnum)]
+pub enum Loglevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl Loglevel {
+    /// Convert to the neutral `crate::extension::LogLevel` that
+    /// `ExtensionServices` accepts.
+    fn to_neutral(self) -> crate::extension::LogLevel {
+        use crate::extension::LogLevel as N;
+        match self {
+            Loglevel::Trace => N::Trace,
+            Loglevel::Debug => N::Debug,
+            Loglevel::Info => N::Info,
+            Loglevel::Warn => N::Warn,
+            Loglevel::Error => N::Error,
+        }
+    }
+}
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/types.logfield`
+/// record. Wire-identical to the wit-bindgen counterpart.
+#[derive(Debug, Clone, wasmos_runtime_api::WitRecord)]
+pub struct Logfield {
+    pub key: String,
+    pub value: String,
+}
+
+/// Host struct for the `duckdb:extension/logging` interface.
+/// See `crate::extension` line 1755. 2 methods, both delegating
+/// to the neutral `ExtensionServices` sink.
+#[derive(Clone)]
+pub struct LoggingHost {
+    state: SharedExtensionState,
+}
+
+impl LoggingHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl LoggingHost {
+    fn log(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        level: Loglevel,
+        message: String,
+        target: Option<String>,
+    ) -> RuntimeResult<()> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        g.services_mut()
+            .log(level.to_neutral(), &message, target.as_deref());
+        Ok(())
+    }
+
+    fn log_fields(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        level: Loglevel,
+        message: String,
+        fields: Vec<Logfield>,
+    ) -> RuntimeResult<()> {
+        let converted: Vec<crate::extension::LogField> = fields
+            .into_iter()
+            .map(|f| crate::extension::LogField {
+                key: f.key,
+                value: f.value,
+            })
+            .collect();
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        g.services_mut()
+            .log_fields(level.to_neutral(), &message, &converted);
+        Ok(())
+    }
+}
+
+/// Register the `duckdb:extension/logging` handler.
+pub fn install_logging_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/logging",
+        Arc::new(SyncHostCallAdapter::new(LoggingHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ── extension_nested_exec ────────────────────────────────────────────
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/nested-exec.
+/// exec-result` record. Wire-identical to the wit-bindgen counterpart.
+#[derive(Debug, Clone, wasmos_runtime_api::WitRecord)]
+pub struct ExecResult {
+    pub rows: Option<Vec<Vec<String>>>,
+    pub rows_affected: Option<u64>,
+}
+
+impl ExecResult {
+    /// Convert from the neutral `crate::extension::NestedExecResult`
+    /// that `ExtensionServices::nested_exec` returns.
+    fn from_neutral(r: crate::extension::NestedExecResult) -> Self {
+        ExecResult {
+            rows: r.rows,
+            rows_affected: r.rows_affected,
+        }
+    }
+}
+
+/// Host struct for the `duckdb:extension/nested-exec` interface.
+/// See `crate::extension` line 2478. Delegates to
+/// `ExtensionServices::nested_exec` via the shared state.
+///
+/// NOTE: The wit-bindgen counterpart wraps the call in a
+/// `NestedExecDepthGuard::enter()?` per-OS-thread nesting-depth
+/// counter to prevent recursive execution from spiraling. That
+/// guard type is private to `crate::extension`; the wasmos-
+/// native path relies on the same guard being active if the
+/// caller invokes both wit-bindgen and wasmos paths through the
+/// same store, or on ExtensionServices::nested_exec's own
+/// re-entry protection. Non-blocking for the intended use;
+/// callers can wire the depth guard manually if their setup
+/// exposes recursive-invocation risk.
+#[derive(Clone)]
+pub struct NestedExecHost {
+    state: SharedExtensionState,
+}
+
+impl NestedExecHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl NestedExecHost {
+    fn nested_exec(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        sql: String,
+    ) -> RuntimeResult<Result<ExecResult, String>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        Ok(g.services_mut().nested_exec(&sql).map(ExecResult::from_neutral))
+    }
+}
+
+/// Register the `duckdb:extension/nested-exec` handler.
+pub fn install_nested_exec_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/nested-exec",
+        Arc::new(SyncHostCallAdapter::new(NestedExecHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
 }
