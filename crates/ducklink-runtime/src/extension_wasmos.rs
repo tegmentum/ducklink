@@ -403,7 +403,9 @@ pub fn install_extension_imports_stateful(
     // 6.2.d.2-h batch (files)
     let imports = install_files_imports(imports, state.clone());
     // 6.2.d.2-i batch (arrow_ext + LogicalType mirror unblocking future batches)
-    install_arrow_ext_imports(imports, state)
+    let imports = install_arrow_ext_imports(imports, state.clone());
+    // 6.2.d.2-j batch (Funcarg mirror + table_stream)
+    install_table_stream_imports(imports, state)
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -1709,6 +1711,87 @@ pub fn install_arrow_ext_imports(
     imports.register(
         "duckdb:extension/arrow_ext",
         Arc::new(SyncHostCallAdapter::new(ArrowExtHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Phase 6.2.d.2-j — Funcarg mirror + table_stream (23/27).
+// ────────────────────────────────────────────────────────────────────
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/types.funcarg`
+/// record. Shared by table_stream + runtime_ext + parts of runtime.
+#[derive(Debug, Clone, wasmos_runtime_api::WitRecord)]
+pub struct Funcarg {
+    pub name: Option<String>,
+    pub logical: LogicalType,
+}
+
+impl Funcarg {
+    pub fn to_reg(self) -> crate::reg::FuncArg {
+        crate::reg::FuncArg {
+            name: self.name,
+            logical: self.logical.to_reg(),
+        }
+    }
+}
+
+// ── extension_table_stream ──────────────────────────────────────────
+
+/// Host struct for the `duckdb:extension/table_stream` interface.
+/// See `crate::extension` line 2165. 1 method
+/// (register_filterable_table); allocates a globally-routable
+/// callback via `allocate_callback_handle_pub` +
+/// `CallbackKind::Table`, converts arguments/columns to the
+/// neutral reg::* shapes, pushes to pending_filterable_tables.
+#[derive(Clone)]
+pub struct TableStreamHost {
+    state: SharedExtensionState,
+}
+
+impl TableStreamHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl TableStreamHost {
+    fn register_filterable_table(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        name: String,
+        arguments: Vec<Funcarg>,
+        columns: Vec<Columndef>,
+        callback_handle: u32,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let converted_arguments: Vec<crate::reg::FuncArg> =
+            arguments.into_iter().map(Funcarg::to_reg).collect();
+        let converted_columns: Vec<crate::reg::ColumnDef> =
+            columns.into_iter().map(Columndef::to_reg).collect();
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let global =
+            g.allocate_callback_handle_pub(callback_handle, crate::CallbackKind::Table);
+        let extension = g.extension_name().to_string();
+        g.push_pending_filterable_table(crate::reg::FilterableTableReg {
+            extension,
+            name,
+            arguments: converted_arguments,
+            columns: converted_columns,
+            callback_handle: global,
+        });
+        Ok(Ok(global))
+    }
+}
+
+/// Register the `duckdb:extension/table_stream` handler.
+pub fn install_table_stream_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/table_stream",
+        Arc::new(SyncHostCallAdapter::new(TableStreamHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
 }
