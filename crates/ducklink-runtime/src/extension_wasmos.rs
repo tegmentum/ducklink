@@ -43,8 +43,8 @@
 use std::sync::{Arc, Mutex};
 
 use wasmos_runtime_api::{
-    host_iface, HostCallContext, HostImports, RuntimeError, RuntimeResult, SyncHostCall,
-    SyncHostCallAdapter, WitEnum, WitFlags, WitVariant,
+    host_iface, HostCallContext, HostImports, HostResourceType, Resource, RuntimeError,
+    RuntimeResult, SyncHostCall, SyncHostCallAdapter, WitEnum, WitFlags, WitVariant,
 };
 
 use crate::extension::{
@@ -408,9 +408,11 @@ pub fn install_extension_imports_stateful(
     let imports = install_table_stream_imports(imports, state.clone());
     // 6.2.d.2-k batch (Funcflags/Funcopts/NullHandling + runtime_ext)
     let imports = install_runtime_ext_imports(imports, state.clone());
-    // 6.2.d.2-l batch (catalog — partial, register_cast deferred pending
-    // Resource<T> integration in Phase 6.2.d.2-m)
-    install_catalog_imports(imports, state)
+    // 6.2.d.2-l/m batch (catalog — register_cast promoted from stub
+    // in -m via Resource<CastCallback> arg handling)
+    let imports = install_catalog_imports(imports, state.clone());
+    // 6.2.d.2-m batch (file_lock — resource lifecycle methods deferred)
+    install_file_lock_imports(imports, state)
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -1941,9 +1943,24 @@ pub fn install_runtime_ext_imports(
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Phase 6.2.d.2-l — catalog (25/27). PARTIAL: register_cast defers
-// pending the Resource<T> integration session.
+// Phase 6.2.d.2-l/m — catalog (26/27 after -m promotes register_cast
+// from stub to full Resource<CastCallback> arg handling).
 // ────────────────────────────────────────────────────────────────────
+
+/// Wasmos-native marker for the WIT `duckdb:extension/catalog.
+/// cast-callback` resource. Guest-owned resource handle passed as
+/// an arg to `register_cast`; the host reads the `.handle()`
+/// (rep) to route future dispatch calls back to the component's
+/// cast-dispatch export.
+///
+/// `#[derive(HostResourceType)]` + `#[wit_resource(...)]` produces
+/// the `HostResourceType` impl the classifier + the
+/// `HostCallContext::new_typed_resource<T>` / `typed_resource_rep::<T>`
+/// helpers need. Sibling to the ScalarCallback / TableCallback
+/// markers in `runtime/api/tests/host_iface_resource.rs`.
+#[derive(HostResourceType)]
+#[wit_resource(interface = "duckdb:extension/catalog", name = "cast-callback")]
+pub struct CastCallback;
 
 /// Wasmos-native mirror of the WIT `duckdb:extension/catalog.
 /// logical-type` record — DIFFERENT from `types.logicaltype`
@@ -1984,15 +2001,9 @@ pub struct MacroDef {
 }
 
 /// Host struct for the `duckdb:extension/catalog` interface.
-/// See `crate::extension` line 1885. 3 methods total:
-/// - `register_logical_type` (migrated fully here)
-/// - `register_cast` — DEFERRED (needs Resource<CastCallback>
-///   marshaling via `HostCallContext::typed_resource_rep`, which
-///   is Phase 6.2.d.2-m follow-up work along with file_lock's
-///   Resource<LockHandle>). Handler returns Err("...deferred...")
-///   so guests calling it get a clean signal rather than an
-///   "unresolved import" trap.
-/// - `register_macro` (migrated fully here)
+/// See `crate::extension` line 1885. 3 methods, all migrated
+/// (register_cast promoted from stub to real Resource<
+/// CastCallback> arg handling in Phase 6.2.d.2-m).
 #[derive(Clone)]
 pub struct CatalogHost {
     state: SharedExtensionState,
@@ -2022,33 +2033,37 @@ impl CatalogHost {
         Ok(Ok(handle))
     }
 
-    /// DEFERRED — `register_cast` takes `callback: cast-callback`
-    /// which is a WIT resource. Resource<T> arg marshaling via
-    /// `HostCallContext::typed_resource_rep` will land in Phase
-    /// 6.2.d.2-m as part of a coordinated batch with file_lock's
-    /// Resource<LockHandle> return + runtime's pervasive
-    /// Resource<T>. Until then the wasmos-native path returns an
-    /// error rather than dropping the request silently.
+    /// Handler for `register-cast`. `callback: Resource<CastCallback>`
+    /// arrives as a guest-owned resource handle; we read
+    /// `.handle()` for the rep (matches the wit-bindgen path's
+    /// `callback.rep()` at `crate::extension` line 1905). The
+    /// implicit `std::mem::forget(callback)` on the wit-bindgen
+    /// side isn't needed here — `Resource<T>` in wasmos-native
+    /// doesn't run a destructor on Drop; the resource lifecycle
+    /// is managed by the adapter's HostCallCtxImpl.
     ///
-    /// Consumers who need register-cast today must use the
-    /// wit-bindgen path at `crate::extension` line 1900.
-    ///
-    /// NOTE: The signature here uses `u32` in place of Resource
-    /// so `#[host_iface]`'s classifier accepts the arg. When the
-    /// full migration lands, this becomes
-    /// `callback: Resource<CastCallback>` + `ctx.typed_resource_
-    /// rep::<CastCallback>(&callback_value)?`.
+    /// Promoted from stub (Phase 6.2.d.2-l) to real impl in
+    /// Phase 6.2.d.2-m via the `CastCallback` marker +
+    /// `Resource<CastCallback>` arg — the `#[host_iface]`
+    /// classifier now handles Resource<T> args through
+    /// WitBridgeCtx routing.
     fn register_cast(
         &self,
         _ctx: &mut HostCallContext<'_>,
-        _spec: CastSpec,
-        _callback_placeholder: u32,
+        spec: CastSpec,
+        callback: Resource<CastCallback>,
     ) -> RuntimeResult<Result<(), String>> {
-        Ok(Err(
-            "register-cast: wasmos-native path deferred pending Resource<T> \
-             integration (Phase 6.2.d.2-m); use the wit-bindgen path"
-                .to_string(),
-        ))
+        let callback_handle = callback.handle();
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let extension = g.extension_name().to_string();
+        g.push_pending_cast(crate::reg::CastReg {
+            extension,
+            source: spec.from,
+            target: spec.to,
+            callback_handle,
+            implicit_cost: spec.implicit_cost,
+        });
+        Ok(Ok(()))
     }
 
     fn register_macro(
@@ -2077,6 +2092,119 @@ pub fn install_catalog_imports(
     imports.register(
         "duckdb:extension/catalog",
         Arc::new(SyncHostCallAdapter::new(CatalogHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Phase 6.2.d.2-m — file_lock (27/27 for the interfaces themselves;
+// resource lifecycle methods deferred pending wasmos-side story).
+//
+// The wit-bindgen counterpart at `crate::extension` line 2609
+// implements TWO host-side traits:
+//
+//   1. `extension_file_lock::Host` — the interface methods:
+//        acquire-exclusive(path) -> Resource<LockHandle>
+//        try-acquire-exclusive(path) -> Option<Resource<LockHandle>>
+//      Migrated here to `FileLockHost` via `#[host_iface]`.
+//      Uses `Resource::<LockHandle>::from_raw(id, true)` for
+//      the return; the `#[host_iface]` classifier emits
+//      `ctx.new_typed_resource::<LockHandle>(id)` lowering.
+//
+//   2. `extension_file_lock::HostLockHandle` — the resource-
+//      METHOD trait:
+//        [method]lock-handle.release  — early lock release
+//        [resource-drop]lock-handle    — auto-cleanup destructor
+//
+//      DEFERRED. The wasmos `#[host_iface]` macro treats every
+//      fn as a plain method dispatch on the interface; the WIT
+//      resource-method mangling (`[method]lock-handle.release`)
+//      + destructor (`[resource-drop]lock-handle`) surface
+//      would need either:
+//        (a) a `#[method("[method]lock-handle.release")]`
+//            override on a plain fn (works for the release
+//            method), plus
+//        (b) an adapter-side resource-drop registration
+//            (`HostImports` doesn't currently expose one).
+//
+//      Practical impact: guests that explicitly call
+//      `handle.release()` get "no handler for method
+//      [method]lock-handle.release" until the release override
+//      lands. Guests that just let the handle fall out of
+//      scope leak the underlying LockHandleState (the OS
+//      flock is never released until the process exits). The
+//      wit-bindgen path at `crate::extension` line 2635 stays
+//      the correct choice for consumers who need real lifecycle.
+//
+//      Follow-up: Phase 6.2.d.2-n adds the release override
+//      once wasmos supports the [method]... convention +
+//      documents the destructor gap as a wasmos-side ADR.
+// ────────────────────────────────────────────────────────────────────
+
+/// Wasmos-native marker for the WIT `duckdb:extension/file-lock.
+/// lock-handle` resource. Handle rep is the internal id from
+/// `ExtensionStoreState::acquire_exclusive_lock`; the
+/// `#[host_iface]` classifier emits ctx-mediated lower for
+/// Resource<LockHandle> returns.
+#[derive(HostResourceType)]
+#[wit_resource(interface = "duckdb:extension/file-lock", name = "lock-handle")]
+pub struct LockHandle;
+
+/// Host struct for the `duckdb:extension/file-lock` interface.
+/// See `crate::extension` line 2609. 2 methods; the resource-
+/// method trait (`HostLockHandle`) is deferred (see module
+/// section docstring).
+#[derive(Clone)]
+pub struct FileLockHost {
+    state: SharedExtensionState,
+}
+
+impl FileLockHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl FileLockHost {
+    fn acquire_exclusive(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        path: String,
+    ) -> RuntimeResult<Result<Resource<LockHandle>, String>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        match g.acquire_exclusive_lock(&path) {
+            Ok(id) => Ok(Ok(Resource::<LockHandle>::from_raw(id, true))),
+            Err(msg) => Ok(Err(msg)),
+        }
+    }
+
+    fn try_acquire_exclusive(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        path: String,
+    ) -> RuntimeResult<Result<Option<Resource<LockHandle>>, String>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        match g.try_acquire_exclusive_lock(&path) {
+            Ok(Some(id)) => Ok(Ok(Some(Resource::<LockHandle>::from_raw(id, true)))),
+            Ok(None) => Ok(Ok(None)),
+            Err(msg) => Ok(Err(msg)),
+        }
+    }
+}
+
+/// Register the `duckdb:extension/file-lock` handler.
+///
+/// NOTE: the interface's resource-method trait (release +
+/// drop) is NOT wired here. See the module section docstring
+/// for the wasmos-side gap + follow-up plan (Phase 6.2.d.2-n).
+pub fn install_file_lock_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/file-lock",
+        Arc::new(SyncHostCallAdapter::new(FileLockHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
 }
