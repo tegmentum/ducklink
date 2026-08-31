@@ -40,12 +40,38 @@
 //!   `wasmos/docs/design/runtime-abstraction/phase-6-2-d-2-recon.md`
 //!   for the full mapping.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use wasmos_runtime_api::{
     host_iface, HostCallContext, HostImports, RuntimeResult, SyncHostCall, SyncHostCallAdapter,
-    WitFlags, WitVariant,
+    WitEnum, WitFlags, WitVariant,
 };
+
+use crate::extension::{
+    ExtensionStoreState, PendingOptimizer, PendingParser, PendingSetting,
+};
+
+/// Shared handle to `ExtensionStoreState` used by state-touching
+/// wasmos-native interface handlers. Matches the SharedTvmHost
+/// pattern from tvm-wasm (ADR-0029 Phase 6.9.a) — per-call
+/// mutex lock, no fine-grained fields. Suitable for interfaces
+/// called at extension-load time (not hot inner loops).
+///
+/// Consumers construct one at instantiation:
+///
+/// ```rust,ignore
+/// let state = ExtensionStoreState::new(...);
+/// let shared: SharedExtensionState = Arc::new(Mutex::new(state));
+/// let imports = install_extension_imports_stateful(
+///     HostImports::new(),
+///     shared,
+/// );
+/// ```
+///
+/// Alternative wire-compatible design (extract per-field locks
+/// into a smaller shared struct) is a Phase 6.2.d.2-d follow-up
+/// if per-call lock contention shows up in benchmarks.
+pub type SharedExtensionState = Arc<Mutex<ExtensionStoreState>>;
 
 // ────────────────────────────────────────────────────────────────────
 // Migration status (Phase 6.2.d.2)
@@ -328,6 +354,239 @@ pub fn install_extension_imports(imports: HostImports) -> HostImports {
     let imports = install_encoding_imports(imports);
     let imports = install_compression_imports(imports);
     install_files_reg_imports(imports)
+}
+
+/// Install every interface currently landed, INCLUDING the
+/// state-touching batch that needs a shared handle to
+/// `ExtensionStoreState`. Preferred entry point for consumers
+/// running the wasmos-native path end-to-end.
+///
+/// Stateless-only [`install_extension_imports`] stays available
+/// for consumers who don't need any state-touching interface —
+/// tests, minimal harnesses, and any component that only imports
+/// the 5 stateless interfaces.
+///
+/// State-touching interfaces registered by this fn (in addition
+/// to the 5 stateless ones):
+/// - `duckdb:extension/parser` — captures pending parser
+///   extensions into `state.pending_parsers`.
+/// - `duckdb:extension/optimizer` — captures pending optimizer
+///   rules into `state.pending_optimizers`.
+/// - `duckdb:extension/settings` — captures pending settings
+///   into `state.pending_settings`.
+pub fn install_extension_imports_stateful(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    let imports = install_extension_imports(imports);
+    let imports = install_parser_imports(imports, state.clone());
+    let imports = install_optimizer_imports(imports, state.clone());
+    install_settings_imports(imports, state)
+}
+
+// ────────────────────────────────────────────────────────────────────
+// State-touching interfaces (Phase 6.2.d.2-c, first batch).
+//
+// Each mirrors the corresponding `impl <iface>::Host for
+// ExtensionStoreState` in `crate::extension`. Behavior is
+// byte-identical; the state access goes through the shared
+// mutex on every call.
+// ────────────────────────────────────────────────────────────────────
+
+// ── extension_parser ────────────────────────────────────────────────
+
+/// Host struct for the `duckdb:extension/parser` interface.
+/// See `crate::extension` line 1973 for the wit-bindgen
+/// counterpart. Currently DEPRECATED (per the source comment
+/// there) — no host drains `pending_parsers` anymore, so
+/// components calling `register-parser-extension` succeed but
+/// their declarations never reach DuckDB.
+// No `Debug` derive — SharedExtensionState wraps
+// ExtensionStoreState which contains non-Debug wasmtime types
+// (WasiCtx, ResourceTable). Trace by state pointer if needed.
+#[derive(Clone)]
+pub struct ParserHost {
+    state: SharedExtensionState,
+}
+
+impl ParserHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl ParserHost {
+    fn register_parser_extension(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        name: String,
+        callback_handle: u32,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let registry_id = g.alloc_resource_id();
+        let extension = g.extension_name().to_string();
+        g.push_pending_parser(PendingParser {
+            extension,
+            name,
+            callback_handle,
+        });
+        Ok(Ok(registry_id))
+    }
+}
+
+/// Register the `duckdb:extension/parser` handler.
+pub fn install_parser_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/parser",
+        Arc::new(SyncHostCallAdapter::new(ParserHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ── extension_optimizer ─────────────────────────────────────────────
+
+/// Host struct for the `duckdb:extension/optimizer` interface.
+/// See `crate::extension` line 2002. Also DEPRECATED (per the
+/// source comment) — pending buffer is captured but not drained.
+#[derive(Clone)]
+pub struct OptimizerHost {
+    state: SharedExtensionState,
+}
+
+impl OptimizerHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl OptimizerHost {
+    fn register_optimizer_rule(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        rule_name: String,
+        callback_handle: u32,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let registry_id = g.alloc_resource_id();
+        let extension = g.extension_name().to_string();
+        g.push_pending_optimizer(PendingOptimizer {
+            extension,
+            rule_name,
+            callback_handle,
+        });
+        Ok(Ok(registry_id))
+    }
+}
+
+/// Register the `duckdb:extension/optimizer` handler.
+pub fn install_optimizer_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/optimizer",
+        Arc::new(SyncHostCallAdapter::new(OptimizerHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ── extension_settings ──────────────────────────────────────────────
+
+/// Wasmos-native mirror of the WIT
+/// `duckdb:extension/settings.setting-type` enum. See
+/// `crate::extension` line 1927.
+#[derive(Debug, Clone, Copy, WitEnum)]
+pub enum SettingType {
+    Boolean,
+    Varchar,
+    Bigint,
+    Double,
+}
+
+impl SettingType {
+    fn as_str(self) -> &'static str {
+        match self {
+            SettingType::Boolean => "boolean",
+            SettingType::Varchar => "varchar",
+            SettingType::Bigint => "bigint",
+            SettingType::Double => "double",
+        }
+    }
+}
+
+/// Wasmos-native mirror of the WIT
+/// `duckdb:extension/settings.setting-scope` enum.
+#[derive(Debug, Clone, Copy, WitEnum)]
+pub enum SettingScope {
+    Local,
+    Global,
+}
+
+impl SettingScope {
+    fn as_str(self) -> &'static str {
+        match self {
+            SettingScope::Local => "local",
+            SettingScope::Global => "global",
+        }
+    }
+}
+
+/// Host struct for the `duckdb:extension/settings` interface.
+/// See `crate::extension` line 1927. Captures pending settings
+/// into `state.pending_settings` for drain by the core shim.
+#[derive(Clone)]
+pub struct SettingsHost {
+    state: SharedExtensionState,
+}
+
+impl SettingsHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl SettingsHost {
+    fn register_option(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        name: String,
+        description: String,
+        ty: SettingType,
+        default_value: Option<String>,
+        scope: SettingScope,
+    ) -> RuntimeResult<Result<(), Duckerror>> {
+        let ty_str = ty.as_str().to_string();
+        let scope_str = scope.as_str().to_string();
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let extension = g.extension_name().to_string();
+        g.push_pending_setting(PendingSetting {
+            extension,
+            name,
+            description,
+            ty: ty_str,
+            default_value,
+            scope: scope_str,
+        });
+        Ok(Ok(()))
+    }
+}
+
+/// Register the `duckdb:extension/settings` handler.
+pub fn install_settings_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/settings",
+        Arc::new(SyncHostCallAdapter::new(SettingsHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
 }
 
 /// Register the `duckdb:extension/lifecycle` handler on the given
