@@ -1091,6 +1091,36 @@ impl ExtensionStoreState {
         self.free_lock_handle(id);
     }
 
+    /// ADR-0029 Phase 6.2.d.2-o accessor — allocate a fresh
+    /// scalar-registry id + insert a default `PendingScalarRegistry`.
+    /// Returned id is the rep for a `runtime.scalar-registry`
+    /// Resource<T> handed back to the guest via
+    /// `runtime.get-capability(scalar)`.
+    pub fn init_scalar_registry(&mut self) -> u32 {
+        let id = self.alloc_resource_id();
+        self.scalar_registries
+            .insert(id, PendingScalarRegistry::default());
+        id
+    }
+
+    /// ADR-0029 Phase 6.2.d.2-o accessor — sibling of
+    /// `init_scalar_registry` for `runtime.table-registry`.
+    pub fn init_table_registry(&mut self) -> u32 {
+        let id = self.alloc_resource_id();
+        self.table_registries
+            .insert(id, PendingTableRegistry::default());
+        id
+    }
+
+    /// ADR-0029 Phase 6.2.d.2-o accessor — sibling of
+    /// `init_scalar_registry` for `runtime.aggregate-registry`.
+    pub fn init_aggregate_registry(&mut self) -> u32 {
+        let id = self.alloc_resource_id();
+        self.aggregate_registries
+            .insert(id, PendingAggregateRegistry::default());
+        id
+    }
+
     /// ADR-0029 Phase 6.2.d.2 accessor — look up the table function
     /// name that was registered for a given handle. Used by the
     /// `files.register_replacement_scan` handler to resolve the

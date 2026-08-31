@@ -412,7 +412,10 @@ pub fn install_extension_imports_stateful(
     // in -m via Resource<CastCallback> arg handling)
     let imports = install_catalog_imports(imports, state.clone());
     // 6.2.d.2-m batch (file_lock — resource lifecycle methods deferred)
-    install_file_lock_imports(imports, state)
+    let imports = install_file_lock_imports(imports, state.clone());
+    // 6.2.d.2-o batch (runtime main Host trait — 10 sub-traits
+    // deferred to Phase 6.2.d.2-p+)
+    install_runtime_imports(imports, state)
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -1958,7 +1961,7 @@ pub fn install_runtime_ext_imports(
 /// `HostCallContext::new_typed_resource<T>` / `typed_resource_rep::<T>`
 /// helpers need. Sibling to the ScalarCallback / TableCallback
 /// markers in `runtime/api/tests/host_iface_resource.rs`.
-#[derive(HostResourceType)]
+#[derive(Debug, HostResourceType)]
 #[wit_resource(interface = "duckdb:extension/catalog", name = "cast-callback")]
 pub struct CastCallback;
 
@@ -2146,7 +2149,7 @@ pub fn install_catalog_imports(
 /// `ExtensionStoreState::acquire_exclusive_lock`; the
 /// `#[host_iface]` classifier emits ctx-mediated lower for
 /// Resource<LockHandle> returns.
-#[derive(HostResourceType)]
+#[derive(Debug, HostResourceType)]
 #[wit_resource(interface = "duckdb:extension/file-lock", name = "lock-handle")]
 pub struct LockHandle;
 
@@ -2205,6 +2208,192 @@ pub fn install_file_lock_imports(
     imports.register(
         "duckdb:extension/file-lock",
         Arc::new(SyncHostCallAdapter::new(FileLockHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Phase 6.2.d.2-o — runtime main Host trait (27/27 for interface
+// registration; the 10 sub-trait impls — 5 XxxCallback + 4
+// XxxRegistry + HostMacroRegistry — are Phase 6.2.d.2-p+).
+//
+// This slice tackles the ROOT of the runtime interface: the 2-method
+// Host trait (get_capability + list_capabilities) that guests call
+// to bootstrap capability negotiation. It exercises Phase 6.12
+// Session 3c's variant-with-Resource<T>-payloads support — the
+// Capability variant has 5 arms each carrying a Resource<T>.
+//
+// The sub-trait impls are structurally different: they use the WIT
+// resource-method mangling (`[method]scalar-registry.register-scalar`
+// etc.) and resource-constructor mangling (`[constructor]scalar-
+// callback`), which #[host_iface] doesn't yet accept as sugar. Each
+// method needs a `#[method("[method]...")]` override; the 55+
+// methods across 10 sub-traits warrant a coordinated sub-arc.
+// ────────────────────────────────────────────────────────────────────
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/types.
+/// capabilitykind` enum. 7 unit arms (WIT `capabilitykind`
+/// includes `file-format` which PascalCases to FileFormat).
+#[derive(Debug, Clone, Copy, WitEnum)]
+pub enum Capabilitykind {
+    Scalar,
+    Table,
+    Aggregate,
+    Pragma,
+    Macro,
+    Catalog,
+    FileFormat,
+}
+
+/// Wasmos-native markers for the WIT `duckdb:extension/runtime.
+/// *-registry` resources. Handle rep is the id from the matching
+/// `init_*_registry` accessor (scalar/table/aggregate) or
+/// `alloc_resource_id` (pragma/macro).
+#[derive(Debug, HostResourceType)]
+#[wit_resource(interface = "duckdb:extension/runtime", name = "scalar-registry")]
+pub struct ScalarRegistry;
+
+#[derive(Debug, HostResourceType)]
+#[wit_resource(interface = "duckdb:extension/runtime", name = "table-registry")]
+pub struct TableRegistry;
+
+#[derive(Debug, HostResourceType)]
+#[wit_resource(interface = "duckdb:extension/runtime", name = "aggregate-registry")]
+pub struct AggregateRegistry;
+
+#[derive(Debug, HostResourceType)]
+#[wit_resource(interface = "duckdb:extension/runtime", name = "pragma-registry")]
+pub struct PragmaRegistry;
+
+#[derive(Debug, HostResourceType)]
+#[wit_resource(interface = "duckdb:extension/runtime", name = "macro-registry")]
+pub struct MacroRegistry;
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/runtime.
+/// capability` variant. 5 arms, each with a `Resource<T>`
+/// payload — the ctx-mediated Resource<T>-inside-variant-payload
+/// shape unlocked by Phase 6.12 Session 3c.
+///
+/// The `#[wit_ctx]` container opt-in emits `impl WitBridgeCtx`
+/// (not `impl WitBridge`) so each payload's `Resource<T>`
+/// serialization routes through `HostCallContext::
+/// new_typed_resource` / `typed_resource_rep` on the way in/out.
+#[derive(Debug, Clone, WitVariant)]
+#[wit_ctx]
+pub enum Capability {
+    Scalar(Resource<ScalarRegistry>),
+    Table(Resource<TableRegistry>),
+    Aggregate(Resource<AggregateRegistry>),
+    Pragma(Resource<PragmaRegistry>),
+    Macro(Resource<MacroRegistry>),
+}
+
+/// Host struct for the `duckdb:extension/runtime` interface —
+/// the ROOT of the extension SPI's registration surface. See
+/// `crate::extension` line 1349 for the wit-bindgen counterpart.
+///
+/// This slice covers the 2 top-level methods (get_capability +
+/// list_capabilities); the 10 sub-trait impls (5 HostXxxCallback
+/// resource constructors + HostScalarRegistry / HostTableRegistry
+/// / HostAggregateRegistry / HostPragmaRegistry / HostMacroRegistry
+/// resource-method traits) land in future Phase 6.2.d.2-p+
+/// sub-sessions using WIT resource-method mangling overrides
+/// (`#[method("[method]scalar-registry.register-scalar")]`).
+#[derive(Clone)]
+pub struct RuntimeHost {
+    state: SharedExtensionState,
+}
+
+impl RuntimeHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl RuntimeHost {
+    /// Handler for `runtime.get-capability(kind) -> option<capability>`.
+    /// Byte-identical to `crate::extension` line 1350:
+    /// - Scalar/Table/Aggregate: allocate a fresh registry id +
+    ///   insert a default PendingXxxRegistry, hand back a
+    ///   Resource<XxxRegistry>.
+    /// - Pragma: allocate a fresh id (no per-registry buffer;
+    ///   register_call captures directly).
+    /// - Macro/Catalog/FileFormat: return None (documented in the
+    ///   wit-bindgen counterpart — Macro capability path is
+    ///   Unsupported today, Catalog + FileFormat have no
+    ///   `Capability::*` variant).
+    fn get_capability(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        kind: Capabilitykind,
+    ) -> RuntimeResult<Option<Capability>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        Ok(match kind {
+            Capabilitykind::Scalar => {
+                let id = g.init_scalar_registry();
+                Some(Capability::Scalar(Resource::<ScalarRegistry>::from_raw(
+                    id, true,
+                )))
+            }
+            Capabilitykind::Table => {
+                let id = g.init_table_registry();
+                Some(Capability::Table(Resource::<TableRegistry>::from_raw(
+                    id, true,
+                )))
+            }
+            Capabilitykind::Aggregate => {
+                let id = g.init_aggregate_registry();
+                Some(Capability::Aggregate(Resource::<AggregateRegistry>::from_raw(
+                    id, true,
+                )))
+            }
+            Capabilitykind::Pragma => {
+                let id = g.alloc_resource_id();
+                Some(Capability::Pragma(Resource::<PragmaRegistry>::from_raw(
+                    id, true,
+                )))
+            }
+            // Documented Nones (see `crate::extension` line 1388-1405).
+            Capabilitykind::Macro => None,
+            Capabilitykind::Catalog => None,
+            Capabilitykind::FileFormat => None,
+        })
+    }
+
+    /// Handler for `runtime.list-capabilities() -> list<capabilitykind>`.
+    /// Returns the kinds `get-capability` actively hands back a
+    /// Some for. Macro/Catalog/FileFormat omitted (matches
+    /// `crate::extension` line 1409).
+    fn list_capabilities(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+    ) -> RuntimeResult<Vec<Capabilitykind>> {
+        Ok(vec![
+            Capabilitykind::Scalar,
+            Capabilitykind::Table,
+            Capabilitykind::Aggregate,
+            Capabilitykind::Pragma,
+        ])
+    }
+}
+
+/// Register the `duckdb:extension/runtime` handler.
+///
+/// NOTE: The 10 sub-trait impls (5 HostXxxCallback constructors +
+/// HostScalarRegistry/HostTableRegistry/HostAggregateRegistry/
+/// HostPragmaRegistry/HostMacroRegistry method-carrying traits)
+/// are NOT wired here — see the module section docstring for the
+/// mangling-convention follow-up plan. Guests that call
+/// registry.register_scalar (etc.) get "no handler" until the
+/// Phase 6.2.d.2-p+ sub-sessions land those overrides.
+pub fn install_runtime_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/runtime",
+        Arc::new(SyncHostCallAdapter::new(RuntimeHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
 }
