@@ -1035,6 +1035,11 @@ impl ExtensionStoreState {
         self.pending_arrow_tables.push(entry);
     }
 
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_filterable_tables`.
+    pub fn push_pending_filterable_table(&mut self, entry: reg::FilterableTableReg) {
+        self.pending_filterable_tables.push(entry);
+    }
+
     /// ADR-0029 Phase 6.2.d.2 accessor — look up the table function
     /// name that was registered for a given handle. Used by the
     /// `files.register_replacement_scan` handler to resolve the
