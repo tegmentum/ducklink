@@ -2376,6 +2376,324 @@ impl RuntimeHost {
             Capabilitykind::Pragma,
         ])
     }
+
+    // ── Sub-trait: HostMacroRegistry (Phase 6.2.d.2-p, first slice) ──
+    //
+    // The wit-bindgen counterpart at `crate::extension` line 1844
+    // has 2 methods on the macro-registry resource:
+    //   register-scalar(name, parameters, body-sql, options)
+    //     -> result<bool, duckerror>  — always returns Unsupported
+    //   [resource-drop]macro-registry  — no-op
+    //
+    // Under the WIT canonical ABI, resource-method names mangle to
+    // `[method]macro-registry.register-scalar` (etc.). The
+    // `#[method("...")]` override on `#[host_iface]` lets us wire
+    // the same dispatch — the arg list mirrors the WIT method
+    // shape (self resource lifts as `Resource<MacroRegistry>`
+    // first arg; other args follow).
+
+    /// `[method]macro-registry.register-scalar` — always
+    /// returns Unsupported. Byte-identical to the wit-bindgen
+    /// counterpart.
+    ///
+    /// NOTE: options is `Option<Extopts>` but I haven't mirrored
+    /// runtime's own Extopts type yet — the runtime WIT reuses
+    /// `types.extopts` which is already mirrored elsewhere in
+    /// this module (as `Extopts`). Same type; wasmos-native
+    /// classifier resolves the reuse automatically.
+    #[method("[method]macro-registry.register-scalar")]
+    fn macro_registry_register_scalar(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _self_: Resource<MacroRegistry>,
+        _name: String,
+        _parameters: Vec<String>,
+        _body_sql: String,
+        _options: Option<Extopts>,
+    ) -> RuntimeResult<Result<bool, Duckerror>> {
+        // Matches `crate::extension` line 1852:
+        // `Err(unsupported_runtime_error())` where
+        // `unsupported_runtime_error` returns
+        // `Duckerror::Unsupported("component runtime not
+        // available in CLI host")`.
+        Ok(Err(Duckerror::Unsupported(
+            "component runtime not available in CLI host".to_string(),
+        )))
+    }
+
+    /// `[resource-drop]macro-registry` — no-op. The wit-bindgen
+    /// counterpart at `crate::extension` line 1856 also just
+    /// returns Ok(()).
+    ///
+    /// WASMOS-SIDE GAP: destructor dispatch depends on adapter-
+    /// level resource-drop notifications from the guest. See
+    /// the Phase 6.2.d.2-n design note in file_lock's section.
+    /// If wasmos never dispatches `[resource-drop]macro-registry`,
+    /// this handler is dead code — harmless (no state to
+    /// release; the wit-bindgen counterpart is also no-op).
+    #[method("[resource-drop]macro-registry")]
+    fn macro_registry_drop(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _rep: Resource<MacroRegistry>,
+    ) -> RuntimeResult<()> {
+        Ok(())
+    }
+
+    // ── Sub-trait: 5 XxxCallback constructors + calls + drops (Phase 6.2.d.2-p) ──
+    //
+    // Under the WIT canonical ABI, each `resource xxx-callback`
+    // mangles to:
+    //   `[constructor]xxx-callback` — takes u32 handle,
+    //      returns Resource<XxxCallback>
+    //   `[method]xxx-callback.call` — self resource + method args,
+    //      returns the resource's declared type (Unsupported here)
+    //   `[resource-drop]xxx-callback` — self resource,
+    //      returns () after cleanup
+    //
+    // The 5 kinds (Scalar/Table/Aggregate/Pragma/Cast) each get 3
+    // methods = 15 total. All `call` methods return
+    // `Duckerror::Unsupported` per the wit-bindgen counterpart
+    // at `crate::extension` line 1453+.
+    //
+    // The `call` args (list<duckvalue>, invokeinfo, rowbatch,
+    // etc.) use `Vec<Value>` passthrough — sidesteps needing
+    // Duckvalue / Invokeinfo / Rowbatch / Resultset mirror types
+    // for handlers that never touch the args. Same pattern used
+    // in sqlink-host's `extension_loader` stub.
+
+    // ── ScalarCallback ─────────────────────────────────────────
+
+    #[method("[constructor]scalar-callback")]
+    fn scalar_callback_new(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        handle: u32,
+    ) -> RuntimeResult<Resource<ScalarCallback>> {
+        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let id = g.allocate_callback_handle_pub(handle, crate::CallbackKind::Scalar);
+        Ok(Resource::<ScalarCallback>::from_raw(id, true))
+    }
+
+    #[method("[method]scalar-callback.call")]
+    fn scalar_callback_call(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _args: Vec<wasmos_runtime_api::Value>,
+    ) -> RuntimeResult<Vec<wasmos_runtime_api::Value>> {
+        // Vec<Value> passthrough: `[method]xxx.call` returns
+        // `result<duckvalue, duckerror>`; construct the Err
+        // arm's Value directly to avoid the Duckvalue mirror.
+        Ok(vec![wasmos_runtime_api::Value::Result(Err(Some(
+            Box::new(unsupported_duckerror_value()),
+        )))])
+    }
+
+    #[method("[resource-drop]scalar-callback")]
+    fn scalar_callback_drop(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        rep: Resource<ScalarCallback>,
+    ) -> RuntimeResult<()> {
+        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        g.release_callback_handle_pub(rep.handle());
+        Ok(())
+    }
+
+    // ── TableCallback ──────────────────────────────────────────
+
+    #[method("[constructor]table-callback")]
+    fn table_callback_new(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        handle: u32,
+    ) -> RuntimeResult<Resource<TableCallback>> {
+        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let id = g.allocate_callback_handle_pub(handle, crate::CallbackKind::Table);
+        Ok(Resource::<TableCallback>::from_raw(id, true))
+    }
+
+    #[method("[method]table-callback.call")]
+    fn table_callback_call(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _args: Vec<wasmos_runtime_api::Value>,
+    ) -> RuntimeResult<Vec<wasmos_runtime_api::Value>> {
+        Ok(vec![wasmos_runtime_api::Value::Result(Err(Some(
+            Box::new(unsupported_duckerror_value()),
+        )))])
+    }
+
+    #[method("[resource-drop]table-callback")]
+    fn table_callback_drop(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        rep: Resource<TableCallback>,
+    ) -> RuntimeResult<()> {
+        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        g.release_callback_handle_pub(rep.handle());
+        Ok(())
+    }
+
+    // ── AggregateCallback ──────────────────────────────────────
+
+    #[method("[constructor]aggregate-callback")]
+    fn aggregate_callback_new(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        handle: u32,
+    ) -> RuntimeResult<Resource<AggregateCallback>> {
+        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let id = g.allocate_callback_handle_pub(handle, crate::CallbackKind::Aggregate);
+        Ok(Resource::<AggregateCallback>::from_raw(id, true))
+    }
+
+    #[method("[method]aggregate-callback.call")]
+    fn aggregate_callback_call(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _args: Vec<wasmos_runtime_api::Value>,
+    ) -> RuntimeResult<Vec<wasmos_runtime_api::Value>> {
+        Ok(vec![wasmos_runtime_api::Value::Result(Err(Some(
+            Box::new(unsupported_duckerror_value()),
+        )))])
+    }
+
+    #[method("[resource-drop]aggregate-callback")]
+    fn aggregate_callback_drop(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        rep: Resource<AggregateCallback>,
+    ) -> RuntimeResult<()> {
+        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        g.release_callback_handle_pub(rep.handle());
+        Ok(())
+    }
+
+    // ── PragmaCallback ─────────────────────────────────────────
+
+    #[method("[constructor]pragma-callback")]
+    fn pragma_callback_new(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        handle: u32,
+    ) -> RuntimeResult<Resource<PragmaCallback>> {
+        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let id = g.allocate_callback_handle_pub(handle, crate::CallbackKind::Pragma);
+        Ok(Resource::<PragmaCallback>::from_raw(id, true))
+    }
+
+    #[method("[method]pragma-callback.call")]
+    fn pragma_callback_call(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _args: Vec<wasmos_runtime_api::Value>,
+    ) -> RuntimeResult<Vec<wasmos_runtime_api::Value>> {
+        Ok(vec![wasmos_runtime_api::Value::Result(Err(Some(
+            Box::new(unsupported_duckerror_value()),
+        )))])
+    }
+
+    #[method("[resource-drop]pragma-callback")]
+    fn pragma_callback_drop(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        rep: Resource<PragmaCallback>,
+    ) -> RuntimeResult<()> {
+        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        g.release_callback_handle_pub(rep.handle());
+        Ok(())
+    }
+
+    // ── CastCallback ───────────────────────────────────────────
+    //
+    // NOTE: CastCallback is used by BOTH runtime AND catalog.
+    // The marker was defined for catalog in Phase 6.2.d.2-m
+    // (`interface = "duckdb:extension/catalog"`); the runtime
+    // constructor needs a separate marker with the runtime
+    // interface tag. Defined below the impl block as
+    // `RuntimeCastCallback` so both markers coexist.
+
+    #[method("[constructor]cast-callback")]
+    fn cast_callback_new(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        handle: u32,
+    ) -> RuntimeResult<Resource<RuntimeCastCallback>> {
+        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let id = g.allocate_callback_handle_pub(handle, crate::CallbackKind::Cast);
+        Ok(Resource::<RuntimeCastCallback>::from_raw(id, true))
+    }
+
+    #[method("[method]cast-callback.call")]
+    fn cast_callback_call(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _args: Vec<wasmos_runtime_api::Value>,
+    ) -> RuntimeResult<Vec<wasmos_runtime_api::Value>> {
+        Ok(vec![wasmos_runtime_api::Value::Result(Err(Some(
+            Box::new(unsupported_duckerror_value()),
+        )))])
+    }
+
+    #[method("[resource-drop]cast-callback")]
+    fn cast_callback_drop(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        rep: Resource<RuntimeCastCallback>,
+    ) -> RuntimeResult<()> {
+        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        g.release_callback_handle_pub(rep.handle());
+        Ok(())
+    }
+}
+
+// ── Runtime XxxCallback resource markers (Phase 6.2.d.2-p) ─────
+
+#[derive(Debug, HostResourceType)]
+#[wit_resource(interface = "duckdb:extension/runtime", name = "scalar-callback")]
+pub struct ScalarCallback;
+
+#[derive(Debug, HostResourceType)]
+#[wit_resource(interface = "duckdb:extension/runtime", name = "table-callback")]
+pub struct TableCallback;
+
+#[derive(Debug, HostResourceType)]
+#[wit_resource(interface = "duckdb:extension/runtime", name = "aggregate-callback")]
+pub struct AggregateCallback;
+
+#[derive(Debug, HostResourceType)]
+#[wit_resource(interface = "duckdb:extension/runtime", name = "pragma-callback")]
+pub struct PragmaCallback;
+
+/// Runtime-side sibling of the `CastCallback` defined for
+/// catalog in Phase 6.2.d.2-m. Same underlying resource type
+/// (host allocates a callback handle via
+/// `allocate_callback_handle_pub`); the two markers are
+/// distinct only because HostResourceType's INTERFACE
+/// associated const has to name the containing interface, and
+/// cast-callback appears in BOTH `duckdb:extension/runtime`
+/// AND `duckdb:extension/catalog` WITs. wasmos-runtime-api's
+/// classifier keys on the (interface, name) pair so the two
+/// markers dispatch independently.
+#[derive(Debug, HostResourceType)]
+#[wit_resource(interface = "duckdb:extension/runtime", name = "cast-callback")]
+pub struct RuntimeCastCallback;
+
+/// Build the `Value` representation of
+/// `Result::Err(Duckerror::Unsupported("component runtime not
+/// available in CLI host"))` — the Value the XxxCallback.call
+/// handlers return under Vec<Value> passthrough. Wire-identical
+/// to what the wit-bindgen counterpart's
+/// `unsupported_runtime_error()` produces at `crate::extension`
+/// line ~1160.
+fn unsupported_duckerror_value() -> wasmos_runtime_api::Value {
+    wasmos_runtime_api::Value::Variant {
+        discriminant: "unsupported".into(),
+        payload: Some(Box::new(wasmos_runtime_api::Value::String(
+            "component runtime not available in CLI host".to_string(),
+        ))),
+    }
 }
 
 /// Register the `duckdb:extension/runtime` handler.

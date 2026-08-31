@@ -1121,6 +1121,16 @@ impl ExtensionStoreState {
         id
     }
 
+    /// ADR-0029 Phase 6.2.d.2-p accessor — release a callback
+    /// handle. Wraps the private `release_callback_handle` so
+    /// `crate::extension_wasmos`'s XxxCallback drop handlers can
+    /// clean up the global registry when a callback resource is
+    /// dropped by the guest. (Actual invocation is subject to the
+    /// wasmos-side destructor-dispatch gap — see Phase 6.2.d.2-n.)
+    pub fn release_callback_handle_pub(&self, handle: u32) {
+        self.release_callback_handle(handle);
+    }
+
     /// ADR-0029 Phase 6.2.d.2 accessor — look up the table function
     /// name that was registered for a given handle. Used by the
     /// `files.register_replacement_scan` handler to resolve the
