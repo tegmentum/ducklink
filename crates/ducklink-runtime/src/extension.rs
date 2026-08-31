@@ -1091,6 +1091,46 @@ impl ExtensionStoreState {
         self.free_lock_handle(id);
     }
 
+    /// ADR-0029 Phase 6.2.g accessor — count of currently-held file
+    /// lock handles. Non-mutating inspection helper for stateful
+    /// integration tests + operational counters (e.g. surfacing
+    /// "extension X holds N file locks" in a diagnostic dump).
+    /// Zero for extensions that don't import `file-lock`.
+    pub fn active_lock_handle_count(&self) -> usize {
+        self.lock_handles.len()
+    }
+
+    /// ADR-0029 Phase 6.2.g accessor — true when `id` currently
+    /// names a live lock-handle registration. Sibling of
+    /// [`active_lock_handle_count`](Self::active_lock_handle_count)
+    /// for tests that need to verify a specific handle survived /
+    /// was released.
+    pub fn contains_lock_handle(&self, id: u32) -> bool {
+        self.lock_handles.contains_key(&id)
+    }
+
+    /// ADR-0029 Phase 6.2.g accessor — clone-out of the shared
+    /// callback registry `Arc`. Read-only for tests that need to
+    /// verify a callback handle was allocated / released after a
+    /// SyncHostCall dispatch (the private field is per-instance;
+    /// cloning the Arc is cheap and lets a test hold a live read
+    /// handle without threading the registry through the fixture
+    /// twice).
+    pub fn callback_registry_handle(&self) -> Arc<RwLock<crate::CallbackRegistry>> {
+        Arc::clone(&self.callback_registry)
+    }
+
+    /// ADR-0029 Phase 6.2.g accessor — current length of the
+    /// `pending_parsers` capture buffer. Stateful-integration
+    /// tests use it to assert that a wasmos-side
+    /// `register-parser-extension` dispatch actually pushed to
+    /// the buffer without exposing the field itself. Sibling of
+    /// [`active_lock_handle_count`](Self::active_lock_handle_count)
+    /// for the parser-registration capture path.
+    pub fn pending_parser_count(&self) -> usize {
+        self.pending_parsers.len()
+    }
+
     /// ADR-0029 Phase 6.2.d.2-o accessor — allocate a fresh
     /// scalar-registry id + insert a default `PendingScalarRegistry`.
     /// Returned id is the rep for a `runtime.scalar-registry`
@@ -5126,51 +5166,12 @@ impl Drop for ExtensionInstance {
 mod tests {
     use super::*;
 
-    /// A no-op `ExtensionServices` sink: every config read is unavailable, logs
-    /// are dropped. Lets us build an `ExtensionStoreState` to test the capture
-    /// paths without a live database.
-    struct NoopServices;
-    impl ExtensionServices for NoopServices {
-        fn provider_version(&mut self) -> Result<String, ConfigError> {
-            Ok("test".to_string())
-        }
-        fn list_keys(&mut self, _prefix: Option<&str>) -> Result<Vec<String>, ConfigError> {
-            Ok(Vec::new())
-        }
-        fn get_string(&mut self, _path: &str) -> Result<Option<String>, ConfigError> {
-            Ok(None)
-        }
-        fn get_bool(&mut self, _path: &str) -> Result<Option<bool>, ConfigError> {
-            Ok(None)
-        }
-        fn get_i64(&mut self, _path: &str) -> Result<Option<i64>, ConfigError> {
-            Ok(None)
-        }
-        fn get_u64(&mut self, _path: &str) -> Result<Option<u64>, ConfigError> {
-            Ok(None)
-        }
-        fn get_f64(&mut self, _path: &str) -> Result<Option<f64>, ConfigError> {
-            Ok(None)
-        }
-        fn get_bytes(&mut self, _path: &str) -> Result<Option<Vec<u8>>, ConfigError> {
-            Ok(None)
-        }
-        fn get_string_list(&mut self, _path: &str) -> Result<Option<Vec<String>>, ConfigError> {
-            Ok(None)
-        }
-        fn log(&mut self, _level: LogLevel, _message: &str, _target: Option<&str>) {}
-        fn log_fields(&mut self, _level: LogLevel, _message: &str, _fields: &[LogField]) {}
-    }
-
-    fn test_state() -> ExtensionStoreState {
-        let wasi = wasmtime_wasi::WasiCtxBuilder::new().build();
-        ExtensionStoreState::new(
-            wasi,
-            Box::new(NoopServices),
-            Arc::new(RwLock::new(CallbackRegistry::default())),
-            "testext".to_string(),
-        )
-    }
+    // ADR-0029 Phase 6.2.g — NoopServices + test_state moved to
+    // crate::extension_test_support so extension_wasmos::tests can
+    // share the same fixture. Re-exported into this module's scope
+    // via `use` so the many downstream test callsites below need no
+    // further edits.
+    use crate::extension_test_support::{test_state, NoopServices};
 
     /// Every base-world logicaltype, including the rich set, for round-tripping.
     fn all_ext_logicaltypes() -> Vec<extension_runtime::Logicaltype> {

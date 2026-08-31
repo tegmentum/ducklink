@@ -378,6 +378,16 @@ pub mod extension;
 // ExtensionStoreState migration to wasmos_runtime_api. Coexists
 // with `extension`; consumers pick per install path.
 pub mod extension_wasmos;
+
+// ADR-0029 Phase 6.2.g — shared test-support module: fixture +
+// stateful stub ctx consumed by both `extension::tests` (state-
+// mutation unit tests on the wit-bindgen path) and
+// `extension_wasmos::tests` (stateful integration tests on the
+// wasmos-native mirror). Cfg-gated so it costs nothing in
+// production builds; `pub(crate)` because it's an internal
+// test fixture, not a public API.
+#[cfg(test)]
+pub(crate) mod extension_test_support;
 pub use extension::{
     add_extension_interfaces_to_linker, describe_runtime_logicaltype, load_component,
     load_component_with_dynlink, summarize_extopts, summarize_funcopts,

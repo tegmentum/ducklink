@@ -3324,4 +3324,396 @@ mod tests {
             "error should name the bad method + list registered ones: {msg}"
         );
     }
+
+    // ─── Phase 6.2.g — stateful file_lock lifecycle tests ─────────
+    //
+    // These exercise `FileLockHost` end-to-end against a real
+    // `ExtensionStoreState` (via the Phase 6.2.g extension_test_
+    // support fixture). They cover the two lifecycle-terminating
+    // paths for `LockHandle`:
+    //
+    //   1. Explicit `handle.release()` — the wit-bindgen-parity
+    //      fast path documented on the WIT ("callers can release
+    //      early after publishing, before slower cleanup"). Routes
+    //      through SyncHostCall::call with the wit-mangled method
+    //      name `[method]lock-handle.release`.
+    //
+    //   2. Implicit scope-drop — the Phase 6.2.f wasmos-side
+    //      destructor-registration route. Routes through
+    //      SyncHostCall::on_resource_drop with resource_name
+    //      `lock-handle`. The macro auto-generated the drop arm
+    //      from `#[method("[resource-drop]lock-handle")]`.
+    //
+    // Both must leave `state.lock_handles` empty afterward. The
+    // acquire step uses a real tempfile so the OS-level flock
+    // machinery is exercised (any spurious double-drop would
+    // panic in `LockHandleState::Drop`).
+
+    use crate::extension_test_support::{shared_test_state, stub_ctx, stub_shared};
+    // SyncHostCall's on_resource_drop is a trait method; the
+    // super::* import pulls in only public re-exports, not the
+    // module's private `use` statements, so bring the trait into
+    // test scope explicitly to enable method-call syntax on
+    // `host.on_resource_drop(...)`.
+    use wasmos_runtime_api::SyncHostCall;
+
+    /// Helper: pull the `rep` out of the two-layer Result-shape a
+    /// `#[host_iface(sync)]`-emitted call returns for
+    /// `acquire-exclusive`. Panics with the raw shape so a test
+    /// failure names what came back.
+    fn extract_lock_handle_rep(out: &[Value]) -> u32 {
+        let [Value::Result(Ok(Some(payload)))] = out else {
+            panic!("expected [Result(Ok(Some(Resource)))], got {out:?}");
+        };
+        let Value::Resource { store_id, handle_id } = payload.as_ref() else {
+            panic!("expected Resource payload, got {:?}", payload);
+        };
+        // The stateful stub ctx recorded (interface, name, rep)
+        // at mint; peek by hand-decoding the stub's contract:
+        // handle_id is a monotonic counter starting at 0, rep is
+        // the state's allocated lock-handle id. Use handle_id + 0
+        // convention isn't what we want — the caller should pass
+        // the recovered rep through `resource_rep`, but that
+        // needs the ctx. Callers below get the rep from the
+        // stub's `creations()` snapshot instead. Return the raw
+        // handle_id for identity assertions only.
+        let _ = (store_id, handle_id);
+        // Look up rep via a fresh short-lived stub read — done by
+        // the caller with the shared handle.
+        u32::MAX
+    }
+
+    /// Path helper: a fresh scratch file inside the OS tempdir
+    /// whose flock the test will acquire. Named uniquely per
+    /// test so parallel test runs don't collide on the same
+    /// OS-level lock.
+    fn scratch_lock_path(tag: &str) -> String {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("ducklink-runtime-test-{tag}-{}.lock", std::process::id()));
+        // Ensure the file exists (LockHandleState::acquire_exclusive
+        // opens with read+write; a missing file would fail on
+        // some platforms).
+        std::fs::File::create(&path).expect("create scratch lock file");
+        path.to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn file_lock_acquire_then_release_removes_from_state() {
+        let state = shared_test_state();
+        let host = FileLockHost::new(state.clone());
+        let shared = stub_shared();
+        let mut ctx = stub_ctx(&shared);
+
+        let path = scratch_lock_path("acquire-release");
+
+        // Acquire the lock — state should now hold one handle.
+        let out = host
+            .call(
+                &mut ctx,
+                "acquire-exclusive",
+                vec![Value::String(path.clone())],
+            )
+            .expect("acquire-exclusive dispatch");
+        assert_eq!(
+            state.lock().unwrap().active_lock_handle_count(),
+            1,
+            "expected 1 live lock after acquire, got {}",
+            state.lock().unwrap().active_lock_handle_count()
+        );
+
+        // Fish the (interface, name, rep) triple out of the
+        // stub's minting log — the rep is the id
+        // ExtensionStoreState.next_lock_handle assigned. Also
+        // grab the Value::Resource itself so we can pass it back
+        // to the release call verbatim.
+        let creations = shared.creations();
+        assert_eq!(creations.len(), 1, "expected 1 mint, got {creations:?}");
+        assert_eq!(creations[0].0, "duckdb:extension/file-lock");
+        assert_eq!(creations[0].1, "lock-handle");
+        let rep = creations[0].2;
+        assert!(
+            state.lock().unwrap().contains_lock_handle(rep),
+            "state should hold rep={rep} after acquire"
+        );
+
+        // Recover the Value::Resource for the release call. The
+        // Ok-Some-Resource shape is fixed by the WIT + the
+        // host_iface macro's return-wrapping — we validated it
+        // via extract_lock_handle_rep's shape check above.
+        let _ = extract_lock_handle_rep(&out);
+        let handle_value = match &out[0] {
+            Value::Result(Ok(Some(payload))) => (**payload).clone(),
+            _ => unreachable!("shape validated above"),
+        };
+
+        // Release via the wit-mangled method name — the
+        // #[method("[method]lock-handle.release")] override
+        // routes here. Return is (); the macro's unit-return
+        // wrap emits an empty Vec::new(), so out must be empty.
+        let rel_out = host
+            .call(
+                &mut ctx,
+                "[method]lock-handle.release",
+                vec![handle_value],
+            )
+            .expect("lock-handle.release dispatch");
+        assert!(
+            rel_out.is_empty(),
+            "release returns () — expected empty out vec, got {rel_out:?}"
+        );
+
+        // State should now be empty.
+        assert_eq!(
+            state.lock().unwrap().active_lock_handle_count(),
+            0,
+            "expected 0 live locks after release"
+        );
+        assert!(
+            !state.lock().unwrap().contains_lock_handle(rep),
+            "state should not hold rep={rep} after release"
+        );
+    }
+
+    #[test]
+    fn file_lock_acquire_then_on_resource_drop_removes_from_state() {
+        // Phase 6.2.f end-to-end proof at the abstraction layer:
+        // simulate what the wasmos adapter's `.resource_async(...)`
+        // closure does when the guest's `Resource<LockHandle>`
+        // falls out of scope. SyncHostCall::on_resource_drop is
+        // called directly with (resource_name, rep) — the macro
+        // routes to the `[resource-drop]lock-handle` arm, which
+        // delegates to `state.release_lock_handle`.
+        let state = shared_test_state();
+        let host = FileLockHost::new(state.clone());
+        let shared = stub_shared();
+        let mut ctx = stub_ctx(&shared);
+
+        let path = scratch_lock_path("acquire-drop");
+
+        let _ = host
+            .call(
+                &mut ctx,
+                "acquire-exclusive",
+                vec![Value::String(path.clone())],
+            )
+            .expect("acquire-exclusive dispatch");
+        assert_eq!(state.lock().unwrap().active_lock_handle_count(), 1);
+        let rep = shared.creations()[0].2;
+        assert!(state.lock().unwrap().contains_lock_handle(rep));
+
+        // Fire the drop hook. This is the exact call the wasmos
+        // adapter's destructor closure makes.
+        host.on_resource_drop(&mut ctx, "lock-handle", rep)
+            .expect("on_resource_drop dispatch");
+
+        assert_eq!(
+            state.lock().unwrap().active_lock_handle_count(),
+            0,
+            "expected 0 live locks after on_resource_drop"
+        );
+        assert!(
+            !state.lock().unwrap().contains_lock_handle(rep),
+            "state should not hold rep={rep} after on_resource_drop"
+        );
+    }
+
+    // ─── Phase 6.2.g — scalar-callback lifecycle stateful test ────
+    //
+    // Proves the RuntimeHost's `[constructor]scalar-callback` +
+    // `[resource-drop]scalar-callback` mangling overrides mutate
+    // the shared CallbackRegistry correctly. The constructor
+    // routes `handle: u32` (a dispatcher handle) through
+    // `state.allocate_callback_handle_pub` which allocates a
+    // fresh registry slot; the drop hook routes back through
+    // `state.release_callback_handle_pub` which clears it. Both
+    // ends are needed for the lifecycle to be tight — a leak
+    // here would strand a CallbackRegistry entry every time a
+    // scalar-callback resource fell out of guest scope.
+
+    #[test]
+    fn scalar_callback_constructor_then_drop_clears_registry() {
+        let state = shared_test_state();
+        let host = RuntimeHost::new(state.clone());
+        let shared = stub_shared();
+        let mut ctx = stub_ctx(&shared);
+
+        // The constructor takes a dispatcher handle `u32` and
+        // returns Resource<ScalarCallback>. We pick an arbitrary
+        // dispatcher handle — the test doesn't drive the
+        // dispatch table, just verifies the registry entry
+        // arrives + departs.
+        let dispatcher_handle: u32 = 4242;
+
+        let registry = state.lock().unwrap().callback_registry_handle();
+        // Pre-condition: registry has no entry for what the
+        // constructor will allocate. We can't predict the fresh
+        // id, so pre-assert the get(1) slot is empty (fresh
+        // registry starts issuing at id 1).
+        assert!(
+            registry.read().unwrap().get(1).is_none(),
+            "fresh registry should have no id=1 entry"
+        );
+
+        let out = host
+            .call(
+                &mut ctx,
+                "[constructor]scalar-callback",
+                vec![Value::U32(dispatcher_handle)],
+            )
+            .expect("scalar-callback constructor dispatch");
+
+        // The stub minted a Resource<ScalarCallback>. Extract
+        // its rep from the creations log — that is the registry
+        // id the constructor allocated.
+        let creations = shared.creations();
+        assert_eq!(creations.len(), 1, "expected 1 mint, got {creations:?}");
+        assert_eq!(creations[0].0, "duckdb:extension/runtime");
+        assert_eq!(creations[0].1, "scalar-callback");
+        let cb_id = creations[0].2;
+
+        // Registry now holds the entry. Verify kind matches +
+        // dispatcher_handle round-tripped.
+        let entry = registry
+            .read()
+            .unwrap()
+            .get(cb_id)
+            .expect("registry must hold the freshly-allocated callback");
+        assert!(matches!(entry.kind, crate::CallbackKind::Scalar));
+        assert_eq!(entry.dispatcher_handle, dispatcher_handle);
+
+        // Recover the returned Resource for the drop.
+        let handle_value = match &out[0] {
+            Value::Resource { .. } => out[0].clone(),
+            other => panic!("expected Value::Resource, got {other:?}"),
+        };
+
+        // Fire the drop hook — the exact call the wasmos adapter
+        // makes when the guest resource falls out of scope. The
+        // macro-generated on_resource_drop arm delegates to
+        // scalar_callback_drop, which calls release_callback_
+        // handle_pub.
+        host.on_resource_drop(&mut ctx, "scalar-callback", cb_id)
+            .expect("scalar-callback drop dispatch");
+
+        assert!(
+            registry.read().unwrap().get(cb_id).is_none(),
+            "registry entry for cb_id={cb_id} should be cleared after drop"
+        );
+
+        // The explicit-release path also works — Value::Resource
+        // handed back through the wit-mangled name. Sanity-check
+        // that a second drop of an already-released id is a
+        // safe no-op (the registry's remove is idempotent).
+        host.on_resource_drop(&mut ctx, "scalar-callback", cb_id)
+            .expect("second drop of released id must be idempotent");
+
+        // Round-trip the returned Resource through the wit-
+        // mangled release-style method too, to prove that path
+        // doesn't blow up on an already-released id.
+        let _ = host
+            .call(
+                &mut ctx,
+                "[resource-drop]scalar-callback",
+                vec![handle_value],
+            )
+            .err(); // routing via [resource-drop] through call() is
+                    // NOT valid — the macro puts drops on the drop
+                    // arm exclusively, so this SHOULD error with
+                    // "no handler for method". That's the same
+                    // isolation the wasmos-side tests verified.
+    }
+
+    // ─── Phase 6.2.g — pending-buffer capture stateful test ──────
+    //
+    // Proves that a register_* dispatch pushed through the
+    // wasmos-side handler mutates the right pending_xxx buffer
+    // on the ExtensionStoreState. Picks `ParserHost.register-
+    // parser-extension` because its signature is the simplest
+    // in the interface set (just name: String + callback_handle:
+    // u32), so the test's marshalling ceremony stays minimal
+    // while proving the state-mutation contract end-to-end.
+    //
+    // Deliberately doesn't drain — leaving the pending entry in
+    // place matches the extension lifecycle where drain fires
+    // exactly once at load-finish time from a different code
+    // path. Tests that want to verify the drain shape use the
+    // existing extension::tests::drain_* suite.
+
+    #[test]
+    fn parser_register_pushes_to_pending_parsers() {
+        let state = shared_test_state();
+        let host = ParserHost::new(state.clone());
+        let shared = stub_shared();
+        let mut ctx = stub_ctx(&shared);
+
+        // Pre-condition: no parsers registered yet.
+        assert_eq!(state.lock().unwrap().pending_parser_count(), 0);
+
+        let out = host
+            .call(
+                &mut ctx,
+                "register-parser-extension",
+                vec![
+                    Value::String("my-parser".into()),
+                    Value::U32(4242),
+                ],
+            )
+            .expect("register-parser-extension dispatch");
+
+        // Return shape: Result<u32, Duckerror> — expect Ok(id).
+        // The id is a fresh resource id the state allocated for
+        // the (unused) parser-registry rep; test cares only that
+        // the shape parses cleanly.
+        match out.as_slice() {
+            [Value::Result(Ok(Some(payload)))] => match payload.as_ref() {
+                Value::U32(_) => {}
+                other => panic!("expected Ok(U32), got {other:?}"),
+            },
+            other => panic!("expected [Result(Ok(Some(U32)))], got {other:?}"),
+        }
+
+        // Post-condition: state's pending_parsers grew by one.
+        assert_eq!(
+            state.lock().unwrap().pending_parser_count(),
+            1,
+            "register dispatch must push to pending_parsers"
+        );
+
+        // A second registration under a different name adds a
+        // second entry.
+        let _ = host
+            .call(
+                &mut ctx,
+                "register-parser-extension",
+                vec![
+                    Value::String("another-parser".into()),
+                    Value::U32(4243),
+                ],
+            )
+            .expect("second register dispatch");
+        assert_eq!(
+            state.lock().unwrap().pending_parser_count(),
+            2,
+            "second register must push a second entry"
+        );
+    }
+
+    #[test]
+    fn file_lock_on_resource_drop_of_unknown_rep_is_noop() {
+        // Idempotency guard: firing on_resource_drop with a rep
+        // the state doesn't know about must be a silent no-op.
+        // This matches the Phase 6.2.f adapter contract — the
+        // guest might drop a handle the host already released
+        // explicitly via `handle.release()`; the drop dispatch
+        // must not panic or error in that race.
+        let state = shared_test_state();
+        let host = FileLockHost::new(state.clone());
+        let shared = stub_shared();
+        let mut ctx = stub_ctx(&shared);
+
+        assert_eq!(state.lock().unwrap().active_lock_handle_count(), 0);
+        host.on_resource_drop(&mut ctx, "lock-handle", 999_999)
+            .expect("on_resource_drop of unknown rep must be no-op");
+        assert_eq!(state.lock().unwrap().active_lock_handle_count(), 0);
+    }
 }
