@@ -963,6 +963,43 @@ impl ExtensionStoreState {
         self.pending_optimizers.push(optimizer);
     }
 
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_coordinate_systems`.
+    pub fn push_pending_coordinate_system(&mut self, entry: reg::CoordinateSystemReg) {
+        self.pending_coordinate_systems.push(entry);
+    }
+
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_storages`.
+    pub fn push_pending_storage(&mut self, entry: reg::StorageReg) {
+        self.pending_storages.push(entry);
+    }
+
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_log_storages`.
+    pub fn push_pending_log_storage(&mut self, entry: PendingLogStorage) {
+        self.pending_log_storages.push(entry);
+    }
+
+    /// ADR-0029 Phase 6.2.d.2 accessor — allocate a globally-routable
+    /// callback handle for the given kind, mapping the caller's
+    /// dispatcher_handle. Delegates to the callback registry the
+    /// same way `Self::allocate_callback_handle` does; kept as a
+    /// visibility promotion so `crate::extension_wasmos` handlers
+    /// can wire log-storage + filterable-table + similar globally-
+    /// routed callbacks without duplicating the registry write.
+    pub fn allocate_callback_handle_pub(
+        &self,
+        dispatcher_handle: u32,
+        kind: crate::CallbackKind,
+    ) -> u32 {
+        self.allocate_callback_handle(dispatcher_handle, kind)
+    }
+
+    /// ADR-0029 Phase 6.2.d.2 accessor — forward a read-only SELECT
+    /// through the neutral `ExtensionServices::query` sink. Mirrors
+    /// the wit-bindgen `extension_query::Host::query` body.
+    pub fn services_query(&mut self, sql: &str) -> Result<Vec<Vec<String>>, String> {
+        self.services.query(sql)
+    }
+
     fn allocate_callback_handle(&self, dispatcher_handle: u32, kind: CallbackKind) -> u32 {
         let mut registry = self
             .callback_registry
