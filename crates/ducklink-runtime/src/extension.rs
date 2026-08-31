@@ -1040,6 +1040,11 @@ impl ExtensionStoreState {
         self.pending_filterable_tables.push(entry);
     }
 
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_scalar_ex`.
+    pub fn push_pending_scalar_ex(&mut self, entry: reg::ScalarExReg) {
+        self.pending_scalar_ex.push(entry);
+    }
+
     /// ADR-0029 Phase 6.2.d.2 accessor — look up the table function
     /// name that was registered for a given handle. Used by the
     /// `files.register_replacement_scan` handler to resolve the
