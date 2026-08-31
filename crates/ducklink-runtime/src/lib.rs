@@ -373,6 +373,11 @@ mod contract_guard_bridge;
 pub use compose_dynlink::{ProviderPreopen, ProviderRegistry};
 
 pub mod extension;
+
+// ADR-0029 Phase 6.2.d.2-a — the first slice of the
+// ExtensionStoreState migration to wasmos_runtime_api. Coexists
+// with `extension`; consumers pick per install path.
+pub mod extension_wasmos;
 pub use extension::{
     add_extension_interfaces_to_linker, describe_runtime_logicaltype, load_component,
     load_component_with_dynlink, summarize_extopts, summarize_funcopts,
