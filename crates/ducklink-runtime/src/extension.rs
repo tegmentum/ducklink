@@ -1000,6 +1000,16 @@ impl ExtensionStoreState {
         self.services.query(sql)
     }
 
+    /// ADR-0029 Phase 6.2.d.2 accessor — mutable borrow of the
+    /// neutral `ExtensionServices` trait object. Lets
+    /// `crate::extension_wasmos` handlers reach every services
+    /// method (provider_version, list_keys, get_string/i64/etc,
+    /// log, log_fields, nested_exec, ...) without one delegator
+    /// per method.
+    pub fn services_mut(&mut self) -> &mut dyn ExtensionServices {
+        &mut *self.services
+    }
+
     fn allocate_callback_handle(&self, dispatcher_handle: u32, kind: CallbackKind) -> u32 {
         let mut registry = self
             .callback_registry
