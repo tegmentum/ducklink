@@ -1030,6 +1030,11 @@ impl ExtensionStoreState {
         self.pending_copy_handlers.push(entry);
     }
 
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_arrow_tables`.
+    pub fn push_pending_arrow_table(&mut self, entry: reg::ArrowTableReg) {
+        self.pending_arrow_tables.push(entry);
+    }
+
     /// ADR-0029 Phase 6.2.d.2 accessor — look up the table function
     /// name that was registered for a given handle. Used by the
     /// `files.register_replacement_scan` handler to resolve the
