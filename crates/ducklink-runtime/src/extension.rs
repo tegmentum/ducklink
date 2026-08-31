@@ -1005,6 +1005,41 @@ impl ExtensionStoreState {
         self.pending_secrets.push(entry);
     }
 
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_table_macros`.
+    pub fn push_pending_table_macro(&mut self, entry: reg::TableMacroReg) {
+        self.pending_table_macros.push(entry);
+    }
+
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_modified_types`.
+    pub fn push_pending_modified_type(&mut self, entry: reg::ModifiedTypeReg) {
+        self.pending_modified_types.push(entry);
+    }
+
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_enum_types`.
+    pub fn push_pending_enum_type(&mut self, entry: reg::EnumTypeReg) {
+        self.pending_enum_types.push(entry);
+    }
+
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_replacement_scans`.
+    pub fn push_pending_replacement_scan(&mut self, entry: reg::ReplacementScanReg) {
+        self.pending_replacement_scans.push(entry);
+    }
+
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_copy_handlers`.
+    pub fn push_pending_copy_handler(&mut self, entry: reg::CopyHandlerReg) {
+        self.pending_copy_handlers.push(entry);
+    }
+
+    /// ADR-0029 Phase 6.2.d.2 accessor — look up the table function
+    /// name that was registered for a given handle. Used by the
+    /// `files.register_replacement_scan` handler to resolve the
+    /// scan's `table-function` handle to the underlying name. Returns
+    /// `None` if the handle was never registered (the wit-bindgen
+    /// counterpart returns Err in that case).
+    pub fn lookup_table_handle_name(&self, handle: u32) -> Option<String> {
+        self.table_handle_names.get(&handle).cloned()
+    }
+
     /// ADR-0029 Phase 6.2.d.2 accessor — mutable borrow of the
     /// neutral `ExtensionServices` trait object. Lets
     /// `crate::extension_wasmos` handlers reach every services
