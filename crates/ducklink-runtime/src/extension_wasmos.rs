@@ -405,7 +405,9 @@ pub fn install_extension_imports_stateful(
     // 6.2.d.2-i batch (arrow_ext + LogicalType mirror unblocking future batches)
     let imports = install_arrow_ext_imports(imports, state.clone());
     // 6.2.d.2-j batch (Funcarg mirror + table_stream)
-    install_table_stream_imports(imports, state)
+    let imports = install_table_stream_imports(imports, state.clone());
+    // 6.2.d.2-k batch (Funcflags/Funcopts/NullHandling + runtime_ext)
+    install_runtime_ext_imports(imports, state)
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -1792,6 +1794,145 @@ pub fn install_table_stream_imports(
     imports.register(
         "duckdb:extension/table_stream",
         Arc::new(SyncHostCallAdapter::new(TableStreamHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Phase 6.2.d.2-k — runtime_ext + Funcflags/Funcopts/NullHandling
+// mirrors (24/27).
+// ────────────────────────────────────────────────────────────────────
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/types.funcflags`
+/// flags shape. Wire-identical to `crate::reg::FuncFlags`. Uses
+/// wasmos's WitFlags derive; each bit maps to a bool field.
+///
+/// WIT `funcflags` field names (kebab-case): deterministic,
+/// commutative, stateless, sideeffecting, deprecated. The Rust
+/// snake_case field `side_effecting` name-mangles from the WIT
+/// `sideeffecting` (no dash between the two).
+#[derive(Debug, Clone, Copy, WitFlags)]
+pub struct Funcflags {
+    pub deterministic: bool,
+    pub commutative: bool,
+    pub stateless: bool,
+    pub sideeffecting: bool,
+    pub deprecated: bool,
+}
+
+impl Funcflags {
+    pub fn to_reg(self) -> crate::reg::FuncFlags {
+        crate::reg::FuncFlags {
+            deterministic: self.deterministic,
+            commutative: self.commutative,
+            stateless: self.stateless,
+            side_effecting: self.sideeffecting,
+            deprecated: self.deprecated,
+        }
+    }
+}
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/types.funcopts`
+/// record.
+#[derive(Debug, Clone, wasmos_runtime_api::WitRecord)]
+pub struct Funcopts {
+    pub description: Option<String>,
+    pub tags: Vec<String>,
+    pub attributes: Funcflags,
+}
+
+impl Funcopts {
+    pub fn to_reg(self) -> crate::reg::FuncOpts {
+        crate::reg::FuncOpts {
+            description: self.description,
+            tags: self.tags,
+            attributes: self.attributes.to_reg(),
+        }
+    }
+}
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/runtime-ext.
+/// null-handling` enum. 2 unit arms.
+#[derive(Debug, Clone, Copy, WitEnum)]
+pub enum NullHandling {
+    Default,
+    Special,
+}
+
+impl NullHandling {
+    fn is_special(self) -> bool {
+        matches!(self, NullHandling::Special)
+    }
+}
+
+/// Host struct for the `duckdb:extension/runtime_ext` interface.
+/// See `crate::extension` line 2228. 1 method (register_scalar_ex).
+/// Byte-identical to the wit-bindgen counterpart: allocates a
+/// resource id, packs the wasmos-native shapes into
+/// `reg::ScalarExReg`, pushes to pending_scalar_ex. Derives the
+/// `volatile` flag from `!options.attributes.deterministic`
+/// (default false when options absent), matching the wit-bindgen
+/// audit-fix behavior.
+#[derive(Clone)]
+pub struct RuntimeExtHost {
+    state: SharedExtensionState,
+}
+
+impl RuntimeExtHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl RuntimeExtHost {
+    fn register_scalar_ex(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        name: String,
+        arguments: Vec<Funcarg>,
+        varargs: Option<LogicalType>,
+        returns: LogicalType,
+        null_handling: NullHandling,
+        callback_handle: u32,
+        options: Option<Funcopts>,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let special_null = null_handling.is_special();
+        let arguments_r: Vec<crate::reg::FuncArg> =
+            arguments.into_iter().map(Funcarg::to_reg).collect();
+        let varargs_r = varargs.map(LogicalType::to_reg);
+        let returns_r = returns.to_reg();
+        let options_r = options.map(Funcopts::to_reg);
+        let volatile = options_r
+            .as_ref()
+            .map(|o| !o.attributes.deterministic)
+            .unwrap_or(false);
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let extension = g.extension_name().to_string();
+        let registry_id = g.alloc_resource_id();
+        g.push_pending_scalar_ex(crate::reg::ScalarExReg {
+            extension,
+            name,
+            arguments: arguments_r,
+            varargs: varargs_r,
+            returns: returns_r,
+            special_null,
+            volatile,
+            callback_handle,
+            options: options_r,
+        });
+        Ok(Ok(registry_id))
+    }
+}
+
+/// Register the `duckdb:extension/runtime_ext` handler.
+pub fn install_runtime_ext_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/runtime_ext",
+        Arc::new(SyncHostCallAdapter::new(RuntimeExtHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
 }
