@@ -2646,6 +2646,260 @@ impl RuntimeHost {
         g.release_callback_handle_pub(rep.handle());
         Ok(())
     }
+
+    // ── Sub-trait: 4 XxxRegistry method-carriers (Phase 6.2.d.2-q) ──
+    //
+    // Each Xxx-Registry resource has 2 methods:
+    //   `[method]xxx-registry.register(name, args, ret, callback, opts)`
+    //     -> result<u32, duckerror>
+    //   `[resource-drop]xxx-registry` -> ()
+    //
+    // Behavior mirrors `crate::extension` line 1567+ verbatim:
+    //   1. Validate `callback` resource's kind matches expected
+    //      (Scalar/Table/Aggregate) via
+    //      `ExtensionStoreState::validate_callback_kind`.
+    //      KindMismatch -> Duckerror::Invalidargument
+    //      UnknownHandle -> Duckerror::Internal
+    //   2. Build the neutral reg::* record (converts wasmos-native
+    //      LogicalType/Funcarg/Funcopts/Extopts to reg::* shapes).
+    //   3. Push into the per-registry buffer via the matching
+    //      `<kind>_registry_push` accessor. UnknownRegistry ->
+    //      Duckerror::Internal.
+    //   4. Return the alloc'd u32 handle.
+    // Drops delegate to `drain_<kind>_registry` accessors, which
+    // move the per-registry buffer's entries into the global
+    // `pending_<kind>s` buffer.
+    //
+    // PragmaRegistry differs: no per-registry buffer, push_call
+    // goes directly to `pending_pragmas`; drop is no-op.
+
+    // ── ScalarRegistry ─────────────────────────────────────────
+
+    #[method("[method]scalar-registry.register")]
+    fn scalar_registry_register(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        self_: Resource<ScalarRegistry>,
+        name: String,
+        arguments: Vec<Funcarg>,
+        returns: LogicalType,
+        callback: Resource<ScalarCallback>,
+        options: Option<Funcopts>,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let callback_handle = callback.handle();
+        let registry_id = self_.handle();
+        let arguments_r: Vec<crate::reg::FuncArg> =
+            arguments.into_iter().map(Funcarg::to_reg).collect();
+        let returns_r = returns.to_reg();
+        let options_r = options.map(Funcopts::to_reg);
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        // 1. Validate callback kind.
+        if let Err(e) =
+            g.validate_callback_kind(callback_handle, crate::CallbackKind::Scalar)
+        {
+            return Ok(Err(kind_validation_to_duckerror(e, "scalar")));
+        }
+        let extension = g.extension_name().to_string();
+        // 2 + 3. Build entry + push.
+        let entry = crate::reg::ScalarReg {
+            extension,
+            name,
+            arguments: arguments_r,
+            returns: returns_r,
+            callback_handle,
+            options: options_r,
+        };
+        match g.scalar_registry_push(registry_id, entry) {
+            Ok(handle) => Ok(Ok(handle)),
+            Err(_) => Ok(Err(Duckerror::Internal(
+                "unknown scalar registry handle".to_string(),
+            ))),
+        }
+    }
+
+    #[method("[resource-drop]scalar-registry")]
+    fn scalar_registry_drop(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        rep: Resource<ScalarRegistry>,
+    ) -> RuntimeResult<()> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        g.drain_scalar_registry(rep.handle());
+        Ok(())
+    }
+
+    // ── TableRegistry ──────────────────────────────────────────
+
+    #[method("[method]table-registry.register")]
+    fn table_registry_register(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        self_: Resource<TableRegistry>,
+        name: String,
+        arguments: Vec<Funcarg>,
+        columns: Vec<Columndef>,
+        callback: Resource<TableCallback>,
+        options: Option<Extopts>,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let callback_handle = callback.handle();
+        let registry_id = self_.handle();
+        let arguments_r: Vec<crate::reg::FuncArg> =
+            arguments.into_iter().map(Funcarg::to_reg).collect();
+        let columns_r: Vec<crate::reg::ColumnDef> =
+            columns.into_iter().map(Columndef::to_reg).collect();
+        let options_r = options.map(|o| crate::reg::ExtOpts {
+            description: o.description,
+            tags: o.tags,
+        });
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        if let Err(e) =
+            g.validate_callback_kind(callback_handle, crate::CallbackKind::Table)
+        {
+            return Ok(Err(kind_validation_to_duckerror(e, "a table callback")));
+        }
+        let extension = g.extension_name().to_string();
+        let entry = crate::reg::TableReg {
+            extension,
+            name,
+            arguments: arguments_r,
+            columns: columns_r,
+            callback_handle,
+            options: options_r,
+        };
+        match g.table_registry_push(registry_id, entry) {
+            Ok(handle) => Ok(Ok(handle)),
+            Err(_) => Ok(Err(Duckerror::Internal(
+                "unknown table registry handle".to_string(),
+            ))),
+        }
+    }
+
+    #[method("[resource-drop]table-registry")]
+    fn table_registry_drop(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        rep: Resource<TableRegistry>,
+    ) -> RuntimeResult<()> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        g.drain_table_registry(rep.handle());
+        Ok(())
+    }
+
+    // ── AggregateRegistry ──────────────────────────────────────
+
+    #[method("[method]aggregate-registry.register")]
+    fn aggregate_registry_register(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        self_: Resource<AggregateRegistry>,
+        name: String,
+        arguments: Vec<Funcarg>,
+        returns: LogicalType,
+        callback: Resource<AggregateCallback>,
+        options: Option<Funcopts>,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let callback_handle = callback.handle();
+        let registry_id = self_.handle();
+        let arguments_r: Vec<crate::reg::FuncArg> =
+            arguments.into_iter().map(Funcarg::to_reg).collect();
+        let returns_r = returns.to_reg();
+        let options_r = options.map(Funcopts::to_reg);
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        if let Err(e) =
+            g.validate_callback_kind(callback_handle, crate::CallbackKind::Aggregate)
+        {
+            return Ok(Err(kind_validation_to_duckerror(e, "aggregate")));
+        }
+        let extension = g.extension_name().to_string();
+        let entry = crate::reg::AggregateReg {
+            extension,
+            name,
+            arguments: arguments_r,
+            returns: returns_r,
+            callback_handle,
+            options: options_r,
+        };
+        match g.aggregate_registry_push(registry_id, entry) {
+            Ok(handle) => Ok(Ok(handle)),
+            Err(_) => Ok(Err(Duckerror::Internal(
+                "unknown aggregate registry handle".to_string(),
+            ))),
+        }
+    }
+
+    #[method("[resource-drop]aggregate-registry")]
+    fn aggregate_registry_drop(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        rep: Resource<AggregateRegistry>,
+    ) -> RuntimeResult<()> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        g.drain_aggregate_registry(rep.handle());
+        Ok(())
+    }
+
+    // ── PragmaRegistry ─────────────────────────────────────────
+
+    #[method("[method]pragma-registry.register-call")]
+    fn pragma_registry_register_call(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _self_: Resource<PragmaRegistry>,
+        name: String,
+        _arguments: Vec<Funcarg>,
+        _returns: LogicalType,
+        callback: Resource<PragmaCallback>,
+        _options: Option<Extopts>,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let callback_handle = callback.handle();
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        if let Err(e) =
+            g.validate_callback_kind(callback_handle, crate::CallbackKind::Pragma)
+        {
+            return Ok(Err(kind_validation_to_duckerror(e, "a pragma")));
+        }
+        let extension = g.extension_name().to_string();
+        let entry = crate::reg::PragmaReg {
+            extension,
+            name,
+            callback_handle,
+        };
+        Ok(Ok(g.pragma_registry_push_call(entry)))
+    }
+
+    #[method("[resource-drop]pragma-registry")]
+    fn pragma_registry_drop(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _rep: Resource<PragmaRegistry>,
+    ) -> RuntimeResult<()> {
+        // The wit-bindgen counterpart at `crate::extension` line
+        // 1839 is a no-op; pragma_registry_push_call already
+        // pushed into pending_pragmas at register time (no per-
+        // registry buffer to drain).
+        Ok(())
+    }
+}
+
+/// Translate a `CallbackValidationError` into the Duckerror wire
+/// shape the wit-bindgen counterpart emits. `kind_phrase` is the
+/// per-kind message fragment ("scalar", "aggregate", "a table
+/// callback", "a pragma") — the phrase varies slightly across
+/// the 4 XxxRegistry impls in `crate::extension`; we preserve
+/// each verbatim.
+fn kind_validation_to_duckerror(
+    err: crate::extension::CallbackValidationError,
+    kind_phrase: &str,
+) -> Duckerror {
+    use crate::extension::CallbackValidationError as E;
+    match err {
+        E::KindMismatch => Duckerror::Invalidargument(format!(
+            "callback handle is not {kind_phrase}"
+        )),
+        E::UnknownHandle => {
+            Duckerror::Internal(format!("unknown {kind_phrase} callback handle"))
+        }
+    }
 }
 
 // ── Runtime XxxCallback resource markers (Phase 6.2.d.2-p) ─────

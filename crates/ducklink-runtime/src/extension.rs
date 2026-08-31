@@ -1131,6 +1131,154 @@ impl ExtensionStoreState {
         self.release_callback_handle(handle);
     }
 
+    /// ADR-0029 Phase 6.2.d.2-q — kind-mismatch / unknown-handle /
+    /// unknown-registry errors that XxxRegistry.register handlers
+    /// map to `Duckerror::Invalidargument` / `Duckerror::Internal`.
+    /// Kept as a concise enum here so `crate::extension_wasmos`
+    /// translates once at the boundary.
+    ///
+    /// Not `Debug` / `Display` — the wasmos handlers pattern-match
+    /// on this enum and produce the exact wire message the
+    /// wit-bindgen counterpart uses.
+
+    /// Validate that `callback_handle` maps to a callback registry
+    /// entry of the given `expected` kind. Returns Ok on match,
+    /// distinct errors on kind-mismatch vs unknown-handle so
+    /// callers surface the right Duckerror variant.
+    pub fn validate_callback_kind(
+        &self,
+        callback_handle: u32,
+        expected: crate::CallbackKind,
+    ) -> Result<(), CallbackValidationError> {
+        let registry = self
+            .callback_registry
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+        match registry.get(callback_handle) {
+            Some(entry) if entry.kind == expected => Ok(()),
+            Some(_) => Err(CallbackValidationError::KindMismatch),
+            None => Err(CallbackValidationError::UnknownHandle),
+        }
+    }
+
+    /// ADR-0029 Phase 6.2.d.2-q — push a fully-converted
+    /// `reg::ScalarReg` into the per-registry buffer at
+    /// `registry_id` + return a fresh alloc'd resource id.
+    /// Assumes the callback kind has already been validated via
+    /// `validate_callback_kind`. Fails only on unknown registry.
+    pub fn scalar_registry_push(
+        &mut self,
+        registry_id: u32,
+        entry: reg::ScalarReg,
+    ) -> Result<u32, RegistryPushError> {
+        let registry = self
+            .scalar_registries
+            .get_mut(&registry_id)
+            .ok_or(RegistryPushError::UnknownRegistry)?;
+        registry.entries.push(entry);
+        Ok(self.alloc_resource_id())
+    }
+
+    /// ADR-0029 Phase 6.2.d.2-q — sibling of
+    /// `scalar_registry_push` for tables. Also updates
+    /// `table_handle_names` with the returned handle so
+    /// `files.register-replacement-scan` can resolve the name.
+    pub fn table_registry_push(
+        &mut self,
+        registry_id: u32,
+        entry: reg::TableReg,
+    ) -> Result<u32, RegistryPushError> {
+        let table_name = entry.name.clone();
+        let registry = self
+            .table_registries
+            .get_mut(&registry_id)
+            .ok_or(RegistryPushError::UnknownRegistry)?;
+        registry.entries.push(entry);
+        let handle = self.alloc_resource_id();
+        self.table_handle_names.insert(handle, table_name);
+        Ok(handle)
+    }
+
+    /// ADR-0029 Phase 6.2.d.2-q — sibling of
+    /// `scalar_registry_push` for aggregates.
+    pub fn aggregate_registry_push(
+        &mut self,
+        registry_id: u32,
+        entry: reg::AggregateReg,
+    ) -> Result<u32, RegistryPushError> {
+        let registry = self
+            .aggregate_registries
+            .get_mut(&registry_id)
+            .ok_or(RegistryPushError::UnknownRegistry)?;
+        registry.entries.push(entry);
+        Ok(self.alloc_resource_id())
+    }
+
+    /// ADR-0029 Phase 6.2.d.2-q — pragma has NO per-registry
+    /// buffer; the wit-bindgen counterpart pushes directly to
+    /// `pending_pragmas` from `register_call`. Kept as a distinct
+    /// accessor so the wasmos handler mirrors that shape.
+    pub fn pragma_registry_push_call(&mut self, entry: reg::PragmaReg) -> u32 {
+        self.pending_pragmas.push(entry);
+        self.alloc_resource_id()
+    }
+
+    /// ADR-0029 Phase 6.2.d.2-q — drain the per-registry buffer at
+    /// `rep` into `pending_scalars`, then remove the registry.
+    /// Matches the wit-bindgen `HostScalarRegistry::drop`
+    /// behaviour at `crate::extension` line 1633.
+    ///
+    /// Wasmos-side dispatch of `[resource-drop]...` is subject to
+    /// the same destructor-gap noted for other resources — this
+    /// handler is dead code until the adapter gap closes.
+    pub fn drain_scalar_registry(&mut self, rep: u32) {
+        if let Some(registry) = self.scalar_registries.remove(&rep) {
+            self.pending_scalars.extend(registry.entries);
+        }
+    }
+
+    /// ADR-0029 Phase 6.2.d.2-q — sibling of
+    /// `drain_scalar_registry` for tables.
+    pub fn drain_table_registry(&mut self, rep: u32) {
+        if let Some(registry) = self.table_registries.remove(&rep) {
+            self.pending_tables.extend(registry.entries);
+        }
+    }
+
+    /// ADR-0029 Phase 6.2.d.2-q — sibling of
+    /// `drain_scalar_registry` for aggregates.
+    pub fn drain_aggregate_registry(&mut self, rep: u32) {
+        if let Some(registry) = self.aggregate_registries.remove(&rep) {
+            self.pending_aggregates.extend(registry.entries);
+        }
+    }
+}
+
+// ADR-0029 Phase 6.2.d.2-q — concise error enums for the registry
+// accessors. `crate::extension_wasmos` pattern-matches these to
+// produce the exact wit-bindgen counterpart's Duckerror wire
+// messages (Invalidargument vs Internal).
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CallbackValidationError {
+    /// Callback exists but its kind doesn't match the expected one.
+    /// Maps to `Duckerror::Invalidargument("callback handle is not
+    /// <kind>")`.
+    KindMismatch,
+    /// No callback registered under this handle. Maps to
+    /// `Duckerror::Internal("unknown <kind> callback handle")`.
+    UnknownHandle,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegistryPushError {
+    /// No per-registry buffer exists for this handle. Maps to
+    /// `Duckerror::Internal("unknown <kind> registry handle")`.
+    UnknownRegistry,
+}
+
+impl ExtensionStoreState {
+
     /// ADR-0029 Phase 6.2.d.2 accessor — look up the table function
     /// name that was registered for a given handle. Used by the
     /// `files.register_replacement_scan` handler to resolve the
