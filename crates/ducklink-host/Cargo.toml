@@ -73,6 +73,12 @@ datalink-policy = { git = "https://github.com/tegmentum/datalink.git", rev = "75
 # tests still keep rusqlite as a dev-dep to sanity-check the underlying
 # SQLite file from native code after the wasm-side writes complete.
 
+# ADR-0029 Phase 6.2.d.3 — moved from dev-deps to a regular dep so
+# `src/dotcmd_wasmos.rs` can register the `duckdb:dotcmd/spi` handler
+# on production install paths, not just tests. Same rev as the
+# ducklink-runtime + dev-dep pins to keep the crate graph unified.
+wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", rev = "ea572b369ab09ff809f40c43bad7bb0a921ce8ac" }
+
 [dev-dependencies]
 tempfile = "3"
 # ADR-0029 Phase 6.2.d.1 dev-deps: the DynState-migration integration
