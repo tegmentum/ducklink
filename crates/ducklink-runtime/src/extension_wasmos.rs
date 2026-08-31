@@ -407,7 +407,10 @@ pub fn install_extension_imports_stateful(
     // 6.2.d.2-j batch (Funcarg mirror + table_stream)
     let imports = install_table_stream_imports(imports, state.clone());
     // 6.2.d.2-k batch (Funcflags/Funcopts/NullHandling + runtime_ext)
-    install_runtime_ext_imports(imports, state)
+    let imports = install_runtime_ext_imports(imports, state.clone());
+    // 6.2.d.2-l batch (catalog — partial, register_cast deferred pending
+    // Resource<T> integration in Phase 6.2.d.2-m)
+    install_catalog_imports(imports, state)
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -1933,6 +1936,147 @@ pub fn install_runtime_ext_imports(
     imports.register(
         "duckdb:extension/runtime_ext",
         Arc::new(SyncHostCallAdapter::new(RuntimeExtHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Phase 6.2.d.2-l — catalog (25/27). PARTIAL: register_cast defers
+// pending the Resource<T> integration session.
+// ────────────────────────────────────────────────────────────────────
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/catalog.
+/// logical-type` record — DIFFERENT from `types.logicaltype`
+/// (variant). This one is a simple 2-field record.
+#[derive(Debug, Clone, wasmos_runtime_api::WitRecord)]
+pub struct CatalogLogicalType {
+    pub name: String,
+    pub physical: String,
+}
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/catalog.
+/// cast-kind` enum.
+#[derive(Debug, Clone, Copy, WitEnum)]
+pub enum CastKind {
+    Implicit,
+    Assignment,
+    Explicit,
+}
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/catalog.
+/// cast-spec` record.
+#[derive(Debug, Clone, wasmos_runtime_api::WitRecord)]
+pub struct CastSpec {
+    pub from: String,
+    pub to: String,
+    pub kind: CastKind,
+    pub implicit_cost: Option<i32>,
+}
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/catalog.
+/// macro-def` record.
+#[derive(Debug, Clone, wasmos_runtime_api::WitRecord)]
+pub struct MacroDef {
+    pub schema: String,
+    pub name: String,
+    pub parameters: Vec<String>,
+    pub definition_sql: String,
+}
+
+/// Host struct for the `duckdb:extension/catalog` interface.
+/// See `crate::extension` line 1885. 3 methods total:
+/// - `register_logical_type` (migrated fully here)
+/// - `register_cast` — DEFERRED (needs Resource<CastCallback>
+///   marshaling via `HostCallContext::typed_resource_rep`, which
+///   is Phase 6.2.d.2-m follow-up work along with file_lock's
+///   Resource<LockHandle>). Handler returns Err("...deferred...")
+///   so guests calling it get a clean signal rather than an
+///   "unresolved import" trap.
+/// - `register_macro` (migrated fully here)
+#[derive(Clone)]
+pub struct CatalogHost {
+    state: SharedExtensionState,
+}
+
+impl CatalogHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl CatalogHost {
+    fn register_logical_type(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        ty: CatalogLogicalType,
+    ) -> RuntimeResult<Result<u32, String>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let extension = g.extension_name().to_string();
+        let handle = g.alloc_resource_id();
+        g.push_pending_logical_type(crate::reg::LogicalTypeReg {
+            extension,
+            name: ty.name,
+            physical: ty.physical,
+        });
+        Ok(Ok(handle))
+    }
+
+    /// DEFERRED — `register_cast` takes `callback: cast-callback`
+    /// which is a WIT resource. Resource<T> arg marshaling via
+    /// `HostCallContext::typed_resource_rep` will land in Phase
+    /// 6.2.d.2-m as part of a coordinated batch with file_lock's
+    /// Resource<LockHandle> return + runtime's pervasive
+    /// Resource<T>. Until then the wasmos-native path returns an
+    /// error rather than dropping the request silently.
+    ///
+    /// Consumers who need register-cast today must use the
+    /// wit-bindgen path at `crate::extension` line 1900.
+    ///
+    /// NOTE: The signature here uses `u32` in place of Resource
+    /// so `#[host_iface]`'s classifier accepts the arg. When the
+    /// full migration lands, this becomes
+    /// `callback: Resource<CastCallback>` + `ctx.typed_resource_
+    /// rep::<CastCallback>(&callback_value)?`.
+    fn register_cast(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _spec: CastSpec,
+        _callback_placeholder: u32,
+    ) -> RuntimeResult<Result<(), String>> {
+        Ok(Err(
+            "register-cast: wasmos-native path deferred pending Resource<T> \
+             integration (Phase 6.2.d.2-m); use the wit-bindgen path"
+                .to_string(),
+        ))
+    }
+
+    fn register_macro(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        def: MacroDef,
+    ) -> RuntimeResult<Result<(), String>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let extension = g.extension_name().to_string();
+        g.push_pending_macro(crate::reg::MacroReg {
+            extension,
+            schema: def.schema,
+            name: def.name,
+            parameters: def.parameters,
+            definition_sql: def.definition_sql,
+        });
+        Ok(Ok(()))
+    }
+}
+
+/// Register the `duckdb:extension/catalog` handler.
+pub fn install_catalog_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/catalog",
+        Arc::new(SyncHostCallAdapter::new(CatalogHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
 }

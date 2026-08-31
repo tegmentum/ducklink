@@ -1045,6 +1045,21 @@ impl ExtensionStoreState {
         self.pending_scalar_ex.push(entry);
     }
 
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_logical_types`.
+    pub fn push_pending_logical_type(&mut self, entry: reg::LogicalTypeReg) {
+        self.pending_logical_types.push(entry);
+    }
+
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_macros`.
+    pub fn push_pending_macro(&mut self, entry: reg::MacroReg) {
+        self.pending_macros.push(entry);
+    }
+
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_casts`.
+    pub fn push_pending_cast(&mut self, entry: reg::CastReg) {
+        self.pending_casts.push(entry);
+    }
+
     /// ADR-0029 Phase 6.2.d.2 accessor — look up the table function
     /// name that was registered for a given handle. Used by the
     /// `files.register_replacement_scan` handler to resolve the
