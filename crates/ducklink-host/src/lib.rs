@@ -152,6 +152,12 @@ pub use ducklink_runtime::compose_dynlink::{ProviderPreopen, ProviderRegistry};
 // for the production ExtensionStoreState + DotcmdState paths that
 // haven't migrated yet (Phase 6.2.d.2 / 6.2.d.3).
 pub mod at5_intercept;
+
+// ADR-0029 Phase 6.2.d.3 — the wasmos-native mirror of the
+// `duckdb:dotcmd/spi` host interface that `DotcmdState` implements
+// at line 1337 below. Additive; the existing wit-bindgen path is
+// untouched.
+pub mod dotcmd_wasmos;
 mod delta_rewrite;
 mod plan_shape;
 /// Phase D: per-sub-extension `compose:dynlink` bridge + composed-provider
