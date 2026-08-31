@@ -379,9 +379,18 @@ pub fn install_extension_imports_stateful(
     state: SharedExtensionState,
 ) -> HostImports {
     let imports = install_extension_imports(imports);
+    // 6.2.d.2-c batch
     let imports = install_parser_imports(imports, state.clone());
     let imports = install_optimizer_imports(imports, state.clone());
-    install_settings_imports(imports, state)
+    let imports = install_settings_imports(imports, state.clone());
+    // 6.2.d.2-d batch (stateless additions)
+    let imports = install_index_imports(imports);
+    let imports = install_collation_imports(imports);
+    // 6.2.d.2-d batch (state-touching)
+    let imports = install_coordinate_system_imports(imports, state.clone());
+    let imports = install_storage_imports(imports, state.clone());
+    let imports = install_log_storage_imports(imports, state.clone());
+    install_query_imports(imports, state)
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -589,6 +598,300 @@ pub fn install_settings_imports(
     )
 }
 
+// ────────────────────────────────────────────────────────────────────
+// Phase 6.2.d.2-d — record-carrying batch (6 interfaces).
+//
+// Adds coordinate_system, storage, log_storage, query, plus the two
+// remaining Unsupported-return interfaces (index, collation). Each
+// mirrors the corresponding wit-bindgen impl in `crate::extension`
+// with byte-identical guest-observable behavior.
+// ────────────────────────────────────────────────────────────────────
+
+// ── extension_index (Unsupported return) ─────────────────────────────
+
+/// Host struct for the `duckdb:extension/index` interface.
+/// One method (`register-index-type`), returns Unsupported —
+/// `duckdb_register_index_type` is not part of the DuckDB
+/// stable C API. See `crate::extension` line 2408.
+#[derive(Debug, Default, Clone)]
+pub struct IndexHost;
+
+impl IndexHost {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[host_iface(sync)]
+impl IndexHost {
+    fn register_index_type(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _type_name: String,
+    ) -> RuntimeResult<Result<(), Duckerror>> {
+        Ok(Err(Duckerror::Unsupported(
+            "duckdb_register_index_type is not part of the DuckDB stable C API".to_string(),
+        )))
+    }
+}
+
+/// Register the `duckdb:extension/index` handler.
+pub fn install_index_imports(imports: HostImports) -> HostImports {
+    imports.register(
+        "duckdb:extension/index",
+        Arc::new(SyncHostCallAdapter::new(IndexHost::new()))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ── extension_collation (Unsupported return) ─────────────────────────
+
+/// Host struct for the `duckdb:extension/collation` interface.
+/// One method (`register-collation`), returns Unsupported —
+/// `duckdb_register_collation` is not in the stable C API.
+/// See `crate::extension` line 2445.
+#[derive(Debug, Default, Clone)]
+pub struct CollationHost;
+
+impl CollationHost {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[host_iface(sync)]
+impl CollationHost {
+    fn register_collation(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _name: String,
+        _transform_scalar: String,
+        _combinable: bool,
+    ) -> RuntimeResult<Result<(), Duckerror>> {
+        Ok(Err(Duckerror::Unsupported(
+            "duckdb_register_collation is not part of the DuckDB stable C API".to_string(),
+        )))
+    }
+}
+
+/// Register the `duckdb:extension/collation` handler.
+pub fn install_collation_imports(imports: HostImports) -> HostImports {
+    imports.register(
+        "duckdb:extension/collation",
+        Arc::new(SyncHostCallAdapter::new(CollationHost::new()))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ── extension_coordinate_system (record push) ────────────────────────
+
+/// Wasmos-native mirror of the WIT
+/// `duckdb:extension/coordinate-system.crs-def` record.
+#[derive(Debug, Clone, wasmos_runtime_api::WitRecord)]
+pub struct CrsDef {
+    pub auth_name: String,
+    pub code: u32,
+    pub wkt: String,
+}
+
+/// Host struct for the `duckdb:extension/coordinate-system` interface.
+/// See `crate::extension` line 2240.
+#[derive(Clone)]
+pub struct CoordinateSystemHost {
+    state: SharedExtensionState,
+}
+
+impl CoordinateSystemHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl CoordinateSystemHost {
+    fn register_coordinate_system(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        crs: CrsDef,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let extension = g.extension_name().to_string();
+        g.push_pending_coordinate_system(crate::reg::CoordinateSystemReg {
+            extension,
+            auth_name: crs.auth_name,
+            code: crs.code,
+            wkt: crs.wkt,
+        });
+        Ok(Ok(g.alloc_resource_id()))
+    }
+}
+
+/// Register the `duckdb:extension/coordinate-system` handler.
+pub fn install_coordinate_system_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/coordinate-system",
+        Arc::new(SyncHostCallAdapter::new(CoordinateSystemHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ── extension_storage (Option<record> push) ──────────────────────────
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/types.extopts`
+/// record. Reused by any interface accepting extension options
+/// (currently just storage; may add table_stream in future batches).
+#[derive(Debug, Clone, wasmos_runtime_api::WitRecord)]
+pub struct Extopts {
+    pub description: Option<String>,
+    pub tags: Vec<String>,
+}
+
+/// Host struct for the `duckdb:extension/storage` interface.
+/// See `crate::extension` line 2361.
+#[derive(Clone)]
+pub struct StorageHost {
+    state: SharedExtensionState,
+}
+
+impl StorageHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl StorageHost {
+    fn register_storage(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        type_name: String,
+        callback_handle: u32,
+        options: Option<Extopts>,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let neutral_options = options.map(|o| crate::reg::ExtOpts {
+            description: o.description,
+            tags: o.tags,
+        });
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let extension = g.extension_name().to_string();
+        g.push_pending_storage(crate::reg::StorageReg {
+            extension,
+            type_name,
+            callback_handle,
+            options: neutral_options,
+        });
+        // The @4 host-side API return-was-the-handle contract:
+        // callback_handle passed in comes back unchanged. See
+        // `crate::extension` line 2382-2385 for the historical
+        // wire-compat rationale.
+        Ok(Ok(callback_handle))
+    }
+}
+
+/// Register the `duckdb:extension/storage` handler.
+pub fn install_storage_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/storage",
+        Arc::new(SyncHostCallAdapter::new(StorageHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ── extension_log_storage (globally-routed callback) ────────────────
+
+/// Host struct for the `duckdb:extension/log-storage` interface.
+/// See `crate::extension` line 2325. Allocates a globally-routable
+/// callback handle so the C API installer can carry ONE u32 through
+/// the `duckdb_register_log_storage` write callback and re-enter
+/// via `ExtensionInstance::dispatch_write_log_entry`.
+#[derive(Clone)]
+pub struct LogStorageHost {
+    state: SharedExtensionState,
+}
+
+impl LogStorageHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl LogStorageHost {
+    fn register_log_storage(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        name: String,
+        callback_handle: u32,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let global =
+            g.allocate_callback_handle_pub(callback_handle, crate::CallbackKind::LogStorage);
+        g.push_pending_log_storage(crate::extension::PendingLogStorage {
+            name,
+            callback_handle: global,
+        });
+        Ok(Ok(global))
+    }
+}
+
+/// Register the `duckdb:extension/log-storage` handler.
+pub fn install_log_storage_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/log-storage",
+        Arc::new(SyncHostCallAdapter::new(LogStorageHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ── extension_query (services delegation) ────────────────────────────
+
+/// Host struct for the `duckdb:extension/query` interface.
+/// See `crate::extension` line 2451. Delegates to the neutral
+/// `ExtensionServices::query` sink for the actual work.
+#[derive(Clone)]
+pub struct QueryHost {
+    state: SharedExtensionState,
+}
+
+impl QueryHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl QueryHost {
+    fn query(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        sql: String,
+    ) -> RuntimeResult<Result<Vec<Vec<String>>, String>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        Ok(g.services_query(&sql))
+    }
+}
+
+/// Register the `duckdb:extension/query` handler.
+pub fn install_query_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/query",
+        Arc::new(SyncHostCallAdapter::new(QueryHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
 /// Register the `duckdb:extension/lifecycle` handler on the given
 /// [`HostImports`] set. Consumer usage mirrors [`datalink_dynlink::
 /// install_host_imports`] and other wasmos-side install fns:
@@ -786,6 +1089,72 @@ mod tests {
             "duckdb:extension/encoding",
             "duckdb:extension/compression",
             "duckdb:extension/files-reg",
+        ] {
+            assert!(
+                imports.get(iface).is_some(),
+                "interface {iface} should be registered"
+            );
+        }
+    }
+
+    #[test]
+    fn index_returns_unsupported() {
+        let host = IndexHost::new();
+        let mut stub = StubCtx;
+        let mut ctx = HostCallContext::new(&mut stub);
+        let out = host
+            .call(
+                &mut ctx,
+                "register-index-type",
+                vec![Value::String("wasm_hnsw".into())],
+            )
+            .expect("dispatch");
+        assert!(
+            matches!(out.as_slice(), [Value::Result(Err(Some(_)))]),
+            "expected Result(Err), got {out:?}"
+        );
+    }
+
+    #[test]
+    fn collation_returns_unsupported() {
+        let host = CollationHost::new();
+        let mut stub = StubCtx;
+        let mut ctx = HostCallContext::new(&mut stub);
+        let out = host
+            .call(
+                &mut ctx,
+                "register-collation",
+                vec![
+                    Value::String("nocase".into()),
+                    Value::String("lower".into()),
+                    Value::Bool(true),
+                ],
+            )
+            .expect("dispatch");
+        assert!(
+            matches!(out.as_slice(), [Value::Result(Err(Some(_)))]),
+            "expected Result(Err), got {out:?}"
+        );
+    }
+
+    #[test]
+    fn install_stateless_batch_registers_all_seven() {
+        // install_extension_imports is stateless-only; verify all
+        // 5 base interfaces still register, and that the newly
+        // stateless interfaces (index, collation) also register
+        // through their individual install fns (they're stateless,
+        // so no state handle needed).
+        let imports = install_extension_imports(HostImports::new());
+        let imports = install_index_imports(imports);
+        let imports = install_collation_imports(imports);
+        for iface in [
+            "duckdb:extension/lifecycle",
+            "duckdb:extension/types",
+            "duckdb:extension/encoding",
+            "duckdb:extension/compression",
+            "duckdb:extension/files-reg",
+            "duckdb:extension/index",
+            "duckdb:extension/collation",
         ] {
             assert!(
                 imports.get(iface).is_some(),
