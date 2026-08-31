@@ -31,7 +31,7 @@ hex = "0.4"
 # former inline `component_contract_major`/`check_component_contract` so the
 # same guard backs both the ducklink and sqlink hosts (datalink is public).
 # The witcanon CONTRACT_DIGEST (above) stays per-repo; this is the @MAJOR proxy.
-datalink-contract = { git = "https://github.com/tegmentum/datalink.git", rev = "9b48e598ae141377e0bfe07e988fb9b224e53b0f" }
+datalink-contract = { git = "https://github.com/tegmentum/datalink.git", rev = "7582f1d5e1f462b605b5aab4368c46461c6dd470" }
 # ADR-0029 Phase 6.1b — datalink-contract migrated its two introspection fns
 # from `(&Engine, &Component, &str)` to `(&CompiledComponent, &str)` (wasmos
 # migration doc: docs/design/runtime-abstraction/phase-6-1-component-metadata-
@@ -43,12 +43,12 @@ datalink-contract = { git = "https://github.com/tegmentum/datalink.git", rev = "
 # (a later phase), this dep continues to serve as the underlying opaque
 # handle vocabulary; when the whole crate migrates, the bridge module
 # retires.
-wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", rev = "2406cc7075dcf1d9c98f054c408f062ebed3c0b0" }
+wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", rev = "ea572b369ab09ff809f40c43bad7bb0a921ce8ac" }
 # The shared store-generic compose:dynlink/linker host machinery + the
 # ResidentBackend (instantiate-once-and-reuse provider lifecycle). ducklink's
 # compose_dynlink module is now a thin adapter over this; the resolve/invoke
 # bridge + bindings live here, shared with the other wasm-component hosts.
-datalink-dynlink = { git = "https://github.com/tegmentum/datalink.git", rev = "3175f1f3e29e96cdb22ad64a6c26627111dff364" }
+datalink-dynlink = { git = "https://github.com/tegmentum/datalink.git", rev = "7582f1d5e1f462b605b5aab4368c46461c6dd470" }
 # `PendingKind::iter()` is derived via `EnumIter` so `PendingKind::all()` stays
 # in lockstep with the enum without a hand-maintained mirror array or a
 # hardcoded variant-count assert. `strum` is stable-Rust (no nightly required)
