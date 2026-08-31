@@ -43,8 +43,8 @@
 use std::sync::{Arc, Mutex};
 
 use wasmos_runtime_api::{
-    host_iface, HostCallContext, HostImports, RuntimeResult, SyncHostCall, SyncHostCallAdapter,
-    WitEnum, WitFlags, WitVariant,
+    host_iface, HostCallContext, HostImports, RuntimeError, RuntimeResult, SyncHostCall,
+    SyncHostCallAdapter, WitEnum, WitFlags, WitVariant,
 };
 
 use crate::extension::{
@@ -396,7 +396,12 @@ pub fn install_extension_imports_stateful(
     let imports = install_logging_imports(imports, state.clone());
     let imports = install_nested_exec_imports(imports, state.clone());
     // 6.2.d.2-f batch (secret)
-    install_secret_imports(imports, state)
+    let imports = install_secret_imports(imports, state.clone());
+    // 6.2.d.2-g batch (macro_ext + types_ext)
+    let imports = install_macro_ext_imports(imports, state.clone());
+    let imports = install_types_ext_imports(imports, state.clone());
+    // 6.2.d.2-h batch (files)
+    install_files_imports(imports, state)
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -1304,6 +1309,253 @@ pub fn install_secret_imports(
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
 }
+
+// ────────────────────────────────────────────────────────────────────
+// Phase 6.2.d.2-g — macro_ext + types_ext (20/27).
+//
+// Both are simple state-touching push interfaces: primitives +
+// Vec<String> args, push into a pending buffer, return Ok. Follows
+// the parser/optimizer/settings pattern from Phase 6.2.d.2-c.
+// ────────────────────────────────────────────────────────────────────
+
+// ── extension_macro_ext ─────────────────────────────────────────────
+
+/// Host struct for the `duckdb:extension/macro_ext` interface.
+/// See `crate::extension` line 2160. 1 method (register_table_macro);
+/// pushes to `pending_table_macros`.
+#[derive(Clone)]
+pub struct MacroExtHost {
+    state: SharedExtensionState,
+}
+
+impl MacroExtHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl MacroExtHost {
+    fn register_table_macro(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        schema: String,
+        name: String,
+        parameters: Vec<String>,
+        body_sql: String,
+    ) -> RuntimeResult<Result<(), Duckerror>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let extension = g.extension_name().to_string();
+        g.push_pending_table_macro(crate::reg::TableMacroReg {
+            extension,
+            schema,
+            name,
+            parameters,
+            body_sql,
+        });
+        Ok(Ok(()))
+    }
+}
+
+/// Register the `duckdb:extension/macro_ext` handler.
+pub fn install_macro_ext_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/macro_ext",
+        Arc::new(SyncHostCallAdapter::new(MacroExtHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ── extension_types_ext ─────────────────────────────────────────────
+
+/// Host struct for the `duckdb:extension/types_ext` interface.
+/// See `crate::extension` line 2186. 2 methods
+/// (register_logical_type_modified, register_enum).
+#[derive(Clone)]
+pub struct TypesExtHost {
+    state: SharedExtensionState,
+}
+
+impl TypesExtHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl TypesExtHost {
+    fn register_logical_type_modified(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        name: String,
+        type_expr: String,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let extension = g.extension_name().to_string();
+        g.push_pending_modified_type(crate::reg::ModifiedTypeReg {
+            extension,
+            name,
+            type_expr,
+        });
+        Ok(Ok(g.alloc_resource_id()))
+    }
+
+    fn register_enum(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        name: String,
+        members: Vec<String>,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let extension = g.extension_name().to_string();
+        g.push_pending_enum_type(crate::reg::EnumTypeReg {
+            extension,
+            name,
+            members,
+        });
+        Ok(Ok(g.alloc_resource_id()))
+    }
+}
+
+/// Register the `duckdb:extension/types_ext` handler.
+pub fn install_types_ext_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/types_ext",
+        Arc::new(SyncHostCallAdapter::new(TypesExtHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Phase 6.2.d.2-h — files interface (22/27).
+// ────────────────────────────────────────────────────────────────────
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/files.
+/// detection-mode` enum.
+#[derive(Debug, Clone, Copy, WitEnum)]
+pub enum DetectionMode {
+    ExtensionOnly,
+    Signature,
+}
+
+impl DetectionMode {
+    fn as_debug(self) -> &'static str {
+        match self {
+            DetectionMode::ExtensionOnly => "extension-only",
+            DetectionMode::Signature => "signature",
+        }
+    }
+}
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/files.
+/// replacement-scan` record.
+#[derive(Debug, Clone, wasmos_runtime_api::WitRecord)]
+pub struct ReplacementScan {
+    pub extensions: Vec<String>,
+    pub table_function: u32,
+    pub mode: DetectionMode,
+}
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/files.
+/// copy-handler` record.
+#[derive(Debug, Clone, wasmos_runtime_api::WitRecord)]
+pub struct CopyHandler {
+    pub extension: String,
+    pub function: u32,
+}
+
+/// Host struct for the `duckdb:extension/files` interface.
+/// See `crate::extension` line 1908. 2 methods:
+/// register_replacement_scan (looks up table_handle_names), and
+/// register_copy_handler.
+///
+/// Note: this interface uses `Result<u32, String>` (plain
+/// String errors), not `Result<u32, Duckerror>` like most
+/// state-touching interfaces in the arc — matches the
+/// wit-bindgen counterpart signature.
+#[derive(Clone)]
+pub struct FilesHost {
+    state: SharedExtensionState,
+}
+
+impl FilesHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl FilesHost {
+    fn register_replacement_scan(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        scan: ReplacementScan,
+    ) -> RuntimeResult<Result<u32, String>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let function_name = match g.lookup_table_handle_name(scan.table_function) {
+            Some(name) => name,
+            None => {
+                return Ok(Err(format!(
+                    "replacement scan references unknown table-function handle {}",
+                    scan.table_function
+                )));
+            }
+        };
+        let extension = g.extension_name().to_string();
+        let id = g.alloc_resource_id();
+        // Log kept as a debug-adjacent side-effect only (skipping
+        // the verbose_log! macro since it's private to
+        // crate::extension); wire behavior unaffected.
+        let _ = scan.mode.as_debug();
+        g.push_pending_replacement_scan(crate::reg::ReplacementScanReg {
+            extension,
+            extensions: scan.extensions,
+            function_name,
+        });
+        Ok(Ok(id))
+    }
+
+    fn register_copy_handler(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        handler: CopyHandler,
+    ) -> RuntimeResult<Result<u32, String>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let extension = g.extension_name().to_string();
+        let id = g.alloc_resource_id();
+        g.push_pending_copy_handler(crate::reg::CopyHandlerReg {
+            extension,
+            file_extension: handler.extension,
+            function_handle: handler.function,
+        });
+        Ok(Ok(id))
+    }
+}
+
+/// Register the `duckdb:extension/files` handler.
+pub fn install_files_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/files",
+        Arc::new(SyncHostCallAdapter::new(FilesHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// Silence unused-import warning on RuntimeError — will be reached
+// via macro expansion in future error-returning handlers.
+#[allow(dead_code)]
+const _RUNTIME_ERROR: fn() = || {
+    let _ = RuntimeError::msg("");
+};
 
 /// Register the `duckdb:extension/lifecycle` handler on the given
 /// [`HostImports`] set. Consumer usage mirrors [`datalink_dynlink::
