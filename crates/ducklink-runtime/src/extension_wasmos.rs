@@ -401,7 +401,9 @@ pub fn install_extension_imports_stateful(
     let imports = install_macro_ext_imports(imports, state.clone());
     let imports = install_types_ext_imports(imports, state.clone());
     // 6.2.d.2-h batch (files)
-    install_files_imports(imports, state)
+    let imports = install_files_imports(imports, state.clone());
+    // 6.2.d.2-i batch (arrow_ext + LogicalType mirror unblocking future batches)
+    install_arrow_ext_imports(imports, state)
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -1546,6 +1548,167 @@ pub fn install_files_imports(
     imports.register(
         "duckdb:extension/files",
         Arc::new(SyncHostCallAdapter::new(FilesHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Phase 6.2.d.2-i — LogicalType + Columndef mirrors + arrow_ext (22/27).
+//
+// LogicalType is the shared blocker for arrow_ext + table_stream +
+// runtime_ext + parts of runtime. Landing it once here unblocks
+// those four (and more) future sub-sessions.
+// ────────────────────────────────────────────────────────────────────
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/types.
+/// decimalshape` record — the `decimal` arm's width + scale payload.
+#[derive(Debug, Clone, wasmos_runtime_api::WitRecord)]
+pub struct DecimalShape {
+    pub width: u8,
+    pub scale: u8,
+}
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/types.
+/// logicaltype` variant. 20 unit arms + 2 tuple arms
+/// (`decimal(decimalshape)`, `complex(string)`). Wire-identical to
+/// the wit-bindgen counterpart + to `crate::reg::LogicalType`.
+///
+/// Shared mirror — arrow_ext, table_stream, runtime_ext, and much
+/// of runtime all use it. Defined once here; every future
+/// migration in Phase 6.2.d.2 reuses it.
+#[derive(Debug, Clone, WitVariant)]
+pub enum LogicalType {
+    Boolean,
+    Int64,
+    Uint64,
+    Float64,
+    Text,
+    Blob,
+    Int32,
+    Timestamp,
+    Int8,
+    Int16,
+    Uint8,
+    Uint16,
+    Uint32,
+    Float32,
+    Date,
+    Time,
+    Timestamptz,
+    Decimal(DecimalShape),
+    Interval,
+    Uuid,
+    Hugeint,
+    Uhugeint,
+    Complex(String),
+}
+
+impl LogicalType {
+    /// Convert to `crate::reg::LogicalType` (the neutral type the
+    /// pending buffers store). Same variant order + names as the
+    /// WIT source, so the two representations are wire-identical;
+    /// this is a Rust-level type-adapter, not a wire conversion.
+    pub fn to_reg(self) -> crate::reg::LogicalType {
+        use crate::reg::LogicalType as R;
+        match self {
+            LogicalType::Boolean => R::Boolean,
+            LogicalType::Int64 => R::Int64,
+            LogicalType::Uint64 => R::Uint64,
+            LogicalType::Float64 => R::Float64,
+            LogicalType::Text => R::Text,
+            LogicalType::Blob => R::Blob,
+            LogicalType::Int32 => R::Int32,
+            LogicalType::Timestamp => R::Timestamp,
+            LogicalType::Int8 => R::Int8,
+            LogicalType::Int16 => R::Int16,
+            LogicalType::Uint8 => R::Uint8,
+            LogicalType::Uint16 => R::Uint16,
+            LogicalType::Uint32 => R::Uint32,
+            LogicalType::Float32 => R::Float32,
+            LogicalType::Date => R::Date,
+            LogicalType::Time => R::Time,
+            LogicalType::Timestamptz => R::Timestamptz,
+            LogicalType::Decimal(shape) => R::Decimal {
+                width: shape.width,
+                scale: shape.scale,
+            },
+            LogicalType::Interval => R::Interval,
+            LogicalType::Uuid => R::Uuid,
+            LogicalType::Hugeint => R::Hugeint,
+            // reg::LogicalType uses UHugeint (mid-word H capitalized);
+            // the WIT ident 'uhugeint' PascalCases as Uhugeint here.
+            LogicalType::Uhugeint => R::UHugeint,
+            LogicalType::Complex(s) => R::Complex(s),
+        }
+    }
+}
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/types.columndef`
+/// record. Shared by arrow_ext + table_stream + several methods on
+/// runtime.
+#[derive(Debug, Clone, wasmos_runtime_api::WitRecord)]
+pub struct Columndef {
+    pub name: String,
+    pub logical: LogicalType,
+}
+
+impl Columndef {
+    pub fn to_reg(self) -> crate::reg::ColumnDef {
+        crate::reg::ColumnDef {
+            name: self.name,
+            logical: self.logical.to_reg(),
+        }
+    }
+}
+
+// ── extension_arrow_ext ─────────────────────────────────────────────
+
+/// Host struct for the `duckdb:extension/arrow_ext` interface.
+/// See `crate::extension` line 2352. 1 method (register_arrow_table);
+/// pushes to `pending_arrow_tables` with the caller-supplied schema
+/// converted to `reg::ColumnDef` via `Columndef::to_reg`.
+#[derive(Clone)]
+pub struct ArrowExtHost {
+    state: SharedExtensionState,
+}
+
+impl ArrowExtHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl ArrowExtHost {
+    fn register_arrow_table(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        name: String,
+        schema: Vec<Columndef>,
+        callback_handle: u32,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let columns: Vec<crate::reg::ColumnDef> =
+            schema.into_iter().map(Columndef::to_reg).collect();
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let extension = g.extension_name().to_string();
+        g.push_pending_arrow_table(crate::reg::ArrowTableReg {
+            extension,
+            name,
+            columns,
+            callback_handle,
+        });
+        Ok(Ok(g.alloc_resource_id()))
+    }
+}
+
+/// Register the `duckdb:extension/arrow_ext` handler.
+pub fn install_arrow_ext_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/arrow_ext",
+        Arc::new(SyncHostCallAdapter::new(ArrowExtHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
 }
