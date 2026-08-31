@@ -394,7 +394,9 @@ pub fn install_extension_imports_stateful(
     // 6.2.d.2-e batch (services-delegating)
     let imports = install_config_imports(imports, state.clone());
     let imports = install_logging_imports(imports, state.clone());
-    install_nested_exec_imports(imports, state)
+    let imports = install_nested_exec_imports(imports, state.clone());
+    // 6.2.d.2-f batch (secret)
+    install_secret_imports(imports, state)
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -1215,6 +1217,90 @@ pub fn install_nested_exec_imports(
     imports.register(
         "duckdb:extension/nested-exec",
         Arc::new(SyncHostCallAdapter::new(NestedExecHost::new(state)))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Phase 6.2.d.2-f — secret interface (18/27).
+// ────────────────────────────────────────────────────────────────────
+
+/// Wasmos-native mirror of the WIT `duckdb:extension/secret.
+/// secret-param` record.
+#[derive(Debug, Clone, wasmos_runtime_api::WitRecord)]
+pub struct SecretParam {
+    pub name: String,
+    pub redacted: bool,
+}
+
+/// Host struct for the `duckdb:extension/secret` interface.
+/// See `crate::extension` line 1937. 2 methods, both push to
+/// `pending_secrets`. Captures secret TYPE + PROVIDER
+/// declarations for drain by `ExtensionManager::secret_backends`.
+#[derive(Clone)]
+pub struct SecretHost {
+    state: SharedExtensionState,
+}
+
+impl SecretHost {
+    pub fn new(state: SharedExtensionState) -> Self {
+        Self { state }
+    }
+}
+
+#[host_iface(sync)]
+impl SecretHost {
+    fn register_secret_type(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        type_name: String,
+        params: Vec<SecretParam>,
+        callback_handle: u32,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let params: Vec<(String, bool)> =
+            params.into_iter().map(|p| (p.name, p.redacted)).collect();
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let registry_id = g.alloc_resource_id();
+        let extension = g.extension_name().to_string();
+        g.push_pending_secret(crate::reg::SecretReg {
+            extension,
+            type_name,
+            provider: None,
+            params,
+            callback_handle,
+        });
+        Ok(Ok(registry_id))
+    }
+
+    fn register_secret_provider(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        type_name: String,
+        provider: String,
+        callback_handle: u32,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let registry_id = g.alloc_resource_id();
+        let extension = g.extension_name().to_string();
+        g.push_pending_secret(crate::reg::SecretReg {
+            extension,
+            type_name,
+            provider: Some(provider),
+            params: Vec::new(),
+            callback_handle,
+        });
+        Ok(Ok(registry_id))
+    }
+}
+
+/// Register the `duckdb:extension/secret` handler.
+pub fn install_secret_imports(
+    imports: HostImports,
+    state: SharedExtensionState,
+) -> HostImports {
+    imports.register(
+        "duckdb:extension/secret",
+        Arc::new(SyncHostCallAdapter::new(SecretHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
 }
