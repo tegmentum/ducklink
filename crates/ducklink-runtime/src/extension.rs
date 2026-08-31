@@ -1060,6 +1060,37 @@ impl ExtensionStoreState {
         self.pending_casts.push(entry);
     }
 
+    /// ADR-0029 Phase 6.2.d.2-m accessor — acquire an exclusive
+    /// advisory lock on `path`, stash the `LockHandleState`, and
+    /// return the fresh handle id. Wraps the private
+    /// `LockHandleState::acquire_exclusive` + `alloc_lock_handle`
+    /// pair so `crate::extension_wasmos` can register the
+    /// `file-lock.acquire-exclusive` handler without exposing the
+    /// LockHandleState struct itself.
+    pub fn acquire_exclusive_lock(&mut self, path: &str) -> Result<u32, String> {
+        let state = LockHandleState::acquire_exclusive(path)?;
+        Ok(self.alloc_lock_handle(state))
+    }
+
+    /// ADR-0029 Phase 6.2.d.2-m accessor — try-acquire variant of
+    /// `acquire_exclusive_lock`. Returns `Ok(Some(id))` on
+    /// acquisition, `Ok(None)` if the lock is currently held by
+    /// another process, `Err` on IO failure.
+    pub fn try_acquire_exclusive_lock(&mut self, path: &str) -> Result<Option<u32>, String> {
+        match LockHandleState::try_acquire_exclusive(path)? {
+            Some(state) => Ok(Some(self.alloc_lock_handle(state))),
+            None => Ok(None),
+        }
+    }
+
+    /// ADR-0029 Phase 6.2.d.2-m accessor — release the lock at
+    /// `id` (drops the underlying `LockHandleState`, releasing the
+    /// OS flock via its `Drop` impl). No-op if the id was already
+    /// released. Wraps the private `free_lock_handle`.
+    pub fn release_lock_handle(&mut self, id: u32) {
+        self.free_lock_handle(id);
+    }
+
     /// ADR-0029 Phase 6.2.d.2 accessor — look up the table function
     /// name that was registered for a given handle. Used by the
     /// `files.register_replacement_scan` handler to resolve the
