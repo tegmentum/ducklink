@@ -47,6 +47,40 @@ use wasmos_runtime_api::{
     WitFlags, WitVariant,
 };
 
+// ────────────────────────────────────────────────────────────────────
+// Migration status (Phase 6.2.d.2)
+//
+// This module hosts the wasmos-native equivalents of the 27
+// `impl <iface>::Host for ExtensionStoreState` blocks in
+// `crate::extension`. Interfaces migrate in batches based on state-
+// dependency shape:
+//
+// - **Stateless interfaces** (this session, Phase 6.2.d.2-a/b) —
+//   interfaces whose handlers reach for no ExtensionStoreState
+//   fields. Currently: `lifecycle`, `types`, `encoding`,
+//   `compression`, `files_reg`. All either empty markers or
+//   `Unsupported` returns.
+// - **State-sharing interfaces** (Phase 6.2.d.2-c, future) —
+//   interfaces whose handlers append to `pending_*` buffers or
+//   read `extension_name` / `alloc_resource_id()`. Blocked on an
+//   architecture decision:
+//     (A) Wrap ExtensionStoreState in `Arc<Mutex<...>>` at the
+//         wasmos install path, per-call `.lock()` (matches
+//         SharedTvmHost pattern; adds mutex cost).
+//     (B) Extract `pending_*` + `extension_name` +
+//         `next_resource_id` into a `SharedExtensionState` handle
+//         that host structs capture individually (finer-grained;
+//         requires refactor to `crate::extension`).
+//     (C) `mpsc::Sender<HostEvent>` from host structs to a single
+//         drain owned by ExtensionStoreState (async-friendly but
+//         changes the ownership model most).
+// - **Resource-carrying interfaces** (Phase 6.2.d.2-d, future) —
+//   `extension_runtime`, `runtime_ext`, `storage`, `nested_exec`.
+//   Each returns `Resource<T>`; needs the state architecture from
+//   the previous bucket plus `#[wit_ctx]` on the return-carrying
+//   variants.
+// ────────────────────────────────────────────────────────────────────
+
 /// Wasmos-native mirror of `duckdb:extension/types.duckerror`.
 ///
 /// Wire-identical to the wit-bindgen `extension_types::Duckerror`
@@ -114,6 +148,186 @@ impl LifecycleHost {
             "no DuckDB C API for connection open/close callbacks".to_string(),
         )))
     }
+}
+
+// ── extension_types (empty marker interface) ─────────────────────────
+
+/// Host struct for the `duckdb:extension/types` interface.
+///
+/// The interface exists only as a namespace for shared type
+/// declarations (`duckerror`, `duckvalue`, etc.) — it has zero
+/// methods. The empty impl satisfies the guest's import so
+/// instantiation succeeds; the type declarations themselves are
+/// consumed by other interfaces.
+#[derive(Debug, Default, Clone)]
+pub struct TypesHost;
+
+impl TypesHost {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[host_iface(sync)]
+impl TypesHost {}
+
+/// Register the `duckdb:extension/types` handler.
+pub fn install_types_imports(imports: HostImports) -> HostImports {
+    imports.register(
+        "duckdb:extension/types",
+        Arc::new(SyncHostCallAdapter::new(TypesHost::new()))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ── extension_encoding (single Unsupported return) ───────────────────
+
+/// Host struct for the `duckdb:extension/encoding` interface.
+/// The one method (`register-encoding`) always returns
+/// `Unsupported` — `duckdb_register_encoding` is not part of the
+/// DuckDB stable C API. See `crate::extension` line 2258 for the
+/// wit-bindgen counterpart.
+#[derive(Debug, Default, Clone)]
+pub struct EncodingHost;
+
+impl EncodingHost {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[host_iface(sync)]
+impl EncodingHost {
+    fn register_encoding(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _name: String,
+        _aliases: Vec<String>,
+        _callback_handle: u32,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        Ok(Err(Duckerror::Unsupported(
+            "duckdb_register_encoding is not part of the DuckDB stable C API".to_string(),
+        )))
+    }
+}
+
+/// Register the `duckdb:extension/encoding` handler.
+pub fn install_encoding_imports(imports: HostImports) -> HostImports {
+    imports.register(
+        "duckdb:extension/encoding",
+        Arc::new(SyncHostCallAdapter::new(EncodingHost::new()))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ── extension_compression (single Unsupported return) ────────────────
+
+/// Host struct for the `duckdb:extension/compression` interface.
+/// The one method (`register-compression`) always returns
+/// `Unsupported` — no stable DuckDB C API. See `crate::extension`
+/// line 2275.
+#[derive(Debug, Default, Clone)]
+pub struct CompressionHost;
+
+impl CompressionHost {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[host_iface(sync)]
+impl CompressionHost {
+    fn register_compression(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _name: String,
+        _file_extension: String,
+        _callback_handle: u32,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        Ok(Err(Duckerror::Unsupported(
+            "duckdb_register_compression is not part of the DuckDB stable C API".to_string(),
+        )))
+    }
+}
+
+/// Register the `duckdb:extension/compression` handler.
+pub fn install_compression_imports(imports: HostImports) -> HostImports {
+    imports.register(
+        "duckdb:extension/compression",
+        Arc::new(SyncHostCallAdapter::new(CompressionHost::new()))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ── extension_files_reg (single Unsupported return) ──────────────────
+
+/// Host struct for the `duckdb:extension/files-reg` interface.
+/// The one method (`register-files`) always returns `Unsupported`
+/// — no stable DuckDB C API. See `crate::extension` line 2375.
+#[derive(Debug, Default, Clone)]
+pub struct FilesRegHost;
+
+impl FilesRegHost {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[host_iface(sync)]
+impl FilesRegHost {
+    fn register_files(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _callback_handle: u32,
+    ) -> RuntimeResult<Result<u32, Duckerror>> {
+        Ok(Err(Duckerror::Unsupported(
+            "duckdb_register_file_system is not part of the DuckDB stable C API".to_string(),
+        )))
+    }
+}
+
+/// Register the `duckdb:extension/files-reg` handler.
+pub fn install_files_reg_imports(imports: HostImports) -> HostImports {
+    imports.register(
+        "duckdb:extension/files-reg",
+        Arc::new(SyncHostCallAdapter::new(FilesRegHost::new()))
+            as Arc<dyn wasmos_runtime_api::HostCall>,
+    )
+}
+
+// ── Composite installer for all currently-migrated interfaces ────────
+
+/// Install every wasmos-native interface currently landed under
+/// Phase 6.2.d.2-a/b. As additional interfaces migrate in later
+/// sub-sessions, they'll be added to this composite fn — consumer
+/// code depends on this single entry point and picks up new
+/// interfaces automatically.
+///
+/// Interfaces registered today:
+/// - `duckdb:extension/lifecycle`
+/// - `duckdb:extension/types`
+/// - `duckdb:extension/encoding`
+/// - `duckdb:extension/compression`
+/// - `duckdb:extension/files-reg`
+///
+/// **Not yet registered** (need state-sharing architecture per
+/// module docstring): `runtime`, `config`, `logging`, `catalog`,
+/// `files`, `secret`, `settings`, `parser`, `optimizer`,
+/// `table_stream`, `macro_ext`, `types_ext`, `runtime_ext`,
+/// `coordinate_system`, `arrow_ext`, `log_storage`, `storage`,
+/// `index`, `collation`, `query`, `nested_exec`, `file_lock`.
+///
+/// A guest importing any of these unmigrated interfaces will fail
+/// instantiation with an "unresolved import" error under the
+/// wasmos-native install path — that's the signal to fall back to
+/// the wit-bindgen `crate::extension` path or wait for the
+/// remaining interfaces to migrate.
+pub fn install_extension_imports(imports: HostImports) -> HostImports {
+    let imports = install_lifecycle_imports(imports);
+    let imports = install_types_imports(imports);
+    let imports = install_encoding_imports(imports);
+    let imports = install_compression_imports(imports);
+    install_files_reg_imports(imports)
 }
 
 /// Register the `duckdb:extension/lifecycle` handler on the given
@@ -224,6 +438,101 @@ mod tests {
             imports.get("duckdb:extension/lifecycle").is_some(),
             "lifecycle interface should be registered"
         );
+    }
+
+    #[test]
+    fn types_marker_dispatches_nothing() {
+        // TypesHost has zero methods — every dispatch is an
+        // unknown-method error. Proves the empty-impl case works.
+        let host = TypesHost::new();
+        let mut stub = StubCtx;
+        let mut ctx = HostCallContext::new(&mut stub);
+        let err = host
+            .call(&mut ctx, "anything", vec![])
+            .expect_err("empty marker should reject every method");
+        let msg = format!("{err}");
+        assert!(msg.contains("anything"), "error should name the method: {msg}");
+    }
+
+    #[test]
+    fn encoding_returns_unsupported() {
+        let host = EncodingHost::new();
+        let mut stub = StubCtx;
+        let mut ctx = HostCallContext::new(&mut stub);
+        let out = host
+            .call(
+                &mut ctx,
+                "register-encoding",
+                vec![
+                    Value::String("utf-8".into()),
+                    Value::List(vec![Value::String("utf8".into())]),
+                    Value::U32(1),
+                ],
+            )
+            .expect("dispatch");
+        match out.as_slice() {
+            [Value::Result(Err(Some(payload)))] => match payload.as_ref() {
+                Value::Variant {
+                    discriminant,
+                    payload: Some(_),
+                } => assert_eq!(discriminant, "unsupported"),
+                other => panic!("expected unsupported variant, got {other:?}"),
+            },
+            other => panic!("expected Result(Err(...)), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn compression_returns_unsupported() {
+        let host = CompressionHost::new();
+        let mut stub = StubCtx;
+        let mut ctx = HostCallContext::new(&mut stub);
+        let out = host
+            .call(
+                &mut ctx,
+                "register-compression",
+                vec![
+                    Value::String("lz4".into()),
+                    Value::String("lz4".into()),
+                    Value::U32(2),
+                ],
+            )
+            .expect("dispatch");
+        assert!(
+            matches!(out.as_slice(), [Value::Result(Err(Some(_)))]),
+            "expected Result(Err), got {out:?}"
+        );
+    }
+
+    #[test]
+    fn files_reg_returns_unsupported() {
+        let host = FilesRegHost::new();
+        let mut stub = StubCtx;
+        let mut ctx = HostCallContext::new(&mut stub);
+        let out = host
+            .call(&mut ctx, "register-files", vec![Value::U32(3)])
+            .expect("dispatch");
+        assert!(
+            matches!(out.as_slice(), [Value::Result(Err(Some(_)))]),
+            "expected Result(Err), got {out:?}"
+        );
+    }
+
+    #[test]
+    fn install_extension_registers_all_five() {
+        let imports = install_extension_imports(HostImports::new());
+        for iface in [
+            "duckdb:extension/lifecycle",
+            "duckdb:extension/types",
+            "duckdb:extension/encoding",
+            "duckdb:extension/compression",
+            "duckdb:extension/files-reg",
+        ] {
+            assert!(
+                imports.get(iface).is_some(),
+                "interface {iface} should be registered"
+            );
+        }
     }
 
     #[test]
