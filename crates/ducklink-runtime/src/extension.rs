@@ -609,7 +609,11 @@ type PendingPragma = reg::PragmaReg;
 // 2.1.0 additive captures.
 type PendingCopyHandler = reg::CopyHandlerReg;
 type PendingSecret = reg::SecretReg;
-type PendingSetting = reg::SettingReg;
+// ADR-0029 Phase 6.2.d.2 — `pub` so crate::extension_wasmos
+// can construct pending entries during interface migration. The
+// underlying `reg::*` type is already public; the alias just
+// preserves grep-locality with the private original.
+pub type PendingSetting = reg::SettingReg;
 type PendingTableMacro = reg::TableMacroReg;
 type PendingModifiedType = reg::ModifiedTypeReg;
 type PendingEnumType = reg::EnumTypeReg;
@@ -621,8 +625,10 @@ type PendingArrowTable = reg::ArrowTableReg;
 type PendingEncoding = reg::EncodingReg;
 type PendingCompression = reg::CompressionReg;
 // 2.3.0 / v3 additive captures.
-type PendingParser = reg::ParserReg;
-type PendingOptimizer = reg::OptimizerReg;
+// ADR-0029 Phase 6.2.d.2 — `pub` so crate::extension_wasmos can
+// construct pending entries during interface migration.
+pub type PendingParser = reg::ParserReg;
+pub type PendingOptimizer = reg::OptimizerReg;
 // 3.1.0 additive capture: streaming/filter-pushdown table function.
 type PendingFilterableTable = reg::FilterableTableReg;
 
@@ -923,10 +929,38 @@ impl ExtensionStoreState {
             .expect("dynlink bridge present only when the component imports compose:dynlink/linker")
     }
 
-    fn alloc_resource_id(&mut self) -> u32 {
+    // ADR-0029 Phase 6.2.d.2 — visibility bumped from `fn` to
+    // `pub fn` so `crate::extension_wasmos` can allocate resource
+    // ids while migrating interfaces to `wasmos_runtime_api::
+    // HostImports`. No behavior change; the invariant that the
+    // returned id is nonzero + monotonic (wrapping) is preserved.
+    pub fn alloc_resource_id(&mut self) -> u32 {
         let id = self.next_resource_id;
         self.next_resource_id = self.next_resource_id.wrapping_add(1).max(1);
         id
+    }
+
+    /// ADR-0029 Phase 6.2.d.2 accessor — the extension's name, used
+    /// by `crate::extension_wasmos` handlers for pending-buffer
+    /// tagging. Read-only; the field is set at construction time
+    /// via `Self::new` / `Self::with_dynlink`.
+    pub fn extension_name(&self) -> &str {
+        &self.extension_name
+    }
+
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_settings`.
+    pub fn push_pending_setting(&mut self, setting: PendingSetting) {
+        self.pending_settings.push(setting);
+    }
+
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_parsers`.
+    pub fn push_pending_parser(&mut self, parser: PendingParser) {
+        self.pending_parsers.push(parser);
+    }
+
+    /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_optimizers`.
+    pub fn push_pending_optimizer(&mut self, optimizer: PendingOptimizer) {
+        self.pending_optimizers.push(optimizer);
     }
 
     fn allocate_callback_handle(&self, dispatcher_handle: u32, kind: CallbackKind) -> u32 {
