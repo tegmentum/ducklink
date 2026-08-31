@@ -2376,6 +2376,69 @@ impl RuntimeHost {
             Capabilitykind::Pragma,
         ])
     }
+
+    // ── Sub-trait: HostMacroRegistry (Phase 6.2.d.2-p, first slice) ──
+    //
+    // The wit-bindgen counterpart at `crate::extension` line 1844
+    // has 2 methods on the macro-registry resource:
+    //   register-scalar(name, parameters, body-sql, options)
+    //     -> result<bool, duckerror>  — always returns Unsupported
+    //   [resource-drop]macro-registry  — no-op
+    //
+    // Under the WIT canonical ABI, resource-method names mangle to
+    // `[method]macro-registry.register-scalar` (etc.). The
+    // `#[method("...")]` override on `#[host_iface]` lets us wire
+    // the same dispatch — the arg list mirrors the WIT method
+    // shape (self resource lifts as `Resource<MacroRegistry>`
+    // first arg; other args follow).
+
+    /// `[method]macro-registry.register-scalar` — always
+    /// returns Unsupported. Byte-identical to the wit-bindgen
+    /// counterpart.
+    ///
+    /// NOTE: options is `Option<Extopts>` but I haven't mirrored
+    /// runtime's own Extopts type yet — the runtime WIT reuses
+    /// `types.extopts` which is already mirrored elsewhere in
+    /// this module (as `Extopts`). Same type; wasmos-native
+    /// classifier resolves the reuse automatically.
+    #[method("[method]macro-registry.register-scalar")]
+    fn macro_registry_register_scalar(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _self_: Resource<MacroRegistry>,
+        _name: String,
+        _parameters: Vec<String>,
+        _body_sql: String,
+        _options: Option<Extopts>,
+    ) -> RuntimeResult<Result<bool, Duckerror>> {
+        // Matches `crate::extension` line 1852:
+        // `Err(unsupported_runtime_error())` where
+        // `unsupported_runtime_error` returns
+        // `Duckerror::Unsupported("component runtime not
+        // available in CLI host")`.
+        Ok(Err(Duckerror::Unsupported(
+            "component runtime not available in CLI host".to_string(),
+        )))
+    }
+
+    /// `[resource-drop]macro-registry` — no-op. The wit-bindgen
+    /// counterpart at `crate::extension` line 1856 also just
+    /// returns Ok(()).
+    ///
+    /// WASMOS-SIDE GAP: destructor dispatch depends on adapter-
+    /// level resource-drop notifications from the guest. See
+    /// the Phase 6.2.d.2-n design note in file_lock's section.
+    /// If wasmos never dispatches `[resource-drop]macro-registry`,
+    /// this handler is dead code — harmless (no state to
+    /// release; the wit-bindgen counterpart is also no-op).
+    #[method("[resource-drop]macro-registry")]
+    fn macro_registry_drop(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        _rep: Resource<MacroRegistry>,
+    ) -> RuntimeResult<()> {
+        Ok(())
+    }
 }
 
 /// Register the `duckdb:extension/runtime` handler.
