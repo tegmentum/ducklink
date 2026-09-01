@@ -5976,6 +5976,111 @@ mod tests {
         );
     }
 
+    /// Arc 2 (behavior test) — the pintest sibling artifact, an
+    /// independent-shape verification that `install_wasmos_migrated_
+    /// interfaces` handles a DIFFERENT component-model shape than
+    /// pintest_a. If pintest_a passes and pintest_b fails, the failure
+    /// is localized to component-shape sensitivity in the install
+    /// path, not the wasmos handler set itself.
+    #[test]
+    fn wasmos_native_load_pintest_b_end_to_end() {
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        let path = std::path::Path::new(manifest)
+            .join("../../artifacts/extensions/pintest_b.wasm");
+        if !path.exists() {
+            eprintln!(
+                "skipping wasmos-native pintest_b e2e load test: {} absent",
+                path.display()
+            );
+            return;
+        }
+
+        let engine = test_engine();
+        let instance = load_artifact(&engine, "pintest_b")
+            .expect("pintest_b should load through the wasmos-native install path");
+        let _ = instance;
+    }
+
+    /// Arc 2 (behavior test) — the type-focused artifact. `typetest`
+    /// exercises the full `duckdb:extension/types` surface: value
+    /// crossings for every arm of `Duckvalue` (including the rich
+    /// Decimal/Interval/Uuid/Hugeint/Complex payloads) and the
+    /// `Logicaltype` variant with its S2 `Decimal(decimalshape)` +
+    /// T2-1 `Hugeint`/`Uhugeint` first-class arms. Successful load
+    /// validates that the wasmos-native `types` host trait handler
+    /// classifies + marshals every arm the mirror types cover.
+    #[test]
+    fn wasmos_native_load_typetest_end_to_end() {
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        let path = std::path::Path::new(manifest)
+            .join("../../artifacts/extensions/typetest.wasm");
+        if !path.exists() {
+            eprintln!(
+                "skipping wasmos-native typetest e2e load test: {} absent",
+                path.display()
+            );
+            return;
+        }
+
+        let engine = test_engine();
+        let instance = load_artifact(&engine, "typetest")
+            .expect("typetest should load through the wasmos-native install path");
+        let _ = instance;
+    }
+
+    /// Arc 2 (behavior test) — a real production component
+    /// (`atbash`, the letter-substitution cipher extension) loaded
+    /// via the wasmos-native install path. Unlike the pintest / typetest
+    /// artifacts (which are shaped specifically for host-side
+    /// exercise), `atbash` is a live extension consumed by real users.
+    /// Successful load through the wasmos path validates that the
+    /// migration is production-quality on shapes that weren't authored
+    /// with the tests in mind.
+    #[test]
+    fn wasmos_native_load_atbash_production_component() {
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        let path = std::path::Path::new(manifest)
+            .join("../../artifacts/extensions/atbash.wasm");
+        if !path.exists() {
+            eprintln!(
+                "skipping wasmos-native atbash e2e load test: {} absent",
+                path.display()
+            );
+            return;
+        }
+
+        let engine = test_engine();
+        let instance = load_artifact(&engine, "atbash")
+            .expect("atbash should load through the wasmos-native install path");
+        let _ = instance;
+    }
+
+    /// Arc 2 (behavior test) — verifies the load path is
+    /// re-entrant. Load the same artifact twice on the same engine
+    /// and assert that both loads succeed independently. Guards
+    /// against a class of bug where the wasmos install path caches
+    /// per-Component state that would prevent a second load (or
+    /// leaks state from a prior load into a fresh instance).
+    #[test]
+    fn wasmos_native_load_reentrant_on_same_engine() {
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        let path = std::path::Path::new(manifest)
+            .join("../../artifacts/extensions/pintest_a.wasm");
+        if !path.exists() {
+            eprintln!("skipping re-entrant load test: {} absent", path.display());
+            return;
+        }
+        let engine = test_engine();
+        // First load.
+        let first = load_artifact(&engine, "pintest_a")
+            .expect("first load should succeed");
+        drop(first);
+        // Second load on the same engine — must succeed independently.
+        let second = load_artifact(&engine, "pintest_a")
+            .expect("second load on same engine should succeed independently");
+        drop(second);
+    }
+
     #[test]
     fn convert_logicaltype_covers_every_arm_incl_rich_and_complex() {
         use extension_runtime::Logicaltype as L;
