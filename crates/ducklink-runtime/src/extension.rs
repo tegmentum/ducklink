@@ -34,7 +34,13 @@ use crate::duckdb_extension_bindings::duckdb::extension::{
     table_stream as extension_table_stream, types as extension_types,
     types_ext as extension_types_ext,
 };
-use crate::duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
+// Phase 6.2.j — DuckdbExtension typed dispatcher retired (used to be
+// constructed at load time; every dispatch now flows through the
+// wasmos sync export bridge with the raw Instance). DuckdbExtensionPre
+// was unused in this crate already. The interface types (extension_
+// types, extension_column_types, etc.) are imported above from the
+// same bindings module.
+// use crate::duckdb_extension_bindings::{DuckdbExtension, DuckdbExtensionPre};
 use crate::reg;
 use crate::{CallbackKind, CallbackRegistry};
 
@@ -61,7 +67,7 @@ fn column_from_values(vals: &[&extension_types::Duckvalue]) -> extension_column_
     use extension_types::Duckvalue as D;
     let n = vals.len();
     let mut validity: Vec<u8> = Vec::new();
-    let mut mark_null = |row: usize, validity: &mut Vec<u8>| {
+    let mark_null = |row: usize, validity: &mut Vec<u8>| {
         if validity.is_empty() {
             *validity = vec![0xFFu8; (n + 7) / 8];
         }
@@ -3080,13 +3086,6 @@ fn convert_extension_extopts(opts: extension_runtime::Extopts) -> reg::ExtOpts {
     }
 }
 
-fn convert_storage_extopts(opts: extension_storage::Extopts) -> reg::ExtOpts {
-    reg::ExtOpts {
-        description: opts.description,
-        tags: opts.tags.into_iter().collect(),
-    }
-}
-
 fn convert_extension_funcflags(flags: extension_types::Funcflags) -> reg::FuncFlags {
     reg::FuncFlags {
         deterministic: flags.contains(extension_types::Funcflags::DETERMINISTIC),
@@ -3218,62 +3217,32 @@ pub fn describe_runtime_logicaltype(ty: &reg::LogicalType) -> String {
 // ExtensionInstance
 // ---------------------------------------------------------------------------
 
-/// A loaded extension component: its wasmtime store and generated bindings.
-/// `dispatch_*` re-enter the guest's `callback-dispatch` export for each
-/// DuckDB-side invocation.
+/// A loaded extension component: its wasmtime store + raw component
+/// instance. `dispatch_*` re-enter the guest's exports via the wasmos
+/// sync export bridge (see Phase 6.2.i for the migration off wit-
+/// bindgen typed dispatchers).
+///
+/// ADR-0029 Phase 6.2.j — struct trimmed after the Phase 6.2.i
+/// export-migration completed. The former `bindings: DuckdbExtension`
+/// field and the 14 lazily-built `xxx_bindings: Option<...>` fields
+/// (storage, index, files, parser, optimizer, copy, secret,
+/// storage_write, table_stream, aggregate_incr, conn, file_write,
+/// index_write, settings, log_storage, arrow_ext) all retired here —
+/// every dispatch now flows through
+/// `wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export`
+/// using the raw `instance`, no typed dispatcher struct required.
+///
+/// Type re-exports (`FileInfo`, `TableOpenResult`, `CopyFromBindResult`,
+/// `LogEntry`, `IndexHit`, `FilterOp`, `TableFilter`) still come from
+/// the corresponding `duckdb_extension_*_bindings` modules in
+/// `lib.rs` — those modules stay to serve their re-export role; only
+/// their typed dispatcher structs stopped participating in the load
+/// flow.
 pub struct ExtensionInstance {
     store: Store<ExtensionStoreState>,
-    bindings: DuckdbExtension,
-    // Raw component instance, retained so the storage-capable bindings can be
-    // built on demand for storage backend components (which export
-    // storage-dispatch on top of the base world).
     instance: wasmtime::component::Instance,
-    // Lazily-built storage bindings (None until first storage-dispatch call or
-    // for non-storage extensions).
-    storage_bindings: Option<crate::duckdb_extension_storage_bindings::DuckdbExtensionStorage>,
-    // Item 3 / M2a: lazily-built index bindings (None until first index-dispatch
-    // call or for non-index extensions).
-    index_bindings: Option<crate::duckdb_extension_index_bindings::DuckdbExtensionIndex>,
-    // httpfs M2: lazily-built files bindings (None until first file-dispatch
-    // call or for non-files extensions).
-    files_bindings: Option<crate::duckdb_extension_files_bindings::DuckdbExtensionFiles>,
-    // 2.3.0 / v3: lazily-built parser-dispatch bindings (None until first
-    // call-parse, or for non-parser extensions).
-    parser_bindings: Option<crate::duckdb_extension_parser_bindings::DuckdbExtensionParser>,
-    // 2.3.0 / v3: lazily-built optimizer-dispatch bindings (None until first
-    // call-optimize, or for non-optimizer extensions).
-    optimizer_bindings:
-        Option<crate::duckdb_extension_optimizer_bindings::DuckdbExtensionOptimizer>,
-    // 2.1.0: lazily-built copy / secret / writable-storage bindings.
-    copy_bindings: Option<crate::duckdb_extension_copy_bindings::DuckdbExtensionCopy>,
-    secret_bindings: Option<crate::duckdb_extension_secret_bindings::DuckdbExtensionSecret>,
-    storage_write_bindings:
-        Option<crate::duckdb_extension_storage_write_bindings::DuckdbExtensionStorageWrite>,
-    // 2.2.0 (Items 6-7): lazily-built dispatch bindings for the additive
-    // dispatch-only worlds. Each is built on first use from the SAME loaded
-    // component instance, exactly like the 2.1.0 copy/secret/storage-write path.
-    table_stream_bindings:
-        Option<crate::duckdb_extension_table_stream_bindings::DuckdbExtensionTableStream>,
-    aggregate_incr_bindings:
-        Option<crate::duckdb_extension_aggregate_incr_bindings::DuckdbExtensionAggregateIncr>,
-    conn_bindings: Option<crate::duckdb_extension_conn_bindings::DuckdbExtensionConn>,
-    file_write_bindings:
-        Option<crate::duckdb_extension_file_write_bindings::DuckdbExtensionFileWrite>,
-    index_write_bindings:
-        Option<crate::duckdb_extension_index_write_bindings::DuckdbExtensionIndexWrite>,
-    settings_bindings: Option<crate::duckdb_extension_settings_bindings::DuckdbExtensionSettings>,
-    // 3.2.0: lazily-built log-storage bindings (None until first
-    // write_log_entry, or for non-log-sink extensions).
-    log_storage_bindings:
-        Option<crate::duckdb_extension_log_storage_bindings::DuckdbExtensionLogStorage>,
-    // 4.0.0: lazily-built arrow-ext-dispatch bindings (None until first
-    // call-arrow-open, or for non-arrow-producer extensions).
-    arrow_ext_bindings: Option<crate::duckdb_extension_arrow_ext_bindings::DuckdbExtensionArrowExt>,
 }
 
-fn map_extension_trap(err: wasmtime::Error) -> extension_types::Duckerror {
-    extension_types::Duckerror::Internal(format!("extension trap: {err}"))
-}
 
 /// ADR-0029 Phase 6.2.i — decode a `wasmos_runtime_api::Value` in the
 /// shape emitted by a guest `duckerror` variant return back to the
@@ -3303,14 +3272,8 @@ fn map_extension_trap(err: wasmtime::Error) -> extension_types::Duckerror {
 // duckerror moved to `crate::export_marshal` alongside the full
 // Duckvalue + record marshalling suite. Callsites reach both via
 // the module-level `use crate::export_marshal::*` import.
-pub(crate) use crate::export_marshal::{duckerror_from_value, export_result_to_duckerror};
+pub(crate) use crate::export_marshal::export_result_to_duckerror;
 
-// The storage-capable bindgen world generates its OWN (structurally identical)
-// `types`; convert those into the base `extension_types` the rest of the runtime
-// uses.
-mod storage_types {
-    pub use crate::duckdb_extension_storage_bindings::duckdb::extension::types::*;
-}
 
 // M2b: the storage interface's scan types (scan-request / scan-filter /
 // compare-op) used when driving a pushdown scan into the component.
@@ -3324,130 +3287,61 @@ pub mod storage_scan {
     };
 }
 
-fn storage_duckvalue_to_ext(value: storage_types::Duckvalue) -> extension_types::Duckvalue {
+// Phase 6.2.j — the wit-bindgen storage-world generates its OWN
+// `Duckvalue` (structurally identical to the base extension_types
+// one). `storage_scan_open` marshals a `scan-request` whose filters
+// carry the storage-world Duckvalue; this thin converter bridges it
+// to the base Duckvalue so the shared `duckvalue_to_value` in
+// `export_marshal` can produce the wasmos-side Value. The only
+// production call site is `storage_scan_open` — everything else that
+// used to lean on the storage-world types (converters for logicaltype,
+// columndef, duckerror) retired with the wit-bindgen dispatch path.
+fn storage_duckvalue_to_ext(value: storage_scan::Duckvalue) -> extension_types::Duckvalue {
+    use storage_scan::Duckvalue as S;
     match value {
-        storage_types::Duckvalue::Null => extension_types::Duckvalue::Null,
-        storage_types::Duckvalue::Boolean(v) => extension_types::Duckvalue::Boolean(v),
-        storage_types::Duckvalue::Int64(v) => extension_types::Duckvalue::Int64(v),
-        storage_types::Duckvalue::Uint64(v) => extension_types::Duckvalue::Uint64(v),
-        storage_types::Duckvalue::Float64(v) => extension_types::Duckvalue::Float64(v),
-        storage_types::Duckvalue::Text(v) => extension_types::Duckvalue::Text(v),
-        storage_types::Duckvalue::Blob(v) => extension_types::Duckvalue::Blob(v),
-        storage_types::Duckvalue::Int32(v) => extension_types::Duckvalue::Int32(v),
-        storage_types::Duckvalue::Timestamp(v) => extension_types::Duckvalue::Timestamp(v),
-        storage_types::Duckvalue::Int8(v) => extension_types::Duckvalue::Int8(v),
-        storage_types::Duckvalue::Int16(v) => extension_types::Duckvalue::Int16(v),
-        storage_types::Duckvalue::Uint8(v) => extension_types::Duckvalue::Uint8(v),
-        storage_types::Duckvalue::Uint16(v) => extension_types::Duckvalue::Uint16(v),
-        storage_types::Duckvalue::Uint32(v) => extension_types::Duckvalue::Uint32(v),
-        storage_types::Duckvalue::Float32(v) => extension_types::Duckvalue::Float32(v),
-        storage_types::Duckvalue::Date(v) => extension_types::Duckvalue::Date(v),
-        storage_types::Duckvalue::Time(v) => extension_types::Duckvalue::Time(v),
-        storage_types::Duckvalue::Timestamptz(v) => extension_types::Duckvalue::Timestamptz(v),
-        storage_types::Duckvalue::Decimal(d) => {
-            extension_types::Duckvalue::Decimal(extension_types::Decimalvalue {
-                lower: d.lower,
-                upper: d.upper,
-                width: d.width,
-                scale: d.scale,
-            })
-        }
-        storage_types::Duckvalue::Interval(iv) => {
-            extension_types::Duckvalue::Interval(extension_types::Intervalvalue {
-                months: iv.months,
-                days: iv.days,
-                micros: iv.micros,
-            })
-        }
-        storage_types::Duckvalue::Uuid(u) => {
-            extension_types::Duckvalue::Uuid(extension_types::Uuidvalue { hi: u.hi, lo: u.lo })
-        }
-        // T2-1 residual (major-5): 128-bit integer scalars ride first-class WIT
-        // arms with two u64/s64 halves.
-        storage_types::Duckvalue::Hugeint(h) => {
-            extension_types::Duckvalue::Hugeint(extension_types::Hugeintvalue {
-                lower: h.lower,
-                upper: h.upper,
-            })
-        }
-        storage_types::Duckvalue::Uhugeint(h) => {
-            extension_types::Duckvalue::Uhugeint(extension_types::Uhugeintvalue {
-                lower: h.lower,
-                upper: h.upper,
-            })
-        }
-        storage_types::Duckvalue::Complex(c) => {
-            extension_types::Duckvalue::Complex(extension_types::Complexvalue {
-                type_expr: c.type_expr,
-                json: c.json,
-            })
-        }
+        S::Null => extension_types::Duckvalue::Null,
+        S::Boolean(v) => extension_types::Duckvalue::Boolean(v),
+        S::Int64(v) => extension_types::Duckvalue::Int64(v),
+        S::Uint64(v) => extension_types::Duckvalue::Uint64(v),
+        S::Float64(v) => extension_types::Duckvalue::Float64(v),
+        S::Text(v) => extension_types::Duckvalue::Text(v),
+        S::Blob(v) => extension_types::Duckvalue::Blob(v),
+        S::Int32(v) => extension_types::Duckvalue::Int32(v),
+        S::Timestamp(v) => extension_types::Duckvalue::Timestamp(v),
+        S::Int8(v) => extension_types::Duckvalue::Int8(v),
+        S::Int16(v) => extension_types::Duckvalue::Int16(v),
+        S::Uint8(v) => extension_types::Duckvalue::Uint8(v),
+        S::Uint16(v) => extension_types::Duckvalue::Uint16(v),
+        S::Uint32(v) => extension_types::Duckvalue::Uint32(v),
+        S::Float32(v) => extension_types::Duckvalue::Float32(v),
+        S::Date(v) => extension_types::Duckvalue::Date(v),
+        S::Time(v) => extension_types::Duckvalue::Time(v),
+        S::Timestamptz(v) => extension_types::Duckvalue::Timestamptz(v),
+        S::Decimal(d) => extension_types::Duckvalue::Decimal(extension_types::Decimalvalue {
+            lower: d.lower, upper: d.upper, width: d.width, scale: d.scale,
+        }),
+        S::Interval(i) => extension_types::Duckvalue::Interval(extension_types::Intervalvalue {
+            months: i.months, days: i.days, micros: i.micros,
+        }),
+        S::Uuid(u) => extension_types::Duckvalue::Uuid(extension_types::Uuidvalue {
+            hi: u.hi, lo: u.lo,
+        }),
+        S::Hugeint(h) => extension_types::Duckvalue::Hugeint(extension_types::Hugeintvalue {
+            lower: h.lower, upper: h.upper,
+        }),
+        S::Uhugeint(h) => extension_types::Duckvalue::Uhugeint(extension_types::Uhugeintvalue {
+            lower: h.lower, upper: h.upper,
+        }),
+        S::Complex(c) => extension_types::Duckvalue::Complex(extension_types::Complexvalue {
+            type_expr: c.type_expr, json: c.json,
+        }),
     }
 }
 
-fn storage_duckerror_to_ext(err: storage_types::Duckerror) -> extension_types::Duckerror {
-    match err {
-        storage_types::Duckerror::Invalidargument(m) => {
-            extension_types::Duckerror::Invalidargument(m)
-        }
-        storage_types::Duckerror::Unsupported(m) => extension_types::Duckerror::Unsupported(m),
-        storage_types::Duckerror::Invalidstate(m) => extension_types::Duckerror::Invalidstate(m),
-        storage_types::Duckerror::Io(m) => extension_types::Duckerror::Io(m),
-        storage_types::Duckerror::Internal(m) => extension_types::Duckerror::Internal(m),
-    }
-}
 
-fn storage_logicaltype_to_ext(ty: storage_types::Logicaltype) -> extension_types::Logicaltype {
-    match ty {
-        storage_types::Logicaltype::Boolean => extension_types::Logicaltype::Boolean,
-        storage_types::Logicaltype::Int64 => extension_types::Logicaltype::Int64,
-        storage_types::Logicaltype::Uint64 => extension_types::Logicaltype::Uint64,
-        storage_types::Logicaltype::Float64 => extension_types::Logicaltype::Float64,
-        storage_types::Logicaltype::Text => extension_types::Logicaltype::Text,
-        storage_types::Logicaltype::Blob => extension_types::Logicaltype::Blob,
-        storage_types::Logicaltype::Int32 => extension_types::Logicaltype::Int32,
-        storage_types::Logicaltype::Timestamp => extension_types::Logicaltype::Timestamp,
-        storage_types::Logicaltype::Int8 => extension_types::Logicaltype::Int8,
-        storage_types::Logicaltype::Int16 => extension_types::Logicaltype::Int16,
-        storage_types::Logicaltype::Uint8 => extension_types::Logicaltype::Uint8,
-        storage_types::Logicaltype::Uint16 => extension_types::Logicaltype::Uint16,
-        storage_types::Logicaltype::Uint32 => extension_types::Logicaltype::Uint32,
-        storage_types::Logicaltype::Float32 => extension_types::Logicaltype::Float32,
-        storage_types::Logicaltype::Date => extension_types::Logicaltype::Date,
-        storage_types::Logicaltype::Time => extension_types::Logicaltype::Time,
-        storage_types::Logicaltype::Timestamptz => extension_types::Logicaltype::Timestamptz,
-        // S2 (major-5): DECIMAL width/scale ride the variant arm. Storage-world
-        // `Decimalshape` and base-world `Decimalshape` are structurally
-        // identical -- rebuild the base record from the storage-world fields.
-        storage_types::Logicaltype::Decimal(shape) => {
-            extension_types::Logicaltype::Decimal(extension_types::Decimalshape {
-                width: shape.width,
-                scale: shape.scale,
-            })
-        }
-        storage_types::Logicaltype::Interval => extension_types::Logicaltype::Interval,
-        storage_types::Logicaltype::Uuid => extension_types::Logicaltype::Uuid,
-        // T2-1 residual (major-5): first-class 128-bit integer logical types.
-        storage_types::Logicaltype::Hugeint => extension_types::Logicaltype::Hugeint,
-        storage_types::Logicaltype::Uhugeint => extension_types::Logicaltype::Uhugeint,
-        storage_types::Logicaltype::Complex(expr) => extension_types::Logicaltype::Complex(expr),
-    }
-}
 
-fn storage_columndef_to_ext(col: storage_types::Columndef) -> extension_types::Columndef {
-    extension_types::Columndef {
-        name: col.name,
-        logical: storage_logicaltype_to_ext(col.logical),
-    }
-}
 
-// Item 3 / M2a: the index-capable bindgen world generates its OWN (structurally
 // identical) `types`; convert those into the base `extension_types`.
-mod index_types {
-    pub use crate::duckdb_extension_index_bindings::duckdb::extension::types::*;
-}
-
-/// An index-dispatch nearest-neighbour hit (rowid + distance), re-exported for
 /// the host to surface up the index-host import.
 pub use crate::duckdb_extension_index_bindings::exports::duckdb::extension::index_dispatch::IndexHit;
 
@@ -3482,71 +3376,17 @@ pub use crate::duckdb_extension_file_write_bindings::exports::duckdb::extension:
 /// Class B parity with the stable `duckdb_register_log_storage` C API.
 pub use crate::duckdb_extension_log_storage_bindings::exports::duckdb::extension::log_storage_dispatch::LogEntry;
 
-fn index_duckerror_to_ext(err: index_types::Duckerror) -> extension_types::Duckerror {
-    match err {
-        index_types::Duckerror::Invalidargument(m) => {
-            extension_types::Duckerror::Invalidargument(m)
-        }
-        index_types::Duckerror::Unsupported(m) => extension_types::Duckerror::Unsupported(m),
-        index_types::Duckerror::Invalidstate(m) => extension_types::Duckerror::Invalidstate(m),
-        index_types::Duckerror::Io(m) => extension_types::Duckerror::Io(m),
-        index_types::Duckerror::Internal(m) => extension_types::Duckerror::Internal(m),
-    }
-}
 
 impl ExtensionInstance {
+    /// Phase 6.2.j — trimmed constructor. No wit-bindgen typed
+    /// dispatchers to stash any more; every `dispatch_*` re-enters
+    /// the guest via `sync_export_bridge::call_export` using
+    /// `instance` directly.
     pub fn new(
         store: Store<ExtensionStoreState>,
-        bindings: DuckdbExtension,
         instance: wasmtime::component::Instance,
     ) -> Self {
-        Self {
-            store,
-            bindings,
-            instance,
-            storage_bindings: None,
-            index_bindings: None,
-            files_bindings: None,
-            parser_bindings: None,
-            optimizer_bindings: None,
-            copy_bindings: None,
-            secret_bindings: None,
-            storage_write_bindings: None,
-            table_stream_bindings: None,
-            aggregate_incr_bindings: None,
-            conn_bindings: None,
-            file_write_bindings: None,
-            index_write_bindings: None,
-            settings_bindings: None,
-            // 3.2.0: log-storage-dispatch bindings are None until the first
-            // write-log-entry the direction-specific sink forwards to this
-            // component. Non-log-sink extensions never build them.
-            log_storage_bindings: None,
-            // 4.0.0: arrow-ext-dispatch bindings are None until the first
-            // call-arrow-open the direction-specific sink forwards to this
-            // component. Non-arrow-producer extensions never build them.
-            arrow_ext_bindings: None,
-        }
-    }
-
-    /// Builds (once) the storage-capable bindings from the raw instance. Errors
-    /// if this component does not export storage-dispatch (i.e. is not a storage
-    /// backend).
-    fn storage_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_storage_bindings::DuckdbExtensionStorage,
-        extension_types::Duckerror,
-    > {
-        if self.storage_bindings.is_none() {
-            let built = crate::duckdb_extension_storage_bindings::DuckdbExtensionStorage::new(
-                self.store.as_context_mut(),
-                &self.instance,
-            )
-            .map_err(map_extension_trap)?;
-            self.storage_bindings = Some(built);
-        }
-        Ok(self.storage_bindings.as_ref().unwrap())
+        Self { store, instance }
     }
 
     pub fn dispatch_scalar(
@@ -3984,23 +3824,6 @@ impl ExtensionInstance {
     // remapped to the base `extension_types` (see lib.rs `with`), so no per-world
     // conversion is needed.
 
-    fn copy_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_copy_bindings::DuckdbExtensionCopy,
-        extension_types::Duckerror,
-    > {
-        if self.copy_bindings.is_none() {
-            let built = crate::duckdb_extension_copy_bindings::DuckdbExtensionCopy::new(
-                self.store.as_context_mut(),
-                &self.instance,
-            )
-            .map_err(map_extension_trap)?;
-            self.copy_bindings = Some(built);
-        }
-        Ok(self.copy_bindings.as_ref().unwrap())
-    }
-
     /// COPY TO: bind a writer for `path`; returns a writer handle.
     pub fn copy_to_bind(
         &mut self,
@@ -4177,23 +4000,6 @@ impl ExtensionInstance {
 
     // --- 2.1.0 (Item 2): secret-dispatch re-entry ---
 
-    fn secret_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_secret_bindings::DuckdbExtensionSecret,
-        extension_types::Duckerror,
-    > {
-        if self.secret_bindings.is_none() {
-            let built = crate::duckdb_extension_secret_bindings::DuckdbExtensionSecret::new(
-                self.store.as_context_mut(),
-                &self.instance,
-            )
-            .map_err(map_extension_trap)?;
-            self.secret_bindings = Some(built);
-        }
-        Ok(self.secret_bindings.as_ref().unwrap())
-    }
-
     /// Materialize a secret of `(type_name, provider)` from `params`; returns the
     /// resolved flat key=value set the core stores.
     pub fn create_secret(
@@ -4243,24 +4049,6 @@ impl ExtensionInstance {
     }
 
     // --- 2.1.0 (Item 4): storage-write-dispatch re-entry ---
-
-    fn storage_write_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_storage_write_bindings::DuckdbExtensionStorageWrite,
-        extension_types::Duckerror,
-    > {
-        if self.storage_write_bindings.is_none() {
-            let built =
-                crate::duckdb_extension_storage_write_bindings::DuckdbExtensionStorageWrite::new(
-                    self.store.as_context_mut(),
-                    &self.instance,
-                )
-                .map_err(map_extension_trap)?;
-            self.storage_write_bindings = Some(built);
-        }
-        Ok(self.storage_write_bindings.as_ref().unwrap())
-    }
 
     /// Begin a write transaction on `catalog`; returns a transaction handle.
     pub fn storage_begin_transaction(
@@ -4460,24 +4248,6 @@ impl ExtensionInstance {
     // `table-stream-dispatch`. Types are remapped to base `extension_types` /
     // `extension_runtime` (see lib.rs `with`), so no per-world conversion.
 
-    fn table_stream_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_table_stream_bindings::DuckdbExtensionTableStream,
-        extension_types::Duckerror,
-    > {
-        if self.table_stream_bindings.is_none() {
-            let built =
-                crate::duckdb_extension_table_stream_bindings::DuckdbExtensionTableStream::new(
-                    self.store.as_context_mut(),
-                    &self.instance,
-                )
-                .map_err(map_extension_trap)?;
-            self.table_stream_bindings = Some(built);
-        }
-        Ok(self.table_stream_bindings.as_ref().unwrap())
-    }
-
     /// Open a streaming table cursor with bound `args` and a column `projection`
     /// (empty = all columns); returns the cursor handle + projected schema.
     pub fn table_open(
@@ -4613,24 +4383,6 @@ impl ExtensionInstance {
     // Drives a registered incremental aggregate's init/update/combine/finalize
     // state machine.
 
-    fn aggregate_incr_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_aggregate_incr_bindings::DuckdbExtensionAggregateIncr,
-        extension_types::Duckerror,
-    > {
-        if self.aggregate_incr_bindings.is_none() {
-            let built =
-                crate::duckdb_extension_aggregate_incr_bindings::DuckdbExtensionAggregateIncr::new(
-                    self.store.as_context_mut(),
-                    &self.instance,
-                )
-                .map_err(map_extension_trap)?;
-            self.aggregate_incr_bindings = Some(built);
-        }
-        Ok(self.aggregate_incr_bindings.as_ref().unwrap())
-    }
-
     /// Allocate a fresh incremental-aggregate state; returns a state handle.
     pub fn aggregate_init(&mut self, handle: u32) -> Result<u32, extension_types::Duckerror> {
         // Phase 6.2.i.7 — migrated.
@@ -4723,23 +4475,6 @@ impl ExtensionInstance {
     // Notifies a component that subscribed via lifecycle.register-connection-callback
     // when a connection is opened or closed.
 
-    fn conn_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_conn_bindings::DuckdbExtensionConn,
-        extension_types::Duckerror,
-    > {
-        if self.conn_bindings.is_none() {
-            let built = crate::duckdb_extension_conn_bindings::DuckdbExtensionConn::new(
-                self.store.as_context_mut(),
-                &self.instance,
-            )
-            .map_err(map_extension_trap)?;
-            self.conn_bindings = Some(built);
-        }
-        Ok(self.conn_bindings.as_ref().unwrap())
-    }
-
     /// Notify the component that connection `connection_id` was opened.
     pub fn connection_opened(
         &mut self,
@@ -4792,23 +4527,6 @@ impl ExtensionInstance {
 
     // --- 2.2.0 (Item 7): file-write-dispatch re-entry ---
     // Drives the writable + glob + stat half of a files backend.
-
-    fn file_write_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_file_write_bindings::DuckdbExtensionFileWrite,
-        extension_types::Duckerror,
-    > {
-        if self.file_write_bindings.is_none() {
-            let built = crate::duckdb_extension_file_write_bindings::DuckdbExtensionFileWrite::new(
-                self.store.as_context_mut(),
-                &self.instance,
-            )
-            .map_err(map_extension_trap)?;
-            self.file_write_bindings = Some(built);
-        }
-        Ok(self.file_write_bindings.as_ref().unwrap())
-    }
 
     /// Write `data` at `offset` in `path`; returns the bytes written.
     pub fn file_write(
@@ -4889,24 +4607,6 @@ impl ExtensionInstance {
     // --- 2.2.0 (Item 7): index-write-dispatch re-entry ---
     // Drives the general (non-ANN) secondary-index operations: ranged scan,
     // delete, unique-constraint check, and serialization.
-
-    fn index_write_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_index_write_bindings::DuckdbExtensionIndexWrite,
-        extension_types::Duckerror,
-    > {
-        if self.index_write_bindings.is_none() {
-            let built =
-                crate::duckdb_extension_index_write_bindings::DuckdbExtensionIndexWrite::new(
-                    self.store.as_context_mut(),
-                    &self.instance,
-                )
-                .map_err(map_extension_trap)?;
-            self.index_write_bindings = Some(built);
-        }
-        Ok(self.index_write_bindings.as_ref().unwrap())
-    }
 
     /// Range scan: row-ids whose key is within [low, high] (empty = unbounded).
     pub fn index_scan(
@@ -5004,23 +4704,6 @@ impl ExtensionInstance {
     // Notifies a component that declared an option (via settings.register-option)
     // and exported settings-dispatch when a user runs `SET <name> = <value>`.
 
-    fn settings_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_settings_bindings::DuckdbExtensionSettings,
-        extension_types::Duckerror,
-    > {
-        if self.settings_bindings.is_none() {
-            let built = crate::duckdb_extension_settings_bindings::DuckdbExtensionSettings::new(
-                self.store.as_context_mut(),
-                &self.instance,
-            )
-            .map_err(map_extension_trap)?;
-            self.settings_bindings = Some(built);
-        }
-        Ok(self.settings_bindings.as_ref().unwrap())
-    }
-
     /// Notify the component that option `name` was SET to `value` (rendered text).
     pub fn setting_set(
         &mut self,
@@ -5054,24 +4737,6 @@ impl ExtensionInstance {
     // (Class B parity with the stable `duckdb_register_log_storage` C API). The
     // bindings are built lazily from the SAME loaded component instance so a
     // non-log-sink extension pays nothing.
-
-    fn log_storage_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_log_storage_bindings::DuckdbExtensionLogStorage,
-        extension_types::Duckerror,
-    > {
-        if self.log_storage_bindings.is_none() {
-            let built =
-                crate::duckdb_extension_log_storage_bindings::DuckdbExtensionLogStorage::new(
-                    self.store.as_context_mut(),
-                    &self.instance,
-                )
-                .map_err(map_extension_trap)?;
-            self.log_storage_bindings = Some(built);
-        }
-        Ok(self.log_storage_bindings.as_ref().unwrap())
-    }
 
     /// Deliver one log entry to the component's registered log sink. `handle` is
     /// the `callback-handle` the component passed to `register-log-storage`; the
@@ -5136,23 +4801,6 @@ impl ExtensionInstance {
     // batches (`resultset`) until an empty resultset signals EOF. Bindings are
     // built lazily from the SAME loaded component instance so a non-arrow-
     // producer extension pays nothing.
-
-    fn arrow_ext_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_arrow_ext_bindings::DuckdbExtensionArrowExt,
-        extension_types::Duckerror,
-    > {
-        if self.arrow_ext_bindings.is_none() {
-            let built = crate::duckdb_extension_arrow_ext_bindings::DuckdbExtensionArrowExt::new(
-                self.store.as_context_mut(),
-                &self.instance,
-            )
-            .map_err(map_extension_trap)?;
-            self.arrow_ext_bindings = Some(built);
-        }
-        Ok(self.arrow_ext_bindings.as_ref().unwrap())
-    }
 
     /// Open a scan cursor against the arrow producer named by `callback_handle`.
     /// Returns the guest-side opaque cursor id (which the host then threads
@@ -5483,26 +5131,6 @@ impl ExtensionInstance {
     // hits. No callback-handle is threaded (the component keys index state by
     // index NAME), so these take no `handle` argument.
 
-    /// Builds (once) the index-capable bindings from the raw instance. Errors if
-    /// this component does not export index-dispatch (i.e. is not an index
-    /// backend).
-    fn index_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_index_bindings::DuckdbExtensionIndex,
-        extension_types::Duckerror,
-    > {
-        if self.index_bindings.is_none() {
-            let built = crate::duckdb_extension_index_bindings::DuckdbExtensionIndex::new(
-                self.store.as_context_mut(),
-                &self.instance,
-            )
-            .map_err(map_extension_trap)?;
-            self.index_bindings = Some(built);
-        }
-        Ok(self.index_bindings.as_ref().unwrap())
-    }
-
     /// Allocate an empty index builder for `(type_name, index_name)` over a
     /// FLOAT[dims] key. Returns the component-side index-handle.
     pub fn index_create(
@@ -5647,26 +5275,6 @@ impl ExtensionInstance {
     // fetches the whole resource over wasi:sockets at open, caches it, and
     // serves byte ranges. The error channel is plain strings (not duckerror).
 
-    /// Builds (once) the files-capable bindings from the raw instance. Errors if
-    /// this component does not export file-dispatch (i.e. is not a files
-    /// backend).
-    fn files_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_files_bindings::DuckdbExtensionFiles,
-        extension_types::Duckerror,
-    > {
-        if self.files_bindings.is_none() {
-            let built = crate::duckdb_extension_files_bindings::DuckdbExtensionFiles::new(
-                self.store.as_context_mut(),
-                &self.instance,
-            )
-            .map_err(map_extension_trap)?;
-            self.files_bindings = Some(built);
-        }
-        Ok(self.files_bindings.as_ref().unwrap())
-    }
-
     /// Open (fetch + cache) `url`. Returns (component-side file handle, size).
     /// `handle` is the files backend's callback-handle (from register-files).
     pub fn file_open(
@@ -5742,22 +5350,6 @@ impl ExtensionInstance {
     }
 
     // 2.3.0 / v3: lazily-built parser-dispatch bindings.
-    fn parser_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_parser_bindings::DuckdbExtensionParser,
-        extension_types::Duckerror,
-    > {
-        if self.parser_bindings.is_none() {
-            let built = crate::duckdb_extension_parser_bindings::DuckdbExtensionParser::new(
-                self.store.as_context_mut(),
-                &self.instance,
-            )
-            .map_err(map_extension_trap)?;
-            self.parser_bindings = Some(built);
-        }
-        Ok(self.parser_bindings.as_ref().unwrap())
-    }
 
     /// Offer the unrecognized statement `query` to the parser extension `handle`.
     /// Returns `Some(rewrite_sql)` if the component claims it (string->SQL rewrite),
@@ -5802,22 +5394,6 @@ impl ExtensionInstance {
     }
 
     // 2.3.0 / v3: lazily-built optimizer-dispatch bindings.
-    fn optimizer_bindings(
-        &mut self,
-    ) -> Result<
-        &crate::duckdb_extension_optimizer_bindings::DuckdbExtensionOptimizer,
-        extension_types::Duckerror,
-    > {
-        if self.optimizer_bindings.is_none() {
-            let built = crate::duckdb_extension_optimizer_bindings::DuckdbExtensionOptimizer::new(
-                self.store.as_context_mut(),
-                &self.instance,
-            )
-            .map_err(map_extension_trap)?;
-            self.optimizer_bindings = Some(built);
-        }
-        Ok(self.optimizer_bindings.as_ref().unwrap())
-    }
 
     /// Offer the flattened plan (`nodes` = (id, op-type, parent, params-json);
     /// `query` = the source SQL or empty) to the optimizer rule `handle`. Returns
@@ -6200,121 +5776,17 @@ mod tests {
         assert!(!det.commutative && !det.stateless && !det.side_effecting && !det.deprecated);
     }
 
-    #[test]
-    fn storage_duckvalue_converts_every_arm_incl_rich() {
-        use storage_types::Duckvalue as S;
-        let samples = vec![
-            S::Null,
-            S::Boolean(true),
-            S::Int64(-9),
-            S::Uint64(9),
-            S::Float64(1.5),
-            S::Text("hi".to_string()),
-            S::Blob(vec![1, 2, 3]),
-            S::Int32(-3),
-            S::Timestamp(100),
-            S::Int8(-1),
-            S::Int16(-2),
-            S::Uint8(1),
-            S::Uint16(2),
-            S::Uint32(3),
-            S::Float32(0.25),
-            S::Date(42),
-            S::Time(7),
-            S::Timestamptz(8),
-            S::Decimal(storage_types::Decimalvalue {
-                lower: 123,
-                upper: 0,
-                width: 5,
-                scale: 2,
-            }),
-            S::Interval(storage_types::Intervalvalue {
-                months: 1,
-                days: 2,
-                micros: 3,
-            }),
-            S::Uuid(storage_types::Uuidvalue { hi: 1, lo: 2 }),
-            S::Complex(storage_types::Complexvalue {
-                type_expr: "INTEGER[]".to_string(),
-                json: "[1,2]".to_string(),
-            }),
-        ];
-        for s in samples {
-            let ext = storage_duckvalue_to_ext(s);
-            match ext {
-                extension_types::Duckvalue::Decimal(ref d) => {
-                    assert_eq!((d.lower, d.width, d.scale), (123, 5, 2));
-                }
-                extension_types::Duckvalue::Complex(ref c) => {
-                    assert_eq!(c.type_expr, "INTEGER[]");
-                }
-                _ => {}
-            }
-        }
-    }
-
-    #[test]
-    fn storage_logicaltype_and_columndef_convert_every_arm() {
-        use storage_types::Logicaltype as S;
-        for ty in [
-            S::Boolean,
-            S::Int64,
-            S::Uint64,
-            S::Float64,
-            S::Text,
-            S::Blob,
-            S::Int32,
-            S::Timestamp,
-            S::Int8,
-            S::Int16,
-            S::Uint8,
-            S::Uint16,
-            S::Uint32,
-            S::Float32,
-            S::Date,
-            S::Time,
-            S::Timestamptz,
-            S::Decimal(storage_types::Decimalshape {
-                width: 18,
-                scale: 3,
-            }),
-            S::Hugeint,
-            S::Uhugeint,
-            S::Interval,
-            S::Uuid,
-        ] {
-            let _ = storage_logicaltype_to_ext(ty);
-        }
-        let cx = storage_logicaltype_to_ext(S::Complex("STRUCT(a INT)".to_string()));
-        assert!(matches!(cx, extension_types::Logicaltype::Complex(ref e) if e == "STRUCT(a INT)"));
-        let col = storage_columndef_to_ext(storage_types::Columndef {
-            name: "c".to_string(),
-            logical: S::Int64,
-        });
-        assert_eq!(col.name, "c");
-    }
-
-    #[test]
-    fn storage_and_index_duckerror_map_every_arm() {
-        for e in [
-            storage_types::Duckerror::Invalidargument("a".into()),
-            storage_types::Duckerror::Unsupported("b".into()),
-            storage_types::Duckerror::Invalidstate("c".into()),
-            storage_types::Duckerror::Io("d".into()),
-            storage_types::Duckerror::Internal("e".into()),
-        ] {
-            let _ = storage_duckerror_to_ext(e);
-        }
-        for e in [
-            index_types::Duckerror::Invalidargument("a".into()),
-            index_types::Duckerror::Unsupported("b".into()),
-            index_types::Duckerror::Invalidstate("c".into()),
-            index_types::Duckerror::Io("d".into()),
-            index_types::Duckerror::Internal("e".into()),
-        ] {
-            let _ = index_duckerror_to_ext(e);
-        }
-    }
+    // Phase 6.2.j — the following test blocks retired with the
+    // wit-bindgen dispatch path they exercised:
+    //   * storage_duckvalue_converts_every_arm_incl_rich
+    //   * storage_logicaltype_and_columndef_convert_every_arm
+    //   * storage_and_index_duckerror_map_every_arm
+    // The `storage_duckvalue_to_ext` helper still lives (one production
+    // callsite in `storage_scan_open`); its 25-arm coverage is now
+    // exercised through the integration path rather than a unit test.
+    // The other converters (logicaltype/columndef/duckerror for both
+    // storage and index) are gone entirely — their targets went with
+    // the export_marshal migration.
 
     #[test]
     fn configerror_and_loglevel_converters_cover_arms() {
@@ -7481,7 +6953,10 @@ pub fn load_component_with_dynlink(
     // load here).
     let instance_pre = linker.instantiate_pre(component)?;
     let instance = instance_pre.instantiate(store.as_context_mut())?;
-    let bindings = DuckdbExtension::new(store.as_context_mut(), &instance)?;
+    // Phase 6.2.j — the wit-bindgen typed dispatcher construction
+    // (`DuckdbExtension::new(store, &instance)?`) is gone. Every guest
+    // export dispatches through the wasmos sync bridge using `instance`
+    // directly; no typed dispatcher struct needed.
 
     // ADR-0029 Phase 6.2.i.3 — migrate `load()` from wit-bindgen's
     // typed dispatcher to the wasmos sync_export_bridge. First of
@@ -7540,5 +7015,5 @@ pub fn load_component_with_dynlink(
         }
     }
 
-    Ok(ExtensionInstance::new(store, bindings, instance))
+    Ok(ExtensionInstance::new(store, instance))
 }

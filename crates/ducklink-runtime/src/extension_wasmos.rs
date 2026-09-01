@@ -287,7 +287,7 @@ impl LifecycleHost {
     /// `Unsupported`.
     fn register_connection_callback(
         &self,
-        ctx: &mut HostCallContext<'_>,
+        _ctx: &mut HostCallContext<'_>,
         _events: ConnEvents,
         _callback_handle: u32,
     ) -> RuntimeResult<Result<u32, Duckerror>> {
@@ -347,7 +347,7 @@ impl EncodingHost {
 impl EncodingHost {
     fn register_encoding(
         &self,
-        ctx: &mut HostCallContext<'_>,
+        _ctx: &mut HostCallContext<'_>,
         _name: String,
         _aliases: Vec<String>,
         _callback_handle: u32,
@@ -386,7 +386,7 @@ impl CompressionHost {
 impl CompressionHost {
     fn register_compression(
         &self,
-        ctx: &mut HostCallContext<'_>,
+        _ctx: &mut HostCallContext<'_>,
         _name: String,
         _file_extension: String,
         _callback_handle: u32,
@@ -424,7 +424,7 @@ impl FilesRegHost {
 impl FilesRegHost {
     fn register_files(
         &self,
-        ctx: &mut HostCallContext<'_>,
+        _ctx: &mut HostCallContext<'_>,
         _callback_handle: u32,
     ) -> RuntimeResult<Result<u32, Duckerror>> {
         Ok(Err(Duckerror::Unsupported(
@@ -793,7 +793,7 @@ impl IndexHost {
 impl IndexHost {
     fn register_index_type(
         &self,
-        ctx: &mut HostCallContext<'_>,
+        _ctx: &mut HostCallContext<'_>,
         _type_name: String,
     ) -> RuntimeResult<Result<(), Duckerror>> {
         Ok(Err(Duckerror::Unsupported(
@@ -830,7 +830,7 @@ impl CollationHost {
 impl CollationHost {
     fn register_collation(
         &self,
-        ctx: &mut HostCallContext<'_>,
+        _ctx: &mut HostCallContext<'_>,
         _name: String,
         _transform_scalar: String,
         _combinable: bool,
@@ -2698,7 +2698,7 @@ impl RuntimeHost {
     /// `crate::extension` line 1409).
     fn list_capabilities(
         &self,
-        ctx: &mut HostCallContext<'_>,
+        _ctx: &mut HostCallContext<'_>,
     ) -> RuntimeResult<Vec<Capabilitykind>> {
         Ok(vec![
             Capabilitykind::Scalar,
@@ -2735,7 +2735,7 @@ impl RuntimeHost {
     #[method("[method]macro-registry.register-scalar")]
     fn macro_registry_register_scalar(
         &self,
-        ctx: &mut HostCallContext<'_>,
+        _ctx: &mut HostCallContext<'_>,
         _self_: Resource<MacroRegistry>,
         _name: String,
         _parameters: Vec<String>,
@@ -2765,7 +2765,7 @@ impl RuntimeHost {
     #[method("[resource-drop]macro-registry")]
     fn macro_registry_drop(
         &self,
-        ctx: &mut HostCallContext<'_>,
+        _ctx: &mut HostCallContext<'_>,
         _rep: Resource<MacroRegistry>,
     ) -> RuntimeResult<()> {
         Ok(())
@@ -2809,7 +2809,7 @@ impl RuntimeHost {
     #[method("[method]scalar-callback.call")]
     fn scalar_callback_call(
         &self,
-        ctx: &mut HostCallContext<'_>,
+        _ctx: &mut HostCallContext<'_>,
         _args: Vec<wasmos_runtime_api::Value>,
     ) -> RuntimeResult<Vec<wasmos_runtime_api::Value>> {
         // Vec<Value> passthrough: `[method]xxx.call` returns
@@ -2847,7 +2847,7 @@ impl RuntimeHost {
     #[method("[method]table-callback.call")]
     fn table_callback_call(
         &self,
-        ctx: &mut HostCallContext<'_>,
+        _ctx: &mut HostCallContext<'_>,
         _args: Vec<wasmos_runtime_api::Value>,
     ) -> RuntimeResult<Vec<wasmos_runtime_api::Value>> {
         Ok(vec![wasmos_runtime_api::Value::Result(Err(Some(
@@ -2882,7 +2882,7 @@ impl RuntimeHost {
     #[method("[method]aggregate-callback.call")]
     fn aggregate_callback_call(
         &self,
-        ctx: &mut HostCallContext<'_>,
+        _ctx: &mut HostCallContext<'_>,
         _args: Vec<wasmos_runtime_api::Value>,
     ) -> RuntimeResult<Vec<wasmos_runtime_api::Value>> {
         Ok(vec![wasmos_runtime_api::Value::Result(Err(Some(
@@ -2917,7 +2917,7 @@ impl RuntimeHost {
     #[method("[method]pragma-callback.call")]
     fn pragma_callback_call(
         &self,
-        ctx: &mut HostCallContext<'_>,
+        _ctx: &mut HostCallContext<'_>,
         _args: Vec<wasmos_runtime_api::Value>,
     ) -> RuntimeResult<Vec<wasmos_runtime_api::Value>> {
         Ok(vec![wasmos_runtime_api::Value::Result(Err(Some(
@@ -2959,7 +2959,7 @@ impl RuntimeHost {
     #[method("[method]cast-callback.call")]
     fn cast_callback_call(
         &self,
-        ctx: &mut HostCallContext<'_>,
+        _ctx: &mut HostCallContext<'_>,
         _args: Vec<wasmos_runtime_api::Value>,
     ) -> RuntimeResult<Vec<wasmos_runtime_api::Value>> {
         Ok(vec![wasmos_runtime_api::Value::Result(Err(Some(
@@ -3201,7 +3201,7 @@ impl RuntimeHost {
     #[method("[resource-drop]pragma-registry")]
     fn pragma_registry_drop(
         &self,
-        ctx: &mut HostCallContext<'_>,
+        _ctx: &mut HostCallContext<'_>,
         _rep: Resource<PragmaRegistry>,
     ) -> RuntimeResult<()> {
         // The wit-bindgen counterpart at `crate::extension` line

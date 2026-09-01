@@ -17,7 +17,6 @@
 //! traits (capturing registrations into [`reg`]) and services config/logging
 //! through an [`extension::ExtensionServices`] sink — the one direction-specific
 //! seam.
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 use wasmtime::component::Component;
@@ -441,19 +440,6 @@ pub mod duckdb_extension_index_bindings {
     });
 }
 
-/// Bindings for the files-capable world (`duckdb-extension-files`), which
-/// additionally exports `file-dispatch` (httpfs M2). Only files backend
-/// components (e.g. webfs) satisfy this; the runtime builds these bindings
-/// lazily from an already-loaded component instance so non-files extensions
-/// (which don't export file-dispatch) still load against the base world above.
-pub mod duckdb_extension_files_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-files",
-        require_store_data_send: true,
-    });
-}
-
 /// Bindings for the copy-capable world (`duckdb-extension-copy`, 2.1.0), which
 /// additionally exports `copy-dispatch`. Only components that register a COPY
 /// handler satisfy this; built lazily from an already-loaded instance.
@@ -487,21 +473,6 @@ pub mod duckdb_extension_secret_bindings {
     });
 }
 
-/// Bindings for the writable-storage world (`duckdb-extension-storage-write`,
-/// 2.1.0), which additionally exports `storage-write-dispatch` on top of the
-/// read-only `storage-dispatch`. Only writable storage backends satisfy this;
-/// built lazily from an already-loaded instance.
-pub mod duckdb_extension_storage_write_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-storage-write",
-        require_store_data_send: true,
-        with: {
-            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
-        },
-    });
-}
-
 /// Bindings for the streaming-table world (`duckdb-extension-table-stream`,
 /// 2.2.0, Item 6), which additionally exports `table-stream-dispatch`. Only
 /// components that back a streaming/pushdown table function satisfy this; built
@@ -517,34 +488,6 @@ pub mod duckdb_extension_table_stream_bindings {
     });
 }
 
-/// Bindings for the incremental-aggregate world (`duckdb-extension-aggregate-incr`,
-/// 2.2.0, Item 6), which additionally exports `aggregate-incr-dispatch`. Only
-/// components that back an incremental aggregate satisfy this; built lazily.
-pub mod duckdb_extension_aggregate_incr_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-aggregate-incr",
-        require_store_data_send: true,
-        with: {
-            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
-        },
-    });
-}
-
-/// Bindings for the connection-lifecycle world (`duckdb-extension-conn`, 2.2.0,
-/// Item 7), which additionally exports `conn-dispatch`. Only components that
-/// subscribed to connection callbacks satisfy this; built lazily.
-pub mod duckdb_extension_conn_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-conn",
-        require_store_data_send: true,
-        with: {
-            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
-        },
-    });
-}
-
 /// Bindings for the writable/glob files world (`duckdb-extension-file-write`,
 /// 2.2.0, Item 7), which additionally exports `file-write-dispatch`. Only files
 /// backends that support write/glob/stat satisfy this; built lazily.
@@ -552,64 +495,6 @@ pub mod duckdb_extension_file_write_bindings {
     wasmtime::component::bindgen!({
         path: "./wit",
         world: "duckdb:extension-host/duckdb-extension-file-write",
-        require_store_data_send: true,
-        with: {
-            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
-        },
-    });
-}
-
-/// Bindings for the general-index world (`duckdb-extension-index-write`, 2.2.0,
-/// Item 7), which additionally exports `index-write-dispatch`. Only general
-/// (non-ANN) index backends satisfy this; built lazily.
-pub mod duckdb_extension_index_write_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-index-write",
-        require_store_data_send: true,
-        with: {
-            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
-        },
-    });
-}
-
-/// Bindings for the settings-callback world (`duckdb-extension-settings`, 2.2.0,
-/// Item 7), which additionally exports `settings-dispatch`. Only components that
-/// react to `SET <option>` satisfy this; built lazily.
-pub mod duckdb_extension_settings_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-settings",
-        require_store_data_send: true,
-        with: {
-            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
-        },
-    });
-}
-
-/// Bindings for the parser-extension world (`duckdb-extension-parser`, 2.3.0 / v3),
-/// which additionally exports `parser-dispatch`. Only components that register a
-/// parser extension satisfy this; built lazily from an already-loaded instance and
-/// driven by a DuckDB `ParserExtension` in the core shim.
-pub mod duckdb_extension_parser_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-parser",
-        require_store_data_send: true,
-        with: {
-            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
-        },
-    });
-}
-
-/// Bindings for the general-optimizer world (`duckdb-extension-optimizer`, 2.3.0 /
-/// v3), which additionally exports `optimizer-dispatch`. Only components that
-/// register an optimizer rule satisfy this; built lazily and driven by a DuckDB
-/// `OptimizerExtension` in the core shim (the generalized index-scan rule).
-pub mod duckdb_extension_optimizer_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-optimizer",
         require_store_data_send: true,
         with: {
             "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
@@ -633,24 +518,18 @@ pub mod duckdb_extension_log_storage_bindings {
     });
 }
 
-/// Bindings for the arrow-ext world (`duckdb-extension-arrow-ext`, 4.0.0), which
-/// additionally exports `arrow-ext-dispatch`. Only components that back a named
-/// Arrow producer (registered via `arrow-ext.register-arrow-table`) satisfy this;
-/// the runtime builds these bindings lazily from an already-loaded instance.
-/// The 3-fn cursor (`call-arrow-open` / `-next` / `-close`) keeps state on the
-/// guest — the host holds only an opaque cursor u32 and pulls row-vector
-/// batches (`resultset`) until an empty resultset signals EOF; no arrow-rs types
-/// cross the WIT boundary.
-pub mod duckdb_extension_arrow_ext_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-arrow-ext",
-        require_store_data_send: true,
-        with: {
-            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
-        },
-    });
-}
+// Phase 6.2.j — nine per-world wit-bindgen wrapper modules were
+// deleted after the wit-bindgen dispatch path retired: files,
+// storage_write, aggregate_incr, conn, index_write, settings, parser,
+// optimizer, arrow_ext. All of their export types are now marshalled
+// via `crate::export_marshal` + `sync_export_bridge::call_export`, and
+// no downstream crate imported them (the `native-extension/ducklink`
+// crate maintains its own copies). The seven that remain each still
+// contribute a type re-export (`index_bindings::IndexHit`,
+// `copy_bindings::CopyFromBindResult`, etc.) at
+// `crate::extension`'s module boundary; storage_bindings backs the
+// `storage_scan` public API. Once those consumers are migrated too,
+// the remaining wrappers can retire in the same pass.
 
 /// The kind of callback a handle dispatches to inside an extension component.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -134,10 +134,6 @@ pub(crate) fn lift_u64(payload: Option<&Value>) -> Result<u64, extension_types::
     }
 }
 
-pub(crate) fn lift_unit(_payload: Option<&Value>) -> Result<(), extension_types::Duckerror> {
-    Ok(())
-}
-
 pub(crate) fn lift_bytes(payload: Option<&Value>) -> Result<Vec<u8>, extension_types::Duckerror> {
     match payload {
         Some(Value::Bytes(b)) => Ok(b.to_vec()),
@@ -225,10 +221,6 @@ pub(crate) fn bytes_to_value(b: &[u8]) -> Value {
 
 pub(crate) fn s64_list_to_value(xs: &[i64]) -> Value {
     Value::List(xs.iter().map(|n| Value::S64(*n)).collect())
-}
-
-pub(crate) fn string_list_to_value(xs: &[String]) -> Value {
-    Value::List(xs.iter().map(|s| Value::String(s.clone())).collect())
 }
 
 pub(crate) fn f32_matrix_to_value(m: &[Vec<f32>]) -> Value {
@@ -716,31 +708,15 @@ pub(crate) fn value_to_columndef_list(
 }
 
 // ─── scan-request / scan-filter / compare-op ───────────────────────
-
-use crate::duckdb_extension_bindings::duckdb::extension::storage as extension_storage;
-
-pub(crate) fn compare_op_to_value(op: extension_storage::CompareOp) -> Value {
-    use extension_storage::CompareOp as C;
-    let name = match op {
-        C::Eq => "eq",
-        C::Ne => "ne",
-        C::Lt => "lt",
-        C::Le => "le",
-        C::Gt => "gt",
-        C::Ge => "ge",
-        C::IsNull => "is-null",
-        C::IsNotNull => "is-not-null",
-    };
-    Value::Enum(name.into())
-}
-
-pub(crate) fn scan_filter_to_value(f: &extension_storage::ScanFilter) -> Value {
-    Value::Record(vec![
-        ("column".into(), Value::U32(f.column)),
-        ("op".into(), compare_op_to_value(f.op)),
-        ("value".into(), duckvalue_to_value(&f.value)),
-    ])
-}
+//
+// Phase 6.2.j — the top-level `scan_request_to_value` /
+// `scan_filter_to_value` / `compare_op_to_value` helpers were removed
+// as dead: the sole caller (`storage_scan_open`) marshals inline
+// against the bindings-per-module `storage_scan::ScanRequest` (a
+// distinct Rust type from the main `extension_storage::ScanRequest`),
+// so a shared helper here would still need cross-type conversion at
+// the callsite. Restore them if a second caller ever needs the main-
+// bindings shape.
 
 // ─── Colvec (Column has 27 arms) ──────────────────────────────────
 
@@ -1049,20 +1025,3 @@ fn bytes_field(rec: &Value, name: &str) -> Result<Vec<u8>, extension_types::Duck
     }
 }
 
-pub(crate) fn scan_request_to_value(r: &extension_storage::ScanRequest) -> Value {
-    Value::Record(vec![
-        ("table".into(), Value::String(r.table.clone())),
-        (
-            "projection".into(),
-            Value::List(r.projection.iter().map(|n| Value::U32(*n)).collect()),
-        ),
-        (
-            "filters".into(),
-            Value::List(r.filters.iter().map(scan_filter_to_value).collect()),
-        ),
-        (
-            "limit".into(),
-            Value::Option(r.limit.map(|n| Box::new(Value::U64(n)))),
-        ),
-    ])
-}
