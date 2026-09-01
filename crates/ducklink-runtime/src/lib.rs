@@ -413,43 +413,29 @@ pub mod duckdb_extension_bindings {
     });
 }
 
-/// Bindings for the storage-capable world (`duckdb-extension-storage`), which
-/// additionally exports `storage-dispatch`. Only storage backend components
-/// (e.g. sqlitewasm) satisfy this; the runtime builds these bindings lazily from
-/// an already-loaded component instance so non-storage extensions (which don't
-/// export storage-dispatch) still load against the base world above.
-pub mod duckdb_extension_storage_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-storage",
-        require_store_data_send: true,
-    });
-}
-
-// Phase 6.2.j retired nine per-world wit-bindgen wrapper modules
-// after the wit-bindgen dispatch path retired: files, storage_write,
-// aggregate_incr, conn, index_write, settings, parser, optimizer,
-// arrow_ext. Phase 6.2.k retires SIX MORE — index, copy, secret,
-// table_stream, file_write, log_storage — after replacing their sole
-// remaining role (type re-exports for `IndexHit`,
-// `CopyFromBindResult`, `SecretKv`, `TableOpenResult` +
-// `FilterOp`/`TableFilter`, `FileInfo`, `LogEntry`) with plain Rust
-// mirror types in `crate::extension` (see the block starting at
-// "Phase 6.2.k — SPI record/enum mirrors"). No downstream crate
-// imported these wrappers (native-extension/ducklink maintains its
-// own copies). All dispatch is via `crate::export_marshal` +
-// `sync_export_bridge::call_export` against the raw component
-// instance.
+// ADR-0029 Phase 6.2 wrapper-retirement history:
+// - Phase 6.2.j retired nine per-world wit-bindgen wrapper modules
+//   (files, storage_write, aggregate_incr, conn, index_write,
+//   settings, parser, optimizer, arrow_ext) after their dispatch
+//   surfaces migrated to the wasmos install path.
+// - Phase 6.2.k retired six more (index, copy, secret, table_stream,
+//   file_write, log_storage) after replacing their SPI record/enum
+//   re-exports with plain Rust mirror types on `crate::extension`.
+// - Phase 6.2.l' retired `duckdb_extension_storage_bindings` after
+//   mirroring `ScanRequest` / `ScanFilter` / `CompareOp` into
+//   `crate::extension::storage_scan` (the WIT `duckvalue` field on
+//   `scan-filter` now uses `extension_types::Duckvalue` directly —
+//   no per-world clone that needed a bridge).
 //
-// Two wrappers remain: `duckdb_extension_bindings` (the base world —
-// provides `extension_types::{Duckvalue, Columndef, Duckerror,
-// Logicaltype, ...}`, plus `extension_runtime::Resultset` and every
-// other host-import Host trait) and `duckdb_extension_storage_bindings`
-// (backs the `crate::extension::storage_scan` public API — components
-// that drive pushdown scans reach for the storage-world's Duckvalue
-// via `storage_scan::Duckvalue`). Retiring those two would require
-// migrating downstream code off wit-bindgen for the base extension
-// types themselves — a separate scope from Phase 6.2.k.
+// One wrapper remains: `duckdb_extension_bindings` (the base world) —
+// still provides `extension_types::{Duckvalue, Columndef, Duckerror,
+// Logicaltype, Colvec, Column, ...}`, `extension_runtime::Resultset`,
+// and every host-import Host trait. Its dispatch surface (Host trait
+// impls + `add_to_linker`) is dead from the linker's perspective post
+// Phase 6.2.h — the wasmos install path serves every interface — but
+// the record types are the workhorse types used across hundreds of
+// callsites in ducklink-host, so retiring the base wrapper is a
+// separate multi-session scope.
 
 /// The kind of callback a handle dispatches to inside an extension component.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

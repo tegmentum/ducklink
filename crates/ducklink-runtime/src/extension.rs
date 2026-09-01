@@ -3275,66 +3275,58 @@ pub struct ExtensionInstance {
 pub(crate) use crate::export_marshal::export_result_to_duckerror;
 
 
-// M2b: the storage interface's scan types (scan-request / scan-filter /
-// compare-op) used when driving a pushdown scan into the component.
+/// M2b: the storage interface's scan types (`scan-request` /
+/// `scan-filter` / `compare-op`) used when driving a pushdown scan
+/// into the component.
+///
+/// ADR-0029 Phase 6.2.l' — these used to re-export the wit-bindgen-
+/// generated records from the `duckdb_extension_storage_bindings`
+/// wrapper. That wrapper existed SOLELY to generate a distinct
+/// `Duckvalue` per world (wit-bindgen emits one Rust enum per
+/// bindings module for the same WIT type), which then required a
+/// bridge (`storage_duckvalue_to_ext`) to convert into the base
+/// `extension_types::Duckvalue` at the callsite. The mirror below
+/// uses `extension_types::Duckvalue` directly — no per-world clone,
+/// no bridge, no wrapper needed.
 pub mod storage_scan {
-    pub use crate::duckdb_extension_storage_bindings::duckdb::extension::storage::*;
-    // The scan-filter `value` field is the storage world's own `types.duckvalue`;
-    // re-export it (and the composite record types it carries) so the host can
-    // construct scan requests.
-    pub use crate::duckdb_extension_storage_bindings::duckdb::extension::types::{
-        Complexvalue, Decimalvalue, Duckvalue, Intervalvalue, Uuidvalue,
-    };
-}
+    use super::extension_types;
 
-// Phase 6.2.j — the wit-bindgen storage-world generates its OWN
-// `Duckvalue` (structurally identical to the base extension_types
-// one). `storage_scan_open` marshals a `scan-request` whose filters
-// carry the storage-world Duckvalue; this thin converter bridges it
-// to the base Duckvalue so the shared `duckvalue_to_value` in
-// `export_marshal` can produce the wasmos-side Value. The only
-// production call site is `storage_scan_open` — everything else that
-// used to lean on the storage-world types (converters for logicaltype,
-// columndef, duckerror) retired with the wit-bindgen dispatch path.
-fn storage_duckvalue_to_ext(value: storage_scan::Duckvalue) -> extension_types::Duckvalue {
-    use storage_scan::Duckvalue as S;
-    match value {
-        S::Null => extension_types::Duckvalue::Null,
-        S::Boolean(v) => extension_types::Duckvalue::Boolean(v),
-        S::Int64(v) => extension_types::Duckvalue::Int64(v),
-        S::Uint64(v) => extension_types::Duckvalue::Uint64(v),
-        S::Float64(v) => extension_types::Duckvalue::Float64(v),
-        S::Text(v) => extension_types::Duckvalue::Text(v),
-        S::Blob(v) => extension_types::Duckvalue::Blob(v),
-        S::Int32(v) => extension_types::Duckvalue::Int32(v),
-        S::Timestamp(v) => extension_types::Duckvalue::Timestamp(v),
-        S::Int8(v) => extension_types::Duckvalue::Int8(v),
-        S::Int16(v) => extension_types::Duckvalue::Int16(v),
-        S::Uint8(v) => extension_types::Duckvalue::Uint8(v),
-        S::Uint16(v) => extension_types::Duckvalue::Uint16(v),
-        S::Uint32(v) => extension_types::Duckvalue::Uint32(v),
-        S::Float32(v) => extension_types::Duckvalue::Float32(v),
-        S::Date(v) => extension_types::Duckvalue::Date(v),
-        S::Time(v) => extension_types::Duckvalue::Time(v),
-        S::Timestamptz(v) => extension_types::Duckvalue::Timestamptz(v),
-        S::Decimal(d) => extension_types::Duckvalue::Decimal(extension_types::Decimalvalue {
-            lower: d.lower, upper: d.upper, width: d.width, scale: d.scale,
-        }),
-        S::Interval(i) => extension_types::Duckvalue::Interval(extension_types::Intervalvalue {
-            months: i.months, days: i.days, micros: i.micros,
-        }),
-        S::Uuid(u) => extension_types::Duckvalue::Uuid(extension_types::Uuidvalue {
-            hi: u.hi, lo: u.lo,
-        }),
-        S::Hugeint(h) => extension_types::Duckvalue::Hugeint(extension_types::Hugeintvalue {
-            lower: h.lower, upper: h.upper,
-        }),
-        S::Uhugeint(h) => extension_types::Duckvalue::Uhugeint(extension_types::Uhugeintvalue {
-            lower: h.lower, upper: h.upper,
-        }),
-        S::Complex(c) => extension_types::Duckvalue::Complex(extension_types::Complexvalue {
-            type_expr: c.type_expr, json: c.json,
-        }),
+    /// Mirror of WIT `storage.compare-op`. Comparison pushed into a
+    /// scan as an AND-ed predicate.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum CompareOp {
+        Eq,
+        Ne,
+        Lt,
+        Le,
+        Gt,
+        Ge,
+        IsNull,
+        IsNotNull,
+    }
+
+    /// Mirror of WIT `storage.scan-filter`. One predicate. `column`
+    /// indexes the table's FULL column list (not the projection).
+    /// Pushdown is best-effort: the engine re-applies every filter,
+    /// so a backend may ignore any predicate it cannot evaluate.
+    /// `value` is ignored for `IsNull` / `IsNotNull`.
+    #[derive(Clone, Debug)]
+    pub struct ScanFilter {
+        pub column: u32,
+        pub op: CompareOp,
+        pub value: extension_types::Duckvalue,
+    }
+
+    /// Mirror of WIT `storage.scan-request`. What the engine asks a
+    /// scan to produce.
+    #[derive(Clone, Debug)]
+    pub struct ScanRequest {
+        pub table: String,
+        /// Column indices to emit, in order; empty = all columns.
+        pub projection: Vec<u32>,
+        pub filters: Vec<ScanFilter>,
+        /// Best-effort row cap.
+        pub limit: Option<u64>,
     }
 }
 
@@ -5070,9 +5062,10 @@ impl ExtensionInstance {
         catalog: u32,
         request: storage_scan::ScanRequest,
     ) -> Result<u32, extension_types::Duckerror> {
-        // Phase 6.2.i.7 — migrated. scan-request record marshalled
-        // via scan_request_to_value (table + projection + filters +
-        // limit; filters use compare-op enum + duckvalue payload).
+        // Phase 6.2.i.7 — migrated. Phase 6.2.l' — `storage_scan`
+        // types now mirror the WIT records directly (no per-world
+        // Duckvalue clone), so filter values marshal through the
+        // shared `duckvalue_to_value` without a bridge.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -5083,26 +5076,17 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::U32(catalog),
                 {
-                    // The bindings module for storage exports its own
-                    // ScanRequest type (structurally identical to the
-                    // one in extension_storage but a distinct Rust
-                    // type). Marshal inline to avoid the cross-module
-                    // conversion.
-                    use crate::duckdb_extension_storage_bindings::duckdb::extension::storage::CompareOp as C;
+                    use storage_scan::CompareOp as C;
                     let op_val = |op: C| wasmos_runtime_api::Value::Enum(match op {
                         C::Eq => "eq", C::Ne => "ne", C::Lt => "lt", C::Le => "le",
                         C::Gt => "gt", C::Ge => "ge", C::IsNull => "is-null",
                         C::IsNotNull => "is-not-null",
                     }.into());
-                    // request's `filters.value` is `storage_scan::Duckvalue`
-                    // (bindings-per-module Duckvalue). Convert to the
-                    // extension_types Duckvalue via the existing
-                    // storage_duckvalue_to_ext helper, then marshal.
                     let filters_val = wasmos_runtime_api::Value::List(
                         request.filters.iter().map(|f| wasmos_runtime_api::Value::Record(vec![
                             ("column".into(), wasmos_runtime_api::Value::U32(f.column)),
                             ("op".into(), op_val(f.op)),
-                            ("value".into(), duckvalue_to_value(&storage_duckvalue_to_ext(f.value.clone()))),
+                            ("value".into(), duckvalue_to_value(&f.value)),
                         ])).collect(),
                     );
                     wasmos_runtime_api::Value::Record(vec![
@@ -6634,79 +6618,16 @@ pub fn add_extension_interfaces_to_linker(
     // wasi:http `add_to_linker_sync` re-adds the wasi:http/proxy world and
     // would collide.
     wasmtime_wasi_http::p2::add_only_http_to_linker_sync(linker)?;
-    // ADR-0029 Phase 6.2.h.3 — Types, Encoding (added below), Compression,
-    // FilesReg, Index, Collation intentionally NOT registered here.
-    // Wired per-load in `load_component_with_dynlink` via
-    // `install_wasmos_migrated_interfaces` using wasmos-native
-    // SyncHostCall dispatch through {Types,Encoding,Compression,
-    // FilesReg,Index,Collation}Host. See Phase 6.2.h.2 comment below
-    // for why per-load and not here.
-    // extension_types::add_to_linker(...)?;      // ← migrated (Phase 6.2.h.3)
-    // ADR-0029 Phase 6.2.h.7 — Runtime migrated to the wasmos-native
-    // install path via install_host_call. The multi-resource
-    // classification lands per-mint name annotations in the ctx's
-    // name_map so lower resolves the correct discriminant across all
-    // 10 resource types (5 XxxCallback + 4 XxxRegistry + macro-
-    // registry).
-    // extension_runtime::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.7)
-    // extension_config::add_to_linker(...)?;   // ← migrated (Phase 6.2.h.6)
-    // extension_logging::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
-    // extension_catalog::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
-    // extension_files::add_to_linker(...)?;    // ← migrated (Phase 6.2.h.6)
-    // extension_storage::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
-    // extension_index::add_to_linker(...)?;      // ← migrated (Phase 6.2.h.3)
-    // extension_collation::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.3)
-    // extension_files_reg::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.3)
-    // extension_query::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
-    // EXECUTE-capable counterpart to `query`. The host always PROVIDES it; only
-    // exec-capable components (fieldbook) import it. Uses a sibling connection
-    // and a per-thread depth cap; see `NestedExecDepthGuard`.
-    // extension_nested_exec::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
-    // Advisory file-lock primitive. The host always PROVIDES it; only
-    // cache-shaped components import it. Backed by fs2::FileExt::lock_exclusive
-    // (fcntl(F_SETLKW) on Unix, LockFileEx on Windows) -- the same lock
-    // mechanism the native duckdb-cache uses in `store.rs::UriLock`.
-    //
-    // ADR-0029 Phase 6.2.h.5 — migrated to the wasmos resource-aware
-    // bridge (sync_bridge_resource::install_host_call). BridgedFileLockHost
-    // pulls state from HostCallContext::consumer_state so both paths
-    // (the wit-bindgen-typed LockHandle from other host imports + the
-    // wasmos-native BridgedFileLockHost) operate on the SAME
-    // ExtensionStoreState in the wasmtime Store. Wired per-load in
-    // install_wasmos_migrated_interfaces.
-    // extension_file_lock::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.5)
-    // 2.1.0 additive registration imports.
-    // extension_secret::add_to_linker(...)?;      // ← migrated (Phase 6.2.h.6)
-    // extension_settings::add_to_linker(...)?;    // ← migrated (Phase 6.2.h.6)
-    // extension_macro_ext::add_to_linker(...)?;   // ← migrated (Phase 6.2.h.6)
-    // extension_types_ext::add_to_linker(...)?;   // ← migrated (Phase 6.2.h.6)
-    // 2.2.0 additive registration imports (Items 6-7).
-    // extension_runtime_ext::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
-    // ADR-0029 Phase 6.2.h.2 — Lifecycle intentionally NOT registered
-    // here. It's wired per-load in `load_component_with_dynlink` via
-    // `install_wasmos_migrated_interfaces` using the wasmos-native
-    // `SyncHostCall` dispatch through `LifecycleHost`. The per-load
-    // wiring path is required because the wasmos bridge needs the
-    // Component in scope to enumerate method signatures at wire time
-    // (the wit-bindgen `add_to_linker` shape doesn't — the interface
-    // shape is compile-time-known via bindgen). Adding lifecycle here
-    // AND per-load would collide (wasmtime rejects duplicate
-    // registrations); registering only per-load matches Session-2 of
-    // the Phase 6.2.h consumer-migration plan.
-    // extension_lifecycle::add_to_linker(linker, |s| s)?;  // ← migrated
-    // extension_coordinate_system::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
-    // extension_arrow_ext::add_to_linker(...)?;          // ← migrated (Phase 6.2.h.6)
-    // extension_encoding::add_to_linker(...)?;     // ← migrated (Phase 6.2.h.3)
-    // extension_compression::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.3)
-    // 2.3.0 / v3 additive registration imports.
-    // extension_parser::add_to_linker(...)?;     // ← migrated (Phase 6.2.h.6)
-    // extension_optimizer::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
-    // 3.1.0 additive registration import: filterable streaming table-fn marker.
-    // extension_table_stream::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
-    // 3.2.0 additive registration import: log-storage sink declaration (Class B
-    // parity with the stable `duckdb_register_log_storage` C API). The host
-    // always PROVIDES this; components import it only if they back a log sink.
-    // extension_log_storage::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
+    // ADR-0029 Phase 6.2.h — every `duckdb:extension/*` host import
+    // used to be wired here through wit-bindgen's `extension_xxx::
+    // add_to_linker`. The full 27-interface sweep is now on the
+    // wasmos install path (`install_wasmos_migrated_interfaces`) —
+    // see the phase-by-phase attribution in the git log (Phase
+    // 6.2.h.2 through 6.2.h.7) or the state-of-the-abstraction doc.
+    // The `Host` trait impls immediately below survive as test
+    // scaffolding for register/lifecycle unit tests but no linker
+    // path invokes them any more. Phase 6.2.l retired the last of
+    // the commented-out `add_to_linker` calls that used to sit here.
     Ok(())
 }
 
