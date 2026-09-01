@@ -6275,10 +6275,13 @@ pub fn add_extension_interfaces_to_linker(
     // FilesReg,Index,Collation}Host. See Phase 6.2.h.2 comment below
     // for why per-load and not here.
     // extension_types::add_to_linker(...)?;      // ← migrated (Phase 6.2.h.3)
-    // ADR-0029 Phase 6.2.h.6 — config, logging, catalog, files, storage
-    // migrated. Runtime stays on wit-bindgen pending Phase 6.2.h.7's
-    // multi-resource classification (10 resource types).
-    extension_runtime::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    // ADR-0029 Phase 6.2.h.7 — Runtime migrated to the wasmos-native
+    // install path via install_host_call. The multi-resource
+    // classification lands per-mint name annotations in the ctx's
+    // name_map so lower resolves the correct discriminant across all
+    // 10 resource types (5 XxxCallback + 4 XxxRegistry + macro-
+    // registry).
+    // extension_runtime::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.7)
     // extension_config::add_to_linker(...)?;   // ← migrated (Phase 6.2.h.6)
     // extension_logging::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
     // extension_catalog::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
@@ -6446,7 +6449,7 @@ fn install_wasmos_migrated_interfaces(
     // Phase 6.2.h.7 pending per-return-type discriminant
     // classification on the bridge — the single-`sole_disc`
     // fallback only covers 0-1 resource interfaces.
-    let stateful_migrated: [(&str, fn() -> StdArc<dyn _SyncHostCall>); 19] = [
+    let stateful_migrated: [(&str, fn() -> StdArc<dyn _SyncHostCall>); 20] = [
         // File-lock — 1 resource, migrated Phase 6.2.h.5.
         (
             "duckdb:extension/file-lock",
@@ -6524,6 +6527,17 @@ fn install_wasmos_migrated_interfaces(
         (
             "duckdb:extension/log-storage",
             || StdArc::new(crate::extension_wasmos::LogStorageHost::bridged()),
+        ),
+        // ADR-0029 Phase 6.2.h.7 — Runtime, the final interface.
+        // 10 resource types (5 XxxCallback + 4 XxxRegistry + macro-
+        // registry) + the get-capability variant with 5 Resource-
+        // carrying arms. Enabled by Phase 6.2.h.7's multi-resource
+        // classification on the bridge — every Value::Resource now
+        // carries its resource_name in the ctx's name_map, so lower
+        // resolves the correct wasmtime discriminant per return.
+        (
+            "duckdb:extension/runtime",
+            || StdArc::new(crate::extension_wasmos::RuntimeHost::bridged()),
         ),
     ];
 
