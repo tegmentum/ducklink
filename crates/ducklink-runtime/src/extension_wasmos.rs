@@ -2275,6 +2275,125 @@ pub fn install_file_lock_imports(
 }
 
 // ────────────────────────────────────────────────────────────────────
+// ADR-0029 Phase 6.2.h.5 — BridgedFileLockHost
+//
+// Purpose: the sibling of `FileLockHost` used exclusively by the
+// consumer-migration bridge in ducklink's production loader
+// (`crate::extension::install_wasmos_migrated_interfaces`).
+//
+// Where the original `FileLockHost` holds `SharedExtensionState =
+// Arc<Mutex<ExtensionStoreState>>` and uses that clone at dispatch
+// time — appropriate when the wasmos-native handler is being
+// dispatched by the wasmos ADAPTER path where the state lives OUTSIDE
+// wasmtime's Store — `BridgedFileLockHost` is STATELESS. Its methods
+// pull `&mut ExtensionStoreState` from
+// [`HostCallContext::consumer_state`] instead, which the resource-
+// aware bridge populates per-call with `store.data_mut()` (the
+// wasmtime Store's actual data).
+//
+// This closes the state-coherence gap Phase 6.2.h.4 Session 2
+// surfaced: a lock acquired via BridgedFileLockHost lands in the
+// SAME `ExtensionStoreState.lock_handles` the wit-bindgen
+// `HostLockHandle::drop` path operates on. Not two disconnected
+// state instances — one, held by the Store, both paths reach it.
+//
+// Both handler variants speak the same WIT interface + share the
+// same wire semantics. Production wires the Bridged variant via the
+// sync_bridge_resource; tests (Phase 6.2.g) continue to use the
+// original FileLockHost with its own SharedExtensionState.
+// ────────────────────────────────────────────────────────────────────
+
+/// Stateless sibling of [`FileLockHost`] for the
+/// [`crate::extension::install_wasmos_migrated_interfaces`] path.
+/// Pulls `&mut ExtensionStoreState` from the ctx's Phase 6.2.h.5
+/// consumer-state slot instead of holding an `Arc<Mutex<>>` clone.
+///
+/// A fresh instance per load is fine — no state held here to leak.
+#[derive(Debug, Default, Clone)]
+pub struct BridgedFileLockHost;
+
+impl BridgedFileLockHost {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+/// Helper: pull `&mut ExtensionStoreState` from the ctx or error
+/// with a specific message that names the bridge contract. All four
+/// BridgedFileLockHost methods delegate through this so the error
+/// text is uniform.
+fn bridged_state<'a>(
+    ctx: &'a mut HostCallContext<'_>,
+) -> RuntimeResult<&'a mut crate::extension::ExtensionStoreState> {
+    ctx.consumer_state::<crate::extension::ExtensionStoreState>()
+        .ok_or_else(|| {
+            wasmos_runtime_api::RuntimeError::msg(
+                "BridgedFileLockHost: no ExtensionStoreState in HostCallContext — the \
+                 wasmos-runtime-wasmtime-v48 sync_bridge_resource is required to populate \
+                 the consumer-state slot at dispatch time. Are you invoking this handler \
+                 outside the bridge? Use FileLockHost::new(shared_state) for direct \
+                 dispatch tests.",
+            )
+        })
+}
+
+#[host_iface(sync)]
+impl BridgedFileLockHost {
+    fn acquire_exclusive(
+        &self,
+        ctx: &mut HostCallContext<'_>,
+        path: String,
+    ) -> RuntimeResult<Result<Resource<LockHandle>, String>> {
+        let state = bridged_state(ctx)?;
+        match state.acquire_exclusive_lock(&path) {
+            Ok(id) => Ok(Ok(Resource::<LockHandle>::from_raw(id, true))),
+            Err(msg) => Ok(Err(msg)),
+        }
+    }
+
+    fn try_acquire_exclusive(
+        &self,
+        ctx: &mut HostCallContext<'_>,
+        path: String,
+    ) -> RuntimeResult<Result<Option<Resource<LockHandle>>, String>> {
+        let state = bridged_state(ctx)?;
+        match state.try_acquire_exclusive_lock(&path) {
+            Ok(Some(id)) => Ok(Ok(Some(Resource::<LockHandle>::from_raw(id, true)))),
+            Ok(None) => Ok(Ok(None)),
+            Err(msg) => Ok(Err(msg)),
+        }
+    }
+
+    /// `[method]lock-handle.release` — early lock release. Same
+    /// semantics as `FileLockHost::lock_handle_release`.
+    #[method("[method]lock-handle.release")]
+    fn lock_handle_release(
+        &self,
+        ctx: &mut HostCallContext<'_>,
+        self_: Resource<LockHandle>,
+    ) -> RuntimeResult<()> {
+        let state = bridged_state(ctx)?;
+        state.release_lock_handle(self_.handle());
+        Ok(())
+    }
+
+    /// `[resource-drop]lock-handle` — destructor. Fires via
+    /// [`wasmos_runtime_api::SyncHostCall::on_resource_drop`] on
+    /// guest scope-exit through the resource-aware bridge's
+    /// `.resource(...)` destructor closure.
+    #[method("[resource-drop]lock-handle")]
+    fn lock_handle_drop(
+        &self,
+        ctx: &mut HostCallContext<'_>,
+        rep: Resource<LockHandle>,
+    ) -> RuntimeResult<()> {
+        let state = bridged_state(ctx)?;
+        state.release_lock_handle(rep.handle());
+        Ok(())
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────
 // Phase 6.2.d.2-o — runtime main Host trait (27/27 for interface
 // registration; the 10 sub-trait impls — 5 XxxCallback + 4
 // XxxRegistry + HostMacroRegistry — are Phase 6.2.d.2-p+).

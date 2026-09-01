@@ -6296,7 +6296,15 @@ pub fn add_extension_interfaces_to_linker(
     // cache-shaped components import it. Backed by fs2::FileExt::lock_exclusive
     // (fcntl(F_SETLKW) on Unix, LockFileEx on Windows) -- the same lock
     // mechanism the native duckdb-cache uses in `store.rs::UriLock`.
-    extension_file_lock::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    //
+    // ADR-0029 Phase 6.2.h.5 — migrated to the wasmos resource-aware
+    // bridge (sync_bridge_resource::install_host_call). BridgedFileLockHost
+    // pulls state from HostCallContext::consumer_state so both paths
+    // (the wit-bindgen-typed LockHandle from other host imports + the
+    // wasmos-native BridgedFileLockHost) operate on the SAME
+    // ExtensionStoreState in the wasmtime Store. Wired per-load in
+    // install_wasmos_migrated_interfaces.
+    // extension_file_lock::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.5)
     // 2.1.0 additive registration imports.
     extension_secret::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_settings::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
@@ -6430,6 +6438,28 @@ fn install_wasmos_migrated_interfaces(
                 "install_stateless_host_call({iface}) failed: {e}"
             )))?;
     }
+
+    // ADR-0029 Phase 6.2.h.5 — resource-aware bridge migrations.
+    // BridgedFileLockHost is the first: pulls ExtensionStoreState
+    // from ctx.consumer_state (which the sync_bridge_resource
+    // populates per-call with `store.data_mut()`), so both this
+    // handler AND any residual wit-bindgen callsite that still
+    // touches lock_handles operate on the SAME state instance in
+    // the wasmtime Store. Handles the acquire-exclusive / try-
+    // acquire-exclusive methods PLUS the [method]lock-handle.release
+    // and [resource-drop]lock-handle mangling overrides.
+    let file_lock_handler: StdArc<dyn _SyncHostCall> =
+        StdArc::new(crate::extension_wasmos::BridgedFileLockHost::new());
+    wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call(
+        engine,
+        linker,
+        component,
+        "duckdb:extension/file-lock",
+        file_lock_handler,
+    )
+    .map_err(|e| wasmtime::Error::msg(format!(
+        "install_host_call(file-lock) failed: {e}"
+    )))?;
 
     Ok(())
 }
