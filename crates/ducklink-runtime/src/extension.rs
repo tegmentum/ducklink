@@ -6300,7 +6300,18 @@ pub fn add_extension_interfaces_to_linker(
         linker,
         |s| s,
     )?;
-    extension_lifecycle::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    // ADR-0029 Phase 6.2.h.2 — Lifecycle intentionally NOT registered
+    // here. It's wired per-load in `load_component_with_dynlink` via
+    // `install_wasmos_migrated_interfaces` using the wasmos-native
+    // `SyncHostCall` dispatch through `LifecycleHost`. The per-load
+    // wiring path is required because the wasmos bridge needs the
+    // Component in scope to enumerate method signatures at wire time
+    // (the wit-bindgen `add_to_linker` shape doesn't — the interface
+    // shape is compile-time-known via bindgen). Adding lifecycle here
+    // AND per-load would collide (wasmtime rejects duplicate
+    // registrations); registering only per-load matches Session-2 of
+    // the Phase 6.2.h consumer-migration plan.
+    // extension_lifecycle::add_to_linker(linker, |s| s)?;  // ← migrated
     extension_coordinate_system::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
         linker,
         |s| s,
@@ -6326,6 +6337,61 @@ pub fn add_extension_interfaces_to_linker(
         linker,
         |s| s,
     )?;
+    Ok(())
+}
+
+/// ADR-0029 Phase 6.2.h.2 — wire the wasmos-migrated interfaces on
+/// `linker` for `component`. Called per-load from
+/// [`load_component_with_dynlink`] because the wasmos
+/// `install_stateless_host_call` bridge needs the [`Component`] in scope
+/// to enumerate method signatures at wire time (the wit-bindgen
+/// `add_to_linker` shape doesn't; the interface shape is compile-time-
+/// known via bindgen).
+///
+/// Interfaces migrated so far:
+///
+/// - `duckdb:extension/lifecycle` — routed to
+///   [`crate::extension_wasmos::LifecycleHost`] via wasmos
+///   `SyncHostCall` dispatch. 1 method, no resources, no state — the
+///   smallest possible first migration so any parity issues surface
+///   with minimal noise.
+///
+/// Future sessions extend this set to the other 6
+/// stateless-and-no-resource interfaces (Types, Encoding, Compression,
+/// FilesReg, Index, Collation) using the same bridge, then design the
+/// resource-aware bridge for the Resource<T>-carrying interfaces.
+///
+/// **Non-blocking behaviour**: if `component` doesn't import a given
+/// migrated interface, the bridge no-ops for that interface — matches
+/// the wasmos `wire_host_imports` policy so a shared installer works
+/// across a mixed extension set.
+fn install_wasmos_migrated_interfaces(
+    engine: &Engine,
+    linker: &mut Linker<ExtensionStoreState>,
+    component: &Component,
+) -> wasmtime::Result<()> {
+    use std::sync::Arc as StdArc;
+    use wasmos_runtime_api::{SyncHostCall as _SyncHostCall};
+    use wasmos_runtime_wasmtime_v48::sync_bridge::install_stateless_host_call;
+
+    // Lifecycle — Phase 6.2.h.2 Session 2. `LifecycleHost` is stateless
+    // (no `SharedExtensionState` field), so a fresh instance per load
+    // is fine (no shared registry to leak, no allocator to reuse).
+    // The `#[host_iface(sync)]`-emitted `impl SyncHostCall for
+    // LifecycleHost` provides the dispatch entry point.
+    let lifecycle_handler: StdArc<dyn _SyncHostCall> =
+        StdArc::new(crate::extension_wasmos::LifecycleHost::new());
+    install_stateless_host_call(
+        engine,
+        linker,
+        component,
+        "duckdb:extension/lifecycle",
+        lifecycle_handler,
+    )
+    .map_err(|e| wasmtime::Error::msg(format!(
+        "install_stateless_host_call(lifecycle) failed: {e}"
+    )))?;
+
     Ok(())
 }
 
@@ -6414,6 +6480,18 @@ pub fn load_component_with_dynlink(
             dynlink,
         ),
     );
+
+    // ADR-0029 Phase 6.2.h.2 — wire the wasmos-migrated interfaces
+    // per-load. Session 2 covers Lifecycle only; future sessions add
+    // the other stateless-and-no-resource interfaces (Types, Encoding,
+    // Compression, FilesReg, Index, Collation) then face the resource-
+    // marshalling design decision. Non-blocking for the current call:
+    // if the component doesn't import lifecycle, the installer is a
+    // no-op (matches wasmos wire_host_imports policy).
+    install_wasmos_migrated_interfaces(engine, &mut linker, component)
+        .map_err(|e| wasmtime::Error::msg(format!(
+            "wasmos-native import wiring failed: {e}"
+        )))?;
 
     // Instantiate via the linker to obtain the raw component instance, then build
     // the typed base-world bindings from it. Retaining the raw instance lets a
