@@ -22,7 +22,8 @@ use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 use crate::duckdb_extension_bindings::duckdb::extension::{
-    column_types as extension_column_types, runtime as extension_runtime, types as extension_types,
+    column_types as extension_column_types, logging as extension_logging,
+    runtime as extension_runtime, types as extension_types,
 };
 // Phase 6.2.l.2 — the following interface types are referenced only
 // by #[cfg(test)]-gated inherent methods (extracted from retired
@@ -3222,6 +3223,218 @@ impl From<extension_column_types::Colvec> for Colvec {
 impl From<Colvec> for extension_column_types::Colvec {
     fn from(v: Colvec) -> Self {
         extension_column_types::Colvec { data: v.data.into(), validity: v.validity.into(), rows: v.rows }
+    }
+}
+
+// ─── Session 5 mirrors — smaller records / enums ─────────────────
+
+/// Config-lookup error surface. Mirror of WIT `types.configerror`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Configerror {
+    Invalidkey(String),
+    Typemismatch(String),
+    Unavailable(String),
+    Internalconfig(String),
+}
+
+/// Log severity. Mirror of WIT `types.loglevel`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Loglevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+/// Structured log field. Mirror of WIT `types.logfield`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Logfield {
+    pub key: String,
+    pub value: String,
+}
+
+/// Per-invocation context passed alongside scalar callback args.
+/// Mirror of WIT `types.invokeinfo`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Invokeinfo {
+    pub rowindex: Option<u64>,
+    pub iswindow: bool,
+}
+
+/// The kinds of capability a runtime exposes. Mirror of WIT
+/// `types.capabilitykind`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Capabilitykind {
+    Scalar,
+    Table,
+    Aggregate,
+    Pragma,
+    Macro,
+    Catalog,
+    FileFormat,
+}
+
+/// A function argument declaration: optional name + logical type.
+/// Mirror of WIT `types.funcarg`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Funcarg {
+    pub name: Option<String>,
+    pub logical: Logicaltype,
+}
+
+/// Metadata carried alongside a scalar / table / aggregate
+/// registration: description + tags. Mirror of WIT `types.extopts`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Extopts {
+    pub description: Option<String>,
+    pub tags: Vec<String>,
+}
+
+/// `Loadresult` — what a component's `load` export returns. Mirror
+/// of WIT `types.loadresult`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Loadresult {
+    pub name: String,
+    pub version: Option<String>,
+    pub requires: Vec<Capabilitykind>,
+}
+
+impl From<extension_types::Configerror> for Configerror {
+    fn from(e: extension_types::Configerror) -> Self {
+        match e {
+            extension_types::Configerror::Invalidkey(m) => Configerror::Invalidkey(m),
+            extension_types::Configerror::Typemismatch(m) => Configerror::Typemismatch(m),
+            extension_types::Configerror::Unavailable(m) => Configerror::Unavailable(m),
+            extension_types::Configerror::Internalconfig(m) => Configerror::Internalconfig(m),
+        }
+    }
+}
+impl From<Configerror> for extension_types::Configerror {
+    fn from(e: Configerror) -> Self {
+        match e {
+            Configerror::Invalidkey(m) => extension_types::Configerror::Invalidkey(m),
+            Configerror::Typemismatch(m) => extension_types::Configerror::Typemismatch(m),
+            Configerror::Unavailable(m) => extension_types::Configerror::Unavailable(m),
+            Configerror::Internalconfig(m) => extension_types::Configerror::Internalconfig(m),
+        }
+    }
+}
+
+impl From<extension_logging::Loglevel> for Loglevel {
+    fn from(l: extension_logging::Loglevel) -> Self {
+        use extension_logging::Loglevel as W;
+        match l {
+            W::Trace => Loglevel::Trace,
+            W::Debug => Loglevel::Debug,
+            W::Info => Loglevel::Info,
+            W::Warn => Loglevel::Warn,
+            W::Error => Loglevel::Error,
+        }
+    }
+}
+impl From<Loglevel> for extension_logging::Loglevel {
+    fn from(l: Loglevel) -> Self {
+        use extension_logging::Loglevel as W;
+        match l {
+            Loglevel::Trace => W::Trace,
+            Loglevel::Debug => W::Debug,
+            Loglevel::Info => W::Info,
+            Loglevel::Warn => W::Warn,
+            Loglevel::Error => W::Error,
+        }
+    }
+}
+
+impl From<extension_logging::Logfield> for Logfield {
+    fn from(f: extension_logging::Logfield) -> Self {
+        Logfield { key: f.key, value: f.value }
+    }
+}
+impl From<Logfield> for extension_logging::Logfield {
+    fn from(f: Logfield) -> Self {
+        extension_logging::Logfield { key: f.key, value: f.value }
+    }
+}
+
+impl From<extension_types::Invokeinfo> for Invokeinfo {
+    fn from(i: extension_types::Invokeinfo) -> Self {
+        Invokeinfo { rowindex: i.rowindex, iswindow: i.iswindow }
+    }
+}
+impl From<Invokeinfo> for extension_types::Invokeinfo {
+    fn from(i: Invokeinfo) -> Self {
+        extension_types::Invokeinfo { rowindex: i.rowindex, iswindow: i.iswindow }
+    }
+}
+
+impl From<extension_types::Capabilitykind> for Capabilitykind {
+    fn from(k: extension_types::Capabilitykind) -> Self {
+        use extension_types::Capabilitykind as W;
+        match k {
+            W::Scalar => Capabilitykind::Scalar,
+            W::Table => Capabilitykind::Table,
+            W::Aggregate => Capabilitykind::Aggregate,
+            W::Pragma => Capabilitykind::Pragma,
+            W::Macro => Capabilitykind::Macro,
+            W::Catalog => Capabilitykind::Catalog,
+            W::FileFormat => Capabilitykind::FileFormat,
+        }
+    }
+}
+impl From<Capabilitykind> for extension_types::Capabilitykind {
+    fn from(k: Capabilitykind) -> Self {
+        use extension_types::Capabilitykind as W;
+        match k {
+            Capabilitykind::Scalar => W::Scalar,
+            Capabilitykind::Table => W::Table,
+            Capabilitykind::Aggregate => W::Aggregate,
+            Capabilitykind::Pragma => W::Pragma,
+            Capabilitykind::Macro => W::Macro,
+            Capabilitykind::Catalog => W::Catalog,
+            Capabilitykind::FileFormat => W::FileFormat,
+        }
+    }
+}
+
+impl From<extension_types::Funcarg> for Funcarg {
+    fn from(a: extension_types::Funcarg) -> Self {
+        Funcarg { name: a.name, logical: a.logical.into() }
+    }
+}
+impl From<Funcarg> for extension_types::Funcarg {
+    fn from(a: Funcarg) -> Self {
+        extension_types::Funcarg { name: a.name, logical: a.logical.into() }
+    }
+}
+
+impl From<extension_types::Extopts> for Extopts {
+    fn from(o: extension_types::Extopts) -> Self {
+        Extopts { description: o.description, tags: o.tags.into_iter().collect() }
+    }
+}
+impl From<Extopts> for extension_types::Extopts {
+    fn from(o: Extopts) -> Self {
+        extension_types::Extopts { description: o.description, tags: o.tags.into() }
+    }
+}
+
+impl From<extension_types::Loadresult> for Loadresult {
+    fn from(r: extension_types::Loadresult) -> Self {
+        Loadresult {
+            name: r.name,
+            version: r.version,
+            requires: r.requires.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+impl From<Loadresult> for extension_types::Loadresult {
+    fn from(r: Loadresult) -> Self {
+        extension_types::Loadresult {
+            name: r.name,
+            version: r.version,
+            requires: r.requires.into_iter().map(Into::into).collect::<Vec<_>>().into(),
+        }
     }
 }
 

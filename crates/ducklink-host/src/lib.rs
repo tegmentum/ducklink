@@ -10829,20 +10829,20 @@ mod tests {
     impl extension_runtime::Host for TestExtensionHost {
         fn get_capability(
             &mut self,
-            kind: extension_runtime::Capabilitykind,
+            kind: ducklink_runtime::extension::Capabilitykind,
         ) -> Option<extension_runtime::Capability> {
             match kind {
-                extension_runtime::Capabilitykind::Scalar => {
+                ducklink_runtime::extension::Capabilitykind::Scalar => {
                     Some(extension_runtime::Capability::Scalar(
                         wasmtime::component::Resource::new_own(self.alloc_resource_id()),
                     ))
                 }
-                extension_runtime::Capabilitykind::Table => {
+                ducklink_runtime::extension::Capabilitykind::Table => {
                     Some(extension_runtime::Capability::Table(
                         wasmtime::component::Resource::new_own(self.alloc_resource_id()),
                     ))
                 }
-                extension_runtime::Capabilitykind::Aggregate => {
+                ducklink_runtime::extension::Capabilitykind::Aggregate => {
                     Some(extension_runtime::Capability::Aggregate(
                         wasmtime::component::Resource::new_own(self.alloc_resource_id()),
                     ))
@@ -10851,11 +10851,11 @@ mod tests {
             }
         }
 
-        fn list_capabilities(&mut self) -> BindgenVec<extension_runtime::Capabilitykind> {
+        fn list_capabilities(&mut self) -> BindgenVec<ducklink_runtime::extension::Capabilitykind> {
             vec![
-                extension_runtime::Capabilitykind::Scalar,
-                extension_runtime::Capabilitykind::Table,
-                extension_runtime::Capabilitykind::Aggregate,
+                ducklink_runtime::extension::Capabilitykind::Scalar,
+                ducklink_runtime::extension::Capabilitykind::Table,
+                ducklink_runtime::extension::Capabilitykind::Aggregate,
             ]
             .into()
         }
@@ -11098,40 +11098,40 @@ mod tests {
         fn get_string(
             &mut self,
             _path: String,
-        ) -> Result<Option<String>, extension_types::Configerror> {
+        ) -> Result<Option<String>, ducklink_runtime::extension::Configerror> {
             Ok(None)
         }
 
         fn get_bool(
             &mut self,
             _path: String,
-        ) -> Result<Option<bool>, extension_types::Configerror> {
+        ) -> Result<Option<bool>, ducklink_runtime::extension::Configerror> {
             Ok(None)
         }
 
-        fn get_i64(&mut self, _path: String) -> Result<Option<i64>, extension_types::Configerror> {
+        fn get_i64(&mut self, _path: String) -> Result<Option<i64>, ducklink_runtime::extension::Configerror> {
             Ok(None)
         }
 
-        fn get_u64(&mut self, _path: String) -> Result<Option<u64>, extension_types::Configerror> {
+        fn get_u64(&mut self, _path: String) -> Result<Option<u64>, ducklink_runtime::extension::Configerror> {
             Ok(None)
         }
 
-        fn get_f64(&mut self, _path: String) -> Result<Option<f64>, extension_types::Configerror> {
+        fn get_f64(&mut self, _path: String) -> Result<Option<f64>, ducklink_runtime::extension::Configerror> {
             Ok(None)
         }
 
         fn get_bytes(
             &mut self,
             _path: String,
-        ) -> Result<Option<BindgenVec<u8>>, extension_types::Configerror> {
+        ) -> Result<Option<BindgenVec<u8>>, ducklink_runtime::extension::Configerror> {
             Ok(None)
         }
 
         fn get_string_list(
             &mut self,
             _path: String,
-        ) -> Result<Option<BindgenVec<String>>, extension_types::Configerror> {
+        ) -> Result<Option<BindgenVec<String>>, ducklink_runtime::extension::Configerror> {
             Ok(None)
         }
     }
@@ -11139,7 +11139,7 @@ mod tests {
     impl extension_logging::Host for TestExtensionHost {
         fn log(
             &mut self,
-            _level: extension_logging::Loglevel,
+            _level: ducklink_runtime::extension::Loglevel,
             _message: String,
             _target: Option<String>,
         ) {
@@ -11147,9 +11147,9 @@ mod tests {
 
         fn log_fields(
             &mut self,
-            _level: extension_logging::Loglevel,
+            _level: ducklink_runtime::extension::Loglevel,
             _message: String,
-            _fields: BindgenVec<extension_logging::Logfield>,
+            _fields: BindgenVec<ducklink_runtime::extension::Logfield>,
         ) {
         }
     }
