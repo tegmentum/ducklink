@@ -21,16 +21,13 @@ use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 use crate::duckdb_extension_bindings::duckdb::extension::{
     arrow_ext as extension_arrow_ext, catalog as extension_catalog,
-    collation as extension_collation, column_types as extension_column_types,
-    compression as extension_compression, config as extension_config,
-    coordinate_system as extension_coordinate_system, encoding as extension_encoding,
-    file_lock as extension_file_lock, files as extension_files, files_reg as extension_files_reg,
-    index as extension_index, lifecycle as extension_lifecycle,
-    log_storage as extension_log_storage, logging as extension_logging,
+    column_types as extension_column_types, config as extension_config,
+    coordinate_system as extension_coordinate_system, file_lock as extension_file_lock,
+    files as extension_files, log_storage as extension_log_storage, logging as extension_logging,
     macro_ext as extension_macro_ext, nested_exec as extension_nested_exec,
     optimizer as extension_optimizer, parser as extension_parser, query as extension_query,
-    runtime as extension_runtime, runtime_ext as extension_runtime_ext, secret as extension_secret,
-    settings as extension_settings, storage as extension_storage,
+    runtime as extension_runtime, runtime_ext as extension_runtime_ext,
+    secret as extension_secret, settings as extension_settings, storage as extension_storage,
     table_stream as extension_table_stream, types as extension_types,
     types_ext as extension_types_ext,
 };
@@ -1578,7 +1575,11 @@ fn unsupported_runtime_error() -> extension_types::Duckerror {
     )
 }
 
-impl extension_types::Host for ExtensionStoreState {}
+// Phase 6.2.l.2 — the empty `impl extension_types::Host for
+// ExtensionStoreState {}` retired here. The base `types` interface
+// has no host imports (it only defines records + variants), so the
+// Host trait was empty. The wasmos-native `TypesHost` in
+// extension_wasmos.rs is the equivalent zero-method marker.
 
 impl extension_runtime::Host for ExtensionStoreState {
     fn get_capability(
@@ -2600,20 +2601,11 @@ impl extension_runtime_ext::Host for ExtensionStoreState {
     }
 }
 
-// 2.2.0 (Item 7): the `lifecycle` interface lets a component subscribe to
-// connection open/close events; the host captures the subscription and drives the
-// notifications through the separate `conn-dispatch` export.
-impl extension_lifecycle::Host for ExtensionStoreState {
-    fn register_connection_callback(
-        &mut self,
-        _events: extension_lifecycle::ConnEvents,
-        _callback_handle: u32,
-    ) -> Result<u32, extension_types::Duckerror> {
-        Err(extension_types::Duckerror::Unsupported(
-            "no DuckDB C API for connection open/close callbacks".to_string(),
-        ))
-    }
-}
+// Phase 6.2.l.2 — extension_lifecycle::Host pure Unsupported-stub
+// impl retired here. The wasmos-native LifecycleHost in
+// extension_wasmos.rs returns the same error on the production
+// path and is covered by `register_connection_callback_returns_
+// unsupported`.
 
 // 2.2.0 (Item 7): the `coordinate-system` interface lets a spatial component
 // declare CRS definitions (authority + code + WKT2) in load(); the host captures
@@ -2667,39 +2659,12 @@ impl extension_arrow_ext::Host for ExtensionStoreState {
     }
 }
 
-// 2.2.0 (Item 7): the `encoding` interface lets a component declare a text
-// encoding it can transcode to UTF-8; the host captures the declaration so the
-// CSV/text readers can route an `encoding=` option. Transcoding rides an
-// already-registered scalar, so no new dispatch export is needed.
-impl extension_encoding::Host for ExtensionStoreState {
-    fn register_encoding(
-        &mut self,
-        _name: String,
-        _aliases: BindgenVec<String>,
-        _callback_handle: u32,
-    ) -> Result<u32, extension_types::Duckerror> {
-        Err(extension_types::Duckerror::Unsupported(
-            "duckdb_register_encoding is not part of the DuckDB stable C API".to_string(),
-        ))
-    }
-}
-
-// 2.2.0 (Item 7): the `compression` interface lets a component declare a
-// compression codec keyed by a file extension; the host captures the declaration
-// so the file readers/writers can route a matching file. The (de)compression
-// rides an already-registered scalar, so no new dispatch export is needed.
-impl extension_compression::Host for ExtensionStoreState {
-    fn register_compression(
-        &mut self,
-        _name: String,
-        _file_extension: String,
-        _callback_handle: u32,
-    ) -> Result<u32, extension_types::Duckerror> {
-        Err(extension_types::Duckerror::Unsupported(
-            "duckdb_register_compression is not part of the DuckDB stable C API".to_string(),
-        ))
-    }
-}
+// Phase 6.2.l.2 — the extension_encoding::Host and
+// extension_compression::Host pure Unsupported-stub impls retired
+// here. The wasmos-native EncodingHost / CompressionHost in
+// extension_wasmos.rs return the same errors on the production
+// path and are covered by the matching wasmos-side
+// `_returns_unsupported` tests.
 
 // 3.2.0: the `log-storage` interface lets a component declare a NAMED log sink
 // (Class B parity with the stable `duckdb_register_log_storage` C API). The
@@ -2767,55 +2732,17 @@ impl extension_storage::Host for ExtensionStoreState {
     }
 }
 
-// Item 3 / M2a: the `index` interface lets a component register a custom INDEX
-// TYPE (e.g. "wasm_hnsw") in `load()`. The host satisfies the import so
-// index-capable components instantiate and load; the registration is captured
-// into the neutral pending buffer. Driving the component's `index-dispatch`
-// export (create/append/build/search/drop) is the direction-specific sink's job.
-impl extension_index::Host for ExtensionStoreState {
-    fn register_index_type(
-        &mut self,
-        _type_name: String,
-    ) -> Result<(), extension_types::Duckerror> {
-        Err(extension_types::Duckerror::Unsupported(
-            "duckdb_register_index_type is not part of the DuckDB stable C API".to_string(),
-        ))
-    }
-}
-
-// httpfs M2: the `files-reg` interface lets a component declare itself the files
-// backend (an http(s) fetcher) in `load()`. The host satisfies the import so
-// files-capable components instantiate; the registration is captured into the
-// neutral pending buffer and driving the component's `file-dispatch` export is
-// the direction-specific sink's job.
-impl extension_files_reg::Host for ExtensionStoreState {
-    fn register_files(&mut self, _callback_handle: u32) -> Result<u32, extension_types::Duckerror> {
-        Err(extension_types::Duckerror::Unsupported(
-            "duckdb_register_file_system is not part of the DuckDB stable C API".to_string(),
-        ))
-    }
-}
-
-// Item 2: the `collation` interface lets a component declare a collation in
-// `load()` whose transform is an already-registered sort-key scalar. The host
-// satisfies the import so collation-capable components (e.g. icufns) instantiate
-// and load; the registration is captured into the neutral pending buffer. The
-// core later pulls the list (the `collation-host` pull-back interface for this
-// capability was never produced; enumeration goes through
-// PendingRegistrationsData instead) and wraps each as a DuckDB collation
-// reusing the named scalar -- no new dispatch.
-impl extension_collation::Host for ExtensionStoreState {
-    fn register_collation(
-        &mut self,
-        _name: String,
-        _transform_scalar: String,
-        _combinable: bool,
-    ) -> Result<(), extension_types::Duckerror> {
-        Err(extension_types::Duckerror::Unsupported(
-            "duckdb_register_collation is not part of the DuckDB stable C API".to_string(),
-        ))
-    }
-}
+// Phase 6.2.l.2 — the three pure Unsupported-stub Host impls
+// (extension_index::Host::register_index_type,
+// extension_files_reg::Host::register_files,
+// extension_collation::Host::register_collation) retired here.
+// Nothing in the load path invokes wit-bindgen Host traits any
+// more; the wasmos-native handlers in extension_wasmos.rs
+// (IndexHost, FilesRegHost, CollationHost) return the same
+// Unsupported error via the production install path, and the
+// extension_wasmos test module covers each with a matching
+// `_returns_unsupported` unit test. The interface WIT + docstring
+// context stays with those handlers.
 
 // v1.1: the `query` interface lets a component run a read-only SELECT against the
 // live database (catalog completion). The host satisfies the import here by
@@ -5870,46 +5797,28 @@ mod tests {
     }
 
     // --- capture-into-pending logic (Host trait impls) ---
+    //
+    // Phase 6.2.l.2 — the following tests retired here:
+    //   * register_collation_returns_unsupported
+    //   * register_index_type_returns_unsupported
+    //   * the `register_files → Unsupported` half of
+    //     register_storage_captures_files_returns_unsupported
+    // Their behavior is exercised on the wasmos-native production
+    // path via extension_wasmos.rs tests (collation_returns_
+    // unsupported / index_returns_unsupported / files_reg_returns_
+    // unsupported), and the corresponding Host trait impls in the
+    // extension.rs body retired in the same pass. The
+    // register_storage capture-into-pending half survives below
+    // (renamed) — that path IS unique-value coverage.
 
     #[test]
-    fn register_collation_returns_unsupported() {
-        // The DuckDB stable C API in this build has no
-        // duckdb_register_collation hook, so the register-* trait impl now
-        // rejects the call with Duckerror::Unsupported instead of pretending
-        // to capture into a pending buffer that would never be installed.
-        let mut state = test_state();
-        let res = extension_collation::Host::register_collation(
-            &mut state,
-            "icu_en".to_string(),
-            "icu_sort".to_string(),
-            false,
-        );
-        assert!(matches!(
-            res,
-            Err(extension_types::Duckerror::Unsupported(_))
-        ));
-        // Nothing must have been captured into the pending buffer.
-        assert!(state.take_pending_collations().is_empty());
-    }
-
-    #[test]
-    fn register_index_type_returns_unsupported() {
-        let mut state = test_state();
-        let res = extension_index::Host::register_index_type(&mut state, "wasm_hnsw".to_string());
-        assert!(matches!(
-            res,
-            Err(extension_types::Duckerror::Unsupported(_))
-        ));
-        assert!(state.take_pending_indexes().is_empty());
-    }
-
-    #[test]
-    fn register_storage_captures_files_returns_unsupported() {
-        // Phase 2 (@5): register_storage now CAPTURES into pending_storages
+    fn register_storage_captures_into_pending() {
+        // Phase 2 (@5): register_storage CAPTURES into pending_storages
         // (drained into `ExtensionManager::storage_backends`) rather than
         // rejecting as Unsupported. The host's ATTACH intercept dispatches
-        // through the captured mapping. `register_files` still returns
-        // Unsupported (httpfs-shape backends are not yet wired at @5).
+        // through the captured mapping. Phase 6.2.l.2 dropped the paired
+        // `register_files → Unsupported` assertion (redundant with the
+        // wasmos-side `files_reg_returns_unsupported` test).
         let mut state = test_state();
         let storage_res = extension_storage::Host::register_storage(
             &mut state,
@@ -5922,13 +5831,6 @@ mod tests {
         assert_eq!(storages.len(), 1);
         assert_eq!(storages[0].type_name, "sqlitewasm");
         assert_eq!(storages[0].callback_handle, 7);
-
-        let files_res = extension_files_reg::Host::register_files(&mut state, 9);
-        assert!(matches!(
-            files_res,
-            Err(extension_types::Duckerror::Unsupported(_))
-        ));
-        assert!(state.take_pending_files().is_empty());
     }
 
     #[test]
@@ -6121,17 +6023,10 @@ mod tests {
         )
         .expect("register_scalar_ex");
 
-        // Item 7: connection-lifecycle subscription — no DuckDB C API for
-        // connection open/close callbacks, so this now rejects as Unsupported.
-        let conn_res = extension_lifecycle::Host::register_connection_callback(
-            &mut state,
-            extension_lifecycle::ConnEvents::OPENED,
-            22,
-        );
-        assert!(matches!(
-            conn_res,
-            Err(extension_types::Duckerror::Unsupported(_))
-        ));
+        // Phase 6.2.l.2 — the register_connection_callback →
+        // Unsupported assertion retired here (redundant with the
+        // wasmos-side `register_connection_callback_returns_
+        // unsupported` test). Its Host impl retired too.
 
         // Item 7: coordinate system.
         extension_coordinate_system::Host::register_coordinate_system(
@@ -6157,29 +6052,11 @@ mod tests {
         )
         .expect("register_arrow_table");
 
-        // Item 7: text encoding — no stable C API hook, rejected as Unsupported.
-        let enc_res = extension_encoding::Host::register_encoding(
-            &mut state,
-            "latin-1".to_string(),
-            vec!["iso-8859-1".to_string()].into(),
-            24,
-        );
-        assert!(matches!(
-            enc_res,
-            Err(extension_types::Duckerror::Unsupported(_))
-        ));
-
-        // Item 7: compression codec — no stable C API hook, rejected as Unsupported.
-        let comp_res = extension_compression::Host::register_compression(
-            &mut state,
-            "zstd".to_string(),
-            "zst".to_string(),
-            25,
-        );
-        assert!(matches!(
-            comp_res,
-            Err(extension_types::Duckerror::Unsupported(_))
-        ));
+        // Phase 6.2.l.2 — register_encoding + register_compression
+        // → Unsupported assertions retired here (redundant with
+        // wasmos-side `encoding_returns_unsupported` /
+        // `compression_returns_unsupported`). Their Host impls
+        // retired too.
 
         let scalar_ex = state.take_pending_scalar_ex();
         assert_eq!(scalar_ex.len(), 1);
@@ -6192,9 +6069,6 @@ mod tests {
         assert_eq!(scalar_ex[0].varargs, Some(reg::LogicalType::Text));
         assert_eq!(scalar_ex[0].callback_handle, 21);
 
-        // register_connection_callback returned Err(Unsupported); nothing captured.
-        assert!(state.take_pending_conn_callbacks().is_empty());
-
         let crs = state.take_pending_coordinate_systems();
         assert_eq!(crs.len(), 1);
         assert_eq!(crs[0].auth_name, "EPSG");
@@ -6206,10 +6080,6 @@ mod tests {
         assert_eq!(arrow[0].columns.len(), 1);
         assert_eq!(arrow[0].callback_handle, 23);
 
-        // register_encoding / register_compression returned Err(Unsupported);
-        // nothing captured.
-        assert!(state.take_pending_encodings().is_empty());
-        assert!(state.take_pending_compressions().is_empty());
     }
 
     #[test]
