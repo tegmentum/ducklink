@@ -6714,13 +6714,63 @@ pub fn load_component_with_dynlink(
     let instance_pre = linker.instantiate_pre(component)?;
     let instance = instance_pre.instantiate(store.as_context_mut())?;
     let bindings = DuckdbExtension::new(store.as_context_mut(), &instance)?;
-    bindings
-        .duckdb_extension_guest()
-        .call_load(store.as_context_mut())?
-        .map_err(|err| {
-            wasmtime::Error::msg(format!(
-                "extension component '{extension_name}' returned error from load(): {err:?}"
-            ))
-        })?;
+
+    // ADR-0029 Phase 6.2.i.3 — migrate `load()` from wit-bindgen's
+    // typed dispatcher to the wasmos sync_export_bridge. First of
+    // ~68 callsites; the rest migrate in follow-up sessions per the
+    // Phase 6.2.i design brief.
+    //
+    // Wire equivalence: `bindings.duckdb_extension_guest().call_load(
+    // store)` used to be a wit-bindgen macro-generated dispatcher
+    // that looked up the "load" export inside the
+    // `duckdb:extension/guest@5.0.0` interface, called it with no
+    // args, and lifted the returned `result<loadresult, duckerror>`
+    // to a typed Rust Result. The wasmos-native path does the same
+    // via `call_export` with the qualified interface name + a
+    // Value::Result match on the return.
+    //
+    // Version tag `@5.0.0` matches CONTRACT_MAJOR/MINOR — Phase
+    // 6.2.h.8 established that wasmtime's Linker + Instance export
+    // lookups match interface names verbatim including the version
+    // suffix.
+    let load_out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+        store.as_context_mut(),
+        &instance,
+        Some("duckdb:extension/guest@5.0.0"),
+        "load",
+        &[],
+    )
+    .map_err(|e| {
+        wasmtime::Error::msg(format!(
+            "extension component '{extension_name}' load() dispatch failed: {e}"
+        ))
+    })?;
+    if load_out.len() != 1 {
+        return Err(wasmtime::Error::msg(format!(
+            "extension component '{extension_name}' load() returned {} values, expected 1",
+            load_out.len()
+        )));
+    }
+    match &load_out[0] {
+        // Ok(loadresult) — success. The loadresult value is
+        // opaque to the loader (it carries a version marker + any
+        // additive fields), so we don't decode further here.
+        wasmos_runtime_api::Value::Result(Ok(_)) => {}
+        // Err(duckerror) — guest signalled a load failure. Preserve
+        // the wit-bindgen counterpart's error message shape by
+        // formatting the wasmos-native Duckerror value.
+        wasmos_runtime_api::Value::Result(Err(payload)) => {
+            return Err(wasmtime::Error::msg(format!(
+                "extension component '{extension_name}' returned error from load(): {payload:?}"
+            )));
+        }
+        other => {
+            return Err(wasmtime::Error::msg(format!(
+                "extension component '{extension_name}' load() returned unexpected \
+                 non-Result value: {other:?}"
+            )));
+        }
+    }
+
     Ok(ExtensionInstance::new(store, bindings, instance))
 }
