@@ -64,8 +64,8 @@ type BindgenVec<T> = wasmtime::component::__internal::Vec<T>;
 /// Build one columnar `colvec` from a column of row-major `Duckvalue`s. The arm
 /// is chosen from the first non-NULL value (a component column is homogeneous);
 /// NULLs become a typed placeholder plus a cleared validity bit.
-fn column_from_values(vals: &[&Duckvalue]) -> extension_column_types::Colvec {
-    use extension_column_types::Column;
+fn column_from_values(vals: &[&Duckvalue]) -> Colvec {
+    use Column;
     use Duckvalue as D;
     let n = vals.len();
     let mut validity: Vec<u8> = Vec::new();
@@ -121,7 +121,7 @@ fn column_from_values(vals: &[&Duckvalue]) -> extension_column_types::Colvec {
             let mut out = Vec::with_capacity(n);
             for (r, v) in vals.iter().enumerate() {
                 match v {
-                    D::Decimal(d) => out.push(extension_column_types::Decimalvalue {
+                    D::Decimal(d) => out.push(Decimalvalue {
                         lower: d.lower,
                         upper: d.upper,
                         width: d.width,
@@ -129,7 +129,7 @@ fn column_from_values(vals: &[&Duckvalue]) -> extension_column_types::Colvec {
                     }),
                     _ => {
                         mark_null(r, &mut validity);
-                        out.push(extension_column_types::Decimalvalue {
+                        out.push(Decimalvalue {
                             lower: 0,
                             upper: 0,
                             width: 0,
@@ -144,14 +144,14 @@ fn column_from_values(vals: &[&Duckvalue]) -> extension_column_types::Colvec {
             let mut out = Vec::with_capacity(n);
             for (r, v) in vals.iter().enumerate() {
                 match v {
-                    D::Interval(d) => out.push(extension_column_types::Intervalvalue {
+                    D::Interval(d) => out.push(Intervalvalue {
                         months: d.months,
                         days: d.days,
                         micros: d.micros,
                     }),
                     _ => {
                         mark_null(r, &mut validity);
-                        out.push(extension_column_types::Intervalvalue {
+                        out.push(Intervalvalue {
                             months: 0,
                             days: 0,
                             micros: 0,
@@ -166,11 +166,11 @@ fn column_from_values(vals: &[&Duckvalue]) -> extension_column_types::Colvec {
             for (r, v) in vals.iter().enumerate() {
                 match v {
                     D::Uuid(d) => {
-                        out.push(extension_column_types::Uuidvalue { hi: d.hi, lo: d.lo })
+                        out.push(Uuidvalue { hi: d.hi, lo: d.lo })
                     }
                     _ => {
                         mark_null(r, &mut validity);
-                        out.push(extension_column_types::Uuidvalue { hi: 0, lo: 0 });
+                        out.push(Uuidvalue { hi: 0, lo: 0 });
                     }
                 }
             }
@@ -182,13 +182,13 @@ fn column_from_values(vals: &[&Duckvalue]) -> extension_column_types::Colvec {
             let mut out = Vec::with_capacity(n);
             for (r, v) in vals.iter().enumerate() {
                 match v {
-                    D::Hugeint(h) => out.push(extension_column_types::DuckInt128 {
+                    D::Hugeint(h) => out.push(DuckInt128 {
                         lower: h.lower,
                         upper: h.upper,
                     }),
                     _ => {
                         mark_null(r, &mut validity);
-                        out.push(extension_column_types::DuckInt128 { lower: 0, upper: 0 });
+                        out.push(DuckInt128 { lower: 0, upper: 0 });
                     }
                 }
             }
@@ -198,13 +198,13 @@ fn column_from_values(vals: &[&Duckvalue]) -> extension_column_types::Colvec {
             let mut out = Vec::with_capacity(n);
             for (r, v) in vals.iter().enumerate() {
                 match v {
-                    D::Uhugeint(h) => out.push(extension_column_types::DuckUint128 {
+                    D::Uhugeint(h) => out.push(DuckUint128 {
                         lower: h.lower,
                         upper: h.upper,
                     }),
                     _ => {
                         mark_null(r, &mut validity);
-                        out.push(extension_column_types::DuckUint128 { lower: 0, upper: 0 });
+                        out.push(DuckUint128 { lower: 0, upper: 0 });
                     }
                 }
             }
@@ -214,13 +214,13 @@ fn column_from_values(vals: &[&Duckvalue]) -> extension_column_types::Colvec {
             let mut out = Vec::with_capacity(n);
             for (r, v) in vals.iter().enumerate() {
                 match v {
-                    D::Complex(c) => out.push(extension_column_types::Complexvalue {
+                    D::Complex(c) => out.push(Complexvalue {
                         type_expr: c.type_expr.clone(),
                         json: c.json.clone(),
                     }),
                     _ => {
                         mark_null(r, &mut validity);
-                        out.push(extension_column_types::Complexvalue {
+                        out.push(Complexvalue {
                             type_expr: String::new(),
                             json: "null".into(),
                         });
@@ -231,7 +231,7 @@ fn column_from_values(vals: &[&Duckvalue]) -> extension_column_types::Colvec {
         }
         Some(D::Null) => unreachable!("rep is a non-null value"),
     };
-    extension_column_types::Colvec {
+    Colvec {
         data,
         validity,
         rows: n as u32,
@@ -241,7 +241,7 @@ fn column_from_values(vals: &[&Duckvalue]) -> extension_column_types::Colvec {
 /// Pivot a row-major batch to one `colvec` per argument column.
 fn rows_to_colvecs(
     rows: &[Vec<Duckvalue>],
-) -> Vec<extension_column_types::Colvec> {
+) -> Vec<Colvec> {
     let ncols = rows.first().map(|r| r.len()).unwrap_or(0);
     (0..ncols)
         .map(|j| {
@@ -253,8 +253,8 @@ fn rows_to_colvecs(
 
 /// Lower a result `colvec` back to a row-major `Vec<Duckvalue>` (validity =>
 /// `Null`). The inverse of [`column_from_values`].
-fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<Duckvalue> {
-    use extension_column_types::Column;
+fn colvec_to_values(c: Colvec) -> Vec<Duckvalue> {
+    use Column;
     use Duckvalue as D;
     let n = c.rows as usize;
     let is_valid = |i: usize| -> bool {
@@ -2942,6 +2942,289 @@ impl From<Columndef> for extension_types::Columndef {
     }
 }
 
+// ─── Column-types mirrors ────────────────────────────────────────
+
+/// 128-bit signed integer scalar for the columnar `Column::Hugeint`
+/// arm. Mirror of WIT `column-types.duck-int128`. Layout parallels
+/// [`Hugeintvalue`] (lower `u64` + upper `i64`); named distinctly
+/// because wit-bindgen emits a separate Rust type per WIT record
+/// declaration.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DuckInt128 {
+    pub lower: u64,
+    pub upper: i64,
+}
+
+/// 128-bit unsigned integer scalar for `Column::Uhugeint`. Mirror of
+/// WIT `column-types.duck-uint128`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DuckUint128 {
+    pub lower: u64,
+    pub upper: u64,
+}
+
+/// Opaque byte-encoded nested column payload for `Column::ListCol`
+/// and `Column::StructCol`. Mirror of WIT `column-types.nested-
+/// column`. The runtime-defined compact binary encoding is owned by
+/// this crate's marshalling layer; consumers of the WIT boundary
+/// treat it as bytes.
+#[derive(Clone, Debug)]
+pub struct NestedColumn {
+    pub encoded: Vec<u8>,
+}
+
+/// Opaque byte-encoded map column payload for `Column::MapCol`.
+/// Mirror of WIT `column-types.map-column`. Keys + values ride
+/// separate byte buffers.
+#[derive(Clone, Debug)]
+pub struct MapColumn {
+    pub keys_encoded: Vec<u8>,
+    pub vals_encoded: Vec<u8>,
+}
+
+/// Opaque byte-encoded array column payload for `Column::ArrayCol`.
+/// Mirror of WIT `column-types.array-column`. `size` is the ARRAY[N]
+/// element count.
+#[derive(Clone, Debug)]
+pub struct ArrayColumn {
+    pub size: u32,
+    pub encoded: Vec<u8>,
+}
+
+/// A typed, contiguous column buffer — one WIT-defined memcpy shape
+/// per DuckDB physical type. Mirror of WIT `column-types.column`.
+/// 27 arms:
+/// * Fixed-width numeric / temporal (boolean, i8/16/32/64, u8/16/32/
+///   64, f32/64, date, time, timestamp, timestamptz) — bulk memcpy.
+/// * Record-payload (decimal, interval, uuid, hugeint, uhugeint) —
+///   bulk memcpy.
+/// * Var-width (text, blob) — element-wise (unavoidable).
+/// * Nested S1 (list-col, struct-col, map-col, array-col) — one
+///   opaque byte payload per vector.
+/// * Escape hatch (complex) — element-wise `Complexvalue` list.
+#[derive(Clone, Debug)]
+pub enum Column {
+    Boolean(Vec<bool>),
+    Int64(Vec<i64>),
+    Uint64(Vec<u64>),
+    Float64(Vec<f64>),
+    Int32(Vec<i32>),
+    Timestamp(Vec<i64>),
+    Int8(Vec<i8>),
+    Int16(Vec<i16>),
+    Uint8(Vec<u8>),
+    Uint16(Vec<u16>),
+    Uint32(Vec<u32>),
+    Float32(Vec<f32>),
+    Date(Vec<i32>),
+    Time(Vec<i64>),
+    Timestamptz(Vec<i64>),
+    Decimal(Vec<Decimalvalue>),
+    Interval(Vec<Intervalvalue>),
+    Uuid(Vec<Uuidvalue>),
+    Text(Vec<String>),
+    Blob(Vec<Vec<u8>>),
+    Hugeint(Vec<DuckInt128>),
+    Uhugeint(Vec<DuckUint128>),
+    ListCol(NestedColumn),
+    StructCol(NestedColumn),
+    MapCol(MapColumn),
+    ArrayCol(ArrayColumn),
+    Complex(Vec<Complexvalue>),
+}
+
+/// A column plus its validity + row count — the unit of columnar
+/// transfer. Mirror of WIT `column-types.colvec`. `validity` is a
+/// packed little-endian bitmap (bit i set => row i valid); an EMPTY
+/// bitmap means "all rows valid" (zero-alloc fast path).
+#[derive(Clone, Debug)]
+pub struct Colvec {
+    pub data: Column,
+    pub validity: Vec<u8>,
+    pub rows: u32,
+}
+
+impl From<extension_column_types::DuckInt128> for DuckInt128 {
+    fn from(v: extension_column_types::DuckInt128) -> Self {
+        DuckInt128 { lower: v.lower, upper: v.upper }
+    }
+}
+impl From<DuckInt128> for extension_column_types::DuckInt128 {
+    fn from(v: DuckInt128) -> Self {
+        extension_column_types::DuckInt128 { lower: v.lower, upper: v.upper }
+    }
+}
+impl From<extension_column_types::DuckUint128> for DuckUint128 {
+    fn from(v: extension_column_types::DuckUint128) -> Self {
+        DuckUint128 { lower: v.lower, upper: v.upper }
+    }
+}
+impl From<DuckUint128> for extension_column_types::DuckUint128 {
+    fn from(v: DuckUint128) -> Self {
+        extension_column_types::DuckUint128 { lower: v.lower, upper: v.upper }
+    }
+}
+impl From<extension_column_types::NestedColumn> for NestedColumn {
+    fn from(v: extension_column_types::NestedColumn) -> Self {
+        NestedColumn { encoded: v.encoded.into_iter().collect() }
+    }
+}
+impl From<NestedColumn> for extension_column_types::NestedColumn {
+    fn from(v: NestedColumn) -> Self {
+        extension_column_types::NestedColumn { encoded: v.encoded.into() }
+    }
+}
+impl From<extension_column_types::MapColumn> for MapColumn {
+    fn from(v: extension_column_types::MapColumn) -> Self {
+        MapColumn { keys_encoded: v.keys_encoded.into_iter().collect(),
+                    vals_encoded: v.vals_encoded.into_iter().collect() }
+    }
+}
+impl From<MapColumn> for extension_column_types::MapColumn {
+    fn from(v: MapColumn) -> Self {
+        extension_column_types::MapColumn {
+            keys_encoded: v.keys_encoded.into(),
+            vals_encoded: v.vals_encoded.into(),
+        }
+    }
+}
+impl From<extension_column_types::ArrayColumn> for ArrayColumn {
+    fn from(v: extension_column_types::ArrayColumn) -> Self {
+        ArrayColumn { size: v.size, encoded: v.encoded.into_iter().collect() }
+    }
+}
+impl From<ArrayColumn> for extension_column_types::ArrayColumn {
+    fn from(v: ArrayColumn) -> Self {
+        extension_column_types::ArrayColumn { size: v.size, encoded: v.encoded.into() }
+    }
+}
+
+// Column-types re-declares decimalvalue, intervalvalue, uuidvalue,
+// and complexvalue with identical layout to their types.wit
+// counterparts. wit-bindgen generates distinct Rust types per WIT
+// declaration, so we bridge column-types' variants through the
+// unified mirrors above.
+impl From<extension_column_types::Decimalvalue> for Decimalvalue {
+    fn from(v: extension_column_types::Decimalvalue) -> Self {
+        Decimalvalue { lower: v.lower, upper: v.upper, width: v.width, scale: v.scale }
+    }
+}
+impl From<Decimalvalue> for extension_column_types::Decimalvalue {
+    fn from(v: Decimalvalue) -> Self {
+        extension_column_types::Decimalvalue { lower: v.lower, upper: v.upper, width: v.width, scale: v.scale }
+    }
+}
+impl From<extension_column_types::Intervalvalue> for Intervalvalue {
+    fn from(v: extension_column_types::Intervalvalue) -> Self {
+        Intervalvalue { months: v.months, days: v.days, micros: v.micros }
+    }
+}
+impl From<Intervalvalue> for extension_column_types::Intervalvalue {
+    fn from(v: Intervalvalue) -> Self {
+        extension_column_types::Intervalvalue { months: v.months, days: v.days, micros: v.micros }
+    }
+}
+impl From<extension_column_types::Uuidvalue> for Uuidvalue {
+    fn from(v: extension_column_types::Uuidvalue) -> Self {
+        Uuidvalue { hi: v.hi, lo: v.lo }
+    }
+}
+impl From<Uuidvalue> for extension_column_types::Uuidvalue {
+    fn from(v: Uuidvalue) -> Self {
+        extension_column_types::Uuidvalue { hi: v.hi, lo: v.lo }
+    }
+}
+impl From<extension_column_types::Complexvalue> for Complexvalue {
+    fn from(v: extension_column_types::Complexvalue) -> Self {
+        Complexvalue { type_expr: v.type_expr, json: v.json }
+    }
+}
+impl From<Complexvalue> for extension_column_types::Complexvalue {
+    fn from(v: Complexvalue) -> Self {
+        extension_column_types::Complexvalue { type_expr: v.type_expr, json: v.json }
+    }
+}
+
+impl From<extension_column_types::Column> for Column {
+    fn from(v: extension_column_types::Column) -> Self {
+        use extension_column_types::Column as W;
+        match v {
+            W::Boolean(xs) => Column::Boolean(xs.into()),
+            W::Int64(xs) => Column::Int64(xs.into()),
+            W::Uint64(xs) => Column::Uint64(xs.into()),
+            W::Float64(xs) => Column::Float64(xs.into()),
+            W::Int32(xs) => Column::Int32(xs.into()),
+            W::Timestamp(xs) => Column::Timestamp(xs.into()),
+            W::Int8(xs) => Column::Int8(xs.into()),
+            W::Int16(xs) => Column::Int16(xs.into()),
+            W::Uint8(xs) => Column::Uint8(xs.into()),
+            W::Uint16(xs) => Column::Uint16(xs.into()),
+            W::Uint32(xs) => Column::Uint32(xs.into()),
+            W::Float32(xs) => Column::Float32(xs.into()),
+            W::Date(xs) => Column::Date(xs.into()),
+            W::Time(xs) => Column::Time(xs.into()),
+            W::Timestamptz(xs) => Column::Timestamptz(xs.into()),
+            W::Decimal(xs) => Column::Decimal(xs.into_iter().map(Into::into).collect()),
+            W::Interval(xs) => Column::Interval(xs.into_iter().map(Into::into).collect()),
+            W::Uuid(xs) => Column::Uuid(xs.into_iter().map(Into::into).collect()),
+            W::Text(xs) => Column::Text(xs.into()),
+            W::Blob(xs) => Column::Blob(xs.into_iter().map(|b| b.into()).collect()),
+            W::Hugeint(xs) => Column::Hugeint(xs.into_iter().map(Into::into).collect()),
+            W::Uhugeint(xs) => Column::Uhugeint(xs.into_iter().map(Into::into).collect()),
+            W::ListCol(n) => Column::ListCol(n.into()),
+            W::StructCol(n) => Column::StructCol(n.into()),
+            W::MapCol(m) => Column::MapCol(m.into()),
+            W::ArrayCol(a) => Column::ArrayCol(a.into()),
+            W::Complex(xs) => Column::Complex(xs.into_iter().map(Into::into).collect()),
+        }
+    }
+}
+impl From<Column> for extension_column_types::Column {
+    fn from(v: Column) -> Self {
+        use extension_column_types::Column as W;
+        match v {
+            Column::Boolean(xs) => W::Boolean(xs.into()),
+            Column::Int64(xs) => W::Int64(xs.into()),
+            Column::Uint64(xs) => W::Uint64(xs.into()),
+            Column::Float64(xs) => W::Float64(xs.into()),
+            Column::Int32(xs) => W::Int32(xs.into()),
+            Column::Timestamp(xs) => W::Timestamp(xs.into()),
+            Column::Int8(xs) => W::Int8(xs.into()),
+            Column::Int16(xs) => W::Int16(xs.into()),
+            Column::Uint8(xs) => W::Uint8(xs.into()),
+            Column::Uint16(xs) => W::Uint16(xs.into()),
+            Column::Uint32(xs) => W::Uint32(xs.into()),
+            Column::Float32(xs) => W::Float32(xs.into()),
+            Column::Date(xs) => W::Date(xs.into()),
+            Column::Time(xs) => W::Time(xs.into()),
+            Column::Timestamptz(xs) => W::Timestamptz(xs.into()),
+            Column::Decimal(xs) => W::Decimal(xs.into_iter().map(Into::into).collect()),
+            Column::Interval(xs) => W::Interval(xs.into_iter().map(Into::into).collect()),
+            Column::Uuid(xs) => W::Uuid(xs.into_iter().map(Into::into).collect()),
+            Column::Text(xs) => W::Text(xs.into()),
+            Column::Blob(xs) => W::Blob(xs.into_iter().map(|b| b.into()).collect::<Vec<_>>().into()),
+            Column::Hugeint(xs) => W::Hugeint(xs.into_iter().map(Into::into).collect()),
+            Column::Uhugeint(xs) => W::Uhugeint(xs.into_iter().map(Into::into).collect()),
+            Column::ListCol(n) => W::ListCol(n.into()),
+            Column::StructCol(n) => W::StructCol(n.into()),
+            Column::MapCol(m) => W::MapCol(m.into()),
+            Column::ArrayCol(a) => W::ArrayCol(a.into()),
+            Column::Complex(xs) => W::Complex(xs.into_iter().map(Into::into).collect()),
+        }
+    }
+}
+
+impl From<extension_column_types::Colvec> for Colvec {
+    fn from(v: extension_column_types::Colvec) -> Self {
+        Colvec { data: v.data.into(), validity: v.validity.into_iter().collect(), rows: v.rows }
+    }
+}
+impl From<Colvec> for extension_column_types::Colvec {
+    fn from(v: Colvec) -> Self {
+        extension_column_types::Colvec { data: v.data.into(), validity: v.validity.into(), rows: v.rows }
+    }
+}
+
 /// A resultset returned by a scan / query dispatch: row-major
 /// list of rows, each a list of `Duckvalue`s. Mirror of WIT
 /// `types.resultset` (which is `list<list<duckvalue>>`).
@@ -3167,9 +3450,9 @@ impl ExtensionInstance {
     pub fn dispatch_scalar_batch_col(
         &mut self,
         dispatcher_handle: u32,
-        args: &[extension_column_types::Colvec],
+        args: &[Colvec],
         ctx: extension_runtime::Invokeinfo,
-    ) -> Result<extension_column_types::Colvec, Duckerror> {
+    ) -> Result<Colvec, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let ctx_val = wasmos_runtime_api::Value::Record(vec![
@@ -3237,7 +3520,7 @@ impl ExtensionInstance {
     pub fn dispatch_aggregate_col(
         &mut self,
         dispatcher_handle: u32,
-        args: &[extension_column_types::Colvec],
+        args: &[Colvec],
     ) -> Result<Duckvalue, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;

@@ -719,9 +719,7 @@ pub(crate) fn value_to_columndef_list(
 
 // ─── Colvec (Column has 27 arms) ──────────────────────────────────
 
-use crate::duckdb_extension_bindings::duckdb::extension::column_types as extension_column_types;
-
-pub(crate) fn colvec_to_value(cv: &extension_column_types::Colvec) -> Value {
+pub(crate) fn colvec_to_value(cv: &crate::extension::Colvec) -> Value {
     Value::Record(vec![
         ("data".into(), column_to_value(&cv.data)),
         ("validity".into(), bytes_to_value(&cv.validity)),
@@ -731,7 +729,7 @@ pub(crate) fn colvec_to_value(cv: &extension_column_types::Colvec) -> Value {
 
 pub(crate) fn value_to_colvec(
     v: &Value,
-) -> Result<extension_column_types::Colvec, crate::extension::Duckerror> {
+) -> Result<crate::extension::Colvec, crate::extension::Duckerror> {
     let data = value_to_column(record_field(v, "data")?)?;
     let validity = match record_field(v, "validity")? {
         Value::Bytes(b) => b.to_vec(),
@@ -750,10 +748,10 @@ pub(crate) fn value_to_colvec(
             "colvec.validity: expected Bytes or List<U8>, got {o:?}"))),
     };
     let rows = u32_field(v, "rows")?;
-    Ok(extension_column_types::Colvec { data, validity, rows })
+    Ok(crate::extension::Colvec { data, validity, rows })
 }
 
-pub(crate) fn colvec_list_to_value(cvs: &[extension_column_types::Colvec]) -> Value {
+pub(crate) fn colvec_list_to_value(cvs: &[crate::extension::Colvec]) -> Value {
     Value::List(cvs.iter().map(colvec_to_value).collect())
 }
 
@@ -761,8 +759,8 @@ fn primitive_list_val<T: Copy>(items: &[T], f: impl Fn(T) -> Value) -> Value {
     Value::List(items.iter().map(|x| f(*x)).collect())
 }
 
-pub(crate) fn column_to_value(c: &extension_column_types::Column) -> Value {
-    use extension_column_types::Column as C;
+pub(crate) fn column_to_value(c: &crate::extension::Column) -> Value {
+    use crate::extension::Column as C;
     let (disc, payload) = match c {
         C::Boolean(xs) => ("boolean", primitive_list_val(xs, Value::Bool)),
         C::Int64(xs) => ("int64", primitive_list_val(xs, Value::S64)),
@@ -848,8 +846,8 @@ fn lift_prim_list<T>(
 
 pub(crate) fn value_to_column(
     v: &Value,
-) -> Result<extension_column_types::Column, crate::extension::Duckerror> {
-    use extension_column_types::Column as C;
+) -> Result<crate::extension::Column, crate::extension::Duckerror> {
+    use crate::extension::Column as C;
     let (disc, payload) = match v {
         Value::Variant { discriminant, payload } => (discriminant, payload),
         o => return Err(crate::extension::Duckerror::Internal(format!(
@@ -882,7 +880,7 @@ pub(crate) fn value_to_column(
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
-                out.push(extension_column_types::Decimalvalue {
+                out.push(crate::extension::Decimalvalue {
                     lower: u64_field(it, "lower")?,
                     upper: u64_field(it, "upper")?,
                     width: u8_field(it, "width")?,
@@ -898,7 +896,7 @@ pub(crate) fn value_to_column(
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
-                out.push(extension_column_types::Intervalvalue {
+                out.push(crate::extension::Intervalvalue {
                     months: s32_field(it, "months")?,
                     days: s32_field(it, "days")?,
                     micros: s64_field(it, "micros")?,
@@ -913,7 +911,7 @@ pub(crate) fn value_to_column(
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
-                out.push(extension_column_types::Uuidvalue {
+                out.push(crate::extension::Uuidvalue {
                     hi: u64_field(it, "hi")?,
                     lo: u64_field(it, "lo")?,
                 });
@@ -951,7 +949,7 @@ pub(crate) fn value_to_column(
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
-                out.push(extension_column_types::DuckInt128 {
+                out.push(crate::extension::DuckInt128 {
                     lower: u64_field(it, "lower")?,
                     upper: s64_field(it, "upper")?,
                 });
@@ -965,24 +963,24 @@ pub(crate) fn value_to_column(
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
-                out.push(extension_column_types::DuckUint128 {
+                out.push(crate::extension::DuckUint128 {
                     lower: u64_field(it, "lower")?,
                     upper: u64_field(it, "upper")?,
                 });
             }
             C::Uhugeint(out)
         }
-        "list-col" => C::ListCol(extension_column_types::NestedColumn {
+        "list-col" => C::ListCol(crate::extension::NestedColumn {
             encoded: bytes_field(p, "encoded")?,
         }),
-        "struct-col" => C::StructCol(extension_column_types::NestedColumn {
+        "struct-col" => C::StructCol(crate::extension::NestedColumn {
             encoded: bytes_field(p, "encoded")?,
         }),
-        "map-col" => C::MapCol(extension_column_types::MapColumn {
+        "map-col" => C::MapCol(crate::extension::MapColumn {
             keys_encoded: bytes_field(p, "keys-encoded")?,
             vals_encoded: bytes_field(p, "vals-encoded")?,
         }),
-        "array-col" => C::ArrayCol(extension_column_types::ArrayColumn {
+        "array-col" => C::ArrayCol(crate::extension::ArrayColumn {
             size: u32_field(p, "size")?,
             encoded: bytes_field(p, "encoded")?,
         }),
@@ -993,7 +991,7 @@ pub(crate) fn value_to_column(
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
-                out.push(extension_column_types::Complexvalue {
+                out.push(crate::extension::Complexvalue {
                     type_expr: string_field(it, "type-expr")?,
                     json: string_field(it, "json")?,
                 });
