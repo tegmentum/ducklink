@@ -589,3 +589,173 @@ pub(crate) fn string_field(rec: &Value, name: &str) -> Result<String, extension_
         ))),
     }
 }
+
+// ─── Logicaltype (25 arms) + columndef ─────────────────────────────
+
+pub(crate) fn logicaltype_to_value(v: &extension_types::Logicaltype) -> Value {
+    use extension_types::Logicaltype as L;
+    let (disc, payload): (&str, Option<Value>) = match v {
+        L::Boolean => ("boolean", None),
+        L::Int64 => ("int64", None),
+        L::Uint64 => ("uint64", None),
+        L::Float64 => ("float64", None),
+        L::Text => ("text", None),
+        L::Blob => ("blob", None),
+        L::Int32 => ("int32", None),
+        L::Timestamp => ("timestamp", None),
+        L::Int8 => ("int8", None),
+        L::Int16 => ("int16", None),
+        L::Uint8 => ("uint8", None),
+        L::Uint16 => ("uint16", None),
+        L::Uint32 => ("uint32", None),
+        L::Float32 => ("float32", None),
+        L::Date => ("date", None),
+        L::Time => ("time", None),
+        L::Timestamptz => ("timestamptz", None),
+        L::Decimal(d) => (
+            "decimal",
+            Some(Value::Record(vec![
+                ("width".into(), Value::U8(d.width)),
+                ("scale".into(), Value::U8(d.scale)),
+            ])),
+        ),
+        L::Interval => ("interval", None),
+        L::Uuid => ("uuid", None),
+        L::Hugeint => ("hugeint", None),
+        L::Uhugeint => ("uhugeint", None),
+        L::Complex(s) => ("complex", Some(Value::String(s.clone()))),
+    };
+    Value::Variant { discriminant: disc.into(), payload: payload.map(Box::new) }
+}
+
+pub(crate) fn value_to_logicaltype(
+    v: &Value,
+) -> Result<extension_types::Logicaltype, extension_types::Duckerror> {
+    use extension_types::Logicaltype as L;
+    let (disc, payload) = match v {
+        Value::Variant { discriminant, payload } => (discriminant, payload),
+        other => {
+            return Err(extension_types::Duckerror::Internal(format!(
+                "value_to_logicaltype: expected Variant, got {other:?}"
+            )));
+        }
+    };
+    Ok(match disc.as_str() {
+        "boolean" => L::Boolean,
+        "int64" => L::Int64,
+        "uint64" => L::Uint64,
+        "float64" => L::Float64,
+        "text" => L::Text,
+        "blob" => L::Blob,
+        "int32" => L::Int32,
+        "timestamp" => L::Timestamp,
+        "int8" => L::Int8,
+        "int16" => L::Int16,
+        "uint8" => L::Uint8,
+        "uint16" => L::Uint16,
+        "uint32" => L::Uint32,
+        "float32" => L::Float32,
+        "date" => L::Date,
+        "time" => L::Time,
+        "timestamptz" => L::Timestamptz,
+        "decimal" => {
+            let rec = payload.as_deref().ok_or_else(|| {
+                extension_types::Duckerror::Internal("logicaltype.decimal: missing payload".into())
+            })?;
+            L::Decimal(extension_types::Decimalshape {
+                width: u8_field(rec, "width")?,
+                scale: u8_field(rec, "scale")?,
+            })
+        }
+        "interval" => L::Interval,
+        "uuid" => L::Uuid,
+        "hugeint" => L::Hugeint,
+        "uhugeint" => L::Uhugeint,
+        "complex" => match payload.as_deref() {
+            Some(Value::String(s)) => L::Complex(s.clone()),
+            other => return Err(extension_types::Duckerror::Internal(format!(
+                "logicaltype.complex: expected String, got {other:?}"
+            ))),
+        },
+        other => {
+            return Err(extension_types::Duckerror::Internal(format!(
+                "value_to_logicaltype: unknown discriminant {other:?}"
+            )));
+        }
+    })
+}
+
+pub(crate) fn columndef_to_value(c: &extension_types::Columndef) -> Value {
+    Value::Record(vec![
+        ("name".into(), Value::String(c.name.clone())),
+        ("logical".into(), logicaltype_to_value(&c.logical)),
+    ])
+}
+
+pub(crate) fn value_to_columndef(
+    v: &Value,
+) -> Result<extension_types::Columndef, extension_types::Duckerror> {
+    let name = string_field(v, "name")?;
+    let logical = value_to_logicaltype(record_field(v, "logical")?)?;
+    Ok(extension_types::Columndef { name, logical })
+}
+
+pub(crate) fn columndef_list_to_value(cs: &[extension_types::Columndef]) -> Value {
+    Value::List(cs.iter().map(columndef_to_value).collect())
+}
+
+pub(crate) fn value_to_columndef_list(
+    v: &Value,
+) -> Result<Vec<extension_types::Columndef>, extension_types::Duckerror> {
+    match v {
+        Value::List(items) => items.iter().map(value_to_columndef).collect(),
+        other => Err(extension_types::Duckerror::Internal(format!(
+            "expected list<columndef>, got {other:?}"
+        ))),
+    }
+}
+
+// ─── scan-request / scan-filter / compare-op ───────────────────────
+
+use crate::duckdb_extension_bindings::duckdb::extension::storage as extension_storage;
+
+pub(crate) fn compare_op_to_value(op: extension_storage::CompareOp) -> Value {
+    use extension_storage::CompareOp as C;
+    let name = match op {
+        C::Eq => "eq",
+        C::Ne => "ne",
+        C::Lt => "lt",
+        C::Le => "le",
+        C::Gt => "gt",
+        C::Ge => "ge",
+        C::IsNull => "is-null",
+        C::IsNotNull => "is-not-null",
+    };
+    Value::Enum(name.into())
+}
+
+pub(crate) fn scan_filter_to_value(f: &extension_storage::ScanFilter) -> Value {
+    Value::Record(vec![
+        ("column".into(), Value::U32(f.column)),
+        ("op".into(), compare_op_to_value(f.op)),
+        ("value".into(), duckvalue_to_value(&f.value)),
+    ])
+}
+
+pub(crate) fn scan_request_to_value(r: &extension_storage::ScanRequest) -> Value {
+    Value::Record(vec![
+        ("table".into(), Value::String(r.table.clone())),
+        (
+            "projection".into(),
+            Value::List(r.projection.iter().map(|n| Value::U32(*n)).collect()),
+        ),
+        (
+            "filters".into(),
+            Value::List(r.filters.iter().map(scan_filter_to_value).collect()),
+        ),
+        (
+            "limit".into(),
+            Value::Option(r.limit.map(|n| Box::new(Value::U64(n)))),
+        ),
+    ])
+}

@@ -3980,13 +3980,27 @@ impl ExtensionInstance {
         columns: &[extension_types::Columndef],
         options: &[(String, String)],
     ) -> Result<u32, extension_types::Duckerror> {
-        self.copy_bindings()?;
-        let bindings = self.copy_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_copy_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_copy_to_bind(store.as_context_mut(), handle, path, columns, options)
-            .map_err(map_extension_trap)?
+        // Phase 6.2.i.7 — migrated.
+        use crate::export_marshal::*;
+        let opts_val = wasmos_runtime_api::Value::List(
+            options.iter().map(|(k, v)| wasmos_runtime_api::Value::Tuple(vec![
+                wasmos_runtime_api::Value::String(k.clone()),
+                wasmos_runtime_api::Value::String(v.clone()),
+            ])).collect(),
+        );
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/copy-dispatch@5.0.0"),
+            "copy-to-bind",
+            &[
+                wasmos_runtime_api::Value::U32(handle),
+                wasmos_runtime_api::Value::String(path.to_string()),
+                columndef_list_to_value(columns),
+                opts_val,
+            ],
+        ).map_err(|e| extension_types::Duckerror::Internal(format!("copy-to-bind dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "copy-to-bind", |p| lift_u32(p))
     }
 
     /// COPY TO: sink a batch of rows to the writer.
@@ -3996,13 +4010,23 @@ impl ExtensionInstance {
         writer: u32,
         rows: &[Vec<extension_types::Duckvalue>],
     ) -> Result<(), extension_types::Duckerror> {
-        self.copy_bindings()?;
-        let bindings = self.copy_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_copy_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_copy_to_sink(store.as_context_mut(), handle, writer, rows)
-            .map_err(map_extension_trap)?
+        // Phase 6.2.i.7 — migrated.
+        use crate::export_marshal::*;
+        let rows_val = wasmos_runtime_api::Value::List(
+            rows.iter().map(|row| duckvalue_list_to_value(row)).collect(),
+        );
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/copy-dispatch@5.0.0"),
+            "copy-to-sink",
+            &[
+                wasmos_runtime_api::Value::U32(handle),
+                wasmos_runtime_api::Value::U32(writer),
+                rows_val,
+            ],
+        ).map_err(|e| extension_types::Duckerror::Internal(format!("copy-to-sink dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "copy-to-sink", |_| Ok(()))
     }
 
     /// COPY TO: finalize + close; returns rows written.
@@ -4011,13 +4035,19 @@ impl ExtensionInstance {
         handle: u32,
         writer: u32,
     ) -> Result<u64, extension_types::Duckerror> {
-        self.copy_bindings()?;
-        let bindings = self.copy_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_copy_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_copy_to_finalize(store.as_context_mut(), handle, writer)
-            .map_err(map_extension_trap)?
+        // Phase 6.2.i.7 — migrated.
+        use crate::export_marshal::*;
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/copy-dispatch@5.0.0"),
+            "copy-to-finalize",
+            &[
+                wasmos_runtime_api::Value::U32(handle),
+                wasmos_runtime_api::Value::U32(writer),
+            ],
+        ).map_err(|e| extension_types::Duckerror::Internal(format!("copy-to-finalize dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "copy-to-finalize", |p| lift_u64(p))
     }
 
     /// COPY FROM: bind a reader for `path`, forwarding the destination table's
@@ -4038,19 +4068,34 @@ impl ExtensionInstance {
         options: &[(String, String)],
         target_columns: &[extension_types::Columndef],
     ) -> Result<CopyFromBindResult, extension_types::Duckerror> {
-        self.copy_bindings()?;
-        let bindings = self.copy_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_copy_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_copy_from_bind(
-                store.as_context_mut(),
-                handle,
-                path,
-                options,
-                target_columns,
-            )
-            .map_err(map_extension_trap)?
+        // Phase 6.2.i.7 — migrated. copy-from-bind-result: record
+        // { reader: u32, columns: list<columndef> }.
+        use crate::export_marshal::*;
+        let opts_val = wasmos_runtime_api::Value::List(
+            options.iter().map(|(k, v)| wasmos_runtime_api::Value::Tuple(vec![
+                wasmos_runtime_api::Value::String(k.clone()),
+                wasmos_runtime_api::Value::String(v.clone()),
+            ])).collect(),
+        );
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/copy-dispatch@5.0.0"),
+            "copy-from-bind",
+            &[
+                wasmos_runtime_api::Value::U32(handle),
+                wasmos_runtime_api::Value::String(path.to_string()),
+                opts_val,
+                columndef_list_to_value(target_columns),
+            ],
+        ).map_err(|e| extension_types::Duckerror::Internal(format!("copy-from-bind dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "copy-from-bind", |p| {
+            let rec = p.ok_or_else(|| extension_types::Duckerror::Internal(
+                "copy-from-bind: expected Ok(copy-from-bind-result), got None".into()))?;
+            let reader = u32_field(rec, "reader")?;
+            let columns = value_to_columndef_list(record_field(rec, "columns")?)?;
+            Ok(CopyFromBindResult { reader, columns })
+        })
     }
 
     /// COPY FROM: pull up to `max_rows`; empty resultset signals EOF.
@@ -4060,13 +4105,24 @@ impl ExtensionInstance {
         reader: u32,
         max_rows: u32,
     ) -> Result<Vec<Vec<extension_types::Duckvalue>>, extension_types::Duckerror> {
-        self.copy_bindings()?;
-        let bindings = self.copy_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_copy_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_copy_from_scan(store.as_context_mut(), handle, reader, max_rows)
-            .map_err(map_extension_trap)?
+        // Phase 6.2.i.7 — migrated.
+        use crate::export_marshal::*;
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/copy-dispatch@5.0.0"),
+            "copy-from-scan",
+            &[
+                wasmos_runtime_api::Value::U32(handle),
+                wasmos_runtime_api::Value::U32(reader),
+                wasmos_runtime_api::Value::U32(max_rows),
+            ],
+        ).map_err(|e| extension_types::Duckerror::Internal(format!("copy-from-scan dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "copy-from-scan", |p| {
+            let v = p.ok_or_else(|| extension_types::Duckerror::Internal(
+                "copy-from-scan: expected Ok(resultset), got None".into()))?;
+            value_to_resultset(v)
+        })
     }
 
     /// COPY FROM: close the reader.
@@ -4075,13 +4131,19 @@ impl ExtensionInstance {
         handle: u32,
         reader: u32,
     ) -> Result<bool, extension_types::Duckerror> {
-        self.copy_bindings()?;
-        let bindings = self.copy_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_copy_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_copy_from_close(store.as_context_mut(), handle, reader)
-            .map_err(map_extension_trap)?
+        // Phase 6.2.i.7 — migrated.
+        use crate::export_marshal::*;
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/copy-dispatch@5.0.0"),
+            "copy-from-close",
+            &[
+                wasmos_runtime_api::Value::U32(handle),
+                wasmos_runtime_api::Value::U32(reader),
+            ],
+        ).map_err(|e| extension_types::Duckerror::Internal(format!("copy-from-close dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "copy-from-close", |p| lift_bool(p))
     }
 
     // --- 2.1.0 (Item 2): secret-dispatch re-entry ---
@@ -4239,13 +4301,22 @@ impl ExtensionInstance {
         table: &str,
         columns: &[extension_types::Columndef],
     ) -> Result<(), extension_types::Duckerror> {
-        self.storage_write_bindings()?;
-        let bindings = self.storage_write_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_storage_write_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_create_table(store.as_context_mut(), handle, txn, table, columns)
-            .map_err(map_extension_trap)?
+        // Phase 6.2.i.7 — migrated. columns: list<columndef> where
+        // columndef = record { name: string, logical: logicaltype }.
+        use crate::export_marshal::*;
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/storage-write-dispatch@5.0.0"),
+            "create-table",
+            &[
+                wasmos_runtime_api::Value::U32(handle),
+                wasmos_runtime_api::Value::U32(txn),
+                wasmos_runtime_api::Value::String(table.to_string()),
+                columndef_list_to_value(columns),
+            ],
+        ).map_err(|e| extension_types::Duckerror::Internal(format!("create-table dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "create-table", |_| Ok(()))
     }
 
     pub fn storage_insert_rows(
@@ -4386,13 +4457,27 @@ impl ExtensionInstance {
         args: &[extension_types::Duckvalue],
         projection: &[u32],
     ) -> Result<TableOpenResult, extension_types::Duckerror> {
-        self.table_stream_bindings()?;
-        let bindings = self.table_stream_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_table_stream_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_call_table_open(store.as_context_mut(), handle, args, projection)
-            .map_err(map_extension_trap)?
+        // Phase 6.2.i.7 — migrated. table-open-result: record
+        // { cursor: u32, columns: list<columndef> }.
+        use crate::export_marshal::*;
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/table-stream-dispatch@5.0.0"),
+            "call-table-open",
+            &[
+                wasmos_runtime_api::Value::U32(handle),
+                duckvalue_list_to_value(args),
+                wasmos_runtime_api::Value::List(projection.iter().map(|n| wasmos_runtime_api::Value::U32(*n)).collect()),
+            ],
+        ).map_err(|e| extension_types::Duckerror::Internal(format!("call-table-open dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "call-table-open", |p| {
+            let rec = p.ok_or_else(|| extension_types::Duckerror::Internal(
+                "call-table-open: expected Ok(table-open-result), got None".into()))?;
+            let cursor = u32_field(rec, "cursor")?;
+            let columns = value_to_columndef_list(record_field(rec, "columns")?)?;
+            Ok(TableOpenResult { cursor, columns })
+        })
     }
 
     /// 3.1.0: open a streaming table cursor WITH pushed-down filters (and a column
@@ -4408,19 +4493,43 @@ impl ExtensionInstance {
         projection: &[u32],
         filters: &[TableFilter],
     ) -> Result<TableOpenResult, extension_types::Duckerror> {
-        self.table_stream_bindings()?;
-        let bindings = self.table_stream_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_table_stream_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_call_table_open_filtered(
-                store.as_context_mut(),
-                handle,
-                args,
-                projection,
-                filters,
-            )
-            .map_err(map_extension_trap)?
+        // Phase 6.2.i.7 — migrated. table-filter: record
+        // { column: u32, op: filter-op, values: list<duckvalue> }.
+        // filter-op enum: eq, ne, lt, le, gt, ge, is-in, is-null,
+        // is-not-null.
+        use crate::export_marshal::*;
+        use crate::duckdb_extension_table_stream_bindings::exports::duckdb::extension::table_stream_dispatch::FilterOp as F;
+        let filter_op_val = |op: F| wasmos_runtime_api::Value::Enum(match op {
+            F::Eq => "eq", F::Ne => "ne", F::Lt => "lt", F::Le => "le",
+            F::Gt => "gt", F::Ge => "ge", F::IsIn => "is-in",
+            F::IsNull => "is-null", F::IsNotNull => "is-not-null",
+        }.into());
+        let filters_val = wasmos_runtime_api::Value::List(
+            filters.iter().map(|f| wasmos_runtime_api::Value::Record(vec![
+                ("column".into(), wasmos_runtime_api::Value::U32(f.column)),
+                ("op".into(), filter_op_val(f.op)),
+                ("values".into(), duckvalue_list_to_value(&f.values)),
+            ])).collect(),
+        );
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/table-stream-dispatch@5.0.0"),
+            "call-table-open-filtered",
+            &[
+                wasmos_runtime_api::Value::U32(handle),
+                duckvalue_list_to_value(args),
+                wasmos_runtime_api::Value::List(projection.iter().map(|n| wasmos_runtime_api::Value::U32(*n)).collect()),
+                filters_val,
+            ],
+        ).map_err(|e| extension_types::Duckerror::Internal(format!("call-table-open-filtered dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "call-table-open-filtered", |p| {
+            let rec = p.ok_or_else(|| extension_types::Duckerror::Internal(
+                "call-table-open-filtered: expected Ok(table-open-result), got None".into()))?;
+            let cursor = u32_field(rec, "cursor")?;
+            let columns = value_to_columndef_list(record_field(rec, "columns")?)?;
+            Ok(TableOpenResult { cursor, columns })
+        })
     }
 
     /// Pull up to `max_rows` from the cursor; an empty resultset signals EOF.
@@ -5179,15 +5288,25 @@ impl ExtensionInstance {
         catalog: u32,
         table: &str,
     ) -> Result<Vec<extension_types::Columndef>, extension_types::Duckerror> {
-        self.storage_bindings()?;
-        let bindings = self.storage_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_storage_dispatch();
-        let store = &mut self.store;
-        let cols = guest
-            .call_storage_table_columns(store.as_context_mut(), handle, catalog, table)
-            .map_err(map_extension_trap)?
-            .map_err(storage_duckerror_to_ext)?;
-        Ok(cols.into_iter().map(storage_columndef_to_ext).collect())
+        // Phase 6.2.i.7 — migrated. Returns result<list<columndef>,
+        // duckerror>; columndef decoded via value_to_columndef_list.
+        use crate::export_marshal::*;
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/storage-dispatch@5.0.0"),
+            "storage-table-columns",
+            &[
+                wasmos_runtime_api::Value::U32(handle),
+                wasmos_runtime_api::Value::U32(catalog),
+                wasmos_runtime_api::Value::String(table.to_string()),
+            ],
+        ).map_err(|e| extension_types::Duckerror::Internal(format!("storage-table-columns dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "storage-table-columns", |p| {
+            let v = p.ok_or_else(|| extension_types::Duckerror::Internal(
+                "storage-table-columns: expected Ok(list<columndef>), got None".into()))?;
+            value_to_columndef_list(v)
+        })
     }
 
     /// M2b: open a scan cursor for `(catalog, table)` honoring the request's
@@ -5198,14 +5317,55 @@ impl ExtensionInstance {
         catalog: u32,
         request: storage_scan::ScanRequest,
     ) -> Result<u32, extension_types::Duckerror> {
-        self.storage_bindings()?;
-        let bindings = self.storage_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_storage_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_storage_scan_open(store.as_context_mut(), handle, catalog, &request)
-            .map_err(map_extension_trap)?
-            .map_err(storage_duckerror_to_ext)
+        // Phase 6.2.i.7 — migrated. scan-request record marshalled
+        // via scan_request_to_value (table + projection + filters +
+        // limit; filters use compare-op enum + duckvalue payload).
+        use crate::export_marshal::*;
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/storage-dispatch@5.0.0"),
+            "storage-scan-open",
+            &[
+                wasmos_runtime_api::Value::U32(handle),
+                wasmos_runtime_api::Value::U32(catalog),
+                {
+                    // The bindings module for storage exports its own
+                    // ScanRequest type (structurally identical to the
+                    // one in extension_storage but a distinct Rust
+                    // type). Marshal inline to avoid the cross-module
+                    // conversion.
+                    use crate::duckdb_extension_storage_bindings::duckdb::extension::storage::CompareOp as C;
+                    let op_val = |op: C| wasmos_runtime_api::Value::Enum(match op {
+                        C::Eq => "eq", C::Ne => "ne", C::Lt => "lt", C::Le => "le",
+                        C::Gt => "gt", C::Ge => "ge", C::IsNull => "is-null",
+                        C::IsNotNull => "is-not-null",
+                    }.into());
+                    // request's `filters.value` is `storage_scan::Duckvalue`
+                    // (bindings-per-module Duckvalue). Convert to the
+                    // extension_types Duckvalue via the existing
+                    // storage_duckvalue_to_ext helper, then marshal.
+                    let filters_val = wasmos_runtime_api::Value::List(
+                        request.filters.iter().map(|f| wasmos_runtime_api::Value::Record(vec![
+                            ("column".into(), wasmos_runtime_api::Value::U32(f.column)),
+                            ("op".into(), op_val(f.op)),
+                            ("value".into(), duckvalue_to_value(&storage_duckvalue_to_ext(f.value.clone()))),
+                        ])).collect(),
+                    );
+                    wasmos_runtime_api::Value::Record(vec![
+                        ("table".into(), wasmos_runtime_api::Value::String(request.table.clone())),
+                        ("projection".into(), wasmos_runtime_api::Value::List(
+                            request.projection.iter().map(|n| wasmos_runtime_api::Value::U32(*n)).collect(),
+                        )),
+                        ("filters".into(), filters_val),
+                        ("limit".into(), wasmos_runtime_api::Value::Option(
+                            request.limit.map(|n| Box::new(wasmos_runtime_api::Value::U64(n))),
+                        )),
+                    ])
+                },
+            ],
+        ).map_err(|e| extension_types::Duckerror::Internal(format!("storage-scan-open dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "storage-scan-open", |p| lift_u32(p))
     }
 
     /// M2b: pull up to `max_rows` rows from a scan; empty resultset signals EOF.
