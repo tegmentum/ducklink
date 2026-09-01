@@ -3275,6 +3275,100 @@ fn map_extension_trap(err: wasmtime::Error) -> extension_types::Duckerror {
     extension_types::Duckerror::Internal(format!("extension trap: {err}"))
 }
 
+/// ADR-0029 Phase 6.2.i — decode a `wasmos_runtime_api::Value` in the
+/// shape emitted by a guest `duckerror` variant return back to the
+/// wit-bindgen `extension_types::Duckerror` enum. Used by the
+/// `dispatch_*` methods in `ExtensionInstance` that migrated off
+/// wit-bindgen typed dispatchers via `sync_export_bridge::call_export`;
+/// their public API returns `Result<T, extension_types::Duckerror>`
+/// for backward compat, so the bridge's `Value::Result(Err(payload))`
+/// gets decoded here.
+///
+/// WIT arms (from `wit/duckdb-extension/types.wit`):
+///
+/// ```text
+/// variant duckerror {
+///   invalidargument(string),
+///   unsupported(string),
+///   invalidstate(string),
+///   io(string),
+///   internal(string),
+/// }
+/// ```
+///
+/// Unknown discriminants or missing payloads fall through to
+/// `Duckerror::Internal("...")` so a shape mismatch surfaces with a
+/// diagnostic rather than a panic.
+fn duckerror_from_value(v: &wasmos_runtime_api::Value) -> extension_types::Duckerror {
+    let (disc, payload) = match v {
+        wasmos_runtime_api::Value::Variant { discriminant, payload } => (discriminant, payload),
+        other => {
+            return extension_types::Duckerror::Internal(format!(
+                "sync_export_bridge: expected Value::Variant for duckerror, got {other:?}"
+            ));
+        }
+    };
+    let msg = match payload.as_deref() {
+        Some(wasmos_runtime_api::Value::String(s)) => s.clone(),
+        Some(other) => {
+            return extension_types::Duckerror::Internal(format!(
+                "sync_export_bridge: expected String payload for duckerror.{disc}, got {other:?}"
+            ));
+        }
+        None => String::new(),
+    };
+    match disc.as_str() {
+        "invalidargument" => extension_types::Duckerror::Invalidargument(msg),
+        "unsupported" => extension_types::Duckerror::Unsupported(msg),
+        "invalidstate" => extension_types::Duckerror::Invalidstate(msg),
+        "io" => extension_types::Duckerror::Io(msg),
+        "internal" => extension_types::Duckerror::Internal(msg),
+        other => extension_types::Duckerror::Internal(format!(
+            "sync_export_bridge: unknown duckerror discriminant {other:?}: {msg}"
+        )),
+    }
+}
+
+/// ADR-0029 Phase 6.2.i — helper shared by ExtensionInstance
+/// dispatch_* methods that call a guest export returning
+/// `result<T, duckerror>` and want to unpack it into
+/// `Result<T, extension_types::Duckerror>`.
+///
+/// Takes the single-element `Vec<Value>` a `sync_export_bridge::
+/// call_export` returned + a lifter closure for the Ok payload.
+/// Returns `Ok(T)` on success, `Err(Duckerror)` on guest error, or
+/// panics with a descriptive message on shape mismatch (which would
+/// indicate a WIT / bridge-marshalling bug, not a runtime error).
+fn export_result_to_duckerror<T>(
+    out: Vec<wasmos_runtime_api::Value>,
+    method: &str,
+    lift_ok: impl FnOnce(Option<&wasmos_runtime_api::Value>) -> Result<T, extension_types::Duckerror>,
+) -> Result<T, extension_types::Duckerror> {
+    if out.len() != 1 {
+        return Err(extension_types::Duckerror::Internal(format!(
+            "sync_export_bridge: {method:?} returned {} values, expected 1",
+            out.len()
+        )));
+    }
+    match &out[0] {
+        wasmos_runtime_api::Value::Result(Ok(payload)) => lift_ok(payload.as_deref()),
+        wasmos_runtime_api::Value::Result(Err(payload)) => {
+            let err_val = payload.as_deref().ok_or_else(|| {
+                extension_types::Duckerror::Internal(format!(
+                    "sync_export_bridge: {method:?} returned Err(None) — expected duckerror payload"
+                ))
+            });
+            match err_val {
+                Ok(v) => Err(duckerror_from_value(v)),
+                Err(e) => Err(e),
+            }
+        }
+        other => Err(extension_types::Duckerror::Internal(format!(
+            "sync_export_bridge: {method:?} returned unexpected non-Result value: {other:?}"
+        ))),
+    }
+}
+
 // The storage-capable bindgen world generates its OWN (structurally identical)
 // `types`; convert those into the base `extension_types` the rest of the runtime
 // uses.
@@ -3659,11 +3753,29 @@ impl ExtensionInstance {
     /// tears down. Mirrors the `bindings.duckdb_extension_guest().call_load`
     /// shape used at load time (see `load_component`).
     pub fn dispatch_shutdown(&mut self) -> Result<bool, extension_types::Duckerror> {
-        let guest = self.bindings.duckdb_extension_guest();
-        let mut store = self.store.as_context_mut();
-        guest
-            .call_shutdown(&mut store)
-            .map_err(map_extension_trap)?
+        // ADR-0029 Phase 6.2.i.4 — migrated from
+        // `bindings.duckdb_extension_guest().call_shutdown(store)` to
+        // the wasmos sync_export_bridge. Same interface + method
+        // names + wire semantics; the Ok payload is `bool` and the
+        // Err payload is `duckerror` (decoded via export_result_to_
+        // duckerror + duckerror_from_value).
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/guest@5.0.0"),
+            "shutdown",
+            &[],
+        )
+        .map_err(|e| extension_types::Duckerror::Internal(format!("shutdown dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "shutdown", |payload| match payload {
+            Some(wasmos_runtime_api::Value::Bool(b)) => Ok(*b),
+            Some(other) => Err(extension_types::Duckerror::Internal(format!(
+                "shutdown: expected Ok(bool), got {other:?}"
+            ))),
+            None => Err(extension_types::Duckerror::Internal(
+                "shutdown: expected Ok(bool), got Ok(None)".to_string(),
+            )),
+        })
     }
 
     /// Drive the component's `guest.reconfigure` export. The C API installer
@@ -3675,11 +3787,28 @@ impl ExtensionInstance {
         &mut self,
         keys: &[String],
     ) -> Result<bool, extension_types::Duckerror> {
-        let guest = self.bindings.duckdb_extension_guest();
-        let mut store = self.store.as_context_mut();
-        guest
-            .call_reconfigure(&mut store, keys)
-            .map_err(map_extension_trap)?
+        // ADR-0029 Phase 6.2.i.4 — sibling of dispatch_shutdown.
+        // `keys` list<string> lowers to Value::List of Value::String.
+        let keys_val = wasmos_runtime_api::Value::List(
+            keys.iter().map(|k| wasmos_runtime_api::Value::String(k.clone())).collect(),
+        );
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/guest@5.0.0"),
+            "reconfigure",
+            &[keys_val],
+        )
+        .map_err(|e| extension_types::Duckerror::Internal(format!("reconfigure dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "reconfigure", |payload| match payload {
+            Some(wasmos_runtime_api::Value::Bool(b)) => Ok(*b),
+            Some(other) => Err(extension_types::Duckerror::Internal(format!(
+                "reconfigure: expected Ok(bool), got {other:?}"
+            ))),
+            None => Err(extension_types::Duckerror::Internal(
+                "reconfigure: expected Ok(bool), got Ok(None)".to_string(),
+            )),
+        })
     }
 
     /// Drains only the captured storage-backend registrations (see
