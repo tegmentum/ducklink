@@ -14,11 +14,11 @@ use wasmos_runtime_api::Value;
 
 // ─── Duckerror ─────────────────────────────────────────────────────
 
-pub(crate) fn duckerror_from_value(v: &Value) -> extension_types::Duckerror {
+pub(crate) fn duckerror_from_value(v: &Value) -> crate::extension::Duckerror {
     let (disc, payload) = match v {
         Value::Variant { discriminant, payload } => (discriminant, payload),
         other => {
-            return extension_types::Duckerror::Internal(format!(
+            return crate::extension::Duckerror::Internal(format!(
                 "export_marshal: expected Variant for duckerror, got {other:?}"
             ));
         }
@@ -26,19 +26,19 @@ pub(crate) fn duckerror_from_value(v: &Value) -> extension_types::Duckerror {
     let msg = match payload.as_deref() {
         Some(Value::String(s)) => s.clone(),
         Some(other) => {
-            return extension_types::Duckerror::Internal(format!(
+            return crate::extension::Duckerror::Internal(format!(
                 "export_marshal: expected String payload for duckerror.{disc}, got {other:?}"
             ));
         }
         None => String::new(),
     };
     match disc.as_str() {
-        "invalidargument" => extension_types::Duckerror::Invalidargument(msg),
-        "unsupported" => extension_types::Duckerror::Unsupported(msg),
-        "invalidstate" => extension_types::Duckerror::Invalidstate(msg),
-        "io" => extension_types::Duckerror::Io(msg),
-        "internal" => extension_types::Duckerror::Internal(msg),
-        other => extension_types::Duckerror::Internal(format!(
+        "invalidargument" => crate::extension::Duckerror::Invalidargument(msg),
+        "unsupported" => crate::extension::Duckerror::Unsupported(msg),
+        "invalidstate" => crate::extension::Duckerror::Invalidstate(msg),
+        "io" => crate::extension::Duckerror::Io(msg),
+        "internal" => crate::extension::Duckerror::Internal(msg),
+        other => crate::extension::Duckerror::Internal(format!(
             "export_marshal: unknown duckerror discriminant {other:?}: {msg}"
         )),
     }
@@ -54,10 +54,10 @@ pub(crate) fn string_from_value(v: &Value) -> String {
 pub(crate) fn export_result_to_duckerror<T>(
     out: Vec<Value>,
     method: &str,
-    lift_ok: impl FnOnce(Option<&Value>) -> Result<T, extension_types::Duckerror>,
-) -> Result<T, extension_types::Duckerror> {
+    lift_ok: impl FnOnce(Option<&Value>) -> Result<T, crate::extension::Duckerror>,
+) -> Result<T, crate::extension::Duckerror> {
     if out.len() != 1 {
-        return Err(extension_types::Duckerror::Internal(format!(
+        return Err(crate::extension::Duckerror::Internal(format!(
             "{method:?} returned {} values, expected 1",
             out.len()
         )));
@@ -66,12 +66,12 @@ pub(crate) fn export_result_to_duckerror<T>(
         Value::Result(Ok(payload)) => lift_ok(payload.as_deref()),
         Value::Result(Err(payload)) => {
             let e = payload.as_deref().map_or_else(
-                || extension_types::Duckerror::Internal(format!("{method}: Err(None)")),
+                || crate::extension::Duckerror::Internal(format!("{method}: Err(None)")),
                 duckerror_from_value,
             );
             Err(e)
         }
-        other => Err(extension_types::Duckerror::Internal(format!(
+        other => Err(crate::extension::Duckerror::Internal(format!(
             "{method:?}: expected Result, got {other:?}"
         ))),
     }
@@ -81,22 +81,22 @@ pub(crate) fn export_result_to_string<T>(
     out: Vec<Value>,
     method: &str,
     lift_ok: impl FnOnce(Option<&Value>) -> Result<T, String>,
-) -> Result<T, extension_types::Duckerror> {
+) -> Result<T, crate::extension::Duckerror> {
     if out.len() != 1 {
-        return Err(extension_types::Duckerror::Internal(format!(
+        return Err(crate::extension::Duckerror::Internal(format!(
             "{method:?} returned {} values, expected 1",
             out.len()
         )));
     }
     match &out[0] {
         Value::Result(Ok(payload)) => {
-            lift_ok(payload.as_deref()).map_err(extension_types::Duckerror::Io)
+            lift_ok(payload.as_deref()).map_err(crate::extension::Duckerror::Io)
         }
         Value::Result(Err(payload)) => {
             let s = payload.as_deref().map_or_else(String::new, string_from_value);
-            Err(extension_types::Duckerror::Io(s))
+            Err(crate::extension::Duckerror::Io(s))
         }
-        other => Err(extension_types::Duckerror::Internal(format!(
+        other => Err(crate::extension::Duckerror::Internal(format!(
             "{method:?}: expected Result, got {other:?}"
         ))),
     }
@@ -104,37 +104,37 @@ pub(crate) fn export_result_to_string<T>(
 
 // ─── Common lifters ────────────────────────────────────────────────
 
-pub(crate) fn lift_bool(payload: Option<&Value>) -> Result<bool, extension_types::Duckerror> {
+pub(crate) fn lift_bool(payload: Option<&Value>) -> Result<bool, crate::extension::Duckerror> {
     match payload {
         Some(Value::Bool(b)) => Ok(*b),
-        Some(other) => Err(extension_types::Duckerror::Internal(format!(
+        Some(other) => Err(crate::extension::Duckerror::Internal(format!(
             "expected Ok(Bool), got {other:?}"
         ))),
-        None => Err(extension_types::Duckerror::Internal("expected Ok(Bool), got None".into())),
+        None => Err(crate::extension::Duckerror::Internal("expected Ok(Bool), got None".into())),
     }
 }
 
-pub(crate) fn lift_u32(payload: Option<&Value>) -> Result<u32, extension_types::Duckerror> {
+pub(crate) fn lift_u32(payload: Option<&Value>) -> Result<u32, crate::extension::Duckerror> {
     match payload {
         Some(Value::U32(n)) => Ok(*n),
-        Some(other) => Err(extension_types::Duckerror::Internal(format!(
+        Some(other) => Err(crate::extension::Duckerror::Internal(format!(
             "expected Ok(U32), got {other:?}"
         ))),
-        None => Err(extension_types::Duckerror::Internal("expected Ok(U32), got None".into())),
+        None => Err(crate::extension::Duckerror::Internal("expected Ok(U32), got None".into())),
     }
 }
 
-pub(crate) fn lift_u64(payload: Option<&Value>) -> Result<u64, extension_types::Duckerror> {
+pub(crate) fn lift_u64(payload: Option<&Value>) -> Result<u64, crate::extension::Duckerror> {
     match payload {
         Some(Value::U64(n)) => Ok(*n),
-        Some(other) => Err(extension_types::Duckerror::Internal(format!(
+        Some(other) => Err(crate::extension::Duckerror::Internal(format!(
             "expected Ok(U64), got {other:?}"
         ))),
-        None => Err(extension_types::Duckerror::Internal("expected Ok(U64), got None".into())),
+        None => Err(crate::extension::Duckerror::Internal("expected Ok(U64), got None".into())),
     }
 }
 
-pub(crate) fn lift_bytes(payload: Option<&Value>) -> Result<Vec<u8>, extension_types::Duckerror> {
+pub(crate) fn lift_bytes(payload: Option<&Value>) -> Result<Vec<u8>, crate::extension::Duckerror> {
     match payload {
         Some(Value::Bytes(b)) => Ok(b.to_vec()),
         Some(Value::List(items)) => {
@@ -143,7 +143,7 @@ pub(crate) fn lift_bytes(payload: Option<&Value>) -> Result<Vec<u8>, extension_t
                 match item {
                     Value::U8(b) => out.push(*b),
                     other => {
-                        return Err(extension_types::Duckerror::Internal(format!(
+                        return Err(crate::extension::Duckerror::Internal(format!(
                             "list<u8>[{i}]: expected U8, got {other:?}"
                         )));
                     }
@@ -151,16 +151,16 @@ pub(crate) fn lift_bytes(payload: Option<&Value>) -> Result<Vec<u8>, extension_t
             }
             Ok(out)
         }
-        Some(other) => Err(extension_types::Duckerror::Internal(format!(
+        Some(other) => Err(crate::extension::Duckerror::Internal(format!(
             "expected Ok(list<u8>), got {other:?}"
         ))),
-        None => Err(extension_types::Duckerror::Internal("expected Ok(list<u8>), got None".into())),
+        None => Err(crate::extension::Duckerror::Internal("expected Ok(list<u8>), got None".into())),
     }
 }
 
 pub(crate) fn lift_string_list(
     payload: Option<&Value>,
-) -> Result<Vec<String>, extension_types::Duckerror> {
+) -> Result<Vec<String>, crate::extension::Duckerror> {
     match payload {
         Some(Value::List(items)) => {
             let mut out = Vec::with_capacity(items.len());
@@ -168,7 +168,7 @@ pub(crate) fn lift_string_list(
                 match item {
                     Value::String(s) => out.push(s.clone()),
                     other => {
-                        return Err(extension_types::Duckerror::Internal(format!(
+                        return Err(crate::extension::Duckerror::Internal(format!(
                             "list<string>[{i}]: expected String, got {other:?}"
                         )));
                     }
@@ -176,10 +176,10 @@ pub(crate) fn lift_string_list(
             }
             Ok(out)
         }
-        Some(other) => Err(extension_types::Duckerror::Internal(format!(
+        Some(other) => Err(crate::extension::Duckerror::Internal(format!(
             "expected Ok(list<string>), got {other:?}"
         ))),
-        None => Err(extension_types::Duckerror::Internal(
+        None => Err(crate::extension::Duckerror::Internal(
             "expected Ok(list<string>), got None".into(),
         )),
     }
@@ -187,7 +187,7 @@ pub(crate) fn lift_string_list(
 
 pub(crate) fn lift_s64_list(
     payload: Option<&Value>,
-) -> Result<Vec<i64>, extension_types::Duckerror> {
+) -> Result<Vec<i64>, crate::extension::Duckerror> {
     match payload {
         Some(Value::List(items)) => {
             let mut out = Vec::with_capacity(items.len());
@@ -195,7 +195,7 @@ pub(crate) fn lift_s64_list(
                 match item {
                     Value::S64(n) => out.push(*n),
                     other => {
-                        return Err(extension_types::Duckerror::Internal(format!(
+                        return Err(crate::extension::Duckerror::Internal(format!(
                             "list<s64>[{i}]: expected S64, got {other:?}"
                         )));
                     }
@@ -203,10 +203,10 @@ pub(crate) fn lift_s64_list(
             }
             Ok(out)
         }
-        Some(other) => Err(extension_types::Duckerror::Internal(format!(
+        Some(other) => Err(crate::extension::Duckerror::Internal(format!(
             "expected Ok(list<s64>), got {other:?}"
         ))),
-        None => Err(extension_types::Duckerror::Internal("expected Ok(list<s64>), got None".into())),
+        None => Err(crate::extension::Duckerror::Internal("expected Ok(list<s64>), got None".into())),
     }
 }
 
@@ -309,19 +309,19 @@ pub(crate) fn duckvalue_to_value(v: &extension_types::Duckvalue) -> Value {
 
 pub(crate) fn value_to_duckvalue(
     v: &Value,
-) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+) -> Result<extension_types::Duckvalue, crate::extension::Duckerror> {
     use extension_types::Duckvalue as D;
     let (disc, payload) = match v {
         Value::Variant { discriminant, payload } => (discriminant, payload),
         other => {
-            return Err(extension_types::Duckerror::Internal(format!(
+            return Err(crate::extension::Duckerror::Internal(format!(
                 "value_to_duckvalue: expected Variant, got {other:?}"
             )));
         }
     };
-    let need = |want: &str| -> Result<&Value, extension_types::Duckerror> {
+    let need = |want: &str| -> Result<&Value, crate::extension::Duckerror> {
         payload.as_deref().ok_or_else(|| {
-            extension_types::Duckerror::Internal(format!(
+            crate::extension::Duckerror::Internal(format!(
                 "duckvalue.{disc}: expected {want}, got None"
             ))
         })
@@ -452,15 +452,15 @@ pub(crate) fn value_to_duckvalue(
             })
         }
         other => {
-            return Err(extension_types::Duckerror::Internal(format!(
+            return Err(crate::extension::Duckerror::Internal(format!(
                 "value_to_duckvalue: unknown discriminant {other:?}"
             )));
         }
     })
 }
 
-fn shape_err(disc: &str, want: &str, got: &Value) -> extension_types::Duckerror {
-    extension_types::Duckerror::Internal(format!(
+fn shape_err(disc: &str, want: &str, got: &Value) -> crate::extension::Duckerror {
+    crate::extension::Duckerror::Internal(format!(
         "duckvalue.{disc}: expected {want}, got {got:?}"
     ))
 }
@@ -473,10 +473,10 @@ pub(crate) fn duckvalue_list_to_value(xs: &[extension_types::Duckvalue]) -> Valu
 
 pub(crate) fn value_to_duckvalue_list(
     v: &Value,
-) -> Result<Vec<extension_types::Duckvalue>, extension_types::Duckerror> {
+) -> Result<Vec<extension_types::Duckvalue>, crate::extension::Duckerror> {
     match v {
         Value::List(items) => items.iter().map(value_to_duckvalue).collect(),
-        other => Err(extension_types::Duckerror::Internal(format!(
+        other => Err(crate::extension::Duckerror::Internal(format!(
             "expected list<duckvalue>, got {other:?}"
         ))),
     }
@@ -484,10 +484,10 @@ pub(crate) fn value_to_duckvalue_list(
 
 pub(crate) fn value_to_resultset(
     v: &Value,
-) -> Result<Vec<Vec<extension_types::Duckvalue>>, extension_types::Duckerror> {
+) -> Result<Vec<Vec<extension_types::Duckvalue>>, crate::extension::Duckerror> {
     match v {
         Value::List(rows) => rows.iter().map(value_to_duckvalue_list).collect(),
-        other => Err(extension_types::Duckerror::Internal(format!(
+        other => Err(crate::extension::Duckerror::Internal(format!(
             "expected resultset (list<list<duckvalue>>), got {other:?}"
         ))),
     }
@@ -495,11 +495,11 @@ pub(crate) fn value_to_resultset(
 
 pub(crate) fn value_to_optional_duckvalue(
     v: &Value,
-) -> Result<Option<extension_types::Duckvalue>, extension_types::Duckerror> {
+) -> Result<Option<extension_types::Duckvalue>, crate::extension::Duckerror> {
     match v {
         Value::Option(None) => Ok(None),
         Value::Option(Some(inner)) => Ok(Some(value_to_duckvalue(inner)?)),
-        other => Err(extension_types::Duckerror::Internal(format!(
+        other => Err(crate::extension::Duckerror::Internal(format!(
             "expected option<duckvalue>, got {other:?}"
         ))),
     }
@@ -510,73 +510,73 @@ pub(crate) fn value_to_optional_duckvalue(
 pub(crate) fn record_field<'a>(
     v: &'a Value,
     name: &str,
-) -> Result<&'a Value, extension_types::Duckerror> {
+) -> Result<&'a Value, crate::extension::Duckerror> {
     match v {
         Value::Record(fields) => fields
             .iter()
             .find(|(n, _)| n == name)
             .map(|(_, val)| val)
             .ok_or_else(|| {
-                extension_types::Duckerror::Internal(format!("record missing field {name:?}"))
+                crate::extension::Duckerror::Internal(format!("record missing field {name:?}"))
             }),
-        other => Err(extension_types::Duckerror::Internal(format!(
+        other => Err(crate::extension::Duckerror::Internal(format!(
             "expected Record, got {other:?}"
         ))),
     }
 }
 
-pub(crate) fn u32_field(rec: &Value, name: &str) -> Result<u32, extension_types::Duckerror> {
+pub(crate) fn u32_field(rec: &Value, name: &str) -> Result<u32, crate::extension::Duckerror> {
     match record_field(rec, name)? {
         Value::U32(n) => Ok(*n),
-        o => Err(extension_types::Duckerror::Internal(format!(
+        o => Err(crate::extension::Duckerror::Internal(format!(
             "field {name:?}: expected U32, got {o:?}"
         ))),
     }
 }
-pub(crate) fn u64_field(rec: &Value, name: &str) -> Result<u64, extension_types::Duckerror> {
+pub(crate) fn u64_field(rec: &Value, name: &str) -> Result<u64, crate::extension::Duckerror> {
     match record_field(rec, name)? {
         Value::U64(n) => Ok(*n),
-        o => Err(extension_types::Duckerror::Internal(format!(
+        o => Err(crate::extension::Duckerror::Internal(format!(
             "field {name:?}: expected U64, got {o:?}"
         ))),
     }
 }
-pub(crate) fn s32_field(rec: &Value, name: &str) -> Result<i32, extension_types::Duckerror> {
+pub(crate) fn s32_field(rec: &Value, name: &str) -> Result<i32, crate::extension::Duckerror> {
     match record_field(rec, name)? {
         Value::S32(n) => Ok(*n),
-        o => Err(extension_types::Duckerror::Internal(format!(
+        o => Err(crate::extension::Duckerror::Internal(format!(
             "field {name:?}: expected S32, got {o:?}"
         ))),
     }
 }
-pub(crate) fn s64_field(rec: &Value, name: &str) -> Result<i64, extension_types::Duckerror> {
+pub(crate) fn s64_field(rec: &Value, name: &str) -> Result<i64, crate::extension::Duckerror> {
     match record_field(rec, name)? {
         Value::S64(n) => Ok(*n),
-        o => Err(extension_types::Duckerror::Internal(format!(
+        o => Err(crate::extension::Duckerror::Internal(format!(
             "field {name:?}: expected S64, got {o:?}"
         ))),
     }
 }
-pub(crate) fn u8_field(rec: &Value, name: &str) -> Result<u8, extension_types::Duckerror> {
+pub(crate) fn u8_field(rec: &Value, name: &str) -> Result<u8, crate::extension::Duckerror> {
     match record_field(rec, name)? {
         Value::U8(n) => Ok(*n),
-        o => Err(extension_types::Duckerror::Internal(format!(
+        o => Err(crate::extension::Duckerror::Internal(format!(
             "field {name:?}: expected U8, got {o:?}"
         ))),
     }
 }
-pub(crate) fn bool_field(rec: &Value, name: &str) -> Result<bool, extension_types::Duckerror> {
+pub(crate) fn bool_field(rec: &Value, name: &str) -> Result<bool, crate::extension::Duckerror> {
     match record_field(rec, name)? {
         Value::Bool(b) => Ok(*b),
-        o => Err(extension_types::Duckerror::Internal(format!(
+        o => Err(crate::extension::Duckerror::Internal(format!(
             "field {name:?}: expected Bool, got {o:?}"
         ))),
     }
 }
-pub(crate) fn string_field(rec: &Value, name: &str) -> Result<String, extension_types::Duckerror> {
+pub(crate) fn string_field(rec: &Value, name: &str) -> Result<String, crate::extension::Duckerror> {
     match record_field(rec, name)? {
         Value::String(s) => Ok(s.clone()),
-        o => Err(extension_types::Duckerror::Internal(format!(
+        o => Err(crate::extension::Duckerror::Internal(format!(
             "field {name:?}: expected String, got {o:?}"
         ))),
     }
@@ -622,12 +622,12 @@ pub(crate) fn logicaltype_to_value(v: &extension_types::Logicaltype) -> Value {
 
 pub(crate) fn value_to_logicaltype(
     v: &Value,
-) -> Result<extension_types::Logicaltype, extension_types::Duckerror> {
+) -> Result<extension_types::Logicaltype, crate::extension::Duckerror> {
     use extension_types::Logicaltype as L;
     let (disc, payload) = match v {
         Value::Variant { discriminant, payload } => (discriminant, payload),
         other => {
-            return Err(extension_types::Duckerror::Internal(format!(
+            return Err(crate::extension::Duckerror::Internal(format!(
                 "value_to_logicaltype: expected Variant, got {other:?}"
             )));
         }
@@ -652,7 +652,7 @@ pub(crate) fn value_to_logicaltype(
         "timestamptz" => L::Timestamptz,
         "decimal" => {
             let rec = payload.as_deref().ok_or_else(|| {
-                extension_types::Duckerror::Internal("logicaltype.decimal: missing payload".into())
+                crate::extension::Duckerror::Internal("logicaltype.decimal: missing payload".into())
             })?;
             L::Decimal(extension_types::Decimalshape {
                 width: u8_field(rec, "width")?,
@@ -665,12 +665,12 @@ pub(crate) fn value_to_logicaltype(
         "uhugeint" => L::Uhugeint,
         "complex" => match payload.as_deref() {
             Some(Value::String(s)) => L::Complex(s.clone()),
-            other => return Err(extension_types::Duckerror::Internal(format!(
+            other => return Err(crate::extension::Duckerror::Internal(format!(
                 "logicaltype.complex: expected String, got {other:?}"
             ))),
         },
         other => {
-            return Err(extension_types::Duckerror::Internal(format!(
+            return Err(crate::extension::Duckerror::Internal(format!(
                 "value_to_logicaltype: unknown discriminant {other:?}"
             )));
         }
@@ -686,7 +686,7 @@ pub(crate) fn columndef_to_value(c: &extension_types::Columndef) -> Value {
 
 pub(crate) fn value_to_columndef(
     v: &Value,
-) -> Result<extension_types::Columndef, extension_types::Duckerror> {
+) -> Result<extension_types::Columndef, crate::extension::Duckerror> {
     let name = string_field(v, "name")?;
     let logical = value_to_logicaltype(record_field(v, "logical")?)?;
     Ok(extension_types::Columndef { name, logical })
@@ -698,10 +698,10 @@ pub(crate) fn columndef_list_to_value(cs: &[extension_types::Columndef]) -> Valu
 
 pub(crate) fn value_to_columndef_list(
     v: &Value,
-) -> Result<Vec<extension_types::Columndef>, extension_types::Duckerror> {
+) -> Result<Vec<extension_types::Columndef>, crate::extension::Duckerror> {
     match v {
         Value::List(items) => items.iter().map(value_to_columndef).collect(),
-        other => Err(extension_types::Duckerror::Internal(format!(
+        other => Err(crate::extension::Duckerror::Internal(format!(
             "expected list<columndef>, got {other:?}"
         ))),
     }
@@ -732,7 +732,7 @@ pub(crate) fn colvec_to_value(cv: &extension_column_types::Colvec) -> Value {
 
 pub(crate) fn value_to_colvec(
     v: &Value,
-) -> Result<extension_column_types::Colvec, extension_types::Duckerror> {
+) -> Result<extension_column_types::Colvec, crate::extension::Duckerror> {
     let data = value_to_column(record_field(v, "data")?)?;
     let validity = match record_field(v, "validity")? {
         Value::Bytes(b) => b.to_vec(),
@@ -741,13 +741,13 @@ pub(crate) fn value_to_colvec(
             for it in items {
                 match it {
                     Value::U8(b) => out.push(*b),
-                    o => return Err(extension_types::Duckerror::Internal(format!(
+                    o => return Err(crate::extension::Duckerror::Internal(format!(
                         "colvec.validity: expected U8, got {o:?}"))),
                 }
             }
             out
         }
-        o => return Err(extension_types::Duckerror::Internal(format!(
+        o => return Err(crate::extension::Duckerror::Internal(format!(
             "colvec.validity: expected Bytes or List<U8>, got {o:?}"))),
     };
     let rows = u32_field(v, "rows")?;
@@ -833,15 +833,15 @@ fn lift_prim_list<T>(
     v: &Value,
     name: &str,
     extract: impl Fn(&Value) -> Option<T>,
-) -> Result<Vec<T>, extension_types::Duckerror> {
+) -> Result<Vec<T>, crate::extension::Duckerror> {
     let items = match v {
         Value::List(items) => items,
-        o => return Err(extension_types::Duckerror::Internal(format!(
+        o => return Err(crate::extension::Duckerror::Internal(format!(
             "expected List for column.{name}, got {o:?}"))),
     };
     let mut out = Vec::with_capacity(items.len());
     for (i, item) in items.iter().enumerate() {
-        out.push(extract(item).ok_or_else(|| extension_types::Duckerror::Internal(format!(
+        out.push(extract(item).ok_or_else(|| crate::extension::Duckerror::Internal(format!(
             "column.{name}[{i}]: shape mismatch, got {item:?}")))?);
     }
     Ok(out)
@@ -849,15 +849,15 @@ fn lift_prim_list<T>(
 
 pub(crate) fn value_to_column(
     v: &Value,
-) -> Result<extension_column_types::Column, extension_types::Duckerror> {
+) -> Result<extension_column_types::Column, crate::extension::Duckerror> {
     use extension_column_types::Column as C;
     let (disc, payload) = match v {
         Value::Variant { discriminant, payload } => (discriminant, payload),
-        o => return Err(extension_types::Duckerror::Internal(format!(
+        o => return Err(crate::extension::Duckerror::Internal(format!(
             "value_to_column: expected Variant, got {o:?}"))),
     };
     let p = payload.as_deref().ok_or_else(|| {
-        extension_types::Duckerror::Internal(format!("column.{disc}: missing payload"))
+        crate::extension::Duckerror::Internal(format!("column.{disc}: missing payload"))
     })?;
     Ok(match disc.as_str() {
         "boolean" => C::Boolean(lift_prim_list(p, "boolean", |v| if let Value::Bool(b) = v { Some(*b) } else { None })?),
@@ -879,7 +879,7 @@ pub(crate) fn value_to_column(
         "decimal" => {
             let items = match p {
                 Value::List(items) => items,
-                o => return Err(extension_types::Duckerror::Internal(format!("column.decimal: expected List, got {o:?}"))),
+                o => return Err(crate::extension::Duckerror::Internal(format!("column.decimal: expected List, got {o:?}"))),
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
@@ -895,7 +895,7 @@ pub(crate) fn value_to_column(
         "interval" => {
             let items = match p {
                 Value::List(items) => items,
-                o => return Err(extension_types::Duckerror::Internal(format!("column.interval: expected List, got {o:?}"))),
+                o => return Err(crate::extension::Duckerror::Internal(format!("column.interval: expected List, got {o:?}"))),
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
@@ -910,7 +910,7 @@ pub(crate) fn value_to_column(
         "uuid" => {
             let items = match p {
                 Value::List(items) => items,
-                o => return Err(extension_types::Duckerror::Internal(format!("column.uuid: expected List, got {o:?}"))),
+                o => return Err(crate::extension::Duckerror::Internal(format!("column.uuid: expected List, got {o:?}"))),
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
@@ -924,7 +924,7 @@ pub(crate) fn value_to_column(
         "blob" => {
             let items = match p {
                 Value::List(items) => items,
-                o => return Err(extension_types::Duckerror::Internal(format!("column.blob: expected List, got {o:?}"))),
+                o => return Err(crate::extension::Duckerror::Internal(format!("column.blob: expected List, got {o:?}"))),
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
@@ -935,12 +935,12 @@ pub(crate) fn value_to_column(
                         for b in bs {
                             match b {
                                 Value::U8(x) => v.push(*x),
-                                o => return Err(extension_types::Duckerror::Internal(format!("column.blob element: expected U8, got {o:?}"))),
+                                o => return Err(crate::extension::Duckerror::Internal(format!("column.blob element: expected U8, got {o:?}"))),
                             }
                         }
                         out.push(v);
                     }
-                    o => return Err(extension_types::Duckerror::Internal(format!("column.blob element: expected Bytes/List, got {o:?}"))),
+                    o => return Err(crate::extension::Duckerror::Internal(format!("column.blob element: expected Bytes/List, got {o:?}"))),
                 }
             }
             C::Blob(out)
@@ -948,7 +948,7 @@ pub(crate) fn value_to_column(
         "hugeint" => {
             let items = match p {
                 Value::List(items) => items,
-                o => return Err(extension_types::Duckerror::Internal(format!("column.hugeint: expected List, got {o:?}"))),
+                o => return Err(crate::extension::Duckerror::Internal(format!("column.hugeint: expected List, got {o:?}"))),
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
@@ -962,7 +962,7 @@ pub(crate) fn value_to_column(
         "uhugeint" => {
             let items = match p {
                 Value::List(items) => items,
-                o => return Err(extension_types::Duckerror::Internal(format!("column.uhugeint: expected List, got {o:?}"))),
+                o => return Err(crate::extension::Duckerror::Internal(format!("column.uhugeint: expected List, got {o:?}"))),
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
@@ -990,7 +990,7 @@ pub(crate) fn value_to_column(
         "complex" => {
             let items = match p {
                 Value::List(items) => items,
-                o => return Err(extension_types::Duckerror::Internal(format!("column.complex: expected List, got {o:?}"))),
+                o => return Err(crate::extension::Duckerror::Internal(format!("column.complex: expected List, got {o:?}"))),
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
@@ -1001,12 +1001,12 @@ pub(crate) fn value_to_column(
             }
             C::Complex(out)
         }
-        other => return Err(extension_types::Duckerror::Internal(format!(
+        other => return Err(crate::extension::Duckerror::Internal(format!(
             "value_to_column: unknown discriminant {other:?}"))),
     })
 }
 
-fn bytes_field(rec: &Value, name: &str) -> Result<Vec<u8>, extension_types::Duckerror> {
+fn bytes_field(rec: &Value, name: &str) -> Result<Vec<u8>, crate::extension::Duckerror> {
     match record_field(rec, name)? {
         Value::Bytes(b) => Ok(b.to_vec()),
         Value::List(items) => {
@@ -1014,13 +1014,13 @@ fn bytes_field(rec: &Value, name: &str) -> Result<Vec<u8>, extension_types::Duck
             for it in items {
                 match it {
                     Value::U8(b) => out.push(*b),
-                    o => return Err(extension_types::Duckerror::Internal(format!(
+                    o => return Err(crate::extension::Duckerror::Internal(format!(
                         "field {name:?} element: expected U8, got {o:?}"))),
                 }
             }
             Ok(out)
         }
-        o => Err(extension_types::Duckerror::Internal(format!(
+        o => Err(crate::extension::Duckerror::Internal(format!(
             "field {name:?}: expected Bytes or List<U8>, got {o:?}"))),
     }
 }

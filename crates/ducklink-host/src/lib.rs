@@ -2141,26 +2141,26 @@ impl ExtensionManager {
         &mut self,
         handle: u32,
         query: &str,
-    ) -> Result<Option<String>, extension_types::Duckerror> {
+    ) -> Result<Option<String>, ducklink_runtime::extension::Duckerror> {
         let ext = self
             .parsers
             .values()
             .find(|(_e, h)| *h == handle)
             .map(|(e, _h)| e.clone())
             .ok_or_else(|| {
-                extension_types::Duckerror::Invalidstate(format!(
+                ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "no parser extension registered for handle {handle}"
                 ))
             })?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("parser extension '{ext}' not loaded"))
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!("parser extension '{ext}' not loaded"))
         })?;
         let outcome = instance.call_parse(handle, query)?;
         // Defensive boundary: the core RE-PLANS the returned rewrite, so reject an
         // adversarial/degenerate rewrite here (see `validate_parser_rewrite`).
         if let Some(rewrite) = &outcome {
             validate_parser_rewrite(&ext, query, rewrite)
-                .map_err(extension_types::Duckerror::Invalidargument)?;
+                .map_err(ducklink_runtime::extension::Duckerror::Invalidargument)?;
         }
         Ok(outcome)
     }
@@ -2183,14 +2183,14 @@ impl ExtensionManager {
         &mut self,
         handle: u32,
         plan_json: &str,
-    ) -> Result<Option<String>, extension_types::Duckerror> {
+    ) -> Result<Option<String>, ducklink_runtime::extension::Duckerror> {
         let ext = self
             .optimizers
             .values()
             .find(|(_e, h)| *h == handle)
             .map(|(e, _h)| e.clone())
             .ok_or_else(|| {
-                extension_types::Duckerror::Invalidstate(format!(
+                ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "no optimizer rule registered for handle {handle}"
                 ))
             })?;
@@ -2198,9 +2198,9 @@ impl ExtensionManager {
         // Flattening lives in the wit-free, fuzzed `plan_shape` module (never-panic
         // boundary; bounds the node count against an adversarial core).
         let nodes = crate::plan_shape::flatten_plan_json(plan_json)
-            .map_err(extension_types::Duckerror::Invalidargument)?;
+            .map_err(ducklink_runtime::extension::Duckerror::Invalidargument)?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "optimizer extension '{ext}' not loaded"
             ))
         })?;
@@ -2270,7 +2270,7 @@ impl ExtensionManager {
     /// Resolve the storage backend that should service an ATTACH. For M2a the
     /// type name is hardcoded "sqlitewasm" core-side, so prefer that backend and
     /// otherwise fall back to the single registered backend (if unambiguous).
-    fn resolve_storage_backend(&self) -> Result<(String, u32), extension_types::Duckerror> {
+    fn resolve_storage_backend(&self) -> Result<(String, u32), ducklink_runtime::extension::Duckerror> {
         if let Some((ext, handle)) = self.storage_backends.get("sqlitewasm") {
             return Ok((ext.clone(), *handle));
         }
@@ -2289,7 +2289,7 @@ impl ExtensionManager {
                 }
             }
         }
-        Err(extension_types::Duckerror::Invalidstate(format!(
+        Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
             "no storage backend registered for 'sqlitewasm' (have {} backend(s))",
             self.storage_backends.len()
         )))
@@ -2297,7 +2297,7 @@ impl ExtensionManager {
 
     /// Reads the foreign DB file at `dsn`, stages it into the backing component,
     /// and opens the catalog; returns the component-side catalog handle.
-    fn dispatch_storage_attach(&mut self, dsn: &str) -> Result<u32, extension_types::Duckerror> {
+    fn dispatch_storage_attach(&mut self, dsn: &str) -> Result<u32, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         eprintln!("[storage-attach] dispatch_storage_attach ext='{ext}' dsn='{dsn}'");
         // The dsn may be a FILE (sqlite-over-blob) or a CONNECTION STRING
@@ -2307,12 +2307,12 @@ impl ExtensionManager {
         // component's storage-attach receives the raw dsn to dial directly.
         let bytes = match std::fs::metadata(dsn) {
             Ok(m) if m.is_file() => std::fs::read(dsn).map_err(|e| {
-                extension_types::Duckerror::Io(format!("cannot read attach file '{dsn}': {e}"))
+                ducklink_runtime::extension::Duckerror::Io(format!("cannot read attach file '{dsn}': {e}"))
             })?,
             _ => Vec::new(),
         };
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "storage extension '{ext}' not loaded"
             ))
         })?;
@@ -2322,10 +2322,10 @@ impl ExtensionManager {
     pub fn dispatch_storage_list_tables(
         &mut self,
         catalog: u32,
-    ) -> Result<Vec<String>, extension_types::Duckerror> {
+    ) -> Result<Vec<String>, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "storage extension '{ext}' not loaded"
             ))
         })?;
@@ -2336,10 +2336,10 @@ impl ExtensionManager {
         &mut self,
         catalog: u32,
         table: &str,
-    ) -> Result<Vec<extension_types::Columndef>, extension_types::Duckerror> {
+    ) -> Result<Vec<extension_types::Columndef>, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "storage extension '{ext}' not loaded"
             ))
         })?;
@@ -2350,10 +2350,10 @@ impl ExtensionManager {
         &mut self,
         catalog: u32,
         request: storage_scan::ScanRequest,
-    ) -> Result<u32, extension_types::Duckerror> {
+    ) -> Result<u32, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "storage extension '{ext}' not loaded"
             ))
         })?;
@@ -2364,10 +2364,10 @@ impl ExtensionManager {
         &mut self,
         scan: u32,
         max_rows: u32,
-    ) -> Result<Vec<Vec<extension_types::Duckvalue>>, extension_types::Duckerror> {
+    ) -> Result<Vec<Vec<extension_types::Duckvalue>>, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "storage extension '{ext}' not loaded"
             ))
         })?;
@@ -2377,10 +2377,10 @@ impl ExtensionManager {
     fn dispatch_storage_scan_close(
         &mut self,
         scan: u32,
-    ) -> Result<bool, extension_types::Duckerror> {
+    ) -> Result<bool, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "storage extension '{ext}' not loaded"
             ))
         })?;
@@ -2396,10 +2396,10 @@ impl ExtensionManager {
     pub fn dispatch_storage_serialize(
         &mut self,
         catalog: u32,
-    ) -> Result<Vec<u8>, extension_types::Duckerror> {
+    ) -> Result<Vec<u8>, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "storage extension '{ext}' not loaded"
             ))
         })?;
@@ -2417,10 +2417,10 @@ impl ExtensionManager {
     /// backends whose serialize also returns Unsupported).
     pub fn dispatch_storage_writes_persist_directly(
         &mut self,
-    ) -> Result<bool, extension_types::Duckerror> {
+    ) -> Result<bool, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "storage extension '{ext}' not loaded"
             ))
         })?;
@@ -2478,9 +2478,9 @@ impl ExtensionManager {
         &mut self,
         handle: u32,
         _args: &[extension_types::Duckvalue],
-    ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
+    ) -> Result<extension_runtime::Resultset, ducklink_runtime::extension::Duckerror> {
         let target = self.at5_scan_targets.get(&handle).cloned().ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "unknown AT5 attach-scan handle {handle}"
             ))
         })?;
@@ -2494,7 +2494,7 @@ impl ExtensionManager {
             limit: None,
         };
         let instance = self.extensions.get_mut(&target.extension).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "AT5 attach-scan handle {handle} points at extension '{}', which is not loaded",
                 target.extension
             ))
@@ -2528,15 +2528,15 @@ impl ExtensionManager {
     // registered (same picker as the read-side scan) and forwards to the
     // ExtensionInstance's `storage_*` write trampoline
     // (ducklink-runtime/src/extension.rs). Errors bubble up as
-    // `extension_types::Duckerror` which the core-side impl re-maps.
+    // `ducklink_runtime::extension::Duckerror` which the core-side impl re-maps.
 
     fn dispatch_storage_begin_transaction(
         &mut self,
         catalog: u32,
-    ) -> Result<u32, extension_types::Duckerror> {
+    ) -> Result<u32, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "storage extension '{ext}' not loaded"
             ))
         })?;
@@ -2546,10 +2546,10 @@ impl ExtensionManager {
     fn dispatch_storage_commit_transaction(
         &mut self,
         txn: u32,
-    ) -> Result<(), extension_types::Duckerror> {
+    ) -> Result<(), ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "storage extension '{ext}' not loaded"
             ))
         })?;
@@ -2559,10 +2559,10 @@ impl ExtensionManager {
     fn dispatch_storage_rollback_transaction(
         &mut self,
         txn: u32,
-    ) -> Result<(), extension_types::Duckerror> {
+    ) -> Result<(), ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "storage extension '{ext}' not loaded"
             ))
         })?;
@@ -2574,10 +2574,10 @@ impl ExtensionManager {
         txn: u32,
         table: &str,
         columns: &[extension_types::Columndef],
-    ) -> Result<(), extension_types::Duckerror> {
+    ) -> Result<(), ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "storage extension '{ext}' not loaded"
             ))
         })?;
@@ -2589,10 +2589,10 @@ impl ExtensionManager {
         txn: u32,
         table: &str,
         rows: &[Vec<extension_types::Duckvalue>],
-    ) -> Result<u64, extension_types::Duckerror> {
+    ) -> Result<u64, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "storage extension '{ext}' not loaded"
             ))
         })?;
@@ -2608,7 +2608,7 @@ impl ExtensionManager {
         catalog: u32,
         table: &str,
         rows: &[Vec<extension_types::Duckvalue>],
-    ) -> Result<u64, extension_types::Duckerror> {
+    ) -> Result<u64, ducklink_runtime::extension::Duckerror> {
         let txn = self.dispatch_storage_begin_transaction(catalog)?;
         match self.dispatch_storage_insert_rows(txn, table, rows) {
             Ok(n) => {
@@ -2629,10 +2629,10 @@ impl ExtensionManager {
         txn: u32,
         table: &str,
         rowids: &[i64],
-    ) -> Result<u64, extension_types::Duckerror> {
+    ) -> Result<u64, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "storage extension '{ext}' not loaded"
             ))
         })?;
@@ -2646,10 +2646,10 @@ impl ExtensionManager {
         rowids: &[i64],
         updated_columns: &[u32],
         rows: &[Vec<extension_types::Duckvalue>],
-    ) -> Result<u64, extension_types::Duckerror> {
+    ) -> Result<u64, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "storage extension '{ext}' not loaded"
             ))
         })?;
@@ -2669,7 +2669,7 @@ impl ExtensionManager {
         table: &str,
         rowids: &[i64],
         rows: &[Vec<extension_types::Duckvalue>],
-    ) -> Result<u64, extension_types::Duckerror> {
+    ) -> Result<u64, ducklink_runtime::extension::Duckerror> {
         let txn = self.dispatch_storage_begin_transaction(catalog)?;
         match self.dispatch_storage_update_rows(txn, table, rowids, &[], rows) {
             Ok(n) => {
@@ -2691,7 +2691,7 @@ impl ExtensionManager {
         catalog: u32,
         table: &str,
         columns: &[extension_types::Columndef],
-    ) -> Result<(), extension_types::Duckerror> {
+    ) -> Result<(), ducklink_runtime::extension::Duckerror> {
         let txn = self.dispatch_storage_begin_transaction(catalog)?;
         match self.dispatch_storage_create_table(txn, table, columns) {
             Ok(()) => {
@@ -2713,7 +2713,7 @@ impl ExtensionManager {
         catalog: u32,
         table: &str,
         rowids: &[i64],
-    ) -> Result<u64, extension_types::Duckerror> {
+    ) -> Result<u64, ducklink_runtime::extension::Duckerror> {
         let txn = self.dispatch_storage_begin_transaction(catalog)?;
         match self.dispatch_storage_delete_rows(txn, table, rowids) {
             Ok(n) => {
@@ -2740,7 +2740,7 @@ impl ExtensionManager {
     /// Resolve the index backend that should service a `(type_name)` index
     /// operation. Prefer the exact type-name match; otherwise fall back to the
     /// single registered index backend (if unambiguous).
-    fn resolve_index_backend(&self, type_name: &str) -> Result<String, extension_types::Duckerror> {
+    fn resolve_index_backend(&self, type_name: &str) -> Result<String, ducklink_runtime::extension::Duckerror> {
         if let Some(ext) = self.index_backends.get(type_name) {
             return Ok(ext.clone());
         }
@@ -2755,7 +2755,7 @@ impl ExtensionManager {
                 }
             }
         }
-        Err(extension_types::Duckerror::Invalidstate(format!(
+        Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
             "no index backend registered for '{type_name}' (have {} backend(s))",
             self.index_backends.len()
         )))
@@ -2766,13 +2766,13 @@ impl ExtensionManager {
         type_name: &str,
         index_name: &str,
         dims: u32,
-    ) -> Result<u32, extension_types::Duckerror> {
+    ) -> Result<u32, ducklink_runtime::extension::Duckerror> {
         let ext = self.resolve_index_backend(type_name)?;
         eprintln!(
             "[index-create] dispatch_index_create ext='{ext}' type='{type_name}' name='{index_name}' dims={dims}"
         );
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
         })?;
         instance.index_create(type_name, index_name, dims)
     }
@@ -2782,21 +2782,21 @@ impl ExtensionManager {
         handle: u32,
         rowids: &[i64],
         vectors: &[Vec<f32>],
-    ) -> Result<(), extension_types::Duckerror> {
+    ) -> Result<(), ducklink_runtime::extension::Duckerror> {
         // The build pipeline targets the single resolved index backend (M2a: one
         // index extension at a time). Resolve by the empty type (falls back to the
         // single registered backend).
         let ext = self.resolve_index_backend("")?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
         })?;
         instance.index_append(handle, rowids, vectors)
     }
 
-    fn dispatch_index_build(&mut self, handle: u32) -> Result<(), extension_types::Duckerror> {
+    fn dispatch_index_build(&mut self, handle: u32) -> Result<(), ducklink_runtime::extension::Duckerror> {
         let ext = self.resolve_index_backend("")?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
         })?;
         instance.index_build(handle)
     }
@@ -2806,18 +2806,18 @@ impl ExtensionManager {
         handle: u32,
         query: &[f32],
         k: u32,
-    ) -> Result<Vec<ducklink_runtime::extension::IndexHit>, extension_types::Duckerror> {
+    ) -> Result<Vec<ducklink_runtime::extension::IndexHit>, ducklink_runtime::extension::Duckerror> {
         let ext = self.resolve_index_backend("")?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
         })?;
         instance.index_search(handle, query, k)
     }
 
-    fn dispatch_index_drop(&mut self, handle: u32) -> Result<(), extension_types::Duckerror> {
+    fn dispatch_index_drop(&mut self, handle: u32) -> Result<(), ducklink_runtime::extension::Duckerror> {
         let ext = self.resolve_index_backend("")?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
         })?;
         instance.index_drop(handle)
     }
@@ -2899,7 +2899,7 @@ impl ExtensionManager {
         handle: u32,
         args: &[extension_types::Duckvalue],
         ctx: extension_runtime::Invokeinfo,
-    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+    ) -> Result<extension_types::Duckvalue, ducklink_runtime::extension::Duckerror> {
         // `ducklink_prefix` sentinel (scalar form): see
         // [`DUCKLINK_PREFIX_SCALAR_HANDLE`]. Same handler as the table
         // form but wraps its result as a VARCHAR summary.
@@ -2926,7 +2926,7 @@ impl ExtensionManager {
                         "[extension-manager] callback handle {handle} expected scalar but is {:?}",
                         entry.kind
                     );
-                    return Err(extension_types::Duckerror::Invalidstate(format!(
+                    return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                         "callback handle {handle} is not scalar"
                     )));
                 }
@@ -2934,7 +2934,7 @@ impl ExtensionManager {
                     eprintln!(
                         "[extension-manager] dispatch_scalar received unknown handle {handle}"
                     );
-                    return Err(extension_types::Duckerror::Invalidstate(format!(
+                    return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                         "unknown scalar callback handle {handle}"
                     )));
                 }
@@ -2946,7 +2946,7 @@ impl ExtensionManager {
                 eprintln!(
                     "[extension-manager] dispatch_scalar could not find loaded extension '{ext_name}'"
                 );
-                return Err(extension_types::Duckerror::Invalidstate(format!(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "extension {ext_name} is not loaded"
                 )));
             }
@@ -2960,7 +2960,7 @@ impl ExtensionManager {
         handle: u32,
         rows: &Vec<Vec<extension_types::Duckvalue>>,
         ctx: extension_runtime::Invokeinfo,
-    ) -> Result<Vec<extension_types::Duckvalue>, extension_types::Duckerror> {
+    ) -> Result<Vec<extension_types::Duckvalue>, ducklink_runtime::extension::Duckerror> {
         // `ducklink_prefix` scalar sentinel: the core batches scalar calls
         // through this columnar entry point. Handle it per-row via the
         // shared native handler so the deferred queue reflects each
@@ -2998,7 +2998,7 @@ impl ExtensionManager {
                 eprintln!(
                     "[extension-manager] dispatch_scalar_batch received unknown handle {handle}"
                 );
-                return Err(extension_types::Duckerror::Invalidstate(format!(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "unknown scalar callback handle {handle}"
                 )));
             }
@@ -3006,7 +3006,7 @@ impl ExtensionManager {
         let instance = match self.extensions.get_mut(&*entry.extension) {
             Some(instance) => instance,
             None => {
-                return Err(extension_types::Duckerror::Invalidstate(format!(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "extension {} is not loaded",
                     entry.extension
                 )));
@@ -3019,7 +3019,7 @@ impl ExtensionManager {
         &mut self,
         handle: u32,
         args: &[extension_types::Duckvalue],
-    ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
+    ) -> Result<extension_runtime::Resultset, ducklink_runtime::extension::Duckerror> {
         // Phase 2c (@5) AT5 attach-scan sentinel range: handles minted by
         // `register_at5_scan` (from `HostState::intercept_attach`) route
         // straight to the storage-dispatch scan path — no wasm component's
@@ -3053,7 +3053,7 @@ impl ExtensionManager {
             Some(entry) => entry,
             None => {
                 eprintln!("[extension-manager] dispatch_table received unknown handle {handle}");
-                return Err(extension_types::Duckerror::Invalidstate(format!(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "unknown table callback handle {handle}"
                 )));
             }
@@ -3065,7 +3065,7 @@ impl ExtensionManager {
                     "[extension-manager] dispatch_table could not find loaded extension '{}'",
                     entry.extension
                 );
-                return Err(extension_types::Duckerror::Invalidstate(format!(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "extension {} is not loaded",
                     entry.extension
                 )));
@@ -3112,7 +3112,7 @@ impl ExtensionManager {
     fn native_ducklink_load(
         &mut self,
         args: &[extension_types::Duckvalue],
-    ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
+    ) -> Result<extension_runtime::Resultset, ducklink_runtime::extension::Duckerror> {
         // Positional/named arg 0: extension name (VARCHAR). DuckDB passes named
         // args in order, so the first VARCHAR is the name regardless of whether
         // the caller wrote `ducklink_load('jsonfns')` or
@@ -3120,12 +3120,12 @@ impl ExtensionManager {
         let name = match args.first() {
             Some(extension_types::Duckvalue::Text(s)) => s.clone(),
             Some(extension_types::Duckvalue::Null) | None => {
-                return Err(extension_types::Duckerror::Invalidargument(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidargument(
                     "ducklink_load: missing required VARCHAR argument 'name'".into(),
                 ));
             }
             Some(_) => {
-                return Err(extension_types::Duckerror::Invalidargument(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidargument(
                     "ducklink_load: first argument must be VARCHAR".into(),
                 ));
             }
@@ -3137,7 +3137,7 @@ impl ExtensionManager {
             Some(extension_types::Duckvalue::Text(s)) => s.to_ascii_lowercase(),
             Some(extension_types::Duckvalue::Null) | None => "wasm".to_string(),
             Some(_) => {
-                return Err(extension_types::Duckerror::Invalidargument(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidargument(
                     "ducklink_load: second argument (kind) must be VARCHAR".into(),
                 ));
             }
@@ -3145,14 +3145,14 @@ impl ExtensionManager {
         match kind.as_str() {
             "wasm" => {}
             "native" => {
-                return Err(extension_types::Duckerror::Unsupported(
+                return Err(ducklink_runtime::extension::Duckerror::Unsupported(
                     "ducklink_load(kind='native'): the workspace host has no native \
                      provider path yet — use kind='wasm' (the default)"
                         .into(),
                 ));
             }
             other => {
-                return Err(extension_types::Duckerror::Invalidargument(format!(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidargument(format!(
                     "ducklink_load: kind must be 'wasm' or 'native', got '{other}'"
                 )));
             }
@@ -3163,12 +3163,12 @@ impl ExtensionManager {
         // declined (no provider), or Err on load-time trap.
         let sanitized = sanitize_extension_name(&name);
         let loaded_ok = self.ensure_extension_loaded(&sanitized).map_err(|err| {
-            extension_types::Duckerror::Internal(format!(
+            ducklink_runtime::extension::Duckerror::Internal(format!(
                 "ducklink_load: failed to load '{name}': {err}"
             ))
         })?;
         if !loaded_ok {
-            return Err(extension_types::Duckerror::Invalidargument(format!(
+            return Err(ducklink_runtime::extension::Duckerror::Invalidargument(format!(
                 "ducklink_load: no admissible provider for '{name}' — no manifest \
                  entry, no <extensions-dir>/{sanitized}.wasm shortcut, or the \
                  resolver declined the candidates"
@@ -3248,16 +3248,16 @@ impl ExtensionManager {
     fn native_ducklink_prefix_common(
         &mut self,
         args: &[extension_types::Duckvalue],
-    ) -> Result<(String, String), extension_types::Duckerror> {
+    ) -> Result<(String, String), ducklink_runtime::extension::Duckerror> {
         let alias = match args.first() {
             Some(extension_types::Duckvalue::Text(s)) => s.clone(),
             Some(extension_types::Duckvalue::Null) | None => {
-                return Err(extension_types::Duckerror::Invalidargument(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidargument(
                     "ducklink_prefix: missing required VARCHAR argument 'alias'".into(),
                 ));
             }
             Some(_) => {
-                return Err(extension_types::Duckerror::Invalidargument(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidargument(
                     "ducklink_prefix: first argument (alias) must be VARCHAR".into(),
                 ));
             }
@@ -3265,18 +3265,18 @@ impl ExtensionManager {
         let namespace = match args.get(1) {
             Some(extension_types::Duckvalue::Text(s)) => s.clone(),
             Some(extension_types::Duckvalue::Null) | None => {
-                return Err(extension_types::Duckerror::Invalidargument(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidargument(
                     "ducklink_prefix: missing required VARCHAR argument 'namespace'".into(),
                 ));
             }
             Some(_) => {
-                return Err(extension_types::Duckerror::Invalidargument(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidargument(
                     "ducklink_prefix: second argument (namespace) must be VARCHAR".into(),
                 ));
             }
         };
         if !is_safe_prefix_identifier(&alias) || !is_safe_prefix_identifier(&namespace) {
-            return Err(extension_types::Duckerror::Invalidargument(format!(
+            return Err(ducklink_runtime::extension::Duckerror::Invalidargument(format!(
                 "ducklink_prefix: alias and namespace must match [A-Za-z0-9_]+ \
                  (got alias='{alias}', namespace='{namespace}')"
             )));
@@ -3310,7 +3310,7 @@ impl ExtensionManager {
     fn native_ducklink_prefix_table(
         &mut self,
         args: &[extension_types::Duckvalue],
-    ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
+    ) -> Result<extension_runtime::Resultset, ducklink_runtime::extension::Duckerror> {
         let (alias, namespace) = self.native_ducklink_prefix_common(args)?;
         let row: Vec<extension_types::Duckvalue> = vec![
             extension_types::Duckvalue::Text(alias),
@@ -3328,7 +3328,7 @@ impl ExtensionManager {
     fn native_ducklink_prefix_scalar(
         &mut self,
         args: &[extension_types::Duckvalue],
-    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+    ) -> Result<extension_types::Duckvalue, ducklink_runtime::extension::Duckerror> {
         let (alias, namespace) = self.native_ducklink_prefix_common(args)?;
         Ok(extension_types::Duckvalue::Text(format!(
             "alias='{alias}' namespace='{namespace}' macros=0 (deferred)"
@@ -3358,16 +3358,16 @@ impl ExtensionManager {
         args: &[extension_types::Duckvalue],
         projection: &[u32],
         filters: &[ducklink_runtime::extension::TableFilter],
-    ) -> Result<ducklink_runtime::extension::TableOpenResult, extension_types::Duckerror> {
+    ) -> Result<ducklink_runtime::extension::TableOpenResult, ducklink_runtime::extension::Duckerror> {
         let entry = self
             .lookup_callback(handle, CallbackKind::Table)
             .ok_or_else(|| {
-                extension_types::Duckerror::Invalidstate(format!(
+                ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "unknown filterable-table handle {handle}"
                 ))
             })?;
         let instance = self.extensions.get_mut(&*entry.extension).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "extension {} is not loaded",
                 entry.extension
             ))
@@ -3380,16 +3380,16 @@ impl ExtensionManager {
         handle: u32,
         cursor: u32,
         max_rows: u32,
-    ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
+    ) -> Result<extension_runtime::Resultset, ducklink_runtime::extension::Duckerror> {
         let entry = self
             .lookup_callback(handle, CallbackKind::Table)
             .ok_or_else(|| {
-                extension_types::Duckerror::Invalidstate(format!(
+                ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "unknown filterable-table handle {handle}"
                 ))
             })?;
         let instance = self.extensions.get_mut(&*entry.extension).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "extension {} is not loaded",
                 entry.extension
             ))
@@ -3401,16 +3401,16 @@ impl ExtensionManager {
         &mut self,
         handle: u32,
         cursor: u32,
-    ) -> Result<bool, extension_types::Duckerror> {
+    ) -> Result<bool, ducklink_runtime::extension::Duckerror> {
         let entry = self
             .lookup_callback(handle, CallbackKind::Table)
             .ok_or_else(|| {
-                extension_types::Duckerror::Invalidstate(format!(
+                ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "unknown filterable-table handle {handle}"
                 ))
             })?;
         let instance = self.extensions.get_mut(&*entry.extension).ok_or_else(|| {
-            extension_types::Duckerror::Invalidstate(format!(
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "extension {} is not loaded",
                 entry.extension
             ))
@@ -3422,14 +3422,14 @@ impl ExtensionManager {
         &mut self,
         handle: u32,
         rows: &extension_runtime::Rowbatch,
-    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+    ) -> Result<extension_types::Duckvalue, ducklink_runtime::extension::Duckerror> {
         let entry = match self.lookup_callback(handle, CallbackKind::Aggregate) {
             Some(entry) => entry,
             None => {
                 eprintln!(
                     "[extension-manager] dispatch_aggregate received unknown handle {handle}"
                 );
-                return Err(extension_types::Duckerror::Invalidstate(format!(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "unknown aggregate callback handle {handle}"
                 )));
             }
@@ -3441,7 +3441,7 @@ impl ExtensionManager {
                     "[extension-manager] dispatch_aggregate could not find loaded extension '{}'",
                     entry.extension
                 );
-                return Err(extension_types::Duckerror::Invalidstate(format!(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "extension {} is not loaded",
                     entry.extension
                 )));
@@ -3454,12 +3454,12 @@ impl ExtensionManager {
         &mut self,
         handle: u32,
         args: &[extension_types::Duckvalue],
-    ) -> Result<Option<extension_types::Duckvalue>, extension_types::Duckerror> {
+    ) -> Result<Option<extension_types::Duckvalue>, ducklink_runtime::extension::Duckerror> {
         let entry = match self.lookup_callback(handle, CallbackKind::Pragma) {
             Some(entry) => entry,
             None => {
                 eprintln!("[extension-manager] dispatch_pragma received unknown handle {handle}");
-                return Err(extension_types::Duckerror::Invalidstate(format!(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "unknown pragma callback handle {handle}"
                 )));
             }
@@ -3471,7 +3471,7 @@ impl ExtensionManager {
                     "[extension-manager] dispatch_pragma could not find loaded extension '{}'",
                     entry.extension
                 );
-                return Err(extension_types::Duckerror::Invalidstate(format!(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "extension {} is not loaded",
                     entry.extension
                 )));
@@ -3484,12 +3484,12 @@ impl ExtensionManager {
         &mut self,
         handle: u32,
         value: &extension_types::Duckvalue,
-    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+    ) -> Result<extension_types::Duckvalue, ducklink_runtime::extension::Duckerror> {
         let entry = match self.lookup_callback(handle, CallbackKind::Cast) {
             Some(entry) => entry,
             None => {
                 eprintln!("[extension-manager] dispatch_cast received unknown handle {handle}");
-                return Err(extension_types::Duckerror::Invalidstate(format!(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "unknown cast callback handle {handle}"
                 )));
             }
@@ -3497,7 +3497,7 @@ impl ExtensionManager {
         let instance = match self.extensions.get_mut(&*entry.extension) {
             Some(instance) => instance,
             None => {
-                return Err(extension_types::Duckerror::Invalidstate(format!(
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                     "extension {} is not loaded",
                     entry.extension
                 )))
@@ -5508,7 +5508,7 @@ impl HostState {
                 .expect("extension manager mutex poisoned");
             match manager.dispatch_storage_serialize(catalog_handle) {
                 Ok(bytes) => bytes,
-                Err(extension_types::Duckerror::Unsupported(_)) => {
+                Err(ducklink_runtime::extension::Duckerror::Unsupported(_)) => {
                     eprintln!(
                         "[at5-writeback] {alias}: serialize Unsupported; \
                          skipping fs write (backend is not a serializable blob)"
@@ -5732,15 +5732,15 @@ fn at5_duckvalue_to_i64(v: &core_types::Duckvalue) -> Result<i64, String> {
     })
 }
 
-fn cli_extension_duckerror(err: extension_types::Duckerror) -> cli_types::Duckerror {
+fn cli_extension_duckerror(err: ducklink_runtime::extension::Duckerror) -> cli_types::Duckerror {
     match err {
-        extension_types::Duckerror::Invalidargument(m) => {
+        ducklink_runtime::extension::Duckerror::Invalidargument(m) => {
             cli_types::Duckerror::Invalidargument(m.into())
         }
-        extension_types::Duckerror::Unsupported(m) => cli_types::Duckerror::Unsupported(m.into()),
-        extension_types::Duckerror::Invalidstate(m) => cli_types::Duckerror::Invalidstate(m.into()),
-        extension_types::Duckerror::Io(m) => cli_types::Duckerror::Io(m.into()),
-        extension_types::Duckerror::Internal(m) => cli_types::Duckerror::Internal(m.into()),
+        ducklink_runtime::extension::Duckerror::Unsupported(m) => cli_types::Duckerror::Unsupported(m.into()),
+        ducklink_runtime::extension::Duckerror::Invalidstate(m) => cli_types::Duckerror::Invalidstate(m.into()),
+        ducklink_runtime::extension::Duckerror::Io(m) => cli_types::Duckerror::Io(m.into()),
+        ducklink_runtime::extension::Duckerror::Internal(m) => cli_types::Duckerror::Internal(m.into()),
     }
 }
 
@@ -5748,13 +5748,13 @@ fn cli_extension_duckerror(err: extension_types::Duckerror) -> cli_types::Ducker
 /// the write intercept's `CREATE TABLE IF NOT EXISTS` arm to detect the
 /// backend-specific "table already exists" wording without cracking every
 /// variant open individually.
-fn extension_duckerror_message(err: &extension_types::Duckerror) -> &str {
+fn extension_duckerror_message(err: &ducklink_runtime::extension::Duckerror) -> &str {
     match err {
-        extension_types::Duckerror::Invalidargument(m)
-        | extension_types::Duckerror::Unsupported(m)
-        | extension_types::Duckerror::Invalidstate(m)
-        | extension_types::Duckerror::Io(m)
-        | extension_types::Duckerror::Internal(m) => m.as_str(),
+        ducklink_runtime::extension::Duckerror::Invalidargument(m)
+        | ducklink_runtime::extension::Duckerror::Unsupported(m)
+        | ducklink_runtime::extension::Duckerror::Invalidstate(m)
+        | ducklink_runtime::extension::Duckerror::Io(m)
+        | ducklink_runtime::extension::Duckerror::Internal(m) => m.as_str(),
     }
 }
 
@@ -5923,8 +5923,8 @@ fn sql_type_to_extension_logical(type_text: &str) -> Result<extension_types::Log
 // Retained only for the test mocks below (the production impls moved to
 // ducklink-runtime).
 #[cfg(test)]
-fn unsupported_runtime_error() -> extension_types::Duckerror {
-    extension_types::Duckerror::Unsupported(
+fn unsupported_runtime_error() -> ducklink_runtime::extension::Duckerror {
+    ducklink_runtime::extension::Duckerror::Unsupported(
         "component runtime not available in CLI host".to_string(),
     )
 }
@@ -8999,28 +8999,28 @@ fn convert_extension_resultset_to_core(
         .collect()
 }
 
-fn convert_extension_duckerror_to_core(err: extension_types::Duckerror) -> core_types::Duckerror {
+fn convert_extension_duckerror_to_core(err: ducklink_runtime::extension::Duckerror) -> core_types::Duckerror {
     match err {
-        extension_types::Duckerror::Invalidargument(v) => core_types::Duckerror::Invalidargument(v),
-        extension_types::Duckerror::Unsupported(v) => core_types::Duckerror::Unsupported(v),
-        extension_types::Duckerror::Invalidstate(v) => core_types::Duckerror::Invalidstate(v),
-        extension_types::Duckerror::Io(v) => core_types::Duckerror::Io(v),
-        extension_types::Duckerror::Internal(v) => core_types::Duckerror::Internal(v),
+        ducklink_runtime::extension::Duckerror::Invalidargument(v) => core_types::Duckerror::Invalidargument(v),
+        ducklink_runtime::extension::Duckerror::Unsupported(v) => core_types::Duckerror::Unsupported(v),
+        ducklink_runtime::extension::Duckerror::Invalidstate(v) => core_types::Duckerror::Invalidstate(v),
+        ducklink_runtime::extension::Duckerror::Io(v) => core_types::Duckerror::Io(v),
+        ducklink_runtime::extension::Duckerror::Internal(v) => core_types::Duckerror::Internal(v),
     }
 }
 
-fn convert_core_duckerror_to_extension(err: core_types::Duckerror) -> extension_types::Duckerror {
+fn convert_core_duckerror_to_extension(err: core_types::Duckerror) -> ducklink_runtime::extension::Duckerror {
     match err {
-        core_types::Duckerror::Invalidargument(v) => extension_types::Duckerror::Invalidargument(v),
-        core_types::Duckerror::Unsupported(v) => extension_types::Duckerror::Unsupported(v),
-        core_types::Duckerror::Invalidstate(v) => extension_types::Duckerror::Invalidstate(v),
-        core_types::Duckerror::Io(v) => extension_types::Duckerror::Io(v),
-        core_types::Duckerror::Internal(v) => extension_types::Duckerror::Internal(v),
+        core_types::Duckerror::Invalidargument(v) => ducklink_runtime::extension::Duckerror::Invalidargument(v),
+        core_types::Duckerror::Unsupported(v) => ducklink_runtime::extension::Duckerror::Unsupported(v),
+        core_types::Duckerror::Invalidstate(v) => ducklink_runtime::extension::Duckerror::Invalidstate(v),
+        core_types::Duckerror::Io(v) => ducklink_runtime::extension::Duckerror::Io(v),
+        core_types::Duckerror::Internal(v) => ducklink_runtime::extension::Duckerror::Internal(v),
     }
 }
 
-fn map_runtime_trap(err: wasmtime::Error) -> extension_types::Duckerror {
-    extension_types::Duckerror::Internal(format!("core runtime trap: {err}"))
+fn map_runtime_trap(err: wasmtime::Error) -> ducklink_runtime::extension::Duckerror {
+    ducklink_runtime::extension::Duckerror::Internal(format!("core runtime trap: {err}"))
 }
 
 // M2a: storage-host result converters (extension-WIT -> core-WIT).
@@ -10874,7 +10874,7 @@ mod tests {
             _self_: wasmtime::component::Resource<extension_runtime::ScalarCallback>,
             _args: BindgenVec<extension_types::Duckvalue>,
             _ctx: extension_runtime::Invokeinfo,
-        ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+        ) -> Result<extension_types::Duckvalue, ducklink_runtime::extension::Duckerror> {
             Err(unsupported_runtime_error())
         }
 
@@ -10898,7 +10898,7 @@ mod tests {
             &mut self,
             _self_: wasmtime::component::Resource<extension_runtime::TableCallback>,
             _args: BindgenVec<extension_types::Duckvalue>,
-        ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
+        ) -> Result<extension_runtime::Resultset, ducklink_runtime::extension::Duckerror> {
             Err(unsupported_runtime_error())
         }
 
@@ -10922,7 +10922,7 @@ mod tests {
             &mut self,
             _self_: wasmtime::component::Resource<extension_runtime::AggregateCallback>,
             _rows: extension_runtime::Rowbatch,
-        ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+        ) -> Result<extension_types::Duckvalue, ducklink_runtime::extension::Duckerror> {
             Err(unsupported_runtime_error())
         }
 
@@ -10946,7 +10946,7 @@ mod tests {
             &mut self,
             _self_: wasmtime::component::Resource<extension_runtime::PragmaCallback>,
             _args: BindgenVec<extension_types::Duckvalue>,
-        ) -> Result<Option<extension_types::Duckvalue>, extension_types::Duckerror> {
+        ) -> Result<Option<extension_types::Duckvalue>, ducklink_runtime::extension::Duckerror> {
             Err(unsupported_runtime_error())
         }
 
@@ -10970,7 +10970,7 @@ mod tests {
             &mut self,
             _self_: wasmtime::component::Resource<extension_runtime::CastCallback>,
             _value: extension_types::Duckvalue,
-        ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
+        ) -> Result<extension_types::Duckvalue, ducklink_runtime::extension::Duckerror> {
             Err(unsupported_runtime_error())
         }
 
@@ -10991,7 +10991,7 @@ mod tests {
             _returns: extension_runtime::Logicaltype,
             _callback: wasmtime::component::Resource<extension_runtime::ScalarCallback>,
             _options: Option<extension_runtime::Funcopts>,
-        ) -> Result<u32, extension_types::Duckerror> {
+        ) -> Result<u32, ducklink_runtime::extension::Duckerror> {
             Ok(self.alloc_resource_id())
         }
 
@@ -11012,7 +11012,7 @@ mod tests {
             _columns: BindgenVec<extension_runtime::Columndef>,
             _callback: wasmtime::component::Resource<extension_runtime::TableCallback>,
             _options: Option<extension_runtime::Extopts>,
-        ) -> Result<u32, extension_types::Duckerror> {
+        ) -> Result<u32, ducklink_runtime::extension::Duckerror> {
             Ok(self.alloc_resource_id())
         }
 
@@ -11033,7 +11033,7 @@ mod tests {
             _returns: extension_runtime::Logicaltype,
             _callback: wasmtime::component::Resource<extension_runtime::AggregateCallback>,
             _options: Option<extension_runtime::Funcopts>,
-        ) -> Result<u32, extension_types::Duckerror> {
+        ) -> Result<u32, ducklink_runtime::extension::Duckerror> {
             Ok(self.alloc_resource_id())
         }
 
@@ -11054,7 +11054,7 @@ mod tests {
             _returns: extension_runtime::Logicaltype,
             _callback: wasmtime::component::Resource<extension_runtime::PragmaCallback>,
             _options: Option<extension_runtime::Extopts>,
-        ) -> Result<u32, extension_types::Duckerror> {
+        ) -> Result<u32, ducklink_runtime::extension::Duckerror> {
             Err(unsupported_runtime_error())
         }
 
@@ -11074,7 +11074,7 @@ mod tests {
             _parameters: BindgenVec<String>,
             _body_sql: String,
             _options: Option<extension_runtime::Extopts>,
-        ) -> Result<bool, extension_types::Duckerror> {
+        ) -> Result<bool, ducklink_runtime::extension::Duckerror> {
             Err(unsupported_runtime_error())
         }
 
