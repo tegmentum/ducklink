@@ -420,14 +420,22 @@ pub use extension::{
 ///
 /// This gate flip verifies at the compiler level that no production
 /// path in ducklink-runtime references the wit-bindgen wrapper.
-#[cfg(test)]
-pub mod duckdb_extension_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension",
-        require_store_data_send: true,
-    });
-}
+// Phase 6.2.o — the base wit-bindgen wrapper `duckdb_extension_
+// bindings` retired entirely. Phase 6.2.n Arc 3 gated it with
+// `#[cfg(test)]` (production compile already didn't touch it);
+// Phase 6.2.n Sessions 3-5 migrated every test-only inherent method
+// signature off wit-bindgen record args. What remained were:
+//   * 60 `#[cfg(test)] impl From<extension_types::X> for Mirror`
+//     converter blocks whose sole purpose was bridging wit-bindgen
+//     types to the mirrors (both sides gated to test);
+//   * `#[cfg(test)]` `convert_extension_*` helpers used inside a
+//     handful of test-only inherent methods.
+// With the wrapper deleted, the converters lose their wit-bindgen
+// half — the mirrors are the sole source of truth. The tests that
+// exercised converter arms (see Phase 6.2.o cleanup commit) either
+// retire (their coverage was contract-drift detection which the
+// integration-load tests already cover) or move to plain
+// mirror-shape assertions.
 
 // ADR-0029 Phase 6.2 wrapper-retirement history:
 // - Phase 6.2.j retired nine per-world wit-bindgen wrapper modules

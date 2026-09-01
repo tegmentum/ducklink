@@ -21,19 +21,12 @@ use wasmtime::{AsContextMut, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
-// Phase 6.2.n (Arc 3) — the wit-bindgen wrapper is now `#[cfg(test)]`
-// (see the module def in `crate::lib`), so its interface aliases
-// need to be too. Production dispatch uses the Phase 6.2.m mirrors on
-// `crate::extension` directly.
-#[cfg(test)]
-use crate::duckdb_extension_bindings::duckdb::extension::{
-    arrow_ext as extension_arrow_ext, catalog as extension_catalog,
-    column_types as extension_column_types,
-    coordinate_system as extension_coordinate_system, files as extension_files,
-    logging as extension_logging, runtime as extension_runtime,
-    runtime_ext as extension_runtime_ext, secret as extension_secret,
-    settings as extension_settings, storage as extension_storage, types as extension_types,
-};
+// Phase 6.2.o — the wit-bindgen wrapper `duckdb_extension_bindings`
+// retired entirely (Phase 6.2.n Sessions 3-5 migrated every
+// test-only inherent method signature off wit-bindgen record args;
+// the remaining 60 From converter blocks + convert_extension_*
+// helpers cascade-retired here). Production + test both name only
+// the Phase 6.2.m mirrors on `crate::extension`.
 // Phase 6.2.j — DuckdbExtension typed dispatcher retired (used to be
 // constructed at load time; every dispatch now flows through the
 // wasmos sync export bridge with the raw Instance). DuckdbExtensionPre
@@ -1949,18 +1942,12 @@ impl ExtensionStoreState {
         callback_handle: u32,
         options: Option<Funcopts>,
     ) -> Result<u32, Duckerror> {
-        let arguments: Vec<extension_runtime::Funcarg> = arguments
-            .into_iter()
-            .map(|a| extension_runtime::Funcarg { name: a.name, logical: a.logical.into() })
-            .collect();
+        // Phase 6.2.o — mirrors go straight into the neutral
+        // reg::* helpers; no more wit-bindgen roundtrip.
         let arguments = convert_extension_funcargs(arguments);
-        let varargs = varargs.map(|v| convert_extension_logicaltype(v.into()));
-        let returns = convert_extension_logicaltype(returns.into());
-        let options = options.map(|o| convert_extension_funcopts(extension_runtime::Funcopts {
-            description: o.description,
-            tags: o.tags.into(),
-            attributes: o.attributes.into(),
-        }));
+        let varargs = varargs.map(convert_extension_logicaltype);
+        let returns = convert_extension_logicaltype(returns);
+        let options = options.map(convert_extension_funcopts);
         // WIT `funcflags` has no VOLATILE bit; derive it from the incoming
         // attributes: a scalar-ex is VOLATILE iff it did NOT declare
         // `deterministic`. Absent options -> non-volatile default, closing the
@@ -2037,11 +2024,8 @@ impl ExtensionStoreState {
         schema: Vec<Columndef>,
         callback_handle: u32,
     ) -> Result<u32, Duckerror> {
-        let columns: Vec<extension_runtime::Columndef> = schema
-            .into_iter()
-            .map(|c| extension_runtime::Columndef { name: c.name, logical: c.logical.into() })
-            .collect();
-        let columns = convert_extension_columndefs(columns);
+        // Phase 6.2.o — direct mirror → reg::* conversion.
+        let columns = convert_extension_columndefs(schema);
         verbose_log!(
             "[extension-runtime:{}] registered arrow table '{name}' ({} columns, callback={callback_handle})",
             self.extension_name,
@@ -2261,11 +2245,11 @@ impl LockHandleState {
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
-fn convert_extension_funcargs(args: Vec<extension_runtime::Funcarg>) -> Vec<reg::FuncArg> {
+fn convert_extension_funcargs(args: Vec<Funcarg>) -> Vec<reg::FuncArg> {
     args.into_iter()
         .map(|arg| reg::FuncArg {
             name: arg.name,
-            logical: convert_extension_logicaltype(arg.logical.into()),
+            logical: convert_extension_logicaltype(arg.logical),
         })
         .collect()
 }
@@ -2305,21 +2289,21 @@ fn convert_extension_logicaltype(ty: Logicaltype) -> reg::LogicalType {
 }
 
 #[cfg(test)]
-fn convert_extension_funcopts(opts: extension_runtime::Funcopts) -> reg::FuncOpts {
+fn convert_extension_funcopts(opts: Funcopts) -> reg::FuncOpts {
     reg::FuncOpts {
         description: opts.description,
-        tags: opts.tags.into_iter().collect(),
-        attributes: convert_extension_funcflags(opts.attributes.into()),
+        tags: opts.tags,
+        attributes: convert_extension_funcflags(opts.attributes),
     }
 }
 
 #[cfg(test)]
-fn convert_extension_columndefs(columns: Vec<extension_runtime::Columndef>) -> Vec<reg::ColumnDef> {
+fn convert_extension_columndefs(columns: Vec<Columndef>) -> Vec<reg::ColumnDef> {
     columns
         .into_iter()
         .map(|col| reg::ColumnDef {
             name: col.name,
-            logical: convert_extension_logicaltype(col.logical.into()),
+            logical: convert_extension_logicaltype(col.logical),
         })
         .collect()
 }
@@ -2561,31 +2545,7 @@ pub enum Duckerror {
     Internal(String),
 }
 
-#[cfg(test)]
-impl From<extension_types::Duckerror> for Duckerror {
-    fn from(e: extension_types::Duckerror) -> Self {
-        match e {
-            extension_types::Duckerror::Invalidargument(m) => Duckerror::Invalidargument(m),
-            extension_types::Duckerror::Unsupported(m) => Duckerror::Unsupported(m),
-            extension_types::Duckerror::Invalidstate(m) => Duckerror::Invalidstate(m),
-            extension_types::Duckerror::Io(m) => Duckerror::Io(m),
-            extension_types::Duckerror::Internal(m) => Duckerror::Internal(m),
-        }
-    }
-}
 
-#[cfg(test)]
-impl From<Duckerror> for extension_types::Duckerror {
-    fn from(e: Duckerror) -> Self {
-        match e {
-            Duckerror::Invalidargument(m) => extension_types::Duckerror::Invalidargument(m),
-            Duckerror::Unsupported(m) => extension_types::Duckerror::Unsupported(m),
-            Duckerror::Invalidstate(m) => extension_types::Duckerror::Invalidstate(m),
-            Duckerror::Io(m) => extension_types::Duckerror::Io(m),
-            Duckerror::Internal(m) => extension_types::Duckerror::Internal(m),
-        }
-    }
-}
 
 impl std::fmt::Display for Duckerror {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -2693,111 +2653,7 @@ pub enum Duckvalue {
     Complex(Complexvalue),
 }
 
-#[cfg(test)]
-impl From<extension_types::Decimalvalue> for Decimalvalue {
-    fn from(v: extension_types::Decimalvalue) -> Self {
-        Decimalvalue { lower: v.lower, upper: v.upper, width: v.width, scale: v.scale }
-    }
-}
-#[cfg(test)]
-impl From<Decimalvalue> for extension_types::Decimalvalue {
-    fn from(v: Decimalvalue) -> Self {
-        extension_types::Decimalvalue { lower: v.lower, upper: v.upper, width: v.width, scale: v.scale }
-    }
-}
-#[cfg(test)]
-impl From<extension_types::Hugeintvalue> for Hugeintvalue {
-    fn from(v: extension_types::Hugeintvalue) -> Self {
-        Hugeintvalue { lower: v.lower, upper: v.upper }
-    }
-}
-#[cfg(test)]
-impl From<Hugeintvalue> for extension_types::Hugeintvalue {
-    fn from(v: Hugeintvalue) -> Self {
-        extension_types::Hugeintvalue { lower: v.lower, upper: v.upper }
-    }
-}
-#[cfg(test)]
-impl From<extension_types::Uhugeintvalue> for Uhugeintvalue {
-    fn from(v: extension_types::Uhugeintvalue) -> Self {
-        Uhugeintvalue { lower: v.lower, upper: v.upper }
-    }
-}
-#[cfg(test)]
-impl From<Uhugeintvalue> for extension_types::Uhugeintvalue {
-    fn from(v: Uhugeintvalue) -> Self {
-        extension_types::Uhugeintvalue { lower: v.lower, upper: v.upper }
-    }
-}
-#[cfg(test)]
-impl From<extension_types::Intervalvalue> for Intervalvalue {
-    fn from(v: extension_types::Intervalvalue) -> Self {
-        Intervalvalue { months: v.months, days: v.days, micros: v.micros }
-    }
-}
-#[cfg(test)]
-impl From<Intervalvalue> for extension_types::Intervalvalue {
-    fn from(v: Intervalvalue) -> Self {
-        extension_types::Intervalvalue { months: v.months, days: v.days, micros: v.micros }
-    }
-}
-#[cfg(test)]
-impl From<extension_types::Uuidvalue> for Uuidvalue {
-    fn from(v: extension_types::Uuidvalue) -> Self {
-        Uuidvalue { hi: v.hi, lo: v.lo }
-    }
-}
-#[cfg(test)]
-impl From<Uuidvalue> for extension_types::Uuidvalue {
-    fn from(v: Uuidvalue) -> Self {
-        extension_types::Uuidvalue { hi: v.hi, lo: v.lo }
-    }
-}
-#[cfg(test)]
-impl From<extension_types::Complexvalue> for Complexvalue {
-    fn from(v: extension_types::Complexvalue) -> Self {
-        Complexvalue { type_expr: v.type_expr, json: v.json }
-    }
-}
-#[cfg(test)]
-impl From<Complexvalue> for extension_types::Complexvalue {
-    fn from(v: Complexvalue) -> Self {
-        extension_types::Complexvalue { type_expr: v.type_expr, json: v.json }
-    }
-}
 
-#[cfg(test)]
-impl From<extension_types::Duckvalue> for Duckvalue {
-    fn from(v: extension_types::Duckvalue) -> Self {
-        use extension_types::Duckvalue as W;
-        match v {
-            W::Null => Duckvalue::Null,
-            W::Boolean(b) => Duckvalue::Boolean(b),
-            W::Int64(n) => Duckvalue::Int64(n),
-            W::Uint64(n) => Duckvalue::Uint64(n),
-            W::Float64(n) => Duckvalue::Float64(n),
-            W::Text(s) => Duckvalue::Text(s),
-            W::Blob(b) => Duckvalue::Blob(b),
-            W::Int32(n) => Duckvalue::Int32(n),
-            W::Timestamp(n) => Duckvalue::Timestamp(n),
-            W::Int8(n) => Duckvalue::Int8(n),
-            W::Int16(n) => Duckvalue::Int16(n),
-            W::Uint8(n) => Duckvalue::Uint8(n),
-            W::Uint16(n) => Duckvalue::Uint16(n),
-            W::Uint32(n) => Duckvalue::Uint32(n),
-            W::Float32(n) => Duckvalue::Float32(n),
-            W::Date(n) => Duckvalue::Date(n),
-            W::Time(n) => Duckvalue::Time(n),
-            W::Timestamptz(n) => Duckvalue::Timestamptz(n),
-            W::Decimal(d) => Duckvalue::Decimal(d.into()),
-            W::Interval(i) => Duckvalue::Interval(i.into()),
-            W::Uuid(u) => Duckvalue::Uuid(u.into()),
-            W::Hugeint(h) => Duckvalue::Hugeint(h.into()),
-            W::Uhugeint(h) => Duckvalue::Uhugeint(h.into()),
-            W::Complex(c) => Duckvalue::Complex(c.into()),
-        }
-    }
-}
 
 /// DECIMAL width/scale shape. Mirror of WIT `types.decimalshape`.
 /// Carried on `Logicaltype::Decimal` so DECIMAL type-shape is
@@ -2850,94 +2706,8 @@ pub struct Columndef {
     pub logical: Logicaltype,
 }
 
-#[cfg(test)]
-impl From<extension_types::Decimalshape> for Decimalshape {
-    fn from(v: extension_types::Decimalshape) -> Self {
-        Decimalshape { width: v.width, scale: v.scale }
-    }
-}
-#[cfg(test)]
-impl From<Decimalshape> for extension_types::Decimalshape {
-    fn from(v: Decimalshape) -> Self {
-        extension_types::Decimalshape { width: v.width, scale: v.scale }
-    }
-}
 
-#[cfg(test)]
-impl From<extension_types::Logicaltype> for Logicaltype {
-    fn from(v: extension_types::Logicaltype) -> Self {
-        use extension_types::Logicaltype as W;
-        match v {
-            W::Boolean => Logicaltype::Boolean,
-            W::Int64 => Logicaltype::Int64,
-            W::Uint64 => Logicaltype::Uint64,
-            W::Float64 => Logicaltype::Float64,
-            W::Text => Logicaltype::Text,
-            W::Blob => Logicaltype::Blob,
-            W::Int32 => Logicaltype::Int32,
-            W::Timestamp => Logicaltype::Timestamp,
-            W::Int8 => Logicaltype::Int8,
-            W::Int16 => Logicaltype::Int16,
-            W::Uint8 => Logicaltype::Uint8,
-            W::Uint16 => Logicaltype::Uint16,
-            W::Uint32 => Logicaltype::Uint32,
-            W::Float32 => Logicaltype::Float32,
-            W::Date => Logicaltype::Date,
-            W::Time => Logicaltype::Time,
-            W::Timestamptz => Logicaltype::Timestamptz,
-            W::Decimal(d) => Logicaltype::Decimal(d.into()),
-            W::Interval => Logicaltype::Interval,
-            W::Uuid => Logicaltype::Uuid,
-            W::Hugeint => Logicaltype::Hugeint,
-            W::Uhugeint => Logicaltype::Uhugeint,
-            W::Complex(s) => Logicaltype::Complex(s),
-        }
-    }
-}
-#[cfg(test)]
-impl From<Logicaltype> for extension_types::Logicaltype {
-    fn from(v: Logicaltype) -> Self {
-        use extension_types::Logicaltype as W;
-        match v {
-            Logicaltype::Boolean => W::Boolean,
-            Logicaltype::Int64 => W::Int64,
-            Logicaltype::Uint64 => W::Uint64,
-            Logicaltype::Float64 => W::Float64,
-            Logicaltype::Text => W::Text,
-            Logicaltype::Blob => W::Blob,
-            Logicaltype::Int32 => W::Int32,
-            Logicaltype::Timestamp => W::Timestamp,
-            Logicaltype::Int8 => W::Int8,
-            Logicaltype::Int16 => W::Int16,
-            Logicaltype::Uint8 => W::Uint8,
-            Logicaltype::Uint16 => W::Uint16,
-            Logicaltype::Uint32 => W::Uint32,
-            Logicaltype::Float32 => W::Float32,
-            Logicaltype::Date => W::Date,
-            Logicaltype::Time => W::Time,
-            Logicaltype::Timestamptz => W::Timestamptz,
-            Logicaltype::Decimal(d) => W::Decimal(d.into()),
-            Logicaltype::Interval => W::Interval,
-            Logicaltype::Uuid => W::Uuid,
-            Logicaltype::Hugeint => W::Hugeint,
-            Logicaltype::Uhugeint => W::Uhugeint,
-            Logicaltype::Complex(s) => W::Complex(s),
-        }
-    }
-}
 
-#[cfg(test)]
-impl From<extension_types::Columndef> for Columndef {
-    fn from(v: extension_types::Columndef) -> Self {
-        Columndef { name: v.name, logical: v.logical.into() }
-    }
-}
-#[cfg(test)]
-impl From<Columndef> for extension_types::Columndef {
-    fn from(v: Columndef) -> Self {
-        extension_types::Columndef { name: v.name, logical: v.logical.into() }
-    }
-}
 
 // ─── Column-types mirrors ────────────────────────────────────────
 
@@ -3041,208 +2811,14 @@ pub struct Colvec {
     pub rows: u32,
 }
 
-#[cfg(test)]
-impl From<extension_column_types::DuckInt128> for DuckInt128 {
-    fn from(v: extension_column_types::DuckInt128) -> Self {
-        DuckInt128 { lower: v.lower, upper: v.upper }
-    }
-}
-#[cfg(test)]
-impl From<DuckInt128> for extension_column_types::DuckInt128 {
-    fn from(v: DuckInt128) -> Self {
-        extension_column_types::DuckInt128 { lower: v.lower, upper: v.upper }
-    }
-}
-#[cfg(test)]
-impl From<extension_column_types::DuckUint128> for DuckUint128 {
-    fn from(v: extension_column_types::DuckUint128) -> Self {
-        DuckUint128 { lower: v.lower, upper: v.upper }
-    }
-}
-#[cfg(test)]
-impl From<DuckUint128> for extension_column_types::DuckUint128 {
-    fn from(v: DuckUint128) -> Self {
-        extension_column_types::DuckUint128 { lower: v.lower, upper: v.upper }
-    }
-}
-#[cfg(test)]
-impl From<extension_column_types::NestedColumn> for NestedColumn {
-    fn from(v: extension_column_types::NestedColumn) -> Self {
-        NestedColumn { encoded: v.encoded.into_iter().collect() }
-    }
-}
-#[cfg(test)]
-impl From<NestedColumn> for extension_column_types::NestedColumn {
-    fn from(v: NestedColumn) -> Self {
-        extension_column_types::NestedColumn { encoded: v.encoded.into() }
-    }
-}
-#[cfg(test)]
-impl From<extension_column_types::MapColumn> for MapColumn {
-    fn from(v: extension_column_types::MapColumn) -> Self {
-        MapColumn { keys_encoded: v.keys_encoded.into_iter().collect(),
-                    vals_encoded: v.vals_encoded.into_iter().collect() }
-    }
-}
-#[cfg(test)]
-impl From<MapColumn> for extension_column_types::MapColumn {
-    fn from(v: MapColumn) -> Self {
-        extension_column_types::MapColumn {
-            keys_encoded: v.keys_encoded.into(),
-            vals_encoded: v.vals_encoded.into(),
-        }
-    }
-}
-#[cfg(test)]
-impl From<extension_column_types::ArrayColumn> for ArrayColumn {
-    fn from(v: extension_column_types::ArrayColumn) -> Self {
-        ArrayColumn { size: v.size, encoded: v.encoded.into_iter().collect() }
-    }
-}
-#[cfg(test)]
-impl From<ArrayColumn> for extension_column_types::ArrayColumn {
-    fn from(v: ArrayColumn) -> Self {
-        extension_column_types::ArrayColumn { size: v.size, encoded: v.encoded.into() }
-    }
-}
 
 // Column-types re-declares decimalvalue, intervalvalue, uuidvalue,
 // and complexvalue with identical layout to their types.wit
 // counterparts. wit-bindgen generates distinct Rust types per WIT
 // declaration, so we bridge column-types' variants through the
 // unified mirrors above.
-#[cfg(test)]
-impl From<extension_column_types::Decimalvalue> for Decimalvalue {
-    fn from(v: extension_column_types::Decimalvalue) -> Self {
-        Decimalvalue { lower: v.lower, upper: v.upper, width: v.width, scale: v.scale }
-    }
-}
-#[cfg(test)]
-impl From<Decimalvalue> for extension_column_types::Decimalvalue {
-    fn from(v: Decimalvalue) -> Self {
-        extension_column_types::Decimalvalue { lower: v.lower, upper: v.upper, width: v.width, scale: v.scale }
-    }
-}
-#[cfg(test)]
-impl From<extension_column_types::Intervalvalue> for Intervalvalue {
-    fn from(v: extension_column_types::Intervalvalue) -> Self {
-        Intervalvalue { months: v.months, days: v.days, micros: v.micros }
-    }
-}
-#[cfg(test)]
-impl From<Intervalvalue> for extension_column_types::Intervalvalue {
-    fn from(v: Intervalvalue) -> Self {
-        extension_column_types::Intervalvalue { months: v.months, days: v.days, micros: v.micros }
-    }
-}
-#[cfg(test)]
-impl From<extension_column_types::Uuidvalue> for Uuidvalue {
-    fn from(v: extension_column_types::Uuidvalue) -> Self {
-        Uuidvalue { hi: v.hi, lo: v.lo }
-    }
-}
-#[cfg(test)]
-impl From<Uuidvalue> for extension_column_types::Uuidvalue {
-    fn from(v: Uuidvalue) -> Self {
-        extension_column_types::Uuidvalue { hi: v.hi, lo: v.lo }
-    }
-}
-#[cfg(test)]
-impl From<extension_column_types::Complexvalue> for Complexvalue {
-    fn from(v: extension_column_types::Complexvalue) -> Self {
-        Complexvalue { type_expr: v.type_expr, json: v.json }
-    }
-}
-#[cfg(test)]
-impl From<Complexvalue> for extension_column_types::Complexvalue {
-    fn from(v: Complexvalue) -> Self {
-        extension_column_types::Complexvalue { type_expr: v.type_expr, json: v.json }
-    }
-}
 
-#[cfg(test)]
-impl From<extension_column_types::Column> for Column {
-    fn from(v: extension_column_types::Column) -> Self {
-        use extension_column_types::Column as W;
-        match v {
-            W::Boolean(xs) => Column::Boolean(xs.into()),
-            W::Int64(xs) => Column::Int64(xs.into()),
-            W::Uint64(xs) => Column::Uint64(xs.into()),
-            W::Float64(xs) => Column::Float64(xs.into()),
-            W::Int32(xs) => Column::Int32(xs.into()),
-            W::Timestamp(xs) => Column::Timestamp(xs.into()),
-            W::Int8(xs) => Column::Int8(xs.into()),
-            W::Int16(xs) => Column::Int16(xs.into()),
-            W::Uint8(xs) => Column::Uint8(xs.into()),
-            W::Uint16(xs) => Column::Uint16(xs.into()),
-            W::Uint32(xs) => Column::Uint32(xs.into()),
-            W::Float32(xs) => Column::Float32(xs.into()),
-            W::Date(xs) => Column::Date(xs.into()),
-            W::Time(xs) => Column::Time(xs.into()),
-            W::Timestamptz(xs) => Column::Timestamptz(xs.into()),
-            W::Decimal(xs) => Column::Decimal(xs.into_iter().map(Into::into).collect()),
-            W::Interval(xs) => Column::Interval(xs.into_iter().map(Into::into).collect()),
-            W::Uuid(xs) => Column::Uuid(xs.into_iter().map(Into::into).collect()),
-            W::Text(xs) => Column::Text(xs.into()),
-            W::Blob(xs) => Column::Blob(xs.into_iter().map(|b| b.into()).collect()),
-            W::Hugeint(xs) => Column::Hugeint(xs.into_iter().map(Into::into).collect()),
-            W::Uhugeint(xs) => Column::Uhugeint(xs.into_iter().map(Into::into).collect()),
-            W::ListCol(n) => Column::ListCol(n.into()),
-            W::StructCol(n) => Column::StructCol(n.into()),
-            W::MapCol(m) => Column::MapCol(m.into()),
-            W::ArrayCol(a) => Column::ArrayCol(a.into()),
-            W::Complex(xs) => Column::Complex(xs.into_iter().map(Into::into).collect()),
-        }
-    }
-}
-#[cfg(test)]
-impl From<Column> for extension_column_types::Column {
-    fn from(v: Column) -> Self {
-        use extension_column_types::Column as W;
-        match v {
-            Column::Boolean(xs) => W::Boolean(xs.into()),
-            Column::Int64(xs) => W::Int64(xs.into()),
-            Column::Uint64(xs) => W::Uint64(xs.into()),
-            Column::Float64(xs) => W::Float64(xs.into()),
-            Column::Int32(xs) => W::Int32(xs.into()),
-            Column::Timestamp(xs) => W::Timestamp(xs.into()),
-            Column::Int8(xs) => W::Int8(xs.into()),
-            Column::Int16(xs) => W::Int16(xs.into()),
-            Column::Uint8(xs) => W::Uint8(xs.into()),
-            Column::Uint16(xs) => W::Uint16(xs.into()),
-            Column::Uint32(xs) => W::Uint32(xs.into()),
-            Column::Float32(xs) => W::Float32(xs.into()),
-            Column::Date(xs) => W::Date(xs.into()),
-            Column::Time(xs) => W::Time(xs.into()),
-            Column::Timestamptz(xs) => W::Timestamptz(xs.into()),
-            Column::Decimal(xs) => W::Decimal(xs.into_iter().map(Into::into).collect()),
-            Column::Interval(xs) => W::Interval(xs.into_iter().map(Into::into).collect()),
-            Column::Uuid(xs) => W::Uuid(xs.into_iter().map(Into::into).collect()),
-            Column::Text(xs) => W::Text(xs.into()),
-            Column::Blob(xs) => W::Blob(xs.into_iter().map(|b| b.into()).collect::<Vec<_>>().into()),
-            Column::Hugeint(xs) => W::Hugeint(xs.into_iter().map(Into::into).collect()),
-            Column::Uhugeint(xs) => W::Uhugeint(xs.into_iter().map(Into::into).collect()),
-            Column::ListCol(n) => W::ListCol(n.into()),
-            Column::StructCol(n) => W::StructCol(n.into()),
-            Column::MapCol(m) => W::MapCol(m.into()),
-            Column::ArrayCol(a) => W::ArrayCol(a.into()),
-            Column::Complex(xs) => W::Complex(xs.into_iter().map(Into::into).collect()),
-        }
-    }
-}
 
-#[cfg(test)]
-impl From<extension_column_types::Colvec> for Colvec {
-    fn from(v: extension_column_types::Colvec) -> Self {
-        Colvec { data: v.data.into(), validity: v.validity.into_iter().collect(), rows: v.rows }
-    }
-}
-#[cfg(test)]
-impl From<Colvec> for extension_column_types::Colvec {
-    fn from(v: Colvec) -> Self {
-        extension_column_types::Colvec { data: v.data.into(), validity: v.validity.into(), rows: v.rows }
-    }
-}
 
 // ─── Phase 6.2.m Session 6 — flags mirrors ───────────────────────
 
@@ -3279,30 +2855,6 @@ impl std::ops::BitOrAssign for Funcflags {
     fn bitor_assign(&mut self, rhs: Self) { self.0 |= rhs.0; }
 }
 
-#[cfg(test)]
-impl From<extension_types::Funcflags> for Funcflags {
-    fn from(f: extension_types::Funcflags) -> Self {
-        let mut out = Funcflags::empty();
-        if f.contains(extension_types::Funcflags::DETERMINISTIC) { out |= Funcflags::DETERMINISTIC; }
-        if f.contains(extension_types::Funcflags::COMMUTATIVE)   { out |= Funcflags::COMMUTATIVE; }
-        if f.contains(extension_types::Funcflags::STATELESS)     { out |= Funcflags::STATELESS; }
-        if f.contains(extension_types::Funcflags::SIDEEFFECTING) { out |= Funcflags::SIDEEFFECTING; }
-        if f.contains(extension_types::Funcflags::DEPRECATED)    { out |= Funcflags::DEPRECATED; }
-        out
-    }
-}
-#[cfg(test)]
-impl From<Funcflags> for extension_types::Funcflags {
-    fn from(f: Funcflags) -> Self {
-        let mut out = extension_types::Funcflags::empty();
-        if f.contains(Funcflags::DETERMINISTIC) { out |= extension_types::Funcflags::DETERMINISTIC; }
-        if f.contains(Funcflags::COMMUTATIVE)   { out |= extension_types::Funcflags::COMMUTATIVE; }
-        if f.contains(Funcflags::STATELESS)     { out |= extension_types::Funcflags::STATELESS; }
-        if f.contains(Funcflags::SIDEEFFECTING) { out |= extension_types::Funcflags::SIDEEFFECTING; }
-        if f.contains(Funcflags::DEPRECATED)    { out |= extension_types::Funcflags::DEPRECATED; }
-        out
-    }
-}
 
 /// Connection lifecycle event bits. Mirror of WIT
 /// `lifecycle.conn-events` (2-flag bitset: opened + closed).
@@ -3414,159 +2966,13 @@ pub struct Loadresult {
     pub requires: Vec<Capabilitykind>,
 }
 
-#[cfg(test)]
-impl From<extension_types::Configerror> for Configerror {
-    fn from(e: extension_types::Configerror) -> Self {
-        match e {
-            extension_types::Configerror::Invalidkey(m) => Configerror::Invalidkey(m),
-            extension_types::Configerror::Typemismatch(m) => Configerror::Typemismatch(m),
-            extension_types::Configerror::Unavailable(m) => Configerror::Unavailable(m),
-            extension_types::Configerror::Internalconfig(m) => Configerror::Internalconfig(m),
-        }
-    }
-}
-#[cfg(test)]
-impl From<Configerror> for extension_types::Configerror {
-    fn from(e: Configerror) -> Self {
-        match e {
-            Configerror::Invalidkey(m) => extension_types::Configerror::Invalidkey(m),
-            Configerror::Typemismatch(m) => extension_types::Configerror::Typemismatch(m),
-            Configerror::Unavailable(m) => extension_types::Configerror::Unavailable(m),
-            Configerror::Internalconfig(m) => extension_types::Configerror::Internalconfig(m),
-        }
-    }
-}
 
-#[cfg(test)]
-impl From<extension_logging::Loglevel> for Loglevel {
-    fn from(l: extension_logging::Loglevel) -> Self {
-        use extension_logging::Loglevel as W;
-        match l {
-            W::Trace => Loglevel::Trace,
-            W::Debug => Loglevel::Debug,
-            W::Info => Loglevel::Info,
-            W::Warn => Loglevel::Warn,
-            W::Error => Loglevel::Error,
-        }
-    }
-}
-#[cfg(test)]
-impl From<Loglevel> for extension_logging::Loglevel {
-    fn from(l: Loglevel) -> Self {
-        use extension_logging::Loglevel as W;
-        match l {
-            Loglevel::Trace => W::Trace,
-            Loglevel::Debug => W::Debug,
-            Loglevel::Info => W::Info,
-            Loglevel::Warn => W::Warn,
-            Loglevel::Error => W::Error,
-        }
-    }
-}
 
-#[cfg(test)]
-impl From<extension_logging::Logfield> for Logfield {
-    fn from(f: extension_logging::Logfield) -> Self {
-        Logfield { key: f.key, value: f.value }
-    }
-}
-#[cfg(test)]
-impl From<Logfield> for extension_logging::Logfield {
-    fn from(f: Logfield) -> Self {
-        extension_logging::Logfield { key: f.key, value: f.value }
-    }
-}
 
-#[cfg(test)]
-impl From<extension_types::Invokeinfo> for Invokeinfo {
-    fn from(i: extension_types::Invokeinfo) -> Self {
-        Invokeinfo { rowindex: i.rowindex, iswindow: i.iswindow }
-    }
-}
-#[cfg(test)]
-impl From<Invokeinfo> for extension_types::Invokeinfo {
-    fn from(i: Invokeinfo) -> Self {
-        extension_types::Invokeinfo { rowindex: i.rowindex, iswindow: i.iswindow }
-    }
-}
 
-#[cfg(test)]
-impl From<extension_types::Capabilitykind> for Capabilitykind {
-    fn from(k: extension_types::Capabilitykind) -> Self {
-        use extension_types::Capabilitykind as W;
-        match k {
-            W::Scalar => Capabilitykind::Scalar,
-            W::Table => Capabilitykind::Table,
-            W::Aggregate => Capabilitykind::Aggregate,
-            W::Pragma => Capabilitykind::Pragma,
-            W::Macro => Capabilitykind::Macro,
-            W::Catalog => Capabilitykind::Catalog,
-            W::FileFormat => Capabilitykind::FileFormat,
-        }
-    }
-}
-#[cfg(test)]
-impl From<Capabilitykind> for extension_types::Capabilitykind {
-    fn from(k: Capabilitykind) -> Self {
-        use extension_types::Capabilitykind as W;
-        match k {
-            Capabilitykind::Scalar => W::Scalar,
-            Capabilitykind::Table => W::Table,
-            Capabilitykind::Aggregate => W::Aggregate,
-            Capabilitykind::Pragma => W::Pragma,
-            Capabilitykind::Macro => W::Macro,
-            Capabilitykind::Catalog => W::Catalog,
-            Capabilitykind::FileFormat => W::FileFormat,
-        }
-    }
-}
 
-#[cfg(test)]
-impl From<extension_types::Funcarg> for Funcarg {
-    fn from(a: extension_types::Funcarg) -> Self {
-        Funcarg { name: a.name, logical: a.logical.into() }
-    }
-}
-#[cfg(test)]
-impl From<Funcarg> for extension_types::Funcarg {
-    fn from(a: Funcarg) -> Self {
-        extension_types::Funcarg { name: a.name, logical: a.logical.into() }
-    }
-}
 
-#[cfg(test)]
-impl From<extension_types::Extopts> for Extopts {
-    fn from(o: extension_types::Extopts) -> Self {
-        Extopts { description: o.description, tags: o.tags.into_iter().collect() }
-    }
-}
-#[cfg(test)]
-impl From<Extopts> for extension_types::Extopts {
-    fn from(o: Extopts) -> Self {
-        extension_types::Extopts { description: o.description, tags: o.tags.into() }
-    }
-}
 
-#[cfg(test)]
-impl From<extension_types::Loadresult> for Loadresult {
-    fn from(r: extension_types::Loadresult) -> Self {
-        Loadresult {
-            name: r.name,
-            version: r.version,
-            requires: r.requires.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-#[cfg(test)]
-impl From<Loadresult> for extension_types::Loadresult {
-    fn from(r: Loadresult) -> Self {
-        extension_types::Loadresult {
-            name: r.name,
-            version: r.version,
-            requires: r.requires.into_iter().map(Into::into).collect::<Vec<_>>().into(),
-        }
-    }
-}
 
 /// A resultset returned by a scan / query dispatch: row-major
 /// list of rows, each a list of `Duckvalue`s. Mirror of WIT
@@ -3578,38 +2984,6 @@ pub type Resultset = Vec<Vec<Duckvalue>>;
 /// `types.rowbatch`.
 pub type Rowbatch = Vec<Vec<Duckvalue>>;
 
-#[cfg(test)]
-impl From<Duckvalue> for extension_types::Duckvalue {
-    fn from(v: Duckvalue) -> Self {
-        use extension_types::Duckvalue as W;
-        match v {
-            Duckvalue::Null => W::Null,
-            Duckvalue::Boolean(b) => W::Boolean(b),
-            Duckvalue::Int64(n) => W::Int64(n),
-            Duckvalue::Uint64(n) => W::Uint64(n),
-            Duckvalue::Float64(n) => W::Float64(n),
-            Duckvalue::Text(s) => W::Text(s),
-            Duckvalue::Blob(b) => W::Blob(b),
-            Duckvalue::Int32(n) => W::Int32(n),
-            Duckvalue::Timestamp(n) => W::Timestamp(n),
-            Duckvalue::Int8(n) => W::Int8(n),
-            Duckvalue::Int16(n) => W::Int16(n),
-            Duckvalue::Uint8(n) => W::Uint8(n),
-            Duckvalue::Uint16(n) => W::Uint16(n),
-            Duckvalue::Uint32(n) => W::Uint32(n),
-            Duckvalue::Float32(n) => W::Float32(n),
-            Duckvalue::Date(n) => W::Date(n),
-            Duckvalue::Time(n) => W::Time(n),
-            Duckvalue::Timestamptz(n) => W::Timestamptz(n),
-            Duckvalue::Decimal(d) => W::Decimal(d.into()),
-            Duckvalue::Interval(i) => W::Interval(i.into()),
-            Duckvalue::Uuid(u) => W::Uuid(u.into()),
-            Duckvalue::Hugeint(h) => W::Hugeint(h.into()),
-            Duckvalue::Uhugeint(h) => W::Uhugeint(h.into()),
-            Duckvalue::Complex(c) => W::Complex(c.into()),
-        }
-    }
-}
 
 // ADR-0029 Phase 6.2.k — SPI record/enum mirrors.
 //
@@ -6161,14 +5535,8 @@ mod tests {
     fn convert_funcargs_preserves_names_and_types() {
         use Logicaltype as L;
         let args = vec![
-            extension_runtime::Funcarg {
-                name: Some("x".to_string()),
-                logical: L::Int64.into(),
-            },
-            extension_runtime::Funcarg {
-                name: None,
-                logical: L::Text.into(),
-            },
+            Funcarg { name: Some("x".to_string()), logical: L::Int64 },
+            Funcarg { name: None, logical: L::Text },
         ];
         let out = convert_extension_funcargs(args);
         assert_eq!(out.len(), 2);
@@ -6182,14 +5550,8 @@ mod tests {
     fn convert_columndefs_preserves_names_and_types() {
         use Logicaltype as L;
         let cols = vec![
-            extension_runtime::Columndef {
-                name: "id".to_string(),
-                logical: L::Int32.into(),
-            },
-            extension_runtime::Columndef {
-                name: "label".to_string(),
-                logical: L::Complex("VARCHAR[]".to_string()).into(),
-            },
+            Columndef { name: "id".to_string(), logical: L::Int32 },
+            Columndef { name: "label".to_string(), logical: L::Complex("VARCHAR[]".to_string()) },
         ];
         let out = convert_extension_columndefs(cols);
         assert_eq!(out.len(), 2);
