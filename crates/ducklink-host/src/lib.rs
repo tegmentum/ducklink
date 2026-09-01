@@ -2336,7 +2336,7 @@ impl ExtensionManager {
         &mut self,
         catalog: u32,
         table: &str,
-    ) -> Result<Vec<extension_types::Columndef>, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<Vec<ducklink_runtime::extension::Columndef>, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
             ducklink_runtime::extension::Duckerror::Invalidstate(format!(
@@ -2573,7 +2573,7 @@ impl ExtensionManager {
         &mut self,
         txn: u32,
         table: &str,
-        columns: &[extension_types::Columndef],
+        columns: &[ducklink_runtime::extension::Columndef],
     ) -> Result<(), ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
@@ -2690,7 +2690,7 @@ impl ExtensionManager {
         &mut self,
         catalog: u32,
         table: &str,
-        columns: &[extension_types::Columndef],
+        columns: &[ducklink_runtime::extension::Columndef],
     ) -> Result<(), ducklink_runtime::extension::Duckerror> {
         let txn = self.dispatch_storage_begin_transaction(catalog)?;
         match self.dispatch_storage_create_table(txn, table, columns) {
@@ -5314,7 +5314,7 @@ impl HostState {
                         return Ok(empty_query_result());
                     }
                 }
-                let mut ext_cols: Vec<extension_types::Columndef> =
+                let mut ext_cols: Vec<ducklink_runtime::extension::Columndef> =
                     Vec::with_capacity(columns.len());
                 for col in &columns {
                     let name = &col.name;
@@ -5330,7 +5330,7 @@ impl HostState {
                             .into(),
                         )
                     })?;
-                    ext_cols.push(extension_types::Columndef {
+                    ext_cols.push(ducklink_runtime::extension::Columndef {
                         name: name.clone(),
                         logical,
                     });
@@ -5409,9 +5409,9 @@ impl HostState {
                 // for mapping its own logical types back to native column
                 // types on the wire (see e.g. postgreswasm's
                 // `logical_to_postgres`).
-                let ext_columns: Vec<extension_types::Columndef> = columns
+                let ext_columns: Vec<ducklink_runtime::extension::Columndef> = columns
                     .iter()
-                    .map(|c| extension_types::Columndef {
+                    .map(|c| ducklink_runtime::extension::Columndef {
                         name: c.name.clone(),
                         logical: parse_sql_type_to_logical(&c.type_name),
                     })
@@ -5545,7 +5545,7 @@ impl HostState {
         &mut self,
         alias: &str,
         table: &str,
-    ) -> Result<(u32, Vec<extension_types::Columndef>), cli_types::Duckerror> {
+    ) -> Result<(u32, Vec<ducklink_runtime::extension::Columndef>), cli_types::Duckerror> {
         let catalog_handle = self
             .attached_aliases
             .get(alias)
@@ -5689,7 +5689,7 @@ fn resolve_attach_dsn_path(dsn: &str) -> Option<PathBuf> {
 /// in a storage-dispatch column list. Missing = the extension doesn't expose
 /// a stable row identifier; UPDATE/DELETE can't run against it.
 fn at5_locate_rowid_column(
-    columns: &[extension_types::Columndef],
+    columns: &[ducklink_runtime::extension::Columndef],
     alias: &str,
     table: &str,
 ) -> Result<usize, cli_types::Duckerror> {
@@ -5765,32 +5765,32 @@ fn extension_duckerror_message(err: &ducklink_runtime::extension::Duckerror) -> 
 /// forwarded as `Complex` so an extension that supports it can decide.
 /// Case-insensitive; strips a trailing width/scale specifier
 /// (`VARCHAR(255)` -> `VARCHAR`) before matching.
-fn parse_sql_type_to_logical(ty: &str) -> extension_types::Logicaltype {
+fn parse_sql_type_to_logical(ty: &str) -> ducklink_runtime::extension::Logicaltype {
     let mut t = ty.trim();
     if let Some(paren) = t.find('(') {
         t = t[..paren].trim();
     }
     let up = t.to_ascii_uppercase();
     match up.as_str() {
-        "INT" | "INTEGER" | "INT4" => extension_types::Logicaltype::Int32,
-        "BIGINT" | "INT8" => extension_types::Logicaltype::Int64,
-        "SMALLINT" | "INT2" => extension_types::Logicaltype::Int16,
-        "TINYINT" => extension_types::Logicaltype::Int8,
-        "UBIGINT" => extension_types::Logicaltype::Uint64,
-        "UINTEGER" => extension_types::Logicaltype::Uint32,
-        "USMALLINT" => extension_types::Logicaltype::Uint16,
-        "UTINYINT" => extension_types::Logicaltype::Uint8,
-        "REAL" | "FLOAT4" => extension_types::Logicaltype::Float32,
-        "DOUBLE" | "FLOAT" | "FLOAT8" | "DOUBLE PRECISION" => extension_types::Logicaltype::Float64,
-        "BOOL" | "BOOLEAN" => extension_types::Logicaltype::Boolean,
-        "TEXT" | "STRING" | "VARCHAR" | "CHAR" => extension_types::Logicaltype::Text,
-        "BLOB" | "BYTEA" | "BYTES" => extension_types::Logicaltype::Blob,
-        "DATE" => extension_types::Logicaltype::Date,
-        "TIME" => extension_types::Logicaltype::Time,
-        "TIMESTAMP" | "DATETIME" => extension_types::Logicaltype::Timestamp,
-        "TIMESTAMPTZ" => extension_types::Logicaltype::Timestamptz,
-        "UUID" => extension_types::Logicaltype::Uuid,
-        _ => extension_types::Logicaltype::Complex(t.to_string()),
+        "INT" | "INTEGER" | "INT4" => ducklink_runtime::extension::Logicaltype::Int32,
+        "BIGINT" | "INT8" => ducklink_runtime::extension::Logicaltype::Int64,
+        "SMALLINT" | "INT2" => ducklink_runtime::extension::Logicaltype::Int16,
+        "TINYINT" => ducklink_runtime::extension::Logicaltype::Int8,
+        "UBIGINT" => ducklink_runtime::extension::Logicaltype::Uint64,
+        "UINTEGER" => ducklink_runtime::extension::Logicaltype::Uint32,
+        "USMALLINT" => ducklink_runtime::extension::Logicaltype::Uint16,
+        "UTINYINT" => ducklink_runtime::extension::Logicaltype::Uint8,
+        "REAL" | "FLOAT4" => ducklink_runtime::extension::Logicaltype::Float32,
+        "DOUBLE" | "FLOAT" | "FLOAT8" | "DOUBLE PRECISION" => ducklink_runtime::extension::Logicaltype::Float64,
+        "BOOL" | "BOOLEAN" => ducklink_runtime::extension::Logicaltype::Boolean,
+        "TEXT" | "STRING" | "VARCHAR" | "CHAR" => ducklink_runtime::extension::Logicaltype::Text,
+        "BLOB" | "BYTEA" | "BYTES" => ducklink_runtime::extension::Logicaltype::Blob,
+        "DATE" => ducklink_runtime::extension::Logicaltype::Date,
+        "TIME" => ducklink_runtime::extension::Logicaltype::Time,
+        "TIMESTAMP" | "DATETIME" => ducklink_runtime::extension::Logicaltype::Timestamp,
+        "TIMESTAMPTZ" => ducklink_runtime::extension::Logicaltype::Timestamptz,
+        "UUID" => ducklink_runtime::extension::Logicaltype::Uuid,
+        _ => ducklink_runtime::extension::Logicaltype::Complex(t.to_string()),
     }
 }
 
@@ -5821,10 +5821,10 @@ fn literal_to_extension_duckvalue(
 /// is DECIMAL, which parses `(width,scale)` into the DECIMAL arm).
 ///
 /// Used by `HostState::intercept_write`'s `CreateTable` branch to convert
-/// parsed columns into `extension_types::Columndef` before dispatching
+/// parsed columns into `ducklink_runtime::extension::Columndef` before dispatching
 /// through `storage-write-dispatch.create-table`. Returns `Err(reason)` for
 /// unrecognized types so the caller can surface a clean `Unsupported` error.
-fn sql_type_to_extension_logical(type_text: &str) -> Result<extension_types::Logicaltype, String> {
+fn sql_type_to_extension_logical(type_text: &str) -> Result<ducklink_runtime::extension::Logicaltype, String> {
     let s = type_text.trim();
     if s.is_empty() {
         return Err("empty type text".to_string());
@@ -5860,31 +5860,31 @@ fn sql_type_to_extension_logical(type_text: &str) -> Result<extension_types::Log
         .join(" ")
         .to_ascii_uppercase();
     Ok(match up.as_str() {
-        "BOOLEAN" | "BOOL" => extension_types::Logicaltype::Boolean,
-        "TINYINT" | "INT1" => extension_types::Logicaltype::Int8,
-        "SMALLINT" | "INT2" => extension_types::Logicaltype::Int16,
-        "INT" | "INTEGER" | "INT4" => extension_types::Logicaltype::Int32,
-        "BIGINT" | "INT8" | "INT64" => extension_types::Logicaltype::Int64,
-        "HUGEINT" | "INT128" => extension_types::Logicaltype::Hugeint,
-        "UTINYINT" | "UINT1" => extension_types::Logicaltype::Uint8,
-        "USMALLINT" | "UINT2" => extension_types::Logicaltype::Uint16,
-        "UINTEGER" | "UINT4" => extension_types::Logicaltype::Uint32,
-        "UBIGINT" | "UINT8" => extension_types::Logicaltype::Uint64,
-        "UHUGEINT" | "UINT128" => extension_types::Logicaltype::Uhugeint,
-        "REAL" | "FLOAT" | "FLOAT4" => extension_types::Logicaltype::Float32,
-        "DOUBLE" | "DOUBLE PRECISION" | "FLOAT8" => extension_types::Logicaltype::Float64,
+        "BOOLEAN" | "BOOL" => ducklink_runtime::extension::Logicaltype::Boolean,
+        "TINYINT" | "INT1" => ducklink_runtime::extension::Logicaltype::Int8,
+        "SMALLINT" | "INT2" => ducklink_runtime::extension::Logicaltype::Int16,
+        "INT" | "INTEGER" | "INT4" => ducklink_runtime::extension::Logicaltype::Int32,
+        "BIGINT" | "INT8" | "INT64" => ducklink_runtime::extension::Logicaltype::Int64,
+        "HUGEINT" | "INT128" => ducklink_runtime::extension::Logicaltype::Hugeint,
+        "UTINYINT" | "UINT1" => ducklink_runtime::extension::Logicaltype::Uint8,
+        "USMALLINT" | "UINT2" => ducklink_runtime::extension::Logicaltype::Uint16,
+        "UINTEGER" | "UINT4" => ducklink_runtime::extension::Logicaltype::Uint32,
+        "UBIGINT" | "UINT8" => ducklink_runtime::extension::Logicaltype::Uint64,
+        "UHUGEINT" | "UINT128" => ducklink_runtime::extension::Logicaltype::Uhugeint,
+        "REAL" | "FLOAT" | "FLOAT4" => ducklink_runtime::extension::Logicaltype::Float32,
+        "DOUBLE" | "DOUBLE PRECISION" | "FLOAT8" => ducklink_runtime::extension::Logicaltype::Float64,
         "TEXT" | "VARCHAR" | "CHAR" | "CHARACTER" | "STRING" | "CLOB" => {
-            extension_types::Logicaltype::Text
+            ducklink_runtime::extension::Logicaltype::Text
         }
-        "BLOB" | "BYTEA" | "BYTES" | "BINARY" | "VARBINARY" => extension_types::Logicaltype::Blob,
-        "DATE" => extension_types::Logicaltype::Date,
-        "TIME" => extension_types::Logicaltype::Time,
-        "TIMESTAMP" | "DATETIME" => extension_types::Logicaltype::Timestamp,
+        "BLOB" | "BYTEA" | "BYTES" | "BINARY" | "VARBINARY" => ducklink_runtime::extension::Logicaltype::Blob,
+        "DATE" => ducklink_runtime::extension::Logicaltype::Date,
+        "TIME" => ducklink_runtime::extension::Logicaltype::Time,
+        "TIMESTAMP" | "DATETIME" => ducklink_runtime::extension::Logicaltype::Timestamp,
         "TIMESTAMPTZ" | "TIMESTAMP_TZ" | "TIMESTAMP WITH TIME ZONE" => {
-            extension_types::Logicaltype::Timestamptz
+            ducklink_runtime::extension::Logicaltype::Timestamptz
         }
-        "INTERVAL" => extension_types::Logicaltype::Interval,
-        "UUID" => extension_types::Logicaltype::Uuid,
+        "INTERVAL" => ducklink_runtime::extension::Logicaltype::Interval,
+        "UUID" => ducklink_runtime::extension::Logicaltype::Uuid,
         "DECIMAL" | "NUMERIC" => {
             let (width, scale) = match spec.as_deref() {
                 Some(inside) => {
@@ -5909,7 +5909,7 @@ fn sql_type_to_extension_logical(type_text: &str) -> Result<extension_types::Log
                 }
                 None => (18, 3), // DuckDB's default DECIMAL when unspecified.
             };
-            extension_types::Logicaltype::Decimal(extension_types::Decimalshape { width, scale })
+            ducklink_runtime::extension::Logicaltype::Decimal(ducklink_runtime::extension::Decimalshape { width, scale })
         }
         other => {
             return Err(format!(
@@ -9025,44 +9025,44 @@ fn map_runtime_trap(err: wasmtime::Error) -> ducklink_runtime::extension::Ducker
 
 // M2a: storage-host result converters (extension-WIT -> core-WIT).
 fn convert_extension_logicaltype_to_core(
-    ty: extension_types::Logicaltype,
+    ty: ducklink_runtime::extension::Logicaltype,
 ) -> core_types::Logicaltype {
     match ty {
-        extension_types::Logicaltype::Boolean => core_types::Logicaltype::Boolean,
-        extension_types::Logicaltype::Int64 => core_types::Logicaltype::Int64,
-        extension_types::Logicaltype::Uint64 => core_types::Logicaltype::Uint64,
-        extension_types::Logicaltype::Float64 => core_types::Logicaltype::Float64,
-        extension_types::Logicaltype::Text => core_types::Logicaltype::Text,
-        extension_types::Logicaltype::Blob => core_types::Logicaltype::Blob,
-        extension_types::Logicaltype::Int32 => core_types::Logicaltype::Int32,
-        extension_types::Logicaltype::Timestamp => core_types::Logicaltype::Timestamp,
-        extension_types::Logicaltype::Int8 => core_types::Logicaltype::Int8,
-        extension_types::Logicaltype::Int16 => core_types::Logicaltype::Int16,
-        extension_types::Logicaltype::Uint8 => core_types::Logicaltype::Uint8,
-        extension_types::Logicaltype::Uint16 => core_types::Logicaltype::Uint16,
-        extension_types::Logicaltype::Uint32 => core_types::Logicaltype::Uint32,
-        extension_types::Logicaltype::Float32 => core_types::Logicaltype::Float32,
-        extension_types::Logicaltype::Date => core_types::Logicaltype::Date,
-        extension_types::Logicaltype::Time => core_types::Logicaltype::Time,
-        extension_types::Logicaltype::Timestamptz => core_types::Logicaltype::Timestamptz,
+        ducklink_runtime::extension::Logicaltype::Boolean => core_types::Logicaltype::Boolean,
+        ducklink_runtime::extension::Logicaltype::Int64 => core_types::Logicaltype::Int64,
+        ducklink_runtime::extension::Logicaltype::Uint64 => core_types::Logicaltype::Uint64,
+        ducklink_runtime::extension::Logicaltype::Float64 => core_types::Logicaltype::Float64,
+        ducklink_runtime::extension::Logicaltype::Text => core_types::Logicaltype::Text,
+        ducklink_runtime::extension::Logicaltype::Blob => core_types::Logicaltype::Blob,
+        ducklink_runtime::extension::Logicaltype::Int32 => core_types::Logicaltype::Int32,
+        ducklink_runtime::extension::Logicaltype::Timestamp => core_types::Logicaltype::Timestamp,
+        ducklink_runtime::extension::Logicaltype::Int8 => core_types::Logicaltype::Int8,
+        ducklink_runtime::extension::Logicaltype::Int16 => core_types::Logicaltype::Int16,
+        ducklink_runtime::extension::Logicaltype::Uint8 => core_types::Logicaltype::Uint8,
+        ducklink_runtime::extension::Logicaltype::Uint16 => core_types::Logicaltype::Uint16,
+        ducklink_runtime::extension::Logicaltype::Uint32 => core_types::Logicaltype::Uint32,
+        ducklink_runtime::extension::Logicaltype::Float32 => core_types::Logicaltype::Float32,
+        ducklink_runtime::extension::Logicaltype::Date => core_types::Logicaltype::Date,
+        ducklink_runtime::extension::Logicaltype::Time => core_types::Logicaltype::Time,
+        ducklink_runtime::extension::Logicaltype::Timestamptz => core_types::Logicaltype::Timestamptz,
         // @5.0.0: DECIMAL carries decimalshape { width, scale } payload on
         // both sides -- pass through structurally.
-        extension_types::Logicaltype::Decimal(shape) => {
+        ducklink_runtime::extension::Logicaltype::Decimal(shape) => {
             core_types::Logicaltype::Decimal(core_types::Decimalshape {
                 width: shape.width,
                 scale: shape.scale,
             })
         }
-        extension_types::Logicaltype::Interval => core_types::Logicaltype::Interval,
-        extension_types::Logicaltype::Uuid => core_types::Logicaltype::Uuid,
+        ducklink_runtime::extension::Logicaltype::Interval => core_types::Logicaltype::Interval,
+        ducklink_runtime::extension::Logicaltype::Uuid => core_types::Logicaltype::Uuid,
         // @5.0.0: first-class HUGEINT / UHUGEINT arms on both sides.
-        extension_types::Logicaltype::Hugeint => core_types::Logicaltype::Hugeint,
-        extension_types::Logicaltype::Uhugeint => core_types::Logicaltype::Uhugeint,
-        extension_types::Logicaltype::Complex(expr) => core_types::Logicaltype::Complex(expr),
+        ducklink_runtime::extension::Logicaltype::Hugeint => core_types::Logicaltype::Hugeint,
+        ducklink_runtime::extension::Logicaltype::Uhugeint => core_types::Logicaltype::Uhugeint,
+        ducklink_runtime::extension::Logicaltype::Complex(expr) => core_types::Logicaltype::Complex(expr),
     }
 }
 
-fn convert_extension_columndef_to_core(col: extension_types::Columndef) -> core_types::Columndef {
+fn convert_extension_columndef_to_core(col: ducklink_runtime::extension::Columndef) -> core_types::Columndef {
     core_types::Columndef {
         name: col.name,
         logical: convert_extension_logicaltype_to_core(col.logical),
@@ -9074,43 +9074,43 @@ fn convert_extension_columndef_to_core(col: extension_types::Columndef) -> core_
 // Logicaltype / Columndef shape ExtensionInstance expects.
 fn convert_core_logicaltype_to_extension(
     ty: core_types::Logicaltype,
-) -> extension_types::Logicaltype {
+) -> ducklink_runtime::extension::Logicaltype {
     match ty {
-        core_types::Logicaltype::Boolean => extension_types::Logicaltype::Boolean,
-        core_types::Logicaltype::Int64 => extension_types::Logicaltype::Int64,
-        core_types::Logicaltype::Uint64 => extension_types::Logicaltype::Uint64,
-        core_types::Logicaltype::Float64 => extension_types::Logicaltype::Float64,
-        core_types::Logicaltype::Text => extension_types::Logicaltype::Text,
-        core_types::Logicaltype::Blob => extension_types::Logicaltype::Blob,
-        core_types::Logicaltype::Int32 => extension_types::Logicaltype::Int32,
-        core_types::Logicaltype::Timestamp => extension_types::Logicaltype::Timestamp,
-        core_types::Logicaltype::Int8 => extension_types::Logicaltype::Int8,
-        core_types::Logicaltype::Int16 => extension_types::Logicaltype::Int16,
-        core_types::Logicaltype::Uint8 => extension_types::Logicaltype::Uint8,
-        core_types::Logicaltype::Uint16 => extension_types::Logicaltype::Uint16,
-        core_types::Logicaltype::Uint32 => extension_types::Logicaltype::Uint32,
-        core_types::Logicaltype::Float32 => extension_types::Logicaltype::Float32,
-        core_types::Logicaltype::Date => extension_types::Logicaltype::Date,
-        core_types::Logicaltype::Time => extension_types::Logicaltype::Time,
-        core_types::Logicaltype::Timestamptz => extension_types::Logicaltype::Timestamptz,
+        core_types::Logicaltype::Boolean => ducklink_runtime::extension::Logicaltype::Boolean,
+        core_types::Logicaltype::Int64 => ducklink_runtime::extension::Logicaltype::Int64,
+        core_types::Logicaltype::Uint64 => ducklink_runtime::extension::Logicaltype::Uint64,
+        core_types::Logicaltype::Float64 => ducklink_runtime::extension::Logicaltype::Float64,
+        core_types::Logicaltype::Text => ducklink_runtime::extension::Logicaltype::Text,
+        core_types::Logicaltype::Blob => ducklink_runtime::extension::Logicaltype::Blob,
+        core_types::Logicaltype::Int32 => ducklink_runtime::extension::Logicaltype::Int32,
+        core_types::Logicaltype::Timestamp => ducklink_runtime::extension::Logicaltype::Timestamp,
+        core_types::Logicaltype::Int8 => ducklink_runtime::extension::Logicaltype::Int8,
+        core_types::Logicaltype::Int16 => ducklink_runtime::extension::Logicaltype::Int16,
+        core_types::Logicaltype::Uint8 => ducklink_runtime::extension::Logicaltype::Uint8,
+        core_types::Logicaltype::Uint16 => ducklink_runtime::extension::Logicaltype::Uint16,
+        core_types::Logicaltype::Uint32 => ducklink_runtime::extension::Logicaltype::Uint32,
+        core_types::Logicaltype::Float32 => ducklink_runtime::extension::Logicaltype::Float32,
+        core_types::Logicaltype::Date => ducklink_runtime::extension::Logicaltype::Date,
+        core_types::Logicaltype::Time => ducklink_runtime::extension::Logicaltype::Time,
+        core_types::Logicaltype::Timestamptz => ducklink_runtime::extension::Logicaltype::Timestamptz,
         // @5.0.0: DECIMAL carries decimalshape { width, scale } on both sides.
         core_types::Logicaltype::Decimal(shape) => {
-            extension_types::Logicaltype::Decimal(extension_types::Decimalshape {
+            ducklink_runtime::extension::Logicaltype::Decimal(ducklink_runtime::extension::Decimalshape {
                 width: shape.width,
                 scale: shape.scale,
             })
         }
-        core_types::Logicaltype::Interval => extension_types::Logicaltype::Interval,
-        core_types::Logicaltype::Uuid => extension_types::Logicaltype::Uuid,
+        core_types::Logicaltype::Interval => ducklink_runtime::extension::Logicaltype::Interval,
+        core_types::Logicaltype::Uuid => ducklink_runtime::extension::Logicaltype::Uuid,
         // @5.0.0: first-class HUGEINT / UHUGEINT on both sides.
-        core_types::Logicaltype::Hugeint => extension_types::Logicaltype::Hugeint,
-        core_types::Logicaltype::Uhugeint => extension_types::Logicaltype::Uhugeint,
-        core_types::Logicaltype::Complex(expr) => extension_types::Logicaltype::Complex(expr),
+        core_types::Logicaltype::Hugeint => ducklink_runtime::extension::Logicaltype::Hugeint,
+        core_types::Logicaltype::Uhugeint => ducklink_runtime::extension::Logicaltype::Uhugeint,
+        core_types::Logicaltype::Complex(expr) => ducklink_runtime::extension::Logicaltype::Complex(expr),
     }
 }
 
-fn convert_core_columndef_to_extension(col: core_types::Columndef) -> extension_types::Columndef {
-    extension_types::Columndef {
+fn convert_core_columndef_to_extension(col: core_types::Columndef) -> ducklink_runtime::extension::Columndef {
+    ducklink_runtime::extension::Columndef {
         name: col.name,
         logical: convert_core_logicaltype_to_extension(col.logical),
     }

@@ -9,7 +9,6 @@
 //! every reusable converter — Duckvalue, Duckerror, common lifters
 //! — so each migrated callsite stays a few lines of glue.
 
-use crate::duckdb_extension_bindings::duckdb::extension::types as extension_types;
 use wasmos_runtime_api::Value;
 
 // ─── Duckerror ─────────────────────────────────────────────────────
@@ -584,8 +583,8 @@ pub(crate) fn string_field(rec: &Value, name: &str) -> Result<String, crate::ext
 
 // ─── Logicaltype (25 arms) + columndef ─────────────────────────────
 
-pub(crate) fn logicaltype_to_value(v: &extension_types::Logicaltype) -> Value {
-    use extension_types::Logicaltype as L;
+pub(crate) fn logicaltype_to_value(v: &crate::extension::Logicaltype) -> Value {
+    use crate::extension::Logicaltype as L;
     let (disc, payload): (&str, Option<Value>) = match v {
         L::Boolean => ("boolean", None),
         L::Int64 => ("int64", None),
@@ -622,8 +621,8 @@ pub(crate) fn logicaltype_to_value(v: &extension_types::Logicaltype) -> Value {
 
 pub(crate) fn value_to_logicaltype(
     v: &Value,
-) -> Result<extension_types::Logicaltype, crate::extension::Duckerror> {
-    use extension_types::Logicaltype as L;
+) -> Result<crate::extension::Logicaltype, crate::extension::Duckerror> {
+    use crate::extension::Logicaltype as L;
     let (disc, payload) = match v {
         Value::Variant { discriminant, payload } => (discriminant, payload),
         other => {
@@ -654,7 +653,7 @@ pub(crate) fn value_to_logicaltype(
             let rec = payload.as_deref().ok_or_else(|| {
                 crate::extension::Duckerror::Internal("logicaltype.decimal: missing payload".into())
             })?;
-            L::Decimal(extension_types::Decimalshape {
+            L::Decimal(crate::extension::Decimalshape {
                 width: u8_field(rec, "width")?,
                 scale: u8_field(rec, "scale")?,
             })
@@ -677,7 +676,7 @@ pub(crate) fn value_to_logicaltype(
     })
 }
 
-pub(crate) fn columndef_to_value(c: &extension_types::Columndef) -> Value {
+pub(crate) fn columndef_to_value(c: &crate::extension::Columndef) -> Value {
     Value::Record(vec![
         ("name".into(), Value::String(c.name.clone())),
         ("logical".into(), logicaltype_to_value(&c.logical)),
@@ -686,19 +685,19 @@ pub(crate) fn columndef_to_value(c: &extension_types::Columndef) -> Value {
 
 pub(crate) fn value_to_columndef(
     v: &Value,
-) -> Result<extension_types::Columndef, crate::extension::Duckerror> {
+) -> Result<crate::extension::Columndef, crate::extension::Duckerror> {
     let name = string_field(v, "name")?;
     let logical = value_to_logicaltype(record_field(v, "logical")?)?;
-    Ok(extension_types::Columndef { name, logical })
+    Ok(crate::extension::Columndef { name, logical })
 }
 
-pub(crate) fn columndef_list_to_value(cs: &[extension_types::Columndef]) -> Value {
+pub(crate) fn columndef_list_to_value(cs: &[crate::extension::Columndef]) -> Value {
     Value::List(cs.iter().map(columndef_to_value).collect())
 }
 
 pub(crate) fn value_to_columndef_list(
     v: &Value,
-) -> Result<Vec<extension_types::Columndef>, crate::extension::Duckerror> {
+) -> Result<Vec<crate::extension::Columndef>, crate::extension::Duckerror> {
     match v {
         Value::List(items) => items.iter().map(value_to_columndef).collect(),
         other => Err(crate::extension::Duckerror::Internal(format!(

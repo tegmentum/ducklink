@@ -2808,6 +2808,140 @@ impl From<extension_types::Duckvalue> for Duckvalue {
     }
 }
 
+/// DECIMAL width/scale shape. Mirror of WIT `types.decimalshape`.
+/// Carried on `Logicaltype::Decimal` so DECIMAL type-shape is
+/// structural.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Decimalshape {
+    pub width: u8,
+    pub scale: u8,
+}
+
+/// The logical (schema-side) type of a column or scalar. Mirror of
+/// WIT `types.logicaltype`. 24 arms: 22 fieldless scalar / temporal
+/// types + `Decimal(Decimalshape)` for structural DECIMAL(width,
+/// scale) + `Complex(String)` escape hatch carrying a DuckDB type-
+/// expression (e.g. `"INTEGER[]"`, `"STRUCT(a INT, b VARCHAR)"`) for
+/// nested LIST/STRUCT/MAP/ARRAY types.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Logicaltype {
+    Boolean,
+    Int64,
+    Uint64,
+    Float64,
+    Text,
+    Blob,
+    Int32,
+    Timestamp,
+    Int8,
+    Int16,
+    Uint8,
+    Uint16,
+    Uint32,
+    Float32,
+    Date,
+    Time,
+    Timestamptz,
+    Decimal(Decimalshape),
+    Interval,
+    Uuid,
+    Hugeint,
+    Uhugeint,
+    Complex(String),
+}
+
+/// Column definition: `(name, logical type)`. Mirror of WIT
+/// `types.columndef`. Used across storage / table / arrow / copy
+/// schemas.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Columndef {
+    pub name: String,
+    pub logical: Logicaltype,
+}
+
+impl From<extension_types::Decimalshape> for Decimalshape {
+    fn from(v: extension_types::Decimalshape) -> Self {
+        Decimalshape { width: v.width, scale: v.scale }
+    }
+}
+impl From<Decimalshape> for extension_types::Decimalshape {
+    fn from(v: Decimalshape) -> Self {
+        extension_types::Decimalshape { width: v.width, scale: v.scale }
+    }
+}
+
+impl From<extension_types::Logicaltype> for Logicaltype {
+    fn from(v: extension_types::Logicaltype) -> Self {
+        use extension_types::Logicaltype as W;
+        match v {
+            W::Boolean => Logicaltype::Boolean,
+            W::Int64 => Logicaltype::Int64,
+            W::Uint64 => Logicaltype::Uint64,
+            W::Float64 => Logicaltype::Float64,
+            W::Text => Logicaltype::Text,
+            W::Blob => Logicaltype::Blob,
+            W::Int32 => Logicaltype::Int32,
+            W::Timestamp => Logicaltype::Timestamp,
+            W::Int8 => Logicaltype::Int8,
+            W::Int16 => Logicaltype::Int16,
+            W::Uint8 => Logicaltype::Uint8,
+            W::Uint16 => Logicaltype::Uint16,
+            W::Uint32 => Logicaltype::Uint32,
+            W::Float32 => Logicaltype::Float32,
+            W::Date => Logicaltype::Date,
+            W::Time => Logicaltype::Time,
+            W::Timestamptz => Logicaltype::Timestamptz,
+            W::Decimal(d) => Logicaltype::Decimal(d.into()),
+            W::Interval => Logicaltype::Interval,
+            W::Uuid => Logicaltype::Uuid,
+            W::Hugeint => Logicaltype::Hugeint,
+            W::Uhugeint => Logicaltype::Uhugeint,
+            W::Complex(s) => Logicaltype::Complex(s),
+        }
+    }
+}
+impl From<Logicaltype> for extension_types::Logicaltype {
+    fn from(v: Logicaltype) -> Self {
+        use extension_types::Logicaltype as W;
+        match v {
+            Logicaltype::Boolean => W::Boolean,
+            Logicaltype::Int64 => W::Int64,
+            Logicaltype::Uint64 => W::Uint64,
+            Logicaltype::Float64 => W::Float64,
+            Logicaltype::Text => W::Text,
+            Logicaltype::Blob => W::Blob,
+            Logicaltype::Int32 => W::Int32,
+            Logicaltype::Timestamp => W::Timestamp,
+            Logicaltype::Int8 => W::Int8,
+            Logicaltype::Int16 => W::Int16,
+            Logicaltype::Uint8 => W::Uint8,
+            Logicaltype::Uint16 => W::Uint16,
+            Logicaltype::Uint32 => W::Uint32,
+            Logicaltype::Float32 => W::Float32,
+            Logicaltype::Date => W::Date,
+            Logicaltype::Time => W::Time,
+            Logicaltype::Timestamptz => W::Timestamptz,
+            Logicaltype::Decimal(d) => W::Decimal(d.into()),
+            Logicaltype::Interval => W::Interval,
+            Logicaltype::Uuid => W::Uuid,
+            Logicaltype::Hugeint => W::Hugeint,
+            Logicaltype::Uhugeint => W::Uhugeint,
+            Logicaltype::Complex(s) => W::Complex(s),
+        }
+    }
+}
+
+impl From<extension_types::Columndef> for Columndef {
+    fn from(v: extension_types::Columndef) -> Self {
+        Columndef { name: v.name, logical: v.logical.into() }
+    }
+}
+impl From<Columndef> for extension_types::Columndef {
+    fn from(v: Columndef) -> Self {
+        extension_types::Columndef { name: v.name, logical: v.logical.into() }
+    }
+}
+
 /// A resultset returned by a scan / query dispatch: row-major
 /// list of rows, each a list of `Duckvalue`s. Mirror of WIT
 /// `types.resultset` (which is `list<list<duckvalue>>`).
@@ -2886,12 +3020,12 @@ pub struct IndexHit {
 /// 2.1.0 (Item 1): result of binding a COPY FROM reader (reader
 /// handle + projected column schema). Mirror of WIT
 /// `copy-dispatch.copy-from-bind-result`. `columns` is the base
-/// `extension_types::Columndef` — the WIT wire type is the SAME
+/// `Columndef` — the WIT wire type is the SAME
 /// record, not a per-world clone.
 #[derive(Clone, Debug)]
 pub struct CopyFromBindResult {
     pub reader: u32,
-    pub columns: Vec<extension_types::Columndef>,
+    pub columns: Vec<Columndef>,
 }
 
 /// 2.1.0 (Item 2): one flat key=value entry of a materialized secret.
@@ -2908,7 +3042,7 @@ pub struct SecretKv {
 #[derive(Clone, Debug)]
 pub struct TableOpenResult {
     pub cursor: u32,
-    pub columns: Vec<extension_types::Columndef>,
+    pub columns: Vec<Columndef>,
 }
 
 /// 3.1.0: comparator for a pushed-down filter. Mirror of WIT
@@ -3416,7 +3550,7 @@ impl ExtensionInstance {
         &mut self,
         handle: u32,
         path: &str,
-        columns: &[extension_types::Columndef],
+        columns: &[Columndef],
         options: &[(String, String)],
     ) -> Result<u32, Duckerror> {
         // Phase 6.2.i.7 — migrated.
@@ -3505,7 +3639,7 @@ impl ExtensionInstance {
         handle: u32,
         path: &str,
         options: &[(String, String)],
-        target_columns: &[extension_types::Columndef],
+        target_columns: &[Columndef],
     ) -> Result<CopyFromBindResult, Duckerror> {
         // Phase 6.2.i.7 — migrated. copy-from-bind-result: record
         // { reader: u32, columns: list<columndef> }.
@@ -3703,7 +3837,7 @@ impl ExtensionInstance {
         handle: u32,
         txn: u32,
         table: &str,
-        columns: &[extension_types::Columndef],
+        columns: &[Columndef],
     ) -> Result<(), Duckerror> {
         // Phase 6.2.i.7 — migrated. columns: list<columndef> where
         // columndef = record { name: string, logical: logicaltype }.
@@ -4552,7 +4686,7 @@ impl ExtensionInstance {
         handle: u32,
         catalog: u32,
         table: &str,
-    ) -> Result<Vec<extension_types::Columndef>, Duckerror> {
+    ) -> Result<Vec<Columndef>, Duckerror> {
         // Phase 6.2.i.7 — migrated. Returns result<list<columndef>,
         // duckerror>; columndef decoded via value_to_columndef_list.
         use crate::export_marshal::*;
