@@ -1641,64 +1641,73 @@ impl ExtensionStoreState {
 // copy handlers. The host satisfies the imports here so such extensions
 // instantiate and load; the requests are captured into the neutral pending
 // buffers. Forwarding them into DuckDB is the direction-specific sink's job.
+// Phase 6.2.n Session 3 — catalog register-* inherent method
+// signatures inlined (were `catalog::LogicalType` / `catalog::
+// MacroDef` records). Same test coverage, no wit-bindgen types.
 #[cfg(test)]
 impl ExtensionStoreState {
-    pub(crate) fn register_logical_type(&mut self, ty: extension_catalog::LogicalType) -> Result<u32, String> {
+    pub(crate) fn register_logical_type(&mut self, name: String, physical: String) -> Result<u32, String> {
         let handle = self.alloc_resource_id();
         verbose_log!(
             "[extension-manager] catalog register-logical-type '{}' (physical={}) for '{}' -> handle {handle}",
-            ty.name, ty.physical, self.extension_name
+            name, physical, self.extension_name
         );
         self.pending_logical_types.push(PendingLogicalType {
             extension: self.extension_name.clone(),
-            name: ty.name,
-            physical: ty.physical,
+            name,
+            physical,
         });
         Ok(handle)
     }
 
-    // Phase 6.2.l.2 — `register_cast` retired (no test caller).
-
-    pub(crate) fn register_macro(&mut self, def: extension_catalog::MacroDef) -> Result<(), String> {
+    pub(crate) fn register_macro(
+        &mut self,
+        schema: String,
+        name: String,
+        parameters: Vec<String>,
+        definition_sql: String,
+    ) -> Result<(), String> {
         verbose_log!(
             "[extension-manager] catalog register-macro '{}.{}' ({} params) for '{}'",
-            def.schema,
-            def.name,
-            def.parameters.len(),
-            self.extension_name
+            schema, name, parameters.len(), self.extension_name
         );
         self.pending_macros.push(PendingMacro {
             extension: self.extension_name.clone(),
-            schema: def.schema,
-            name: def.name,
-            parameters: def.parameters.into_iter().collect(),
-            definition_sql: def.definition_sql,
+            schema,
+            name,
+            parameters,
+            definition_sql,
         });
         Ok(())
     }
 }
 
+// Phase 6.2.n Session 3 — files register-* signatures inlined
+// (were `files::ReplacementScan` / `files::CopyHandler` records).
 #[cfg(test)]
 impl ExtensionStoreState {
     pub(crate) fn register_replacement_scan(
         &mut self,
-        scan: extension_files::ReplacementScan,
+        table_function: u32,
+        extensions: Vec<String>,
+        // `mode` was `files::DetectionMode` enum — Debug-print only,
+        // so a string works for the log line without losing content.
+        mode: &str,
     ) -> Result<u32, String> {
         let function_name = self
             .table_handle_names
-            .get(&scan.table_function)
+            .get(&table_function)
             .cloned()
             .ok_or_else(|| {
                 format!(
                     "replacement scan references unknown table-function handle {}",
-                    scan.table_function
+                    table_function
                 )
             })?;
         let id = self.alloc_resource_id();
-        let extensions: Vec<String> = scan.extensions.into_iter().collect();
         verbose_log!(
-            "[extension-manager] files register-replacement-scan exts={:?} ({:?}) -> '{}' for '{}' (id {id})",
-            extensions, scan.mode, function_name, self.extension_name
+            "[extension-manager] files register-replacement-scan exts={:?} ({}) -> '{}' for '{}' (id {id})",
+            extensions, mode, function_name, self.extension_name
         );
         self.pending_replacement_scans.push(PendingReplacementScan {
             extension: self.extension_name.clone(),
@@ -1710,21 +1719,18 @@ impl ExtensionStoreState {
 
     pub(crate) fn register_copy_handler(
         &mut self,
-        handler: extension_files::CopyHandler,
+        extension: String,
+        function: u32,
     ) -> Result<u32, String> {
-        // 2.1.0 (Item 1): a COPY handler is captured into the neutral pending
-        // buffer; COPY TO / COPY FROM are driven through the component's exported
-        // `copy-dispatch` (see ExtensionInstance::copy_*). The `function` field is
-        // the copy-function-handle the host threads back into every dispatch call.
         let id = self.alloc_resource_id();
         verbose_log!(
             "[extension-manager] files register-copy-handler ext='{}' (function={}) for '{}' -> id {id}",
-            handler.extension, handler.function, self.extension_name
+            extension, function, self.extension_name
         );
         self.pending_copy_handlers.push(PendingCopyHandler {
             extension: self.extension_name.clone(),
-            file_extension: handler.extension,
-            function_handle: handler.function,
+            file_extension: extension,
+            function_handle: function,
         });
         Ok(id)
     }
@@ -1740,7 +1746,10 @@ impl ExtensionStoreState {
     pub(crate) fn register_secret_type(
         &mut self,
         type_name: String,
-        params: BindgenVec<extension_secret::SecretParam>,
+        // Phase 6.2.n Session 3 — the wit-bindgen `SecretParam` record
+        // (name + redacted) is inlined as a plain `(String, bool)`
+        // tuple so no wit-bindgen type crosses the signature.
+        params: Vec<(String, bool)>,
         callback_handle: u32,
     ) -> Result<u32, Duckerror> {
         // Phase 3 (@5 host-import wiring): capture the secret TYPE declaration
@@ -1751,9 +1760,6 @@ impl ExtensionStoreState {
         // resource id (opaque to the guest) mirroring the pattern used for
         // parser / optimizer / filterable-table registration.
         let registry_id = self.alloc_resource_id();
-        let params: Vec<extension_secret::SecretParam> = params.into();
-        let params: Vec<(String, bool)> =
-            params.into_iter().map(|p| (p.name, p.redacted)).collect();
         verbose_log!(
             "[extension-runtime:{}] registered secret type '{type_name}' \
              (registry={registry_id}, callback={callback_handle}, params={})",
@@ -1806,22 +1812,14 @@ impl ExtensionStoreState {
         &mut self,
         name: String,
         description: String,
-        ty: extension_settings::SettingType,
+        // Phase 6.2.n Session 3 — wit-bindgen `SettingType` /
+        // `SettingScope` enums replaced by pre-rendered strings
+        // (the wire values). Both were 4-arm / 2-arm C-enums with no
+        // payload; passing the string skips the enum → String render.
+        ty: String,
         default_value: Option<String>,
-        scope: extension_settings::SettingScope,
+        scope: String,
     ) -> Result<(), Duckerror> {
-        let ty = match ty {
-            extension_settings::SettingType::Boolean => "boolean",
-            extension_settings::SettingType::Varchar => "varchar",
-            extension_settings::SettingType::Bigint => "bigint",
-            extension_settings::SettingType::Double => "double",
-        }
-        .to_string();
-        let scope = match scope {
-            extension_settings::SettingScope::Local => "local",
-            extension_settings::SettingScope::Global => "global",
-        }
-        .to_string();
         verbose_log!(
             "[extension-runtime:{}] registered option '{name}' (type={ty}, scope={scope})",
             self.extension_name
@@ -1871,7 +1869,7 @@ impl ExtensionStoreState {
         &mut self,
         schema: String,
         name: String,
-        parameters: BindgenVec<String>,
+        parameters: Vec<String>,
         body_sql: String,
     ) -> Result<(), Duckerror> {
         verbose_log!(
@@ -1940,18 +1938,29 @@ impl ExtensionStoreState {
     pub(crate) fn register_scalar_ex(
         &mut self,
         name: String,
-        arguments: BindgenVec<extension_runtime_ext::Funcarg>,
-        varargs: Option<extension_runtime_ext::Logicaltype>,
-        returns: extension_runtime_ext::Logicaltype,
-        null_handling: extension_runtime_ext::NullHandling,
+        // Phase 6.2.n Session 3 — signatures use the Phase 6.2.m
+        // mirrors on `crate::extension`; `null_handling` is a plain
+        // bool (`true` = Special, `false` = default short-circuit)
+        // since the wit-bindgen enum had only those two arms.
+        arguments: Vec<Funcarg>,
+        varargs: Option<Logicaltype>,
+        returns: Logicaltype,
+        special_null: bool,
         callback_handle: u32,
-        options: Option<extension_runtime_ext::Funcopts>,
+        options: Option<Funcopts>,
     ) -> Result<u32, Duckerror> {
-        let special_null = matches!(null_handling, extension_runtime_ext::NullHandling::Special);
-        let arguments = convert_extension_funcargs(arguments.into_iter().collect());
-        let varargs = varargs.map(convert_extension_logicaltype);
-        let returns = convert_extension_logicaltype(returns);
-        let options = options.map(convert_extension_funcopts);
+        let arguments: Vec<extension_runtime::Funcarg> = arguments
+            .into_iter()
+            .map(|a| extension_runtime::Funcarg { name: a.name, logical: a.logical.into() })
+            .collect();
+        let arguments = convert_extension_funcargs(arguments);
+        let varargs = varargs.map(|v| convert_extension_logicaltype(v.into()));
+        let returns = convert_extension_logicaltype(returns.into());
+        let options = options.map(|o| convert_extension_funcopts(extension_runtime::Funcopts {
+            description: o.description,
+            tags: o.tags.into(),
+            attributes: o.attributes.into(),
+        }));
         // WIT `funcflags` has no VOLATILE bit; derive it from the incoming
         // attributes: a scalar-ex is VOLATILE iff it did NOT declare
         // `deterministic`. Absent options -> non-volatile default, closing the
@@ -1995,20 +2004,20 @@ impl ExtensionStoreState {
 impl ExtensionStoreState {
     pub(crate) fn register_coordinate_system(
         &mut self,
-        crs: extension_coordinate_system::CrsDef,
+        auth_name: String,
+        code: u32,
+        wkt: String,
     ) -> Result<u32, Duckerror> {
         verbose_log!(
             "[extension-runtime:{}] registered coordinate system {}:{}",
-            self.extension_name,
-            crs.auth_name,
-            crs.code
+            self.extension_name, auth_name, code
         );
         self.pending_coordinate_systems
             .push(PendingCoordinateSystem {
                 extension: self.extension_name.clone(),
-                auth_name: crs.auth_name,
-                code: crs.code,
-                wkt: crs.wkt,
+                auth_name,
+                code,
+                wkt,
             });
         Ok(self.alloc_resource_id())
     }
@@ -2022,10 +2031,17 @@ impl ExtensionStoreState {
     pub(crate) fn register_arrow_table(
         &mut self,
         name: String,
-        schema: BindgenVec<extension_arrow_ext::Columndef>,
+        // Phase 6.2.n Session 3 — `arrow_ext::Columndef` re-uses
+        // types.wit's Columndef via wit-bindgen `use`, so the mirror
+        // is a same-shape drop-in.
+        schema: Vec<Columndef>,
         callback_handle: u32,
     ) -> Result<u32, Duckerror> {
-        let columns = convert_extension_columndefs(schema.into_iter().collect());
+        let columns: Vec<extension_runtime::Columndef> = schema
+            .into_iter()
+            .map(|c| extension_runtime::Columndef { name: c.name, logical: c.logical.into() })
+            .collect();
+        let columns = convert_extension_columndefs(columns);
         verbose_log!(
             "[extension-runtime:{}] registered arrow table '{name}' ({} columns, callback={callback_handle})",
             self.extension_name,
@@ -2068,11 +2084,13 @@ impl ExtensionStoreState {
         &mut self,
         type_name: String,
         callback_handle: u32,
-        options: Option<extension_storage::Extopts>,
+        // Phase 6.2.n Session 3 — mirror `Extopts` (same-shape as
+        // storage.wit's re-export of types.wit's Extopts).
+        options: Option<Extopts>,
     ) -> Result<u32, Duckerror> {
         let neutral_options = options.map(|o| reg::ExtOpts {
             description: o.description,
-            tags: o.tags.into_iter().collect(),
+            tags: o.tags,
         });
         self.pending_storages.push(reg::StorageReg {
             extension: self.extension_name.clone(),
@@ -3378,6 +3396,15 @@ pub struct Funcarg {
 pub struct Extopts {
     pub description: Option<String>,
     pub tags: Vec<String>,
+}
+
+/// Function-registration options: description + tags + attributes
+/// (a [`Funcflags`] bitset). Mirror of WIT `types.funcopts`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Funcopts {
+    pub description: Option<String>,
+    pub tags: Vec<String>,
+    pub attributes: Funcflags,
 }
 
 /// `Loadresult` — what a component's `load` export returns. Mirror
@@ -6255,20 +6282,17 @@ mod tests {
     #[test]
     fn register_logical_type_and_macro_capture_into_pending() {
         let mut state = test_state();
-        state.register_logical_type(extension_catalog::LogicalType {
-                name: "myint".to_string(),
-                physical: "INTEGER".to_string(),
-            },
-        )
-        .expect("register_logical_type should not error");
-        state.register_macro(extension_catalog::MacroDef {
-                schema: "main".to_string(),
-                name: "addone".to_string(),
-                parameters: vec!["x".to_string()].into(),
-                definition_sql: "x + 1".to_string(),
-            },
-        )
-        .expect("register_macro should not error");
+        state
+            .register_logical_type("myint".to_string(), "INTEGER".to_string())
+            .expect("register_logical_type should not error");
+        state
+            .register_macro(
+                "main".to_string(),
+                "addone".to_string(),
+                vec!["x".to_string()],
+                "x + 1".to_string(),
+            )
+            .expect("register_macro should not error");
         let drained = state.drain_pending();
         assert_eq!(drained.logical_types.len(), 1);
         assert_eq!(drained.logical_types[0].name, "myint");
@@ -6283,11 +6307,7 @@ mod tests {
         // copy-dispatch), not rejected. Registration succeeds and lands in the
         // neutral pending buffer with the routing function-handle preserved.
         let mut state = test_state();
-        let res = state.register_copy_handler(extension_files::CopyHandler {
-                extension: "parquet".to_string(),
-                function: 7,
-            },
-        );
+        let res = state.register_copy_handler("parquet".to_string(), 7);
         assert!(res.is_ok());
         let captured = state.take_pending_copy_handlers();
         assert_eq!(captured.len(), 1);
@@ -6303,18 +6323,9 @@ mod tests {
         // macro, modified logical type, and enum also capture as before.
         let mut state = test_state();
 
-        let secret_type_res = state.register_secret_type("s3".to_string(),
-            vec![
-                extension_secret::SecretParam {
-                    name: "key_id".to_string(),
-                    redacted: false,
-                },
-                extension_secret::SecretParam {
-                    name: "secret".to_string(),
-                    redacted: true,
-                },
-            ]
-            .into(),
+        let secret_type_res = state.register_secret_type(
+            "s3".to_string(),
+            vec![("key_id".to_string(), false), ("secret".to_string(), true)],
             11,
         );
         assert!(
@@ -6330,20 +6341,24 @@ mod tests {
             "register_secret_provider should capture (Phase 3)"
         );
 
-        state.register_option("my_threshold".to_string(),
-            "tuning knob".to_string(),
-            extension_settings::SettingType::Bigint,
-            Some("42".to_string()),
-            extension_settings::SettingScope::Global,
-        )
-        .expect("register_option");
+        state
+            .register_option(
+                "my_threshold".to_string(),
+                "tuning knob".to_string(),
+                "bigint".to_string(),
+                Some("42".to_string()),
+                "global".to_string(),
+            )
+            .expect("register_option");
 
-        state.register_table_macro("main".to_string(),
-            "series".to_string(),
-            vec!["n".to_string()].into(),
-            "SELECT * FROM range(n)".to_string(),
-        )
-        .expect("register_table_macro");
+        state
+            .register_table_macro(
+                "main".to_string(),
+                "series".to_string(),
+                vec!["n".to_string()],
+                "SELECT * FROM range(n)".to_string(),
+            )
+            .expect("register_table_macro");
 
         state.register_logical_type_modified("price".to_string(),
             "DECIMAL(18,3)".to_string(),
@@ -6404,23 +6419,21 @@ mod tests {
         // 2.2.0 (Items 6-7): the richer scalar (scalar-ex), connection-lifecycle
         // subscription, coordinate system, Arrow table, text encoding, and
         // compression codec all CAPTURE into their neutral pending buffers.
-        use extension_runtime::Logicaltype as L;
+        use Logicaltype as L;
         let mut state = test_state();
 
         // Item 6: register-scalar-ex with varargs + special NULL handling.
-        state.register_scalar_ex("concat_ws".to_string(),
-            vec![extension_runtime_ext::Funcarg {
-                name: Some("sep".to_string()),
-                logical: L::Text,
-            }]
-            .into(),
-            Some(L::Text),
-            L::Text,
-            extension_runtime_ext::NullHandling::Special,
-            21,
-            None,
-        )
-        .expect("register_scalar_ex");
+        state
+            .register_scalar_ex(
+                "concat_ws".to_string(),
+                vec![Funcarg { name: Some("sep".to_string()), logical: L::Text }],
+                Some(L::Text),
+                L::Text,
+                true, // special_null
+                21,
+                None,
+            )
+            .expect("register_scalar_ex");
 
         // Phase 6.2.l.2 — the register_connection_callback →
         // Unsupported assertion retired here (redundant with the
@@ -6428,24 +6441,18 @@ mod tests {
         // unsupported` test). Its Host impl retired too.
 
         // Item 7: coordinate system.
-        state.register_coordinate_system(extension_coordinate_system::CrsDef {
-                auth_name: "EPSG".to_string(),
-                code: 4326,
-                wkt: "GEOGCRS[...]".to_string(),
-            },
-        )
-        .expect("register_coordinate_system");
+        state
+            .register_coordinate_system("EPSG".to_string(), 4326, "GEOGCRS[...]".to_string())
+            .expect("register_coordinate_system");
 
         // Item 7: Arrow table producer.
-        state.register_arrow_table("feed".to_string(),
-            vec![extension_arrow_ext::Columndef {
-                name: "v".to_string(),
-                logical: L::Int64,
-            }]
-            .into(),
-            23,
-        )
-        .expect("register_arrow_table");
+        state
+            .register_arrow_table(
+                "feed".to_string(),
+                vec![Columndef { name: "v".to_string(), logical: L::Int64 }],
+                23,
+            )
+            .expect("register_arrow_table");
 
         // Phase 6.2.l.2 — register_encoding + register_compression
         // → Unsupported assertions retired here (redundant with
@@ -6502,12 +6509,7 @@ mod tests {
         let mut state = test_state();
         // No table function was ever registered, so handle 999 is unknown: the
         // capture must return Err, not panic.
-        let res = state.register_replacement_scan(extension_files::ReplacementScan {
-                table_function: 999,
-                extensions: vec!["csv".to_string()].into(),
-                mode: extension_files::DetectionMode::ExtensionOnly,
-            },
-        );
+        let res = state.register_replacement_scan(999, vec!["csv".to_string()], "ExtensionOnly");
         assert!(res.is_err());
     }
 
