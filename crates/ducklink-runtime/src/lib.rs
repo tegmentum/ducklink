@@ -379,6 +379,11 @@ pub mod extension;
 // with `extension`; consumers pick per install path.
 pub mod extension_wasmos;
 
+// ADR-0029 Phase 6.2.i — shared value ↔ wit-bindgen-type marshalling
+// for the guest-export migration. Every ExtensionInstance dispatch_*
+// callsite that migrated to sync_export_bridge uses helpers here.
+pub(crate) mod export_marshal;
+
 // ADR-0029 Phase 6.2.g — shared test-support module: fixture +
 // stateful stub ctx consumed by both `extension::tests` (state-
 // mutation unit tests on the wit-bindgen path) and
