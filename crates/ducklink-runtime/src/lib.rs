@@ -426,110 +426,30 @@ pub mod duckdb_extension_storage_bindings {
     });
 }
 
-/// Bindings for the index-capable world (`duckdb-extension-index`), which
-/// additionally exports `index-dispatch` (Item 3 / M2a custom index). Only
-/// custom-index backend components (e.g. hnswfns) satisfy this; the runtime
-/// builds these bindings lazily from an already-loaded component instance so
-/// non-index extensions (which don't export index-dispatch) still load against
-/// the base world above.
-pub mod duckdb_extension_index_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-index",
-        require_store_data_send: true,
-    });
-}
-
-/// Bindings for the copy-capable world (`duckdb-extension-copy`, 2.1.0), which
-/// additionally exports `copy-dispatch`. Only components that register a COPY
-/// handler satisfy this; built lazily from an already-loaded instance.
-pub mod duckdb_extension_copy_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-copy",
-        require_store_data_send: true,
-        // Reuse the base world's `types` so copy-dispatch exchanges the SAME
-        // Duckvalue/Columndef/Duckerror the rest of the runtime uses -- no
-        // per-world type conversion. NOTE: bump the @version here in lockstep
-        // with the contract.
-        with: {
-            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
-        },
-    });
-}
-
-/// Bindings for the secret-capable world (`duckdb-extension-secret`, 2.1.0),
-/// which additionally exports `secret-dispatch`. Only components that register a
-/// secret type/provider satisfy this; built lazily from an already-loaded
-/// instance.
-pub mod duckdb_extension_secret_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-secret",
-        require_store_data_send: true,
-        with: {
-            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
-        },
-    });
-}
-
-/// Bindings for the streaming-table world (`duckdb-extension-table-stream`,
-/// 2.2.0, Item 6), which additionally exports `table-stream-dispatch`. Only
-/// components that back a streaming/pushdown table function satisfy this; built
-/// lazily from an already-loaded instance.
-pub mod duckdb_extension_table_stream_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-table-stream",
-        require_store_data_send: true,
-        with: {
-            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
-        },
-    });
-}
-
-/// Bindings for the writable/glob files world (`duckdb-extension-file-write`,
-/// 2.2.0, Item 7), which additionally exports `file-write-dispatch`. Only files
-/// backends that support write/glob/stat satisfy this; built lazily.
-pub mod duckdb_extension_file_write_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-file-write",
-        require_store_data_send: true,
-        with: {
-            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
-        },
-    });
-}
-
-/// Bindings for the log-storage world (`duckdb-extension-log-storage`, 3.2.0),
-/// which additionally exports `log-storage-dispatch`. Only components that back
-/// a named log sink satisfy this; the runtime builds these bindings lazily from
-/// an already-loaded instance. Class B parity with the stable
-/// `duckdb_register_log_storage` C API.
-pub mod duckdb_extension_log_storage_bindings {
-    wasmtime::component::bindgen!({
-        path: "./wit",
-        world: "duckdb:extension-host/duckdb-extension-log-storage",
-        require_store_data_send: true,
-        with: {
-            "duckdb:extension/types@5.0.0": crate::duckdb_extension_bindings::duckdb::extension::types,
-        },
-    });
-}
-
-// Phase 6.2.j — nine per-world wit-bindgen wrapper modules were
-// deleted after the wit-bindgen dispatch path retired: files,
-// storage_write, aggregate_incr, conn, index_write, settings, parser,
-// optimizer, arrow_ext. All of their export types are now marshalled
-// via `crate::export_marshal` + `sync_export_bridge::call_export`, and
-// no downstream crate imported them (the `native-extension/ducklink`
-// crate maintains its own copies). The seven that remain each still
-// contribute a type re-export (`index_bindings::IndexHit`,
-// `copy_bindings::CopyFromBindResult`, etc.) at
-// `crate::extension`'s module boundary; storage_bindings backs the
-// `storage_scan` public API. Once those consumers are migrated too,
-// the remaining wrappers can retire in the same pass.
+// Phase 6.2.j retired nine per-world wit-bindgen wrapper modules
+// after the wit-bindgen dispatch path retired: files, storage_write,
+// aggregate_incr, conn, index_write, settings, parser, optimizer,
+// arrow_ext. Phase 6.2.k retires SIX MORE — index, copy, secret,
+// table_stream, file_write, log_storage — after replacing their sole
+// remaining role (type re-exports for `IndexHit`,
+// `CopyFromBindResult`, `SecretKv`, `TableOpenResult` +
+// `FilterOp`/`TableFilter`, `FileInfo`, `LogEntry`) with plain Rust
+// mirror types in `crate::extension` (see the block starting at
+// "Phase 6.2.k — SPI record/enum mirrors"). No downstream crate
+// imported these wrappers (native-extension/ducklink maintains its
+// own copies). All dispatch is via `crate::export_marshal` +
+// `sync_export_bridge::call_export` against the raw component
+// instance.
+//
+// Two wrappers remain: `duckdb_extension_bindings` (the base world —
+// provides `extension_types::{Duckvalue, Columndef, Duckerror,
+// Logicaltype, ...}`, plus `extension_runtime::Resultset` and every
+// other host-import Host trait) and `duckdb_extension_storage_bindings`
+// (backs the `crate::extension::storage_scan` public API — components
+// that drive pushdown scans reach for the storage-world's Duckvalue
+// via `storage_scan::Duckvalue`). Retiring those two would require
+// migrating downstream code off wit-bindgen for the base extension
+// types themselves — a separate scope from Phase 6.2.k.
 
 /// The kind of callback a handle dispatches to inside an extension component.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

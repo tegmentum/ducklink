@@ -3232,12 +3232,12 @@ pub fn describe_runtime_logicaltype(ty: &reg::LogicalType) -> String {
 /// `wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export`
 /// using the raw `instance`, no typed dispatcher struct required.
 ///
-/// Type re-exports (`FileInfo`, `TableOpenResult`, `CopyFromBindResult`,
-/// `LogEntry`, `IndexHit`, `FilterOp`, `TableFilter`) still come from
-/// the corresponding `duckdb_extension_*_bindings` modules in
-/// `lib.rs` — those modules stay to serve their re-export role; only
-/// their typed dispatcher structs stopped participating in the load
-/// flow.
+/// Phase 6.2.k retired the last of those wrapper modules whose only
+/// remaining role was per-world type re-exports. `FileInfo`,
+/// `TableOpenResult`, `CopyFromBindResult`, `LogEntry`, `IndexHit`,
+/// `FilterOp`, `TableFilter`, `SecretKv` now live as plain Rust
+/// mirror structs on `crate::extension` directly — no wit-bindgen
+/// dependency in ducklink-runtime's public SPI record surface.
 pub struct ExtensionInstance {
     store: Store<ExtensionStoreState>,
     instance: wasmtime::component::Instance,
@@ -3338,43 +3338,118 @@ fn storage_duckvalue_to_ext(value: storage_scan::Duckvalue) -> extension_types::
     }
 }
 
+// ADR-0029 Phase 6.2.k — SPI record/enum mirrors.
+//
+// These types used to be re-exports of the wit-bindgen-generated
+// records inside per-world binding wrappers (`duckdb_extension_index_
+// bindings::exports::duckdb::extension::index_dispatch::IndexHit`,
+// etc.). Phase 6.2.i migrated every dispatch off wit-bindgen through
+// `sync_export_bridge::call_export` + `crate::export_marshal`; Phase
+// 6.2.j retired the nine wrapper modules whose dispatchers no caller
+// touched. What kept the last seven wrappers alive was these type
+// re-exports: they leaked wit-bindgen's generated Rust shape onto
+// ducklink-runtime's public API, so `ducklink-host` and any external
+// consumer that named `ducklink_runtime::extension::IndexHit`
+// depended transitively on the wit-bindgen module tree.
+//
+// Phase 6.2.k defines each record/enum as a plain Rust struct here
+// — same fields, same wire semantics, no wit-bindgen coupling. The
+// seven wrappers can then retire in the same pass. The types stay
+// wire-shaped (matching the WIT definitions in
+// `wit/deps/duckdb-extension/{index,copy,secret,table-stream,file-
+// write,log-storage}-dispatch.wit`) so `export_marshal` decoders
+// build them directly from `wasmos_runtime_api::Value` payloads
+// with no downstream lift/lower needed.
 
+/// M2a (index): one hit returned by an ANN or general index scan —
+/// a `(rowid, distance)` pair. Mirror of WIT
+/// `index-dispatch.index-hit`. Kept on the public API so the host
+/// surfaces hits up through the index-host import.
+#[derive(Clone, Debug, PartialEq)]
+pub struct IndexHit {
+    pub rowid: i64,
+    pub distance: f32,
+}
 
+/// 2.1.0 (Item 1): result of binding a COPY FROM reader (reader
+/// handle + projected column schema). Mirror of WIT
+/// `copy-dispatch.copy-from-bind-result`. `columns` is the base
+/// `extension_types::Columndef` — the WIT wire type is the SAME
+/// record, not a per-world clone.
+#[derive(Clone, Debug)]
+pub struct CopyFromBindResult {
+    pub reader: u32,
+    pub columns: Vec<extension_types::Columndef>,
+}
 
-// identical) `types`; convert those into the base `extension_types`.
-/// the host to surface up the index-host import.
-pub use crate::duckdb_extension_index_bindings::exports::duckdb::extension::index_dispatch::IndexHit;
+/// 2.1.0 (Item 2): one flat key=value entry of a materialized secret.
+/// Mirror of WIT `secret-dispatch.secret-kv`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SecretKv {
+    pub key: String,
+    pub value: String,
+}
 
-/// 2.1.0 (Item 1): result of binding a COPY FROM reader (reader handle +
-/// columns), re-exported for the host. `columns` is the base `extension_types`
-/// Columndef (the world's `types` is remapped to the base bindings).
-pub use crate::duckdb_extension_copy_bindings::exports::duckdb::extension::copy_dispatch::CopyFromBindResult;
+/// 2.2.0 (Item 6): result of opening a streaming table cursor
+/// (cursor handle + projected column schema). Mirror of WIT
+/// `table-stream-dispatch.table-open-result`.
+#[derive(Clone, Debug)]
+pub struct TableOpenResult {
+    pub cursor: u32,
+    pub columns: Vec<extension_types::Columndef>,
+}
 
-/// 2.1.0 (Item 2): one flat key=value entry of a materialized secret,
-/// re-exported for the host.
-pub use crate::duckdb_extension_secret_bindings::exports::duckdb::extension::secret_dispatch::SecretKv;
+/// 3.1.0: comparator for a pushed-down filter. Mirror of WIT
+/// `table-stream-dispatch.filter-op`. The `IsIn` variant carries no
+/// payload — the flattened IN-list rides on the enclosing
+/// [`TableFilter::values`] vector.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FilterOp {
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    /// The column value is one of `values` (a flattened IN-list).
+    IsIn,
+    IsNull,
+    IsNotNull,
+}
 
-/// 2.2.0 (Item 6): result of opening a streaming table cursor (cursor handle +
-/// projected column schema), re-exported for the host.
-pub use crate::duckdb_extension_table_stream_bindings::exports::duckdb::extension::table_stream_dispatch::TableOpenResult;
+/// 3.1.0: the neutral, by-value-safe pushed-down filter descriptor.
+/// Mirror of WIT `table-stream-dispatch.table-filter`. The
+/// core<->host bridge builds the conjunctive filter set that the
+/// streaming `TableFunction` pushes to `call-table-open-filtered`.
+#[derive(Clone, Debug)]
+pub struct TableFilter {
+    pub column: u32,
+    pub op: FilterOp,
+    pub values: Vec<extension_types::Duckvalue>,
+}
 
-/// 3.1.0: the neutral, by-value-safe pushed-down filter descriptor + its
-/// comparator enum (`table-stream-dispatch.table-filter` / `filter-op`),
-/// re-exported so the core<->host bridge can build the conjunctive filter set
-/// the streaming `TableFunction` pushes to `call-table-open-filtered`.
-pub use crate::duckdb_extension_table_stream_bindings::exports::duckdb::extension::table_stream_dispatch::{
-    FilterOp, TableFilter,
-};
+/// 2.2.0 (Item 7): metadata for one path returned by
+/// `file-write-dispatch.file-stat`. Mirror of WIT
+/// `file-write-dispatch.file-info`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FileInfo {
+    pub path: String,
+    pub size: u64,
+    pub is_directory: bool,
+}
 
-/// 2.2.0 (Item 7): metadata for one path returned by `file-write-dispatch.file-stat`,
-/// re-exported for the host.
-pub use crate::duckdb_extension_file_write_bindings::exports::duckdb::extension::file_write_dispatch::FileInfo;
-
-/// 3.2.0: one log record crossing the WIT boundary into a registered log sink,
-/// re-exported so the direction-specific sink (the C API installer in
-/// `ducklink-extension/src/reg_duckdb.rs`) can construct entries by-value.
-/// Class B parity with the stable `duckdb_register_log_storage` C API.
-pub use crate::duckdb_extension_log_storage_bindings::exports::duckdb::extension::log_storage_dispatch::LogEntry;
+/// 3.2.0: one log record crossing the WIT boundary into a registered
+/// log sink. Mirror of WIT `log-storage-dispatch.log-entry`. Class B
+/// parity with the stable `duckdb_register_log_storage` C API — the
+/// direction-specific sink (the C API installer in `ducklink-
+/// extension/src/reg_duckdb.rs`) constructs entries by-value.
+#[derive(Clone, Debug)]
+pub struct LogEntry {
+    pub level: u32,
+    pub message: String,
+    pub tags: Option<Vec<(String, String)>>,
+    pub ts_micros: i64,
+}
 
 
 impl ExtensionInstance {
@@ -4297,11 +4372,12 @@ impl ExtensionInstance {
         // filter-op enum: eq, ne, lt, le, gt, ge, is-in, is-null,
         // is-not-null.
         use crate::export_marshal::*;
-        use crate::duckdb_extension_table_stream_bindings::exports::duckdb::extension::table_stream_dispatch::FilterOp as F;
-        let filter_op_val = |op: F| wasmos_runtime_api::Value::Enum(match op {
-            F::Eq => "eq", F::Ne => "ne", F::Lt => "lt", F::Le => "le",
-            F::Gt => "gt", F::Ge => "ge", F::IsIn => "is-in",
-            F::IsNull => "is-null", F::IsNotNull => "is-not-null",
+        // Phase 6.2.k — FilterOp is now the ducklink-runtime-owned
+        // mirror; enum-name mapping stays wire-canonical.
+        let filter_op_val = |op: FilterOp| wasmos_runtime_api::Value::Enum(match op {
+            FilterOp::Eq => "eq", FilterOp::Ne => "ne", FilterOp::Lt => "lt", FilterOp::Le => "le",
+            FilterOp::Gt => "gt", FilterOp::Ge => "ge", FilterOp::IsIn => "is-in",
+            FilterOp::IsNull => "is-null", FilterOp::IsNotNull => "is-not-null",
         }.into());
         let filters_val = wasmos_runtime_api::Value::List(
             filters.iter().map(|f| wasmos_runtime_api::Value::Record(vec![
