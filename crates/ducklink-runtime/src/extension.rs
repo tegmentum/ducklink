@@ -5234,27 +5234,29 @@ mod tests {
         )
     }
 
-    /// THE MAJOR-5 BREAK PROOF. The @5.0.0 contract is a DELIBERATE clean break
-    /// over @4.x: S1 nested types collapse to an opaque `list<u8>` for columns
-    /// (with a `Complex(string)` escape hatch on logicaltype), S2 introduces
-    /// `decimal(width, scale)` as a first-class typed columnar path, and T2-1
-    /// drops residual HUGEINT / UHUGEINT surface. Every pre-existing @4.x
-    /// component is REJECTED by design (the ABI it exports no longer matches).
-    /// The on-disk `artifacts/extensions/*.wasm` are the OLD @4.0.0 builds (not
-    /// yet rebuilt at @5.0.0), so the contract guard must reject them with the
-    /// friendly major-mismatch message. (After the coordinated @5.0.0 rebuild
-    /// they load.) Skipped gracefully if the artifacts are absent (toolchain-
-    /// free CI subset).
+    /// The @5.0.0 contract check accepts the coordinated post-rebuild
+    /// artifacts. Historical context: the @4.x → @5.0.0 major bump
+    /// (S1 nested-type collapse, S2 first-class decimal, T2-1 hugeint
+    /// drop) was a DELIBERATE clean break — pre-existing @4.x
+    /// components were rejected by design until every artifact
+    /// rebuilt. Post-rebuild (current state), `component_contract_
+    /// version` reports @5.0.0 for the on-disk artifacts and
+    /// `check_component_contract` accepts them.
+    ///
+    /// Phase 6.2.h.7 REPLACED this test's original intent (assert the
+    /// @4.x rejection) with the post-rebuild assertion (assert the
+    /// @5.x acceptance) after all artifacts were rebuilt. The break
+    /// itself is proven at the release-boundary level via
+    /// datalink-contract's own tests.
     #[test]
-    fn major_5_rejects_frozen_4_0_0_components() {
+    fn major_5_accepts_post_rebuild_artifacts() {
         let manifest = env!("CARGO_MANIFEST_DIR");
         let aba = std::path::Path::new(manifest).join("../../artifacts/extensions/aba.wasm");
         if !aba.exists() {
-            eprintln!("skipping major-5 break proof: artifacts/extensions/aba.wasm absent");
+            eprintln!("skipping post-rebuild acceptance test: artifacts/extensions/aba.wasm absent");
             return;
         }
 
-        // This host is the major-5 baseline.
         assert_eq!(crate::CONTRACT_MAJOR, 5);
         assert_eq!(crate::CONTRACT_MINOR, 0);
 
@@ -5269,21 +5271,70 @@ mod tests {
             let bytes = std::fs::read(&path).unwrap();
             let component = Component::new(&engine, &bytes).unwrap();
 
-            // The on-disk artifact is still the @4.0.0 build (major 4).
+            // Post-rebuild: artifact reports @5.
             let ver = crate::component_contract_version(&engine, &component);
             assert_eq!(
                 ver.map(|(maj, _)| maj),
-                Some(4),
-                "{name} on disk is expected to still be the @4.0.0 build pre-rebuild"
+                Some(5),
+                "{name} on disk is expected to be the @5.0.0 rebuild"
             );
 
-            // The major-5 contract guard REJECTS it (the clean break by design).
+            // The major-5 contract guard ACCEPTS it.
             assert!(
-                crate::check_component_contract(&engine, &component, name).is_err(),
-                "{name}: a @4.x component MUST be rejected by the major-5 host"
+                crate::check_component_contract(&engine, &component, name).is_ok(),
+                "{name}: a @5.x component MUST be accepted by the major-5 host"
             );
-            eprintln!("[major-5-break] @4.0.0 '{name}' correctly REJECTED by the @5.0.0 host");
         }
+    }
+
+    /// ADR-0029 Phase 6.2.h.8 — end-to-end proof that ducklink's
+    /// production `load_component` flow (which now dispatches every
+    /// extension SPI host import through the wasmos-native install
+    /// path via `install_wasmos_migrated_interfaces`) successfully
+    /// loads a real @5.0.0 component.
+    ///
+    /// Loads `pintest_a.wasm` because it imports the full
+    /// `duckdb:extension/runtime` interface (10 resource types incl.
+    /// the get-capability multi-arm variant) — the exact surface Phase
+    /// 6.2.h.7 unblocked via multi-resource classification on the
+    /// resource-aware sync bridge. Successful load = every one of the
+    /// 27 wasmos-native handlers wires cleanly through the bridge, the
+    /// contract guard passes at @5.0.0, and the guest's `load()`
+    /// export runs to completion under the wasmos-native dispatch
+    /// path (invoking `types::` + `runtime::` host imports as needed).
+    ///
+    /// Skipped gracefully if the artifact is absent (toolchain-free
+    /// CI subset). Requires the coordinated rebuild that has landed.
+    #[test]
+    fn wasmos_native_load_pintest_a_end_to_end() {
+        let manifest = env!("CARGO_MANIFEST_DIR");
+        let path = std::path::Path::new(manifest)
+            .join("../../artifacts/extensions/pintest_a.wasm");
+        if !path.exists() {
+            eprintln!(
+                "skipping wasmos-native e2e load test: {} absent",
+                path.display()
+            );
+            return;
+        }
+
+        let engine = test_engine();
+        let instance = load_artifact(&engine, "pintest_a")
+            .expect("pintest_a should load through the wasmos-native install path");
+
+        // The load succeeded: contract guard accepted @5.0.0, every
+        // extension SPI interface pintest_a imports resolved through
+        // `install_wasmos_migrated_interfaces` + the sync bridge, and
+        // the component's `load()` export ran to completion (which
+        // may have exercised `types::` + `runtime::` host-import
+        // dispatches via the wasmos-native handlers).
+        let _ = instance; // retained by ExtensionInstance's Drop —
+                          // any pending registrations were captured
+                          // into the store's ExtensionStoreState.
+        eprintln!(
+            "[wasmos-native] pintest_a loaded successfully through the wasmos-\
+             migrated install path (27/27 interfaces)"
+        );
     }
 
     #[test]
@@ -6393,32 +6444,32 @@ fn install_wasmos_migrated_interfaces(
     let migrated: [(&str, fn() -> StdArc<dyn _SyncHostCall>); 7] = [
         // Phase 6.2.h.2 — Session 2 first migration.
         (
-            "duckdb:extension/lifecycle",
+            "duckdb:extension/lifecycle@5.0.0",
             || StdArc::new(crate::extension_wasmos::LifecycleHost::new()),
         ),
         // Phase 6.2.h.3 — the six remaining stateless interfaces.
         (
-            "duckdb:extension/types",
+            "duckdb:extension/types@5.0.0",
             || StdArc::new(crate::extension_wasmos::TypesHost::new()),
         ),
         (
-            "duckdb:extension/encoding",
+            "duckdb:extension/encoding@5.0.0",
             || StdArc::new(crate::extension_wasmos::EncodingHost::new()),
         ),
         (
-            "duckdb:extension/compression",
+            "duckdb:extension/compression@5.0.0",
             || StdArc::new(crate::extension_wasmos::CompressionHost::new()),
         ),
         (
-            "duckdb:extension/files-reg",
+            "duckdb:extension/files-reg@5.0.0",
             || StdArc::new(crate::extension_wasmos::FilesRegHost::new()),
         ),
         (
-            "duckdb:extension/index",
+            "duckdb:extension/index@5.0.0",
             || StdArc::new(crate::extension_wasmos::IndexHost::new()),
         ),
         (
-            "duckdb:extension/collation",
+            "duckdb:extension/collation@5.0.0",
             || StdArc::new(crate::extension_wasmos::CollationHost::new()),
         ),
     ];
@@ -6452,80 +6503,80 @@ fn install_wasmos_migrated_interfaces(
     let stateful_migrated: [(&str, fn() -> StdArc<dyn _SyncHostCall>); 20] = [
         // File-lock — 1 resource, migrated Phase 6.2.h.5.
         (
-            "duckdb:extension/file-lock",
+            "duckdb:extension/file-lock@5.0.0",
             || StdArc::new(crate::extension_wasmos::FileLockHost::bridged()),
         ),
         // Resource-free stateful interfaces — Phase 6.2.h.6.
         (
-            "duckdb:extension/config",
+            "duckdb:extension/config@5.0.0",
             || StdArc::new(crate::extension_wasmos::ConfigHost::bridged()),
         ),
         (
-            "duckdb:extension/logging",
+            "duckdb:extension/logging@5.0.0",
             || StdArc::new(crate::extension_wasmos::LoggingHost::bridged()),
         ),
         (
-            "duckdb:extension/catalog",
+            "duckdb:extension/catalog@5.0.0",
             || StdArc::new(crate::extension_wasmos::CatalogHost::bridged()),
         ),
         (
-            "duckdb:extension/files",
+            "duckdb:extension/files@5.0.0",
             || StdArc::new(crate::extension_wasmos::FilesHost::bridged()),
         ),
         (
-            "duckdb:extension/storage",
+            "duckdb:extension/storage@5.0.0",
             || StdArc::new(crate::extension_wasmos::StorageHost::bridged()),
         ),
         (
-            "duckdb:extension/query",
+            "duckdb:extension/query@5.0.0",
             || StdArc::new(crate::extension_wasmos::QueryHost::bridged()),
         ),
         (
-            "duckdb:extension/nested-exec",
+            "duckdb:extension/nested-exec@5.0.0",
             || StdArc::new(crate::extension_wasmos::NestedExecHost::bridged()),
         ),
         (
-            "duckdb:extension/secret",
+            "duckdb:extension/secret@5.0.0",
             || StdArc::new(crate::extension_wasmos::SecretHost::bridged()),
         ),
         (
-            "duckdb:extension/settings",
+            "duckdb:extension/settings@5.0.0",
             || StdArc::new(crate::extension_wasmos::SettingsHost::bridged()),
         ),
         (
-            "duckdb:extension/macro-ext",
+            "duckdb:extension/macro-ext@5.0.0",
             || StdArc::new(crate::extension_wasmos::MacroExtHost::bridged()),
         ),
         (
-            "duckdb:extension/types-ext",
+            "duckdb:extension/types-ext@5.0.0",
             || StdArc::new(crate::extension_wasmos::TypesExtHost::bridged()),
         ),
         (
-            "duckdb:extension/runtime-ext",
+            "duckdb:extension/runtime-ext@5.0.0",
             || StdArc::new(crate::extension_wasmos::RuntimeExtHost::bridged()),
         ),
         (
-            "duckdb:extension/coordinate-system",
+            "duckdb:extension/coordinate-system@5.0.0",
             || StdArc::new(crate::extension_wasmos::CoordinateSystemHost::bridged()),
         ),
         (
-            "duckdb:extension/arrow-ext",
+            "duckdb:extension/arrow-ext@5.0.0",
             || StdArc::new(crate::extension_wasmos::ArrowExtHost::bridged()),
         ),
         (
-            "duckdb:extension/parser",
+            "duckdb:extension/parser@5.0.0",
             || StdArc::new(crate::extension_wasmos::ParserHost::bridged()),
         ),
         (
-            "duckdb:extension/optimizer",
+            "duckdb:extension/optimizer@5.0.0",
             || StdArc::new(crate::extension_wasmos::OptimizerHost::bridged()),
         ),
         (
-            "duckdb:extension/table-stream",
+            "duckdb:extension/table-stream@5.0.0",
             || StdArc::new(crate::extension_wasmos::TableStreamHost::bridged()),
         ),
         (
-            "duckdb:extension/log-storage",
+            "duckdb:extension/log-storage@5.0.0",
             || StdArc::new(crate::extension_wasmos::LogStorageHost::bridged()),
         ),
         // ADR-0029 Phase 6.2.h.7 — Runtime, the final interface.
@@ -6536,7 +6587,7 @@ fn install_wasmos_migrated_interfaces(
         // carries its resource_name in the ctx's name_map, so lower
         // resolves the correct wasmtime discriminant per return.
         (
-            "duckdb:extension/runtime",
+            "duckdb:extension/runtime@5.0.0",
             || StdArc::new(crate::extension_wasmos::RuntimeHost::bridged()),
         ),
     ];
