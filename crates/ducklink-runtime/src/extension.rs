@@ -1579,21 +1579,24 @@ impl ExtensionStoreState {
     // this capability was never produced), intercepts `PRAGMA <name>(...)`,
     // dispatches via callback-dispatch.call-pragma (the component RETURNS a
     // SQL script as text), and runs that script.
+    /// Phase 6.2.n Session 4 — signature inlined. The wit-bindgen
+    /// `Resource<PragmaRegistry>` / `Resource<PragmaCallback>` args
+    /// carried opaque u32 handle reps; test callers pass raw u32s.
+    /// The `arguments` / `returns` / `options` args were unused
+    /// (validation only exercised the callback-handle lookup path)
+    /// and dropped.
     pub(crate) fn register_call(
         &mut self,
-        _self_: Resource<extension_runtime::PragmaRegistry>,
+        _registry: u32,
         name: String,
-        _arguments: BindgenVec<extension_runtime::Funcarg>,
-        _returns: extension_runtime::Logicaltype,
-        callback: Resource<extension_runtime::PragmaCallback>,
-        _options: Option<extension_runtime::Extopts>,
+        callback_handle: u32,
     ) -> Result<u32, Duckerror> {
         {
             let registry = self
                 .callback_registry
                 .read()
                 .unwrap_or_else(|e| e.into_inner());
-            match registry.get(callback.rep()) {
+            match registry.get(callback_handle) {
                 Some(entry) if entry.kind == CallbackKind::Pragma => {}
                 Some(_) => {
                     return Err(Duckerror::Invalidargument(
@@ -1607,9 +1610,6 @@ impl ExtensionStoreState {
                 }
             }
         }
-
-        let callback_handle = callback.rep();
-        std::mem::forget(callback);
 
         verbose_log!(
             "[extension-runtime:{}] registered pragma '{name}' (callback={callback_handle})",
@@ -1912,7 +1912,7 @@ impl ExtensionStoreState {
     pub(crate) fn register_enum(
         &mut self,
         name: String,
-        members: BindgenVec<String>,
+        members: Vec<String>,
     ) -> Result<u32, Duckerror> {
         verbose_log!(
             "[extension-runtime:{}] registered enum type '{name}' ({} members)",
@@ -1922,7 +1922,7 @@ impl ExtensionStoreState {
         self.pending_enum_types.push(PendingEnumType {
             extension: self.extension_name.clone(),
             name,
-            members: members.into_iter().collect(),
+            members,
         });
         Ok(self.alloc_resource_id())
     }
@@ -6360,14 +6360,12 @@ mod tests {
             )
             .expect("register_table_macro");
 
-        state.register_logical_type_modified("price".to_string(),
-            "DECIMAL(18,3)".to_string(),
-        )
-        .expect("register_logical_type_modified");
-        state.register_enum("mood".to_string(),
-            vec!["happy".to_string(), "sad".to_string()].into(),
-        )
-        .expect("register_enum");
+        state
+            .register_logical_type_modified("price".to_string(), "DECIMAL(18,3)".to_string())
+            .expect("register_logical_type_modified");
+        state
+            .register_enum("mood".to_string(), vec!["happy".to_string(), "sad".to_string()])
+            .expect("register_enum");
 
         // Phase 3: both register_secret_* calls capture into pending_secrets.
         // The type registration has params + `provider = None`; the provider
@@ -6517,16 +6515,8 @@ mod tests {
     fn register_pragma_with_unknown_callback_handle_errors_not_panics() {
         let mut state = test_state();
         // A pragma callback handle that was never registered in the callback
-        // registry -> Err, not a panic.
-        let bogus: Resource<extension_runtime::PragmaCallback> = Resource::new_own(424242);
-        let registry: Resource<extension_runtime::PragmaRegistry> = Resource::new_own(1);
-        let res = state.register_call(registry,
-            "my_pragma".to_string(),
-            Vec::new().into(),
-            extension_runtime::Logicaltype::Text,
-            bogus,
-            None,
-        );
+        // registry -> Err, not a panic. Registry rep is arbitrary.
+        let res = state.register_call(1, "my_pragma".to_string(), 424242);
         assert!(res.is_err());
     }
 
