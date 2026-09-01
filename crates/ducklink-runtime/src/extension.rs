@@ -2334,7 +2334,7 @@ fn convert_extension_funcopts(opts: extension_runtime::Funcopts) -> reg::FuncOpt
     reg::FuncOpts {
         description: opts.description,
         tags: opts.tags.into_iter().collect(),
-        attributes: convert_extension_funcflags(opts.attributes),
+        attributes: convert_extension_funcflags(opts.attributes.into()),
     }
 }
 
@@ -2350,13 +2350,13 @@ fn convert_extension_columndefs(columns: Vec<extension_runtime::Columndef>) -> V
 }
 
 #[cfg(test)]
-fn convert_extension_funcflags(flags: extension_types::Funcflags) -> reg::FuncFlags {
+fn convert_extension_funcflags(flags: Funcflags) -> reg::FuncFlags {
     reg::FuncFlags {
-        deterministic: flags.contains(extension_types::Funcflags::DETERMINISTIC),
-        commutative: flags.contains(extension_types::Funcflags::COMMUTATIVE),
-        stateless: flags.contains(extension_types::Funcflags::STATELESS),
-        side_effecting: flags.contains(extension_types::Funcflags::SIDEEFFECTING),
-        deprecated: flags.contains(extension_types::Funcflags::DEPRECATED),
+        deterministic: flags.contains(Funcflags::DETERMINISTIC),
+        commutative: flags.contains(Funcflags::COMMUTATIVE),
+        stateless: flags.contains(Funcflags::STATELESS),
+        side_effecting: flags.contains(Funcflags::SIDEEFFECTING),
+        deprecated: flags.contains(Funcflags::DEPRECATED),
     }
 }
 
@@ -3224,6 +3224,91 @@ impl From<Colvec> for extension_column_types::Colvec {
     fn from(v: Colvec) -> Self {
         extension_column_types::Colvec { data: v.data.into(), validity: v.validity.into(), rows: v.rows }
     }
+}
+
+// ─── Phase 6.2.m Session 6 — flags mirrors ───────────────────────
+
+/// Function-registration flags. Mirror of WIT `types.funcflags` (a
+/// WIT `flags` value, marshalled as a bitset). Same associated
+/// constants + `.contains()` / `.empty()` / `|` API as the wit-
+/// bindgen bitflags shape.
+///
+/// Kept hand-rolled (rather than routed through the `bitflags`
+/// crate) to avoid pulling in a new dependency for one 5-flag type.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Funcflags(u32);
+
+impl Funcflags {
+    pub const DETERMINISTIC: Self = Self(0b0_0001);
+    pub const COMMUTATIVE: Self = Self(0b0_0010);
+    pub const STATELESS: Self = Self(0b0_0100);
+    pub const SIDEEFFECTING: Self = Self(0b0_1000);
+    pub const DEPRECATED: Self = Self(0b1_0000);
+
+    /// Zero-flag value — the identity element of `|`.
+    pub const fn empty() -> Self { Self(0) }
+
+    /// Whether `self` has every flag `other` sets.
+    pub const fn contains(&self, other: Self) -> bool { self.0 & other.0 == other.0 }
+}
+
+impl std::ops::BitOr for Funcflags {
+    type Output = Self;
+    fn bitor(self, rhs: Self) -> Self { Self(self.0 | rhs.0) }
+}
+
+impl std::ops::BitOrAssign for Funcflags {
+    fn bitor_assign(&mut self, rhs: Self) { self.0 |= rhs.0; }
+}
+
+impl From<extension_types::Funcflags> for Funcflags {
+    fn from(f: extension_types::Funcflags) -> Self {
+        let mut out = Funcflags::empty();
+        if f.contains(extension_types::Funcflags::DETERMINISTIC) { out |= Funcflags::DETERMINISTIC; }
+        if f.contains(extension_types::Funcflags::COMMUTATIVE)   { out |= Funcflags::COMMUTATIVE; }
+        if f.contains(extension_types::Funcflags::STATELESS)     { out |= Funcflags::STATELESS; }
+        if f.contains(extension_types::Funcflags::SIDEEFFECTING) { out |= Funcflags::SIDEEFFECTING; }
+        if f.contains(extension_types::Funcflags::DEPRECATED)    { out |= Funcflags::DEPRECATED; }
+        out
+    }
+}
+impl From<Funcflags> for extension_types::Funcflags {
+    fn from(f: Funcflags) -> Self {
+        let mut out = extension_types::Funcflags::empty();
+        if f.contains(Funcflags::DETERMINISTIC) { out |= extension_types::Funcflags::DETERMINISTIC; }
+        if f.contains(Funcflags::COMMUTATIVE)   { out |= extension_types::Funcflags::COMMUTATIVE; }
+        if f.contains(Funcflags::STATELESS)     { out |= extension_types::Funcflags::STATELESS; }
+        if f.contains(Funcflags::SIDEEFFECTING) { out |= extension_types::Funcflags::SIDEEFFECTING; }
+        if f.contains(Funcflags::DEPRECATED)    { out |= extension_types::Funcflags::DEPRECATED; }
+        out
+    }
+}
+
+/// Connection lifecycle event bits. Mirror of WIT
+/// `lifecycle.conn-events` (2-flag bitset: opened + closed).
+///
+/// The wasmos-native `LifecycleHost` in `crate::extension_wasmos`
+/// carries its own `#[derive(WitFlags)]`-backed `ConnEvents` for the
+/// wire dispatch path; this mirror lives on the public API so
+/// consumers reach one flags type consistently, and pairs with
+/// bidirectional `From` converters to the wit-bindgen shape.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ConnEvents(u32);
+
+impl ConnEvents {
+    pub const OPENED: Self = Self(0b01);
+    pub const CLOSED: Self = Self(0b10);
+
+    pub const fn empty() -> Self { Self(0) }
+    pub const fn contains(&self, other: Self) -> bool { self.0 & other.0 == other.0 }
+}
+
+impl std::ops::BitOr for ConnEvents {
+    type Output = Self;
+    fn bitor(self, rhs: Self) -> Self { Self(self.0 | rhs.0) }
+}
+impl std::ops::BitOrAssign for ConnEvents {
+    fn bitor_assign(&mut self, rhs: Self) { self.0 |= rhs.0; }
 }
 
 // ─── Session 5 mirrors — smaller records / enums ─────────────────
@@ -5970,18 +6055,18 @@ mod tests {
 
     #[test]
     fn convert_funcflags_maps_each_bit() {
-        let none = convert_extension_funcflags(extension_types::Funcflags::empty());
+        let none = convert_extension_funcflags(Funcflags::empty());
         assert_eq!(none, reg::FuncFlags::default());
         let all = convert_extension_funcflags(
-            extension_types::Funcflags::DETERMINISTIC
-                | extension_types::Funcflags::COMMUTATIVE
-                | extension_types::Funcflags::STATELESS
-                | extension_types::Funcflags::SIDEEFFECTING
-                | extension_types::Funcflags::DEPRECATED,
+            Funcflags::DETERMINISTIC
+                | Funcflags::COMMUTATIVE
+                | Funcflags::STATELESS
+                | Funcflags::SIDEEFFECTING
+                | Funcflags::DEPRECATED,
         );
         assert!(all.deterministic && all.commutative && all.stateless);
         assert!(all.side_effecting && all.deprecated);
-        let det = convert_extension_funcflags(extension_types::Funcflags::DETERMINISTIC);
+        let det = convert_extension_funcflags(Funcflags::DETERMINISTIC);
         assert!(det.deterministic);
         assert!(!det.commutative && !det.stateless && !det.side_effecting && !det.deprecated);
     }
