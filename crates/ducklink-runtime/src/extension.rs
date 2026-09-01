@@ -20,21 +20,19 @@ use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 use crate::duckdb_extension_bindings::duckdb::extension::{
-    catalog as extension_catalog, column_types as extension_column_types,
-    config as extension_config, file_lock as extension_file_lock, files as extension_files,
-    logging as extension_logging, nested_exec as extension_nested_exec,
-    query as extension_query, runtime as extension_runtime, secret as extension_secret,
-    types as extension_types, types_ext as extension_types_ext,
+    column_types as extension_column_types, file_lock as extension_file_lock,
+    nested_exec as extension_nested_exec, runtime as extension_runtime, types as extension_types,
 };
 // Phase 6.2.l.2 — the following interface types are referenced only
 // by #[cfg(test)]-gated inherent methods (extracted from retired
 // Host trait impls whose test coverage stayed in this file).
 #[cfg(test)]
 use crate::duckdb_extension_bindings::duckdb::extension::{
-    arrow_ext as extension_arrow_ext,
-    coordinate_system as extension_coordinate_system,
-    runtime_ext as extension_runtime_ext, settings as extension_settings,
-    storage as extension_storage,
+    arrow_ext as extension_arrow_ext, catalog as extension_catalog,
+    coordinate_system as extension_coordinate_system, files as extension_files,
+    runtime_ext as extension_runtime_ext, secret as extension_secret,
+    settings as extension_settings, storage as extension_storage,
+    types_ext as extension_types_ext,
 };
 // Phase 6.2.j — DuckdbExtension typed dispatcher retired (used to be
 // constructed at load time; every dispatch now flows through the
@@ -579,24 +577,11 @@ pub trait ExtensionServices: Send {
     }
 }
 
-fn neutral_configerror_to_ext(err: ConfigError) -> extension_types::Configerror {
-    match err {
-        ConfigError::InvalidKey(m) => extension_types::Configerror::Invalidkey(m),
-        ConfigError::TypeMismatch(m) => extension_types::Configerror::Typemismatch(m),
-        ConfigError::Unavailable(m) => extension_types::Configerror::Unavailable(m),
-        ConfigError::InternalConfig(m) => extension_types::Configerror::Internalconfig(m),
-    }
-}
-
-fn ext_loglevel_to_neutral(level: extension_logging::Loglevel) -> LogLevel {
-    match level {
-        extension_logging::Loglevel::Trace => LogLevel::Trace,
-        extension_logging::Loglevel::Debug => LogLevel::Debug,
-        extension_logging::Loglevel::Info => LogLevel::Info,
-        extension_logging::Loglevel::Warn => LogLevel::Warn,
-        extension_logging::Loglevel::Error => LogLevel::Error,
-    }
-}
+// Phase 6.2.l.2 — `neutral_configerror_to_ext` and
+// `ext_loglevel_to_neutral` retired here. They were used only by
+// the deleted extension_config::Host and extension_logging::Host
+// impls; the wasmos-native ConfigHost / LoggingHost in
+// extension_wasmos.rs have their own local converters.
 
 // ---------------------------------------------------------------------------
 // Pending-registration buffers
@@ -2068,108 +2053,21 @@ impl extension_runtime::HostMacroRegistry for ExtensionStoreState {
     }
 }
 
-impl extension_config::Host for ExtensionStoreState {
-    fn provider_version(&mut self) -> String {
-        self.services.provider_version().unwrap_or_else(|err| {
-            eprintln!("extension config provider-version failed: {err:?}");
-            "duckdb-extension-host".into()
-        })
-    }
-
-    fn list_keys(&mut self, prefix: Option<String>) -> BindgenVec<String> {
-        self.services
-            .list_keys(prefix.as_deref())
-            .unwrap_or_else(|err| {
-                eprintln!("extension config list-keys failed: {err:?}");
-                Vec::new()
-            })
-            .into()
-    }
-
-    fn get_string(&mut self, path: String) -> Result<Option<String>, extension_types::Configerror> {
-        self.services
-            .get_string(&path)
-            .map_err(neutral_configerror_to_ext)
-    }
-
-    fn get_bool(&mut self, path: String) -> Result<Option<bool>, extension_types::Configerror> {
-        self.services
-            .get_bool(&path)
-            .map_err(neutral_configerror_to_ext)
-    }
-
-    fn get_i64(&mut self, path: String) -> Result<Option<i64>, extension_types::Configerror> {
-        self.services
-            .get_i64(&path)
-            .map_err(neutral_configerror_to_ext)
-    }
-
-    fn get_u64(&mut self, path: String) -> Result<Option<u64>, extension_types::Configerror> {
-        self.services
-            .get_u64(&path)
-            .map_err(neutral_configerror_to_ext)
-    }
-
-    fn get_f64(&mut self, path: String) -> Result<Option<f64>, extension_types::Configerror> {
-        self.services
-            .get_f64(&path)
-            .map_err(neutral_configerror_to_ext)
-    }
-
-    fn get_bytes(
-        &mut self,
-        path: String,
-    ) -> Result<Option<BindgenVec<u8>>, extension_types::Configerror> {
-        let value = self
-            .services
-            .get_bytes(&path)
-            .map_err(neutral_configerror_to_ext)?;
-        Ok(value.map(|bytes| bytes.into()))
-    }
-
-    fn get_string_list(
-        &mut self,
-        path: String,
-    ) -> Result<Option<BindgenVec<String>>, extension_types::Configerror> {
-        let value = self
-            .services
-            .get_string_list(&path)
-            .map_err(neutral_configerror_to_ext)?;
-        Ok(value.map(|items| items.into()))
-    }
-}
-
-impl extension_logging::Host for ExtensionStoreState {
-    fn log(&mut self, level: extension_logging::Loglevel, message: String, target: Option<String>) {
-        self.services
-            .log(ext_loglevel_to_neutral(level), &message, target.as_deref());
-    }
-
-    fn log_fields(
-        &mut self,
-        level: extension_logging::Loglevel,
-        message: String,
-        fields: BindgenVec<extension_logging::Logfield>,
-    ) {
-        let converted: Vec<LogField> = fields
-            .into_iter()
-            .map(|field| LogField {
-                key: field.key.into(),
-                value: field.value.into(),
-            })
-            .collect();
-        self.services
-            .log_fields(ext_loglevel_to_neutral(level), &message, &converted);
-    }
-}
+// Phase 6.2.l.2 — `impl extension_config::Host` and
+// `impl extension_logging::Host` retired here. No test in this
+// crate exercised them; the wasmos-native `ConfigHost` and
+// `LoggingHost` in extension_wasmos.rs delegate to the same
+// `self.services.*` sink methods on the production dispatch
+// path. The `ExtensionServices` trait itself is unchanged.
 
 // The `catalog` and `files` interfaces are part of the extension world so that
 // extensions can register logical types, casts, macros, replacement scans, and
 // copy handlers. The host satisfies the imports here so such extensions
 // instantiate and load; the requests are captured into the neutral pending
 // buffers. Forwarding them into DuckDB is the direction-specific sink's job.
-impl extension_catalog::Host for ExtensionStoreState {
-    fn register_logical_type(&mut self, ty: extension_catalog::LogicalType) -> Result<u32, String> {
+#[cfg(test)]
+impl ExtensionStoreState {
+    pub(crate) fn register_logical_type(&mut self, ty: extension_catalog::LogicalType) -> Result<u32, String> {
         let handle = self.alloc_resource_id();
         verbose_log!(
             "[extension-manager] catalog register-logical-type '{}' (physical={}) for '{}' -> handle {handle}",
@@ -2207,7 +2105,7 @@ impl extension_catalog::Host for ExtensionStoreState {
         Ok(())
     }
 
-    fn register_macro(&mut self, def: extension_catalog::MacroDef) -> Result<(), String> {
+    pub(crate) fn register_macro(&mut self, def: extension_catalog::MacroDef) -> Result<(), String> {
         verbose_log!(
             "[extension-manager] catalog register-macro '{}.{}' ({} params) for '{}'",
             def.schema,
@@ -2226,8 +2124,9 @@ impl extension_catalog::Host for ExtensionStoreState {
     }
 }
 
-impl extension_files::Host for ExtensionStoreState {
-    fn register_replacement_scan(
+#[cfg(test)]
+impl ExtensionStoreState {
+    pub(crate) fn register_replacement_scan(
         &mut self,
         scan: extension_files::ReplacementScan,
     ) -> Result<u32, String> {
@@ -2255,7 +2154,7 @@ impl extension_files::Host for ExtensionStoreState {
         Ok(id)
     }
 
-    fn register_copy_handler(
+    pub(crate) fn register_copy_handler(
         &mut self,
         handler: extension_files::CopyHandler,
     ) -> Result<u32, String> {
@@ -2282,8 +2181,9 @@ impl extension_files::Host for ExtensionStoreState {
 // secret-capable components instantiate; the declaration is captured into the
 // neutral pending buffer. Materializing a concrete secret is driven through the
 // component's exported `secret-dispatch`.
-impl extension_secret::Host for ExtensionStoreState {
-    fn register_secret_type(
+#[cfg(test)]
+impl ExtensionStoreState {
+    pub(crate) fn register_secret_type(
         &mut self,
         type_name: String,
         params: BindgenVec<extension_secret::SecretParam>,
@@ -2316,7 +2216,7 @@ impl extension_secret::Host for ExtensionStoreState {
         Ok(registry_id)
     }
 
-    fn register_secret_provider(
+    pub(crate) fn register_secret_provider(
         &mut self,
         type_name: String,
         provider: String,
@@ -2438,8 +2338,9 @@ impl ExtensionStoreState {
 
 // 2.1.0 (Item 5): the `types-ext` interface adds modified logical types (over a
 // type-expression, riding the escape hatch) and ENUM types. `types` stays FROZEN.
-impl extension_types_ext::Host for ExtensionStoreState {
-    fn register_logical_type_modified(
+#[cfg(test)]
+impl ExtensionStoreState {
+    pub(crate) fn register_logical_type_modified(
         &mut self,
         name: String,
         type_expr: String,
@@ -2456,7 +2357,7 @@ impl extension_types_ext::Host for ExtensionStoreState {
         Ok(self.alloc_resource_id())
     }
 
-    fn register_enum(
+    pub(crate) fn register_enum(
         &mut self,
         name: String,
         members: BindgenVec<String>,
@@ -2646,24 +2547,10 @@ impl ExtensionStoreState {
 // `_returns_unsupported` unit test. The interface WIT + docstring
 // context stays with those handlers.
 
-// v1.1: the `query` interface lets a component run a read-only SELECT against the
-// live database (catalog completion). The host satisfies the import here by
-// forwarding to the direction-specific `ExtensionServices::query` sink. The call
-// is BEST-EFFORT: a re-entrant call (from inside a query callback) or a SQL error
-// returns Err, which the component treats as "no rows".
-impl extension_query::Host for ExtensionStoreState {
-    fn query(&mut self, sql: String) -> Result<BindgenVec<BindgenVec<String>>, String> {
-        let rows = self.services.query(&sql)?;
-        Ok(rows
-            .into_iter()
-            .map(|row| {
-                row.into_iter()
-                    .map(Into::into)
-                    .collect::<BindgenVec<String>>()
-            })
-            .collect())
-    }
-}
+// Phase 6.2.l.2 — `impl extension_query::Host::query` retired
+// here. No test in this crate exercised it; the wasmos-native
+// `QueryHost` in extension_wasmos.rs forwards to the same
+// `ExtensionServices::query` sink on the production dispatch path.
 
 // The `nested-exec` interface: an EXECUTE-capable counterpart to `query` that
 // runs SQL on a SIBLING connection to the same database. Guarded by a
@@ -5677,26 +5564,13 @@ mod tests {
     // storage and index) are gone entirely — their targets went with
     // the export_marshal migration.
 
-    #[test]
-    fn configerror_and_loglevel_converters_cover_arms() {
-        for e in [
-            ConfigError::InvalidKey("k".into()),
-            ConfigError::TypeMismatch("t".into()),
-            ConfigError::Unavailable("u".into()),
-            ConfigError::InternalConfig("i".into()),
-        ] {
-            let _ = neutral_configerror_to_ext(e);
-        }
-        for l in [
-            extension_logging::Loglevel::Trace,
-            extension_logging::Loglevel::Debug,
-            extension_logging::Loglevel::Info,
-            extension_logging::Loglevel::Warn,
-            extension_logging::Loglevel::Error,
-        ] {
-            let _ = ext_loglevel_to_neutral(l);
-        }
-    }
+    // Phase 6.2.l.2 — the `configerror_and_loglevel_converters_
+    // cover_arms` test retired here. It exercised the
+    // `neutral_configerror_to_ext` / `ext_loglevel_to_neutral`
+    // helpers that fed the retired `extension_config::Host` and
+    // `extension_logging::Host` impls; the wasmos-native ConfigHost
+    // / LoggingHost in extension_wasmos.rs carry their own
+    // converters covering the same arms.
 
     // --- capture-into-pending logic (Host trait impls) ---
     //
@@ -5736,17 +5610,13 @@ mod tests {
     #[test]
     fn register_logical_type_and_macro_capture_into_pending() {
         let mut state = test_state();
-        extension_catalog::Host::register_logical_type(
-            &mut state,
-            extension_catalog::LogicalType {
+        state.register_logical_type(extension_catalog::LogicalType {
                 name: "myint".to_string(),
                 physical: "INTEGER".to_string(),
             },
         )
         .expect("register_logical_type should not error");
-        extension_catalog::Host::register_macro(
-            &mut state,
-            extension_catalog::MacroDef {
+        state.register_macro(extension_catalog::MacroDef {
                 schema: "main".to_string(),
                 name: "addone".to_string(),
                 parameters: vec!["x".to_string()].into(),
@@ -5768,9 +5638,7 @@ mod tests {
         // copy-dispatch), not rejected. Registration succeeds and lands in the
         // neutral pending buffer with the routing function-handle preserved.
         let mut state = test_state();
-        let res = extension_files::Host::register_copy_handler(
-            &mut state,
-            extension_files::CopyHandler {
+        let res = state.register_copy_handler(extension_files::CopyHandler {
                 extension: "parquet".to_string(),
                 function: 7,
             },
@@ -5790,9 +5658,7 @@ mod tests {
         // macro, modified logical type, and enum also capture as before.
         let mut state = test_state();
 
-        let secret_type_res = extension_secret::Host::register_secret_type(
-            &mut state,
-            "s3".to_string(),
+        let secret_type_res = state.register_secret_type("s3".to_string(),
             vec![
                 extension_secret::SecretParam {
                     name: "key_id".to_string(),
@@ -5810,9 +5676,7 @@ mod tests {
             secret_type_res.is_ok(),
             "register_secret_type should capture (Phase 3)"
         );
-        let secret_provider_res = extension_secret::Host::register_secret_provider(
-            &mut state,
-            "s3".to_string(),
+        let secret_provider_res = state.register_secret_provider("s3".to_string(),
             "credential_chain".to_string(),
             12,
         );
@@ -5836,15 +5700,11 @@ mod tests {
         )
         .expect("register_table_macro");
 
-        extension_types_ext::Host::register_logical_type_modified(
-            &mut state,
-            "price".to_string(),
+        state.register_logical_type_modified("price".to_string(),
             "DECIMAL(18,3)".to_string(),
         )
         .expect("register_logical_type_modified");
-        extension_types_ext::Host::register_enum(
-            &mut state,
-            "mood".to_string(),
+        state.register_enum("mood".to_string(),
             vec!["happy".to_string(), "sad".to_string()].into(),
         )
         .expect("register_enum");
@@ -5997,9 +5857,7 @@ mod tests {
         let mut state = test_state();
         // No table function was ever registered, so handle 999 is unknown: the
         // capture must return Err, not panic.
-        let res = extension_files::Host::register_replacement_scan(
-            &mut state,
-            extension_files::ReplacementScan {
+        let res = state.register_replacement_scan(extension_files::ReplacementScan {
                 table_function: 999,
                 extensions: vec!["csv".to_string()].into(),
                 mode: extension_files::DetectionMode::ExtensionOnly,
