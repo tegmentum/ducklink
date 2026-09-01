@@ -742,6 +742,313 @@ pub(crate) fn scan_filter_to_value(f: &extension_storage::ScanFilter) -> Value {
     ])
 }
 
+// ─── Colvec (Column has 27 arms) ──────────────────────────────────
+
+use crate::duckdb_extension_bindings::duckdb::extension::column_types as extension_column_types;
+
+pub(crate) fn colvec_to_value(cv: &extension_column_types::Colvec) -> Value {
+    Value::Record(vec![
+        ("data".into(), column_to_value(&cv.data)),
+        ("validity".into(), bytes_to_value(&cv.validity)),
+        ("rows".into(), Value::U32(cv.rows)),
+    ])
+}
+
+pub(crate) fn value_to_colvec(
+    v: &Value,
+) -> Result<extension_column_types::Colvec, extension_types::Duckerror> {
+    let data = value_to_column(record_field(v, "data")?)?;
+    let validity = match record_field(v, "validity")? {
+        Value::Bytes(b) => b.to_vec(),
+        Value::List(items) => {
+            let mut out = Vec::with_capacity(items.len());
+            for it in items {
+                match it {
+                    Value::U8(b) => out.push(*b),
+                    o => return Err(extension_types::Duckerror::Internal(format!(
+                        "colvec.validity: expected U8, got {o:?}"))),
+                }
+            }
+            out
+        }
+        o => return Err(extension_types::Duckerror::Internal(format!(
+            "colvec.validity: expected Bytes or List<U8>, got {o:?}"))),
+    };
+    let rows = u32_field(v, "rows")?;
+    Ok(extension_column_types::Colvec { data, validity, rows })
+}
+
+pub(crate) fn colvec_list_to_value(cvs: &[extension_column_types::Colvec]) -> Value {
+    Value::List(cvs.iter().map(colvec_to_value).collect())
+}
+
+fn primitive_list_val<T: Copy>(items: &[T], f: impl Fn(T) -> Value) -> Value {
+    Value::List(items.iter().map(|x| f(*x)).collect())
+}
+
+pub(crate) fn column_to_value(c: &extension_column_types::Column) -> Value {
+    use extension_column_types::Column as C;
+    let (disc, payload) = match c {
+        C::Boolean(xs) => ("boolean", primitive_list_val(xs, Value::Bool)),
+        C::Int64(xs) => ("int64", primitive_list_val(xs, Value::S64)),
+        C::Uint64(xs) => ("uint64", primitive_list_val(xs, Value::U64)),
+        C::Float64(xs) => ("float64", primitive_list_val(xs, Value::F64)),
+        C::Int32(xs) => ("int32", primitive_list_val(xs, Value::S32)),
+        C::Timestamp(xs) => ("timestamp", primitive_list_val(xs, Value::S64)),
+        C::Int8(xs) => ("int8", primitive_list_val(xs, Value::S8)),
+        C::Int16(xs) => ("int16", primitive_list_val(xs, Value::S16)),
+        C::Uint8(xs) => ("uint8", primitive_list_val(xs, Value::U8)),
+        C::Uint16(xs) => ("uint16", primitive_list_val(xs, Value::U16)),
+        C::Uint32(xs) => ("uint32", primitive_list_val(xs, Value::U32)),
+        C::Float32(xs) => ("float32", primitive_list_val(xs, Value::F32)),
+        C::Date(xs) => ("date", primitive_list_val(xs, Value::S32)),
+        C::Time(xs) => ("time", primitive_list_val(xs, Value::S64)),
+        C::Timestamptz(xs) => ("timestamptz", primitive_list_val(xs, Value::S64)),
+        C::Decimal(xs) => ("decimal", Value::List(xs.iter().map(|d| Value::Record(vec![
+            ("lower".into(), Value::U64(d.lower)),
+            ("upper".into(), Value::U64(d.upper)),
+            ("width".into(), Value::U8(d.width)),
+            ("scale".into(), Value::U8(d.scale)),
+        ])).collect())),
+        C::Interval(xs) => ("interval", Value::List(xs.iter().map(|i| Value::Record(vec![
+            ("months".into(), Value::S32(i.months)),
+            ("days".into(), Value::S32(i.days)),
+            ("micros".into(), Value::S64(i.micros)),
+        ])).collect())),
+        C::Uuid(xs) => ("uuid", Value::List(xs.iter().map(|u| Value::Record(vec![
+            ("hi".into(), Value::U64(u.hi)),
+            ("lo".into(), Value::U64(u.lo)),
+        ])).collect())),
+        C::Text(xs) => ("text", Value::List(xs.iter().map(|s| Value::String(s.clone())).collect())),
+        C::Blob(xs) => ("blob", Value::List(xs.iter().map(|b| bytes_to_value(b)).collect())),
+        C::Hugeint(xs) => ("hugeint", Value::List(xs.iter().map(|h| Value::Record(vec![
+            ("lower".into(), Value::U64(h.lower)),
+            ("upper".into(), Value::S64(h.upper)),
+        ])).collect())),
+        C::Uhugeint(xs) => ("uhugeint", Value::List(xs.iter().map(|h| Value::Record(vec![
+            ("lower".into(), Value::U64(h.lower)),
+            ("upper".into(), Value::U64(h.upper)),
+        ])).collect())),
+        C::ListCol(n) => ("list-col", Value::Record(vec![
+            ("encoded".into(), bytes_to_value(&n.encoded)),
+        ])),
+        C::StructCol(n) => ("struct-col", Value::Record(vec![
+            ("encoded".into(), bytes_to_value(&n.encoded)),
+        ])),
+        C::MapCol(m) => ("map-col", Value::Record(vec![
+            ("keys-encoded".into(), bytes_to_value(&m.keys_encoded)),
+            ("vals-encoded".into(), bytes_to_value(&m.vals_encoded)),
+        ])),
+        C::ArrayCol(a) => ("array-col", Value::Record(vec![
+            ("size".into(), Value::U32(a.size)),
+            ("encoded".into(), bytes_to_value(&a.encoded)),
+        ])),
+        C::Complex(xs) => ("complex", Value::List(xs.iter().map(|c| Value::Record(vec![
+            ("type-expr".into(), Value::String(c.type_expr.clone())),
+            ("json".into(), Value::String(c.json.clone())),
+        ])).collect())),
+    };
+    Value::Variant { discriminant: disc.into(), payload: Some(Box::new(payload)) }
+}
+
+/// Lift a Value::List of a specific primitive kind. Uses a closure
+/// to extract the inner primitive with a shape-mismatch error.
+fn lift_prim_list<T>(
+    v: &Value,
+    name: &str,
+    extract: impl Fn(&Value) -> Option<T>,
+) -> Result<Vec<T>, extension_types::Duckerror> {
+    let items = match v {
+        Value::List(items) => items,
+        o => return Err(extension_types::Duckerror::Internal(format!(
+            "expected List for column.{name}, got {o:?}"))),
+    };
+    let mut out = Vec::with_capacity(items.len());
+    for (i, item) in items.iter().enumerate() {
+        out.push(extract(item).ok_or_else(|| extension_types::Duckerror::Internal(format!(
+            "column.{name}[{i}]: shape mismatch, got {item:?}")))?);
+    }
+    Ok(out)
+}
+
+pub(crate) fn value_to_column(
+    v: &Value,
+) -> Result<extension_column_types::Column, extension_types::Duckerror> {
+    use extension_column_types::Column as C;
+    let (disc, payload) = match v {
+        Value::Variant { discriminant, payload } => (discriminant, payload),
+        o => return Err(extension_types::Duckerror::Internal(format!(
+            "value_to_column: expected Variant, got {o:?}"))),
+    };
+    let p = payload.as_deref().ok_or_else(|| {
+        extension_types::Duckerror::Internal(format!("column.{disc}: missing payload"))
+    })?;
+    Ok(match disc.as_str() {
+        "boolean" => C::Boolean(lift_prim_list(p, "boolean", |v| if let Value::Bool(b) = v { Some(*b) } else { None })?),
+        "int64" => C::Int64(lift_prim_list(p, "int64", |v| if let Value::S64(n) = v { Some(*n) } else { None })?),
+        "uint64" => C::Uint64(lift_prim_list(p, "uint64", |v| if let Value::U64(n) = v { Some(*n) } else { None })?),
+        "float64" => C::Float64(lift_prim_list(p, "float64", |v| if let Value::F64(f) = v { Some(*f) } else { None })?),
+        "int32" => C::Int32(lift_prim_list(p, "int32", |v| if let Value::S32(n) = v { Some(*n) } else { None })?),
+        "timestamp" => C::Timestamp(lift_prim_list(p, "timestamp", |v| if let Value::S64(n) = v { Some(*n) } else { None })?),
+        "int8" => C::Int8(lift_prim_list(p, "int8", |v| if let Value::S8(n) = v { Some(*n) } else { None })?),
+        "int16" => C::Int16(lift_prim_list(p, "int16", |v| if let Value::S16(n) = v { Some(*n) } else { None })?),
+        "uint8" => C::Uint8(lift_prim_list(p, "uint8", |v| if let Value::U8(n) = v { Some(*n) } else { None })?),
+        "uint16" => C::Uint16(lift_prim_list(p, "uint16", |v| if let Value::U16(n) = v { Some(*n) } else { None })?),
+        "uint32" => C::Uint32(lift_prim_list(p, "uint32", |v| if let Value::U32(n) = v { Some(*n) } else { None })?),
+        "float32" => C::Float32(lift_prim_list(p, "float32", |v| if let Value::F32(f) = v { Some(*f) } else { None })?),
+        "date" => C::Date(lift_prim_list(p, "date", |v| if let Value::S32(n) = v { Some(*n) } else { None })?),
+        "time" => C::Time(lift_prim_list(p, "time", |v| if let Value::S64(n) = v { Some(*n) } else { None })?),
+        "timestamptz" => C::Timestamptz(lift_prim_list(p, "timestamptz", |v| if let Value::S64(n) = v { Some(*n) } else { None })?),
+        "text" => C::Text(lift_prim_list(p, "text", |v| if let Value::String(s) = v { Some(s.clone()) } else { None })?),
+        "decimal" => {
+            let items = match p {
+                Value::List(items) => items,
+                o => return Err(extension_types::Duckerror::Internal(format!("column.decimal: expected List, got {o:?}"))),
+            };
+            let mut out = Vec::with_capacity(items.len());
+            for it in items {
+                out.push(extension_column_types::Decimalvalue {
+                    lower: u64_field(it, "lower")?,
+                    upper: u64_field(it, "upper")?,
+                    width: u8_field(it, "width")?,
+                    scale: u8_field(it, "scale")?,
+                });
+            }
+            C::Decimal(out)
+        }
+        "interval" => {
+            let items = match p {
+                Value::List(items) => items,
+                o => return Err(extension_types::Duckerror::Internal(format!("column.interval: expected List, got {o:?}"))),
+            };
+            let mut out = Vec::with_capacity(items.len());
+            for it in items {
+                out.push(extension_column_types::Intervalvalue {
+                    months: s32_field(it, "months")?,
+                    days: s32_field(it, "days")?,
+                    micros: s64_field(it, "micros")?,
+                });
+            }
+            C::Interval(out)
+        }
+        "uuid" => {
+            let items = match p {
+                Value::List(items) => items,
+                o => return Err(extension_types::Duckerror::Internal(format!("column.uuid: expected List, got {o:?}"))),
+            };
+            let mut out = Vec::with_capacity(items.len());
+            for it in items {
+                out.push(extension_column_types::Uuidvalue {
+                    hi: u64_field(it, "hi")?,
+                    lo: u64_field(it, "lo")?,
+                });
+            }
+            C::Uuid(out)
+        }
+        "blob" => {
+            let items = match p {
+                Value::List(items) => items,
+                o => return Err(extension_types::Duckerror::Internal(format!("column.blob: expected List, got {o:?}"))),
+            };
+            let mut out = Vec::with_capacity(items.len());
+            for it in items {
+                match it {
+                    Value::Bytes(b) => out.push(b.to_vec()),
+                    Value::List(bs) => {
+                        let mut v = Vec::with_capacity(bs.len());
+                        for b in bs {
+                            match b {
+                                Value::U8(x) => v.push(*x),
+                                o => return Err(extension_types::Duckerror::Internal(format!("column.blob element: expected U8, got {o:?}"))),
+                            }
+                        }
+                        out.push(v);
+                    }
+                    o => return Err(extension_types::Duckerror::Internal(format!("column.blob element: expected Bytes/List, got {o:?}"))),
+                }
+            }
+            C::Blob(out)
+        }
+        "hugeint" => {
+            let items = match p {
+                Value::List(items) => items,
+                o => return Err(extension_types::Duckerror::Internal(format!("column.hugeint: expected List, got {o:?}"))),
+            };
+            let mut out = Vec::with_capacity(items.len());
+            for it in items {
+                out.push(extension_column_types::DuckInt128 {
+                    lower: u64_field(it, "lower")?,
+                    upper: s64_field(it, "upper")?,
+                });
+            }
+            C::Hugeint(out)
+        }
+        "uhugeint" => {
+            let items = match p {
+                Value::List(items) => items,
+                o => return Err(extension_types::Duckerror::Internal(format!("column.uhugeint: expected List, got {o:?}"))),
+            };
+            let mut out = Vec::with_capacity(items.len());
+            for it in items {
+                out.push(extension_column_types::DuckUint128 {
+                    lower: u64_field(it, "lower")?,
+                    upper: u64_field(it, "upper")?,
+                });
+            }
+            C::Uhugeint(out)
+        }
+        "list-col" => C::ListCol(extension_column_types::NestedColumn {
+            encoded: bytes_field(p, "encoded")?,
+        }),
+        "struct-col" => C::StructCol(extension_column_types::NestedColumn {
+            encoded: bytes_field(p, "encoded")?,
+        }),
+        "map-col" => C::MapCol(extension_column_types::MapColumn {
+            keys_encoded: bytes_field(p, "keys-encoded")?,
+            vals_encoded: bytes_field(p, "vals-encoded")?,
+        }),
+        "array-col" => C::ArrayCol(extension_column_types::ArrayColumn {
+            size: u32_field(p, "size")?,
+            encoded: bytes_field(p, "encoded")?,
+        }),
+        "complex" => {
+            let items = match p {
+                Value::List(items) => items,
+                o => return Err(extension_types::Duckerror::Internal(format!("column.complex: expected List, got {o:?}"))),
+            };
+            let mut out = Vec::with_capacity(items.len());
+            for it in items {
+                out.push(extension_column_types::Complexvalue {
+                    type_expr: string_field(it, "type-expr")?,
+                    json: string_field(it, "json")?,
+                });
+            }
+            C::Complex(out)
+        }
+        other => return Err(extension_types::Duckerror::Internal(format!(
+            "value_to_column: unknown discriminant {other:?}"))),
+    })
+}
+
+fn bytes_field(rec: &Value, name: &str) -> Result<Vec<u8>, extension_types::Duckerror> {
+    match record_field(rec, name)? {
+        Value::Bytes(b) => Ok(b.to_vec()),
+        Value::List(items) => {
+            let mut out = Vec::with_capacity(items.len());
+            for it in items {
+                match it {
+                    Value::U8(b) => out.push(*b),
+                    o => return Err(extension_types::Duckerror::Internal(format!(
+                        "field {name:?} element: expected U8, got {o:?}"))),
+                }
+            }
+            Ok(out)
+        }
+        o => Err(extension_types::Duckerror::Internal(format!(
+            "field {name:?}: expected Bytes or List<U8>, got {o:?}"))),
+    }
+}
+
 pub(crate) fn scan_request_to_value(r: &extension_storage::ScanRequest) -> Value {
     Value::Record(vec![
         ("table".into(), Value::String(r.table.clone())),

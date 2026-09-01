@@ -3593,35 +3593,49 @@ impl ExtensionInstance {
         rows: &Vec<Vec<extension_types::Duckvalue>>,
         ctx: extension_runtime::Invokeinfo,
     ) -> Result<Vec<extension_types::Duckvalue>, extension_types::Duckerror> {
-        // major-4: pivot to columnar, cross with call-scalar-batch-col, lower back.
+        // Phase 6.2.i.7 — migrated. Row-major → columnar pivot in
+        // Rust (via existing rows_to_colvecs helper), marshal Colvec
+        // via export_marshal, dispatch, lift Colvec return + pivot
+        // back to rows via colvec_to_values.
         let args = rows_to_colvecs(rows);
-        let guest = self.bindings.duckdb_extension_callback_dispatch();
-        let mut store = self.store.as_context_mut();
-        let out = guest
-            .call_call_scalar_batch_col(&mut store, dispatcher_handle, &args, ctx)
-            .map_err(map_extension_trap)?;
-        out.map(colvec_to_values)
+        self.dispatch_scalar_batch_col(dispatcher_handle, &args, ctx)
+            .map(colvec_to_values)
     }
 
-    /// Column-native scalar batch dispatch. Hands the caller-built `Colvec`s
-    /// straight to `call-scalar-batch-col` and returns the guest's `Colvec`
-    /// unchanged, so no row-major pivot happens on either side. The native
-    /// DuckDB bridge builds `Colvec`s directly from DuckDB flat vectors
-    /// (per-column memcpy for the primitive arms) and writes the result
-    /// `Colvec` back into DuckDB output vectors the same way — both directions
-    /// of the boundary crossing skip the row-major intermediate that
-    /// [`dispatch_scalar_batch`] still allocates.
+    /// Column-native scalar batch dispatch.
     pub fn dispatch_scalar_batch_col(
         &mut self,
         dispatcher_handle: u32,
         args: &[extension_column_types::Colvec],
         ctx: extension_runtime::Invokeinfo,
     ) -> Result<extension_column_types::Colvec, extension_types::Duckerror> {
-        let guest = self.bindings.duckdb_extension_callback_dispatch();
-        let mut store = self.store.as_context_mut();
-        guest
-            .call_call_scalar_batch_col(&mut store, dispatcher_handle, args, ctx)
-            .map_err(map_extension_trap)?
+        // Phase 6.2.i.7 — migrated.
+        use crate::export_marshal::*;
+        let ctx_val = wasmos_runtime_api::Value::Record(vec![
+            (
+                "rowindex".into(),
+                wasmos_runtime_api::Value::Option(
+                    ctx.rowindex.map(|n| Box::new(wasmos_runtime_api::Value::U64(n))),
+                ),
+            ),
+            ("iswindow".into(), wasmos_runtime_api::Value::Bool(ctx.iswindow)),
+        ]);
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/callback-dispatch@5.0.0"),
+            "call-scalar-batch-col",
+            &[
+                wasmos_runtime_api::Value::U32(dispatcher_handle),
+                colvec_list_to_value(args),
+                ctx_val,
+            ],
+        ).map_err(|e| extension_types::Duckerror::Internal(format!("call-scalar-batch-col dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "call-scalar-batch-col", |p| {
+            let v = p.ok_or_else(|| extension_types::Duckerror::Internal(
+                "call-scalar-batch-col: expected Ok(colvec), got None".into()))?;
+            value_to_colvec(v)
+        })
     }
 
     pub fn dispatch_table(
@@ -3653,31 +3667,34 @@ impl ExtensionInstance {
         dispatcher_handle: u32,
         rows: &extension_runtime::Rowbatch,
     ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
-        // major-4: pivot the buffered group to columns, cross with call-aggregate-col.
+        // Phase 6.2.i.7 — delegate via the col variant.
         let args = rows_to_colvecs(rows);
-        let guest = self.bindings.duckdb_extension_callback_dispatch();
-        let mut store = self.store.as_context_mut();
-        guest
-            .call_call_aggregate_col(&mut store, dispatcher_handle, &args)
-            .map_err(map_extension_trap)?
+        self.dispatch_aggregate_col(dispatcher_handle, &args)
     }
 
-    /// Column-native aggregate dispatch. Hands the caller-built `Colvec`s
-    /// straight to `call-aggregate-col`, skipping the row-major
-    /// `rows_to_colvecs` pivot [`dispatch_aggregate`] does. The extension-side
-    /// bridge builds these Colvecs directly from its typed accumulator when
-    /// the group is finalized, so the whole aggregate path avoids the
-    /// row-major intermediate on both sides of the crossing.
+    /// Column-native aggregate dispatch.
     pub fn dispatch_aggregate_col(
         &mut self,
         dispatcher_handle: u32,
         args: &[extension_column_types::Colvec],
     ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
-        let guest = self.bindings.duckdb_extension_callback_dispatch();
-        let mut store = self.store.as_context_mut();
-        guest
-            .call_call_aggregate_col(&mut store, dispatcher_handle, args)
-            .map_err(map_extension_trap)?
+        // Phase 6.2.i.7 — migrated.
+        use crate::export_marshal::*;
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/callback-dispatch@5.0.0"),
+            "call-aggregate-col",
+            &[
+                wasmos_runtime_api::Value::U32(dispatcher_handle),
+                colvec_list_to_value(args),
+            ],
+        ).map_err(|e| extension_types::Duckerror::Internal(format!("call-aggregate-col dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "call-aggregate-col", |p| {
+            let v = p.ok_or_else(|| extension_types::Duckerror::Internal(
+                "call-aggregate-col: expected Ok(duckvalue), got None".into()))?;
+            value_to_duckvalue(v)
+        })
     }
 
     pub fn dispatch_pragma(
@@ -3710,18 +3727,30 @@ impl ExtensionInstance {
         dispatcher_handle: u32,
         value: &extension_types::Duckvalue,
     ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
-        // major-4: a single value becomes a 1-row colvec for call-cast-col.
+        // Phase 6.2.i.7 — migrated. Single-value → 1-row colvec via
+        // existing column_from_values helper; marshal Colvec via
+        // export_marshal; lift return Colvec + extract first row's
+        // value via colvec_to_values.
+        use crate::export_marshal::*;
         let arg = column_from_values(&[value]);
-        let guest = self.bindings.duckdb_extension_callback_dispatch();
-        let mut store = self.store.as_context_mut();
-        let out = guest
-            .call_call_cast_col(&mut store, dispatcher_handle, &arg)
-            .map_err(map_extension_trap)?;
-        out.map(|c| {
-            colvec_to_values(c)
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/callback-dispatch@5.0.0"),
+            "call-cast-col",
+            &[
+                wasmos_runtime_api::Value::U32(dispatcher_handle),
+                colvec_to_value(&arg),
+            ],
+        ).map_err(|e| extension_types::Duckerror::Internal(format!("call-cast-col dispatch failed: {e}")))?;
+        export_result_to_duckerror(out, "call-cast-col", |p| {
+            let v = p.ok_or_else(|| extension_types::Duckerror::Internal(
+                "call-cast-col: expected Ok(colvec), got None".into()))?;
+            let c = value_to_colvec(v)?;
+            Ok(colvec_to_values(c)
                 .into_iter()
                 .next()
-                .unwrap_or(extension_types::Duckvalue::Null)
+                .unwrap_or(extension_types::Duckvalue::Null))
         })
     }
 
