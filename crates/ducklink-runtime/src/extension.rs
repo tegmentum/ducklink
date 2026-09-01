@@ -20,16 +20,21 @@ use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 use crate::duckdb_extension_bindings::duckdb::extension::{
-    arrow_ext as extension_arrow_ext, catalog as extension_catalog,
-    column_types as extension_column_types, config as extension_config,
-    coordinate_system as extension_coordinate_system, file_lock as extension_file_lock,
-    files as extension_files, log_storage as extension_log_storage, logging as extension_logging,
-    macro_ext as extension_macro_ext, nested_exec as extension_nested_exec,
-    optimizer as extension_optimizer, parser as extension_parser, query as extension_query,
-    runtime as extension_runtime, runtime_ext as extension_runtime_ext,
-    secret as extension_secret, settings as extension_settings, storage as extension_storage,
-    table_stream as extension_table_stream, types as extension_types,
-    types_ext as extension_types_ext,
+    catalog as extension_catalog, column_types as extension_column_types,
+    config as extension_config, file_lock as extension_file_lock, files as extension_files,
+    logging as extension_logging, nested_exec as extension_nested_exec,
+    query as extension_query, runtime as extension_runtime, secret as extension_secret,
+    types as extension_types, types_ext as extension_types_ext,
+};
+// Phase 6.2.l.2 — the following interface types are referenced only
+// by #[cfg(test)]-gated inherent methods (extracted from retired
+// Host trait impls whose test coverage stayed in this file).
+#[cfg(test)]
+use crate::duckdb_extension_bindings::duckdb::extension::{
+    arrow_ext as extension_arrow_ext,
+    coordinate_system as extension_coordinate_system,
+    runtime_ext as extension_runtime_ext, settings as extension_settings,
+    storage as extension_storage,
 };
 // Phase 6.2.j — DuckdbExtension typed dispatcher retired (used to be
 // constructed at load time; every dispatch now flows through the
@@ -2341,8 +2346,9 @@ impl extension_secret::Host for ExtensionStoreState {
 // 2.1.0 (Item 3): the `settings` interface lets a component DECLARE a config
 // option (distinct from reading config via `config`). Captured into the neutral
 // pending buffer; the direction-specific sink surfaces it to the database.
-impl extension_settings::Host for ExtensionStoreState {
-    fn register_option(
+#[cfg(test)]
+impl ExtensionStoreState {
+    pub(crate) fn register_option(
         &mut self,
         name: String,
         description: String,
@@ -2378,63 +2384,17 @@ impl extension_settings::Host for ExtensionStoreState {
     }
 }
 
-// DEPRECATED (ducklink 5.0.0) — scheduled for removal at the next
-// `duckdb:extension` major bump. No host drains `pending_parsers` anymore;
-// components calling `register_parser_extension` still succeed but their
-// declarations never reach DuckDB. See ducklink v4.6.0 for the rationale.
-//
-// 2.3.0 / v3: the `parser` interface declares a parser extension. Captured into a
-// neutral pending buffer; the core shim drains it and wires a DuckDB
-// `ParserExtension` that forwards unrecognized statement text to the component's
-// `parser-dispatch.call-parse` and applies the returned string->SQL rewrite.
-impl extension_parser::Host for ExtensionStoreState {
-    fn register_parser_extension(
-        &mut self,
-        name: String,
-        callback_handle: u32,
-    ) -> Result<u32, extension_types::Duckerror> {
-        let registry_id = self.alloc_resource_id();
-        verbose_log!(
-            "[extension-runtime:{}] registered parser extension '{name}' (registry={registry_id}, callback={callback_handle})",
-            self.extension_name
-        );
-        self.pending_parsers.push(PendingParser {
-            extension: self.extension_name.clone(),
-            name,
-            callback_handle,
-        });
-        Ok(registry_id)
-    }
-}
-
-// DEPRECATED (ducklink 5.0.0) — scheduled for removal at the next
-// `duckdb:extension` major bump. No host drains `pending_optimizers` anymore;
-// components calling `register_optimizer_rule` still succeed but their
-// declarations never reach DuckDB. See ducklink v4.6.0 for the rationale.
-//
-// 2.3.0 / v3: the `optimizer` interface declares a general optimizer rule.
-// Captured into a neutral pending buffer; the core shim drains it and wires a
-// DuckDB `OptimizerExtension` that offers the flattened plan-shape to the
-// component's `optimizer-dispatch.call-optimize` and applies the rewrite directive.
-impl extension_optimizer::Host for ExtensionStoreState {
-    fn register_optimizer_rule(
-        &mut self,
-        rule_name: String,
-        callback_handle: u32,
-    ) -> Result<u32, extension_types::Duckerror> {
-        let registry_id = self.alloc_resource_id();
-        verbose_log!(
-            "[extension-runtime:{}] registered optimizer rule '{rule_name}' (registry={registry_id}, callback={callback_handle})",
-            self.extension_name
-        );
-        self.pending_optimizers.push(PendingOptimizer {
-            extension: self.extension_name.clone(),
-            rule_name,
-            callback_handle,
-        });
-        Ok(registry_id)
-    }
-}
+// Phase 6.2.l.2 — the deprecated `impl extension_parser::Host::
+// register_parser_extension` and `impl extension_optimizer::Host::
+// register_optimizer_rule` impls retired here. Both were flagged
+// DEPRECATED (ducklink 5.0.0) in their docstrings: no host drains
+// `pending_parsers` / `pending_optimizers` anymore, and no test in
+// this crate exercised them. The wasmos-native `ParserHost` and
+// `OptimizerHost` in extension_wasmos.rs still capture registrations
+// on the production path (behavior preserved for any legacy
+// components that still call `register-parser-extension` /
+// `register-optimizer-rule`), so retiring these test-scaffolding
+// impls only removes an unused Rust surface.
 
 // DEPRECATED (ducklink 5.0.0) — scheduled for removal at the next
 // `duckdb:extension` major bump. No host drains
@@ -2443,53 +2403,17 @@ impl extension_optimizer::Host for ExtensionStoreState {
 // reach DuckDB. Register through `runtime.table-registry` instead; DuckDB
 // filters above the scan (correct, not pushdown-fast). See ducklink v4.6.0.
 //
-// 3.1.0 (the first additive MINOR off the frozen major-3 baseline): the
-// `table-stream` interface declares a STREAMING + FILTER-PUSHDOWN-capable table
-// function. Captured into a neutral pending buffer; the core shim drains it and
-// wires a C++ streaming `TableFunction` with `filter_pushdown = true` that pushes
-// the conjunctive filter set down (as a neutral, by-value-safe descriptor) to the
-// component's `table-stream-dispatch.call-table-open-filtered` export.
-//
-// FREEZE-COMPLIANT: this is a brand-new interface (`table-stream`) in a new opt-in
-// world; the shared `runtime`/`types` enums are untouched, so every existing
-// @3.0.0 component keeps loading un-rebuilt.
-impl extension_table_stream::Host for ExtensionStoreState {
-    fn register_filterable_table(
-        &mut self,
-        name: String,
-        arguments: BindgenVec<extension_table_stream::Funcarg>,
-        columns: BindgenVec<extension_table_stream::Columndef>,
-        callback_handle: u32,
-    ) -> Result<u32, extension_types::Duckerror> {
-        let converted_arguments = convert_extension_funcargs(arguments.into());
-        let converted_columns = convert_extension_columndefs(columns.into());
-        // Allocate a GLOBALLY-ROUTABLE handle (mapping global -> this extension +
-        // the component-local `callback_handle` dispatcher) so the core can carry
-        // ONE u32 in the C++ TableFunction and the host routes every streaming
-        // dispatch call (open-filtered / next / close) back to the owning
-        // component, exactly as the regular table-callback path routes call-table.
-        let global = self.allocate_callback_handle(callback_handle, CallbackKind::Table);
-        verbose_log!(
-            "[extension-runtime:{}] registered filterable streaming table fn '{name}' (global={global}, dispatcher={callback_handle}, args={}, cols={})",
-            self.extension_name,
-            converted_arguments.len(),
-            converted_columns.len(),
-        );
-        self.pending_filterable_tables.push(PendingFilterableTable {
-            extension: self.extension_name.clone(),
-            name,
-            arguments: converted_arguments,
-            columns: converted_columns,
-            callback_handle: global,
-        });
-        Ok(global)
-    }
-}
+// Phase 6.2.l.2 — `impl extension_table_stream::Host::
+// register_filterable_table` retired here (no test in this crate
+// exercised it). The wasmos-native `TableStreamHost` in
+// extension_wasmos.rs still captures registrations on the
+// production path; retiring only removes an unused Rust surface.
 
 // 2.1.0 (Item 5): the `macro-ext` interface adds TABLE macros (a relation body)
 // on top of the existing scalar-macro registration.
-impl extension_macro_ext::Host for ExtensionStoreState {
-    fn register_table_macro(
+#[cfg(test)]
+impl ExtensionStoreState {
+    pub(crate) fn register_table_macro(
         &mut self,
         schema: String,
         name: String,
@@ -2556,8 +2480,9 @@ impl extension_types_ext::Host for ExtensionStoreState {
 // scalar-registry signature. Captured into the neutral pending buffer; the
 // direction-specific sink forwards it. A callback handle is allocated exactly
 // like the base scalar path so invocations route to the owning component.
-impl extension_runtime_ext::Host for ExtensionStoreState {
-    fn register_scalar_ex(
+#[cfg(test)]
+impl ExtensionStoreState {
+    pub(crate) fn register_scalar_ex(
         &mut self,
         name: String,
         arguments: BindgenVec<extension_runtime_ext::Funcarg>,
@@ -2611,8 +2536,9 @@ impl extension_runtime_ext::Host for ExtensionStoreState {
 // declare CRS definitions (authority + code + WKT2) in load(); the host captures
 // them so the core can resolve geometry SRIDs. Registration only -- reprojection
 // (GDAL/PROJ ST_Transform) is OUT OF SCOPE for 2.2.0.
-impl extension_coordinate_system::Host for ExtensionStoreState {
-    fn register_coordinate_system(
+#[cfg(test)]
+impl ExtensionStoreState {
+    pub(crate) fn register_coordinate_system(
         &mut self,
         crs: extension_coordinate_system::CrsDef,
     ) -> Result<u32, extension_types::Duckerror> {
@@ -2636,8 +2562,9 @@ impl extension_coordinate_system::Host for ExtensionStoreState {
 // 2.2.0 (Item 7): the `arrow-ext` interface lets a component declare an Arrow
 // table producer; the host captures the declaration and streams the batches via
 // the producer's callback handle (reusing the table cursor shape).
-impl extension_arrow_ext::Host for ExtensionStoreState {
-    fn register_arrow_table(
+#[cfg(test)]
+impl ExtensionStoreState {
+    pub(crate) fn register_arrow_table(
         &mut self,
         name: String,
         schema: BindgenVec<extension_arrow_ext::Columndef>,
@@ -2666,37 +2593,11 @@ impl extension_arrow_ext::Host for ExtensionStoreState {
 // path and are covered by the matching wasmos-side
 // `_returns_unsupported` tests.
 
-// 3.2.0: the `log-storage` interface lets a component declare a NAMED log sink
-// (Class B parity with the stable `duckdb_register_log_storage` C API). The
-// host captures the declaration into the neutral pending buffer; the C API
-// installer in `ducklink-extension/src/reg_duckdb.rs` (sibling phase) drains
-// this buffer and wires each name to a `duckdb_register_log_storage` call whose
-// write callback re-enters this component via `ExtensionInstance::dispatch_write_log_entry`.
-impl extension_log_storage::Host for ExtensionStoreState {
-    fn register_log_storage(
-        &mut self,
-        name: String,
-        callback_handle: u32,
-    ) -> Result<u32, extension_types::Duckerror> {
-        // Allocate a GLOBALLY-ROUTABLE handle (mapping global -> this extension +
-        // the component-local `callback_handle` dispatcher) so the C API
-        // installer in `ducklink-extension/src/reg_duckdb.rs` can carry ONE u32
-        // through the `duckdb_register_log_storage` write callback and the host
-        // routes every re-entry (`write-log-entry`) back to the owning component
-        // via `ExtensionInstance::dispatch_write_log_entry` — matching the
-        // register_filterable_table wiring above.
-        let global = self.allocate_callback_handle(callback_handle, CallbackKind::LogStorage);
-        verbose_log!(
-            "[extension-runtime:{}] registered log storage '{name}' (global={global}, dispatcher={callback_handle})",
-            self.extension_name
-        );
-        self.pending_log_storages.push(PendingLogStorage {
-            name,
-            callback_handle: global,
-        });
-        Ok(global)
-    }
-}
+// Phase 6.2.l.2 — `impl extension_log_storage::Host::
+// register_log_storage` retired here (no test in this crate
+// exercised it). The wasmos-native `LogStorageHost` in
+// extension_wasmos.rs still captures registrations on the
+// production path.
 
 // The `storage` interface lets a component register an ATTACH-able catalog
 // backend (a DB scanner) in `load()`. Phase 2 (@5): the host records the
@@ -2706,8 +2607,9 @@ impl extension_log_storage::Host for ExtensionStoreState {
 // storage backend up by TYPE and routes to the owning component's
 // `storage-dispatch` export. No C-API `duckdb_register_storage_extension`
 // is involved -- see ADR Amendments A1 + B1/B2.
-impl extension_storage::Host for ExtensionStoreState {
-    fn register_storage(
+#[cfg(test)]
+impl ExtensionStoreState {
+    pub(crate) fn register_storage(
         &mut self,
         type_name: String,
         callback_handle: u32,
@@ -5820,9 +5722,7 @@ mod tests {
         // `register_files → Unsupported` assertion (redundant with the
         // wasmos-side `files_reg_returns_unsupported` test).
         let mut state = test_state();
-        let storage_res = extension_storage::Host::register_storage(
-            &mut state,
-            "sqlitewasm".to_string(),
+        let storage_res = state.register_storage("sqlitewasm".to_string(),
             7,
             None,
         );
@@ -5921,9 +5821,7 @@ mod tests {
             "register_secret_provider should capture (Phase 3)"
         );
 
-        extension_settings::Host::register_option(
-            &mut state,
-            "my_threshold".to_string(),
+        state.register_option("my_threshold".to_string(),
             "tuning knob".to_string(),
             extension_settings::SettingType::Bigint,
             Some("42".to_string()),
@@ -5931,9 +5829,7 @@ mod tests {
         )
         .expect("register_option");
 
-        extension_macro_ext::Host::register_table_macro(
-            &mut state,
-            "main".to_string(),
+        state.register_table_macro("main".to_string(),
             "series".to_string(),
             vec!["n".to_string()].into(),
             "SELECT * FROM range(n)".to_string(),
@@ -6007,9 +5903,7 @@ mod tests {
         let mut state = test_state();
 
         // Item 6: register-scalar-ex with varargs + special NULL handling.
-        extension_runtime_ext::Host::register_scalar_ex(
-            &mut state,
-            "concat_ws".to_string(),
+        state.register_scalar_ex("concat_ws".to_string(),
             vec![extension_runtime_ext::Funcarg {
                 name: Some("sep".to_string()),
                 logical: L::Text,
@@ -6029,9 +5923,7 @@ mod tests {
         // unsupported` test). Its Host impl retired too.
 
         // Item 7: coordinate system.
-        extension_coordinate_system::Host::register_coordinate_system(
-            &mut state,
-            extension_coordinate_system::CrsDef {
+        state.register_coordinate_system(extension_coordinate_system::CrsDef {
                 auth_name: "EPSG".to_string(),
                 code: 4326,
                 wkt: "GEOGCRS[...]".to_string(),
@@ -6040,9 +5932,7 @@ mod tests {
         .expect("register_coordinate_system");
 
         // Item 7: Arrow table producer.
-        extension_arrow_ext::Host::register_arrow_table(
-            &mut state,
-            "feed".to_string(),
+        state.register_arrow_table("feed".to_string(),
             vec![extension_arrow_ext::Columndef {
                 name: "v".to_string(),
                 logical: L::Int64,
