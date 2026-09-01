@@ -6275,23 +6275,23 @@ pub fn add_extension_interfaces_to_linker(
     // FilesReg,Index,Collation}Host. See Phase 6.2.h.2 comment below
     // for why per-load and not here.
     // extension_types::add_to_linker(...)?;      // ← migrated (Phase 6.2.h.3)
+    // ADR-0029 Phase 6.2.h.6 — config, logging, catalog, files, storage
+    // migrated. Runtime stays on wit-bindgen pending Phase 6.2.h.7's
+    // multi-resource classification (10 resource types).
     extension_runtime::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
-    extension_config::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
-    extension_logging::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
-    extension_catalog::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
-    extension_files::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
-    extension_storage::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    // extension_config::add_to_linker(...)?;   // ← migrated (Phase 6.2.h.6)
+    // extension_logging::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
+    // extension_catalog::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
+    // extension_files::add_to_linker(...)?;    // ← migrated (Phase 6.2.h.6)
+    // extension_storage::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
     // extension_index::add_to_linker(...)?;      // ← migrated (Phase 6.2.h.3)
     // extension_collation::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.3)
     // extension_files_reg::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.3)
-    extension_query::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    // extension_query::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
     // EXECUTE-capable counterpart to `query`. The host always PROVIDES it; only
     // exec-capable components (fieldbook) import it. Uses a sibling connection
     // and a per-thread depth cap; see `NestedExecDepthGuard`.
-    extension_nested_exec::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
-        linker,
-        |s| s,
-    )?;
+    // extension_nested_exec::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
     // Advisory file-lock primitive. The host always PROVIDES it; only
     // cache-shaped components import it. Backed by fs2::FileExt::lock_exclusive
     // (fcntl(F_SETLKW) on Unix, LockFileEx on Windows) -- the same lock
@@ -6306,15 +6306,12 @@ pub fn add_extension_interfaces_to_linker(
     // install_wasmos_migrated_interfaces.
     // extension_file_lock::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.5)
     // 2.1.0 additive registration imports.
-    extension_secret::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
-    extension_settings::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
-    extension_macro_ext::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
-    extension_types_ext::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    // extension_secret::add_to_linker(...)?;      // ← migrated (Phase 6.2.h.6)
+    // extension_settings::add_to_linker(...)?;    // ← migrated (Phase 6.2.h.6)
+    // extension_macro_ext::add_to_linker(...)?;   // ← migrated (Phase 6.2.h.6)
+    // extension_types_ext::add_to_linker(...)?;   // ← migrated (Phase 6.2.h.6)
     // 2.2.0 additive registration imports (Items 6-7).
-    extension_runtime_ext::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
-        linker,
-        |s| s,
-    )?;
+    // extension_runtime_ext::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
     // ADR-0029 Phase 6.2.h.2 — Lifecycle intentionally NOT registered
     // here. It's wired per-load in `load_component_with_dynlink` via
     // `install_wasmos_migrated_interfaces` using the wasmos-native
@@ -6327,28 +6324,19 @@ pub fn add_extension_interfaces_to_linker(
     // registrations); registering only per-load matches Session-2 of
     // the Phase 6.2.h consumer-migration plan.
     // extension_lifecycle::add_to_linker(linker, |s| s)?;  // ← migrated
-    extension_coordinate_system::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
-        linker,
-        |s| s,
-    )?;
-    extension_arrow_ext::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    // extension_coordinate_system::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
+    // extension_arrow_ext::add_to_linker(...)?;          // ← migrated (Phase 6.2.h.6)
     // extension_encoding::add_to_linker(...)?;     // ← migrated (Phase 6.2.h.3)
     // extension_compression::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.3)
     // 2.3.0 / v3 additive registration imports.
-    extension_parser::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
-    extension_optimizer::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    // extension_parser::add_to_linker(...)?;     // ← migrated (Phase 6.2.h.6)
+    // extension_optimizer::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
     // 3.1.0 additive registration import: filterable streaming table-fn marker.
-    extension_table_stream::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
-        linker,
-        |s| s,
-    )?;
+    // extension_table_stream::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
     // 3.2.0 additive registration import: log-storage sink declaration (Class B
     // parity with the stable `duckdb_register_log_storage` C API). The host
     // always PROVIDES this; components import it only if they back a log sink.
-    extension_log_storage::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
-        linker,
-        |s| s,
-    )?;
+    // extension_log_storage::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.6)
     Ok(())
 }
 
@@ -6439,27 +6427,118 @@ fn install_wasmos_migrated_interfaces(
             )))?;
     }
 
-    // ADR-0029 Phase 6.2.h.5 — resource-aware bridge migrations.
-    // BridgedFileLockHost is the first: pulls ExtensionStoreState
-    // from ctx.consumer_state (which the sync_bridge_resource
-    // populates per-call with `store.data_mut()`), so both this
-    // handler AND any residual wit-bindgen callsite that still
-    // touches lock_handles operate on the SAME state instance in
-    // the wasmtime Store. Handles the acquire-exclusive / try-
-    // acquire-exclusive methods PLUS the [method]lock-handle.release
-    // and [resource-drop]lock-handle mangling overrides.
-    let file_lock_handler: StdArc<dyn _SyncHostCall> =
-        StdArc::new(crate::extension_wasmos::BridgedFileLockHost::new());
-    wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call(
-        engine,
-        linker,
-        component,
-        "duckdb:extension/file-lock",
-        file_lock_handler,
-    )
-    .map_err(|e| wasmtime::Error::msg(format!(
-        "install_host_call(file-lock) failed: {e}"
-    )))?;
+    // ADR-0029 Phase 6.2.h.5 + h.6 — resource-aware bridge
+    // migrations. Every stateful-plus-resource-free interface
+    // wires here via `install_host_call`, using `XxxHost::bridged()`
+    // — the StateSource::FromCtx constructor. The bridge populates
+    // `HostCallContext::consumer_state` per-call with
+    // `store.data_mut()`; each handler's `self.state.hold(ctx)?`
+    // pulls the state's mutable reference from ctx and operates on
+    // it directly — no divergent state instance.
+    //
+    // File_lock IS the sole resource-carrying interface in this
+    // table (1 resource: `lock-handle`); every other entry has
+    // zero resources. `install_host_call` handles both cleanly: for
+    // zero-resource interfaces the resource-discs map stays empty
+    // and no resource marshal happens.
+    //
+    // Runtime (10 resources, multi-resource) DEFERRED to
+    // Phase 6.2.h.7 pending per-return-type discriminant
+    // classification on the bridge — the single-`sole_disc`
+    // fallback only covers 0-1 resource interfaces.
+    let stateful_migrated: [(&str, fn() -> StdArc<dyn _SyncHostCall>); 19] = [
+        // File-lock — 1 resource, migrated Phase 6.2.h.5.
+        (
+            "duckdb:extension/file-lock",
+            || StdArc::new(crate::extension_wasmos::FileLockHost::bridged()),
+        ),
+        // Resource-free stateful interfaces — Phase 6.2.h.6.
+        (
+            "duckdb:extension/config",
+            || StdArc::new(crate::extension_wasmos::ConfigHost::bridged()),
+        ),
+        (
+            "duckdb:extension/logging",
+            || StdArc::new(crate::extension_wasmos::LoggingHost::bridged()),
+        ),
+        (
+            "duckdb:extension/catalog",
+            || StdArc::new(crate::extension_wasmos::CatalogHost::bridged()),
+        ),
+        (
+            "duckdb:extension/files",
+            || StdArc::new(crate::extension_wasmos::FilesHost::bridged()),
+        ),
+        (
+            "duckdb:extension/storage",
+            || StdArc::new(crate::extension_wasmos::StorageHost::bridged()),
+        ),
+        (
+            "duckdb:extension/query",
+            || StdArc::new(crate::extension_wasmos::QueryHost::bridged()),
+        ),
+        (
+            "duckdb:extension/nested-exec",
+            || StdArc::new(crate::extension_wasmos::NestedExecHost::bridged()),
+        ),
+        (
+            "duckdb:extension/secret",
+            || StdArc::new(crate::extension_wasmos::SecretHost::bridged()),
+        ),
+        (
+            "duckdb:extension/settings",
+            || StdArc::new(crate::extension_wasmos::SettingsHost::bridged()),
+        ),
+        (
+            "duckdb:extension/macro-ext",
+            || StdArc::new(crate::extension_wasmos::MacroExtHost::bridged()),
+        ),
+        (
+            "duckdb:extension/types-ext",
+            || StdArc::new(crate::extension_wasmos::TypesExtHost::bridged()),
+        ),
+        (
+            "duckdb:extension/runtime-ext",
+            || StdArc::new(crate::extension_wasmos::RuntimeExtHost::bridged()),
+        ),
+        (
+            "duckdb:extension/coordinate-system",
+            || StdArc::new(crate::extension_wasmos::CoordinateSystemHost::bridged()),
+        ),
+        (
+            "duckdb:extension/arrow-ext",
+            || StdArc::new(crate::extension_wasmos::ArrowExtHost::bridged()),
+        ),
+        (
+            "duckdb:extension/parser",
+            || StdArc::new(crate::extension_wasmos::ParserHost::bridged()),
+        ),
+        (
+            "duckdb:extension/optimizer",
+            || StdArc::new(crate::extension_wasmos::OptimizerHost::bridged()),
+        ),
+        (
+            "duckdb:extension/table-stream",
+            || StdArc::new(crate::extension_wasmos::TableStreamHost::bridged()),
+        ),
+        (
+            "duckdb:extension/log-storage",
+            || StdArc::new(crate::extension_wasmos::LogStorageHost::bridged()),
+        ),
+    ];
+
+    for (iface, factory) in stateful_migrated {
+        wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call(
+            engine,
+            linker,
+            component,
+            iface,
+            factory(),
+        )
+        .map_err(|e| wasmtime::Error::msg(format!(
+            "install_host_call({iface}) failed: {e}"
+        )))?;
+    }
 
     Ok(())
 }

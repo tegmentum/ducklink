@@ -73,6 +73,127 @@ use crate::extension::{
 /// if per-call lock contention shows up in benchmarks.
 pub type SharedExtensionState = Arc<Mutex<ExtensionStoreState>>;
 
+/// ADR-0029 Phase 6.2.h.5 — dual-mode state source for wasmos-native
+/// interface handlers.
+///
+/// - [`StateSource::Shared`] carries an
+///   [`SharedExtensionState`]. Used by the wasmos ADAPTER path
+///   (state lives outside the wasmtime Store — the adapter owns
+///   `AdapterHostState`) + by every stateful integration test in
+///   Phase 6.2.g (tests build their own SharedExtensionState).
+///
+/// - [`StateSource::FromCtx`] holds nothing. Used by the
+///   CONSUMER-MIGRATION BRIDGE path
+///   (`crate::extension::install_wasmos_migrated_interfaces`), where
+///   `ExtensionStoreState` lives INSIDE the consumer's wasmtime
+///   Store data. The
+///   [`wasmos_runtime_wasmtime_v48::sync_bridge_resource`] bridge
+///   populates the `HostCallContext::consumer_state` slot per-call
+///   with `store.data_mut()`, and the handler pulls
+///   `&mut ExtensionStoreState` from ctx via
+///   [`StateHold::from_ctx`].
+///
+/// The [`Self::hold`] entry point resolves either variant into a
+/// [`StateHold`] that dereferences to `&mut ExtensionStoreState` —
+/// one code path per method, no per-method match. Every state-
+/// touching wasmos-native handler in this module lands its
+/// per-call `let mut g = self.state.hold(ctx)?;` and proceeds
+/// identically regardless of which variant the constructor picked.
+#[derive(Clone)]
+pub enum StateSource {
+    /// State lives outside the wasmtime store; handler holds its
+    /// own `Arc<Mutex<>>` clone. Wasmos-adapter path + stateful
+    /// integration tests.
+    Shared(SharedExtensionState),
+    /// State lives inside the consumer's wasmtime store; the
+    /// bridge populates it into `HostCallContext::consumer_state`
+    /// per-call. Handler pulls from there.
+    FromCtx,
+}
+
+impl StateSource {
+    /// Resolve to a [`StateHold`] that dereferences to
+    /// `&mut ExtensionStoreState`.
+    ///
+    /// For [`Self::Shared`]: locks the mutex and holds the guard.
+    /// For [`Self::FromCtx`]: downcasts the ctx's consumer-state
+    /// slot; returns an error if the bridge failed to populate it
+    /// (should never happen through the production wire — the
+    /// resource-aware bridge always populates).
+    ///
+    /// Idiomatic use inside a `#[host_iface(sync)]` method:
+    ///
+    /// ```rust,ignore
+    /// fn my_method(&self, ctx: &mut HostCallContext<'_>, ...) -> ... {
+    ///     let mut g = self.state.hold(ctx)?;
+    ///     let name = g.extension_name().to_string();
+    ///     g.push_pending_foo(...);
+    ///     Ok(...)
+    /// }
+    /// ```
+    pub fn hold<'a>(
+        &'a self,
+        ctx: &'a mut HostCallContext<'_>,
+    ) -> RuntimeResult<StateHold<'a>> {
+        match self {
+            StateSource::Shared(shared) => {
+                let guard = shared.lock().expect("ExtensionStoreState mutex poisoned");
+                Ok(StateHold::Guard(guard))
+            }
+            StateSource::FromCtx => {
+                let s = ctx
+                    .consumer_state::<ExtensionStoreState>()
+                    .ok_or_else(|| {
+                        RuntimeError::msg(
+                            "wasmos-native handler: no ExtensionStoreState in \
+                             HostCallContext — the consumer-migration bridge \
+                             (wasmos-runtime-wasmtime-v48::sync_bridge_resource) is \
+                             required to populate the consumer-state slot at dispatch \
+                             time. Handlers built with `bridged()` cannot be invoked \
+                             through the wasmos-adapter path; use the corresponding \
+                             `new(shared_state)` constructor for that path.",
+                        )
+                    })?;
+                Ok(StateHold::Ref(s))
+            }
+        }
+    }
+}
+
+/// The output of [`StateSource::hold`] — dereferences to
+/// `&mut ExtensionStoreState` regardless of which variant produced
+/// it. Owns either a live [`std::sync::MutexGuard`] (Shared
+/// variant) or a plain mutable reference (FromCtx variant).
+pub enum StateHold<'a> {
+    /// A live mutex guard. Dropped at end-of-scope releases the
+    /// lock — matches the wasmos-adapter path semantics where
+    /// each host-call fully brackets its state access.
+    Guard(std::sync::MutexGuard<'a, ExtensionStoreState>),
+    /// A plain mutable reference. No lock semantics — the bridge
+    /// path relies on wasmtime's own single-threaded dispatch to
+    /// enforce mutual exclusion.
+    Ref(&'a mut ExtensionStoreState),
+}
+
+impl<'a> std::ops::Deref for StateHold<'a> {
+    type Target = ExtensionStoreState;
+    fn deref(&self) -> &Self::Target {
+        match self {
+            StateHold::Guard(g) => &**g,
+            StateHold::Ref(r) => r,
+        }
+    }
+}
+
+impl<'a> std::ops::DerefMut for StateHold<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            StateHold::Guard(g) => &mut **g,
+            StateHold::Ref(r) => r,
+        }
+    }
+}
+
 // ────────────────────────────────────────────────────────────────────
 // Migration status (Phase 6.2.d.2)
 //
@@ -166,7 +287,7 @@ impl LifecycleHost {
     /// `Unsupported`.
     fn register_connection_callback(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         _events: ConnEvents,
         _callback_handle: u32,
     ) -> RuntimeResult<Result<u32, Duckerror>> {
@@ -226,7 +347,7 @@ impl EncodingHost {
 impl EncodingHost {
     fn register_encoding(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         _name: String,
         _aliases: Vec<String>,
         _callback_handle: u32,
@@ -265,7 +386,7 @@ impl CompressionHost {
 impl CompressionHost {
     fn register_compression(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         _name: String,
         _file_extension: String,
         _callback_handle: u32,
@@ -303,7 +424,7 @@ impl FilesRegHost {
 impl FilesRegHost {
     fn register_files(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         _callback_handle: u32,
     ) -> RuntimeResult<Result<u32, Duckerror>> {
         Ok(Err(Duckerror::Unsupported(
@@ -440,12 +561,19 @@ pub fn install_extension_imports_stateful(
 // (WasiCtx, ResourceTable). Trace by state pointer if needed.
 #[derive(Clone)]
 pub struct ParserHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl ParserHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -453,11 +581,11 @@ impl ParserHost {
 impl ParserHost {
     fn register_parser_extension(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         name: String,
         callback_handle: u32,
     ) -> RuntimeResult<Result<u32, Duckerror>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let registry_id = g.alloc_resource_id();
         let extension = g.extension_name().to_string();
         g.push_pending_parser(PendingParser {
@@ -488,12 +616,19 @@ pub fn install_parser_imports(
 /// source comment) — pending buffer is captured but not drained.
 #[derive(Clone)]
 pub struct OptimizerHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl OptimizerHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -501,11 +636,11 @@ impl OptimizerHost {
 impl OptimizerHost {
     fn register_optimizer_rule(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         rule_name: String,
         callback_handle: u32,
     ) -> RuntimeResult<Result<u32, Duckerror>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let registry_id = g.alloc_resource_id();
         let extension = g.extension_name().to_string();
         g.push_pending_optimizer(PendingOptimizer {
@@ -575,12 +710,19 @@ impl SettingScope {
 /// into `state.pending_settings` for drain by the core shim.
 #[derive(Clone)]
 pub struct SettingsHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl SettingsHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -588,7 +730,7 @@ impl SettingsHost {
 impl SettingsHost {
     fn register_option(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         name: String,
         description: String,
         ty: SettingType,
@@ -597,7 +739,7 @@ impl SettingsHost {
     ) -> RuntimeResult<Result<(), Duckerror>> {
         let ty_str = ty.as_str().to_string();
         let scope_str = scope.as_str().to_string();
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let extension = g.extension_name().to_string();
         g.push_pending_setting(PendingSetting {
             extension,
@@ -651,7 +793,7 @@ impl IndexHost {
 impl IndexHost {
     fn register_index_type(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         _type_name: String,
     ) -> RuntimeResult<Result<(), Duckerror>> {
         Ok(Err(Duckerror::Unsupported(
@@ -688,7 +830,7 @@ impl CollationHost {
 impl CollationHost {
     fn register_collation(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         _name: String,
         _transform_scalar: String,
         _combinable: bool,
@@ -723,12 +865,19 @@ pub struct CrsDef {
 /// See `crate::extension` line 2240.
 #[derive(Clone)]
 pub struct CoordinateSystemHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl CoordinateSystemHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -736,10 +885,10 @@ impl CoordinateSystemHost {
 impl CoordinateSystemHost {
     fn register_coordinate_system(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         crs: CrsDef,
     ) -> RuntimeResult<Result<u32, Duckerror>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let extension = g.extension_name().to_string();
         g.push_pending_coordinate_system(crate::reg::CoordinateSystemReg {
             extension,
@@ -778,12 +927,19 @@ pub struct Extopts {
 /// See `crate::extension` line 2361.
 #[derive(Clone)]
 pub struct StorageHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl StorageHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -791,7 +947,7 @@ impl StorageHost {
 impl StorageHost {
     fn register_storage(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         type_name: String,
         callback_handle: u32,
         options: Option<Extopts>,
@@ -800,7 +956,7 @@ impl StorageHost {
             description: o.description,
             tags: o.tags,
         });
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let extension = g.extension_name().to_string();
         g.push_pending_storage(crate::reg::StorageReg {
             extension,
@@ -837,12 +993,19 @@ pub fn install_storage_imports(
 /// via `ExtensionInstance::dispatch_write_log_entry`.
 #[derive(Clone)]
 pub struct LogStorageHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl LogStorageHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -850,11 +1013,11 @@ impl LogStorageHost {
 impl LogStorageHost {
     fn register_log_storage(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         name: String,
         callback_handle: u32,
     ) -> RuntimeResult<Result<u32, Duckerror>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let global =
             g.allocate_callback_handle_pub(callback_handle, crate::CallbackKind::LogStorage);
         g.push_pending_log_storage(crate::extension::PendingLogStorage {
@@ -884,12 +1047,19 @@ pub fn install_log_storage_imports(
 /// `ExtensionServices::query` sink for the actual work.
 #[derive(Clone)]
 pub struct QueryHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl QueryHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -897,10 +1067,10 @@ impl QueryHost {
 impl QueryHost {
     fn query(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         sql: String,
     ) -> RuntimeResult<Result<Vec<Vec<String>>, String>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         Ok(g.services_query(&sql))
     }
 }
@@ -958,12 +1128,19 @@ impl Configerror {
 /// to the neutral `ExtensionServices` sink.
 #[derive(Clone)]
 pub struct ConfigHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl ConfigHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -971,9 +1148,9 @@ impl ConfigHost {
 impl ConfigHost {
     fn provider_version(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
     ) -> RuntimeResult<String> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         Ok(g.services_mut().provider_version().unwrap_or_else(|err| {
             eprintln!("extension config provider-version failed: {err:?}");
             "duckdb-extension-host".into()
@@ -982,10 +1159,10 @@ impl ConfigHost {
 
     fn list_keys(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         prefix: Option<String>,
     ) -> RuntimeResult<Vec<String>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         Ok(g.services_mut()
             .list_keys(prefix.as_deref())
             .unwrap_or_else(|err| {
@@ -996,64 +1173,64 @@ impl ConfigHost {
 
     fn get_string(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         path: String,
     ) -> RuntimeResult<Result<Option<String>, Configerror>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         Ok(g.services_mut().get_string(&path).map_err(Configerror::from_neutral))
     }
 
     fn get_bool(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         path: String,
     ) -> RuntimeResult<Result<Option<bool>, Configerror>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         Ok(g.services_mut().get_bool(&path).map_err(Configerror::from_neutral))
     }
 
     fn get_i64(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         path: String,
     ) -> RuntimeResult<Result<Option<i64>, Configerror>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         Ok(g.services_mut().get_i64(&path).map_err(Configerror::from_neutral))
     }
 
     fn get_u64(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         path: String,
     ) -> RuntimeResult<Result<Option<u64>, Configerror>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         Ok(g.services_mut().get_u64(&path).map_err(Configerror::from_neutral))
     }
 
     fn get_f64(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         path: String,
     ) -> RuntimeResult<Result<Option<f64>, Configerror>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         Ok(g.services_mut().get_f64(&path).map_err(Configerror::from_neutral))
     }
 
     fn get_bytes(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         path: String,
     ) -> RuntimeResult<Result<Option<Vec<u8>>, Configerror>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         Ok(g.services_mut().get_bytes(&path).map_err(Configerror::from_neutral))
     }
 
     fn get_string_list(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         path: String,
     ) -> RuntimeResult<Result<Option<Vec<String>>, Configerror>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         Ok(g.services_mut()
             .get_string_list(&path)
             .map_err(Configerror::from_neutral))
@@ -1113,12 +1290,19 @@ pub struct Logfield {
 /// to the neutral `ExtensionServices` sink.
 #[derive(Clone)]
 pub struct LoggingHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl LoggingHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -1126,12 +1310,12 @@ impl LoggingHost {
 impl LoggingHost {
     fn log(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         level: Loglevel,
         message: String,
         target: Option<String>,
     ) -> RuntimeResult<()> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         g.services_mut()
             .log(level.to_neutral(), &message, target.as_deref());
         Ok(())
@@ -1139,7 +1323,7 @@ impl LoggingHost {
 
     fn log_fields(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         level: Loglevel,
         message: String,
         fields: Vec<Logfield>,
@@ -1151,7 +1335,7 @@ impl LoggingHost {
                 value: f.value,
             })
             .collect();
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         g.services_mut()
             .log_fields(level.to_neutral(), &message, &converted);
         Ok(())
@@ -1207,12 +1391,19 @@ impl ExecResult {
 /// exposes recursive-invocation risk.
 #[derive(Clone)]
 pub struct NestedExecHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl NestedExecHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -1220,10 +1411,10 @@ impl NestedExecHost {
 impl NestedExecHost {
     fn nested_exec(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         sql: String,
     ) -> RuntimeResult<Result<ExecResult, String>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         Ok(g.services_mut().nested_exec(&sql).map(ExecResult::from_neutral))
     }
 }
@@ -1258,12 +1449,19 @@ pub struct SecretParam {
 /// declarations for drain by `ExtensionManager::secret_backends`.
 #[derive(Clone)]
 pub struct SecretHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl SecretHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -1271,14 +1469,14 @@ impl SecretHost {
 impl SecretHost {
     fn register_secret_type(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         type_name: String,
         params: Vec<SecretParam>,
         callback_handle: u32,
     ) -> RuntimeResult<Result<u32, Duckerror>> {
         let params: Vec<(String, bool)> =
             params.into_iter().map(|p| (p.name, p.redacted)).collect();
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let registry_id = g.alloc_resource_id();
         let extension = g.extension_name().to_string();
         g.push_pending_secret(crate::reg::SecretReg {
@@ -1293,12 +1491,12 @@ impl SecretHost {
 
     fn register_secret_provider(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         type_name: String,
         provider: String,
         callback_handle: u32,
     ) -> RuntimeResult<Result<u32, Duckerror>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let registry_id = g.alloc_resource_id();
         let extension = g.extension_name().to_string();
         g.push_pending_secret(crate::reg::SecretReg {
@@ -1339,12 +1537,19 @@ pub fn install_secret_imports(
 /// pushes to `pending_table_macros`.
 #[derive(Clone)]
 pub struct MacroExtHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl MacroExtHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -1352,13 +1557,13 @@ impl MacroExtHost {
 impl MacroExtHost {
     fn register_table_macro(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         schema: String,
         name: String,
         parameters: Vec<String>,
         body_sql: String,
     ) -> RuntimeResult<Result<(), Duckerror>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let extension = g.extension_name().to_string();
         g.push_pending_table_macro(crate::reg::TableMacroReg {
             extension,
@@ -1390,12 +1595,19 @@ pub fn install_macro_ext_imports(
 /// (register_logical_type_modified, register_enum).
 #[derive(Clone)]
 pub struct TypesExtHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl TypesExtHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -1403,11 +1615,11 @@ impl TypesExtHost {
 impl TypesExtHost {
     fn register_logical_type_modified(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         name: String,
         type_expr: String,
     ) -> RuntimeResult<Result<u32, Duckerror>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let extension = g.extension_name().to_string();
         g.push_pending_modified_type(crate::reg::ModifiedTypeReg {
             extension,
@@ -1419,11 +1631,11 @@ impl TypesExtHost {
 
     fn register_enum(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         name: String,
         members: Vec<String>,
     ) -> RuntimeResult<Result<u32, Duckerror>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let extension = g.extension_name().to_string();
         g.push_pending_enum_type(crate::reg::EnumTypeReg {
             extension,
@@ -1495,12 +1707,19 @@ pub struct CopyHandler {
 /// wit-bindgen counterpart signature.
 #[derive(Clone)]
 pub struct FilesHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl FilesHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -1508,10 +1727,10 @@ impl FilesHost {
 impl FilesHost {
     fn register_replacement_scan(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         scan: ReplacementScan,
     ) -> RuntimeResult<Result<u32, String>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let function_name = match g.lookup_table_handle_name(scan.table_function) {
             Some(name) => name,
             None => {
@@ -1537,10 +1756,10 @@ impl FilesHost {
 
     fn register_copy_handler(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         handler: CopyHandler,
     ) -> RuntimeResult<Result<u32, String>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let extension = g.extension_name().to_string();
         let id = g.alloc_resource_id();
         g.push_pending_copy_handler(crate::reg::CopyHandlerReg {
@@ -1681,12 +1900,19 @@ impl Columndef {
 /// converted to `reg::ColumnDef` via `Columndef::to_reg`.
 #[derive(Clone)]
 pub struct ArrowExtHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl ArrowExtHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -1694,14 +1920,14 @@ impl ArrowExtHost {
 impl ArrowExtHost {
     fn register_arrow_table(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         name: String,
         schema: Vec<Columndef>,
         callback_handle: u32,
     ) -> RuntimeResult<Result<u32, Duckerror>> {
         let columns: Vec<crate::reg::ColumnDef> =
             schema.into_iter().map(Columndef::to_reg).collect();
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let extension = g.extension_name().to_string();
         g.push_pending_arrow_table(crate::reg::ArrowTableReg {
             extension,
@@ -1756,12 +1982,19 @@ impl Funcarg {
 /// neutral reg::* shapes, pushes to pending_filterable_tables.
 #[derive(Clone)]
 pub struct TableStreamHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl TableStreamHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -1769,7 +2002,7 @@ impl TableStreamHost {
 impl TableStreamHost {
     fn register_filterable_table(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         name: String,
         arguments: Vec<Funcarg>,
         columns: Vec<Columndef>,
@@ -1779,7 +2012,7 @@ impl TableStreamHost {
             arguments.into_iter().map(Funcarg::to_reg).collect();
         let converted_columns: Vec<crate::reg::ColumnDef> =
             columns.into_iter().map(Columndef::to_reg).collect();
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let global =
             g.allocate_callback_handle_pub(callback_handle, crate::CallbackKind::Table);
         let extension = g.extension_name().to_string();
@@ -1883,12 +2116,19 @@ impl NullHandling {
 /// audit-fix behavior.
 #[derive(Clone)]
 pub struct RuntimeExtHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl RuntimeExtHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -1896,7 +2136,7 @@ impl RuntimeExtHost {
 impl RuntimeExtHost {
     fn register_scalar_ex(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         name: String,
         arguments: Vec<Funcarg>,
         varargs: Option<LogicalType>,
@@ -1915,7 +2155,7 @@ impl RuntimeExtHost {
             .as_ref()
             .map(|o| !o.attributes.deterministic)
             .unwrap_or(false);
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let extension = g.extension_name().to_string();
         let registry_id = g.alloc_resource_id();
         g.push_pending_scalar_ex(crate::reg::ScalarExReg {
@@ -2009,12 +2249,19 @@ pub struct MacroDef {
 /// CastCallback> arg handling in Phase 6.2.d.2-m).
 #[derive(Clone)]
 pub struct CatalogHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl CatalogHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -2022,10 +2269,10 @@ impl CatalogHost {
 impl CatalogHost {
     fn register_logical_type(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         ty: CatalogLogicalType,
     ) -> RuntimeResult<Result<u32, String>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let extension = g.extension_name().to_string();
         let handle = g.alloc_resource_id();
         g.push_pending_logical_type(crate::reg::LogicalTypeReg {
@@ -2052,12 +2299,12 @@ impl CatalogHost {
     /// WitBridgeCtx routing.
     fn register_cast(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         spec: CastSpec,
         callback: Resource<CastCallback>,
     ) -> RuntimeResult<Result<(), String>> {
         let callback_handle = callback.handle();
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let extension = g.extension_name().to_string();
         g.push_pending_cast(crate::reg::CastReg {
             extension,
@@ -2071,10 +2318,10 @@ impl CatalogHost {
 
     fn register_macro(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         def: MacroDef,
     ) -> RuntimeResult<Result<(), String>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         let extension = g.extension_name().to_string();
         g.push_pending_macro(crate::reg::MacroReg {
             extension,
@@ -2143,12 +2390,19 @@ pub struct LockHandle;
 /// section docstring).
 #[derive(Clone)]
 pub struct FileLockHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl FileLockHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -2156,10 +2410,10 @@ impl FileLockHost {
 impl FileLockHost {
     fn acquire_exclusive(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         path: String,
     ) -> RuntimeResult<Result<Resource<LockHandle>, String>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         match g.acquire_exclusive_lock(&path) {
             Ok(id) => Ok(Ok(Resource::<LockHandle>::from_raw(id, true))),
             Err(msg) => Ok(Err(msg)),
@@ -2168,10 +2422,10 @@ impl FileLockHost {
 
     fn try_acquire_exclusive(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         path: String,
     ) -> RuntimeResult<Result<Option<Resource<LockHandle>>, String>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         match g.try_acquire_exclusive_lock(&path) {
             Ok(Some(id)) => Ok(Ok(Some(Resource::<LockHandle>::from_raw(id, true)))),
             Ok(None) => Ok(Ok(None)),
@@ -2234,10 +2488,10 @@ impl FileLockHost {
     #[method("[method]lock-handle.release")]
     fn lock_handle_release(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         self_: Resource<LockHandle>,
     ) -> RuntimeResult<()> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         g.release_lock_handle(self_.handle());
         Ok(())
     }
@@ -2249,10 +2503,10 @@ impl FileLockHost {
     #[method("[resource-drop]lock-handle")]
     fn lock_handle_drop(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         rep: Resource<LockHandle>,
     ) -> RuntimeResult<()> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         g.release_lock_handle(rep.handle());
         Ok(())
     }
@@ -2274,124 +2528,13 @@ pub fn install_file_lock_imports(
     )
 }
 
-// ────────────────────────────────────────────────────────────────────
-// ADR-0029 Phase 6.2.h.5 — BridgedFileLockHost
-//
-// Purpose: the sibling of `FileLockHost` used exclusively by the
-// consumer-migration bridge in ducklink's production loader
-// (`crate::extension::install_wasmos_migrated_interfaces`).
-//
-// Where the original `FileLockHost` holds `SharedExtensionState =
-// Arc<Mutex<ExtensionStoreState>>` and uses that clone at dispatch
-// time — appropriate when the wasmos-native handler is being
-// dispatched by the wasmos ADAPTER path where the state lives OUTSIDE
-// wasmtime's Store — `BridgedFileLockHost` is STATELESS. Its methods
-// pull `&mut ExtensionStoreState` from
-// [`HostCallContext::consumer_state`] instead, which the resource-
-// aware bridge populates per-call with `store.data_mut()` (the
-// wasmtime Store's actual data).
-//
-// This closes the state-coherence gap Phase 6.2.h.4 Session 2
-// surfaced: a lock acquired via BridgedFileLockHost lands in the
-// SAME `ExtensionStoreState.lock_handles` the wit-bindgen
-// `HostLockHandle::drop` path operates on. Not two disconnected
-// state instances — one, held by the Store, both paths reach it.
-//
-// Both handler variants speak the same WIT interface + share the
-// same wire semantics. Production wires the Bridged variant via the
-// sync_bridge_resource; tests (Phase 6.2.g) continue to use the
-// original FileLockHost with its own SharedExtensionState.
-// ────────────────────────────────────────────────────────────────────
-
-/// Stateless sibling of [`FileLockHost`] for the
-/// [`crate::extension::install_wasmos_migrated_interfaces`] path.
-/// Pulls `&mut ExtensionStoreState` from the ctx's Phase 6.2.h.5
-/// consumer-state slot instead of holding an `Arc<Mutex<>>` clone.
-///
-/// A fresh instance per load is fine — no state held here to leak.
-#[derive(Debug, Default, Clone)]
-pub struct BridgedFileLockHost;
-
-impl BridgedFileLockHost {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-/// Helper: pull `&mut ExtensionStoreState` from the ctx or error
-/// with a specific message that names the bridge contract. All four
-/// BridgedFileLockHost methods delegate through this so the error
-/// text is uniform.
-fn bridged_state<'a>(
-    ctx: &'a mut HostCallContext<'_>,
-) -> RuntimeResult<&'a mut crate::extension::ExtensionStoreState> {
-    ctx.consumer_state::<crate::extension::ExtensionStoreState>()
-        .ok_or_else(|| {
-            wasmos_runtime_api::RuntimeError::msg(
-                "BridgedFileLockHost: no ExtensionStoreState in HostCallContext — the \
-                 wasmos-runtime-wasmtime-v48 sync_bridge_resource is required to populate \
-                 the consumer-state slot at dispatch time. Are you invoking this handler \
-                 outside the bridge? Use FileLockHost::new(shared_state) for direct \
-                 dispatch tests.",
-            )
-        })
-}
-
-#[host_iface(sync)]
-impl BridgedFileLockHost {
-    fn acquire_exclusive(
-        &self,
-        ctx: &mut HostCallContext<'_>,
-        path: String,
-    ) -> RuntimeResult<Result<Resource<LockHandle>, String>> {
-        let state = bridged_state(ctx)?;
-        match state.acquire_exclusive_lock(&path) {
-            Ok(id) => Ok(Ok(Resource::<LockHandle>::from_raw(id, true))),
-            Err(msg) => Ok(Err(msg)),
-        }
-    }
-
-    fn try_acquire_exclusive(
-        &self,
-        ctx: &mut HostCallContext<'_>,
-        path: String,
-    ) -> RuntimeResult<Result<Option<Resource<LockHandle>>, String>> {
-        let state = bridged_state(ctx)?;
-        match state.try_acquire_exclusive_lock(&path) {
-            Ok(Some(id)) => Ok(Ok(Some(Resource::<LockHandle>::from_raw(id, true)))),
-            Ok(None) => Ok(Ok(None)),
-            Err(msg) => Ok(Err(msg)),
-        }
-    }
-
-    /// `[method]lock-handle.release` — early lock release. Same
-    /// semantics as `FileLockHost::lock_handle_release`.
-    #[method("[method]lock-handle.release")]
-    fn lock_handle_release(
-        &self,
-        ctx: &mut HostCallContext<'_>,
-        self_: Resource<LockHandle>,
-    ) -> RuntimeResult<()> {
-        let state = bridged_state(ctx)?;
-        state.release_lock_handle(self_.handle());
-        Ok(())
-    }
-
-    /// `[resource-drop]lock-handle` — destructor. Fires via
-    /// [`wasmos_runtime_api::SyncHostCall::on_resource_drop`] on
-    /// guest scope-exit through the resource-aware bridge's
-    /// `.resource(...)` destructor closure.
-    #[method("[resource-drop]lock-handle")]
-    fn lock_handle_drop(
-        &self,
-        ctx: &mut HostCallContext<'_>,
-        rep: Resource<LockHandle>,
-    ) -> RuntimeResult<()> {
-        let state = bridged_state(ctx)?;
-        state.release_lock_handle(rep.handle());
-        Ok(())
-    }
-}
+// ADR-0029 Phase 6.2.h.6 — `BridgedFileLockHost` retired: superseded
+// by `FileLockHost::bridged()` (the StateSource::FromCtx variant on
+// the unified `FileLockHost` type). Production wires
+// `FileLockHost::bridged()` via
+// `crate::extension::install_wasmos_migrated_interfaces`; tests hold
+// their own state via `FileLockHost::new(shared)`. One type, dual
+// mode.
 
 // ────────────────────────────────────────────────────────────────────
 // Phase 6.2.d.2-o — runtime main Host trait (27/27 for interface
@@ -2482,12 +2625,19 @@ pub enum Capability {
 /// (`#[method("[method]scalar-registry.register-scalar")]`).
 #[derive(Clone)]
 pub struct RuntimeHost {
-    state: SharedExtensionState,
+    state: StateSource,
 }
 
 impl RuntimeHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state }
+        Self { state: StateSource::Shared(state) }
+    }
+    /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
+    /// migration bridge. Pulls `&mut ExtensionStoreState` from
+    /// `HostCallContext::consumer_state` at dispatch time; the
+    /// bridge populates it per-call with `store.data_mut()`.
+    pub fn bridged() -> Self {
+        Self { state: StateSource::FromCtx }
     }
 }
 
@@ -2506,10 +2656,10 @@ impl RuntimeHost {
     ///   `Capability::*` variant).
     fn get_capability(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         kind: Capabilitykind,
     ) -> RuntimeResult<Option<Capability>> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         Ok(match kind {
             Capabilitykind::Scalar => {
                 let id = g.init_scalar_registry();
@@ -2548,7 +2698,7 @@ impl RuntimeHost {
     /// `crate::extension` line 1409).
     fn list_capabilities(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
     ) -> RuntimeResult<Vec<Capabilitykind>> {
         Ok(vec![
             Capabilitykind::Scalar,
@@ -2585,7 +2735,7 @@ impl RuntimeHost {
     #[method("[method]macro-registry.register-scalar")]
     fn macro_registry_register_scalar(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         _self_: Resource<MacroRegistry>,
         _name: String,
         _parameters: Vec<String>,
@@ -2615,7 +2765,7 @@ impl RuntimeHost {
     #[method("[resource-drop]macro-registry")]
     fn macro_registry_drop(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         _rep: Resource<MacroRegistry>,
     ) -> RuntimeResult<()> {
         Ok(())
@@ -2648,10 +2798,10 @@ impl RuntimeHost {
     #[method("[constructor]scalar-callback")]
     fn scalar_callback_new(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         handle: u32,
     ) -> RuntimeResult<Resource<ScalarCallback>> {
-        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let g = self.state.hold(ctx)?;
         let id = g.allocate_callback_handle_pub(handle, crate::CallbackKind::Scalar);
         Ok(Resource::<ScalarCallback>::from_raw(id, true))
     }
@@ -2659,7 +2809,7 @@ impl RuntimeHost {
     #[method("[method]scalar-callback.call")]
     fn scalar_callback_call(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         _args: Vec<wasmos_runtime_api::Value>,
     ) -> RuntimeResult<Vec<wasmos_runtime_api::Value>> {
         // Vec<Value> passthrough: `[method]xxx.call` returns
@@ -2673,10 +2823,10 @@ impl RuntimeHost {
     #[method("[resource-drop]scalar-callback")]
     fn scalar_callback_drop(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         rep: Resource<ScalarCallback>,
     ) -> RuntimeResult<()> {
-        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let g = self.state.hold(ctx)?;
         g.release_callback_handle_pub(rep.handle());
         Ok(())
     }
@@ -2686,10 +2836,10 @@ impl RuntimeHost {
     #[method("[constructor]table-callback")]
     fn table_callback_new(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         handle: u32,
     ) -> RuntimeResult<Resource<TableCallback>> {
-        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let g = self.state.hold(ctx)?;
         let id = g.allocate_callback_handle_pub(handle, crate::CallbackKind::Table);
         Ok(Resource::<TableCallback>::from_raw(id, true))
     }
@@ -2697,7 +2847,7 @@ impl RuntimeHost {
     #[method("[method]table-callback.call")]
     fn table_callback_call(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         _args: Vec<wasmos_runtime_api::Value>,
     ) -> RuntimeResult<Vec<wasmos_runtime_api::Value>> {
         Ok(vec![wasmos_runtime_api::Value::Result(Err(Some(
@@ -2708,10 +2858,10 @@ impl RuntimeHost {
     #[method("[resource-drop]table-callback")]
     fn table_callback_drop(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         rep: Resource<TableCallback>,
     ) -> RuntimeResult<()> {
-        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let g = self.state.hold(ctx)?;
         g.release_callback_handle_pub(rep.handle());
         Ok(())
     }
@@ -2721,10 +2871,10 @@ impl RuntimeHost {
     #[method("[constructor]aggregate-callback")]
     fn aggregate_callback_new(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         handle: u32,
     ) -> RuntimeResult<Resource<AggregateCallback>> {
-        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let g = self.state.hold(ctx)?;
         let id = g.allocate_callback_handle_pub(handle, crate::CallbackKind::Aggregate);
         Ok(Resource::<AggregateCallback>::from_raw(id, true))
     }
@@ -2732,7 +2882,7 @@ impl RuntimeHost {
     #[method("[method]aggregate-callback.call")]
     fn aggregate_callback_call(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         _args: Vec<wasmos_runtime_api::Value>,
     ) -> RuntimeResult<Vec<wasmos_runtime_api::Value>> {
         Ok(vec![wasmos_runtime_api::Value::Result(Err(Some(
@@ -2743,10 +2893,10 @@ impl RuntimeHost {
     #[method("[resource-drop]aggregate-callback")]
     fn aggregate_callback_drop(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         rep: Resource<AggregateCallback>,
     ) -> RuntimeResult<()> {
-        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let g = self.state.hold(ctx)?;
         g.release_callback_handle_pub(rep.handle());
         Ok(())
     }
@@ -2756,10 +2906,10 @@ impl RuntimeHost {
     #[method("[constructor]pragma-callback")]
     fn pragma_callback_new(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         handle: u32,
     ) -> RuntimeResult<Resource<PragmaCallback>> {
-        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let g = self.state.hold(ctx)?;
         let id = g.allocate_callback_handle_pub(handle, crate::CallbackKind::Pragma);
         Ok(Resource::<PragmaCallback>::from_raw(id, true))
     }
@@ -2767,7 +2917,7 @@ impl RuntimeHost {
     #[method("[method]pragma-callback.call")]
     fn pragma_callback_call(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         _args: Vec<wasmos_runtime_api::Value>,
     ) -> RuntimeResult<Vec<wasmos_runtime_api::Value>> {
         Ok(vec![wasmos_runtime_api::Value::Result(Err(Some(
@@ -2778,10 +2928,10 @@ impl RuntimeHost {
     #[method("[resource-drop]pragma-callback")]
     fn pragma_callback_drop(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         rep: Resource<PragmaCallback>,
     ) -> RuntimeResult<()> {
-        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let g = self.state.hold(ctx)?;
         g.release_callback_handle_pub(rep.handle());
         Ok(())
     }
@@ -2798,10 +2948,10 @@ impl RuntimeHost {
     #[method("[constructor]cast-callback")]
     fn cast_callback_new(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         handle: u32,
     ) -> RuntimeResult<Resource<RuntimeCastCallback>> {
-        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let g = self.state.hold(ctx)?;
         let id = g.allocate_callback_handle_pub(handle, crate::CallbackKind::Cast);
         Ok(Resource::<RuntimeCastCallback>::from_raw(id, true))
     }
@@ -2809,7 +2959,7 @@ impl RuntimeHost {
     #[method("[method]cast-callback.call")]
     fn cast_callback_call(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         _args: Vec<wasmos_runtime_api::Value>,
     ) -> RuntimeResult<Vec<wasmos_runtime_api::Value>> {
         Ok(vec![wasmos_runtime_api::Value::Result(Err(Some(
@@ -2820,10 +2970,10 @@ impl RuntimeHost {
     #[method("[resource-drop]cast-callback")]
     fn cast_callback_drop(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         rep: Resource<RuntimeCastCallback>,
     ) -> RuntimeResult<()> {
-        let g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let g = self.state.hold(ctx)?;
         g.release_callback_handle_pub(rep.handle());
         Ok(())
     }
@@ -2859,7 +3009,7 @@ impl RuntimeHost {
     #[method("[method]scalar-registry.register")]
     fn scalar_registry_register(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         self_: Resource<ScalarRegistry>,
         name: String,
         arguments: Vec<Funcarg>,
@@ -2873,7 +3023,7 @@ impl RuntimeHost {
             arguments.into_iter().map(Funcarg::to_reg).collect();
         let returns_r = returns.to_reg();
         let options_r = options.map(Funcopts::to_reg);
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         // 1. Validate callback kind.
         if let Err(e) =
             g.validate_callback_kind(callback_handle, crate::CallbackKind::Scalar)
@@ -2901,10 +3051,10 @@ impl RuntimeHost {
     #[method("[resource-drop]scalar-registry")]
     fn scalar_registry_drop(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         rep: Resource<ScalarRegistry>,
     ) -> RuntimeResult<()> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         g.drain_scalar_registry(rep.handle());
         Ok(())
     }
@@ -2914,7 +3064,7 @@ impl RuntimeHost {
     #[method("[method]table-registry.register")]
     fn table_registry_register(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         self_: Resource<TableRegistry>,
         name: String,
         arguments: Vec<Funcarg>,
@@ -2932,7 +3082,7 @@ impl RuntimeHost {
             description: o.description,
             tags: o.tags,
         });
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         if let Err(e) =
             g.validate_callback_kind(callback_handle, crate::CallbackKind::Table)
         {
@@ -2958,10 +3108,10 @@ impl RuntimeHost {
     #[method("[resource-drop]table-registry")]
     fn table_registry_drop(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         rep: Resource<TableRegistry>,
     ) -> RuntimeResult<()> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         g.drain_table_registry(rep.handle());
         Ok(())
     }
@@ -2971,7 +3121,7 @@ impl RuntimeHost {
     #[method("[method]aggregate-registry.register")]
     fn aggregate_registry_register(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         self_: Resource<AggregateRegistry>,
         name: String,
         arguments: Vec<Funcarg>,
@@ -2985,7 +3135,7 @@ impl RuntimeHost {
             arguments.into_iter().map(Funcarg::to_reg).collect();
         let returns_r = returns.to_reg();
         let options_r = options.map(Funcopts::to_reg);
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         if let Err(e) =
             g.validate_callback_kind(callback_handle, crate::CallbackKind::Aggregate)
         {
@@ -3011,10 +3161,10 @@ impl RuntimeHost {
     #[method("[resource-drop]aggregate-registry")]
     fn aggregate_registry_drop(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         rep: Resource<AggregateRegistry>,
     ) -> RuntimeResult<()> {
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         g.drain_aggregate_registry(rep.handle());
         Ok(())
     }
@@ -3024,7 +3174,7 @@ impl RuntimeHost {
     #[method("[method]pragma-registry.register-call")]
     fn pragma_registry_register_call(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         _self_: Resource<PragmaRegistry>,
         name: String,
         _arguments: Vec<Funcarg>,
@@ -3033,7 +3183,7 @@ impl RuntimeHost {
         _options: Option<Extopts>,
     ) -> RuntimeResult<Result<u32, Duckerror>> {
         let callback_handle = callback.handle();
-        let mut g = self.state.lock().expect("ExtensionStoreState mutex poisoned");
+        let mut g = self.state.hold(ctx)?;
         if let Err(e) =
             g.validate_callback_kind(callback_handle, crate::CallbackKind::Pragma)
         {
@@ -3051,7 +3201,7 @@ impl RuntimeHost {
     #[method("[resource-drop]pragma-registry")]
     fn pragma_registry_drop(
         &self,
-        _ctx: &mut HostCallContext<'_>,
+        ctx: &mut HostCallContext<'_>,
         _rep: Resource<PragmaRegistry>,
     ) -> RuntimeResult<()> {
         // The wit-bindgen counterpart at `crate::extension` line
