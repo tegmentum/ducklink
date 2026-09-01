@@ -6267,16 +6267,23 @@ pub fn add_extension_interfaces_to_linker(
     // wasi:http `add_to_linker_sync` re-adds the wasi:http/proxy world and
     // would collide.
     wasmtime_wasi_http::p2::add_only_http_to_linker_sync(linker)?;
-    extension_types::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    // ADR-0029 Phase 6.2.h.3 — Types, Encoding (added below), Compression,
+    // FilesReg, Index, Collation intentionally NOT registered here.
+    // Wired per-load in `load_component_with_dynlink` via
+    // `install_wasmos_migrated_interfaces` using wasmos-native
+    // SyncHostCall dispatch through {Types,Encoding,Compression,
+    // FilesReg,Index,Collation}Host. See Phase 6.2.h.2 comment below
+    // for why per-load and not here.
+    // extension_types::add_to_linker(...)?;      // ← migrated (Phase 6.2.h.3)
     extension_runtime::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_config::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_logging::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_catalog::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_files::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_storage::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
-    extension_index::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
-    extension_collation::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
-    extension_files_reg::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
+    // extension_index::add_to_linker(...)?;      // ← migrated (Phase 6.2.h.3)
+    // extension_collation::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.3)
+    // extension_files_reg::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.3)
     extension_query::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     // EXECUTE-capable counterpart to `query`. The host always PROVIDES it; only
     // exec-capable components (fieldbook) import it. Uses a sibling connection
@@ -6317,11 +6324,8 @@ pub fn add_extension_interfaces_to_linker(
         |s| s,
     )?;
     extension_arrow_ext::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
-    extension_encoding::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
-    extension_compression::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(
-        linker,
-        |s| s,
-    )?;
+    // extension_encoding::add_to_linker(...)?;     // ← migrated (Phase 6.2.h.3)
+    // extension_compression::add_to_linker(...)?;  // ← migrated (Phase 6.2.h.3)
     // 2.3.0 / v3 additive registration imports.
     extension_parser::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
     extension_optimizer::add_to_linker::<ExtensionStoreState, ExtensionStoreState>(linker, |s| s)?;
@@ -6350,16 +6354,22 @@ pub fn add_extension_interfaces_to_linker(
 ///
 /// Interfaces migrated so far:
 ///
-/// - `duckdb:extension/lifecycle` — routed to
-///   [`crate::extension_wasmos::LifecycleHost`] via wasmos
-///   `SyncHostCall` dispatch. 1 method, no resources, no state — the
-///   smallest possible first migration so any parity issues surface
-///   with minimal noise.
+/// - `duckdb:extension/lifecycle` — Phase 6.2.h.2. 1 method.
+/// - `duckdb:extension/types` — Phase 6.2.h.3. 0 methods (marker).
+/// - `duckdb:extension/encoding` — Phase 6.2.h.3. 1 method.
+/// - `duckdb:extension/compression` — Phase 6.2.h.3. 1 method.
+/// - `duckdb:extension/files-reg` — Phase 6.2.h.3. 1 method.
+/// - `duckdb:extension/index` — Phase 6.2.h.3. 1 method.
+/// - `duckdb:extension/collation` — Phase 6.2.h.3. 1 method.
 ///
-/// Future sessions extend this set to the other 6
-/// stateless-and-no-resource interfaces (Types, Encoding, Compression,
-/// FilesReg, Index, Collation) using the same bridge, then design the
-/// resource-aware bridge for the Resource<T>-carrying interfaces.
+/// All 7 are stateless (no `SharedExtensionState` — fresh instance per
+/// load is safe) and resource-free (no `Resource<T>` in any method
+/// signature). The `#[host_iface(sync)]`-emitted `impl SyncHostCall`
+/// on each host struct provides the dispatch entry point.
+///
+/// Future sessions add the resource-aware bridge for the
+/// Resource<T>-carrying interfaces (Runtime, FileLock, Files, Catalog,
+/// ...).
 ///
 /// **Non-blocking behaviour**: if `component` doesn't import a given
 /// migrated interface, the bridge no-ops for that interface — matches
@@ -6371,26 +6381,55 @@ fn install_wasmos_migrated_interfaces(
     component: &Component,
 ) -> wasmtime::Result<()> {
     use std::sync::Arc as StdArc;
-    use wasmos_runtime_api::{SyncHostCall as _SyncHostCall};
+    use wasmos_runtime_api::SyncHostCall as _SyncHostCall;
     use wasmos_runtime_wasmtime_v48::sync_bridge::install_stateless_host_call;
 
-    // Lifecycle — Phase 6.2.h.2 Session 2. `LifecycleHost` is stateless
-    // (no `SharedExtensionState` field), so a fresh instance per load
-    // is fine (no shared registry to leak, no allocator to reuse).
-    // The `#[host_iface(sync)]`-emitted `impl SyncHostCall for
-    // LifecycleHost` provides the dispatch entry point.
-    let lifecycle_handler: StdArc<dyn _SyncHostCall> =
-        StdArc::new(crate::extension_wasmos::LifecycleHost::new());
-    install_stateless_host_call(
-        engine,
-        linker,
-        component,
-        "duckdb:extension/lifecycle",
-        lifecycle_handler,
-    )
-    .map_err(|e| wasmtime::Error::msg(format!(
-        "install_stateless_host_call(lifecycle) failed: {e}"
-    )))?;
+    // Table of (iface-name, handler-factory) pairs, one row per
+    // migrated interface. Keeps the wiring uniform — every additional
+    // stateless-no-resource interface migrates as one new entry, and
+    // the loop enforces the same error-mapping shape for each.
+    //
+    // The handler-factory closure returns Arc<dyn SyncHostCall>; each
+    // returns a fresh instance since these hosts are stateless.
+    let migrated: [(&str, fn() -> StdArc<dyn _SyncHostCall>); 7] = [
+        // Phase 6.2.h.2 — Session 2 first migration.
+        (
+            "duckdb:extension/lifecycle",
+            || StdArc::new(crate::extension_wasmos::LifecycleHost::new()),
+        ),
+        // Phase 6.2.h.3 — the six remaining stateless interfaces.
+        (
+            "duckdb:extension/types",
+            || StdArc::new(crate::extension_wasmos::TypesHost::new()),
+        ),
+        (
+            "duckdb:extension/encoding",
+            || StdArc::new(crate::extension_wasmos::EncodingHost::new()),
+        ),
+        (
+            "duckdb:extension/compression",
+            || StdArc::new(crate::extension_wasmos::CompressionHost::new()),
+        ),
+        (
+            "duckdb:extension/files-reg",
+            || StdArc::new(crate::extension_wasmos::FilesRegHost::new()),
+        ),
+        (
+            "duckdb:extension/index",
+            || StdArc::new(crate::extension_wasmos::IndexHost::new()),
+        ),
+        (
+            "duckdb:extension/collation",
+            || StdArc::new(crate::extension_wasmos::CollationHost::new()),
+        ),
+    ];
+
+    for (iface, factory) in migrated {
+        install_stateless_host_call(engine, linker, component, iface, factory())
+            .map_err(|e| wasmtime::Error::msg(format!(
+                "install_stateless_host_call({iface}) failed: {e}"
+            )))?;
+    }
 
     Ok(())
 }
