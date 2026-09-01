@@ -2265,44 +2265,42 @@ fn convert_extension_funcargs(args: Vec<extension_runtime::Funcarg>) -> Vec<reg:
     args.into_iter()
         .map(|arg| reg::FuncArg {
             name: arg.name,
-            logical: convert_extension_logicaltype(arg.logical),
+            logical: convert_extension_logicaltype(arg.logical.into()),
         })
         .collect()
 }
 
+/// Phase 6.2.n Session 5 — takes the mirror `Logicaltype` instead
+/// of wit-bindgen. Same 24 arms.
 #[cfg(test)]
-fn convert_extension_logicaltype(ty: extension_runtime::Logicaltype) -> reg::LogicalType {
+fn convert_extension_logicaltype(ty: Logicaltype) -> reg::LogicalType {
     match ty {
-        extension_runtime::Logicaltype::Boolean => reg::LogicalType::Boolean,
-        extension_runtime::Logicaltype::Int64 => reg::LogicalType::Int64,
-        extension_runtime::Logicaltype::Uint64 => reg::LogicalType::Uint64,
-        extension_runtime::Logicaltype::Float64 => reg::LogicalType::Float64,
-        extension_runtime::Logicaltype::Text => reg::LogicalType::Text,
-        extension_runtime::Logicaltype::Blob => reg::LogicalType::Blob,
-        extension_runtime::Logicaltype::Int32 => reg::LogicalType::Int32,
-        extension_runtime::Logicaltype::Timestamp => reg::LogicalType::Timestamp,
-        extension_runtime::Logicaltype::Int8 => reg::LogicalType::Int8,
-        extension_runtime::Logicaltype::Int16 => reg::LogicalType::Int16,
-        extension_runtime::Logicaltype::Uint8 => reg::LogicalType::Uint8,
-        extension_runtime::Logicaltype::Uint16 => reg::LogicalType::Uint16,
-        extension_runtime::Logicaltype::Uint32 => reg::LogicalType::Uint32,
-        extension_runtime::Logicaltype::Float32 => reg::LogicalType::Float32,
-        extension_runtime::Logicaltype::Date => reg::LogicalType::Date,
-        extension_runtime::Logicaltype::Time => reg::LogicalType::Time,
-        extension_runtime::Logicaltype::Timestamptz => reg::LogicalType::Timestamptz,
-        // S2 (major-5): DECIMAL width/scale now ride the variant arm as a
-        // `decimalshape` payload -- lift into the neutral struct arm.
-        extension_runtime::Logicaltype::Decimal(shape) => reg::LogicalType::Decimal {
+        Logicaltype::Boolean => reg::LogicalType::Boolean,
+        Logicaltype::Int64 => reg::LogicalType::Int64,
+        Logicaltype::Uint64 => reg::LogicalType::Uint64,
+        Logicaltype::Float64 => reg::LogicalType::Float64,
+        Logicaltype::Text => reg::LogicalType::Text,
+        Logicaltype::Blob => reg::LogicalType::Blob,
+        Logicaltype::Int32 => reg::LogicalType::Int32,
+        Logicaltype::Timestamp => reg::LogicalType::Timestamp,
+        Logicaltype::Int8 => reg::LogicalType::Int8,
+        Logicaltype::Int16 => reg::LogicalType::Int16,
+        Logicaltype::Uint8 => reg::LogicalType::Uint8,
+        Logicaltype::Uint16 => reg::LogicalType::Uint16,
+        Logicaltype::Uint32 => reg::LogicalType::Uint32,
+        Logicaltype::Float32 => reg::LogicalType::Float32,
+        Logicaltype::Date => reg::LogicalType::Date,
+        Logicaltype::Time => reg::LogicalType::Time,
+        Logicaltype::Timestamptz => reg::LogicalType::Timestamptz,
+        Logicaltype::Decimal(shape) => reg::LogicalType::Decimal {
             width: shape.width,
             scale: shape.scale,
         },
-        extension_runtime::Logicaltype::Interval => reg::LogicalType::Interval,
-        extension_runtime::Logicaltype::Uuid => reg::LogicalType::Uuid,
-        // T2-1 residual (major-5): 128-bit integer logical types are
-        // fieldless -- values ride on `duckvalue.hugeint` / `.uhugeint`.
-        extension_runtime::Logicaltype::Hugeint => reg::LogicalType::Hugeint,
-        extension_runtime::Logicaltype::Uhugeint => reg::LogicalType::UHugeint,
-        extension_runtime::Logicaltype::Complex(expr) => reg::LogicalType::Complex(expr),
+        Logicaltype::Interval => reg::LogicalType::Interval,
+        Logicaltype::Uuid => reg::LogicalType::Uuid,
+        Logicaltype::Hugeint => reg::LogicalType::Hugeint,
+        Logicaltype::Uhugeint => reg::LogicalType::UHugeint,
+        Logicaltype::Complex(expr) => reg::LogicalType::Complex(expr),
     }
 }
 
@@ -2321,7 +2319,7 @@ fn convert_extension_columndefs(columns: Vec<extension_runtime::Columndef>) -> V
         .into_iter()
         .map(|col| reg::ColumnDef {
             name: col.name,
-            logical: convert_extension_logicaltype(col.logical),
+            logical: convert_extension_logicaltype(col.logical.into()),
         })
         .collect()
 }
@@ -5861,8 +5859,8 @@ mod tests {
     use crate::extension_test_support::{test_state, NoopServices};
 
     /// Every base-world logicaltype, including the rich set, for round-tripping.
-    fn all_ext_logicaltypes() -> Vec<extension_runtime::Logicaltype> {
-        use extension_runtime::Logicaltype as L;
+    fn all_ext_logicaltypes() -> Vec<Logicaltype> {
+        use Logicaltype as L;
         vec![
             L::Boolean,
             L::Int64,
@@ -5881,10 +5879,7 @@ mod tests {
             L::Date,
             L::Time,
             L::Timestamptz,
-            L::Decimal(extension_types::Decimalshape {
-                width: 18,
-                scale: 3,
-            }),
+            L::Decimal(Decimalshape { width: 18, scale: 3 }),
             L::Hugeint,
             L::Uhugeint,
             L::Interval,
@@ -6131,7 +6126,7 @@ mod tests {
 
     #[test]
     fn convert_logicaltype_covers_every_arm_incl_rich_and_complex() {
-        use extension_runtime::Logicaltype as L;
+        use Logicaltype as L;
         assert_eq!(
             convert_extension_logicaltype(L::Boolean),
             reg::LogicalType::Boolean
@@ -6164,15 +6159,15 @@ mod tests {
 
     #[test]
     fn convert_funcargs_preserves_names_and_types() {
-        use extension_runtime::Logicaltype as L;
+        use Logicaltype as L;
         let args = vec![
             extension_runtime::Funcarg {
                 name: Some("x".to_string()),
-                logical: L::Int64,
+                logical: L::Int64.into(),
             },
             extension_runtime::Funcarg {
                 name: None,
-                logical: L::Text,
+                logical: L::Text.into(),
             },
         ];
         let out = convert_extension_funcargs(args);
@@ -6185,15 +6180,15 @@ mod tests {
 
     #[test]
     fn convert_columndefs_preserves_names_and_types() {
-        use extension_runtime::Logicaltype as L;
+        use Logicaltype as L;
         let cols = vec![
             extension_runtime::Columndef {
                 name: "id".to_string(),
-                logical: L::Int32,
+                logical: L::Int32.into(),
             },
             extension_runtime::Columndef {
                 name: "label".to_string(),
-                logical: L::Complex("VARCHAR[]".to_string()),
+                logical: L::Complex("VARCHAR[]".to_string()).into(),
             },
         ];
         let out = convert_extension_columndefs(cols);
