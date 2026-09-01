@@ -523,7 +523,7 @@ impl core_callback_dispatch::Host for CoreStoreState {
             let v = row
                 .first()
                 .cloned()
-                .unwrap_or(extension_types::Duckvalue::Null);
+                .unwrap_or(ducklink_runtime::extension::Duckvalue::Null);
             out.push(
                 manager
                     .dispatch_cast(handle, &v)
@@ -2364,7 +2364,7 @@ impl ExtensionManager {
         &mut self,
         scan: u32,
         max_rows: u32,
-    ) -> Result<Vec<Vec<extension_types::Duckvalue>>, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<Vec<Vec<ducklink_runtime::extension::Duckvalue>>, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
             ducklink_runtime::extension::Duckerror::Invalidstate(format!(
@@ -2477,8 +2477,8 @@ impl ExtensionManager {
     fn native_at5_attach_scan(
         &mut self,
         handle: u32,
-        _args: &[extension_types::Duckvalue],
-    ) -> Result<extension_runtime::Resultset, ducklink_runtime::extension::Duckerror> {
+        _args: &[ducklink_runtime::extension::Duckvalue],
+    ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror> {
         let target = self.at5_scan_targets.get(&handle).cloned().ok_or_else(|| {
             ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "unknown AT5 attach-scan handle {handle}"
@@ -2503,7 +2503,7 @@ impl ExtensionManager {
             instance.storage_scan_open(target.storage_handle, target.catalog_handle, request)?;
         // Drain in one batch. The MAX u32 acts as "give me everything you have";
         // extensions that honour it (sqlitewasm does) return the whole cursor.
-        let mut out: Vec<Vec<extension_types::Duckvalue>> = Vec::new();
+        let mut out: Vec<Vec<ducklink_runtime::extension::Duckvalue>> = Vec::new();
         loop {
             let batch = instance.storage_scan_next(target.storage_handle, scan, u32::MAX)?;
             if batch.is_empty() {
@@ -2588,7 +2588,7 @@ impl ExtensionManager {
         &mut self,
         txn: u32,
         table: &str,
-        rows: &[Vec<extension_types::Duckvalue>],
+        rows: &[Vec<ducklink_runtime::extension::Duckvalue>],
     ) -> Result<u64, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
@@ -2607,7 +2607,7 @@ impl ExtensionManager {
         &mut self,
         catalog: u32,
         table: &str,
-        rows: &[Vec<extension_types::Duckvalue>],
+        rows: &[Vec<ducklink_runtime::extension::Duckvalue>],
     ) -> Result<u64, ducklink_runtime::extension::Duckerror> {
         let txn = self.dispatch_storage_begin_transaction(catalog)?;
         match self.dispatch_storage_insert_rows(txn, table, rows) {
@@ -2645,7 +2645,7 @@ impl ExtensionManager {
         table: &str,
         rowids: &[i64],
         updated_columns: &[u32],
-        rows: &[Vec<extension_types::Duckvalue>],
+        rows: &[Vec<ducklink_runtime::extension::Duckvalue>],
     ) -> Result<u64, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
@@ -2668,7 +2668,7 @@ impl ExtensionManager {
         catalog: u32,
         table: &str,
         rowids: &[i64],
-        rows: &[Vec<extension_types::Duckvalue>],
+        rows: &[Vec<ducklink_runtime::extension::Duckvalue>],
     ) -> Result<u64, ducklink_runtime::extension::Duckerror> {
         let txn = self.dispatch_storage_begin_transaction(catalog)?;
         match self.dispatch_storage_update_rows(txn, table, rowids, &[], rows) {
@@ -2897,9 +2897,9 @@ impl ExtensionManager {
     fn dispatch_scalar(
         &mut self,
         handle: u32,
-        args: &[extension_types::Duckvalue],
+        args: &[ducklink_runtime::extension::Duckvalue],
         ctx: extension_runtime::Invokeinfo,
-    ) -> Result<extension_types::Duckvalue, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
         // `ducklink_prefix` sentinel (scalar form): see
         // [`DUCKLINK_PREFIX_SCALAR_HANDLE`]. Same handler as the table
         // form but wraps its result as a VARCHAR summary.
@@ -2958,9 +2958,9 @@ impl ExtensionManager {
     fn dispatch_scalar_batch(
         &mut self,
         handle: u32,
-        rows: &Vec<Vec<extension_types::Duckvalue>>,
+        rows: &Vec<Vec<ducklink_runtime::extension::Duckvalue>>,
         ctx: extension_runtime::Invokeinfo,
-    ) -> Result<Vec<extension_types::Duckvalue>, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<Vec<ducklink_runtime::extension::Duckvalue>, ducklink_runtime::extension::Duckerror> {
         // `ducklink_prefix` scalar sentinel: the core batches scalar calls
         // through this columnar entry point. Handle it per-row via the
         // shared native handler so the deferred queue reflects each
@@ -2980,7 +2980,7 @@ impl ExtensionManager {
             let mut out = Vec::with_capacity(rows.len());
             for row in rows {
                 let arg = match row.first() {
-                    Some(extension_types::Duckvalue::Text(s)) => s.clone(),
+                    Some(ducklink_runtime::extension::Duckvalue::Text(s)) => s.clone(),
                     _ => String::new(),
                 };
                 let text = if handle == RESOLVER_EXPLAIN_HANDLE {
@@ -2988,7 +2988,7 @@ impl ExtensionManager {
                 } else {
                     self.set_forced_provider(&arg)
                 };
-                out.push(extension_types::Duckvalue::Text(text));
+                out.push(ducklink_runtime::extension::Duckvalue::Text(text));
             }
             return Ok(out);
         }
@@ -3018,8 +3018,8 @@ impl ExtensionManager {
     fn dispatch_table(
         &mut self,
         handle: u32,
-        args: &[extension_types::Duckvalue],
-    ) -> Result<extension_runtime::Resultset, ducklink_runtime::extension::Duckerror> {
+        args: &[ducklink_runtime::extension::Duckvalue],
+    ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror> {
         // Phase 2c (@5) AT5 attach-scan sentinel range: handles minted by
         // `register_at5_scan` (from `HostState::intercept_attach`) route
         // straight to the storage-dispatch scan path — no wasm component's
@@ -3111,15 +3111,15 @@ impl ExtensionManager {
     /// resolver's on-disk path is not surfaced here yet (parity is a follow-up).
     fn native_ducklink_load(
         &mut self,
-        args: &[extension_types::Duckvalue],
-    ) -> Result<extension_runtime::Resultset, ducklink_runtime::extension::Duckerror> {
+        args: &[ducklink_runtime::extension::Duckvalue],
+    ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror> {
         // Positional/named arg 0: extension name (VARCHAR). DuckDB passes named
         // args in order, so the first VARCHAR is the name regardless of whether
         // the caller wrote `ducklink_load('jsonfns')` or
         // `ducklink_load(name := 'jsonfns')`.
         let name = match args.first() {
-            Some(extension_types::Duckvalue::Text(s)) => s.clone(),
-            Some(extension_types::Duckvalue::Null) | None => {
+            Some(ducklink_runtime::extension::Duckvalue::Text(s)) => s.clone(),
+            Some(ducklink_runtime::extension::Duckvalue::Null) | None => {
                 return Err(ducklink_runtime::extension::Duckerror::Invalidargument(
                     "ducklink_load: missing required VARCHAR argument 'name'".into(),
                 ));
@@ -3134,8 +3134,8 @@ impl ExtensionManager {
         // `kind => 'wasm' | 'native'` shape; a NULL / missing value defaults
         // to 'wasm'.
         let kind = match args.get(1) {
-            Some(extension_types::Duckvalue::Text(s)) => s.to_ascii_lowercase(),
-            Some(extension_types::Duckvalue::Null) | None => "wasm".to_string(),
+            Some(ducklink_runtime::extension::Duckvalue::Text(s)) => s.to_ascii_lowercase(),
+            Some(ducklink_runtime::extension::Duckvalue::Null) | None => "wasm".to_string(),
             Some(_) => {
                 return Err(ducklink_runtime::extension::Duckerror::Invalidargument(
                     "ducklink_load: second argument (kind) must be VARCHAR".into(),
@@ -3208,15 +3208,15 @@ impl ExtensionManager {
              scalars={scalars}, tables={tables}, aggregates={aggregates} \
              (deferred core drain scheduled)"
         );
-        let row: Vec<extension_types::Duckvalue> = vec![
-            extension_types::Duckvalue::Text(sanitized),
+        let row: Vec<ducklink_runtime::extension::Duckvalue> = vec![
+            ducklink_runtime::extension::Duckvalue::Text(sanitized),
             // `path` is intentionally NULL — the workspace resolver's
             // artifact path isn't surfaced through this API yet (parity
             // with ducklink-extension's `path` column is a follow-up).
-            extension_types::Duckvalue::Null,
-            extension_types::Duckvalue::Int64(scalars as i64),
-            extension_types::Duckvalue::Int64(tables as i64),
-            extension_types::Duckvalue::Int64(aggregates as i64),
+            ducklink_runtime::extension::Duckvalue::Null,
+            ducklink_runtime::extension::Duckvalue::Int64(scalars as i64),
+            ducklink_runtime::extension::Duckvalue::Int64(tables as i64),
+            ducklink_runtime::extension::Duckvalue::Int64(aggregates as i64),
         ];
         Ok(vec![row])
     }
@@ -3247,11 +3247,11 @@ impl ExtensionManager {
     /// resolves in every subsequent statement.
     fn native_ducklink_prefix_common(
         &mut self,
-        args: &[extension_types::Duckvalue],
+        args: &[ducklink_runtime::extension::Duckvalue],
     ) -> Result<(String, String), ducklink_runtime::extension::Duckerror> {
         let alias = match args.first() {
-            Some(extension_types::Duckvalue::Text(s)) => s.clone(),
-            Some(extension_types::Duckvalue::Null) | None => {
+            Some(ducklink_runtime::extension::Duckvalue::Text(s)) => s.clone(),
+            Some(ducklink_runtime::extension::Duckvalue::Null) | None => {
                 return Err(ducklink_runtime::extension::Duckerror::Invalidargument(
                     "ducklink_prefix: missing required VARCHAR argument 'alias'".into(),
                 ));
@@ -3263,8 +3263,8 @@ impl ExtensionManager {
             }
         };
         let namespace = match args.get(1) {
-            Some(extension_types::Duckvalue::Text(s)) => s.clone(),
-            Some(extension_types::Duckvalue::Null) | None => {
+            Some(ducklink_runtime::extension::Duckvalue::Text(s)) => s.clone(),
+            Some(ducklink_runtime::extension::Duckvalue::Null) | None => {
                 return Err(ducklink_runtime::extension::Duckerror::Invalidargument(
                     "ducklink_prefix: missing required VARCHAR argument 'namespace'".into(),
                 ));
@@ -3309,13 +3309,13 @@ impl ExtensionManager {
     /// next `HostState::execute` boundary drains the queue.
     fn native_ducklink_prefix_table(
         &mut self,
-        args: &[extension_types::Duckvalue],
-    ) -> Result<extension_runtime::Resultset, ducklink_runtime::extension::Duckerror> {
+        args: &[ducklink_runtime::extension::Duckvalue],
+    ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror> {
         let (alias, namespace) = self.native_ducklink_prefix_common(args)?;
-        let row: Vec<extension_types::Duckvalue> = vec![
-            extension_types::Duckvalue::Text(alias),
-            extension_types::Duckvalue::Text(namespace),
-            extension_types::Duckvalue::Int64(0),
+        let row: Vec<ducklink_runtime::extension::Duckvalue> = vec![
+            ducklink_runtime::extension::Duckvalue::Text(alias),
+            ducklink_runtime::extension::Duckvalue::Text(namespace),
+            ducklink_runtime::extension::Duckvalue::Int64(0),
         ];
         Ok(vec![row])
     }
@@ -3327,10 +3327,10 @@ impl ExtensionManager {
     /// `"alias='c' namespace='main' macros=0 (deferred)"`.
     fn native_ducklink_prefix_scalar(
         &mut self,
-        args: &[extension_types::Duckvalue],
-    ) -> Result<extension_types::Duckvalue, ducklink_runtime::extension::Duckerror> {
+        args: &[ducklink_runtime::extension::Duckvalue],
+    ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
         let (alias, namespace) = self.native_ducklink_prefix_common(args)?;
-        Ok(extension_types::Duckvalue::Text(format!(
+        Ok(ducklink_runtime::extension::Duckvalue::Text(format!(
             "alias='{alias}' namespace='{namespace}' macros=0 (deferred)"
         )))
     }
@@ -3355,7 +3355,7 @@ impl ExtensionManager {
     fn dispatch_table_open_filtered(
         &mut self,
         handle: u32,
-        args: &[extension_types::Duckvalue],
+        args: &[ducklink_runtime::extension::Duckvalue],
         projection: &[u32],
         filters: &[ducklink_runtime::extension::TableFilter],
     ) -> Result<ducklink_runtime::extension::TableOpenResult, ducklink_runtime::extension::Duckerror> {
@@ -3380,7 +3380,7 @@ impl ExtensionManager {
         handle: u32,
         cursor: u32,
         max_rows: u32,
-    ) -> Result<extension_runtime::Resultset, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror> {
         let entry = self
             .lookup_callback(handle, CallbackKind::Table)
             .ok_or_else(|| {
@@ -3421,8 +3421,8 @@ impl ExtensionManager {
     fn dispatch_aggregate(
         &mut self,
         handle: u32,
-        rows: &extension_runtime::Rowbatch,
-    ) -> Result<extension_types::Duckvalue, ducklink_runtime::extension::Duckerror> {
+        rows: &ducklink_runtime::extension::Rowbatch,
+    ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
         let entry = match self.lookup_callback(handle, CallbackKind::Aggregate) {
             Some(entry) => entry,
             None => {
@@ -3453,8 +3453,8 @@ impl ExtensionManager {
     fn dispatch_pragma(
         &mut self,
         handle: u32,
-        args: &[extension_types::Duckvalue],
-    ) -> Result<Option<extension_types::Duckvalue>, ducklink_runtime::extension::Duckerror> {
+        args: &[ducklink_runtime::extension::Duckvalue],
+    ) -> Result<Option<ducklink_runtime::extension::Duckvalue>, ducklink_runtime::extension::Duckerror> {
         let entry = match self.lookup_callback(handle, CallbackKind::Pragma) {
             Some(entry) => entry,
             None => {
@@ -3483,8 +3483,8 @@ impl ExtensionManager {
     fn dispatch_cast(
         &mut self,
         handle: u32,
-        value: &extension_types::Duckvalue,
-    ) -> Result<extension_types::Duckvalue, ducklink_runtime::extension::Duckerror> {
+        value: &ducklink_runtime::extension::Duckvalue,
+    ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
         let entry = match self.lookup_callback(handle, CallbackKind::Cast) {
             Some(entry) => entry,
             None => {
@@ -5134,7 +5134,7 @@ impl HostState {
                 // Convert parsed literals into extension Duckvalue rows. Any
                 // Raw/expression cell means we can't dispatch to the extension
                 // cleanly; reject with a clear message.
-                let mut ext_rows: Vec<Vec<extension_types::Duckvalue>> =
+                let mut ext_rows: Vec<Vec<ducklink_runtime::extension::Duckvalue>> =
                     Vec::with_capacity(rows.len());
                 for row in rows {
                     if !columns.is_empty() && row.len() != columns.len() {
@@ -5193,7 +5193,7 @@ impl HostState {
                 let rowid_idx = at5_locate_rowid_column(&columns, &alias, &table)?;
                 // Parse the SET RHS values up-front so an unsupported expression
                 // rejects BEFORE any core round-trip.
-                let assignment_values: Vec<(String, extension_types::Duckvalue)> = assignments
+                let assignment_values: Vec<(String, ducklink_runtime::extension::Duckvalue)> = assignments
                     .into_iter()
                     .map(|(col, expr)| {
                         let lit = at5_intercept::parse_value_literal(&expr);
@@ -5212,7 +5212,7 @@ impl HostState {
                     .collect::<Result<Vec<_>, _>>()?;
                 // Map each assignment column name to its index in the extension's
                 // declared column list (case-insensitive).
-                let mut assignment_by_idx: Vec<(usize, extension_types::Duckvalue)> =
+                let mut assignment_by_idx: Vec<(usize, ducklink_runtime::extension::Duckvalue)> =
                     Vec::with_capacity(assignment_values.len());
                 for (col, val) in &assignment_values {
                     let idx = columns
@@ -5247,7 +5247,7 @@ impl HostState {
                     return Ok(empty_query_result());
                 }
                 // Merge assignment values into each current row.
-                let updated_rows: Vec<Vec<extension_types::Duckvalue>> = current_rows
+                let updated_rows: Vec<Vec<ducklink_runtime::extension::Duckvalue>> = current_rows
                     .into_iter()
                     .map(|mut row| {
                         for (idx, val) in &assignment_by_idx {
@@ -5581,7 +5581,7 @@ impl HostState {
         table: &str,
         rowid_idx: usize,
         where_clause: Option<&str>,
-    ) -> Result<(Vec<i64>, Vec<Vec<extension_types::Duckvalue>>), cli_types::Duckerror> {
+    ) -> Result<(Vec<i64>, Vec<Vec<ducklink_runtime::extension::Duckvalue>>), cli_types::Duckerror> {
         let where_sql = where_clause
             .map(|p| format!(" WHERE {p}"))
             .unwrap_or_default();
@@ -5596,7 +5596,7 @@ impl HostState {
             Err(err) => return Err(convert_core_duckerror(err)),
         };
         let mut rowids: Vec<i64> = Vec::with_capacity(qr.rows.len());
-        let mut rows_ext: Vec<Vec<extension_types::Duckvalue>> = Vec::with_capacity(qr.rows.len());
+        let mut rows_ext: Vec<Vec<ducklink_runtime::extension::Duckvalue>> = Vec::with_capacity(qr.rows.len());
         for row in qr.rows.into_iter() {
             let row_vec: Vec<core_types::Duckvalue> = row.into_iter().collect();
             let rowid_cell = row_vec.get(rowid_idx).ok_or_else(|| {
@@ -5796,14 +5796,14 @@ fn parse_sql_type_to_logical(ty: &str) -> extension_types::Logicaltype {
 
 fn literal_to_extension_duckvalue(
     lit: at5_intercept::ValueLiteral,
-) -> Result<extension_types::Duckvalue, String> {
+) -> Result<ducklink_runtime::extension::Duckvalue, String> {
     use at5_intercept::ValueLiteral;
     Ok(match lit {
-        ValueLiteral::Null => extension_types::Duckvalue::Null,
-        ValueLiteral::Integer(n) => extension_types::Duckvalue::Int64(n),
-        ValueLiteral::Float(f) => extension_types::Duckvalue::Float64(f),
-        ValueLiteral::String(s) => extension_types::Duckvalue::Text(s.into()),
-        ValueLiteral::Blob(b) => extension_types::Duckvalue::Blob(b.into()),
+        ValueLiteral::Null => ducklink_runtime::extension::Duckvalue::Null,
+        ValueLiteral::Integer(n) => ducklink_runtime::extension::Duckvalue::Int64(n),
+        ValueLiteral::Float(f) => ducklink_runtime::extension::Duckvalue::Float64(f),
+        ValueLiteral::String(s) => ducklink_runtime::extension::Duckvalue::Text(s.into()),
+        ValueLiteral::Blob(b) => ducklink_runtime::extension::Duckvalue::Blob(b.into()),
         ValueLiteral::Raw(expr) => {
             return Err(format!(
                 "unsupported expression `{expr}` in VALUES tuple (only literals \
@@ -8651,28 +8651,28 @@ fn sanitize_extension_name(raw: &str) -> String {
     sanitized
 }
 
-fn convert_core_duckvalue_to_extension(value: core_types::Duckvalue) -> extension_types::Duckvalue {
+fn convert_core_duckvalue_to_extension(value: core_types::Duckvalue) -> ducklink_runtime::extension::Duckvalue {
     match value {
-        core_types::Duckvalue::Null => extension_types::Duckvalue::Null,
-        core_types::Duckvalue::Boolean(v) => extension_types::Duckvalue::Boolean(v),
-        core_types::Duckvalue::Int64(v) => extension_types::Duckvalue::Int64(v),
-        core_types::Duckvalue::Uint64(v) => extension_types::Duckvalue::Uint64(v),
-        core_types::Duckvalue::Float64(v) => extension_types::Duckvalue::Float64(v),
-        core_types::Duckvalue::Text(v) => extension_types::Duckvalue::Text(v),
-        core_types::Duckvalue::Blob(v) => extension_types::Duckvalue::Blob(v),
-        core_types::Duckvalue::Int32(v) => extension_types::Duckvalue::Int32(v),
-        core_types::Duckvalue::Timestamp(v) => extension_types::Duckvalue::Timestamp(v),
-        core_types::Duckvalue::Int8(v) => extension_types::Duckvalue::Int8(v),
-        core_types::Duckvalue::Int16(v) => extension_types::Duckvalue::Int16(v),
-        core_types::Duckvalue::Uint8(v) => extension_types::Duckvalue::Uint8(v),
-        core_types::Duckvalue::Uint16(v) => extension_types::Duckvalue::Uint16(v),
-        core_types::Duckvalue::Uint32(v) => extension_types::Duckvalue::Uint32(v),
-        core_types::Duckvalue::Float32(v) => extension_types::Duckvalue::Float32(v),
-        core_types::Duckvalue::Date(v) => extension_types::Duckvalue::Date(v),
-        core_types::Duckvalue::Time(v) => extension_types::Duckvalue::Time(v),
-        core_types::Duckvalue::Timestamptz(v) => extension_types::Duckvalue::Timestamptz(v),
+        core_types::Duckvalue::Null => ducklink_runtime::extension::Duckvalue::Null,
+        core_types::Duckvalue::Boolean(v) => ducklink_runtime::extension::Duckvalue::Boolean(v),
+        core_types::Duckvalue::Int64(v) => ducklink_runtime::extension::Duckvalue::Int64(v),
+        core_types::Duckvalue::Uint64(v) => ducklink_runtime::extension::Duckvalue::Uint64(v),
+        core_types::Duckvalue::Float64(v) => ducklink_runtime::extension::Duckvalue::Float64(v),
+        core_types::Duckvalue::Text(v) => ducklink_runtime::extension::Duckvalue::Text(v),
+        core_types::Duckvalue::Blob(v) => ducklink_runtime::extension::Duckvalue::Blob(v),
+        core_types::Duckvalue::Int32(v) => ducklink_runtime::extension::Duckvalue::Int32(v),
+        core_types::Duckvalue::Timestamp(v) => ducklink_runtime::extension::Duckvalue::Timestamp(v),
+        core_types::Duckvalue::Int8(v) => ducklink_runtime::extension::Duckvalue::Int8(v),
+        core_types::Duckvalue::Int16(v) => ducklink_runtime::extension::Duckvalue::Int16(v),
+        core_types::Duckvalue::Uint8(v) => ducklink_runtime::extension::Duckvalue::Uint8(v),
+        core_types::Duckvalue::Uint16(v) => ducklink_runtime::extension::Duckvalue::Uint16(v),
+        core_types::Duckvalue::Uint32(v) => ducklink_runtime::extension::Duckvalue::Uint32(v),
+        core_types::Duckvalue::Float32(v) => ducklink_runtime::extension::Duckvalue::Float32(v),
+        core_types::Duckvalue::Date(v) => ducklink_runtime::extension::Duckvalue::Date(v),
+        core_types::Duckvalue::Time(v) => ducklink_runtime::extension::Duckvalue::Time(v),
+        core_types::Duckvalue::Timestamptz(v) => ducklink_runtime::extension::Duckvalue::Timestamptz(v),
         core_types::Duckvalue::Decimal(d) => {
-            extension_types::Duckvalue::Decimal(extension_types::Decimalvalue {
+            ducklink_runtime::extension::Duckvalue::Decimal(ducklink_runtime::extension::Decimalvalue {
                 lower: d.lower,
                 upper: d.upper,
                 width: d.width,
@@ -8680,30 +8680,30 @@ fn convert_core_duckvalue_to_extension(value: core_types::Duckvalue) -> extensio
             })
         }
         core_types::Duckvalue::Interval(iv) => {
-            extension_types::Duckvalue::Interval(extension_types::Intervalvalue {
+            ducklink_runtime::extension::Duckvalue::Interval(ducklink_runtime::extension::Intervalvalue {
                 months: iv.months,
                 days: iv.days,
                 micros: iv.micros,
             })
         }
         core_types::Duckvalue::Uuid(u) => {
-            extension_types::Duckvalue::Uuid(extension_types::Uuidvalue { hi: u.hi, lo: u.lo })
+            ducklink_runtime::extension::Duckvalue::Uuid(ducklink_runtime::extension::Uuidvalue { hi: u.hi, lo: u.lo })
         }
         // @5.0.0: first-class 128-bit integer arms carry (lower, upper) halves.
         core_types::Duckvalue::Hugeint(h) => {
-            extension_types::Duckvalue::Hugeint(extension_types::Hugeintvalue {
+            ducklink_runtime::extension::Duckvalue::Hugeint(ducklink_runtime::extension::Hugeintvalue {
                 lower: h.lower,
                 upper: h.upper,
             })
         }
         core_types::Duckvalue::Uhugeint(h) => {
-            extension_types::Duckvalue::Uhugeint(extension_types::Uhugeintvalue {
+            ducklink_runtime::extension::Duckvalue::Uhugeint(ducklink_runtime::extension::Uhugeintvalue {
                 lower: h.lower,
                 upper: h.upper,
             })
         }
         core_types::Duckvalue::Complex(c) => {
-            extension_types::Duckvalue::Complex(extension_types::Complexvalue {
+            ducklink_runtime::extension::Duckvalue::Complex(ducklink_runtime::extension::Complexvalue {
                 type_expr: c.type_expr,
                 json: c.json,
             })
@@ -8711,27 +8711,27 @@ fn convert_core_duckvalue_to_extension(value: core_types::Duckvalue) -> extensio
     }
 }
 
-fn convert_extension_duckvalue_to_core(value: extension_types::Duckvalue) -> core_types::Duckvalue {
+fn convert_extension_duckvalue_to_core(value: ducklink_runtime::extension::Duckvalue) -> core_types::Duckvalue {
     match value {
-        extension_types::Duckvalue::Null => core_types::Duckvalue::Null,
-        extension_types::Duckvalue::Boolean(v) => core_types::Duckvalue::Boolean(v),
-        extension_types::Duckvalue::Int64(v) => core_types::Duckvalue::Int64(v),
-        extension_types::Duckvalue::Uint64(v) => core_types::Duckvalue::Uint64(v),
-        extension_types::Duckvalue::Float64(v) => core_types::Duckvalue::Float64(v),
-        extension_types::Duckvalue::Text(v) => core_types::Duckvalue::Text(v),
-        extension_types::Duckvalue::Blob(v) => core_types::Duckvalue::Blob(v),
-        extension_types::Duckvalue::Int32(v) => core_types::Duckvalue::Int32(v),
-        extension_types::Duckvalue::Timestamp(v) => core_types::Duckvalue::Timestamp(v),
-        extension_types::Duckvalue::Int8(v) => core_types::Duckvalue::Int8(v),
-        extension_types::Duckvalue::Int16(v) => core_types::Duckvalue::Int16(v),
-        extension_types::Duckvalue::Uint8(v) => core_types::Duckvalue::Uint8(v),
-        extension_types::Duckvalue::Uint16(v) => core_types::Duckvalue::Uint16(v),
-        extension_types::Duckvalue::Uint32(v) => core_types::Duckvalue::Uint32(v),
-        extension_types::Duckvalue::Float32(v) => core_types::Duckvalue::Float32(v),
-        extension_types::Duckvalue::Date(v) => core_types::Duckvalue::Date(v),
-        extension_types::Duckvalue::Time(v) => core_types::Duckvalue::Time(v),
-        extension_types::Duckvalue::Timestamptz(v) => core_types::Duckvalue::Timestamptz(v),
-        extension_types::Duckvalue::Decimal(d) => {
+        ducklink_runtime::extension::Duckvalue::Null => core_types::Duckvalue::Null,
+        ducklink_runtime::extension::Duckvalue::Boolean(v) => core_types::Duckvalue::Boolean(v),
+        ducklink_runtime::extension::Duckvalue::Int64(v) => core_types::Duckvalue::Int64(v),
+        ducklink_runtime::extension::Duckvalue::Uint64(v) => core_types::Duckvalue::Uint64(v),
+        ducklink_runtime::extension::Duckvalue::Float64(v) => core_types::Duckvalue::Float64(v),
+        ducklink_runtime::extension::Duckvalue::Text(v) => core_types::Duckvalue::Text(v),
+        ducklink_runtime::extension::Duckvalue::Blob(v) => core_types::Duckvalue::Blob(v),
+        ducklink_runtime::extension::Duckvalue::Int32(v) => core_types::Duckvalue::Int32(v),
+        ducklink_runtime::extension::Duckvalue::Timestamp(v) => core_types::Duckvalue::Timestamp(v),
+        ducklink_runtime::extension::Duckvalue::Int8(v) => core_types::Duckvalue::Int8(v),
+        ducklink_runtime::extension::Duckvalue::Int16(v) => core_types::Duckvalue::Int16(v),
+        ducklink_runtime::extension::Duckvalue::Uint8(v) => core_types::Duckvalue::Uint8(v),
+        ducklink_runtime::extension::Duckvalue::Uint16(v) => core_types::Duckvalue::Uint16(v),
+        ducklink_runtime::extension::Duckvalue::Uint32(v) => core_types::Duckvalue::Uint32(v),
+        ducklink_runtime::extension::Duckvalue::Float32(v) => core_types::Duckvalue::Float32(v),
+        ducklink_runtime::extension::Duckvalue::Date(v) => core_types::Duckvalue::Date(v),
+        ducklink_runtime::extension::Duckvalue::Time(v) => core_types::Duckvalue::Time(v),
+        ducklink_runtime::extension::Duckvalue::Timestamptz(v) => core_types::Duckvalue::Timestamptz(v),
+        ducklink_runtime::extension::Duckvalue::Decimal(d) => {
             core_types::Duckvalue::Decimal(core_types::Decimalvalue {
                 lower: d.lower,
                 upper: d.upper,
@@ -8739,17 +8739,17 @@ fn convert_extension_duckvalue_to_core(value: extension_types::Duckvalue) -> cor
                 scale: d.scale,
             })
         }
-        extension_types::Duckvalue::Interval(iv) => {
+        ducklink_runtime::extension::Duckvalue::Interval(iv) => {
             core_types::Duckvalue::Interval(core_types::Intervalvalue {
                 months: iv.months,
                 days: iv.days,
                 micros: iv.micros,
             })
         }
-        extension_types::Duckvalue::Uuid(u) => {
+        ducklink_runtime::extension::Duckvalue::Uuid(u) => {
             core_types::Duckvalue::Uuid(core_types::Uuidvalue { hi: u.hi, lo: u.lo })
         }
-        extension_types::Duckvalue::Complex(c) => {
+        ducklink_runtime::extension::Duckvalue::Complex(c) => {
             core_types::Duckvalue::Complex(core_types::Complexvalue {
                 type_expr: c.type_expr,
                 json: c.json,
@@ -8760,7 +8760,7 @@ fn convert_extension_duckvalue_to_core(value: extension_types::Duckvalue) -> cor
         // the `complex(complexvalue)` escape hatch. Serialize the 128-bit
         // integer as a base-10 string (the lossless representation DuckDB
         // exchanges HUGEINT literals in) and label it via the type-expr.
-        extension_types::Duckvalue::Hugeint(h) => {
+        ducklink_runtime::extension::Duckvalue::Hugeint(h) => {
             // Reassemble per the WIT comment: (upper as i128) << 64 | lower.
             let v: i128 = ((h.upper as i128) << 64) | (h.lower as i128);
             core_types::Duckvalue::Complex(core_types::Complexvalue {
@@ -8768,7 +8768,7 @@ fn convert_extension_duckvalue_to_core(value: extension_types::Duckvalue) -> cor
                 json: v.to_string(),
             })
         }
-        extension_types::Duckvalue::Uhugeint(h) => {
+        ducklink_runtime::extension::Duckvalue::Uhugeint(h) => {
             let v: u128 = ((h.upper as u128) << 64) | (h.lower as u128);
             core_types::Duckvalue::Complex(core_types::Complexvalue {
                 type_expr: "UHUGEINT".into(),
@@ -8879,7 +8879,7 @@ fn core_colvec_value_at(c: &core_callback_dispatch::Colvec, r: usize) -> core_ty
 /// Pivot CORE colvecs to EXTENSION row-major batch (for the manager dispatch).
 fn core_colvecs_to_ext_rows(
     args: &[core_callback_dispatch::Colvec],
-) -> Vec<Vec<extension_types::Duckvalue>> {
+) -> Vec<Vec<ducklink_runtime::extension::Duckvalue>> {
     let n = args.first().map(|c| c.rows as usize).unwrap_or(0);
     (0..n)
         .map(|r| {
@@ -8893,7 +8893,7 @@ fn core_colvecs_to_ext_rows(
 /// Build a CORE colvec from EXTENSION result values (arm from the first non-null;
 /// NULLs cleared in the out-of-band validity bitmap).
 fn ext_values_to_core_colvec(
-    vals: Vec<extension_types::Duckvalue>,
+    vals: Vec<ducklink_runtime::extension::Duckvalue>,
 ) -> core_callback_dispatch::Colvec {
     use core_column_types::Column;
     use core_types::Duckvalue as D;
@@ -8987,7 +8987,7 @@ fn convert_core_invokeinfo(
 }
 
 fn convert_extension_resultset_to_core(
-    result: extension_runtime::Resultset,
+    result: ducklink_runtime::extension::Resultset,
 ) -> core_callback_dispatch::Resultset {
     result
         .into_iter()
@@ -10872,9 +10872,9 @@ mod tests {
         fn call(
             &mut self,
             _self_: wasmtime::component::Resource<extension_runtime::ScalarCallback>,
-            _args: BindgenVec<extension_types::Duckvalue>,
+            _args: BindgenVec<ducklink_runtime::extension::Duckvalue>,
             _ctx: extension_runtime::Invokeinfo,
-        ) -> Result<extension_types::Duckvalue, ducklink_runtime::extension::Duckerror> {
+        ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
             Err(unsupported_runtime_error())
         }
 
@@ -10897,8 +10897,8 @@ mod tests {
         fn call(
             &mut self,
             _self_: wasmtime::component::Resource<extension_runtime::TableCallback>,
-            _args: BindgenVec<extension_types::Duckvalue>,
-        ) -> Result<extension_runtime::Resultset, ducklink_runtime::extension::Duckerror> {
+            _args: BindgenVec<ducklink_runtime::extension::Duckvalue>,
+        ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror> {
             Err(unsupported_runtime_error())
         }
 
@@ -10921,8 +10921,8 @@ mod tests {
         fn call(
             &mut self,
             _self_: wasmtime::component::Resource<extension_runtime::AggregateCallback>,
-            _rows: extension_runtime::Rowbatch,
-        ) -> Result<extension_types::Duckvalue, ducklink_runtime::extension::Duckerror> {
+            _rows: ducklink_runtime::extension::Rowbatch,
+        ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
             Err(unsupported_runtime_error())
         }
 
@@ -10945,8 +10945,8 @@ mod tests {
         fn call(
             &mut self,
             _self_: wasmtime::component::Resource<extension_runtime::PragmaCallback>,
-            _args: BindgenVec<extension_types::Duckvalue>,
-        ) -> Result<Option<extension_types::Duckvalue>, ducklink_runtime::extension::Duckerror> {
+            _args: BindgenVec<ducklink_runtime::extension::Duckvalue>,
+        ) -> Result<Option<ducklink_runtime::extension::Duckvalue>, ducklink_runtime::extension::Duckerror> {
             Err(unsupported_runtime_error())
         }
 
@@ -10969,8 +10969,8 @@ mod tests {
         fn call(
             &mut self,
             _self_: wasmtime::component::Resource<extension_runtime::CastCallback>,
-            _value: extension_types::Duckvalue,
-        ) -> Result<extension_types::Duckvalue, ducklink_runtime::extension::Duckerror> {
+            _value: ducklink_runtime::extension::Duckvalue,
+        ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
             Err(unsupported_runtime_error())
         }
 

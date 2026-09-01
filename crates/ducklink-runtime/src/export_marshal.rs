@@ -237,8 +237,8 @@ pub(crate) fn f32_list_to_value(xs: &[f32]) -> Value {
 
 // ─── Duckvalue: 25 arms ────────────────────────────────────────────
 
-pub(crate) fn duckvalue_to_value(v: &extension_types::Duckvalue) -> Value {
-    use extension_types::Duckvalue as D;
+pub(crate) fn duckvalue_to_value(v: &crate::extension::Duckvalue) -> Value {
+    use crate::extension::Duckvalue as D;
     let (disc, payload): (&str, Option<Value>) = match v {
         D::Null => ("null", None),
         D::Boolean(b) => ("boolean", Some(Value::Bool(*b))),
@@ -309,8 +309,8 @@ pub(crate) fn duckvalue_to_value(v: &extension_types::Duckvalue) -> Value {
 
 pub(crate) fn value_to_duckvalue(
     v: &Value,
-) -> Result<extension_types::Duckvalue, crate::extension::Duckerror> {
-    use extension_types::Duckvalue as D;
+) -> Result<crate::extension::Duckvalue, crate::extension::Duckerror> {
+    use crate::extension::Duckvalue as D;
     let (disc, payload) = match v {
         Value::Variant { discriminant, payload } => (discriminant, payload),
         other => {
@@ -408,7 +408,7 @@ pub(crate) fn value_to_duckvalue(
         },
         "decimal" => {
             let rec = need("Record")?;
-            D::Decimal(extension_types::Decimalvalue {
+            D::Decimal(crate::extension::Decimalvalue {
                 lower: u64_field(rec, "lower")?,
                 upper: u64_field(rec, "upper")?,
                 width: u8_field(rec, "width")?,
@@ -417,7 +417,7 @@ pub(crate) fn value_to_duckvalue(
         }
         "interval" => {
             let rec = need("Record")?;
-            D::Interval(extension_types::Intervalvalue {
+            D::Interval(crate::extension::Intervalvalue {
                 months: s32_field(rec, "months")?,
                 days: s32_field(rec, "days")?,
                 micros: s64_field(rec, "micros")?,
@@ -425,28 +425,28 @@ pub(crate) fn value_to_duckvalue(
         }
         "uuid" => {
             let rec = need("Record")?;
-            D::Uuid(extension_types::Uuidvalue {
+            D::Uuid(crate::extension::Uuidvalue {
                 hi: u64_field(rec, "hi")?,
                 lo: u64_field(rec, "lo")?,
             })
         }
         "hugeint" => {
             let rec = need("Record")?;
-            D::Hugeint(extension_types::Hugeintvalue {
+            D::Hugeint(crate::extension::Hugeintvalue {
                 lower: u64_field(rec, "lower")?,
                 upper: s64_field(rec, "upper")?,
             })
         }
         "uhugeint" => {
             let rec = need("Record")?;
-            D::Uhugeint(extension_types::Uhugeintvalue {
+            D::Uhugeint(crate::extension::Uhugeintvalue {
                 lower: u64_field(rec, "lower")?,
                 upper: u64_field(rec, "upper")?,
             })
         }
         "complex" => {
             let rec = need("Record")?;
-            D::Complex(extension_types::Complexvalue {
+            D::Complex(crate::extension::Complexvalue {
                 type_expr: string_field(rec, "type-expr")?,
                 json: string_field(rec, "json")?,
             })
@@ -467,13 +467,13 @@ fn shape_err(disc: &str, want: &str, got: &Value) -> crate::extension::Duckerror
 
 // ─── Duckvalue collections ─────────────────────────────────────────
 
-pub(crate) fn duckvalue_list_to_value(xs: &[extension_types::Duckvalue]) -> Value {
+pub(crate) fn duckvalue_list_to_value(xs: &[crate::extension::Duckvalue]) -> Value {
     Value::List(xs.iter().map(duckvalue_to_value).collect())
 }
 
 pub(crate) fn value_to_duckvalue_list(
     v: &Value,
-) -> Result<Vec<extension_types::Duckvalue>, crate::extension::Duckerror> {
+) -> Result<Vec<crate::extension::Duckvalue>, crate::extension::Duckerror> {
     match v {
         Value::List(items) => items.iter().map(value_to_duckvalue).collect(),
         other => Err(crate::extension::Duckerror::Internal(format!(
@@ -484,7 +484,7 @@ pub(crate) fn value_to_duckvalue_list(
 
 pub(crate) fn value_to_resultset(
     v: &Value,
-) -> Result<Vec<Vec<extension_types::Duckvalue>>, crate::extension::Duckerror> {
+) -> Result<Vec<Vec<crate::extension::Duckvalue>>, crate::extension::Duckerror> {
     match v {
         Value::List(rows) => rows.iter().map(value_to_duckvalue_list).collect(),
         other => Err(crate::extension::Duckerror::Internal(format!(
@@ -495,7 +495,7 @@ pub(crate) fn value_to_resultset(
 
 pub(crate) fn value_to_optional_duckvalue(
     v: &Value,
-) -> Result<Option<extension_types::Duckvalue>, crate::extension::Duckerror> {
+) -> Result<Option<crate::extension::Duckvalue>, crate::extension::Duckerror> {
     match v {
         Value::Option(None) => Ok(None),
         Value::Option(Some(inner)) => Ok(Some(value_to_duckvalue(inner)?)),

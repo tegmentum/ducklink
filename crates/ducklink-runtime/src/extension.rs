@@ -64,9 +64,9 @@ type BindgenVec<T> = wasmtime::component::__internal::Vec<T>;
 /// Build one columnar `colvec` from a column of row-major `Duckvalue`s. The arm
 /// is chosen from the first non-NULL value (a component column is homogeneous);
 /// NULLs become a typed placeholder plus a cleared validity bit.
-fn column_from_values(vals: &[&extension_types::Duckvalue]) -> extension_column_types::Colvec {
+fn column_from_values(vals: &[&Duckvalue]) -> extension_column_types::Colvec {
     use extension_column_types::Column;
-    use extension_types::Duckvalue as D;
+    use Duckvalue as D;
     let n = vals.len();
     let mut validity: Vec<u8> = Vec::new();
     let mark_null = |row: usize, validity: &mut Vec<u8>| {
@@ -240,12 +240,12 @@ fn column_from_values(vals: &[&extension_types::Duckvalue]) -> extension_column_
 
 /// Pivot a row-major batch to one `colvec` per argument column.
 fn rows_to_colvecs(
-    rows: &[Vec<extension_types::Duckvalue>],
+    rows: &[Vec<Duckvalue>],
 ) -> Vec<extension_column_types::Colvec> {
     let ncols = rows.first().map(|r| r.len()).unwrap_or(0);
     (0..ncols)
         .map(|j| {
-            let col: Vec<&extension_types::Duckvalue> = rows.iter().map(|r| &r[j]).collect();
+            let col: Vec<&Duckvalue> = rows.iter().map(|r| &r[j]).collect();
             column_from_values(&col)
         })
         .collect()
@@ -253,9 +253,9 @@ fn rows_to_colvecs(
 
 /// Lower a result `colvec` back to a row-major `Vec<Duckvalue>` (validity =>
 /// `Null`). The inverse of [`column_from_values`].
-fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::Duckvalue> {
+fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<Duckvalue> {
     use extension_column_types::Column;
-    use extension_types::Duckvalue as D;
+    use Duckvalue as D;
     let n = c.rows as usize;
     let is_valid = |i: usize| -> bool {
         c.validity.is_empty()
@@ -291,7 +291,7 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
         Column::Decimal(v) => {
             for (i, d) in v.into_iter().enumerate() {
                 out.push(if is_valid(i) {
-                    D::Decimal(extension_types::Decimalvalue {
+                    D::Decimal(Decimalvalue {
                         lower: d.lower,
                         upper: d.upper,
                         width: d.width,
@@ -305,7 +305,7 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
         Column::Interval(v) => {
             for (i, d) in v.into_iter().enumerate() {
                 out.push(if is_valid(i) {
-                    D::Interval(extension_types::Intervalvalue {
+                    D::Interval(Intervalvalue {
                         months: d.months,
                         days: d.days,
                         micros: d.micros,
@@ -318,7 +318,7 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
         Column::Uuid(v) => {
             for (i, d) in v.into_iter().enumerate() {
                 out.push(if is_valid(i) {
-                    D::Uuid(extension_types::Uuidvalue { hi: d.hi, lo: d.lo })
+                    D::Uuid(Uuidvalue { hi: d.hi, lo: d.lo })
                 } else {
                     D::Null
                 });
@@ -329,7 +329,7 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
         Column::Hugeint(v) => {
             for (i, h) in v.into_iter().enumerate() {
                 out.push(if is_valid(i) {
-                    D::Hugeint(extension_types::Hugeintvalue {
+                    D::Hugeint(Hugeintvalue {
                         lower: h.lower,
                         upper: h.upper,
                     })
@@ -341,7 +341,7 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
         Column::Uhugeint(v) => {
             for (i, h) in v.into_iter().enumerate() {
                 out.push(if is_valid(i) {
-                    D::Uhugeint(extension_types::Uhugeintvalue {
+                    D::Uhugeint(Uhugeintvalue {
                         lower: h.lower,
                         upper: h.upper,
                     })
@@ -364,7 +364,7 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
             let json = nested_column_json(&nc.encoded);
             for i in 0..n {
                 out.push(if is_valid(i) {
-                    D::Complex(extension_types::Complexvalue {
+                    D::Complex(Complexvalue {
                         type_expr: "LIST".into(),
                         json: json.clone(),
                     })
@@ -377,7 +377,7 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
             let json = nested_column_json(&nc.encoded);
             for i in 0..n {
                 out.push(if is_valid(i) {
-                    D::Complex(extension_types::Complexvalue {
+                    D::Complex(Complexvalue {
                         type_expr: "STRUCT".into(),
                         json: json.clone(),
                     })
@@ -394,7 +394,7 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
             );
             for i in 0..n {
                 out.push(if is_valid(i) {
-                    D::Complex(extension_types::Complexvalue {
+                    D::Complex(Complexvalue {
                         type_expr: "MAP".into(),
                         json: json.clone(),
                     })
@@ -411,7 +411,7 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
             );
             for i in 0..n {
                 out.push(if is_valid(i) {
-                    D::Complex(extension_types::Complexvalue {
+                    D::Complex(Complexvalue {
                         type_expr: "ARRAY".into(),
                         json: json.clone(),
                     })
@@ -423,7 +423,7 @@ fn colvec_to_values(c: extension_column_types::Colvec) -> Vec<extension_types::D
         Column::Complex(v) => {
             for (i, c) in v.into_iter().enumerate() {
                 out.push(if is_valid(i) {
-                    D::Complex(extension_types::Complexvalue {
+                    D::Complex(Complexvalue {
                         type_expr: c.type_expr,
                         json: c.json,
                     })
@@ -2501,12 +2501,10 @@ pub(crate) use crate::export_marshal::export_result_to_duckerror;
 /// `Duckvalue` per world (wit-bindgen emits one Rust enum per
 /// bindings module for the same WIT type), which then required a
 /// bridge (`storage_duckvalue_to_ext`) to convert into the base
-/// `extension_types::Duckvalue` at the callsite. The mirror below
-/// uses `extension_types::Duckvalue` directly — no per-world clone,
+/// `Duckvalue` at the callsite. The mirror below
+/// uses `Duckvalue` directly — no per-world clone,
 /// no bridge, no wrapper needed.
 pub mod storage_scan {
-    use super::extension_types;
-
     /// Mirror of WIT `storage.compare-op`. Comparison pushed into a
     /// scan as an AND-ed predicate.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2530,7 +2528,7 @@ pub mod storage_scan {
     pub struct ScanFilter {
         pub column: u32,
         pub op: CompareOp,
-        pub value: extension_types::Duckvalue,
+        pub value: super::Duckvalue,
     }
 
     /// Mirror of WIT `storage.scan-request`. What the engine asks a
@@ -2625,6 +2623,233 @@ impl std::fmt::Display for Duckerror {
 
 impl std::error::Error for Duckerror {}
 
+// ─── Phase 6.2.m Session 2 — Duckvalue family mirrors ────────────
+
+/// DuckDB DECIMAL: HUGEINT-backed scaled integer. Mirror of WIT
+/// `types.decimalvalue`. `value = ((upper as i128) << 64 | lower as
+/// i128)`, interpreted with `width` total digits and `scale`
+/// fractional digits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Decimalvalue {
+    pub lower: u64,
+    pub upper: u64,
+    pub width: u8,
+    pub scale: u8,
+}
+
+/// 128-bit signed integer value. Mirror of WIT `types.hugeintvalue`.
+/// WIT has no native s128 so the runtime reassembles the value via
+/// `((upper as i128) << 64 | lower as i128)`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Hugeintvalue {
+    pub lower: u64,
+    pub upper: i64,
+}
+
+/// 128-bit unsigned integer value. Mirror of WIT `types.uhugeintvalue`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Uhugeintvalue {
+    pub lower: u64,
+    pub upper: u64,
+}
+
+/// DuckDB INTERVAL: months + days + microseconds components.
+/// Mirror of WIT `types.intervalvalue`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Intervalvalue {
+    pub months: i32,
+    pub days: i32,
+    pub micros: i64,
+}
+
+/// 128-bit UUID. `hi`/`lo` are the logical big-endian halves of the
+/// UUID value (NOT the sign-flipped physical hugeint storage DuckDB
+/// uses internally). Mirror of WIT `types.uuidvalue`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Uuidvalue {
+    pub hi: u64,
+    pub lo: u64,
+}
+
+/// ESCAPE-HATCH composite value. `type_expr` is a DuckDB type string
+/// (e.g. `"INTEGER[]"` / `"STRUCT(a INTEGER, b VARCHAR)"`) and `json`
+/// is the value rendered as JSON. Flat record — does NOT reference
+/// `Duckvalue`, so there's no recursive cycle. Mirror of WIT
+/// `types.complexvalue`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Complexvalue {
+    pub type_expr: String,
+    pub json: String,
+}
+
+/// The row-major SPI data value. Mirror of WIT `types.duckvalue` —
+/// 25 arms covering scalar, temporal, decimal, hugeint, uuid,
+/// interval, and the `complex` JSON escape hatch for nested
+/// LIST/STRUCT/MAP/ARRAY values (structural nested value transport
+/// lives on the columnar `Column` variant).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Duckvalue {
+    Null,
+    Boolean(bool),
+    Int64(i64),
+    Uint64(u64),
+    Float64(f64),
+    Text(String),
+    Blob(Vec<u8>),
+    Int32(i32),
+    Timestamp(i64),
+    Int8(i8),
+    Int16(i16),
+    Uint8(u8),
+    Uint16(u16),
+    Uint32(u32),
+    Float32(f32),
+    Date(i32),
+    Time(i64),
+    Timestamptz(i64),
+    Decimal(Decimalvalue),
+    Interval(Intervalvalue),
+    Uuid(Uuidvalue),
+    Hugeint(Hugeintvalue),
+    Uhugeint(Uhugeintvalue),
+    Complex(Complexvalue),
+}
+
+impl From<extension_types::Decimalvalue> for Decimalvalue {
+    fn from(v: extension_types::Decimalvalue) -> Self {
+        Decimalvalue { lower: v.lower, upper: v.upper, width: v.width, scale: v.scale }
+    }
+}
+impl From<Decimalvalue> for extension_types::Decimalvalue {
+    fn from(v: Decimalvalue) -> Self {
+        extension_types::Decimalvalue { lower: v.lower, upper: v.upper, width: v.width, scale: v.scale }
+    }
+}
+impl From<extension_types::Hugeintvalue> for Hugeintvalue {
+    fn from(v: extension_types::Hugeintvalue) -> Self {
+        Hugeintvalue { lower: v.lower, upper: v.upper }
+    }
+}
+impl From<Hugeintvalue> for extension_types::Hugeintvalue {
+    fn from(v: Hugeintvalue) -> Self {
+        extension_types::Hugeintvalue { lower: v.lower, upper: v.upper }
+    }
+}
+impl From<extension_types::Uhugeintvalue> for Uhugeintvalue {
+    fn from(v: extension_types::Uhugeintvalue) -> Self {
+        Uhugeintvalue { lower: v.lower, upper: v.upper }
+    }
+}
+impl From<Uhugeintvalue> for extension_types::Uhugeintvalue {
+    fn from(v: Uhugeintvalue) -> Self {
+        extension_types::Uhugeintvalue { lower: v.lower, upper: v.upper }
+    }
+}
+impl From<extension_types::Intervalvalue> for Intervalvalue {
+    fn from(v: extension_types::Intervalvalue) -> Self {
+        Intervalvalue { months: v.months, days: v.days, micros: v.micros }
+    }
+}
+impl From<Intervalvalue> for extension_types::Intervalvalue {
+    fn from(v: Intervalvalue) -> Self {
+        extension_types::Intervalvalue { months: v.months, days: v.days, micros: v.micros }
+    }
+}
+impl From<extension_types::Uuidvalue> for Uuidvalue {
+    fn from(v: extension_types::Uuidvalue) -> Self {
+        Uuidvalue { hi: v.hi, lo: v.lo }
+    }
+}
+impl From<Uuidvalue> for extension_types::Uuidvalue {
+    fn from(v: Uuidvalue) -> Self {
+        extension_types::Uuidvalue { hi: v.hi, lo: v.lo }
+    }
+}
+impl From<extension_types::Complexvalue> for Complexvalue {
+    fn from(v: extension_types::Complexvalue) -> Self {
+        Complexvalue { type_expr: v.type_expr, json: v.json }
+    }
+}
+impl From<Complexvalue> for extension_types::Complexvalue {
+    fn from(v: Complexvalue) -> Self {
+        extension_types::Complexvalue { type_expr: v.type_expr, json: v.json }
+    }
+}
+
+impl From<extension_types::Duckvalue> for Duckvalue {
+    fn from(v: extension_types::Duckvalue) -> Self {
+        use extension_types::Duckvalue as W;
+        match v {
+            W::Null => Duckvalue::Null,
+            W::Boolean(b) => Duckvalue::Boolean(b),
+            W::Int64(n) => Duckvalue::Int64(n),
+            W::Uint64(n) => Duckvalue::Uint64(n),
+            W::Float64(n) => Duckvalue::Float64(n),
+            W::Text(s) => Duckvalue::Text(s),
+            W::Blob(b) => Duckvalue::Blob(b),
+            W::Int32(n) => Duckvalue::Int32(n),
+            W::Timestamp(n) => Duckvalue::Timestamp(n),
+            W::Int8(n) => Duckvalue::Int8(n),
+            W::Int16(n) => Duckvalue::Int16(n),
+            W::Uint8(n) => Duckvalue::Uint8(n),
+            W::Uint16(n) => Duckvalue::Uint16(n),
+            W::Uint32(n) => Duckvalue::Uint32(n),
+            W::Float32(n) => Duckvalue::Float32(n),
+            W::Date(n) => Duckvalue::Date(n),
+            W::Time(n) => Duckvalue::Time(n),
+            W::Timestamptz(n) => Duckvalue::Timestamptz(n),
+            W::Decimal(d) => Duckvalue::Decimal(d.into()),
+            W::Interval(i) => Duckvalue::Interval(i.into()),
+            W::Uuid(u) => Duckvalue::Uuid(u.into()),
+            W::Hugeint(h) => Duckvalue::Hugeint(h.into()),
+            W::Uhugeint(h) => Duckvalue::Uhugeint(h.into()),
+            W::Complex(c) => Duckvalue::Complex(c.into()),
+        }
+    }
+}
+
+/// A resultset returned by a scan / query dispatch: row-major
+/// list of rows, each a list of `Duckvalue`s. Mirror of WIT
+/// `types.resultset` (which is `list<list<duckvalue>>`).
+pub type Resultset = Vec<Vec<Duckvalue>>;
+
+/// A batch of input rows delivered to a table function or scalar
+/// batch dispatch. Same wire shape as [`Resultset`] — mirror of WIT
+/// `types.rowbatch`.
+pub type Rowbatch = Vec<Vec<Duckvalue>>;
+
+impl From<Duckvalue> for extension_types::Duckvalue {
+    fn from(v: Duckvalue) -> Self {
+        use extension_types::Duckvalue as W;
+        match v {
+            Duckvalue::Null => W::Null,
+            Duckvalue::Boolean(b) => W::Boolean(b),
+            Duckvalue::Int64(n) => W::Int64(n),
+            Duckvalue::Uint64(n) => W::Uint64(n),
+            Duckvalue::Float64(n) => W::Float64(n),
+            Duckvalue::Text(s) => W::Text(s),
+            Duckvalue::Blob(b) => W::Blob(b),
+            Duckvalue::Int32(n) => W::Int32(n),
+            Duckvalue::Timestamp(n) => W::Timestamp(n),
+            Duckvalue::Int8(n) => W::Int8(n),
+            Duckvalue::Int16(n) => W::Int16(n),
+            Duckvalue::Uint8(n) => W::Uint8(n),
+            Duckvalue::Uint16(n) => W::Uint16(n),
+            Duckvalue::Uint32(n) => W::Uint32(n),
+            Duckvalue::Float32(n) => W::Float32(n),
+            Duckvalue::Date(n) => W::Date(n),
+            Duckvalue::Time(n) => W::Time(n),
+            Duckvalue::Timestamptz(n) => W::Timestamptz(n),
+            Duckvalue::Decimal(d) => W::Decimal(d.into()),
+            Duckvalue::Interval(i) => W::Interval(i.into()),
+            Duckvalue::Uuid(u) => W::Uuid(u.into()),
+            Duckvalue::Hugeint(h) => W::Hugeint(h.into()),
+            Duckvalue::Uhugeint(h) => W::Uhugeint(h.into()),
+            Duckvalue::Complex(c) => W::Complex(c.into()),
+        }
+    }
+}
+
 // ADR-0029 Phase 6.2.k — SPI record/enum mirrors.
 //
 // These types used to be re-exports of the wit-bindgen-generated
@@ -2712,7 +2937,7 @@ pub enum FilterOp {
 pub struct TableFilter {
     pub column: u32,
     pub op: FilterOp,
-    pub values: Vec<extension_types::Duckvalue>,
+    pub values: Vec<Duckvalue>,
 }
 
 /// 2.2.0 (Item 7): metadata for one path returned by
@@ -2754,9 +2979,9 @@ impl ExtensionInstance {
     pub fn dispatch_scalar(
         &mut self,
         dispatcher_handle: u32,
-        args: &[extension_types::Duckvalue],
+        args: &[Duckvalue],
         ctx: extension_runtime::Invokeinfo,
-    ) -> Result<extension_types::Duckvalue, Duckerror> {
+    ) -> Result<Duckvalue, Duckerror> {
         // Phase 6.2.i.7 — migrated. Invokeinfo record: rowindex
         // (option<u64>), iswindow (bool).
         use crate::export_marshal::*;
@@ -2792,9 +3017,9 @@ impl ExtensionInstance {
     pub fn dispatch_scalar_batch(
         &mut self,
         dispatcher_handle: u32,
-        rows: &Vec<Vec<extension_types::Duckvalue>>,
+        rows: &Vec<Vec<Duckvalue>>,
         ctx: extension_runtime::Invokeinfo,
-    ) -> Result<Vec<extension_types::Duckvalue>, Duckerror> {
+    ) -> Result<Vec<Duckvalue>, Duckerror> {
         // Phase 6.2.i.7 — migrated. Row-major → columnar pivot in
         // Rust (via existing rows_to_colvecs helper), marshal Colvec
         // via export_marshal, dispatch, lift Colvec return + pivot
@@ -2843,8 +3068,8 @@ impl ExtensionInstance {
     pub fn dispatch_table(
         &mut self,
         dispatcher_handle: u32,
-        args: &[extension_types::Duckvalue],
-    ) -> Result<extension_runtime::Resultset, Duckerror> {
+        args: &[Duckvalue],
+    ) -> Result<Resultset, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -2867,8 +3092,8 @@ impl ExtensionInstance {
     pub fn dispatch_aggregate(
         &mut self,
         dispatcher_handle: u32,
-        rows: &extension_runtime::Rowbatch,
-    ) -> Result<extension_types::Duckvalue, Duckerror> {
+        rows: &Rowbatch,
+    ) -> Result<Duckvalue, Duckerror> {
         // Phase 6.2.i.7 — delegate via the col variant.
         let args = rows_to_colvecs(rows);
         self.dispatch_aggregate_col(dispatcher_handle, &args)
@@ -2879,7 +3104,7 @@ impl ExtensionInstance {
         &mut self,
         dispatcher_handle: u32,
         args: &[extension_column_types::Colvec],
-    ) -> Result<extension_types::Duckvalue, Duckerror> {
+    ) -> Result<Duckvalue, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -2902,8 +3127,8 @@ impl ExtensionInstance {
     pub fn dispatch_pragma(
         &mut self,
         dispatcher_handle: u32,
-        args: &[extension_types::Duckvalue],
-    ) -> Result<Option<extension_types::Duckvalue>, Duckerror> {
+        args: &[Duckvalue],
+    ) -> Result<Option<Duckvalue>, Duckerror> {
         // Phase 6.2.i.7 — migrated. Returns result<option<duckvalue>,
         // duckerror>.
         use crate::export_marshal::*;
@@ -2927,8 +3152,8 @@ impl ExtensionInstance {
     pub fn dispatch_cast(
         &mut self,
         dispatcher_handle: u32,
-        value: &extension_types::Duckvalue,
-    ) -> Result<extension_types::Duckvalue, Duckerror> {
+        value: &Duckvalue,
+    ) -> Result<Duckvalue, Duckerror> {
         // Phase 6.2.i.7 — migrated. Single-value → 1-row colvec via
         // existing column_from_values helper; marshal Colvec via
         // export_marshal; lift return Colvec + extract first row's
@@ -2952,7 +3177,7 @@ impl ExtensionInstance {
             Ok(colvec_to_values(c)
                 .into_iter()
                 .next()
-                .unwrap_or(extension_types::Duckvalue::Null))
+                .unwrap_or(Duckvalue::Null))
         })
     }
 
@@ -3222,7 +3447,7 @@ impl ExtensionInstance {
         &mut self,
         handle: u32,
         writer: u32,
-        rows: &[Vec<extension_types::Duckvalue>],
+        rows: &[Vec<Duckvalue>],
     ) -> Result<(), Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
@@ -3318,7 +3543,7 @@ impl ExtensionInstance {
         handle: u32,
         reader: u32,
         max_rows: u32,
-    ) -> Result<Vec<Vec<extension_types::Duckvalue>>, Duckerror> {
+    ) -> Result<Vec<Vec<Duckvalue>>, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -3503,7 +3728,7 @@ impl ExtensionInstance {
         handle: u32,
         txn: u32,
         table: &str,
-        rows: &[Vec<extension_types::Duckvalue>],
+        rows: &[Vec<Duckvalue>],
     ) -> Result<u64, Duckerror> {
         // Phase 6.2.i.7 — migrated. rows: list<list<duckvalue>>.
         use crate::export_marshal::*;
@@ -3555,7 +3780,7 @@ impl ExtensionInstance {
         txn: u32,
         table: &str,
         rowids: &[i64],
-        rows: &[Vec<extension_types::Duckvalue>],
+        rows: &[Vec<Duckvalue>],
     ) -> Result<u64, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
@@ -3615,7 +3840,7 @@ impl ExtensionInstance {
     pub fn table_open(
         &mut self,
         handle: u32,
-        args: &[extension_types::Duckvalue],
+        args: &[Duckvalue],
         projection: &[u32],
     ) -> Result<TableOpenResult, Duckerror> {
         // Phase 6.2.i.7 — migrated. table-open-result: record
@@ -3650,7 +3875,7 @@ impl ExtensionInstance {
     pub fn table_open_filtered(
         &mut self,
         handle: u32,
-        args: &[extension_types::Duckvalue],
+        args: &[Duckvalue],
         projection: &[u32],
         filters: &[TableFilter],
     ) -> Result<TableOpenResult, Duckerror> {
@@ -3700,7 +3925,7 @@ impl ExtensionInstance {
         handle: u32,
         cursor: u32,
         max_rows: u32,
-    ) -> Result<extension_runtime::Resultset, Duckerror> {
+    ) -> Result<Resultset, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -3765,7 +3990,7 @@ impl ExtensionInstance {
         &mut self,
         handle: u32,
         state: u32,
-        rows: &extension_runtime::Rowbatch,
+        rows: &Rowbatch,
     ) -> Result<(), Duckerror> {
         // Phase 6.2.i.7 — migrated. Rowbatch = list<list<duckvalue>>.
         use crate::export_marshal::*;
@@ -3814,7 +4039,7 @@ impl ExtensionInstance {
         &mut self,
         handle: u32,
         state: u32,
-    ) -> Result<extension_types::Duckvalue, Duckerror> {
+    ) -> Result<Duckvalue, Duckerror> {
         // Phase 6.2.i.7 — migrated. Returns result<duckvalue, duckerror>.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -3976,8 +4201,8 @@ impl ExtensionInstance {
         &mut self,
         handle: u32,
         index: u32,
-        low: &[extension_types::Duckvalue],
-        high: &[extension_types::Duckvalue],
+        low: &[Duckvalue],
+        high: &[Duckvalue],
     ) -> Result<Vec<i64>, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
@@ -4024,7 +4249,7 @@ impl ExtensionInstance {
         &mut self,
         handle: u32,
         index: u32,
-        keys: &[extension_types::Duckvalue],
+        keys: &[Duckvalue],
     ) -> Result<bool, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
@@ -4202,7 +4427,7 @@ impl ExtensionInstance {
         &mut self,
         callback_handle: u32,
         cursor: u32,
-    ) -> Result<extension_runtime::Resultset, Duckerror> {
+    ) -> Result<Resultset, Duckerror> {
         // Phase 6.2.i.7 — migrated. Resultset = list<list<duckvalue>>.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -4406,11 +4631,11 @@ impl ExtensionInstance {
         handle: u32,
         scan: u32,
         max_rows: u32,
-    ) -> Result<Vec<Vec<extension_types::Duckvalue>>, Duckerror> {
+    ) -> Result<Vec<Vec<Duckvalue>>, Duckerror> {
         // Phase 6.2.i.7 — migrated. Returns resultset =
         // list<list<duckvalue>>; wire duckvalue is canonical WIT +
         // value_to_resultset decodes directly into
-        // Vec<Vec<extension_types::Duckvalue>>.
+        // Vec<Vec<Duckvalue>>.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -5418,12 +5643,12 @@ mod tests {
         // the bump stays additive (2.1.0). This asserts a flat-encoded LIST value
         // is carried through the base types verbatim (the CORE reconstructs the
         // real LIST vector from the type-expr + JSON via the duckdb C vector API).
-        let v = extension_types::Duckvalue::Complex(extension_types::Complexvalue {
+        let v = Duckvalue::Complex(Complexvalue {
             type_expr: "INTEGER[]".to_string(),
             json: "[10,20,30]".to_string(),
         });
         match v {
-            extension_types::Duckvalue::Complex(c) => {
+            Duckvalue::Complex(c) => {
                 assert_eq!(c.type_expr, "INTEGER[]");
                 assert_eq!(c.json, "[10,20,30]");
             }
