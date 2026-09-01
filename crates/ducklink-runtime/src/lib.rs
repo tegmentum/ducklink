@@ -400,11 +400,27 @@ pub use extension::{
     LogLevel, NestedExecResult, PendingRegistrationsData, NESTED_EXEC_MAX_DEPTH,
 };
 
-/// The generated wasmtime bindings for the `duckdb:extension-host` world — the
-/// capability surface a wasm extension component imports (register-scalar,
-/// register-table, config, logging, catalog, files) plus the guest's exported
-/// `load()` / `callback-dispatch`. Both the `ducklink` host and the native
-/// `ducklink` DuckDB extension instantiate components against these bindings.
+/// The generated wasmtime bindings for the `duckdb:extension-host` world.
+///
+/// ADR-0029 Phase 6.2.n (Arc 3) — gated with `#[cfg(test)]`.
+/// Production dispatch runs entirely through the Phase 6.2.h wasmos
+/// install path + Phase 6.2.i export bridges + the Phase 6.2.m
+/// mirror types on `crate::extension`. The wit-bindgen wrapper
+/// survives ONLY in test builds, where it provides:
+///
+/// * The 14 test-only `#[cfg(test)] impl ExtensionStoreState`
+///   inherent method blocks (extracted from retired Host trait impls
+///   in Phase 6.2.l.2) — those methods still take wit-bindgen-typed
+///   arguments (e.g. `extension_catalog::LogicalType`,
+///   `extension_lifecycle::ConnEvents`) so the tests can construct
+///   those args.
+/// * The Phase 6.2.m mirror `From` converter impls (60 blocks, all
+///   `#[cfg(test)]` gated) — they bridge wit-bindgen types to the
+///   mirrors and are only exercised by test paths.
+///
+/// This gate flip verifies at the compiler level that no production
+/// path in ducklink-runtime references the wit-bindgen wrapper.
+#[cfg(test)]
 pub mod duckdb_extension_bindings {
     wasmtime::component::bindgen!({
         path: "./wit",

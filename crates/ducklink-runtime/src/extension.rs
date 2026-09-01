@@ -21,20 +21,20 @@ use wasmtime::{AsContextMut, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
-use crate::duckdb_extension_bindings::duckdb::extension::{
-    column_types as extension_column_types, logging as extension_logging,
-    runtime as extension_runtime, types as extension_types,
-};
-// Phase 6.2.l.2 — the following interface types are referenced only
-// by #[cfg(test)]-gated inherent methods (extracted from retired
-// Host trait impls whose test coverage stayed in this file).
+// Phase 6.2.n (Arc 3) — the wit-bindgen wrapper is now `#[cfg(test)]`
+// (see the module def in `crate::lib`), so its interface aliases
+// need to be too. Production dispatch uses the Phase 6.2.m mirrors on
+// `crate::extension` directly.
 #[cfg(test)]
 use crate::duckdb_extension_bindings::duckdb::extension::{
     arrow_ext as extension_arrow_ext, catalog as extension_catalog,
+    column_types as extension_column_types,
     coordinate_system as extension_coordinate_system, file_lock as extension_file_lock,
-    files as extension_files, nested_exec as extension_nested_exec,
+    files as extension_files, logging as extension_logging,
+    nested_exec as extension_nested_exec, runtime as extension_runtime,
     runtime_ext as extension_runtime_ext, secret as extension_secret,
-    settings as extension_settings, storage as extension_storage,
+    settings as extension_settings, storage as extension_storage, types as extension_types,
+    types_ext as extension_types_ext,
 };
 // Phase 6.2.j — DuckdbExtension typed dispatcher retired (used to be
 // constructed at load time; every dispatch now flows through the
@@ -2586,6 +2586,7 @@ pub enum Duckerror {
     Internal(String),
 }
 
+#[cfg(test)]
 impl From<extension_types::Duckerror> for Duckerror {
     fn from(e: extension_types::Duckerror) -> Self {
         match e {
@@ -2598,6 +2599,7 @@ impl From<extension_types::Duckerror> for Duckerror {
     }
 }
 
+#[cfg(test)]
 impl From<Duckerror> for extension_types::Duckerror {
     fn from(e: Duckerror) -> Self {
         match e {
@@ -2716,67 +2718,80 @@ pub enum Duckvalue {
     Complex(Complexvalue),
 }
 
+#[cfg(test)]
 impl From<extension_types::Decimalvalue> for Decimalvalue {
     fn from(v: extension_types::Decimalvalue) -> Self {
         Decimalvalue { lower: v.lower, upper: v.upper, width: v.width, scale: v.scale }
     }
 }
+#[cfg(test)]
 impl From<Decimalvalue> for extension_types::Decimalvalue {
     fn from(v: Decimalvalue) -> Self {
         extension_types::Decimalvalue { lower: v.lower, upper: v.upper, width: v.width, scale: v.scale }
     }
 }
+#[cfg(test)]
 impl From<extension_types::Hugeintvalue> for Hugeintvalue {
     fn from(v: extension_types::Hugeintvalue) -> Self {
         Hugeintvalue { lower: v.lower, upper: v.upper }
     }
 }
+#[cfg(test)]
 impl From<Hugeintvalue> for extension_types::Hugeintvalue {
     fn from(v: Hugeintvalue) -> Self {
         extension_types::Hugeintvalue { lower: v.lower, upper: v.upper }
     }
 }
+#[cfg(test)]
 impl From<extension_types::Uhugeintvalue> for Uhugeintvalue {
     fn from(v: extension_types::Uhugeintvalue) -> Self {
         Uhugeintvalue { lower: v.lower, upper: v.upper }
     }
 }
+#[cfg(test)]
 impl From<Uhugeintvalue> for extension_types::Uhugeintvalue {
     fn from(v: Uhugeintvalue) -> Self {
         extension_types::Uhugeintvalue { lower: v.lower, upper: v.upper }
     }
 }
+#[cfg(test)]
 impl From<extension_types::Intervalvalue> for Intervalvalue {
     fn from(v: extension_types::Intervalvalue) -> Self {
         Intervalvalue { months: v.months, days: v.days, micros: v.micros }
     }
 }
+#[cfg(test)]
 impl From<Intervalvalue> for extension_types::Intervalvalue {
     fn from(v: Intervalvalue) -> Self {
         extension_types::Intervalvalue { months: v.months, days: v.days, micros: v.micros }
     }
 }
+#[cfg(test)]
 impl From<extension_types::Uuidvalue> for Uuidvalue {
     fn from(v: extension_types::Uuidvalue) -> Self {
         Uuidvalue { hi: v.hi, lo: v.lo }
     }
 }
+#[cfg(test)]
 impl From<Uuidvalue> for extension_types::Uuidvalue {
     fn from(v: Uuidvalue) -> Self {
         extension_types::Uuidvalue { hi: v.hi, lo: v.lo }
     }
 }
+#[cfg(test)]
 impl From<extension_types::Complexvalue> for Complexvalue {
     fn from(v: extension_types::Complexvalue) -> Self {
         Complexvalue { type_expr: v.type_expr, json: v.json }
     }
 }
+#[cfg(test)]
 impl From<Complexvalue> for extension_types::Complexvalue {
     fn from(v: Complexvalue) -> Self {
         extension_types::Complexvalue { type_expr: v.type_expr, json: v.json }
     }
 }
 
+#[cfg(test)]
 impl From<extension_types::Duckvalue> for Duckvalue {
     fn from(v: extension_types::Duckvalue) -> Self {
         use extension_types::Duckvalue as W;
@@ -2860,17 +2875,20 @@ pub struct Columndef {
     pub logical: Logicaltype,
 }
 
+#[cfg(test)]
 impl From<extension_types::Decimalshape> for Decimalshape {
     fn from(v: extension_types::Decimalshape) -> Self {
         Decimalshape { width: v.width, scale: v.scale }
     }
 }
+#[cfg(test)]
 impl From<Decimalshape> for extension_types::Decimalshape {
     fn from(v: Decimalshape) -> Self {
         extension_types::Decimalshape { width: v.width, scale: v.scale }
     }
 }
 
+#[cfg(test)]
 impl From<extension_types::Logicaltype> for Logicaltype {
     fn from(v: extension_types::Logicaltype) -> Self {
         use extension_types::Logicaltype as W;
@@ -2901,6 +2919,7 @@ impl From<extension_types::Logicaltype> for Logicaltype {
         }
     }
 }
+#[cfg(test)]
 impl From<Logicaltype> for extension_types::Logicaltype {
     fn from(v: Logicaltype) -> Self {
         use extension_types::Logicaltype as W;
@@ -2932,11 +2951,13 @@ impl From<Logicaltype> for extension_types::Logicaltype {
     }
 }
 
+#[cfg(test)]
 impl From<extension_types::Columndef> for Columndef {
     fn from(v: extension_types::Columndef) -> Self {
         Columndef { name: v.name, logical: v.logical.into() }
     }
 }
+#[cfg(test)]
 impl From<Columndef> for extension_types::Columndef {
     fn from(v: Columndef) -> Self {
         extension_types::Columndef { name: v.name, logical: v.logical.into() }
@@ -3045,42 +3066,50 @@ pub struct Colvec {
     pub rows: u32,
 }
 
+#[cfg(test)]
 impl From<extension_column_types::DuckInt128> for DuckInt128 {
     fn from(v: extension_column_types::DuckInt128) -> Self {
         DuckInt128 { lower: v.lower, upper: v.upper }
     }
 }
+#[cfg(test)]
 impl From<DuckInt128> for extension_column_types::DuckInt128 {
     fn from(v: DuckInt128) -> Self {
         extension_column_types::DuckInt128 { lower: v.lower, upper: v.upper }
     }
 }
+#[cfg(test)]
 impl From<extension_column_types::DuckUint128> for DuckUint128 {
     fn from(v: extension_column_types::DuckUint128) -> Self {
         DuckUint128 { lower: v.lower, upper: v.upper }
     }
 }
+#[cfg(test)]
 impl From<DuckUint128> for extension_column_types::DuckUint128 {
     fn from(v: DuckUint128) -> Self {
         extension_column_types::DuckUint128 { lower: v.lower, upper: v.upper }
     }
 }
+#[cfg(test)]
 impl From<extension_column_types::NestedColumn> for NestedColumn {
     fn from(v: extension_column_types::NestedColumn) -> Self {
         NestedColumn { encoded: v.encoded.into_iter().collect() }
     }
 }
+#[cfg(test)]
 impl From<NestedColumn> for extension_column_types::NestedColumn {
     fn from(v: NestedColumn) -> Self {
         extension_column_types::NestedColumn { encoded: v.encoded.into() }
     }
 }
+#[cfg(test)]
 impl From<extension_column_types::MapColumn> for MapColumn {
     fn from(v: extension_column_types::MapColumn) -> Self {
         MapColumn { keys_encoded: v.keys_encoded.into_iter().collect(),
                     vals_encoded: v.vals_encoded.into_iter().collect() }
     }
 }
+#[cfg(test)]
 impl From<MapColumn> for extension_column_types::MapColumn {
     fn from(v: MapColumn) -> Self {
         extension_column_types::MapColumn {
@@ -3089,11 +3118,13 @@ impl From<MapColumn> for extension_column_types::MapColumn {
         }
     }
 }
+#[cfg(test)]
 impl From<extension_column_types::ArrayColumn> for ArrayColumn {
     fn from(v: extension_column_types::ArrayColumn) -> Self {
         ArrayColumn { size: v.size, encoded: v.encoded.into_iter().collect() }
     }
 }
+#[cfg(test)]
 impl From<ArrayColumn> for extension_column_types::ArrayColumn {
     fn from(v: ArrayColumn) -> Self {
         extension_column_types::ArrayColumn { size: v.size, encoded: v.encoded.into() }
@@ -3105,47 +3136,56 @@ impl From<ArrayColumn> for extension_column_types::ArrayColumn {
 // counterparts. wit-bindgen generates distinct Rust types per WIT
 // declaration, so we bridge column-types' variants through the
 // unified mirrors above.
+#[cfg(test)]
 impl From<extension_column_types::Decimalvalue> for Decimalvalue {
     fn from(v: extension_column_types::Decimalvalue) -> Self {
         Decimalvalue { lower: v.lower, upper: v.upper, width: v.width, scale: v.scale }
     }
 }
+#[cfg(test)]
 impl From<Decimalvalue> for extension_column_types::Decimalvalue {
     fn from(v: Decimalvalue) -> Self {
         extension_column_types::Decimalvalue { lower: v.lower, upper: v.upper, width: v.width, scale: v.scale }
     }
 }
+#[cfg(test)]
 impl From<extension_column_types::Intervalvalue> for Intervalvalue {
     fn from(v: extension_column_types::Intervalvalue) -> Self {
         Intervalvalue { months: v.months, days: v.days, micros: v.micros }
     }
 }
+#[cfg(test)]
 impl From<Intervalvalue> for extension_column_types::Intervalvalue {
     fn from(v: Intervalvalue) -> Self {
         extension_column_types::Intervalvalue { months: v.months, days: v.days, micros: v.micros }
     }
 }
+#[cfg(test)]
 impl From<extension_column_types::Uuidvalue> for Uuidvalue {
     fn from(v: extension_column_types::Uuidvalue) -> Self {
         Uuidvalue { hi: v.hi, lo: v.lo }
     }
 }
+#[cfg(test)]
 impl From<Uuidvalue> for extension_column_types::Uuidvalue {
     fn from(v: Uuidvalue) -> Self {
         extension_column_types::Uuidvalue { hi: v.hi, lo: v.lo }
     }
 }
+#[cfg(test)]
 impl From<extension_column_types::Complexvalue> for Complexvalue {
     fn from(v: extension_column_types::Complexvalue) -> Self {
         Complexvalue { type_expr: v.type_expr, json: v.json }
     }
 }
+#[cfg(test)]
 impl From<Complexvalue> for extension_column_types::Complexvalue {
     fn from(v: Complexvalue) -> Self {
         extension_column_types::Complexvalue { type_expr: v.type_expr, json: v.json }
     }
 }
 
+#[cfg(test)]
 impl From<extension_column_types::Column> for Column {
     fn from(v: extension_column_types::Column) -> Self {
         use extension_column_types::Column as W;
@@ -3180,6 +3220,7 @@ impl From<extension_column_types::Column> for Column {
         }
     }
 }
+#[cfg(test)]
 impl From<Column> for extension_column_types::Column {
     fn from(v: Column) -> Self {
         use extension_column_types::Column as W;
@@ -3215,11 +3256,13 @@ impl From<Column> for extension_column_types::Column {
     }
 }
 
+#[cfg(test)]
 impl From<extension_column_types::Colvec> for Colvec {
     fn from(v: extension_column_types::Colvec) -> Self {
         Colvec { data: v.data.into(), validity: v.validity.into_iter().collect(), rows: v.rows }
     }
 }
+#[cfg(test)]
 impl From<Colvec> for extension_column_types::Colvec {
     fn from(v: Colvec) -> Self {
         extension_column_types::Colvec { data: v.data.into(), validity: v.validity.into(), rows: v.rows }
@@ -3261,6 +3304,7 @@ impl std::ops::BitOrAssign for Funcflags {
     fn bitor_assign(&mut self, rhs: Self) { self.0 |= rhs.0; }
 }
 
+#[cfg(test)]
 impl From<extension_types::Funcflags> for Funcflags {
     fn from(f: extension_types::Funcflags) -> Self {
         let mut out = Funcflags::empty();
@@ -3272,6 +3316,7 @@ impl From<extension_types::Funcflags> for Funcflags {
         out
     }
 }
+#[cfg(test)]
 impl From<Funcflags> for extension_types::Funcflags {
     fn from(f: Funcflags) -> Self {
         let mut out = extension_types::Funcflags::empty();
@@ -3385,6 +3430,7 @@ pub struct Loadresult {
     pub requires: Vec<Capabilitykind>,
 }
 
+#[cfg(test)]
 impl From<extension_types::Configerror> for Configerror {
     fn from(e: extension_types::Configerror) -> Self {
         match e {
@@ -3395,6 +3441,7 @@ impl From<extension_types::Configerror> for Configerror {
         }
     }
 }
+#[cfg(test)]
 impl From<Configerror> for extension_types::Configerror {
     fn from(e: Configerror) -> Self {
         match e {
@@ -3406,6 +3453,7 @@ impl From<Configerror> for extension_types::Configerror {
     }
 }
 
+#[cfg(test)]
 impl From<extension_logging::Loglevel> for Loglevel {
     fn from(l: extension_logging::Loglevel) -> Self {
         use extension_logging::Loglevel as W;
@@ -3418,6 +3466,7 @@ impl From<extension_logging::Loglevel> for Loglevel {
         }
     }
 }
+#[cfg(test)]
 impl From<Loglevel> for extension_logging::Loglevel {
     fn from(l: Loglevel) -> Self {
         use extension_logging::Loglevel as W;
@@ -3431,28 +3480,33 @@ impl From<Loglevel> for extension_logging::Loglevel {
     }
 }
 
+#[cfg(test)]
 impl From<extension_logging::Logfield> for Logfield {
     fn from(f: extension_logging::Logfield) -> Self {
         Logfield { key: f.key, value: f.value }
     }
 }
+#[cfg(test)]
 impl From<Logfield> for extension_logging::Logfield {
     fn from(f: Logfield) -> Self {
         extension_logging::Logfield { key: f.key, value: f.value }
     }
 }
 
+#[cfg(test)]
 impl From<extension_types::Invokeinfo> for Invokeinfo {
     fn from(i: extension_types::Invokeinfo) -> Self {
         Invokeinfo { rowindex: i.rowindex, iswindow: i.iswindow }
     }
 }
+#[cfg(test)]
 impl From<Invokeinfo> for extension_types::Invokeinfo {
     fn from(i: Invokeinfo) -> Self {
         extension_types::Invokeinfo { rowindex: i.rowindex, iswindow: i.iswindow }
     }
 }
 
+#[cfg(test)]
 impl From<extension_types::Capabilitykind> for Capabilitykind {
     fn from(k: extension_types::Capabilitykind) -> Self {
         use extension_types::Capabilitykind as W;
@@ -3467,6 +3521,7 @@ impl From<extension_types::Capabilitykind> for Capabilitykind {
         }
     }
 }
+#[cfg(test)]
 impl From<Capabilitykind> for extension_types::Capabilitykind {
     fn from(k: Capabilitykind) -> Self {
         use extension_types::Capabilitykind as W;
@@ -3482,28 +3537,33 @@ impl From<Capabilitykind> for extension_types::Capabilitykind {
     }
 }
 
+#[cfg(test)]
 impl From<extension_types::Funcarg> for Funcarg {
     fn from(a: extension_types::Funcarg) -> Self {
         Funcarg { name: a.name, logical: a.logical.into() }
     }
 }
+#[cfg(test)]
 impl From<Funcarg> for extension_types::Funcarg {
     fn from(a: Funcarg) -> Self {
         extension_types::Funcarg { name: a.name, logical: a.logical.into() }
     }
 }
 
+#[cfg(test)]
 impl From<extension_types::Extopts> for Extopts {
     fn from(o: extension_types::Extopts) -> Self {
         Extopts { description: o.description, tags: o.tags.into_iter().collect() }
     }
 }
+#[cfg(test)]
 impl From<Extopts> for extension_types::Extopts {
     fn from(o: Extopts) -> Self {
         extension_types::Extopts { description: o.description, tags: o.tags.into() }
     }
 }
 
+#[cfg(test)]
 impl From<extension_types::Loadresult> for Loadresult {
     fn from(r: extension_types::Loadresult) -> Self {
         Loadresult {
@@ -3513,6 +3573,7 @@ impl From<extension_types::Loadresult> for Loadresult {
         }
     }
 }
+#[cfg(test)]
 impl From<Loadresult> for extension_types::Loadresult {
     fn from(r: Loadresult) -> Self {
         extension_types::Loadresult {
@@ -3533,6 +3594,7 @@ pub type Resultset = Vec<Vec<Duckvalue>>;
 /// `types.rowbatch`.
 pub type Rowbatch = Vec<Vec<Duckvalue>>;
 
+#[cfg(test)]
 impl From<Duckvalue> for extension_types::Duckvalue {
     fn from(v: Duckvalue) -> Self {
         use extension_types::Duckvalue as W;
@@ -3695,7 +3757,7 @@ impl ExtensionInstance {
         &mut self,
         dispatcher_handle: u32,
         args: &[Duckvalue],
-        ctx: extension_runtime::Invokeinfo,
+        ctx: Invokeinfo,
     ) -> Result<Duckvalue, Duckerror> {
         // Phase 6.2.i.7 — migrated. Invokeinfo record: rowindex
         // (option<u64>), iswindow (bool).
@@ -3733,7 +3795,7 @@ impl ExtensionInstance {
         &mut self,
         dispatcher_handle: u32,
         rows: &Vec<Vec<Duckvalue>>,
-        ctx: extension_runtime::Invokeinfo,
+        ctx: Invokeinfo,
     ) -> Result<Vec<Duckvalue>, Duckerror> {
         // Phase 6.2.i.7 — migrated. Row-major → columnar pivot in
         // Rust (via existing rows_to_colvecs helper), marshal Colvec
@@ -3749,7 +3811,7 @@ impl ExtensionInstance {
         &mut self,
         dispatcher_handle: u32,
         args: &[Colvec],
-        ctx: extension_runtime::Invokeinfo,
+        ctx: Invokeinfo,
     ) -> Result<Colvec, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;

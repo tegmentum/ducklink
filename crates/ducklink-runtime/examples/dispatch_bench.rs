@@ -94,7 +94,7 @@ fn main() {
     println!();
 
     // --- 2. value marshalling (every arg in + result out, per row) -----------
-    use ducklink_runtime::duckdb_extension_bindings::duckdb::extension::types as t;
+    use ducklink_runtime::extension as t;
     let prim = t::Duckvalue::Int64(black_box(42));
     bench("marshal primitive (Int64 round-trip)", iters, || {
         let v = clone_duckvalue(black_box(&prim));
@@ -205,7 +205,7 @@ fn main() {
 /// `convert_core_duckvalue_to_extension` / `convert_extension_duckvalue_to_core`
 /// (here as a clone since both sides are the same generated type in this crate).
 fn clone_duckvalue(
-    v: &ducklink_runtime::duckdb_extension_bindings::duckdb::extension::types::Duckvalue,
-) -> ducklink_runtime::duckdb_extension_bindings::duckdb::extension::types::Duckvalue {
+    v: &ducklink_runtime::extension::Duckvalue,
+) -> ducklink_runtime::extension::Duckvalue {
     v.clone()
 }

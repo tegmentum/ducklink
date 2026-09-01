@@ -105,6 +105,11 @@ use duckdb_core_bindings::exports::duckdb::extension::{
 use duckdb_core_bindings::tvm::memory::bytes as core_tvm_bytes;
 use duckdb_core_bindings::tvm::memory::manager as core_tvm_manager;
 use duckdb_core_bindings::tvm::memory::types as core_tvm_types;
+// Phase 6.2.n (Arc 3) — the wit-bindgen wrapper on ducklink-runtime
+// is `#[cfg(test)]`, so its interface aliases must be too. Both the
+// runtime + types imports here are used solely by the in-crate
+// `mod tests` block (TestExtensionHost stub + typed fixtures).
+#[cfg(test)]
 use ducklink_runtime::duckdb_extension_bindings::duckdb::extension::{
     runtime as extension_runtime, types as extension_types,
 };
@@ -2898,7 +2903,7 @@ impl ExtensionManager {
         &mut self,
         handle: u32,
         args: &[ducklink_runtime::extension::Duckvalue],
-        ctx: extension_runtime::Invokeinfo,
+        ctx: ducklink_runtime::extension::Invokeinfo,
     ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
         // `ducklink_prefix` sentinel (scalar form): see
         // [`DUCKLINK_PREFIX_SCALAR_HANDLE`]. Same handler as the table
@@ -2959,7 +2964,7 @@ impl ExtensionManager {
         &mut self,
         handle: u32,
         rows: &Vec<Vec<ducklink_runtime::extension::Duckvalue>>,
-        ctx: extension_runtime::Invokeinfo,
+        ctx: ducklink_runtime::extension::Invokeinfo,
     ) -> Result<Vec<ducklink_runtime::extension::Duckvalue>, ducklink_runtime::extension::Duckerror> {
         // `ducklink_prefix` scalar sentinel: the core batches scalar calls
         // through this columnar entry point. Handle it per-row via the
@@ -8979,8 +8984,8 @@ fn ext_values_to_core_colvec(
 
 fn convert_core_invokeinfo(
     ctx: core_callback_dispatch::Invokeinfo,
-) -> extension_runtime::Invokeinfo {
-    extension_runtime::Invokeinfo {
+) -> ducklink_runtime::extension::Invokeinfo {
+    ducklink_runtime::extension::Invokeinfo {
         rowindex: ctx.rowindex,
         iswindow: ctx.iswindow,
     }
@@ -10873,7 +10878,7 @@ mod tests {
             &mut self,
             _self_: wasmtime::component::Resource<extension_runtime::ScalarCallback>,
             _args: BindgenVec<ducklink_runtime::extension::Duckvalue>,
-            _ctx: extension_runtime::Invokeinfo,
+            _ctx: ducklink_runtime::extension::Invokeinfo,
         ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
             Err(unsupported_runtime_error())
         }
