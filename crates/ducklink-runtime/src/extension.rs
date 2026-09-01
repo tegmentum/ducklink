@@ -29,12 +29,10 @@ use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 use crate::duckdb_extension_bindings::duckdb::extension::{
     arrow_ext as extension_arrow_ext, catalog as extension_catalog,
     column_types as extension_column_types,
-    coordinate_system as extension_coordinate_system, file_lock as extension_file_lock,
-    files as extension_files, logging as extension_logging,
-    nested_exec as extension_nested_exec, runtime as extension_runtime,
+    coordinate_system as extension_coordinate_system, files as extension_files,
+    logging as extension_logging, runtime as extension_runtime,
     runtime_ext as extension_runtime_ext, secret as extension_secret,
     settings as extension_settings, storage as extension_storage, types as extension_types,
-    types_ext as extension_types_ext,
 };
 // Phase 6.2.j — DuckdbExtension typed dispatcher retired (used to be
 // constructed at load time; every dispatch now flows through the
@@ -2115,13 +2113,14 @@ impl ExtensionStoreState {
 // direction-specific `ExtensionServices::nested_exec` sink for the actual work.
 #[cfg(test)]
 impl ExtensionStoreState {
-    fn nested_exec(&mut self, sql: String) -> Result<extension_nested_exec::ExecResult, String> {
-        // RAII: the counter is bumped for the duration of the sibling-connection
-        // call, decremented when `_depth` drops (either normal return OR any
-        // early Err via `?` below).
+    /// Phase 6.2.n Session 2 — returns the neutral `NestedExecResult`
+    /// mirror directly (was `extension_nested_exec::ExecResult` via
+    /// `neutral_nestedresult_to_wit`). Both types have the same
+    /// `rows` + `rows_affected` field shape, so test callers keep
+    /// working without edits.
+    fn nested_exec(&mut self, sql: String) -> Result<NestedExecResult, String> {
         let _depth = NestedExecDepthGuard::enter()?;
-        let result = self.services.nested_exec(&sql)?;
-        Ok(neutral_nestedresult_to_wit(result))
+        self.services.nested_exec(&sql)
     }
 }
 
@@ -2145,41 +2144,12 @@ impl ExtensionStoreState {
 // root under a name identical to its host path so guest + host see the same
 // string). The host does no additional preopen validation -- see the WIT
 // trust-model comment.
-#[cfg(test)]
-impl ExtensionStoreState {
-    pub(crate) fn acquire_exclusive(
-        &mut self,
-        path: String,
-    ) -> Result<wasmtime::component::Resource<extension_file_lock::LockHandle>, String> {
-        let state = LockHandleState::acquire_exclusive(&path)?;
-        let id = self.alloc_lock_handle(state);
-        Ok(wasmtime::component::Resource::new_own(id))
-    }
-
-    // Phase 6.2.l.2 — `try_acquire_exclusive` retired (no test
-    // caller; wasmos-native FileLockHost still exposes it on the
-    // production path).
-}
-
-#[cfg(test)]
-impl ExtensionStoreState {
-    pub(crate) fn release(&mut self, rep: wasmtime::component::Resource<extension_file_lock::LockHandle>) {
-        // Drop the state; its Drop impl releases the flock and closes the
-        // file. If the guest already released, the entry is gone -- that is
-        // fine, the invariant "lock is released" is upheld.
-        self.free_lock_handle(rep.rep());
-    }
-
-    fn drop(
-        &mut self,
-        rep: wasmtime::component::Resource<extension_file_lock::LockHandle>,
-    ) -> wasmtime::Result<()> {
-        // Guest let the resource fall out of scope. If the guest already
-        // called `release`, the entry is already gone -- swallow.
-        self.free_lock_handle(rep.rep());
-        Ok(())
-    }
-}
+// Phase 6.2.n Session 2 — the test-only `acquire_exclusive` /
+// `release` / `drop` inherent methods on ExtensionStoreState
+// retired here alongside the `file_lock_host_acquire_and_release_
+// round_trip` test that was their only caller. Both the
+// production path (via wasmos FileLockHost) and its test coverage
+// (via extension_wasmos::tests::file_lock_*) survive intact.
 
 /// Native state backing a wasm `duckdb:extension/file-lock.lock-handle`
 /// resource: an open `File` under an advisory `flock`. Dropping the value
@@ -2262,22 +2232,11 @@ impl LockHandleState {
     }
 }
 
-#[cfg(test)]
-fn neutral_nestedresult_to_wit(r: NestedExecResult) -> extension_nested_exec::ExecResult {
-    let rows: Option<BindgenVec<BindgenVec<String>>> = r.rows.map(|rs| {
-        rs.into_iter()
-            .map(|row| {
-                row.into_iter()
-                    .map(Into::into)
-                    .collect::<BindgenVec<String>>()
-            })
-            .collect()
-    });
-    extension_nested_exec::ExecResult {
-        rows,
-        rows_affected: r.rows_affected,
-    }
-}
+// Phase 6.2.n Session 2 — `neutral_nestedresult_to_wit` retired
+// here alongside the wit-bindgen ExecResult return type on
+// `state.nested_exec` (test-only inherent method). The 4
+// nested_exec tests now use the neutral `NestedExecResult` mirror
+// directly.
 
 // ---------------------------------------------------------------------------
 // Capture conversions (extension WIT -> neutral reg::*) + logging helpers
@@ -6836,41 +6795,14 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
-    #[test]
-    fn file_lock_host_acquire_and_release_round_trip() {
-        // Drive the wit `Host` + `HostLockHandle` impls end-to-end, mirroring
-        // what a guest would do: acquire -> hold -> release -> re-acquire.
-        // Uses an ExtensionStoreState (constructed via `scripted_state`) so
-        // the ResourceTable / lock_handles map is real.
-        let path = unique_lock_path("host");
-        let path_str = path.to_string_lossy().into_owned();
-        let mut state = scripted_state();
-
-        let handle = state.acquire_exclusive(path_str.clone())
-            .expect("host acquire ok");
-        assert_eq!(state.lock_handles.len(), 1);
-
-        // While held, native try-acquire from the same process (different
-        // OS-level open) sees WouldBlock -- proves the underlying flock is
-        // active.
-        let contested = LockHandleState::try_acquire_exclusive(&path_str).expect("try IO ok");
-        assert!(
-            contested.is_none(),
-            "flock must exclude a concurrent native try-acquire"
-        );
-
-        // Explicit release drops the state -> flock released.
-        state.release(handle);
-        assert_eq!(state.lock_handles.len(), 0);
-
-        // Re-acquire succeeds now that the lock is free.
-        let handle2 = state.acquire_exclusive(path_str)
-            .expect("host re-acquire ok");
-        // Let drop clean up (also exercise the HostLockHandle::drop path).
-        state.drop(handle2).expect("host drop ok");
-        assert_eq!(state.lock_handles.len(), 0);
-        let _ = std::fs::remove_file(&path);
-    }
+    // Phase 6.2.n Session 2 — `file_lock_host_acquire_and_release_
+    // round_trip` retired here (it drove the test-only inherent
+    // methods that mirrored the wit-bindgen HostLockHandle path).
+    // The wasmos-native `file_lock_acquire_then_release_removes_
+    // from_state` + `file_lock_acquire_then_on_resource_drop_
+    // removes_from_state` tests in extension_wasmos::tests cover
+    // the same acquire → release → drop behavior on the production
+    // dispatch path.
 }
 
 /// Process-global cache for the base [`Linker`] template — the one populated
