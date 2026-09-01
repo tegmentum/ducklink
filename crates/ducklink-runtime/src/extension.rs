@@ -14,14 +14,15 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
-use wasmtime::component::{Component, Linker, Resource, ResourceTable};
+use wasmtime::component::{Component, Linker, ResourceTable};
+#[cfg(test)]
+use wasmtime::component::Resource;
 use wasmtime::{AsContextMut, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 use crate::duckdb_extension_bindings::duckdb::extension::{
-    column_types as extension_column_types, file_lock as extension_file_lock,
-    nested_exec as extension_nested_exec, runtime as extension_runtime, types as extension_types,
+    column_types as extension_column_types, runtime as extension_runtime, types as extension_types,
 };
 // Phase 6.2.l.2 — the following interface types are referenced only
 // by #[cfg(test)]-gated inherent methods (extracted from retired
@@ -29,10 +30,10 @@ use crate::duckdb_extension_bindings::duckdb::extension::{
 #[cfg(test)]
 use crate::duckdb_extension_bindings::duckdb::extension::{
     arrow_ext as extension_arrow_ext, catalog as extension_catalog,
-    coordinate_system as extension_coordinate_system, files as extension_files,
+    coordinate_system as extension_coordinate_system, file_lock as extension_file_lock,
+    files as extension_files, nested_exec as extension_nested_exec,
     runtime_ext as extension_runtime_ext, secret as extension_secret,
     settings as extension_settings, storage as extension_storage,
-    types_ext as extension_types_ext,
 };
 // Phase 6.2.j — DuckdbExtension typed dispatcher retired (used to be
 // constructed at load time; every dispatch now flows through the
@@ -44,6 +45,7 @@ use crate::duckdb_extension_bindings::duckdb::extension::{
 use crate::reg;
 use crate::{CallbackKind, CallbackRegistry};
 
+#[cfg(test)]
 type BindgenVec<T> = wasmtime::component::__internal::Vec<T>;
 
 // ---------------------------------------------------------------------------
@@ -509,8 +511,10 @@ thread_local! {
 /// decrements it on drop. `enter` returns `Err(message)` when a bump would push
 /// the counter past [`NESTED_EXEC_MAX_DEPTH`] — the counter is left unchanged
 /// in that case, so the caller must not decrement it.
+#[cfg(test)]
 struct NestedExecDepthGuard;
 
+#[cfg(test)]
 impl NestedExecDepthGuard {
     fn enter() -> Result<Self, String> {
         NESTED_EXEC_DEPTH.with(|d| {
@@ -526,6 +530,7 @@ impl NestedExecDepthGuard {
     }
 }
 
+#[cfg(test)]
 impl Drop for NestedExecDepthGuard {
     fn drop(&mut self) {
         NESTED_EXEC_DEPTH.with(|d| d.set(d.get().saturating_sub(1)));
@@ -1559,11 +1564,6 @@ impl wasmtime::component::HasData for ExtensionStoreState {
 // import added (the `imports_linker` gate in `load_component`).
 crate::impl_compose_dynlink_host!(ExtensionStoreState, dynlink_bridge);
 
-fn unsupported_runtime_error() -> extension_types::Duckerror {
-    extension_types::Duckerror::Unsupported(
-        "component runtime not available in CLI host".to_string(),
-    )
-}
 
 // Phase 6.2.l.2 — the empty `impl extension_types::Host for
 // ExtensionStoreState {}` retired here. The base `types` interface
@@ -1571,415 +1571,8 @@ fn unsupported_runtime_error() -> extension_types::Duckerror {
 // Host trait was empty. The wasmos-native `TypesHost` in
 // extension_wasmos.rs is the equivalent zero-method marker.
 
-impl extension_runtime::Host for ExtensionStoreState {
-    fn get_capability(
-        &mut self,
-        kind: extension_runtime::Capabilitykind,
-    ) -> Option<extension_runtime::Capability> {
-        match kind {
-            extension_runtime::Capabilitykind::Scalar => {
-                let id = self.alloc_resource_id();
-                self.scalar_registries
-                    .insert(id, PendingScalarRegistry::default());
-                Some(extension_runtime::Capability::Scalar(
-                    wasmtime::component::Resource::new_own(id),
-                ))
-            }
-            extension_runtime::Capabilitykind::Table => {
-                let id = self.alloc_resource_id();
-                self.table_registries
-                    .insert(id, PendingTableRegistry::default());
-                Some(extension_runtime::Capability::Table(
-                    wasmtime::component::Resource::new_own(id),
-                ))
-            }
-            extension_runtime::Capabilitykind::Aggregate => {
-                let id = self.alloc_resource_id();
-                self.aggregate_registries
-                    .insert(id, PendingAggregateRegistry::default());
-                Some(extension_runtime::Capability::Aggregate(
-                    wasmtime::component::Resource::new_own(id),
-                ))
-            }
-            // Item 4: pragma capability. The PragmaRegistry resource carries no
-            // per-registry buffer (register_call captures pragmas directly into
-            // pending_pragmas), so just hand back a fresh resource id.
-            extension_runtime::Capabilitykind::Pragma => {
-                let id = self.alloc_resource_id();
-                Some(extension_runtime::Capability::Pragma(
-                    wasmtime::component::Resource::new_own(id),
-                ))
-            }
-            // `HostMacroRegistry::register_scalar` today returns Unsupported
-            // (see impl above), so handing back a Macro capability would let
-            // the guest hold a registry it cannot usefully call. The real
-            // registration path is `catalog.register-macro`; use that instead
-            // of the capability route. Kept as an explicit arm (rather than
-            // falling through to `_ => None`) so a future implementation is
-            // one edit away and the intent is legible.
-            extension_runtime::Capabilitykind::Macro => None,
-            // No `Capability::Catalog` variant exists in the runtime.wit
-            // `capability` union — catalog operations flow directly through
-            // the `catalog` interface (register-macro, register-table, ...)
-            // rather than being handed out here.
-            extension_runtime::Capabilitykind::Catalog => None,
-            // No `Capability::FileFormat` variant exists in the runtime.wit
-            // `capability` union — file-format registration flows through
-            // `files.register-copy-handler` + `copy-dispatch`. Explicit arm
-            // to document the omission, not silent `_ => None`.
-            extension_runtime::Capabilitykind::FileFormat => None,
-        }
-    }
-
-    fn list_capabilities(&mut self) -> BindgenVec<extension_runtime::Capabilitykind> {
-        // Kinds we actively hand back a `Capability` for. Macro/Catalog/
-        // FileFormat are intentionally omitted: see the matching arms in
-        // `get_capability` above for why each returns None today.
-        vec![
-            extension_runtime::Capabilitykind::Scalar,
-            extension_runtime::Capabilitykind::Table,
-            extension_runtime::Capabilitykind::Aggregate,
-            extension_runtime::Capabilitykind::Pragma,
-        ]
-        .into()
-    }
-}
-
-impl extension_runtime::HostScalarCallback for ExtensionStoreState {
-    fn new(&mut self, handle: u32) -> Resource<extension_runtime::ScalarCallback> {
-        let id = self.allocate_callback_handle(handle, CallbackKind::Scalar);
-        wasmtime::component::Resource::new_own(id)
-    }
-
-    fn call(
-        &mut self,
-        _self_: Resource<extension_runtime::ScalarCallback>,
-        _args: BindgenVec<extension_types::Duckvalue>,
-        _ctx: extension_runtime::Invokeinfo,
-    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
-        Err(unsupported_runtime_error())
-    }
-
-    fn drop(&mut self, rep: Resource<extension_runtime::ScalarCallback>) -> wasmtime::Result<()> {
-        self.release_callback_handle(rep.rep());
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostTableCallback for ExtensionStoreState {
-    fn new(&mut self, handle: u32) -> Resource<extension_runtime::TableCallback> {
-        let id = self.allocate_callback_handle(handle, CallbackKind::Table);
-        wasmtime::component::Resource::new_own(id)
-    }
-
-    fn call(
-        &mut self,
-        _self_: Resource<extension_runtime::TableCallback>,
-        _args: BindgenVec<extension_types::Duckvalue>,
-    ) -> Result<extension_runtime::Resultset, extension_types::Duckerror> {
-        Err(unsupported_runtime_error())
-    }
-
-    fn drop(&mut self, rep: Resource<extension_runtime::TableCallback>) -> wasmtime::Result<()> {
-        self.release_callback_handle(rep.rep());
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostAggregateCallback for ExtensionStoreState {
-    fn new(&mut self, handle: u32) -> Resource<extension_runtime::AggregateCallback> {
-        let id = self.allocate_callback_handle(handle, CallbackKind::Aggregate);
-        wasmtime::component::Resource::new_own(id)
-    }
-
-    fn call(
-        &mut self,
-        _self_: Resource<extension_runtime::AggregateCallback>,
-        _rows: extension_runtime::Rowbatch,
-    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
-        Err(unsupported_runtime_error())
-    }
-
-    fn drop(
-        &mut self,
-        rep: Resource<extension_runtime::AggregateCallback>,
-    ) -> wasmtime::Result<()> {
-        self.release_callback_handle(rep.rep());
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostPragmaCallback for ExtensionStoreState {
-    fn new(&mut self, handle: u32) -> Resource<extension_runtime::PragmaCallback> {
-        let id = self.allocate_callback_handle(handle, CallbackKind::Pragma);
-        wasmtime::component::Resource::new_own(id)
-    }
-
-    fn call(
-        &mut self,
-        _self_: Resource<extension_runtime::PragmaCallback>,
-        _args: BindgenVec<extension_types::Duckvalue>,
-    ) -> Result<Option<extension_types::Duckvalue>, extension_types::Duckerror> {
-        Err(unsupported_runtime_error())
-    }
-
-    fn drop(&mut self, rep: Resource<extension_runtime::PragmaCallback>) -> wasmtime::Result<()> {
-        self.release_callback_handle(rep.rep());
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostCastCallback for ExtensionStoreState {
-    fn new(&mut self, handle: u32) -> Resource<extension_runtime::CastCallback> {
-        let id = self.allocate_callback_handle(handle, CallbackKind::Cast);
-        wasmtime::component::Resource::new_own(id)
-    }
-
-    fn call(
-        &mut self,
-        _self_: Resource<extension_runtime::CastCallback>,
-        _value: extension_types::Duckvalue,
-    ) -> Result<extension_types::Duckvalue, extension_types::Duckerror> {
-        Err(unsupported_runtime_error())
-    }
-
-    fn drop(&mut self, rep: Resource<extension_runtime::CastCallback>) -> wasmtime::Result<()> {
-        self.release_callback_handle(rep.rep());
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostScalarRegistry for ExtensionStoreState {
-    fn register(
-        &mut self,
-        self_: Resource<extension_runtime::ScalarRegistry>,
-        name: String,
-        arguments: BindgenVec<extension_runtime::Funcarg>,
-        returns: extension_runtime::Logicaltype,
-        callback: Resource<extension_runtime::ScalarCallback>,
-        options: Option<extension_runtime::Funcopts>,
-    ) -> Result<u32, extension_types::Duckerror> {
-        {
-            let registry = self
-                .callback_registry
-                .read()
-                .unwrap_or_else(|e| e.into_inner());
-            match registry.get(callback.rep()) {
-                Some(entry) if entry.kind == CallbackKind::Scalar => {}
-                Some(_) => {
-                    return Err(extension_types::Duckerror::Invalidargument(
-                        "callback handle is not scalar".to_string(),
-                    ))
-                }
-                None => {
-                    return Err(extension_types::Duckerror::Internal(
-                        "unknown scalar callback handle".to_string(),
-                    ))
-                }
-            }
-        }
-
-        let registry_id = self_.rep();
-        let registry = self
-            .scalar_registries
-            .get_mut(&registry_id)
-            .ok_or_else(|| {
-                extension_types::Duckerror::Internal("unknown scalar registry handle".to_string())
-            })?;
-
-        let callback_handle = callback.rep();
-        std::mem::forget(callback);
-
-        let converted_arguments = convert_extension_funcargs(arguments.into());
-        let converted_returns = convert_extension_logicaltype(returns);
-        let converted_options = options.map(convert_extension_funcopts);
-        log_scalar_registration(
-            &self.extension_name,
-            &name,
-            registry_id,
-            callback_handle,
-            &converted_arguments,
-            &converted_returns,
-            converted_options.as_ref(),
-        );
-
-        registry.entries.push(PendingScalar {
-            extension: self.extension_name.clone(),
-            name,
-            arguments: converted_arguments,
-            returns: converted_returns,
-            callback_handle,
-            options: converted_options,
-        });
-
-        Ok(self.alloc_resource_id())
-    }
-
-    fn drop(&mut self, rep: Resource<extension_runtime::ScalarRegistry>) -> wasmtime::Result<()> {
-        if let Some(registry) = self.scalar_registries.remove(&rep.rep()) {
-            self.pending_scalars.extend(registry.entries);
-        }
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostTableRegistry for ExtensionStoreState {
-    fn register(
-        &mut self,
-        self_: Resource<extension_runtime::TableRegistry>,
-        name: String,
-        arguments: BindgenVec<extension_runtime::Funcarg>,
-        columns: BindgenVec<extension_runtime::Columndef>,
-        callback: Resource<extension_runtime::TableCallback>,
-        options: Option<extension_runtime::Extopts>,
-    ) -> Result<u32, extension_types::Duckerror> {
-        {
-            let registry = self
-                .callback_registry
-                .read()
-                .unwrap_or_else(|e| e.into_inner());
-            match registry.get(callback.rep()) {
-                Some(entry) if entry.kind == CallbackKind::Table => {}
-                Some(_) => {
-                    return Err(extension_types::Duckerror::Invalidargument(
-                        "callback handle is not a table callback".to_string(),
-                    ))
-                }
-                None => {
-                    return Err(extension_types::Duckerror::Internal(
-                        "unknown table callback handle".to_string(),
-                    ))
-                }
-            }
-        }
-
-        let registry_id = self_.rep();
-        let registry = self.table_registries.get_mut(&registry_id).ok_or_else(|| {
-            extension_types::Duckerror::Internal("unknown table registry handle".to_string())
-        })?;
-
-        let callback_handle = callback.rep();
-        std::mem::forget(callback);
-
-        let converted_arguments = convert_extension_funcargs(arguments.into());
-        let converted_columns = convert_extension_columndefs(columns.into());
-        let converted_options = options.map(convert_extension_extopts);
-        log_table_registration(
-            &self.extension_name,
-            &name,
-            registry_id,
-            callback_handle,
-            &converted_arguments,
-            &converted_columns,
-            converted_options.as_ref(),
-        );
-
-        let table_name = name.clone();
-        registry.entries.push(PendingTable {
-            extension: self.extension_name.clone(),
-            name,
-            arguments: converted_arguments,
-            columns: converted_columns,
-            callback_handle,
-            options: converted_options,
-        });
-
-        // The returned handle is what the extension later passes to
-        // `files.register-replacement-scan`; remember which table function it
-        // names so we can resolve it.
-        let handle = self.alloc_resource_id();
-        self.table_handle_names.insert(handle, table_name);
-        Ok(handle)
-    }
-
-    fn drop(&mut self, rep: Resource<extension_runtime::TableRegistry>) -> wasmtime::Result<()> {
-        if let Some(registry) = self.table_registries.remove(&rep.rep()) {
-            self.pending_tables.extend(registry.entries);
-        }
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostAggregateRegistry for ExtensionStoreState {
-    fn register(
-        &mut self,
-        self_: Resource<extension_runtime::AggregateRegistry>,
-        name: String,
-        arguments: BindgenVec<extension_runtime::Funcarg>,
-        returns: extension_runtime::Logicaltype,
-        callback: Resource<extension_runtime::AggregateCallback>,
-        options: Option<extension_runtime::Funcopts>,
-    ) -> Result<u32, extension_types::Duckerror> {
-        {
-            let registry = self
-                .callback_registry
-                .read()
-                .unwrap_or_else(|e| e.into_inner());
-            match registry.get(callback.rep()) {
-                Some(entry) if entry.kind == CallbackKind::Aggregate => {}
-                Some(_) => {
-                    return Err(extension_types::Duckerror::Invalidargument(
-                        "callback handle is not aggregate".to_string(),
-                    ))
-                }
-                None => {
-                    return Err(extension_types::Duckerror::Internal(
-                        "unknown aggregate callback handle".to_string(),
-                    ))
-                }
-            }
-        }
-
-        let registry_id = self_.rep();
-        let registry = self
-            .aggregate_registries
-            .get_mut(&registry_id)
-            .ok_or_else(|| {
-                extension_types::Duckerror::Internal(
-                    "unknown aggregate registry handle".to_string(),
-                )
-            })?;
-
-        let callback_handle = callback.rep();
-        std::mem::forget(callback);
-
-        let converted_arguments = convert_extension_funcargs(arguments.into());
-        let converted_returns = convert_extension_logicaltype(returns);
-        let converted_options = options.map(convert_extension_funcopts);
-        log_aggregate_registration(
-            &self.extension_name,
-            &name,
-            registry_id,
-            callback_handle,
-            &converted_arguments,
-            &converted_returns,
-            converted_options.as_ref(),
-        );
-
-        registry.entries.push(PendingAggregate {
-            extension: self.extension_name.clone(),
-            name,
-            arguments: converted_arguments,
-            returns: converted_returns,
-            callback_handle,
-            options: converted_options,
-        });
-
-        Ok(self.alloc_resource_id())
-    }
-
-    fn drop(
-        &mut self,
-        rep: Resource<extension_runtime::AggregateRegistry>,
-    ) -> wasmtime::Result<()> {
-        if let Some(registry) = self.aggregate_registries.remove(&rep.rep()) {
-            self.pending_aggregates.extend(registry.entries);
-        }
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostPragmaRegistry for ExtensionStoreState {
+#[cfg(test)]
+impl ExtensionStoreState {
     // Item 4: a component declares a PRAGMA in `load()`. The host captures its
     // name + the callback handle into the neutral pending buffer; the core
     // later pulls the list via `drain_pending`'s `pragmas` field on
@@ -1987,7 +1580,7 @@ impl extension_runtime::HostPragmaRegistry for ExtensionStoreState {
     // this capability was never produced), intercepts `PRAGMA <name>(...)`,
     // dispatches via callback-dispatch.call-pragma (the component RETURNS a
     // SQL script as text), and runs that script.
-    fn register_call(
+    pub(crate) fn register_call(
         &mut self,
         _self_: Resource<extension_runtime::PragmaRegistry>,
         name: String,
@@ -2031,26 +1624,10 @@ impl extension_runtime::HostPragmaRegistry for ExtensionStoreState {
         Ok(self.alloc_resource_id())
     }
 
-    fn drop(&mut self, _rep: Resource<extension_runtime::PragmaRegistry>) -> wasmtime::Result<()> {
-        Ok(())
-    }
-}
-
-impl extension_runtime::HostMacroRegistry for ExtensionStoreState {
-    fn register_scalar(
-        &mut self,
-        _self_: Resource<extension_runtime::MacroRegistry>,
-        _name: String,
-        _parameters: BindgenVec<String>,
-        _body_sql: String,
-        _options: Option<extension_runtime::Extopts>,
-    ) -> Result<bool, extension_types::Duckerror> {
-        Err(unsupported_runtime_error())
-    }
-
-    fn drop(&mut self, _rep: Resource<extension_runtime::MacroRegistry>) -> wasmtime::Result<()> {
-        Ok(())
-    }
+    // Phase 6.2.l.2 — the no-op `HostPragmaRegistry::drop` was
+    // deleted here (never called; the file_lock migration below
+    // also promoted a `drop` method, and two inherent `drop`s on
+    // the same type would collide).
 }
 
 // Phase 6.2.l.2 — `impl extension_config::Host` and
@@ -2081,29 +1658,7 @@ impl ExtensionStoreState {
         Ok(handle)
     }
 
-    fn register_cast(
-        &mut self,
-        spec: extension_catalog::CastSpec,
-        callback: Resource<extension_catalog::CastCallback>,
-    ) -> Result<(), String> {
-        let callback_handle = callback.rep();
-        std::mem::forget(callback);
-        verbose_log!(
-            "[extension-manager] catalog register-cast {}->{} ({:?}, callback={callback_handle}, implicit_cost={:?}) for '{}'",
-            spec.from, spec.to, spec.kind, spec.implicit_cost, self.extension_name
-        );
-        self.pending_casts.push(PendingCast {
-            extension: self.extension_name.clone(),
-            source: spec.from,
-            target: spec.to,
-            callback_handle,
-            // T2-4: drain the optional implicit-conversion cost the guest
-            // supplied; the reg_duckdb consolidator forwards to
-            // `duckdb_cast_function_set_implicit_cost` (default 100 if None).
-            implicit_cost: spec.implicit_cost,
-        });
-        Ok(())
-    }
+    // Phase 6.2.l.2 — `register_cast` retired (no test caller).
 
     pub(crate) fn register_macro(&mut self, def: extension_catalog::MacroDef) -> Result<(), String> {
         verbose_log!(
@@ -2557,7 +2112,8 @@ impl ExtensionStoreState {
 // per-OS-thread nesting-depth counter so a fieldbook entry that recursively
 // invokes `fieldbook_run` cannot spiral out of control. Forwards to the
 // direction-specific `ExtensionServices::nested_exec` sink for the actual work.
-impl extension_nested_exec::Host for ExtensionStoreState {
+#[cfg(test)]
+impl ExtensionStoreState {
     fn nested_exec(&mut self, sql: String) -> Result<extension_nested_exec::ExecResult, String> {
         // RAII: the counter is bumped for the duration of the sibling-connection
         // call, decremented when `_depth` drops (either normal return OR any
@@ -2588,8 +2144,9 @@ impl extension_nested_exec::Host for ExtensionStoreState {
 // root under a name identical to its host path so guest + host see the same
 // string). The host does no additional preopen validation -- see the WIT
 // trust-model comment.
-impl extension_file_lock::Host for ExtensionStoreState {
-    fn acquire_exclusive(
+#[cfg(test)]
+impl ExtensionStoreState {
+    pub(crate) fn acquire_exclusive(
         &mut self,
         path: String,
     ) -> Result<wasmtime::component::Resource<extension_file_lock::LockHandle>, String> {
@@ -2598,23 +2155,14 @@ impl extension_file_lock::Host for ExtensionStoreState {
         Ok(wasmtime::component::Resource::new_own(id))
     }
 
-    fn try_acquire_exclusive(
-        &mut self,
-        path: String,
-    ) -> Result<Option<wasmtime::component::Resource<extension_file_lock::LockHandle>>, String>
-    {
-        match LockHandleState::try_acquire_exclusive(&path)? {
-            Some(state) => {
-                let id = self.alloc_lock_handle(state);
-                Ok(Some(wasmtime::component::Resource::new_own(id)))
-            }
-            None => Ok(None),
-        }
-    }
+    // Phase 6.2.l.2 — `try_acquire_exclusive` retired (no test
+    // caller; wasmos-native FileLockHost still exposes it on the
+    // production path).
 }
 
-impl extension_file_lock::HostLockHandle for ExtensionStoreState {
-    fn release(&mut self, rep: wasmtime::component::Resource<extension_file_lock::LockHandle>) {
+#[cfg(test)]
+impl ExtensionStoreState {
+    pub(crate) fn release(&mut self, rep: wasmtime::component::Resource<extension_file_lock::LockHandle>) {
         // Drop the state; its Drop impl releases the flock and closes the
         // file. If the guest already released, the entry is gone -- that is
         // fine, the invariant "lock is released" is upheld.
@@ -2713,6 +2261,7 @@ impl LockHandleState {
     }
 }
 
+#[cfg(test)]
 fn neutral_nestedresult_to_wit(r: NestedExecResult) -> extension_nested_exec::ExecResult {
     let rows: Option<BindgenVec<BindgenVec<String>>> = r.rows.map(|rs| {
         rs.into_iter()
@@ -2733,6 +2282,7 @@ fn neutral_nestedresult_to_wit(r: NestedExecResult) -> extension_nested_exec::Ex
 // Capture conversions (extension WIT -> neutral reg::*) + logging helpers
 // ---------------------------------------------------------------------------
 
+#[cfg(test)]
 fn convert_extension_funcargs(args: Vec<extension_runtime::Funcarg>) -> Vec<reg::FuncArg> {
     args.into_iter()
         .map(|arg| reg::FuncArg {
@@ -2742,6 +2292,7 @@ fn convert_extension_funcargs(args: Vec<extension_runtime::Funcarg>) -> Vec<reg:
         .collect()
 }
 
+#[cfg(test)]
 fn convert_extension_logicaltype(ty: extension_runtime::Logicaltype) -> reg::LogicalType {
     match ty {
         extension_runtime::Logicaltype::Boolean => reg::LogicalType::Boolean,
@@ -2777,6 +2328,7 @@ fn convert_extension_logicaltype(ty: extension_runtime::Logicaltype) -> reg::Log
     }
 }
 
+#[cfg(test)]
 fn convert_extension_funcopts(opts: extension_runtime::Funcopts) -> reg::FuncOpts {
     reg::FuncOpts {
         description: opts.description,
@@ -2785,6 +2337,7 @@ fn convert_extension_funcopts(opts: extension_runtime::Funcopts) -> reg::FuncOpt
     }
 }
 
+#[cfg(test)]
 fn convert_extension_columndefs(columns: Vec<extension_runtime::Columndef>) -> Vec<reg::ColumnDef> {
     columns
         .into_iter()
@@ -2795,13 +2348,7 @@ fn convert_extension_columndefs(columns: Vec<extension_runtime::Columndef>) -> V
         .collect()
 }
 
-fn convert_extension_extopts(opts: extension_runtime::Extopts) -> reg::ExtOpts {
-    reg::ExtOpts {
-        description: opts.description,
-        tags: opts.tags.into_iter().collect(),
-    }
-}
-
+#[cfg(test)]
 fn convert_extension_funcflags(flags: extension_types::Funcflags) -> reg::FuncFlags {
     reg::FuncFlags {
         deterministic: flags.contains(extension_types::Funcflags::DETERMINISTIC),
@@ -2812,56 +2359,9 @@ fn convert_extension_funcflags(flags: extension_types::Funcflags) -> reg::FuncFl
     }
 }
 
-fn log_scalar_registration(
-    extension: &str,
-    name: &str,
-    registry_id: u32,
-    callback_handle: u32,
-    args: &[reg::FuncArg],
-    returns: &reg::LogicalType,
-    options: Option<&reg::FuncOpts>,
-) {
-    let arg_summary = summarize_runtime_funcargs(args);
-    let return_ty = describe_runtime_logicaltype(returns);
-    let option_summary = summarize_funcopts(options);
-    verbose_log!(
-        "[extension-runtime:{extension}] queued scalar '{name}' (registry={registry_id}, callback={callback_handle}) args={arg_summary} returns={return_ty} opts={option_summary}"
-    );
-}
-
-fn log_table_registration(
-    extension: &str,
-    name: &str,
-    registry_id: u32,
-    callback_handle: u32,
-    args: &[reg::FuncArg],
-    columns: &[reg::ColumnDef],
-    options: Option<&reg::ExtOpts>,
-) {
-    let arg_summary = summarize_runtime_funcargs(args);
-    let column_summary = summarize_runtime_columns(columns);
-    let option_summary = summarize_extopts(options);
-    verbose_log!(
-        "[extension-runtime:{extension}] queued table '{name}' (registry={registry_id}, callback={callback_handle}) args={arg_summary} columns={column_summary} opts={option_summary}"
-    );
-}
-
-fn log_aggregate_registration(
-    extension: &str,
-    name: &str,
-    registry_id: u32,
-    callback_handle: u32,
-    args: &[reg::FuncArg],
-    returns: &reg::LogicalType,
-    options: Option<&reg::FuncOpts>,
-) {
-    let arg_summary = summarize_runtime_funcargs(args);
-    let return_ty = describe_runtime_logicaltype(returns);
-    let option_summary = summarize_funcopts(options);
-    verbose_log!(
-        "[extension-runtime:{extension}] queued aggregate '{name}' (registry={registry_id}, callback={callback_handle}) args={arg_summary} returns={return_ty} opts={option_summary}"
-    );
-}
+// Phase 6.2.l.2 — `log_scalar_registration`, `log_table_registration`,
+// and `log_aggregate_registration` retired here. Only the deleted
+// callback / registry Host impls used them.
 
 pub fn summarize_runtime_funcargs(args: &[reg::FuncArg]) -> String {
     if args.is_empty() {
@@ -5873,9 +5373,7 @@ mod tests {
         // registry -> Err, not a panic.
         let bogus: Resource<extension_runtime::PragmaCallback> = Resource::new_own(424242);
         let registry: Resource<extension_runtime::PragmaRegistry> = Resource::new_own(1);
-        let res = extension_runtime::HostPragmaRegistry::register_call(
-            &mut state,
-            registry,
+        let res = state.register_call(registry,
             "my_pragma".to_string(),
             Vec::new().into(),
             extension_runtime::Logicaltype::Text,
@@ -5986,7 +5484,7 @@ mod tests {
     #[test]
     fn nested_exec_select_returns_rows() {
         let mut state = scripted_state();
-        let r = extension_nested_exec::Host::nested_exec(&mut state, "SELECT * FROM t".to_string())
+        let r = state.nested_exec("SELECT * FROM t".to_string())
             .expect("select ok");
         let rows = r.rows.expect("SELECT populates rows");
         assert_eq!(rows.len(), 2);
@@ -6000,12 +5498,10 @@ mod tests {
     fn nested_exec_dml_returns_rows_affected() {
         let mut state = scripted_state();
         // First call = SELECT (drains the script's initial arm).
-        let _ = extension_nested_exec::Host::nested_exec(&mut state, "SELECT 1".to_string())
+        let _ = state.nested_exec("SELECT 1".to_string())
             .expect("select ok");
         // Second call = DML: rows None, rows_affected Some.
-        let r = extension_nested_exec::Host::nested_exec(
-            &mut state,
-            "INSERT INTO t VALUES (3, 'gamma')".to_string(),
+        let r = state.nested_exec("INSERT INTO t VALUES (3, 'gamma')".to_string(),
         )
         .expect("insert ok");
         assert!(r.rows.is_none());
@@ -6018,7 +5514,7 @@ mod tests {
         // Host::nested_exec call must fail without ever calling into the sink.
         NESTED_EXEC_DEPTH.with(|d| d.set(NESTED_EXEC_MAX_DEPTH));
         let mut state = scripted_state();
-        let err = extension_nested_exec::Host::nested_exec(&mut state, "SELECT 1".to_string())
+        let err = state.nested_exec("SELECT 1".to_string())
             .expect_err("depth-cap error");
         assert!(
             err.contains("max nesting depth"),
@@ -6164,7 +5660,7 @@ mod tests {
         let path_str = path.to_string_lossy().into_owned();
         let mut state = scripted_state();
 
-        let handle = extension_file_lock::Host::acquire_exclusive(&mut state, path_str.clone())
+        let handle = state.acquire_exclusive(path_str.clone())
             .expect("host acquire ok");
         assert_eq!(state.lock_handles.len(), 1);
 
@@ -6178,14 +5674,14 @@ mod tests {
         );
 
         // Explicit release drops the state -> flock released.
-        extension_file_lock::HostLockHandle::release(&mut state, handle);
+        state.release(handle);
         assert_eq!(state.lock_handles.len(), 0);
 
         // Re-acquire succeeds now that the lock is free.
-        let handle2 = extension_file_lock::Host::acquire_exclusive(&mut state, path_str)
+        let handle2 = state.acquire_exclusive(path_str)
             .expect("host re-acquire ok");
         // Let drop clean up (also exercise the HostLockHandle::drop path).
-        extension_file_lock::HostLockHandle::drop(&mut state, handle2).expect("host drop ok");
+        state.drop(handle2).expect("host drop ok");
         assert_eq!(state.lock_handles.len(), 0);
         let _ = std::fs::remove_file(&path);
     }
