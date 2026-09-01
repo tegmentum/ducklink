@@ -4494,13 +4494,25 @@ impl ExtensionInstance {
         handle: u32,
         connection_id: u64,
     ) -> Result<(), extension_types::Duckerror> {
-        self.conn_bindings()?;
-        let bindings = self.conn_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_conn_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_on_connection_opened(store.as_context_mut(), handle, connection_id)
-            .map_err(map_extension_trap)?
+        // ADR-0029 Phase 6.2.i.5 — migrated from bindings.duckdb_
+        // extension_conn_dispatch().call_on_connection_opened(store,
+        // handle, connection_id) to sync_export_bridge::call_export.
+        // Same wire semantics; return is result<_, duckerror> —
+        // Ok(None) on success, Err(duckerror) on guest error.
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/conn-dispatch@5.0.0"),
+            "on-connection-opened",
+            &[
+                wasmos_runtime_api::Value::U32(handle),
+                wasmos_runtime_api::Value::U64(connection_id),
+            ],
+        )
+        .map_err(|e| extension_types::Duckerror::Internal(format!(
+            "on-connection-opened dispatch failed: {e}"
+        )))?;
+        export_result_to_duckerror(out, "on-connection-opened", |_| Ok(()))
     }
 
     /// Notify the component that connection `connection_id` was closed.
@@ -4509,13 +4521,21 @@ impl ExtensionInstance {
         handle: u32,
         connection_id: u64,
     ) -> Result<(), extension_types::Duckerror> {
-        self.conn_bindings()?;
-        let bindings = self.conn_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_conn_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_on_connection_closed(store.as_context_mut(), handle, connection_id)
-            .map_err(map_extension_trap)?
+        // ADR-0029 Phase 6.2.i.5 — sibling of connection_opened.
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/conn-dispatch@5.0.0"),
+            "on-connection-closed",
+            &[
+                wasmos_runtime_api::Value::U32(handle),
+                wasmos_runtime_api::Value::U64(connection_id),
+            ],
+        )
+        .map_err(|e| extension_types::Duckerror::Internal(format!(
+            "on-connection-closed dispatch failed: {e}"
+        )))?;
+        export_result_to_duckerror(out, "on-connection-closed", |_| Ok(()))
     }
 
     // --- 2.2.0 (Item 7): file-write-dispatch re-entry ---
@@ -4699,13 +4719,24 @@ impl ExtensionInstance {
         name: &str,
         value: &str,
     ) -> Result<(), extension_types::Duckerror> {
-        self.settings_bindings()?;
-        let bindings = self.settings_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_settings_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_on_setting_set(store.as_context_mut(), handle, name, value)
-            .map_err(map_extension_trap)?
+        // ADR-0029 Phase 6.2.i.5 — migrated from bindings.duckdb_
+        // extension_settings_dispatch().call_on_setting_set(store,
+        // handle, name, value) to sync_export_bridge::call_export.
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/settings-dispatch@5.0.0"),
+            "on-setting-set",
+            &[
+                wasmos_runtime_api::Value::U32(handle),
+                wasmos_runtime_api::Value::String(name.to_string()),
+                wasmos_runtime_api::Value::String(value.to_string()),
+            ],
+        )
+        .map_err(|e| extension_types::Duckerror::Internal(format!(
+            "on-setting-set dispatch failed: {e}"
+        )))?;
+        export_result_to_duckerror(out, "on-setting-set", |_| Ok(()))
     }
 
     // --- 3.2.0: log-storage-dispatch re-entry ---
@@ -4742,13 +4773,50 @@ impl ExtensionInstance {
         handle: u32,
         entry: LogEntry,
     ) -> Result<(), extension_types::Duckerror> {
-        self.log_storage_bindings()?;
-        let bindings = self.log_storage_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_log_storage_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_write_log_entry(store.as_context_mut(), handle, &entry)
-            .map_err(map_extension_trap)?
+        // ADR-0029 Phase 6.2.i.5 — migrated. LogEntry is a WIT
+        // record with fields (level: u32, message: string,
+        // tags: option<list<tuple<string, string>>>, ts-micros:
+        // s64). Wire field names use WIT canonical hyphenation
+        // (e.g. `ts-micros`, not `ts_micros`); wit-bindgen renames
+        // to snake_case for Rust identifiers but the record wire
+        // shape wasmtime's Val::Record consumes uses the WIT
+        // spelling.
+        let tags_val = match entry.tags {
+            Some(pairs) => wasmos_runtime_api::Value::Option(Some(Box::new(
+                wasmos_runtime_api::Value::List(
+                    pairs
+                        .into_iter()
+                        .map(|(k, v)| {
+                            wasmos_runtime_api::Value::Tuple(vec![
+                                wasmos_runtime_api::Value::String(k),
+                                wasmos_runtime_api::Value::String(v),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ))),
+            None => wasmos_runtime_api::Value::Option(None),
+        };
+        let entry_val = wasmos_runtime_api::Value::Record(vec![
+            ("level".to_string(), wasmos_runtime_api::Value::U32(entry.level)),
+            (
+                "message".to_string(),
+                wasmos_runtime_api::Value::String(entry.message.clone()),
+            ),
+            ("tags".to_string(), tags_val),
+            ("ts-micros".to_string(), wasmos_runtime_api::Value::S64(entry.ts_micros)),
+        ]);
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/log-storage-dispatch@5.0.0"),
+            "write-log-entry",
+            &[wasmos_runtime_api::Value::U32(handle), entry_val],
+        )
+        .map_err(|e| extension_types::Duckerror::Internal(format!(
+            "write-log-entry dispatch failed: {e}"
+        )))?;
+        export_result_to_duckerror(out, "write-log-entry", |_| Ok(()))
     }
 
     // --- 4.0.0: arrow-ext-dispatch re-entry ---
