@@ -4852,13 +4852,27 @@ impl ExtensionInstance {
         &mut self,
         callback_handle: u32,
     ) -> Result<u32, extension_types::Duckerror> {
-        self.arrow_ext_bindings()?;
-        let bindings = self.arrow_ext_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_arrow_ext_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_call_arrow_open(store.as_context_mut(), callback_handle)
-            .map_err(map_extension_trap)?
+        // ADR-0029 Phase 6.2.i.6 — migrated. Returns result<u32,
+        // duckerror> — Ok payload is the guest-assigned cursor id.
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/arrow-ext-dispatch@5.0.0"),
+            "call-arrow-open",
+            &[wasmos_runtime_api::Value::U32(callback_handle)],
+        )
+        .map_err(|e| extension_types::Duckerror::Internal(format!(
+            "call-arrow-open dispatch failed: {e}"
+        )))?;
+        export_result_to_duckerror(out, "call-arrow-open", |payload| match payload {
+            Some(wasmos_runtime_api::Value::U32(n)) => Ok(*n),
+            Some(other) => Err(extension_types::Duckerror::Internal(format!(
+                "call-arrow-open: expected Ok(U32), got {other:?}"
+            ))),
+            None => Err(extension_types::Duckerror::Internal(
+                "call-arrow-open: expected Ok(U32), got Ok(None)".to_string(),
+            )),
+        })
     }
 
     /// Pull the next batch of rows from the guest cursor. An empty resultset
@@ -4885,13 +4899,30 @@ impl ExtensionInstance {
         callback_handle: u32,
         cursor: u32,
     ) -> Result<bool, extension_types::Duckerror> {
-        self.arrow_ext_bindings()?;
-        let bindings = self.arrow_ext_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_arrow_ext_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_call_arrow_close(store.as_context_mut(), callback_handle, cursor)
-            .map_err(map_extension_trap)?
+        // ADR-0029 Phase 6.2.i.6 — migrated. Returns result<bool,
+        // duckerror>.
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/arrow-ext-dispatch@5.0.0"),
+            "call-arrow-close",
+            &[
+                wasmos_runtime_api::Value::U32(callback_handle),
+                wasmos_runtime_api::Value::U32(cursor),
+            ],
+        )
+        .map_err(|e| extension_types::Duckerror::Internal(format!(
+            "call-arrow-close dispatch failed: {e}"
+        )))?;
+        export_result_to_duckerror(out, "call-arrow-close", |payload| match payload {
+            Some(wasmos_runtime_api::Value::Bool(b)) => Ok(*b),
+            Some(other) => Err(extension_types::Duckerror::Internal(format!(
+                "call-arrow-close: expected Ok(Bool), got {other:?}"
+            ))),
+            None => Err(extension_types::Duckerror::Internal(
+                "call-arrow-close: expected Ok(Bool), got Ok(None)".to_string(),
+            )),
+        })
     }
 
     // --- M2a: storage-dispatch (foreign-catalog) re-entry ---
@@ -5069,14 +5100,34 @@ impl ExtensionInstance {
         index_name: &str,
         dims: u32,
     ) -> Result<u32, extension_types::Duckerror> {
-        self.index_bindings()?;
-        let bindings = self.index_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_index_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_index_create(store.as_context_mut(), type_name, index_name, dims)
-            .map_err(map_extension_trap)?
-            .map_err(index_duckerror_to_ext)
+        // ADR-0029 Phase 6.2.i.6 — migrated. `index_duckerror_to_ext`
+        // (a bindings-per-module Duckerror converter) is no longer
+        // needed because the wire duckerror shape is canonical WIT +
+        // `duckerror_from_value` decodes directly into
+        // `extension_types::Duckerror`.
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/index-dispatch@5.0.0"),
+            "index-create",
+            &[
+                wasmos_runtime_api::Value::String(type_name.to_string()),
+                wasmos_runtime_api::Value::String(index_name.to_string()),
+                wasmos_runtime_api::Value::U32(dims),
+            ],
+        )
+        .map_err(|e| extension_types::Duckerror::Internal(format!(
+            "index-create dispatch failed: {e}"
+        )))?;
+        export_result_to_duckerror(out, "index-create", |payload| match payload {
+            Some(wasmos_runtime_api::Value::U32(n)) => Ok(*n),
+            Some(other) => Err(extension_types::Duckerror::Internal(format!(
+                "index-create: expected Ok(U32), got {other:?}"
+            ))),
+            None => Err(extension_types::Duckerror::Internal(
+                "index-create: expected Ok(U32), got Ok(None)".to_string(),
+            )),
+        })
     }
 
     /// Accumulate a batch of (rowid, vector) rows into the builder.
@@ -5098,14 +5149,18 @@ impl ExtensionInstance {
 
     /// Finalize: build the ANN map from every appended row.
     pub fn index_build(&mut self, handle: u32) -> Result<(), extension_types::Duckerror> {
-        self.index_bindings()?;
-        let bindings = self.index_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_index_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_index_build(store.as_context_mut(), handle)
-            .map_err(map_extension_trap)?
-            .map_err(index_duckerror_to_ext)
+        // ADR-0029 Phase 6.2.i.6 — migrated.
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/index-dispatch@5.0.0"),
+            "index-build",
+            &[wasmos_runtime_api::Value::U32(handle)],
+        )
+        .map_err(|e| extension_types::Duckerror::Internal(format!(
+            "index-build dispatch failed: {e}"
+        )))?;
+        export_result_to_duckerror(out, "index-build", |_| Ok(()))
     }
 
     /// k nearest neighbours of `query`, closest first.
@@ -5127,14 +5182,18 @@ impl ExtensionInstance {
 
     /// Free the index + handle.
     pub fn index_drop(&mut self, handle: u32) -> Result<(), extension_types::Duckerror> {
-        self.index_bindings()?;
-        let bindings = self.index_bindings.as_ref().unwrap();
-        let guest = bindings.duckdb_extension_index_dispatch();
-        let store = &mut self.store;
-        guest
-            .call_index_drop(store.as_context_mut(), handle)
-            .map_err(map_extension_trap)?
-            .map_err(index_duckerror_to_ext)
+        // ADR-0029 Phase 6.2.i.6 — migrated.
+        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some("duckdb:extension/index-dispatch@5.0.0"),
+            "index-drop",
+            &[wasmos_runtime_api::Value::U32(handle)],
+        )
+        .map_err(|e| extension_types::Duckerror::Internal(format!(
+            "index-drop dispatch failed: {e}"
+        )))?;
+        export_result_to_duckerror(out, "index-drop", |_| Ok(()))
     }
 
     // --- httpfs M2: file-dispatch (remote file I/O) re-entry ---
