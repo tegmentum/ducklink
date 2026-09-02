@@ -63,7 +63,7 @@ dirs = "5"
 #     adapter (allow-all / deny-all / per-name); behavior is unchanged.
 #     (datalink-prefix was retired here in commit a048b7a — workspace now
 #     adopts the extension v5.0.0 prefix.name model via ducklink_prefix.)
-datalink-policy = { git = "https://github.com/tegmentum/datalink.git", rev = "6091e98df0686cb49e3d2dcef5475b29aeca3e95" }
+datalink-policy = { git = "https://github.com/tegmentum/datalink.git", tag = "v0.1.0" }
 # Bug 4b: the host-side rusqlite dep is gone. sqlitewasm now self-persists
 # through wasivfs (sqlite-lib composed in via `wac plug`), so the host never
 # re-opens the DSN file itself — writes cross the wasm boundary, hit the
@@ -87,7 +87,7 @@ tempfile = "3"
 # wasmos main tip at the time of the migration; bump when the abstraction
 # grows. datalink-dynlink-wasmos is a peer-repo git dep at the datalink
 # main rev that ships it (6fbb890+).
-datalink-dynlink-wasmos = { git = "https://github.com/tegmentum/datalink.git", rev = "6091e98df0686cb49e3d2dcef5475b29aeca3e95" }
+datalink-dynlink-wasmos = { git = "https://github.com/tegmentum/datalink.git", tag = "v0.1.0" }
 wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", tag = "v0.1.0" }
 wasmos-runtime-select = { git = "https://github.com/tegmentum/wasmos.git", tag = "v0.1.0", features = ["wasmtime-lts"] }
 async-trait = "0.1"
