@@ -47,7 +47,7 @@ hex = "0.4"
 # trust-gated CompileCache. Used here to HMAC-authenticate the precompiled
 # `.cwasm` (a `.cwasm` deserializes to runnable machine code, so it must be
 # trusted). compose-core is wasmtime-free and sqlite-free.
-compose-core = { git = "https://github.com/tegmentum/webassembly-component-orchestration.git", rev = "416226921cc166e98016f534a73bd6c9b7dcb33c" }
+compose-core = { git = "https://github.com/tegmentum/webassembly-component-orchestration.git", tag = "v0.1.0" }
 # Ergonomic error enum for the sub-ext loader (Phase D). The rest of the
 # crate uses anyhow at the boundary; internally SubExtError is a `thiserror`
 # enum so callers can pattern-match on `SubExtError::PlanMissing` vs a compose
