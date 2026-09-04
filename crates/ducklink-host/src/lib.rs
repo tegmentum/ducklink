@@ -137,24 +137,19 @@ use duckdb_core_bindings::exports::duckdb::extension::{
 use duckdb_core_bindings::tvm::memory::bytes as core_tvm_bytes;
 use duckdb_core_bindings::tvm::memory::manager as core_tvm_manager;
 use duckdb_core_bindings::tvm::memory::types as core_tvm_types;
-// Phase 6.2.n (Arc 3) — the wit-bindgen wrapper on ducklink-runtime
-// is `#[cfg(test)]`, so its interface aliases must be too. Both the
-// runtime + types imports here are used solely by the in-crate
-// `mod tests` block (TestExtensionHost stub + typed fixtures).
-#[cfg(test)]
-use ducklink_runtime::duckdb_extension_bindings::duckdb::extension::{
-    runtime as extension_runtime, types as extension_types,
-};
-// The catalog/config/files/logging interfaces + DuckdbExtensionPre are only
-// named by the in-crate test harness now (TestExtensionHost mocks + a direct
-// instantiate); the engine itself moved to ducklink-runtime.
-#[cfg(test)]
-use ducklink_runtime::duckdb_extension_bindings::duckdb::extension::{
-    catalog as extension_catalog, config as extension_config, files as extension_files,
-    logging as extension_logging,
-};
-#[cfg(test)]
-use ducklink_runtime::duckdb_extension_bindings::DuckdbExtensionPre;
+// ADR-0029 Phase 6.2.o cleanup — the top-level `#[cfg(test)] use
+// ducklink_runtime::duckdb_extension_bindings::...` block (with
+// `runtime`/`types`/`catalog`/`config`/`files`/`logging` interface
+// aliases + `DuckdbExtensionPre`) retired here alongside the tests
+// that named them. Phase 6.2.o deleted the wit-bindgen wrapper from
+// ducklink-runtime entirely; `#[cfg(test)]` does not cross crate
+// boundaries, so the aliases were dangling in ducklink-host test
+// builds. The `TestExtensionHost` linker fixture + its lone
+// consumer `load_sample_extension_component` retired as trivial
+// stubs; end-to-end load coverage lives in the `cli_loads_component_
+// extension_via_duckdb_loader` (+ 7 sibling `cli_*` sample_extension
+// tests) below, which drive the production wasmos install path
+// through the real CLI.
 use ducklink_runtime::{CallbackEntry, CallbackKind, CallbackRegistry};
 use wasmtime::component::__internal::Vec as BindgenVec;
 // M2b: the storage interface's scan types (scan-request / scan-filter /
@@ -6151,14 +6146,10 @@ fn sql_type_to_extension_logical(type_text: &str) -> Result<ducklink_runtime::ex
     })
 }
 
-// Retained only for the test mocks below (the production impls moved to
-// ducklink-runtime).
-#[cfg(test)]
-fn unsupported_runtime_error() -> ducklink_runtime::extension::Duckerror {
-    ducklink_runtime::extension::Duckerror::Unsupported(
-        "component runtime not available in CLI host".to_string(),
-    )
-}
+// ADR-0029 Phase 6.2.o cleanup — `unsupported_runtime_error` retired
+// here alongside its sole caller (`TestExtensionHost` linker mock in
+// `mod tests`). Production `Duckerror::Unsupported` construction
+// lives in ducklink-runtime.
 
 // Post-Phase-2d (site 3 of the wasmos-migration-recipe; most similar
 // prior migration is site 4 = dotcmd, commit 8e66b826): the five
@@ -12032,54 +12023,27 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn load_sample_extension_component() -> Result<()> {
-        let artifact = ensure_sample_extension_artifact()?;
-        let engine = build_engine()?;
-        let mut linker = Linker::<TestExtensionHost>::new(&engine);
-        p2::add_to_linker_sync(&mut linker)?;
-        add_wasi_http_to_linker(&mut linker)?;
-        extension_types::add_to_linker::<TestExtensionHost, TestExtensionHost>(
-            &mut linker,
-            |state| state,
-        )?;
-        extension_runtime::add_to_linker::<TestExtensionHost, TestExtensionHost>(
-            &mut linker,
-            |state| state,
-        )?;
-        extension_config::add_to_linker::<TestExtensionHost, TestExtensionHost>(
-            &mut linker,
-            |state| state,
-        )?;
-        extension_logging::add_to_linker::<TestExtensionHost, TestExtensionHost>(
-            &mut linker,
-            |state| state,
-        )?;
-        extension_catalog::add_to_linker::<TestExtensionHost, TestExtensionHost>(
-            &mut linker,
-            |state| state,
-        )?;
-        extension_files::add_to_linker::<TestExtensionHost, TestExtensionHost>(
-            &mut linker,
-            |state| state,
-        )?;
-
-        let component = Component::from_file(&engine, &artifact)?;
-        let instance_pre = linker.instantiate_pre(&component)?;
-        let pre = DuckdbExtensionPre::new(instance_pre)?;
-        let mut store = Store::new(&engine, TestExtensionHost::new());
-        let bindings = pre.instantiate(store.as_context_mut())?;
-        let result = bindings
-            .duckdb_extension_guest()
-            .call_load(store.as_context_mut())
-            .map_err(|err| anyhow::anyhow!(err))?;
-        let load_result =
-            result.map_err(|err| anyhow::anyhow!("duckdb extension returned error: {err:?}"))?;
-        assert_eq!(load_result.name, "sample_extension");
-        assert!(load_result.version.is_some());
-
-        Ok(())
-    }
+    // ADR-0029 Phase 6.2.o cleanup — `load_sample_extension_component`
+    // retired here. The test built a wit-bindgen linker over the
+    // stub `TestExtensionHost` (below, also retired) and drove
+    // `sample_extension.wasm` through `DuckdbExtensionPre` to prove
+    // `load()` returned. Every `Host*` impl on `TestExtensionHost`
+    // was a trivial `Ok(())` / `Err(unsupported_runtime_error())` /
+    // no-op stub, so this test only asserted that the linker + a
+    // sample component with no callbacks could instantiate.
+    //
+    // Coverage is subsumed by the 8 `cli_*` sample_extension tests
+    // immediately above (`cli_loads_component_extension_via_duckdb_
+    // loader`, `cli_executes_sample_scalar_callback`, and 6 more),
+    // which drive the SAME wasm through the production wasmos
+    // install path via the real CLI harness — an end-to-end proof
+    // strictly stronger than the wit-bindgen-linker instantiate
+    // check.
+    //
+    // (Phase 6.2.o retired the `duckdb_extension_bindings` wrapper +
+    // `DuckdbExtensionPre`; `#[cfg(test)]` on those imports does not
+    // cross crate boundaries, so keeping the test would leave the
+    // downstream refs dangling.)
 
     fn ensure_sample_extension_artifact() -> Result<PathBuf> {
         let workspace = workspace_root();
@@ -12137,420 +12101,18 @@ mod tests {
         Ok(())
     }
 
-    struct TestExtensionHost {
-        table: ResourceTable,
-        wasi: WasiCtx,
-        wasi_http: WasiHttpCtx,
-        next_resource_id: u32,
-    }
+    // ADR-0029 Phase 6.2.o cleanup — the ~410-line
+    // `TestExtensionHost` fixture retired here. It was a stub linker
+    // ctx implementing every `extension_{types,runtime,catalog,config,
+    // files,logging}::Host` trait (plus `WasiView` / `WasiHttpView` /
+    // `HasData`) with trivial `Ok(())` / `Err(unsupported_runtime_
+    // error())` / no-op bodies — every callback / registry impl
+    // returned the same `Unsupported` error. Its sole consumer,
+    // `load_sample_extension_component` (above), was already retired
+    // as a stub-only test whose real coverage lives in the CLI-driven
+    // `cli_*` sample_extension tests on the production wasmos install
+    // path. With that test gone, the fixture had no callers.
 
-    impl TestExtensionHost {
-        fn new() -> Self {
-            let wasi = WasiCtxBuilder::new().inherit_env().inherit_stdio().build();
-            Self {
-                table: ResourceTable::new(),
-                wasi,
-                wasi_http: WasiHttpCtx::new(),
-                next_resource_id: 1,
-            }
-        }
-
-        fn alloc_resource_id(&mut self) -> u32 {
-            let id = self.next_resource_id;
-            self.next_resource_id = self.next_resource_id.wrapping_add(1).max(1);
-            id
-        }
-    }
-
-    impl WasiView for TestExtensionHost {
-        fn ctx(&mut self) -> WasiCtxView<'_> {
-            WasiCtxView {
-                ctx: &mut self.wasi,
-                table: &mut self.table,
-            }
-        }
-    }
-
-    impl WasiHttpView for TestExtensionHost {
-        fn http(&mut self) -> WasiHttpCtxView<'_> {
-            WasiHttpCtxView {
-                ctx: &mut self.wasi_http,
-                table: &mut self.table,
-                hooks: Default::default(),
-            }
-        }
-    }
-
-    impl wasmtime::component::HasData for TestExtensionHost {
-        type Data<'a> = &'a mut TestExtensionHost;
-    }
-
-    impl extension_types::Host for TestExtensionHost {}
-
-    impl extension_runtime::Host for TestExtensionHost {
-        fn get_capability(
-            &mut self,
-            kind: ducklink_runtime::extension::Capabilitykind,
-        ) -> Option<extension_runtime::Capability> {
-            match kind {
-                ducklink_runtime::extension::Capabilitykind::Scalar => {
-                    Some(extension_runtime::Capability::Scalar(
-                        wasmtime::component::Resource::new_own(self.alloc_resource_id()),
-                    ))
-                }
-                ducklink_runtime::extension::Capabilitykind::Table => {
-                    Some(extension_runtime::Capability::Table(
-                        wasmtime::component::Resource::new_own(self.alloc_resource_id()),
-                    ))
-                }
-                ducklink_runtime::extension::Capabilitykind::Aggregate => {
-                    Some(extension_runtime::Capability::Aggregate(
-                        wasmtime::component::Resource::new_own(self.alloc_resource_id()),
-                    ))
-                }
-                _ => None,
-            }
-        }
-
-        fn list_capabilities(&mut self) -> BindgenVec<ducklink_runtime::extension::Capabilitykind> {
-            vec![
-                ducklink_runtime::extension::Capabilitykind::Scalar,
-                ducklink_runtime::extension::Capabilitykind::Table,
-                ducklink_runtime::extension::Capabilitykind::Aggregate,
-            ]
-            .into()
-        }
-    }
-
-    impl extension_runtime::HostScalarCallback for TestExtensionHost {
-        fn new(
-            &mut self,
-            _handle: u32,
-        ) -> wasmtime::component::Resource<extension_runtime::ScalarCallback> {
-            wasmtime::component::Resource::new_own(self.alloc_resource_id())
-        }
-
-        fn call(
-            &mut self,
-            _self_: wasmtime::component::Resource<extension_runtime::ScalarCallback>,
-            _args: BindgenVec<ducklink_runtime::extension::Duckvalue>,
-            _ctx: ducklink_runtime::extension::Invokeinfo,
-        ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
-            Err(unsupported_runtime_error())
-        }
-
-        fn drop(
-            &mut self,
-            _rep: wasmtime::component::Resource<extension_runtime::ScalarCallback>,
-        ) -> wasmtime::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl extension_runtime::HostTableCallback for TestExtensionHost {
-        fn new(
-            &mut self,
-            _handle: u32,
-        ) -> wasmtime::component::Resource<extension_runtime::TableCallback> {
-            wasmtime::component::Resource::new_own(self.alloc_resource_id())
-        }
-
-        fn call(
-            &mut self,
-            _self_: wasmtime::component::Resource<extension_runtime::TableCallback>,
-            _args: BindgenVec<ducklink_runtime::extension::Duckvalue>,
-        ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror> {
-            Err(unsupported_runtime_error())
-        }
-
-        fn drop(
-            &mut self,
-            _rep: wasmtime::component::Resource<extension_runtime::TableCallback>,
-        ) -> wasmtime::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl extension_runtime::HostAggregateCallback for TestExtensionHost {
-        fn new(
-            &mut self,
-            _handle: u32,
-        ) -> wasmtime::component::Resource<extension_runtime::AggregateCallback> {
-            wasmtime::component::Resource::new_own(self.alloc_resource_id())
-        }
-
-        fn call(
-            &mut self,
-            _self_: wasmtime::component::Resource<extension_runtime::AggregateCallback>,
-            _rows: ducklink_runtime::extension::Rowbatch,
-        ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
-            Err(unsupported_runtime_error())
-        }
-
-        fn drop(
-            &mut self,
-            _rep: wasmtime::component::Resource<extension_runtime::AggregateCallback>,
-        ) -> wasmtime::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl extension_runtime::HostPragmaCallback for TestExtensionHost {
-        fn new(
-            &mut self,
-            _handle: u32,
-        ) -> wasmtime::component::Resource<extension_runtime::PragmaCallback> {
-            wasmtime::component::Resource::new_own(self.alloc_resource_id())
-        }
-
-        fn call(
-            &mut self,
-            _self_: wasmtime::component::Resource<extension_runtime::PragmaCallback>,
-            _args: BindgenVec<ducklink_runtime::extension::Duckvalue>,
-        ) -> Result<Option<ducklink_runtime::extension::Duckvalue>, ducklink_runtime::extension::Duckerror> {
-            Err(unsupported_runtime_error())
-        }
-
-        fn drop(
-            &mut self,
-            _rep: wasmtime::component::Resource<extension_runtime::PragmaCallback>,
-        ) -> wasmtime::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl extension_runtime::HostCastCallback for TestExtensionHost {
-        fn new(
-            &mut self,
-            _handle: u32,
-        ) -> wasmtime::component::Resource<extension_runtime::CastCallback> {
-            wasmtime::component::Resource::new_own(self.alloc_resource_id())
-        }
-
-        fn call(
-            &mut self,
-            _self_: wasmtime::component::Resource<extension_runtime::CastCallback>,
-            _value: ducklink_runtime::extension::Duckvalue,
-        ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
-            Err(unsupported_runtime_error())
-        }
-
-        fn drop(
-            &mut self,
-            _rep: wasmtime::component::Resource<extension_runtime::CastCallback>,
-        ) -> wasmtime::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl extension_runtime::HostScalarRegistry for TestExtensionHost {
-        fn register(
-            &mut self,
-            _self_: wasmtime::component::Resource<extension_runtime::ScalarRegistry>,
-            _name: String,
-            _arguments: BindgenVec<extension_runtime::Funcarg>,
-            _returns: extension_runtime::Logicaltype,
-            _callback: wasmtime::component::Resource<extension_runtime::ScalarCallback>,
-            _options: Option<extension_runtime::Funcopts>,
-        ) -> Result<u32, ducklink_runtime::extension::Duckerror> {
-            Ok(self.alloc_resource_id())
-        }
-
-        fn drop(
-            &mut self,
-            _rep: wasmtime::component::Resource<extension_runtime::ScalarRegistry>,
-        ) -> wasmtime::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl extension_runtime::HostTableRegistry for TestExtensionHost {
-        fn register(
-            &mut self,
-            _self_: wasmtime::component::Resource<extension_runtime::TableRegistry>,
-            _name: String,
-            _arguments: BindgenVec<extension_runtime::Funcarg>,
-            _columns: BindgenVec<extension_runtime::Columndef>,
-            _callback: wasmtime::component::Resource<extension_runtime::TableCallback>,
-            _options: Option<extension_runtime::Extopts>,
-        ) -> Result<u32, ducklink_runtime::extension::Duckerror> {
-            Ok(self.alloc_resource_id())
-        }
-
-        fn drop(
-            &mut self,
-            _rep: wasmtime::component::Resource<extension_runtime::TableRegistry>,
-        ) -> wasmtime::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl extension_runtime::HostAggregateRegistry for TestExtensionHost {
-        fn register(
-            &mut self,
-            _self_: wasmtime::component::Resource<extension_runtime::AggregateRegistry>,
-            _name: String,
-            _arguments: BindgenVec<extension_runtime::Funcarg>,
-            _returns: extension_runtime::Logicaltype,
-            _callback: wasmtime::component::Resource<extension_runtime::AggregateCallback>,
-            _options: Option<extension_runtime::Funcopts>,
-        ) -> Result<u32, ducklink_runtime::extension::Duckerror> {
-            Ok(self.alloc_resource_id())
-        }
-
-        fn drop(
-            &mut self,
-            _rep: wasmtime::component::Resource<extension_runtime::AggregateRegistry>,
-        ) -> wasmtime::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl extension_runtime::HostPragmaRegistry for TestExtensionHost {
-        fn register_call(
-            &mut self,
-            _self_: wasmtime::component::Resource<extension_runtime::PragmaRegistry>,
-            _name: String,
-            _arguments: BindgenVec<extension_runtime::Funcarg>,
-            _returns: extension_runtime::Logicaltype,
-            _callback: wasmtime::component::Resource<extension_runtime::PragmaCallback>,
-            _options: Option<extension_runtime::Extopts>,
-        ) -> Result<u32, ducklink_runtime::extension::Duckerror> {
-            Err(unsupported_runtime_error())
-        }
-
-        fn drop(
-            &mut self,
-            _rep: wasmtime::component::Resource<extension_runtime::PragmaRegistry>,
-        ) -> wasmtime::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl extension_runtime::HostMacroRegistry for TestExtensionHost {
-        fn register_scalar(
-            &mut self,
-            _self_: wasmtime::component::Resource<extension_runtime::MacroRegistry>,
-            _name: String,
-            _parameters: BindgenVec<String>,
-            _body_sql: String,
-            _options: Option<extension_runtime::Extopts>,
-        ) -> Result<bool, ducklink_runtime::extension::Duckerror> {
-            Err(unsupported_runtime_error())
-        }
-
-        fn drop(
-            &mut self,
-            _rep: wasmtime::component::Resource<extension_runtime::MacroRegistry>,
-        ) -> wasmtime::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl extension_config::Host for TestExtensionHost {
-        fn provider_version(&mut self) -> String {
-            "test-extension-host".into()
-        }
-
-        fn list_keys(&mut self, _prefix: Option<String>) -> BindgenVec<String> {
-            Vec::new().into()
-        }
-
-        fn get_string(
-            &mut self,
-            _path: String,
-        ) -> Result<Option<String>, ducklink_runtime::extension::Configerror> {
-            Ok(None)
-        }
-
-        fn get_bool(
-            &mut self,
-            _path: String,
-        ) -> Result<Option<bool>, ducklink_runtime::extension::Configerror> {
-            Ok(None)
-        }
-
-        fn get_i64(&mut self, _path: String) -> Result<Option<i64>, ducklink_runtime::extension::Configerror> {
-            Ok(None)
-        }
-
-        fn get_u64(&mut self, _path: String) -> Result<Option<u64>, ducklink_runtime::extension::Configerror> {
-            Ok(None)
-        }
-
-        fn get_f64(&mut self, _path: String) -> Result<Option<f64>, ducklink_runtime::extension::Configerror> {
-            Ok(None)
-        }
-
-        fn get_bytes(
-            &mut self,
-            _path: String,
-        ) -> Result<Option<BindgenVec<u8>>, ducklink_runtime::extension::Configerror> {
-            Ok(None)
-        }
-
-        fn get_string_list(
-            &mut self,
-            _path: String,
-        ) -> Result<Option<BindgenVec<String>>, ducklink_runtime::extension::Configerror> {
-            Ok(None)
-        }
-    }
-
-    impl extension_logging::Host for TestExtensionHost {
-        fn log(
-            &mut self,
-            _level: ducklink_runtime::extension::Loglevel,
-            _message: String,
-            _target: Option<String>,
-        ) {
-        }
-
-        fn log_fields(
-            &mut self,
-            _level: ducklink_runtime::extension::Loglevel,
-            _message: String,
-            _fields: BindgenVec<ducklink_runtime::extension::Logfield>,
-        ) {
-        }
-    }
-
-    impl extension_catalog::Host for TestExtensionHost {
-        fn register_logical_type(
-            &mut self,
-            _ty: extension_catalog::LogicalType,
-        ) -> Result<u32, String> {
-            Ok(0)
-        }
-
-        fn register_cast(
-            &mut self,
-            _spec: extension_catalog::CastSpec,
-            _callback: wasmtime::component::Resource<extension_catalog::CastCallback>,
-        ) -> Result<(), String> {
-            Ok(())
-        }
-
-        fn register_macro(&mut self, _def: extension_catalog::MacroDef) -> Result<(), String> {
-            Ok(())
-        }
-    }
-
-    impl extension_files::Host for TestExtensionHost {
-        fn register_replacement_scan(
-            &mut self,
-            _scan: extension_files::ReplacementScan,
-        ) -> Result<u32, String> {
-            Ok(0)
-        }
-
-        fn register_copy_handler(
-            &mut self,
-            _handler: extension_files::CopyHandler,
-        ) -> Result<u32, String> {
-            Ok(0)
-        }
-    }
 
     // ----------------------------------------------------------------------
     // Pure converter unit tests (no engine / no .wasm artifact). These cover
@@ -12892,145 +12454,36 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn nested_exec_direction1_depth_cap() -> Result<()> {
-        // Drive the WIT wrapper (`extension_nested_exec::Host::nested_exec`)
-        // through a services sink whose own body re-invokes the same wrapper
-        // via a raw-pointer stashed thread-local. Each entry bumps the
-        // per-thread depth guard; the (NESTED_EXEC_MAX_DEPTH+1)th invocation
-        // errors with the depth-cap message BEFORE reaching the sink again.
-        //
-        // Runtime-crate-side tests cover the guard in isolation
-        // (`nested_exec_depth_cap_returns_error_at_level_max_plus_one` in
-        // `crates/ducklink-runtime/src/extension.rs`); this test complements
-        // it by proving the guard fires when driven end-to-end THROUGH our
-        // sink.
-        use ducklink_runtime::duckdb_extension_bindings::duckdb::extension::nested_exec as ext_nested_exec;
-        use ducklink_runtime::{
-            CallbackRegistry, ExtensionServices, ExtensionStoreState, LogField, LogLevel,
-            NestedExecResult, NESTED_EXEC_MAX_DEPTH,
-        };
-        use std::cell::Cell;
-        use std::sync::RwLock;
+    // ADR-0029 Phase 6.2.o cleanup — `nested_exec_direction1_
+    // depth_cap` retired here. The test called
+    // `ext_nested_exec::Host::nested_exec` directly from a
+    // `RecursingSink` to drive the per-thread depth guard end-to-
+    // end through the WIT wrapper. Phase 6.2.o deleted that wrapper
+    // (and the `#[cfg(test)] impl extension_nested_exec::Host for
+    // ExtensionStoreState`) from ducklink-runtime; there is no
+    // longer a public entry point on `ExtensionStoreState` for this
+    // crate to reach the depth guard (the test-only inherent
+    // method `state.nested_exec` is `#[cfg(test)]` INSIDE
+    // ducklink-runtime, which does not cross the crate boundary
+    // into ducklink-host).
+    //
+    // The guard itself is fully covered by the runtime-side unit
+    // test `nested_exec_depth_cap_returns_error_at_level_max_plus_
+    // one` in `crates/ducklink-runtime/src/extension.rs`, which
+    // exercises the same `NestedExecDepthGuard::enter` path via
+    // `state.nested_exec`. What this test uniquely proved —
+    // sink-side recursion through the guest-observable wrapper —
+    // has no equivalent in the wasmos-native world without a new
+    // ducklink-runtime API to inject a sink and drive dispatch, and
+    // reintroducing one for a single test is out of scope for this
+    // cleanup.
+    //
+    // FOLLOW-UP TODO: consider adding a runtime-side test that
+    // drives `state.nested_exec` under a recursing `ExtensionServices`
+    // sink to lock in the end-to-end guard-fires-through-sink
+    // property; that lives in ducklink-runtime where the test-only
+    // inherent method is reachable.
 
-        thread_local! {
-            /// Non-null while a depth-cap test is running; the sink reads it
-            /// to know which state to recurse into. Set/cleared by the test.
-            static RECURSE_STATE: Cell<*mut ExtensionStoreState> = const { Cell::new(std::ptr::null_mut()) };
-            /// Last error the sink observed from its own recursive
-            /// Host::nested_exec call — the depth-cap message when the guard
-            /// fires.
-            static RECURSE_LAST_ERR: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
-        }
-
-        struct RecursingSink;
-        impl ExtensionServices for RecursingSink {
-            fn provider_version(&mut self) -> Result<String, ducklink_runtime::ConfigError> {
-                Ok("test".to_string())
-            }
-            fn list_keys(
-                &mut self,
-                _: Option<&str>,
-            ) -> Result<Vec<String>, ducklink_runtime::ConfigError> {
-                Ok(Vec::new())
-            }
-            fn get_string(
-                &mut self,
-                _: &str,
-            ) -> Result<Option<String>, ducklink_runtime::ConfigError> {
-                Ok(None)
-            }
-            fn get_bool(&mut self, _: &str) -> Result<Option<bool>, ducklink_runtime::ConfigError> {
-                Ok(None)
-            }
-            fn get_i64(&mut self, _: &str) -> Result<Option<i64>, ducklink_runtime::ConfigError> {
-                Ok(None)
-            }
-            fn get_u64(&mut self, _: &str) -> Result<Option<u64>, ducklink_runtime::ConfigError> {
-                Ok(None)
-            }
-            fn get_f64(&mut self, _: &str) -> Result<Option<f64>, ducklink_runtime::ConfigError> {
-                Ok(None)
-            }
-            fn get_bytes(
-                &mut self,
-                _: &str,
-            ) -> Result<Option<Vec<u8>>, ducklink_runtime::ConfigError> {
-                Ok(None)
-            }
-            fn get_string_list(
-                &mut self,
-                _: &str,
-            ) -> Result<Option<Vec<String>>, ducklink_runtime::ConfigError> {
-                Ok(None)
-            }
-            fn log(&mut self, _: LogLevel, _: &str, _: Option<&str>) {}
-            fn log_fields(&mut self, _: LogLevel, _: &str, _: &[LogField]) {}
-            fn nested_exec(&mut self, _sql: &str) -> Result<NestedExecResult, String> {
-                // Re-enter the WIT wrapper. Its `NestedExecDepthGuard::enter()`
-                // bumps the thread-local counter; the guard drops when this
-                // frame returns.
-                let state_ptr = RECURSE_STATE.with(|c| c.get());
-                if state_ptr.is_null() {
-                    return Ok(NestedExecResult {
-                        rows: Some(Vec::new()),
-                        rows_affected: None,
-                    });
-                }
-                // SAFETY: single-threaded test scope; `state` outlives this
-                // recursive chain (owned by the outer stack frame in
-                // `nested_exec_direction1_depth_cap`), the pointer is set
-                // before the outermost `Host::nested_exec` call and cleared
-                // after — no concurrent access, no lifetime overlap.
-                let state: &mut ExtensionStoreState = unsafe { &mut *state_ptr };
-                match ext_nested_exec::Host::nested_exec(state, "recurse".to_string()) {
-                    Ok(_) => Ok(NestedExecResult {
-                        rows: Some(Vec::new()),
-                        rows_affected: None,
-                    }),
-                    Err(e) => {
-                        RECURSE_LAST_ERR.with(|c| *c.borrow_mut() = Some(e.clone()));
-                        // Bubble the depth-cap error up so the outermost
-                        // `Host::nested_exec` returns Err as well.
-                        Err(e)
-                    }
-                }
-            }
-        }
-
-        let wasi = wasmtime_wasi::WasiCtxBuilder::new().build();
-        let mut state = ExtensionStoreState::new(
-            wasi,
-            Box::new(RecursingSink),
-            Arc::new(RwLock::new(CallbackRegistry::default())),
-            "depth-cap-test".to_string(),
-        );
-        RECURSE_STATE.with(|c| c.set(&mut state as *mut _));
-        RECURSE_LAST_ERR.with(|c| *c.borrow_mut() = None);
-
-        // Outermost Host::nested_exec: depth 0 -> 1 (enters guard). Recurses
-        // NESTED_EXEC_MAX_DEPTH more times; the (max+1)th enter() rejects.
-        let err = ext_nested_exec::Host::nested_exec(&mut state, "kick".to_string())
-            .expect_err("depth cap must fire at max+1");
-        assert!(
-            err.contains("max nesting depth"),
-            "outer error should carry the depth-cap message; got: {err}"
-        );
-        // Every recursed frame surfaces the same message.
-        let inner = RECURSE_LAST_ERR
-            .with(|c| c.borrow().clone())
-            .expect("inner recursion should have observed at least one error");
-        assert!(
-            inner.contains("max nesting depth"),
-            "inner error should be the depth-cap message; got: {inner}"
-        );
-        // The depth ceiling is exposed as a pub const; sanity-check it hasn't
-        // shifted so a future NESTED_EXEC_MAX_DEPTH change surfaces here.
-        assert!(NESTED_EXEC_MAX_DEPTH >= 1, "depth cap must be positive");
-
-        RECURSE_STATE.with(|c| c.set(std::ptr::null_mut()));
-        Ok(())
-    }
 
     // ------------------------------------------------------------------
     // nested-exec Direction-1 §7.8 option (a): primary-core re-entry tests.
