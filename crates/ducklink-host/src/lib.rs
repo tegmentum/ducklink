@@ -2577,6 +2577,15 @@ fn bindgen_tvm_error_to_value(e: core_tvm_types::TvmError) -> wasmos_runtime_api
 struct CoreExecution {
     store: Store<CoreStoreState>,
     bindings: duckdb_core_bindings::Libduckdb,
+    /// Raw wasmtime Instance backing `bindings`. Held alongside
+    /// the bindgen wrapper so Phase 2e's per-interface guest-export
+    /// migration can dispatch through
+    /// `wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export`
+    /// on the raw Instance while the still-typed accessors on
+    /// `bindings` service the interfaces that haven't been retired
+    /// yet. Once every guest-export site has migrated the `bindings`
+    /// field retires and only the Instance remains.
+    instance: wasmtime::component::Instance,
 }
 
 /// The `nested-exec` Direction-1 §5.(b.1) sibling-core state, shared between
@@ -10075,10 +10084,22 @@ fn instantiate_core(
         },
     );
 
+    // Phase 2e — decompose the bindgen-provided `pre.instantiate(store)`
+    // path into its two building blocks so we can retain the raw
+    // wasmtime Instance alongside the typed Libduckdb wrapper.
+    // Bindgen's own implementation is:
+    //     let instance = pre.instance_pre.instantiate(&mut store)?;
+    //     pre.indices.load(&mut store, &instance)
+    // (see cargo expand output). `LibduckdbPre.indices` is private,
+    // but `LibduckdbIndices::new(&instance_pre)` is public — we
+    // build our own indices from the same InstancePre and drive the
+    // load ourselves. Ends with (bindings, instance) both live and
+    // referring to the SAME wasmtime Instance.
     let instance_pre = linker.instantiate_pre(&component)?;
-    let pre = duckdb_core_bindings::LibduckdbPre::new(instance_pre)?;
-    let bindings = pre.instantiate(store.as_context_mut())?;
-    Ok(CoreExecution { store, bindings })
+    let indices = duckdb_core_bindings::LibduckdbIndices::new(&instance_pre)?;
+    let instance = instance_pre.instantiate(store.as_context_mut())?;
+    let bindings = indices.load(store.as_context_mut(), &instance)?;
+    Ok(CoreExecution { store, bindings, instance })
 }
 
 /// Trust gate for precompiled `.cwasm` files.
