@@ -958,145 +958,1094 @@ fn bindgen_logicaltype_to_value(
     }
 }
 
-impl core_callback_dispatch::Host for CoreStoreState {
-    fn call_scalar(
-        &mut self,
-        handle: u32,
-        args: BindgenVec<core_types::Duckvalue>,
-        ctx: core_callback_dispatch::Invokeinfo,
-    ) -> Result<core_types::Duckvalue, core_types::Duckerror> {
-        let converted_args: Vec<_> = args
-            .into_iter()
-            .map(convert_core_duckvalue_to_extension)
-            .collect();
-        let converted_ctx = convert_core_invokeinfo(ctx);
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_scalar(handle, converted_args.as_slice(), converted_ctx)
-            .map(convert_extension_duckvalue_to_core)
-            .map_err(convert_extension_duckerror_to_core)
-    }
+// The bindgen-era `impl core_callback_dispatch::Host for CoreStoreState`
+// block that used to sit here is retired under Phase 2e (site 2) of
+// the wasmos-runtime-api migration — see the [`CallbackDispatchHost`]
+// implementation below. Fifth (and final) of the five host-import
+// interfaces to migrate off bindgen for the core world (after
+// tvm:memory/{bytes,manager} and duckdb:component/{host-extension-
+// loader,extension-loader-hooks}).
+//
+// Seven WIT methods across two shape families:
+//   * Cold row-major (call-scalar / call-table / call-pragma /
+//     call-cast) — `list<duckvalue>` args, one `duckvalue` or
+//     `resultset` return.
+//   * Hot columnar (call-scalar-batch-col / call-aggregate-col /
+//     call-cast-col) — `list<colvec>` / `colvec` args and
+//     `colvec` / `duckvalue` returns. `colvec` is
+//     `{ data: column, validity: list<u8>, rows: u32 }` and
+//     `column` is a 27-arm variant covering every DuckDB physical
+//     type plus the S1 nested-arm escape hatches.
+//
+// The handler reuses every existing conversion helper unchanged:
+//   * `convert_core_duckvalue` / `convert_cli_duckvalue` — the
+//     2-hop chain `Value` (via parallel-session's
+//     `value_to_duckvalue`) ↔ `cli_native::Duckvalue` ↔
+//     `core_types::Duckvalue`.
+//   * `convert_core_duckvalue_to_extension` +
+//     `convert_extension_duckvalue_to_core` — bindgen↔runtime
+//     leaf conversions.
+//   * `core_colvecs_to_ext_rows` + `ext_values_to_core_colvec` —
+//     column-major↔row-major pivots.
+//   * `convert_core_invokeinfo` +
+//     `convert_extension_resultset_to_core` +
+//     `convert_extension_duckerror_to_core` — smaller records.
+//
+// New marshallers this wedge introduces (below the handler):
+//   * `value_to_core_duckvalue` / `core_duckvalue_to_value` —
+//     Value↔core_types::Duckvalue wrappers over the 2-hop chain.
+//   * `value_to_core_invokeinfo` — small record.
+//   * `core_duckerror_to_value` — 5-arm variant.
+//   * `core_resultset_to_value` — `list<list<duckvalue>>`.
+//   * `value_to_core_colvec` / `core_colvec_to_value` — the
+//     27-arm column variant + `{data,validity,rows}` record. The
+//     largest single marshalling surface in this whole migration.
 
-    fn call_scalar_batch_col(
-        &mut self,
-        handle: u32,
-        args: BindgenVec<core_callback_dispatch::Colvec>,
-        ctx: core_callback_dispatch::Invokeinfo,
-    ) -> Result<core_callback_dispatch::Colvec, core_types::Duckerror> {
-        // major-4 columnar: the core hands one colvec per arg; pivot to the
-        // extension manager's row-major dispatch (which re-pivots to the
-        // extension's colvec ABI), then rebuild the result column.
-        let ext_rows = core_colvecs_to_ext_rows(&args);
-        let converted_ctx = convert_core_invokeinfo(ctx);
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_scalar_batch(handle, &ext_rows, converted_ctx)
-            .map(ext_values_to_core_colvec)
-            .map_err(convert_extension_duckerror_to_core)
-    }
+/// Interface name for the callback-dispatch host, matching WIT
+/// `package duckdb:extension@5.0.0; interface callback-dispatch`.
+const CALLBACK_DISPATCH_IFACE: &str =
+    "duckdb:extension/callback-dispatch@5.0.0";
 
-    fn call_table(
-        &mut self,
-        handle: u32,
-        args: BindgenVec<core_types::Duckvalue>,
-    ) -> Result<core_callback_dispatch::Resultset, core_types::Duckerror> {
-        let converted_args: Vec<_> = args
-            .into_iter()
-            .map(convert_core_duckvalue_to_extension)
-            .collect();
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_table(handle, converted_args.as_slice())
-            .map(convert_extension_resultset_to_core)
-            .map_err(convert_extension_duckerror_to_core)
-    }
+/// Wasmos-native host impl of `duckdb:extension/callback-dispatch@5.0.0`.
+/// Stateless unit struct — every method reaches [`CoreStoreState`] via
+/// `ctx.consumer_state`, then locks `extension_manager` for the
+/// duration of the underlying dispatch. Same locking discipline as
+/// the bindgen-era `&mut self` methods.
+struct CallbackDispatchHost;
 
-    fn call_aggregate_col(
-        &mut self,
-        handle: u32,
-        args: BindgenVec<core_callback_dispatch::Colvec>,
-    ) -> Result<core_types::Duckvalue, core_types::Duckerror> {
-        // major-4 columnar aggregate: pivot the buffered group columns to rows.
-        let ext_rows = core_colvecs_to_ext_rows(&args);
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_aggregate(handle, &ext_rows)
-            .map(convert_extension_duckvalue_to_core)
-            .map_err(convert_extension_duckerror_to_core)
-    }
-
-    fn call_cast_col(
-        &mut self,
-        handle: u32,
-        arg: core_callback_dispatch::Colvec,
-    ) -> Result<core_callback_dispatch::Colvec, core_types::Duckerror> {
-        // major-4 columnar cast: cast each row via the row-major dispatch_cast.
-        let ext_rows = core_colvecs_to_ext_rows(std::slice::from_ref(&arg));
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        let mut out = Vec::with_capacity(ext_rows.len());
-        for row in &ext_rows {
-            let v = row
-                .first()
-                .cloned()
-                .unwrap_or(ducklink_runtime::extension::Duckvalue::Null);
-            out.push(
-                manager
-                    .dispatch_cast(handle, &v)
-                    .map_err(convert_extension_duckerror_to_core)?,
-            );
+impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
+    fn call(
+        &self,
+        ctx: &mut wasmos_runtime_api::HostCallContext<'_>,
+        method: &str,
+        args: Vec<wasmos_runtime_api::Value>,
+    ) -> wasmos_runtime_api::RuntimeResult<Vec<wasmos_runtime_api::Value>> {
+        use wasmos_runtime_api::{RuntimeError, Value};
+        match method {
+            "call-scalar" => {
+                let (handle, args_vals, invoke_ctx) = match args.as_slice() {
+                    [Value::U32(h), Value::List(a), c] => (
+                        *h,
+                        a.clone(),
+                        value_to_core_invokeinfo(c)?,
+                    ),
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "{CALLBACK_DISPATCH_IFACE}.call-scalar: expected \
+                             [u32, list<duckvalue>, invokeinfo], got {other:?}"
+                        )))
+                    }
+                };
+                let ext_args: Vec<ducklink_runtime::extension::Duckvalue> = args_vals
+                    .into_iter()
+                    .map(|v| {
+                        value_to_core_duckvalue(&v)
+                            .map(convert_core_duckvalue_to_extension)
+                    })
+                    .collect::<wasmos_runtime_api::RuntimeResult<_>>()?;
+                let ext_ctx = convert_core_invokeinfo(invoke_ctx);
+                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "callback-dispatch call-scalar: consumer_state<CoreStoreState> unavailable",
+                    )
+                })?;
+                let mut manager = state
+                    .extension_manager
+                    .lock()
+                    .expect("extension manager mutex poisoned");
+                let outcome = manager
+                    .dispatch_scalar(handle, ext_args.as_slice(), ext_ctx)
+                    .map(convert_extension_duckvalue_to_core)
+                    .map_err(convert_extension_duckerror_to_core);
+                drop(manager);
+                Ok(vec![match outcome {
+                    Ok(dv) => Value::Result(Ok(Some(Box::new(core_duckvalue_to_value(dv))))),
+                    Err(err) => Value::Result(Err(Some(Box::new(core_duckerror_to_value(err))))),
+                }])
+            }
+            "call-scalar-batch-col" => {
+                let (handle, colvecs, invoke_ctx) = match args.as_slice() {
+                    [Value::U32(h), Value::List(a), c] => (
+                        *h,
+                        a.clone(),
+                        value_to_core_invokeinfo(c)?,
+                    ),
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "{CALLBACK_DISPATCH_IFACE}.call-scalar-batch-col: expected \
+                             [u32, list<colvec>, invokeinfo], got {other:?}"
+                        )))
+                    }
+                };
+                let core_colvecs: Vec<core_callback_dispatch::Colvec> = colvecs
+                    .iter()
+                    .map(value_to_core_colvec)
+                    .collect::<wasmos_runtime_api::RuntimeResult<_>>()?;
+                let ext_rows = core_colvecs_to_ext_rows(&core_colvecs);
+                let ext_ctx = convert_core_invokeinfo(invoke_ctx);
+                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "callback-dispatch call-scalar-batch-col: consumer_state<CoreStoreState> unavailable",
+                    )
+                })?;
+                let mut manager = state
+                    .extension_manager
+                    .lock()
+                    .expect("extension manager mutex poisoned");
+                let outcome = manager
+                    .dispatch_scalar_batch(handle, &ext_rows, ext_ctx)
+                    .map(ext_values_to_core_colvec)
+                    .map_err(convert_extension_duckerror_to_core);
+                drop(manager);
+                Ok(vec![match outcome {
+                    Ok(cv) => Value::Result(Ok(Some(Box::new(core_colvec_to_value(&cv))))),
+                    Err(err) => Value::Result(Err(Some(Box::new(core_duckerror_to_value(err))))),
+                }])
+            }
+            "call-table" => {
+                let (handle, args_vals) = match args.as_slice() {
+                    [Value::U32(h), Value::List(a)] => (*h, a.clone()),
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "{CALLBACK_DISPATCH_IFACE}.call-table: expected \
+                             [u32, list<duckvalue>], got {other:?}"
+                        )))
+                    }
+                };
+                let ext_args: Vec<ducklink_runtime::extension::Duckvalue> = args_vals
+                    .into_iter()
+                    .map(|v| {
+                        value_to_core_duckvalue(&v)
+                            .map(convert_core_duckvalue_to_extension)
+                    })
+                    .collect::<wasmos_runtime_api::RuntimeResult<_>>()?;
+                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "callback-dispatch call-table: consumer_state<CoreStoreState> unavailable",
+                    )
+                })?;
+                let mut manager = state
+                    .extension_manager
+                    .lock()
+                    .expect("extension manager mutex poisoned");
+                let outcome = manager
+                    .dispatch_table(handle, ext_args.as_slice())
+                    .map(convert_extension_resultset_to_core)
+                    .map_err(convert_extension_duckerror_to_core);
+                drop(manager);
+                Ok(vec![match outcome {
+                    Ok(rs) => Value::Result(Ok(Some(Box::new(core_resultset_to_value(rs))))),
+                    Err(err) => Value::Result(Err(Some(Box::new(core_duckerror_to_value(err))))),
+                }])
+            }
+            "call-aggregate-col" => {
+                let (handle, colvecs) = match args.as_slice() {
+                    [Value::U32(h), Value::List(a)] => (*h, a.clone()),
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "{CALLBACK_DISPATCH_IFACE}.call-aggregate-col: expected \
+                             [u32, list<colvec>], got {other:?}"
+                        )))
+                    }
+                };
+                let core_colvecs: Vec<core_callback_dispatch::Colvec> = colvecs
+                    .iter()
+                    .map(value_to_core_colvec)
+                    .collect::<wasmos_runtime_api::RuntimeResult<_>>()?;
+                let ext_rows = core_colvecs_to_ext_rows(&core_colvecs);
+                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "callback-dispatch call-aggregate-col: consumer_state<CoreStoreState> unavailable",
+                    )
+                })?;
+                let mut manager = state
+                    .extension_manager
+                    .lock()
+                    .expect("extension manager mutex poisoned");
+                let outcome = manager
+                    .dispatch_aggregate(handle, &ext_rows)
+                    .map(convert_extension_duckvalue_to_core)
+                    .map_err(convert_extension_duckerror_to_core);
+                drop(manager);
+                Ok(vec![match outcome {
+                    Ok(dv) => Value::Result(Ok(Some(Box::new(core_duckvalue_to_value(dv))))),
+                    Err(err) => Value::Result(Err(Some(Box::new(core_duckerror_to_value(err))))),
+                }])
+            }
+            "call-cast-col" => {
+                let (handle, colvec_v) = match args.as_slice() {
+                    [Value::U32(h), c] => (*h, c),
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "{CALLBACK_DISPATCH_IFACE}.call-cast-col: expected \
+                             [u32, colvec], got {other:?}"
+                        )))
+                    }
+                };
+                let core_colvec = value_to_core_colvec(colvec_v)?;
+                let ext_rows =
+                    core_colvecs_to_ext_rows(std::slice::from_ref(&core_colvec));
+                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "callback-dispatch call-cast-col: consumer_state<CoreStoreState> unavailable",
+                    )
+                })?;
+                let mut manager = state
+                    .extension_manager
+                    .lock()
+                    .expect("extension manager mutex poisoned");
+                let mut ext_out: Vec<ducklink_runtime::extension::Duckvalue> =
+                    Vec::with_capacity(ext_rows.len());
+                let mut err_out = None;
+                for row in &ext_rows {
+                    let v = row
+                        .first()
+                        .cloned()
+                        .unwrap_or(ducklink_runtime::extension::Duckvalue::Null);
+                    match manager.dispatch_cast(handle, &v) {
+                        Ok(dv) => ext_out.push(dv),
+                        Err(err) => {
+                            err_out = Some(convert_extension_duckerror_to_core(err));
+                            break;
+                        }
+                    }
+                }
+                drop(manager);
+                if let Some(err) = err_out {
+                    return Ok(vec![Value::Result(Err(Some(Box::new(
+                        core_duckerror_to_value(err),
+                    ))))]);
+                }
+                let out_colvec = ext_values_to_core_colvec(ext_out);
+                Ok(vec![Value::Result(Ok(Some(Box::new(
+                    core_colvec_to_value(&out_colvec),
+                ))))])
+            }
+            "call-pragma" => {
+                let (handle, args_vals) = match args.as_slice() {
+                    [Value::U32(h), Value::List(a)] => (*h, a.clone()),
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "{CALLBACK_DISPATCH_IFACE}.call-pragma: expected \
+                             [u32, list<duckvalue>], got {other:?}"
+                        )))
+                    }
+                };
+                let ext_args: Vec<ducklink_runtime::extension::Duckvalue> = args_vals
+                    .into_iter()
+                    .map(|v| {
+                        value_to_core_duckvalue(&v)
+                            .map(convert_core_duckvalue_to_extension)
+                    })
+                    .collect::<wasmos_runtime_api::RuntimeResult<_>>()?;
+                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "callback-dispatch call-pragma: consumer_state<CoreStoreState> unavailable",
+                    )
+                })?;
+                let mut manager = state
+                    .extension_manager
+                    .lock()
+                    .expect("extension manager mutex poisoned");
+                let outcome = manager
+                    .dispatch_pragma(handle, ext_args.as_slice())
+                    .map(|r| r.map(convert_extension_duckvalue_to_core))
+                    .map_err(convert_extension_duckerror_to_core);
+                drop(manager);
+                Ok(vec![match outcome {
+                    Ok(opt) => Value::Result(Ok(Some(Box::new(Value::Option(
+                        opt.map(|dv| Box::new(core_duckvalue_to_value(dv))),
+                    ))))),
+                    Err(err) => Value::Result(Err(Some(Box::new(core_duckerror_to_value(err))))),
+                }])
+            }
+            "call-cast" => {
+                let (handle, value_v) = match args.as_slice() {
+                    [Value::U32(h), v] => (*h, v),
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "{CALLBACK_DISPATCH_IFACE}.call-cast: expected \
+                             [u32, duckvalue], got {other:?}"
+                        )))
+                    }
+                };
+                let core_v = value_to_core_duckvalue(value_v)?;
+                let ext_v = convert_core_duckvalue_to_extension(core_v);
+                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "callback-dispatch call-cast: consumer_state<CoreStoreState> unavailable",
+                    )
+                })?;
+                let mut manager = state
+                    .extension_manager
+                    .lock()
+                    .expect("extension manager mutex poisoned");
+                let outcome = manager
+                    .dispatch_cast(handle, &ext_v)
+                    .map(convert_extension_duckvalue_to_core)
+                    .map_err(convert_extension_duckerror_to_core);
+                drop(manager);
+                Ok(vec![match outcome {
+                    Ok(dv) => Value::Result(Ok(Some(Box::new(core_duckvalue_to_value(dv))))),
+                    Err(err) => Value::Result(Err(Some(Box::new(core_duckerror_to_value(err))))),
+                }])
+            }
+            other => Err(RuntimeError::msg(format!(
+                "{CALLBACK_DISPATCH_IFACE}: unknown method {other:?}"
+            ))),
         }
-        Ok(ext_values_to_core_colvec(out))
     }
+}
 
-    fn call_pragma(
-        &mut self,
-        handle: u32,
-        args: BindgenVec<core_types::Duckvalue>,
-    ) -> Result<Option<core_types::Duckvalue>, core_types::Duckerror> {
-        let converted_args: Vec<_> = args
-            .into_iter()
-            .map(convert_core_duckvalue_to_extension)
-            .collect();
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_pragma(handle, converted_args.as_slice())
-            .map(|result| result.map(convert_extension_duckvalue_to_core))
-            .map_err(convert_extension_duckerror_to_core)
-    }
+// -----------------------------------------------------------------
+// Callback-dispatch value marshallers
+// (`Value` ↔ bindgen `core_*` shapes). Wrappers over existing
+// conversion helpers where possible (Duckvalue via 2-hop chain);
+// new hand-written code where none exists (Colvec/Column,
+// Invokeinfo, Duckerror). All lift/lower pairs stay in this
+// section for grep-locality.
+// -----------------------------------------------------------------
 
-    fn call_cast(
-        &mut self,
-        handle: u32,
-        value: core_types::Duckvalue,
-    ) -> Result<core_types::Duckvalue, core_types::Duckerror> {
-        let converted = convert_core_duckvalue_to_extension(value);
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        manager
-            .dispatch_cast(handle, &converted)
-            .map(convert_extension_duckvalue_to_core)
-            .map_err(convert_extension_duckerror_to_core)
+/// `Value` -> `core_types::Duckvalue` via the 2-hop chain
+/// `Value` -> `cli_native::Duckvalue` (parallel session's Phase-2d
+/// `value_to_duckvalue`) -> `core_types::Duckvalue` (existing
+/// `convert_cli_duckvalue` at ~line 8195).
+fn value_to_core_duckvalue(
+    v: &wasmos_runtime_api::Value,
+) -> wasmos_runtime_api::RuntimeResult<core_types::Duckvalue> {
+    Ok(convert_cli_duckvalue(value_to_duckvalue(v)?))
+}
+
+/// `core_types::Duckvalue` -> `Value` via the reverse 2-hop chain
+/// `core_types::Duckvalue` -> `cli_native::Duckvalue` (existing
+/// `convert_core_duckvalue` at ~line 8135) -> `Value` (parallel
+/// session's `duckvalue_to_value`).
+fn core_duckvalue_to_value(dv: core_types::Duckvalue) -> wasmos_runtime_api::Value {
+    duckvalue_to_value(&convert_core_duckvalue(dv))
+}
+
+/// `Value::Record { rowindex: option<u64>, iswindow: bool }` ->
+/// bindgen `core_callback_dispatch::Invokeinfo`. Field-by-name
+/// binding.
+fn value_to_core_invokeinfo(
+    v: &wasmos_runtime_api::Value,
+) -> wasmos_runtime_api::RuntimeResult<core_callback_dispatch::Invokeinfo> {
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let fields = match v {
+        Value::Record(f) => f,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "invokeinfo: expected Value::Record, got {other:?}"
+            )))
+        }
+    };
+    let mut rowindex: Option<u64> = None;
+    let mut iswindow: Option<bool> = None;
+    for (k, val) in fields {
+        match (k.as_str(), val) {
+            ("rowindex", Value::Option(inner)) => {
+                rowindex = match inner {
+                    Some(payload) => match payload.as_ref() {
+                        Value::U64(n) => Some(*n),
+                        other => {
+                            return Err(RuntimeError::msg(format!(
+                                "invokeinfo.rowindex: expected u64 inside option, got {other:?}"
+                            )))
+                        }
+                    },
+                    None => None,
+                };
+            }
+            ("iswindow", Value::Bool(b)) => iswindow = Some(*b),
+            _ => {}
+        }
     }
+    Ok(core_callback_dispatch::Invokeinfo {
+        rowindex,
+        iswindow: iswindow.ok_or_else(|| {
+            RuntimeError::msg("invokeinfo: missing `iswindow: bool`")
+        })?,
+    })
+}
+
+/// `core_types::Duckerror` (5-arm variant, each with a string
+/// payload) -> `Value::Variant`.
+fn core_duckerror_to_value(err: core_types::Duckerror) -> wasmos_runtime_api::Value {
+    use core_types::Duckerror as E;
+    use wasmos_runtime_api::Value;
+    let (discriminant, msg) = match err {
+        E::Invalidargument(m) => ("invalidargument", m),
+        E::Unsupported(m) => ("unsupported", m),
+        E::Invalidstate(m) => ("invalidstate", m),
+        E::Io(m) => ("io", m),
+        E::Internal(m) => ("internal", m),
+    };
+    Value::Variant {
+        discriminant: discriminant.to_string(),
+        payload: Some(Box::new(Value::String(msg))),
+    }
+}
+
+/// `core_callback_dispatch::Resultset` (aliased to
+/// `list<list<duckvalue>>`) -> `Value::List(Vec<Value::List>)`.
+fn core_resultset_to_value(
+    rs: core_callback_dispatch::Resultset,
+) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    let rows: Vec<Value> = rs
+        .into_iter()
+        .map(|row| {
+            Value::List(
+                row.into_iter()
+                    .map(core_duckvalue_to_value)
+                    .collect(),
+            )
+        })
+        .collect();
+    Value::List(rows)
+}
+
+/// `Value::Record { data: column, validity: list<u8>, rows: u32 }`
+/// -> bindgen `core_callback_dispatch::Colvec`. Delegates the
+/// 27-arm `column` variant dispatch to
+/// [`value_to_core_column`].
+fn value_to_core_colvec(
+    v: &wasmos_runtime_api::Value,
+) -> wasmos_runtime_api::RuntimeResult<core_callback_dispatch::Colvec> {
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let fields = match v {
+        Value::Record(f) => f,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "colvec: expected Value::Record, got {other:?}"
+            )))
+        }
+    };
+    let mut data: Option<core_column_types::Column> = None;
+    let mut validity: Option<Vec<u8>> = None;
+    let mut rows: Option<u32> = None;
+    for (k, val) in fields {
+        match (k.as_str(), val) {
+            ("data", column_v) => data = Some(value_to_core_column(column_v)?),
+            ("validity", Value::Bytes(b)) => validity = Some(b.to_vec()),
+            ("validity", Value::List(items)) => {
+                let mut out = Vec::with_capacity(items.len());
+                for (i, item) in items.iter().enumerate() {
+                    match item {
+                        Value::U8(b) => out.push(*b),
+                        other => {
+                            return Err(RuntimeError::msg(format!(
+                                "colvec.validity[{i}]: expected u8, got {other:?}"
+                            )))
+                        }
+                    }
+                }
+                validity = Some(out);
+            }
+            ("rows", Value::U32(n)) => rows = Some(*n),
+            _ => {}
+        }
+    }
+    Ok(core_callback_dispatch::Colvec {
+        data: data
+            .ok_or_else(|| RuntimeError::msg("colvec: missing `data: column`"))?,
+        validity: validity
+            .ok_or_else(|| RuntimeError::msg("colvec: missing `validity: list<u8>`"))?,
+        rows: rows.ok_or_else(|| RuntimeError::msg("colvec: missing `rows: u32`"))?,
+    })
+}
+
+/// `core_callback_dispatch::Colvec` -> `Value::Record`. Inverse
+/// of [`value_to_core_colvec`].
+fn core_colvec_to_value(c: &core_callback_dispatch::Colvec) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("data".to_string(), core_column_to_value(&c.data)),
+        (
+            "validity".to_string(),
+            Value::List(c.validity.iter().copied().map(Value::U8).collect()),
+        ),
+        ("rows".to_string(), Value::U32(c.rows)),
+    ])
+}
+
+/// Unpack the 27-arm `column` variant from `Value::Variant` into
+/// bindgen `core_column_types::Column`. Arm discriminants match the
+/// WIT kebab-cased names verbatim (`list-col`, `struct-col`,
+/// `map-col`, `array-col`). Nested-arm payloads carry opaque byte
+/// buffers per the WIT design (see column-types.wit header).
+fn value_to_core_column(
+    v: &wasmos_runtime_api::Value,
+) -> wasmos_runtime_api::RuntimeResult<core_column_types::Column> {
+    use core_column_types::Column;
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let (disc, payload) = match v {
+        Value::Variant { discriminant, payload } => {
+            (discriminant.as_str(), payload.as_deref())
+        }
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "column: expected Value::Variant, got {other:?}"
+            )))
+        }
+    };
+    // Payload shape for every arm is a `list<T>` — the wasmos
+    // bridge lifts `list<u8>` as `Value::Bytes` and other lists as
+    // `Value::List`. The `bytes_or_list_as_u8s` helper handles both.
+    match (disc, payload) {
+        ("boolean", Some(Value::List(items))) => {
+            let mut out = Vec::with_capacity(items.len());
+            for (i, item) in items.iter().enumerate() {
+                match item {
+                    Value::Bool(b) => out.push(*b),
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "column.boolean[{i}]: expected bool, got {other:?}"
+                        )))
+                    }
+                }
+            }
+            Ok(Column::Boolean(out))
+        }
+        ("int64", Some(Value::List(items))) => list_of_s64(items).map(Column::Int64),
+        ("uint64", Some(Value::List(items))) => list_of_u64(items).map(Column::Uint64),
+        ("float64", Some(Value::List(items))) => list_of_f64(items).map(Column::Float64),
+        ("int32", Some(Value::List(items))) => list_of_s32(items).map(Column::Int32),
+        ("timestamp", Some(Value::List(items))) => list_of_s64(items).map(Column::Timestamp),
+        ("int8", Some(Value::List(items))) => list_of_s8(items).map(Column::Int8),
+        ("int16", Some(Value::List(items))) => list_of_s16(items).map(Column::Int16),
+        ("uint8", Some(Value::List(items))) => list_of_u8(items).map(Column::Uint8),
+        ("uint8", Some(Value::Bytes(b))) => Ok(Column::Uint8(b.to_vec())),
+        ("uint16", Some(Value::List(items))) => list_of_u16(items).map(Column::Uint16),
+        ("uint32", Some(Value::List(items))) => list_of_u32(items).map(Column::Uint32),
+        ("float32", Some(Value::List(items))) => list_of_f32(items).map(Column::Float32),
+        ("date", Some(Value::List(items))) => list_of_s32(items).map(Column::Date),
+        ("time", Some(Value::List(items))) => list_of_s64(items).map(Column::Time),
+        ("timestamptz", Some(Value::List(items))) => list_of_s64(items).map(Column::Timestamptz),
+        ("decimal", Some(Value::List(items))) => {
+            let out = items.iter().map(unpack_decimalvalue).collect::<Result<Vec<_>, _>>()?;
+            Ok(Column::Decimal(out))
+        }
+        ("interval", Some(Value::List(items))) => {
+            let out = items.iter().map(unpack_intervalvalue).collect::<Result<Vec<_>, _>>()?;
+            Ok(Column::Interval(out))
+        }
+        ("uuid", Some(Value::List(items))) => {
+            let out = items.iter().map(unpack_uuidvalue).collect::<Result<Vec<_>, _>>()?;
+            Ok(Column::Uuid(out))
+        }
+        ("text", Some(Value::List(items))) => {
+            let mut out = Vec::with_capacity(items.len());
+            for (i, item) in items.iter().enumerate() {
+                match item {
+                    Value::String(s) => out.push(s.clone()),
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "column.text[{i}]: expected string, got {other:?}"
+                        )))
+                    }
+                }
+            }
+            Ok(Column::Text(out))
+        }
+        ("blob", Some(Value::List(items))) => {
+            let mut out = Vec::with_capacity(items.len());
+            for (i, item) in items.iter().enumerate() {
+                match item {
+                    Value::Bytes(b) => out.push(b.to_vec()),
+                    Value::List(inner) => {
+                        let mut bytes = Vec::with_capacity(inner.len());
+                        for (j, byt) in inner.iter().enumerate() {
+                            match byt {
+                                Value::U8(b) => bytes.push(*b),
+                                other => {
+                                    return Err(RuntimeError::msg(format!(
+                                        "column.blob[{i}][{j}]: expected u8, got {other:?}"
+                                    )))
+                                }
+                            }
+                        }
+                        out.push(bytes);
+                    }
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "column.blob[{i}]: expected list<u8>/bytes, got {other:?}"
+                        )))
+                    }
+                }
+            }
+            Ok(Column::Blob(out))
+        }
+        ("hugeint", Some(Value::List(items))) => {
+            let out = items
+                .iter()
+                .map(unpack_duck_int128)
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Column::Hugeint(out))
+        }
+        ("uhugeint", Some(Value::List(items))) => {
+            let out = items
+                .iter()
+                .map(unpack_duck_uint128)
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Column::Uhugeint(out))
+        }
+        ("list-col", Some(payload_v)) => Ok(Column::ListCol(unpack_nested_column(payload_v)?)),
+        ("struct-col", Some(payload_v)) => Ok(Column::StructCol(unpack_nested_column(payload_v)?)),
+        ("map-col", Some(payload_v)) => Ok(Column::MapCol(unpack_map_column(payload_v)?)),
+        ("array-col", Some(payload_v)) => Ok(Column::ArrayCol(unpack_array_column(payload_v)?)),
+        ("complex", Some(Value::List(items))) => {
+            let out = items.iter().map(unpack_complexvalue).collect::<Result<Vec<_>, _>>()?;
+            Ok(Column::Complex(out))
+        }
+        (other_disc, other_payload) => Err(RuntimeError::msg(format!(
+            "column: unknown or mistyped arm ({other_disc:?}, {other_payload:?})"
+        ))),
+    }
+}
+
+/// Inverse of [`value_to_core_column`] — pack a bindgen
+/// `core_column_types::Column` into `Value::Variant`.
+fn core_column_to_value(c: &core_column_types::Column) -> wasmos_runtime_api::Value {
+    use core_column_types::Column;
+    use wasmos_runtime_api::Value;
+    let (discriminant, payload) = match c {
+        Column::Boolean(v) => (
+            "boolean",
+            Value::List(v.iter().copied().map(Value::Bool).collect()),
+        ),
+        Column::Int64(v) => ("int64", Value::List(v.iter().copied().map(Value::S64).collect())),
+        Column::Uint64(v) => ("uint64", Value::List(v.iter().copied().map(Value::U64).collect())),
+        Column::Float64(v) => ("float64", Value::List(v.iter().copied().map(Value::F64).collect())),
+        Column::Int32(v) => ("int32", Value::List(v.iter().copied().map(Value::S32).collect())),
+        Column::Timestamp(v) => ("timestamp", Value::List(v.iter().copied().map(Value::S64).collect())),
+        Column::Int8(v) => ("int8", Value::List(v.iter().copied().map(Value::S8).collect())),
+        Column::Int16(v) => ("int16", Value::List(v.iter().copied().map(Value::S16).collect())),
+        Column::Uint8(v) => ("uint8", Value::List(v.iter().copied().map(Value::U8).collect())),
+        Column::Uint16(v) => ("uint16", Value::List(v.iter().copied().map(Value::U16).collect())),
+        Column::Uint32(v) => ("uint32", Value::List(v.iter().copied().map(Value::U32).collect())),
+        Column::Float32(v) => ("float32", Value::List(v.iter().copied().map(Value::F32).collect())),
+        Column::Date(v) => ("date", Value::List(v.iter().copied().map(Value::S32).collect())),
+        Column::Time(v) => ("time", Value::List(v.iter().copied().map(Value::S64).collect())),
+        Column::Timestamptz(v) => ("timestamptz", Value::List(v.iter().copied().map(Value::S64).collect())),
+        Column::Decimal(v) => (
+            "decimal",
+            Value::List(v.iter().map(pack_decimalvalue).collect()),
+        ),
+        Column::Interval(v) => (
+            "interval",
+            Value::List(v.iter().map(pack_intervalvalue).collect()),
+        ),
+        Column::Uuid(v) => (
+            "uuid",
+            Value::List(v.iter().map(pack_uuidvalue).collect()),
+        ),
+        Column::Text(v) => (
+            "text",
+            Value::List(v.iter().cloned().map(Value::String).collect()),
+        ),
+        Column::Blob(v) => (
+            "blob",
+            Value::List(
+                v.iter()
+                    .map(|b| Value::List(b.iter().copied().map(Value::U8).collect()))
+                    .collect(),
+            ),
+        ),
+        Column::Hugeint(v) => (
+            "hugeint",
+            Value::List(v.iter().map(pack_duck_int128).collect()),
+        ),
+        Column::Uhugeint(v) => (
+            "uhugeint",
+            Value::List(v.iter().map(pack_duck_uint128).collect()),
+        ),
+        Column::ListCol(nc) => ("list-col", pack_nested_column(nc)),
+        Column::StructCol(nc) => ("struct-col", pack_nested_column(nc)),
+        Column::MapCol(mc) => ("map-col", pack_map_column(mc)),
+        Column::ArrayCol(ac) => ("array-col", pack_array_column(ac)),
+        Column::Complex(v) => (
+            "complex",
+            Value::List(v.iter().map(pack_complexvalue).collect()),
+        ),
+    };
+    Value::Variant {
+        discriminant: discriminant.to_string(),
+        payload: Some(Box::new(payload)),
+    }
+}
+
+// Small typed-list helpers to keep [`value_to_core_column`]
+// compact. Each returns a fresh Vec after per-element unpacking.
+macro_rules! typed_list_helper {
+    ($name:ident, $rust:ty, $variant:ident) => {
+        fn $name(items: &[wasmos_runtime_api::Value]) -> wasmos_runtime_api::RuntimeResult<Vec<$rust>> {
+            use wasmos_runtime_api::{RuntimeError, Value};
+            let mut out = Vec::with_capacity(items.len());
+            for (i, item) in items.iter().enumerate() {
+                match item {
+                    Value::$variant(n) => out.push(*n),
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            concat!("column.", stringify!($name), "[{}]: expected ", stringify!($variant), ", got {:?}"),
+                            i, other
+                        )))
+                    }
+                }
+            }
+            Ok(out)
+        }
+    };
+}
+typed_list_helper!(list_of_s8, i8, S8);
+typed_list_helper!(list_of_s16, i16, S16);
+typed_list_helper!(list_of_s32, i32, S32);
+typed_list_helper!(list_of_s64, i64, S64);
+typed_list_helper!(list_of_u8, u8, U8);
+typed_list_helper!(list_of_u16, u16, U16);
+typed_list_helper!(list_of_u32, u32, U32);
+typed_list_helper!(list_of_u64, u64, U64);
+typed_list_helper!(list_of_f32, f32, F32);
+typed_list_helper!(list_of_f64, f64, F64);
+
+fn unpack_decimalvalue(
+    v: &wasmos_runtime_api::Value,
+) -> wasmos_runtime_api::RuntimeResult<core_column_types::Decimalvalue> {
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let fields = match v {
+        Value::Record(f) => f,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "decimalvalue: expected Value::Record, got {other:?}"
+            )))
+        }
+    };
+    let mut lower = 0u64;
+    let mut upper = 0u64;
+    let mut width = 0u8;
+    let mut scale = 0u8;
+    for (k, val) in fields {
+        match (k.as_str(), val) {
+            ("lower", Value::U64(n)) => lower = *n,
+            ("upper", Value::U64(n)) => upper = *n,
+            ("width", Value::U8(n)) => width = *n,
+            ("scale", Value::U8(n)) => scale = *n,
+            _ => {}
+        }
+    }
+    Ok(core_column_types::Decimalvalue { lower, upper, width, scale })
+}
+fn pack_decimalvalue(d: &core_column_types::Decimalvalue) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("lower".to_string(), Value::U64(d.lower)),
+        ("upper".to_string(), Value::U64(d.upper)),
+        ("width".to_string(), Value::U8(d.width)),
+        ("scale".to_string(), Value::U8(d.scale)),
+    ])
+}
+
+fn unpack_intervalvalue(
+    v: &wasmos_runtime_api::Value,
+) -> wasmos_runtime_api::RuntimeResult<core_column_types::Intervalvalue> {
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let fields = match v {
+        Value::Record(f) => f,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "intervalvalue: expected Value::Record, got {other:?}"
+            )))
+        }
+    };
+    let mut months = 0i32;
+    let mut days = 0i32;
+    let mut micros = 0i64;
+    for (k, val) in fields {
+        match (k.as_str(), val) {
+            ("months", Value::S32(n)) => months = *n,
+            ("days", Value::S32(n)) => days = *n,
+            ("micros", Value::S64(n)) => micros = *n,
+            _ => {}
+        }
+    }
+    Ok(core_column_types::Intervalvalue { months, days, micros })
+}
+fn pack_intervalvalue(d: &core_column_types::Intervalvalue) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("months".to_string(), Value::S32(d.months)),
+        ("days".to_string(), Value::S32(d.days)),
+        ("micros".to_string(), Value::S64(d.micros)),
+    ])
+}
+
+fn unpack_uuidvalue(
+    v: &wasmos_runtime_api::Value,
+) -> wasmos_runtime_api::RuntimeResult<core_column_types::Uuidvalue> {
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let fields = match v {
+        Value::Record(f) => f,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "uuidvalue: expected Value::Record, got {other:?}"
+            )))
+        }
+    };
+    let mut hi = 0u64;
+    let mut lo = 0u64;
+    for (k, val) in fields {
+        match (k.as_str(), val) {
+            ("hi", Value::U64(n)) => hi = *n,
+            ("lo", Value::U64(n)) => lo = *n,
+            _ => {}
+        }
+    }
+    Ok(core_column_types::Uuidvalue { hi, lo })
+}
+fn pack_uuidvalue(d: &core_column_types::Uuidvalue) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("hi".to_string(), Value::U64(d.hi)),
+        ("lo".to_string(), Value::U64(d.lo)),
+    ])
+}
+
+fn unpack_duck_int128(
+    v: &wasmos_runtime_api::Value,
+) -> wasmos_runtime_api::RuntimeResult<core_column_types::DuckInt128> {
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let fields = match v {
+        Value::Record(f) => f,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "duck-int128: expected Value::Record, got {other:?}"
+            )))
+        }
+    };
+    let mut lower = 0u64;
+    let mut upper = 0i64;
+    for (k, val) in fields {
+        match (k.as_str(), val) {
+            ("lower", Value::U64(n)) => lower = *n,
+            ("upper", Value::S64(n)) => upper = *n,
+            _ => {}
+        }
+    }
+    Ok(core_column_types::DuckInt128 { lower, upper })
+}
+fn pack_duck_int128(d: &core_column_types::DuckInt128) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("lower".to_string(), Value::U64(d.lower)),
+        ("upper".to_string(), Value::S64(d.upper)),
+    ])
+}
+
+fn unpack_duck_uint128(
+    v: &wasmos_runtime_api::Value,
+) -> wasmos_runtime_api::RuntimeResult<core_column_types::DuckUint128> {
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let fields = match v {
+        Value::Record(f) => f,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "duck-uint128: expected Value::Record, got {other:?}"
+            )))
+        }
+    };
+    let mut lower = 0u64;
+    let mut upper = 0u64;
+    for (k, val) in fields {
+        match (k.as_str(), val) {
+            ("lower", Value::U64(n)) => lower = *n,
+            ("upper", Value::U64(n)) => upper = *n,
+            _ => {}
+        }
+    }
+    Ok(core_column_types::DuckUint128 { lower, upper })
+}
+fn pack_duck_uint128(d: &core_column_types::DuckUint128) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("lower".to_string(), Value::U64(d.lower)),
+        ("upper".to_string(), Value::U64(d.upper)),
+    ])
+}
+
+fn unpack_nested_column(
+    v: &wasmos_runtime_api::Value,
+) -> wasmos_runtime_api::RuntimeResult<core_column_types::NestedColumn> {
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let fields = match v {
+        Value::Record(f) => f,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "nested-column: expected Value::Record, got {other:?}"
+            )))
+        }
+    };
+    let mut encoded: Option<Vec<u8>> = None;
+    for (k, val) in fields {
+        match (k.as_str(), val) {
+            ("encoded", Value::Bytes(b)) => encoded = Some(b.to_vec()),
+            ("encoded", Value::List(items)) => {
+                encoded = Some(bytes_from_value_list("nested-column.encoded", items)?);
+            }
+            _ => {}
+        }
+    }
+    Ok(core_column_types::NestedColumn {
+        encoded: encoded
+            .ok_or_else(|| RuntimeError::msg("nested-column: missing `encoded: list<u8>`"))?,
+    })
+}
+fn pack_nested_column(nc: &core_column_types::NestedColumn) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![(
+        "encoded".to_string(),
+        Value::List(nc.encoded.iter().copied().map(Value::U8).collect()),
+    )])
+}
+
+fn unpack_map_column(
+    v: &wasmos_runtime_api::Value,
+) -> wasmos_runtime_api::RuntimeResult<core_column_types::MapColumn> {
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let fields = match v {
+        Value::Record(f) => f,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "map-column: expected Value::Record, got {other:?}"
+            )))
+        }
+    };
+    let mut keys_encoded: Option<Vec<u8>> = None;
+    let mut vals_encoded: Option<Vec<u8>> = None;
+    for (k, val) in fields {
+        match (k.as_str(), val) {
+            ("keys-encoded", Value::Bytes(b)) => keys_encoded = Some(b.to_vec()),
+            ("keys-encoded", Value::List(items)) => {
+                keys_encoded = Some(bytes_from_value_list("map-column.keys-encoded", items)?);
+            }
+            ("vals-encoded", Value::Bytes(b)) => vals_encoded = Some(b.to_vec()),
+            ("vals-encoded", Value::List(items)) => {
+                vals_encoded = Some(bytes_from_value_list("map-column.vals-encoded", items)?);
+            }
+            _ => {}
+        }
+    }
+    Ok(core_column_types::MapColumn {
+        keys_encoded: keys_encoded
+            .ok_or_else(|| RuntimeError::msg("map-column: missing `keys-encoded`"))?,
+        vals_encoded: vals_encoded
+            .ok_or_else(|| RuntimeError::msg("map-column: missing `vals-encoded`"))?,
+    })
+}
+fn pack_map_column(mc: &core_column_types::MapColumn) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        (
+            "keys-encoded".to_string(),
+            Value::List(mc.keys_encoded.iter().copied().map(Value::U8).collect()),
+        ),
+        (
+            "vals-encoded".to_string(),
+            Value::List(mc.vals_encoded.iter().copied().map(Value::U8).collect()),
+        ),
+    ])
+}
+
+fn unpack_array_column(
+    v: &wasmos_runtime_api::Value,
+) -> wasmos_runtime_api::RuntimeResult<core_column_types::ArrayColumn> {
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let fields = match v {
+        Value::Record(f) => f,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "array-column: expected Value::Record, got {other:?}"
+            )))
+        }
+    };
+    let mut size: Option<u32> = None;
+    let mut encoded: Option<Vec<u8>> = None;
+    for (k, val) in fields {
+        match (k.as_str(), val) {
+            ("size", Value::U32(n)) => size = Some(*n),
+            ("encoded", Value::Bytes(b)) => encoded = Some(b.to_vec()),
+            ("encoded", Value::List(items)) => {
+                encoded = Some(bytes_from_value_list("array-column.encoded", items)?);
+            }
+            _ => {}
+        }
+    }
+    Ok(core_column_types::ArrayColumn {
+        size: size.ok_or_else(|| RuntimeError::msg("array-column: missing `size: u32`"))?,
+        encoded: encoded
+            .ok_or_else(|| RuntimeError::msg("array-column: missing `encoded: list<u8>`"))?,
+    })
+}
+fn pack_array_column(ac: &core_column_types::ArrayColumn) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("size".to_string(), Value::U32(ac.size)),
+        (
+            "encoded".to_string(),
+            Value::List(ac.encoded.iter().copied().map(Value::U8).collect()),
+        ),
+    ])
+}
+
+fn unpack_complexvalue(
+    v: &wasmos_runtime_api::Value,
+) -> wasmos_runtime_api::RuntimeResult<core_column_types::Complexvalue> {
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let fields = match v {
+        Value::Record(f) => f,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "complexvalue: expected Value::Record, got {other:?}"
+            )))
+        }
+    };
+    let mut type_expr = String::new();
+    let mut json = String::new();
+    for (k, val) in fields {
+        match (k.as_str(), val) {
+            ("type-expr", Value::String(s)) => type_expr = s.clone(),
+            ("json", Value::String(s)) => json = s.clone(),
+            _ => {}
+        }
+    }
+    Ok(core_column_types::Complexvalue { type_expr, json })
+}
+fn pack_complexvalue(c: &core_column_types::Complexvalue) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("type-expr".to_string(), Value::String(c.type_expr.clone())),
+        ("json".to_string(), Value::String(c.json.clone())),
+    ])
+}
+
+/// Shared helper: `Value::List(Vec<Value::U8>)` -> `Vec<u8>`, with
+/// a per-element error message anchored to `context`.
+fn bytes_from_value_list(
+    context: &str,
+    items: &[wasmos_runtime_api::Value],
+) -> wasmos_runtime_api::RuntimeResult<Vec<u8>> {
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let mut out = Vec::with_capacity(items.len());
+    for (i, item) in items.iter().enumerate() {
+        match item {
+            Value::U8(b) => out.push(*b),
+            other => {
+                return Err(RuntimeError::msg(format!(
+                    "{context}[{i}]: expected u8, got {other:?}"
+                )))
+            }
+        }
+    }
+    Ok(out)
 }
 
 // Phase 2 (@5): the eight `*-host::Host` trait implementations that used to
@@ -9053,26 +10002,24 @@ fn instantiate_core(
     let mut linker = Linker::<CoreStoreState>::new(engine);
     p2::add_to_linker_sync(&mut linker)?;
     add_wasi_http_to_linker(&mut linker)?;
-    core_callback_dispatch::add_to_linker::<CoreStoreState, CoreStoreState>(
-        &mut linker,
-        |state| state,
-    )?;
     // Phase 2 (@5): the 8 `*-host` linker registrations
     // (storage / index / collation / pragma / parser / optimizer / files /
     // table-stream) are DELETED. Those imports no longer exist on the core
     // world -- their capabilities lift to the host's SQL-level ATTACH intercept
     // and write intercept (see HostState::execute). See ADR Decision 3.
-    // Phase 2e wedges — retire tvm:memory/{bytes,manager} +
-    // duckdb:component/{host-extension-loader,extension-loader-hooks}
-    // from bindgen's add_to_linker and route them through the
-    // escape-hatch bridge instead. See [`TvmBytesHost`] +
-    // [`TvmManagerHost`] + [`CoreHostExtensionLoaderHost`] +
-    // [`ExtensionLoaderHooksHost`]. The bridge introspects the
+    // Phase 2e wedges — ALL FIVE core-world host imports now route
+    // through the escape-hatch bridge:
+    //   * tvm:memory/{bytes,manager}
+    //   * duckdb:component/{host-extension-loader,extension-loader-hooks}
+    //   * duckdb:extension/callback-dispatch (last one, this wedge)
+    // See [`TvmBytesHost`] + [`TvmManagerHost`] +
+    // [`CoreHostExtensionLoaderHost`] + [`ExtensionLoaderHooksHost`] +
+    // [`CallbackDispatchHost`]. The bridge introspects the
     // component's imports at install-time, so `component` must
     // already be loaded (it is — see `Component::from_file`
-    // above). Only callback-dispatch still uses bindgen now —
-    // most complex host impl with 7 methods, deferred to a
-    // dedicated wedge.
+    // above). No bindgen `add_to_linker` calls left on the core
+    // world's host imports; only guest export sites still touch
+    // the bindgen typed accessors.
     for (iface, handler) in [
         (
             TVM_BYTES_IFACE,
@@ -9090,6 +10037,11 @@ fn instantiate_core(
         (
             EXTENSION_LOADER_HOOKS_IFACE,
             std::sync::Arc::new(ExtensionLoaderHooksHost)
+                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
+        ),
+        (
+            CALLBACK_DISPATCH_IFACE,
+            std::sync::Arc::new(CallbackDispatchHost)
                 as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
         ),
     ] {
@@ -10485,14 +11437,14 @@ pub fn run_shell_with_stdio(
     // Phase 2e wedges — this shell path historically only wired
     // host-extension-loader / extension-hooks / callback-dispatch
     // (no tvm imports for the shell world). Now host-extension-
-    // loader AND extension-loader-hooks route through the bridge;
-    // only callback-dispatch still uses bindgen. The bridge needs
-    // the component's imports at install-time, so the component
-    // load moved BEFORE the bridge install (was originally after
-    // the store construction — the reordering only matters for
-    // the bridge's import-introspection pass; wasmtime allows
-    // linker use before/after component load).
-    core_callback_dispatch::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |s| s)?;
+    // loader AND extension-loader-hooks AND callback-dispatch all
+    // route through the bridge now. No bindgen `add_to_linker`
+    // calls remain on the shell path either. The bridge needs the
+    // component's imports at install-time, so the component load
+    // moved BEFORE the bridge install (was originally after the
+    // store construction — the reordering only matters for the
+    // bridge's import-introspection pass; wasmtime allows linker
+    // use before/after component load).
 
     let component = load_component(&engine, shell_component).with_context(|| {
         format!(
@@ -10510,6 +11462,11 @@ pub fn run_shell_with_stdio(
         (
             EXTENSION_LOADER_HOOKS_IFACE,
             std::sync::Arc::new(ExtensionLoaderHooksHost)
+                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
+        ),
+        (
+            CALLBACK_DISPATCH_IFACE,
+            std::sync::Arc::new(CallbackDispatchHost)
                 as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
         ),
     ] {
