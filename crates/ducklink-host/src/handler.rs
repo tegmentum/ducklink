@@ -11,18 +11,22 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::{anyhow, Result};
+use wasmos_runtime_api::Value;
+use wasmos_runtime_wasmtime_v48::sync_export_bridge;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{AsContextMut, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
 use crate::build_engine;
 
-mod bindings {
-    wasmtime::component::bindgen!({
-        path: "../../wit/handler",
-        world: "duckdb:handler/request-handler",
-    });
-}
+// Under the Path-A migration (see `docs/wasmos-migration-recipe.md`)
+// the `wasmtime::component::bindgen!` invocation that used to sit here
+// is gone. The single WIT export — `duckdb:handler/handler.handle` —
+// is dispatched dynamically through `sync_export_bridge::call_export`
+// with hand-marshalled `wasmos_runtime_api::Value` args + returns.
+// WASI plumbing stays on the wasmtime side (unchanged from bindgen
+// era) — the bridge only replaces the typed dispatcher, not the
+// linker or store construction.
 
 struct HandlerStoreState {
     table: ResourceTable,
@@ -97,12 +101,61 @@ impl HandlerRegistry {
             },
         );
 
-        let pre = bindings::RequestHandlerPre::new(linker.instantiate_pre(component)?)?;
-        let instance = pre.instantiate(store.as_context_mut())?;
-        let result = instance
-            .duckdb_handler_handler()
-            .call_handle(store.as_context_mut(), request_json)
-            .map_err(|e| anyhow!("handler `{name}` trap: {e}"))?;
-        Ok(result)
+        // Instantiate through the wasmtime linker directly — bindgen's
+        // `RequestHandlerPre` wrapper only added the typed-export
+        // accessor; the underlying pre/instance shape is untouched.
+        let instance_pre = linker.instantiate_pre(component)?;
+        let instance = instance_pre.instantiate(store.as_context_mut())?;
+
+        // Call `duckdb:handler/handler.handle(request: string) ->
+        // result<string, string>` through the sync export bridge.
+        // Interface name matches the WIT declaration verbatim (see
+        // `wit/handler/handler.wit` — `package duckdb:handler` +
+        // `interface handler`). Version tags matter to wasmtime's
+        // export lookup; the world here declares no `@x.y.z` so the
+        // qualified name is the bare `duckdb:handler/handler`.
+        let ret = sync_export_bridge::call_export(
+            store.as_context_mut(),
+            &instance,
+            Some("duckdb:handler/handler"),
+            "handle",
+            &[Value::String(request_json.to_string())],
+        )
+        .map_err(|e| anyhow!("handler `{name}` call: {e}"))?;
+
+        // Unpack `result<string, string>` — the bridge lifts a WIT
+        // result to `Value::Result(Result<Option<Box<Value>>,
+        // Option<Box<Value>>>)`. Both arms of our result carry a
+        // string payload, so both `Ok(Some(_))` and `Err(Some(_))`
+        // are the expected shapes; a `None` inner (which would
+        // correspond to WIT `result` / `result<_, E>` / `result<T>`
+        // with an absent payload) is a contract violation for this
+        // signature.
+        match ret.as_slice() {
+            [Value::Result(inner)] => match inner {
+                Ok(Some(payload)) => match payload.as_ref() {
+                    Value::String(s) => Ok(Ok(s.clone())),
+                    other => Err(anyhow!(
+                        "handler `{name}`: expected Value::String in \
+                         Ok payload, got {other:?}"
+                    )),
+                },
+                Err(Some(payload)) => match payload.as_ref() {
+                    Value::String(s) => Ok(Err(s.clone())),
+                    other => Err(anyhow!(
+                        "handler `{name}`: expected Value::String in \
+                         Err payload, got {other:?}"
+                    )),
+                },
+                Ok(None) | Err(None) => Err(anyhow!(
+                    "handler `{name}`: result<string, string> payload \
+                     was None — contract violation"
+                )),
+            },
+            other => Err(anyhow!(
+                "handler `{name}`: expected exactly one Value::Result \
+                 return, got {other:?}"
+            )),
+        }
     }
 }

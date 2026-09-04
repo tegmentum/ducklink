@@ -90,6 +90,15 @@ wasmos-runtime-api    = { path = "../../../wasmos/runtime/api" }
 # dep (was previously dev-only) so Phase 2 source rewrites can point
 # at it directly rather than importing it conditionally.
 wasmos-runtime-select = { path = "../../../wasmos/runtime/selector", features = ["wasmtime-lts"] }
+# The v48 adapter itself, direct-deped so consumer code can reach
+# the ADR-0029 §27 escape-hatch modules (`sync_bridge`,
+# `sync_bridge_resource`, `sync_export_bridge`, `async_bridge`).
+# `wasmos-runtime-select` only re-exports `SelectedRuntime` — not
+# the adapter's escape-hatch surface — so Path-A migrations that
+# retire `wasmtime::component::bindgen!` sites while keeping direct
+# wasmtime types (see `docs/wasmos-migration-recipe.md`) need this
+# in addition to the select facade.
+wasmos-runtime-wasmtime-v48 = { path = "../../../wasmos/runtime/wasmtime/v48" }
 
 [dev-dependencies]
 tempfile = "3"
