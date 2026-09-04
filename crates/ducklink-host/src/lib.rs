@@ -41,40 +41,20 @@ pub mod dotcmd_bindings {
     });
 }
 
-// Module declared here (rather than with the other `pub mod` items further
-// down) so `driver_tool_bindings` below can reference
-// `crate::driver_exec::DriverConnection` in its `with:` map.
 pub mod driver_exec;
 
-/// Generated bindings for the cron-driver-tool world.
-///
-/// The tool is a `wasi:cli/run` command component that imports our small
-/// `duckdb:driver/exec` bridge (open/exec/query) plus a handful of standard
-/// WASI-p2 interfaces (environment/stdout/stderr, monotonic-clock,
-/// wall-clock, io/poll, io/streams). The `with:` map wires every WASI
-/// interface to the wasmtime-wasi types so `p2::add_to_linker_sync` can
-/// service them, and maps the driver-exec `connection` resource to the
-/// native `DriverConnection` struct so the ResourceTable stores it
-/// directly. Only the `Host`/`HostConnection` traits are left generated;
-/// `driver_exec.rs` implements them on `DriverStoreState`.
-pub mod driver_tool_bindings {
-    wasmtime::component::bindgen!({
-        path: "../../extensions/cron-driver-tool/wit",
-        world: "duckdb:driver-tool/cron-driver-tool",
-        with: {
-            "wasi:cli/environment": wasmtime_wasi::p2::bindings::cli::environment,
-            "wasi:cli/stdout": wasmtime_wasi::p2::bindings::cli::stdout,
-            "wasi:cli/stderr": wasmtime_wasi::p2::bindings::cli::stderr,
-            "wasi:clocks/monotonic-clock": wasmtime_wasi::p2::bindings::clocks::monotonic_clock,
-            "wasi:clocks/wall-clock": wasmtime_wasi::p2::bindings::clocks::wall_clock,
-            "wasi:io/poll": wasmtime_wasi::p2::bindings::io::poll,
-            "wasi:io/streams": wasmtime_wasi::p2::bindings::io::streams,
-            "wasi:io/error": wasmtime_wasi::p2::bindings::io::error,
-            "duckdb:driver/exec.connection": crate::driver_exec::DriverConnection,
-        },
-        require_store_data_send: true,
-    });
-}
+// The `driver_tool_bindings` bindgen! macro invocation that used to sit
+// here is gone. Under Path A of the wasmos-runtime-api migration (see
+// `docs/wasmos-migration-recipe.md`), `driver_exec.rs` now wires
+// `duckdb:driver/exec@5.0.0` via `sync_bridge_resource::install_host_call`
+// and dispatches the tool's `wasi:cli/run@0.2.6.run` export through
+// `sync_export_bridge::call_export`. No `CronDriverTool` /
+// `CronDriverToolPre` / `duckdb::driver::exec::{Host, HostConnection}`
+// types are generated any more; the `with:` map that used to bind the
+// `connection` resource to `crate::driver_exec::DriverConnection`
+// becomes explicit — the bridge auto-registers the wasm-side resource
+// type + drop, and `DriverConnection` stays in the wasmtime
+// `ResourceTable` under the rep the bridge assigns.
 
 use std::collections::{BTreeMap, HashMap};
 #[cfg(test)]
