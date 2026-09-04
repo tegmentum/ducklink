@@ -120,6 +120,17 @@ use anyhow::{Context, Result};
 // `cli_native` — types are local mirrors + ducklink_runtime::extension
 // re-exports; the bindgen block is retired.
 // (cli_types formerly aliased duckdb_cli_bindings::duckdb::extension::types)
+// `duckdb_core_bindings::duckdb::component::extension_loader_hooks`
+// stays as an in-crate use because the retired `impl Host` block's
+// return type (`core_extension_hooks::PendingRegistrations`) and
+// its ~10 nested types are still referenced by
+// [`convert_pending_registrations`] + its helper conversion
+// functions (line ~7312), which the Phase 2e wedge re-uses inside
+// the new [`ExtensionLoaderHooksHost`] handler before lowering
+// bindgen -> Value. Retiring the alias will happen once the
+// convert_pending_registrations chain is also replaced with a
+// direct PendingRegistrationsData -> Value marshaller — a
+// follow-up cleanup, deliberately not in scope for this wedge.
 use duckdb_core_bindings::duckdb::component::extension_loader_hooks as core_extension_hooks;
 // `duckdb_core_bindings::duckdb::component::host_extension_loader`
 // no longer referenced after Phase 2e's host-extension-loader wedge
@@ -481,53 +492,469 @@ impl wasmos_runtime_api::SyncHostCall for CoreHostExtensionLoaderHost {
     }
 }
 
-impl core_extension_hooks::Host for CoreStoreState {
-    /// Phase 4 follow-up (FU4): serve the sibling core's post-LOAD
-    /// registrations from the shared archive so extension-registered scalars
-    /// / tables / aggregates reach the sibling's DuckDB catalog.
-    ///
-    /// * PRIMARY stores (`is_sibling == false`) drain the shared
-    ///   [`ExtensionManager`] as before AND append a clone of the drained batch
-    ///   into `replay_archive` (when wired) so a later sibling boot can replay
-    ///   the same registrations without re-invoking each extension's `load()`.
-    /// * SIBLING stores (`is_sibling == true`) serve `replay_archive` verbatim
-    ///   and never touch the extension manager's own drain buffers — the
-    ///   primary already consumed them, and re-draining would return nothing.
-    ///
-    /// Falls back to the historical drain-only behaviour when `replay_archive`
-    /// is `None` (narrow test paths that never opt into a `SiblingState`).
-    fn get_pending_registrations(&mut self) -> core_extension_hooks::PendingRegistrations {
-        if self.is_sibling {
-            // Sibling read path: clone-out the archive under its own mutex so
-            // this call never touches the shared `ExtensionManager` mutex.
-            // Avoids deadlock when the sibling is materialized from inside a
-            // primary extension load thread that already holds the manager
-            // mutex (see the shared-manager deadlock boundary in ADR
-            // Amendment A5 Risk 5 + the sibling_ensure_slot comment block).
-            if let Some(archive) = self.replay_archive.as_ref() {
-                let guard = archive.lock().unwrap_or_else(|e| e.into_inner());
-                return convert_pending_registrations(guard.clone());
+// The bindgen-era `impl core_extension_hooks::Host for CoreStoreState`
+// block that used to sit here is retired under Phase 2e (site 2)
+// of the wasmos-runtime-api migration — see the
+// [`ExtensionLoaderHooksHost`] implementation below. Fourth of the
+// five host-import interfaces to migrate off bindgen for the core
+// world (after tvm/bytes, tvm/manager, host-extension-loader).
+//
+// Only one WIT method — `get-pending-registrations()` — but with a
+// hugely nested return record (`pending-registrations` carries 8
+// lists of registration records, each with sub-shapes reaching down
+// to `logicaltype`/`columndef`/`funcflags`). The
+// existing `convert_pending_registrations` conversion chain from
+// `ducklink_runtime::PendingRegistrationsData` -> bindgen
+// `core_extension_hooks::PendingRegistrations` stays as-is; the
+// handler below layers ONE additional pass on top of it —
+// [`bindgen_pending_registrations_to_value`] — which lowers the
+// bindgen record to `Value::Record(...)` for the wasmos bridge's
+// wire format. The bridge then re-lowers Value -> Val for the
+// guest's own bindgen types (identical shape). Redundant work per
+// call, but this method fires once per extension load, so the
+// perf hit is invisible.
+
+/// Interface name for the extension-loader-hooks host, matching WIT
+/// `package duckdb:component; interface extension-loader-hooks`.
+const EXTENSION_LOADER_HOOKS_IFACE: &str =
+    "duckdb:component/extension-loader-hooks";
+
+/// Wasmos-native host impl of
+/// `duckdb:component/extension-loader-hooks`. Single method
+/// `get-pending-registrations() -> pending-registrations`.
+struct ExtensionLoaderHooksHost;
+
+impl wasmos_runtime_api::SyncHostCall for ExtensionLoaderHooksHost {
+    fn call(
+        &self,
+        ctx: &mut wasmos_runtime_api::HostCallContext<'_>,
+        method: &str,
+        args: Vec<wasmos_runtime_api::Value>,
+    ) -> wasmos_runtime_api::RuntimeResult<Vec<wasmos_runtime_api::Value>> {
+        use wasmos_runtime_api::RuntimeError;
+        match method {
+            "get-pending-registrations" => {
+                if !args.is_empty() {
+                    return Err(RuntimeError::msg(format!(
+                        "{EXTENSION_LOADER_HOOKS_IFACE}.get-pending-registrations: \
+                         expected [] args, got {} elements",
+                        args.len()
+                    )));
+                }
+                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "extension-loader-hooks get-pending-registrations: \
+                         consumer_state<CoreStoreState> unavailable",
+                    )
+                })?;
+                // Body is byte-for-byte the bindgen-era impl block's
+                // Phase-4 (FU4) sibling/primary split — sibling stores
+                // serve the shared replay archive; primary stores drain
+                // the manager and append into the archive. The bindgen
+                // -> Value bridge layer happens at the tail, after both
+                // Arc<Mutex<>> handles are released, so a callback
+                // fired downstream can't re-enter either mutex through
+                // a side-effect.
+                let bindgen_pending = if state.is_sibling {
+                    if let Some(archive) = state.replay_archive.as_ref() {
+                        let guard = archive.lock().unwrap_or_else(|e| e.into_inner());
+                        convert_pending_registrations(guard.clone())
+                    } else {
+                        convert_pending_registrations(
+                            ducklink_runtime::PendingRegistrationsData::default(),
+                        )
+                    }
+                } else {
+                    let drained = {
+                        let mut manager = state
+                            .extension_manager
+                            .lock()
+                            .expect("extension manager mutex poisoned");
+                        manager.drain_pending_registrations()
+                    };
+                    if let Some(archive) = state.replay_archive.as_ref() {
+                        let mut guard = archive.lock().unwrap_or_else(|e| e.into_inner());
+                        guard.append(drained.clone());
+                    }
+                    convert_pending_registrations(drained)
+                };
+                Ok(vec![bindgen_pending_registrations_to_value(bindgen_pending)])
             }
-            return convert_pending_registrations(
-                ducklink_runtime::PendingRegistrationsData::default(),
-            );
+            other => Err(RuntimeError::msg(format!(
+                "{EXTENSION_LOADER_HOOKS_IFACE}: unknown method {other:?}"
+            ))),
         }
-        // Primary write path: drain the shared manager, THEN append a snapshot
-        // into the archive. Locks are acquired in order (manager → archive)
-        // and released before the wit-bindgen conversion so any downstream
-        // side-effect can't re-enter either mutex through a callback.
-        let drained = {
-            let mut manager = self
-                .extension_manager
-                .lock()
-                .expect("extension manager mutex poisoned");
-            manager.drain_pending_registrations()
-        };
-        if let Some(archive) = self.replay_archive.as_ref() {
-            let mut guard = archive.lock().unwrap_or_else(|e| e.into_inner());
-            guard.append(drained.clone());
-        }
-        convert_pending_registrations(drained)
+    }
+}
+
+// -----------------------------------------------------------------
+// Marshallers: bindgen `core_extension_hooks::*` records + their
+// nested WIT types (logicaltype, columndef, funcflags, func-arg,
+// func-opts, ext-opts) -> `wasmos_runtime_api::Value`.
+//
+// One-way lift only (host -> guest). Each helper is small and
+// mechanical; the goal is field-by-name binding so a future WIT
+// reorder doesn't break the marshaller silently. Every fn is
+// `pub(super) fn` scope, private to this crate.
+// -----------------------------------------------------------------
+
+/// Top-level lift for `pending-registrations` (8 lists of
+/// registration records). Called from
+/// [`ExtensionLoaderHooksHost::call`].
+fn bindgen_pending_registrations_to_value(
+    pr: core_extension_hooks::PendingRegistrations,
+) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        (
+            "scalars".to_string(),
+            Value::List(
+                pr.scalars
+                    .into_iter()
+                    .map(bindgen_scalar_registration_to_value)
+                    .collect(),
+            ),
+        ),
+        (
+            "tables".to_string(),
+            Value::List(
+                pr.tables
+                    .into_iter()
+                    .map(bindgen_table_registration_to_value)
+                    .collect(),
+            ),
+        ),
+        (
+            "aggregates".to_string(),
+            Value::List(
+                pr.aggregates
+                    .into_iter()
+                    .map(bindgen_aggregate_registration_to_value)
+                    .collect(),
+            ),
+        ),
+        (
+            "macros".to_string(),
+            Value::List(
+                pr.macros
+                    .into_iter()
+                    .map(bindgen_macro_registration_to_value)
+                    .collect(),
+            ),
+        ),
+        (
+            "table-macros".to_string(),
+            Value::List(
+                pr.table_macros
+                    .into_iter()
+                    .map(bindgen_table_macro_registration_to_value)
+                    .collect(),
+            ),
+        ),
+        (
+            "replacement-scans".to_string(),
+            Value::List(
+                pr.replacement_scans
+                    .into_iter()
+                    .map(bindgen_replacement_scan_registration_to_value)
+                    .collect(),
+            ),
+        ),
+        (
+            "logical-types".to_string(),
+            Value::List(
+                pr.logical_types
+                    .into_iter()
+                    .map(bindgen_logical_type_registration_to_value)
+                    .collect(),
+            ),
+        ),
+        (
+            "casts".to_string(),
+            Value::List(
+                pr.casts
+                    .into_iter()
+                    .map(bindgen_cast_registration_to_value)
+                    .collect(),
+            ),
+        ),
+    ])
+}
+
+fn bindgen_scalar_registration_to_value(
+    e: core_extension_hooks::ScalarRegistration,
+) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("name".to_string(), Value::String(e.name)),
+        (
+            "arguments".to_string(),
+            Value::List(
+                e.arguments
+                    .into_iter()
+                    .map(bindgen_func_arg_to_value)
+                    .collect(),
+            ),
+        ),
+        ("returns".to_string(), bindgen_logicaltype_to_value(e.returns)),
+        ("callback-handle".to_string(), Value::U32(e.callback_handle)),
+        (
+            "options".to_string(),
+            Value::Option(e.options.map(|o| Box::new(bindgen_func_opts_to_value(o)))),
+        ),
+    ])
+}
+
+fn bindgen_table_registration_to_value(
+    e: core_extension_hooks::TableRegistration,
+) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("name".to_string(), Value::String(e.name)),
+        (
+            "arguments".to_string(),
+            Value::List(
+                e.arguments
+                    .into_iter()
+                    .map(bindgen_func_arg_to_value)
+                    .collect(),
+            ),
+        ),
+        (
+            "columns".to_string(),
+            Value::List(
+                e.columns
+                    .into_iter()
+                    .map(bindgen_columndef_to_value)
+                    .collect(),
+            ),
+        ),
+        ("callback-handle".to_string(), Value::U32(e.callback_handle)),
+        (
+            "options".to_string(),
+            Value::Option(e.options.map(|o| Box::new(bindgen_ext_opts_to_value(o)))),
+        ),
+    ])
+}
+
+fn bindgen_aggregate_registration_to_value(
+    e: core_extension_hooks::AggregateRegistration,
+) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("name".to_string(), Value::String(e.name)),
+        (
+            "arguments".to_string(),
+            Value::List(
+                e.arguments
+                    .into_iter()
+                    .map(bindgen_func_arg_to_value)
+                    .collect(),
+            ),
+        ),
+        ("returns".to_string(), bindgen_logicaltype_to_value(e.returns)),
+        ("callback-handle".to_string(), Value::U32(e.callback_handle)),
+        (
+            "options".to_string(),
+            Value::Option(e.options.map(|o| Box::new(bindgen_func_opts_to_value(o)))),
+        ),
+    ])
+}
+
+fn bindgen_macro_registration_to_value(
+    e: core_extension_hooks::MacroRegistration,
+) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("schema".to_string(), Value::String(e.schema)),
+        ("name".to_string(), Value::String(e.name)),
+        (
+            "parameters".to_string(),
+            Value::List(e.parameters.into_iter().map(Value::String).collect()),
+        ),
+        ("definition-sql".to_string(), Value::String(e.definition_sql)),
+    ])
+}
+
+fn bindgen_table_macro_registration_to_value(
+    e: core_extension_hooks::TableMacroRegistration,
+) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("schema".to_string(), Value::String(e.schema)),
+        ("name".to_string(), Value::String(e.name)),
+        (
+            "parameters".to_string(),
+            Value::List(e.parameters.into_iter().map(Value::String).collect()),
+        ),
+        ("body-sql".to_string(), Value::String(e.body_sql)),
+    ])
+}
+
+fn bindgen_replacement_scan_registration_to_value(
+    e: core_extension_hooks::ReplacementScanRegistration,
+) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        (
+            "extensions".to_string(),
+            Value::List(e.extensions.into_iter().map(Value::String).collect()),
+        ),
+        ("function-name".to_string(), Value::String(e.function_name)),
+    ])
+}
+
+fn bindgen_logical_type_registration_to_value(
+    e: core_extension_hooks::LogicalTypeRegistration,
+) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("name".to_string(), Value::String(e.name)),
+        ("physical".to_string(), Value::String(e.physical)),
+    ])
+}
+
+fn bindgen_cast_registration_to_value(
+    e: core_extension_hooks::CastRegistration,
+) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("source".to_string(), Value::String(e.source)),
+        ("target".to_string(), Value::String(e.target)),
+        ("callback-handle".to_string(), Value::U32(e.callback_handle)),
+    ])
+}
+
+fn bindgen_func_arg_to_value(
+    a: core_extension_hooks::FuncArg,
+) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        (
+            "name".to_string(),
+            Value::Option(a.name.map(|s| Box::new(Value::String(s)))),
+        ),
+        ("logical".to_string(), bindgen_logicaltype_to_value(a.logical)),
+    ])
+}
+
+fn bindgen_func_opts_to_value(
+    o: core_extension_hooks::FuncOpts,
+) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        (
+            "description".to_string(),
+            Value::Option(o.description.map(|s| Box::new(Value::String(s)))),
+        ),
+        (
+            "tags".to_string(),
+            Value::List(o.tags.into_iter().map(Value::String).collect()),
+        ),
+        (
+            "attributes".to_string(),
+            bindgen_funcflags_to_value(o.attributes),
+        ),
+    ])
+}
+
+fn bindgen_ext_opts_to_value(
+    o: core_extension_hooks::ExtOpts,
+) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        (
+            "description".to_string(),
+            Value::Option(o.description.map(|s| Box::new(Value::String(s)))),
+        ),
+        (
+            "tags".to_string(),
+            Value::List(o.tags.into_iter().map(Value::String).collect()),
+        ),
+    ])
+}
+
+/// Marshal the bindgen `funcflags` (5-bit flags: deterministic,
+/// commutative, stateless, sideeffecting, deprecated) as
+/// `Value::Flags(Vec<String>)` — the wasmos wire format for WIT
+/// flags is a list of set-flag names by convention.
+fn bindgen_funcflags_to_value(
+    f: core_types::Funcflags,
+) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    let mut set = Vec::with_capacity(5);
+    if f.contains(core_types::Funcflags::DETERMINISTIC) {
+        set.push("deterministic".to_string());
+    }
+    if f.contains(core_types::Funcflags::COMMUTATIVE) {
+        set.push("commutative".to_string());
+    }
+    if f.contains(core_types::Funcflags::STATELESS) {
+        set.push("stateless".to_string());
+    }
+    if f.contains(core_types::Funcflags::SIDEEFFECTING) {
+        set.push("sideeffecting".to_string());
+    }
+    if f.contains(core_types::Funcflags::DEPRECATED) {
+        set.push("deprecated".to_string());
+    }
+    Value::Flags(set)
+}
+
+/// Marshal the bindgen `columndef` record `{name: string, logical:
+/// logicaltype}`.
+fn bindgen_columndef_to_value(
+    c: core_runtime_exports::Columndef,
+) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("name".to_string(), Value::String(c.name)),
+        ("logical".to_string(), bindgen_logicaltype_to_value(c.logical)),
+    ])
+}
+
+/// Marshal the bindgen `logicaltype` variant (24 arms, mostly
+/// unit, two payload-carrying: `decimal(decimalshape)` and
+/// `complex(string)`). Arm names match WIT verbatim.
+fn bindgen_logicaltype_to_value(
+    t: core_runtime_exports::Logicaltype,
+) -> wasmos_runtime_api::Value {
+    use core_runtime_exports::Logicaltype as L;
+    use wasmos_runtime_api::Value;
+    let (discriminant, payload): (&'static str, Option<Box<Value>>) = match t {
+        L::Boolean => ("boolean", None),
+        L::Int64 => ("int64", None),
+        L::Uint64 => ("uint64", None),
+        L::Float64 => ("float64", None),
+        L::Text => ("text", None),
+        L::Blob => ("blob", None),
+        L::Int32 => ("int32", None),
+        L::Timestamp => ("timestamp", None),
+        L::Int8 => ("int8", None),
+        L::Int16 => ("int16", None),
+        L::Uint8 => ("uint8", None),
+        L::Uint16 => ("uint16", None),
+        L::Uint32 => ("uint32", None),
+        L::Float32 => ("float32", None),
+        L::Date => ("date", None),
+        L::Time => ("time", None),
+        L::Timestamptz => ("timestamptz", None),
+        L::Decimal(ds) => (
+            "decimal",
+            Some(Box::new(Value::Record(vec![
+                ("width".to_string(), Value::U8(ds.width)),
+                ("scale".to_string(), Value::U8(ds.scale)),
+            ]))),
+        ),
+        L::Interval => ("interval", None),
+        L::Uuid => ("uuid", None),
+        L::Hugeint => ("hugeint", None),
+        L::Uhugeint => ("uhugeint", None),
+        L::Complex(s) => ("complex", Some(Box::new(Value::String(s)))),
+    };
+    Value::Variant {
+        discriminant: discriminant.to_string(),
+        payload,
     }
 }
 
@@ -8626,9 +9053,6 @@ fn instantiate_core(
     let mut linker = Linker::<CoreStoreState>::new(engine);
     p2::add_to_linker_sync(&mut linker)?;
     add_wasi_http_to_linker(&mut linker)?;
-    core_extension_hooks::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |state| {
-        state
-    })?;
     core_callback_dispatch::add_to_linker::<CoreStoreState, CoreStoreState>(
         &mut linker,
         |state| state,
@@ -8639,15 +9063,16 @@ fn instantiate_core(
     // world -- their capabilities lift to the host's SQL-level ATTACH intercept
     // and write intercept (see HostState::execute). See ADR Decision 3.
     // Phase 2e wedges — retire tvm:memory/{bytes,manager} +
-    // duckdb:component/host-extension-loader from bindgen's
-    // add_to_linker and route them through the escape-hatch bridge
-    // instead. See [`TvmBytesHost`] + [`TvmManagerHost`] +
-    // [`CoreHostExtensionLoaderHost`]. The bridge introspects the
+    // duckdb:component/{host-extension-loader,extension-loader-hooks}
+    // from bindgen's add_to_linker and route them through the
+    // escape-hatch bridge instead. See [`TvmBytesHost`] +
+    // [`TvmManagerHost`] + [`CoreHostExtensionLoaderHost`] +
+    // [`ExtensionLoaderHooksHost`]. The bridge introspects the
     // component's imports at install-time, so `component` must
     // already be loaded (it is — see `Component::from_file`
-    // above). Every other core-world import (extension-hooks,
-    // callback-dispatch) still uses bindgen for now — incremental
-    // retirement.
+    // above). Only callback-dispatch still uses bindgen now —
+    // most complex host impl with 7 methods, deferred to a
+    // dedicated wedge.
     for (iface, handler) in [
         (
             TVM_BYTES_IFACE,
@@ -8660,6 +9085,11 @@ fn instantiate_core(
         (
             HOST_EXTENSION_LOADER_IFACE,
             std::sync::Arc::new(CoreHostExtensionLoaderHost)
+                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
+        ),
+        (
+            EXTENSION_LOADER_HOOKS_IFACE,
+            std::sync::Arc::new(ExtensionLoaderHooksHost)
                 as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
         ),
     ] {
@@ -10052,16 +10482,16 @@ pub fn run_shell_with_stdio(
     let mut linker = Linker::<CoreStoreState>::new(&engine);
     p2::add_to_linker_sync(&mut linker)?;
     add_wasi_http_to_linker(&mut linker)?;
-    // Phase 2e wedge — this shell path historically only wired
+    // Phase 2e wedges — this shell path historically only wired
     // host-extension-loader / extension-hooks / callback-dispatch
     // (no tvm imports for the shell world). Now host-extension-
-    // loader routes through the bridge; the other two still on
-    // bindgen. The bridge needs the component's imports at
-    // install-time, so the component load moved BEFORE the bridge
-    // install (was originally after the store construction — the
-    // reordering only matters for the bridge's import-introspection
-    // pass; wasmtime allows linker use before/after component load).
-    core_extension_hooks::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |s| s)?;
+    // loader AND extension-loader-hooks route through the bridge;
+    // only callback-dispatch still uses bindgen. The bridge needs
+    // the component's imports at install-time, so the component
+    // load moved BEFORE the bridge install (was originally after
+    // the store construction — the reordering only matters for
+    // the bridge's import-introspection pass; wasmtime allows
+    // linker use before/after component load).
     core_callback_dispatch::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |s| s)?;
 
     let component = load_component(&engine, shell_component).with_context(|| {
@@ -10071,17 +10501,27 @@ pub fn run_shell_with_stdio(
         )
     })?;
 
-    wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call::<CoreStoreState>(
-        &engine,
-        &mut linker,
-        &component,
-        HOST_EXTENSION_LOADER_IFACE,
-        std::sync::Arc::new(CoreHostExtensionLoaderHost)
-            as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
-    )
-    .map_err(|e| {
-        anyhow::anyhow!("wire {HOST_EXTENSION_LOADER_IFACE} (shell path): {e}")
-    })?;
+    for (iface, handler) in [
+        (
+            HOST_EXTENSION_LOADER_IFACE,
+            std::sync::Arc::new(CoreHostExtensionLoaderHost)
+                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
+        ),
+        (
+            EXTENSION_LOADER_HOOKS_IFACE,
+            std::sync::Arc::new(ExtensionLoaderHooksHost)
+                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
+        ),
+    ] {
+        wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call::<CoreStoreState>(
+            &engine,
+            &mut linker,
+            &component,
+            iface,
+            handler,
+        )
+        .map_err(|e| anyhow::anyhow!("wire {iface} (shell path): {e}"))?;
+    }
 
     let mut store = Store::new(
         &engine,
