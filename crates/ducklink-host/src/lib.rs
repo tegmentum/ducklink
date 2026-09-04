@@ -33,13 +33,21 @@ pub mod duckdb_cli_bindings {
     });
 }
 
-pub mod dotcmd_bindings {
-    wasmtime::component::bindgen!({
-        path: "../../wit/dotcmd",
-        world: "duckdb:dotcmd/dotcmd",
-        require_store_data_send: true,
-    });
-}
+// The `dotcmd_bindings` bindgen! macro invocation that used to sit
+// here (world `duckdb:dotcmd/dotcmd@0.2.0`) is gone. Under Path A of
+// the wasmos-runtime-api migration (see
+// `docs/wasmos-migration-recipe.md`), the dot-command loader in
+// `DotcmdRegistry::load_one` / `::invoke` wires:
+//   * host import `duckdb:dotcmd/spi@0.2.0` via
+//     `sync_bridge::install_stateless_host_call` — handler is
+//     `crate::dotcmd_wasmos::SpiHost`, previously the wasmos-native
+//     mirror of the (now-retired) bindgen `impl Host for DotcmdState`.
+//   * guest exports `duckdb:dotcmd/registry@0.2.0.list-commands` and
+//     `.invoke` via `sync_export_bridge::call_export`.
+// No `dotcmd_bindings::Dotcmd` / `duckdb::dotcmd::spi::{Host,
+// add_to_linker}` / `duckdb::dotcmd::registry::CommandSpec` /
+// `InvokeResult` / `StateDelta` types are generated any more —
+// records are marshalled positionally as `Value::Record`.
 
 pub mod driver_exec;
 
@@ -181,8 +189,12 @@ pub mod resolver;
 pub mod cron_cli;
 /// `ducklink extension <subcommand>` (alias `ext`) — extension-management CLI UX.
 pub mod extcli;
-// `pub mod driver_exec;` is declared at the top of this file (before the
-// `driver_tool_bindings` bindgen expansion that references its types).
+// `pub mod driver_exec;` is declared at the top of this file. Prior to
+// the Path-A wasmos migration (see `docs/wasmos-migration-recipe.md`)
+// the forward-declaration was load-bearing — the retired
+// `driver_tool_bindings` bindgen expansion's `with:` map referenced
+// `crate::driver_exec::DriverConnection`. The bindgen is gone; the
+// forward-declaration stays put to keep this migration diff minimal.
 mod ui_server;
 
 /// Sentinel callback handles for the resolver observability scalars
@@ -1322,35 +1334,18 @@ fn register_env_providers(registry: &ProviderRegistry) {
     }
 }
 
-/// `duckdb:dotcmd/spi` — run SQL on the CLI's live connection, returned as
-/// tab/newline-delimited text. Shares the user's connection (temp tables,
-/// `:memory:` state, settings).
-impl dotcmd_bindings::duckdb::dotcmd::spi::Host for DotcmdState {
-    fn query(&mut self, sql: String) -> Result<String, String> {
-        let handle = self
-            .current_connection
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
-            .ok_or_else(|| "spi: no active database connection".to_string())?;
-        let mut core = self.core.lock().unwrap_or_else(|e| e.into_inner());
-        let result = core
-            .with_database(|guest, store| guest.call_execute(store, handle, &sql))
-            .map_err(|trap| format!("spi query trapped: {trap}"))?;
-        match result {
-            Ok(qr) => Ok(spi_render_rows(qr)),
-            Err(err) => Err(core_duckerror_message(err)),
-        }
-    }
-
-    /// `duckdb:dotcmd/spi.edit` — shell out to the user's editor for a multi-
-    /// line entry. Mirrors the standalone `fieldbook` CLI's editor UX exactly:
-    /// EDITOR -> VISUAL -> `vi`; whitespace-split so `EDITOR="code -w"` works;
-    /// temp file created in `std::env::temp_dir()`, unlinked after read.
-    fn edit(&mut self, initial: String, hint_suffix: String) -> Result<String, String> {
-        spi_edit(&initial, &hint_suffix)
-    }
-}
+// The bindgen-era `impl dotcmd_bindings::duckdb::dotcmd::spi::Host for
+// DotcmdState` block that used to sit here has been retired under
+// Path A of the wasmos-runtime-api migration. Its two-method body
+// (spi.query + spi.edit) lives verbatim in
+// `crate::dotcmd_wasmos::SpiHost` — the wasmos-native mirror that
+// predated this migration for Phase-6.2.d.3 coexistence. That struct
+// is now the single implementation, registered through the escape-
+// hatch bridge in `DotcmdRegistry::load_one` below.
+//
+// `spi_render_rows`, `spi_edit`, `core_duckerror_message` (free
+// functions used by SpiHost) stay in this module — they have no
+// bindgen dependency.
 
 /// Launch `$EDITOR` (fallback: `$VISUAL`, then `vi`) on a temp file seeded with
 /// `initial`. Returns the file contents after the editor exits. `hint_suffix`
