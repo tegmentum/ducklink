@@ -1202,9 +1202,12 @@ struct DotcmdState {
     /// import wasi:http without a per-component gate.
     wasi_http: WasiHttpCtx,
     table: ResourceTable,
-    /// The core (for spi SQL execution) and the CLI's live connection handle.
-    core: Arc<Mutex<CoreExecution>>,
-    current_connection: Arc<Mutex<Option<ResourceAny>>>,
+    // Post-Phase-2c: `core` and `current_connection` are no longer on
+    // DotcmdState — the SPI host `crate::dotcmd_wasmos::SpiHost`
+    // captures its own Arc clones at register-time in `load_one`, so
+    // the fields would only ever be dead here. Load_one still takes
+    // both as params (they flow directly into `SpiHost::new(...)`).
+    //
     // Retained on the store data even though the surviving `spi.query` no
     // longer reads it — a follow-up dotcmd feature (e.g. the schema-qualified
     // prefix model migration) is expected to route through the manager again.
@@ -1517,9 +1520,12 @@ pub(crate) fn format_uuid(hi: u64, lo: u64) -> String {
 }
 
 /// A loaded pluggable dot-command component (its own wasmtime store + instance).
+/// Post-migration (Phase 2c) holds a bare `wasmtime::component::Instance`
+/// instead of the bindgen-generated `Dotcmd` wrapper; export dispatch
+/// runs through `sync_export_bridge::call_export` per verb.
 struct DotcmdInstance {
     store: Store<DotcmdState>,
-    bindings: dotcmd_bindings::Dotcmd,
+    instance: wasmtime::component::Instance,
 }
 
 /// Registry of pluggable dot-command components. Each declares its commands via
@@ -1605,10 +1611,26 @@ impl DotcmdRegistry {
         let mut linker = Linker::<DotcmdState>::new(engine);
         p2::add_to_linker_sync(&mut linker)?;
         add_wasi_http_to_linker(&mut linker)?;
-        dotcmd_bindings::duckdb::dotcmd::spi::add_to_linker::<DotcmdState, DotcmdState>(
+        // Install `duckdb:dotcmd/spi@0.2.0` via the stateless bridge —
+        // spi has no resources per the WIT, and SpiHost captures its
+        // two Arc handles by value so it does not need consumer_state.
+        // A no-op if the component doesn't actually import the
+        // interface (fine for a lone `registry`-only dot command).
+        let spi_host =
+            crate::dotcmd_wasmos::SpiHost::new(core.clone(), current_connection.clone());
+        wasmos_runtime_wasmtime_v48::sync_bridge::install_stateless_host_call::<DotcmdState>(
+            engine,
             &mut linker,
-            |s| s,
-        )?;
+            &component,
+            "duckdb:dotcmd/spi@0.2.0",
+            // SpiHost implements SyncHostCall directly via
+            // `#[host_iface(sync)]` — the bridge wants the sync
+            // trait, no SyncHostCallAdapter wrap needed (that
+            // adapter converts to the async HostCall used by the
+            // wasmos-native `HostImports::register` path).
+            Arc::new(spi_host) as Arc<dyn wasmos_runtime_api::SyncHostCall>,
+        )
+        .map_err(|e| wasmtime::Error::msg(format!("wire duckdb:dotcmd/spi: {e}")))?;
         // compose:dynlink/linker: conditionally satisfy a guest-driven
         // dlopen import. ONLY components that actually import the linker get
         // the host import + a bridge — every other dot command is unaffected
@@ -1636,20 +1658,41 @@ impl DotcmdRegistry {
                 wasi,
                 wasi_http: WasiHttpCtx::new(),
                 table: ResourceTable::new(),
-                core,
-                current_connection,
+                // `core` + `current_connection` params flowed into
+                // `SpiHost::new(...)` above via `.clone()` — Arc
+                // handles are cheap and DotcmdState no longer needs
+                // to carry them (see the field-set comment above).
                 extension_manager,
                 dynlink,
             },
         );
-        let bindings = dotcmd_bindings::Dotcmd::instantiate(&mut store, &component, &linker)?;
-        let specs = bindings
-            .duckdb_dotcmd_registry()
-            .call_list_commands(&mut store)?
-            .into_iter()
-            .map(|s| (s.name, s.id, s.summary, s.usage))
-            .collect();
-        Ok((DotcmdInstance { store, bindings }, specs))
+        // Post-Phase-2c: the bindgen path was
+        //   let bindings = dotcmd_bindings::Dotcmd::instantiate(
+        //       &mut store, &component, &linker)?;
+        //   let specs = bindings.duckdb_dotcmd_registry()
+        //       .call_list_commands(&mut store)?;
+        // Under the bridge we take the Pre path — cheaper for repeated
+        // dispatch since each `sync_export_bridge::call_export` in the
+        // `invoke` hot path only walks the export index by name, and
+        // `linker.instantiate_pre` amortises the linker walk here.
+        let instance_pre = linker.instantiate_pre(&component)?;
+        let instance = instance_pre.instantiate(store.as_context_mut())?;
+
+        let list_ret = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            store.as_context_mut(),
+            &instance,
+            Some("duckdb:dotcmd/registry@0.2.0"),
+            "list-commands",
+            &[],
+        )
+        .map_err(|e| wasmtime::Error::msg(format!("dotcmd registry.list-commands: {e}")))?;
+        let specs = unpack_command_spec_list(&list_ret).map_err(|e| {
+            wasmtime::Error::msg(format!(
+                "dotcmd registry.list-commands: {e} (from {})",
+                path.display()
+            ))
+        })?;
+        Ok((DotcmdInstance { store, instance }, specs))
     }
 
     /// Invoke `.name args`. None = no registered command by that name (the CLI
@@ -1662,24 +1705,177 @@ impl DotcmdRegistry {
     ) -> Option<Result<(String, Vec<(String, String)>), String>> {
         let (idx, id) = *self.by_name.get(&name.to_ascii_lowercase())?;
         let inst = &mut self.components[idx];
-        Some(
-            match inst
-                .bindings
-                .duckdb_dotcmd_registry()
-                .call_invoke(&mut inst.store, id, args)
-            {
-                Ok(Ok(result)) => Ok((
-                    result.text,
-                    result
-                        .state_deltas
-                        .into_iter()
-                        .map(|d| (d.key, d.value))
-                        .collect(),
-                )),
-                Ok(Err(message)) => Err(message),
-                Err(trap) => Err(format!("dot-command '{name}' trapped: {trap}")),
-            },
-        )
+        // Post-Phase-2c: dispatch via sync_export_bridge with positional
+        // Value args + return. WIT signature is
+        //   invoke: func(id: u64, args: string) ->
+        //       result<invoke-result, string>
+        // — a `Value::Result(Ok(Some(Value::Record{invoke-result})))` on
+        // success or `Value::Result(Err(Some(Value::String(msg))))`
+        // on graceful error. Trap-shaped errors bubble through the
+        // `.map_err` closure below (same shape as the bindgen-era
+        // `Err(trap)` arm).
+        let call_result =
+            wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+                inst.store.as_context_mut(),
+                &inst.instance,
+                Some("duckdb:dotcmd/registry@0.2.0"),
+                "invoke",
+                &[
+                    wasmos_runtime_api::Value::U64(id),
+                    wasmos_runtime_api::Value::String(args.to_string()),
+                ],
+            );
+        Some(match call_result {
+            Ok(ret) => unpack_invoke_result(&ret).unwrap_or_else(|e| {
+                Err(format!(
+                    "dot-command '{name}' invoke returned malformed shape: {e}"
+                ))
+            }),
+            Err(trap) => Err(format!("dot-command '{name}' trapped: {trap}")),
+        })
+    }
+}
+
+/// Unpack a `list<command-spec>` return from
+/// `duckdb:dotcmd/registry.list-commands` into the (name, id, summary,
+/// usage) tuple shape `DotcmdRegistry::load` expects. Ignores extra
+/// record fields the WIT may grow, but requires each declared field to
+/// be present with the expected `Value` variant.
+fn unpack_command_spec_list(
+    ret: &[wasmos_runtime_api::Value],
+) -> Result<Vec<(String, u64, String, String)>, String> {
+    use wasmos_runtime_api::Value;
+    let items = match ret {
+        [Value::List(items)] => items,
+        other => {
+            return Err(format!(
+                "expected [Value::List(command-spec)], got {other:?}"
+            ))
+        }
+    };
+    items
+        .iter()
+        .map(|item| {
+            let fields = match item {
+                Value::Record(f) => f,
+                other => {
+                    return Err(format!("expected Value::Record in list, got {other:?}"))
+                }
+            };
+            let mut id: Option<u64> = None;
+            let mut name: Option<String> = None;
+            let mut summary: Option<String> = None;
+            let mut usage: Option<String> = None;
+            for (k, v) in fields {
+                match (k.as_str(), v) {
+                    ("id", Value::U64(n)) => id = Some(*n),
+                    ("name", Value::String(s)) => name = Some(s.clone()),
+                    ("summary", Value::String(s)) => summary = Some(s.clone()),
+                    ("usage", Value::String(s)) => usage = Some(s.clone()),
+                    // Unknown fields are tolerated (forward compat);
+                    // wrong variants for known fields fall through to
+                    // the required-field-missing check below.
+                    _ => {}
+                }
+            }
+            Ok((
+                name.ok_or_else(|| "command-spec: missing `name: string`".to_string())?,
+                id.ok_or_else(|| "command-spec: missing `id: u64`".to_string())?,
+                summary
+                    .ok_or_else(|| "command-spec: missing `summary: string`".to_string())?,
+                usage.ok_or_else(|| "command-spec: missing `usage: string`".to_string())?,
+            ))
+        })
+        .collect()
+}
+
+/// Unpack a `result<invoke-result, string>` return from
+/// `duckdb:dotcmd/registry.invoke` into the CLI-facing
+/// `Result<(text, state-deltas), error>` shape. Extracts the record
+/// fields (`text: string`, `state-deltas: list<state-delta>`) and
+/// each state-delta's `(key: string, value: string)`.
+fn unpack_invoke_result(
+    ret: &[wasmos_runtime_api::Value],
+) -> Result<Result<(String, Vec<(String, String)>), String>, String> {
+    use wasmos_runtime_api::Value;
+    let inner = match ret {
+        [Value::Result(r)] => r,
+        other => {
+            return Err(format!(
+                "expected [Value::Result(invoke-result, string)], got {other:?}"
+            ))
+        }
+    };
+    match inner {
+        Ok(Some(payload)) => {
+            let fields = match payload.as_ref() {
+                Value::Record(f) => f,
+                other => {
+                    return Err(format!(
+                        "invoke-result Ok payload: expected Record, got {other:?}"
+                    ))
+                }
+            };
+            let mut text: Option<String> = None;
+            let mut deltas: Option<Vec<(String, String)>> = None;
+            for (k, v) in fields {
+                match (k.as_str(), v) {
+                    ("text", Value::String(s)) => text = Some(s.clone()),
+                    ("state-deltas", Value::List(items)) => {
+                        let mut out = Vec::with_capacity(items.len());
+                        for item in items {
+                            let delta_fields = match item {
+                                Value::Record(f) => f,
+                                other => {
+                                    return Err(format!(
+                                        "state-delta: expected Record, got {other:?}"
+                                    ))
+                                }
+                            };
+                            let mut key: Option<String> = None;
+                            let mut value: Option<String> = None;
+                            for (dk, dv) in delta_fields {
+                                match (dk.as_str(), dv) {
+                                    ("key", Value::String(s)) => key = Some(s.clone()),
+                                    ("value", Value::String(s)) => value = Some(s.clone()),
+                                    _ => {}
+                                }
+                            }
+                            out.push((
+                                key.ok_or_else(|| {
+                                    "state-delta: missing `key: string`".to_string()
+                                })?,
+                                value.ok_or_else(|| {
+                                    "state-delta: missing `value: string`".to_string()
+                                })?,
+                            ));
+                        }
+                        deltas = Some(out);
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Ok((
+                text.ok_or_else(|| "invoke-result: missing `text: string`".to_string())?,
+                deltas.ok_or_else(|| {
+                    "invoke-result: missing `state-deltas: list<state-delta>`".to_string()
+                })?,
+            )))
+        }
+        Ok(None) => Err(
+            "invoke-result: expected Some payload for result<invoke-result, _>, got None"
+                .to_string(),
+        ),
+        Err(Some(payload)) => match payload.as_ref() {
+            Value::String(s) => Ok(Err(s.clone())),
+            other => Err(format!(
+                "invoke Err payload: expected String, got {other:?}"
+            )),
+        },
+        Err(None) => Err(
+            "invoke Err payload: expected Some(string) for result<_, string>, got None"
+                .to_string(),
+        ),
     }
 }
 
