@@ -134,7 +134,11 @@ use duckdb_core_bindings::exports::duckdb::component::database as core_db_export
 use duckdb_core_bindings::exports::duckdb::extension::{
     config as core_config_exports, logging as core_logging_exports, runtime as core_runtime_exports,
 };
-use duckdb_core_bindings::tvm::memory::bytes as core_tvm_bytes;
+// `duckdb_core_bindings::tvm::memory::bytes` no longer referenced
+// after Phase 2e's tvm/bytes wedge retired the bindgen `add_to_
+// linker` call for that interface — see `TvmBytesHost` below. The
+// bindgen module still exists (bindgen! is still called for the
+// full core world), but this crate has no per-alias use for it.
 use duckdb_core_bindings::tvm::memory::manager as core_tvm_manager;
 use duckdb_core_bindings::tvm::memory::types as core_tvm_types;
 // ADR-0029 Phase 6.2.o cleanup — the top-level `#[cfg(test)] use
@@ -751,42 +755,223 @@ impl core_tvm_manager::Host for CoreStoreState {
     }
 }
 
-impl core_tvm_bytes::Host for CoreStoreState {
-    fn read(
-        &mut self,
-        ptr: core_tvm_types::Handle,
-        len: u32,
-    ) -> Result<Vec<u8>, core_tvm_types::TvmError> {
-        let th = self.tvm_resolve(ptr, false)?;
-        // Borrow the region bytes zero-copy, then one alloc+copy into the
-        // returned Vec. Avoids the memset that `vec![0; len]` does before the
-        // read would overwrite every byte anyway (a full block of needless
-        // zeroing per read).
-        let buf = self
-            .tvm
-            .region_slice_at(th, len)
-            .map_err(tvm_err_to_wit)?
-            .to_vec();
-        if tvm_debug() {
-            let t = TVM_BYTES_READ.fetch_add(len as u64, std::sync::atomic::Ordering::Relaxed)
-                + len as u64;
-            eprintln!("[tvm] read {len} B (cumulative {} MiB)", t >> 20);
+// The bindgen-era `impl core_tvm_bytes::Host for CoreStoreState`
+// block that used to sit here is retired under Phase 2e of the
+// wasmos-runtime-api migration (site 2 of the recipe at
+// `docs/wasmos-migration-recipe.md`). `tvm:memory/bytes@0.1.0` now
+// wires via `sync_bridge_resource::install_host_call` — see
+// [`TvmBytesHost`] below and the linker wiring change at the
+// `load_core_component` install site. Every other core-world
+// interface (host-extension-loader, extension-loader-hooks,
+// callback-dispatch, tvm/memory/manager) stays on bindgen's
+// `add_to_linker` for now; Phase 2e's incremental strategy retires
+// one interface at a time so each step is a small, revertible
+// commit rather than one monolithic rewrite.
+
+/// Interface name for the tvm bytes host, matching the WIT
+/// declaration `package tvm:memory@0.1.0; interface bytes` in
+/// `wit/deps/tvm/tvm.wit`. Wasmos does verbatim interface-name
+/// matching including the `@x.y.z` version tag.
+const TVM_BYTES_IFACE: &str = "tvm:memory/bytes@0.1.0";
+
+/// Wasmos-native host impl of `tvm:memory/bytes@0.1.0`. Stateless
+/// unit struct — the two methods (`read`, `write`) reach
+/// [`CoreStoreState`] via `ctx.consumer_state`, matching the
+/// bindgen-era `&mut self` access pattern exactly.
+struct TvmBytesHost;
+
+impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
+    fn call(
+        &self,
+        ctx: &mut wasmos_runtime_api::HostCallContext<'_>,
+        method: &str,
+        args: Vec<wasmos_runtime_api::Value>,
+    ) -> wasmos_runtime_api::RuntimeResult<Vec<wasmos_runtime_api::Value>> {
+        use wasmos_runtime_api::{RuntimeError, Value};
+        match method {
+            "read" => {
+                let (handle, len) = match args.as_slice() {
+                    [h, Value::U32(len)] => (unpack_tvm_handle(h)?, *len),
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "{TVM_BYTES_IFACE}.read: expected [handle-record, u32], got {other:?}"
+                        )))
+                    }
+                };
+                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "tvm-bytes read: consumer_state<CoreStoreState> unavailable",
+                    )
+                })?;
+                let th = match state.tvm_resolve(handle, false) {
+                    Ok(th) => th,
+                    Err(bindgen_err) => {
+                        return Ok(vec![Value::Result(Err(Some(Box::new(
+                            bindgen_tvm_error_to_value(bindgen_err),
+                        ))))])
+                    }
+                };
+                match state.tvm.region_slice_at(th, len).map_err(tvm_err_to_wit) {
+                    Ok(slice) => {
+                        let buf = slice.to_vec();
+                        if tvm_debug() {
+                            let t = TVM_BYTES_READ.fetch_add(
+                                len as u64,
+                                std::sync::atomic::Ordering::Relaxed,
+                            ) + len as u64;
+                            eprintln!("[tvm] read {len} B (cumulative {} MiB)", t >> 20);
+                        }
+                        // Encode `list<u8>` as Value::List(Vec<Value::U8>)
+                        // — the v48 adapter's lift/lower path
+                        // canonicalises this to Val::List(Val::U8, ...)
+                        // identically to Value::Bytes(bytes::Bytes),
+                        // per the value.rs marshal-convention docstring.
+                        // Avoids adding the `bytes` crate as a direct
+                        // dep here for a single one-shot allocation.
+                        let list: Vec<Value> = buf.into_iter().map(Value::U8).collect();
+                        Ok(vec![Value::Result(Ok(Some(Box::new(Value::List(list)))))])
+                    }
+                    Err(bindgen_err) => Ok(vec![Value::Result(Err(Some(Box::new(
+                        bindgen_tvm_error_to_value(bindgen_err),
+                    ))))]),
+                }
+            }
+            "write" => {
+                // Guest sends `list<u8>` — the v48 adapter's lift
+                // path canonicalises to `Value::Bytes(bytes::Bytes)`
+                // in preference to `Value::List(Vec<Value::U8>)`
+                // (see value.rs marshal-convention docstring),
+                // but accept both shapes for defensive parity —
+                // future adapters or a downstream reshuffle could
+                // pick either lowering.
+                let (handle, data): (core_tvm_types::Handle, Vec<u8>) = match args.as_slice() {
+                    [h, Value::Bytes(b)] => (unpack_tvm_handle(h)?, b.to_vec()),
+                    [h, Value::List(items)] => {
+                        let mut bytes = Vec::with_capacity(items.len());
+                        for (i, item) in items.iter().enumerate() {
+                            match item {
+                                Value::U8(b) => bytes.push(*b),
+                                other => {
+                                    return Err(RuntimeError::msg(format!(
+                                        "{TVM_BYTES_IFACE}.write: list element [{i}] is not U8: {other:?}"
+                                    )))
+                                }
+                            }
+                        }
+                        (unpack_tvm_handle(h)?, bytes)
+                    }
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "{TVM_BYTES_IFACE}.write: expected [handle-record, list<u8>/bytes], got {other:?}"
+                        )))
+                    }
+                };
+                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "tvm-bytes write: consumer_state<CoreStoreState> unavailable",
+                    )
+                })?;
+                let len = data.len() as u64;
+                let th = match state.tvm_resolve(handle, false) {
+                    Ok(th) => th,
+                    Err(bindgen_err) => {
+                        return Ok(vec![Value::Result(Err(Some(Box::new(
+                            bindgen_tvm_error_to_value(bindgen_err),
+                        ))))])
+                    }
+                };
+                match state.tvm.write(th, &data).map_err(tvm_err_to_wit) {
+                    Ok(()) => {
+                        if tvm_debug() {
+                            let t = TVM_BYTES_WRITTEN.fetch_add(
+                                len,
+                                std::sync::atomic::Ordering::Relaxed,
+                            ) + len;
+                            eprintln!("[tvm] write {len} B (cumulative {} MiB)", t >> 20);
+                        }
+                        Ok(vec![Value::Result(Ok(None))])
+                    }
+                    Err(bindgen_err) => Ok(vec![Value::Result(Err(Some(Box::new(
+                        bindgen_tvm_error_to_value(bindgen_err),
+                    ))))]),
+                }
+            }
+            other => Err(RuntimeError::msg(format!(
+                "{TVM_BYTES_IFACE}: unknown method {other:?}"
+            ))),
         }
-        Ok(buf)
     }
-    fn write(
-        &mut self,
-        ptr: core_tvm_types::Handle,
-        data: Vec<u8>,
-    ) -> Result<(), core_tvm_types::TvmError> {
-        let len = data.len() as u64;
-        let th = self.tvm_resolve(ptr, false)?;
-        let r = self.tvm.write(th, &data).map_err(tvm_err_to_wit);
-        if tvm_debug() && r.is_ok() {
-            let t = TVM_BYTES_WRITTEN.fetch_add(len, std::sync::atomic::Ordering::Relaxed) + len;
-            eprintln!("[tvm] write {len} B (cumulative {} MiB)", t >> 20);
+}
+
+/// Unpack a `tvm:memory/types.handle` record (three fields:
+/// `region-id: u16`, `generation: u16`, `offset: u32`) from a
+/// `Value::Record` payload into the bindgen [`core_tvm_types::Handle`]
+/// struct so the rest of the (unchanged) `tvm_resolve` / `tvm.write` /
+/// `region_slice_at` code paths keep working.
+///
+/// Field-by-name binding — bindgen's field order is not something a
+/// migration should depend on across a future WIT reorder.
+fn unpack_tvm_handle(v: &wasmos_runtime_api::Value) -> wasmos_runtime_api::RuntimeResult<core_tvm_types::Handle> {
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let fields = match v {
+        Value::Record(f) => f,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "tvm handle: expected Value::Record, got {other:?}"
+            )))
         }
-        r
+    };
+    let mut region_id: Option<u16> = None;
+    let mut generation: Option<u16> = None;
+    let mut offset: Option<u32> = None;
+    for (k, val) in fields {
+        match (k.as_str(), val) {
+            ("region-id", Value::U16(n)) => region_id = Some(*n),
+            ("generation", Value::U16(n)) => generation = Some(*n),
+            ("offset", Value::U32(n)) => offset = Some(*n),
+            _ => {}
+        }
+    }
+    Ok(core_tvm_types::Handle {
+        region_id: region_id.ok_or_else(|| {
+            RuntimeError::msg("tvm handle: missing `region-id: u16`")
+        })?,
+        generation: generation.ok_or_else(|| {
+            RuntimeError::msg("tvm handle: missing `generation: u16`")
+        })?,
+        offset: offset
+            .ok_or_else(|| RuntimeError::msg("tvm handle: missing `offset: u32`"))?,
+    })
+}
+
+/// Marshal a bindgen `core_tvm_types::TvmError` variant into the
+/// wasmos `Value::Variant` shape wire-compatible with the WIT
+/// `tvm:memory/types.tvm-error` variant.
+///
+/// Bindgen keeps the tvm-error enum alive (four other tvm/core
+/// interfaces still generate against it), so this helper can
+/// destructure the bindgen enum directly rather than duplicating the
+/// arms into a native mirror. Same input, different lowering — the
+/// eventual full-Phase-2e retirement will remove bindgen entirely
+/// and this fn will lift a native `TvmError` enum instead.
+fn bindgen_tvm_error_to_value(e: core_tvm_types::TvmError) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    let (discriminant, payload): (&'static str, Option<Box<Value>>) = match e {
+        core_tvm_types::TvmError::RegionNotFound(id) => {
+            ("region-not-found", Some(Box::new(Value::U16(id))))
+        }
+        core_tvm_types::TvmError::StaleHandle => ("stale-handle", None),
+        core_tvm_types::TvmError::OutOfBounds => ("out-of-bounds", None),
+        core_tvm_types::TvmError::NotResident => ("not-resident", None),
+        core_tvm_types::TvmError::AllocationFailed => ("allocation-failed", None),
+        core_tvm_types::TvmError::BackingStore(msg) => {
+            ("backing-store", Some(Box::new(Value::String(msg))))
+        }
+        core_tvm_types::TvmError::Pinned => ("pinned", None),
+    };
+    Value::Variant {
+        discriminant: discriminant.to_string(),
+        payload,
     }
 }
 
@@ -8232,7 +8417,23 @@ fn instantiate_core(
     // world -- their capabilities lift to the host's SQL-level ATTACH intercept
     // and write intercept (see HostState::execute). See ADR Decision 3.
     core_tvm_manager::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |state| state)?;
-    core_tvm_bytes::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |state| state)?;
+    // Phase 2e wedge — retire `tvm:memory/bytes` from bindgen's
+    // add_to_linker and route it through the escape-hatch bridge
+    // instead. See [`TvmBytesHost`] + `TVM_BYTES_IFACE`. The bridge
+    // introspects the component's imports at install-time, so
+    // `component` must already be loaded (it is — see the
+    // `Component::from_file` call above at
+    // `let component = ...;`). Every other core-world import
+    // (host-loader, extension-hooks, callback-dispatch, tvm/manager)
+    // stays on bindgen for now — incremental retirement.
+    wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call::<CoreStoreState>(
+        engine,
+        &mut linker,
+        &component,
+        TVM_BYTES_IFACE,
+        std::sync::Arc::new(TvmBytesHost) as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
+    )
+    .map_err(|e| anyhow::anyhow!("wire tvm:memory/bytes host: {e}"))?;
 
     let mut store = Store::new(
         engine,
