@@ -121,7 +121,10 @@ use anyhow::{Context, Result};
 // re-exports; the bindgen block is retired.
 // (cli_types formerly aliased duckdb_cli_bindings::duckdb::extension::types)
 use duckdb_core_bindings::duckdb::component::extension_loader_hooks as core_extension_hooks;
-use duckdb_core_bindings::duckdb::component::host_extension_loader as core_host_loader;
+// `duckdb_core_bindings::duckdb::component::host_extension_loader`
+// no longer referenced after Phase 2e's host-extension-loader wedge
+// retired the bindgen `add_to_linker` call for that interface — see
+// [`CoreHostExtensionLoaderHost`] below.
 use duckdb_core_bindings::duckdb::extension::callback_dispatch as core_callback_dispatch;
 use duckdb_core_bindings::duckdb::extension::column_types as core_column_types;
 // Phase 2 (@5): the 8 `*-host` imports on the core WIT world are DELETED --
@@ -411,18 +414,69 @@ impl wasmtime::component::HasData for CoreStoreState {
     type Data<'a> = &'a mut CoreStoreState;
 }
 
-impl core_host_loader::Host for CoreStoreState {
-    fn request_load(&mut self, name: wasmtime::component::__internal::String) -> bool {
-        let mut manager = self
-            .extension_manager
-            .lock()
-            .expect("extension manager mutex poisoned");
-        match manager.ensure_extension_loaded(&name) {
-            Ok(loaded) => loaded,
-            Err(err) => {
-                eprintln!("failed to load extension {name}: {err}");
-                false
+// The bindgen-era `impl core_host_loader::Host for CoreStoreState`
+// block that used to sit here is retired under Phase 2e (site 2)
+// of the wasmos-runtime-api migration — see the
+// [`CoreHostExtensionLoaderHost`] implementation below. Third of the
+// five host-import interfaces to migrate off bindgen for the
+// core world (after tvm:memory/bytes and tvm:memory/manager).
+
+/// Interface name for the host-extension-loader host, matching WIT
+/// `package duckdb:component; interface host-extension-loader` in
+/// `wit/core/duckdb-core.wit`. The `duckdb:component` package is
+/// unversioned in the core world's imports so the qualified name
+/// carries no `@x.y.z` tag.
+const HOST_EXTENSION_LOADER_IFACE: &str = "duckdb:component/host-extension-loader";
+
+/// Wasmos-native host impl of
+/// `duckdb:component/host-extension-loader`. Single method
+/// `request-load(name: string) -> bool` — the guest asks whether an
+/// extension has been loaded; primary of the two loader-side
+/// interfaces (the sibling `extension-loader-hooks` retirement is
+/// deferred to a later wedge because its pending-registrations
+/// record has 8 nested-list sub-shapes).
+struct CoreHostExtensionLoaderHost;
+
+impl wasmos_runtime_api::SyncHostCall for CoreHostExtensionLoaderHost {
+    fn call(
+        &self,
+        ctx: &mut wasmos_runtime_api::HostCallContext<'_>,
+        method: &str,
+        args: Vec<wasmos_runtime_api::Value>,
+    ) -> wasmos_runtime_api::RuntimeResult<Vec<wasmos_runtime_api::Value>> {
+        use wasmos_runtime_api::{RuntimeError, Value};
+        match method {
+            "request-load" => {
+                let name = match args.as_slice() {
+                    [Value::String(s)] => s.clone(),
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "{HOST_EXTENSION_LOADER_IFACE}.request-load: expected [string], got {other:?}"
+                        )))
+                    }
+                };
+                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "host-extension-loader request-load: \
+                         consumer_state<CoreStoreState> unavailable",
+                    )
+                })?;
+                let mut manager = state
+                    .extension_manager
+                    .lock()
+                    .expect("extension manager mutex poisoned");
+                let loaded = match manager.ensure_extension_loaded(&name) {
+                    Ok(loaded) => loaded,
+                    Err(err) => {
+                        eprintln!("failed to load extension {name}: {err}");
+                        false
+                    }
+                };
+                Ok(vec![Value::Bool(loaded)])
             }
+            other => Err(RuntimeError::msg(format!(
+                "{HOST_EXTENSION_LOADER_IFACE}: unknown method {other:?}"
+            ))),
         }
     }
 }
@@ -8572,7 +8626,6 @@ fn instantiate_core(
     let mut linker = Linker::<CoreStoreState>::new(engine);
     p2::add_to_linker_sync(&mut linker)?;
     add_wasi_http_to_linker(&mut linker)?;
-    core_host_loader::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |state| state)?;
     core_extension_hooks::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |state| {
         state
     })?;
@@ -8585,14 +8638,15 @@ fn instantiate_core(
     // table-stream) are DELETED. Those imports no longer exist on the core
     // world -- their capabilities lift to the host's SQL-level ATTACH intercept
     // and write intercept (see HostState::execute). See ADR Decision 3.
-    // Phase 2e wedges — retire tvm:memory/{bytes,manager} from
-    // bindgen's add_to_linker and route them through the escape-
-    // hatch bridge instead. See [`TvmBytesHost`] +
-    // [`TvmManagerHost`]. The bridge introspects the component's
-    // imports at install-time, so `component` must already be
-    // loaded (it is — see `Component::from_file` above). Every
-    // other core-world import (host-loader, extension-hooks,
-    // callback-dispatch) stays on bindgen for now — incremental
+    // Phase 2e wedges — retire tvm:memory/{bytes,manager} +
+    // duckdb:component/host-extension-loader from bindgen's
+    // add_to_linker and route them through the escape-hatch bridge
+    // instead. See [`TvmBytesHost`] + [`TvmManagerHost`] +
+    // [`CoreHostExtensionLoaderHost`]. The bridge introspects the
+    // component's imports at install-time, so `component` must
+    // already be loaded (it is — see `Component::from_file`
+    // above). Every other core-world import (extension-hooks,
+    // callback-dispatch) still uses bindgen for now — incremental
     // retirement.
     for (iface, handler) in [
         (
@@ -8602,6 +8656,11 @@ fn instantiate_core(
         (
             TVM_MANAGER_IFACE,
             std::sync::Arc::new(TvmManagerHost) as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
+        ),
+        (
+            HOST_EXTENSION_LOADER_IFACE,
+            std::sync::Arc::new(CoreHostExtensionLoaderHost)
+                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
         ),
     ] {
         wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call::<CoreStoreState>(
@@ -9993,9 +10052,36 @@ pub fn run_shell_with_stdio(
     let mut linker = Linker::<CoreStoreState>::new(&engine);
     p2::add_to_linker_sync(&mut linker)?;
     add_wasi_http_to_linker(&mut linker)?;
-    core_host_loader::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |s| s)?;
+    // Phase 2e wedge — this shell path historically only wired
+    // host-extension-loader / extension-hooks / callback-dispatch
+    // (no tvm imports for the shell world). Now host-extension-
+    // loader routes through the bridge; the other two still on
+    // bindgen. The bridge needs the component's imports at
+    // install-time, so the component load moved BEFORE the bridge
+    // install (was originally after the store construction — the
+    // reordering only matters for the bridge's import-introspection
+    // pass; wasmtime allows linker use before/after component load).
     core_extension_hooks::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |s| s)?;
     core_callback_dispatch::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |s| s)?;
+
+    let component = load_component(&engine, shell_component).with_context(|| {
+        format!(
+            "failed to load shell component from {}",
+            shell_component.display()
+        )
+    })?;
+
+    wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call::<CoreStoreState>(
+        &engine,
+        &mut linker,
+        &component,
+        HOST_EXTENSION_LOADER_IFACE,
+        std::sync::Arc::new(CoreHostExtensionLoaderHost)
+            as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
+    )
+    .map_err(|e| {
+        anyhow::anyhow!("wire {HOST_EXTENSION_LOADER_IFACE} (shell path): {e}")
+    })?;
 
     let mut store = Store::new(
         &engine,
@@ -10014,13 +10100,6 @@ pub fn run_shell_with_stdio(
             is_sibling: false,
         },
     );
-
-    let component = load_component(&engine, shell_component).with_context(|| {
-        format!(
-            "failed to load shell component from {}",
-            shell_component.display()
-        )
-    })?;
     let instance = linker.instantiate(store.as_context_mut(), &component)?;
     let (_, run_iface) = instance
         .get_export(store.as_context_mut(), None, "wasi:cli/run@0.2.0")
@@ -10819,6 +10898,12 @@ fn cli_db_appender_close(
 /// Replaces the bindgen-era `linker.instance(...).func_wrap("request-
 /// load", ...)` shim; the single WIT method forwards to
 /// `HostState::request_extension_load` verbatim.
+///
+/// Distinct from [`CoreHostExtensionLoaderHost`] earlier in this
+/// file — that one handles the same WIT interface but for the CORE
+/// world's `CoreStoreState`, calling `extension_manager.
+/// ensure_extension_loaded`. Same interface, two different worlds
+/// import it with different store data, so two handler types.
 struct HostExtensionLoaderHost;
 
 impl SyncHostCall for HostExtensionLoaderHost {
