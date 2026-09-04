@@ -146,7 +146,16 @@ use duckdb_core_bindings::duckdb::extension::column_types as core_column_types;
 use duckdb_core_bindings::duckdb::extension::types as core_types;
 use duckdb_core_bindings::exports::duckdb::component::database as core_db_exports;
 use duckdb_core_bindings::exports::duckdb::extension::{
-    config as core_config_exports, logging as core_logging_exports, runtime as core_runtime_exports,
+    // `logging as core_logging_exports` retired alongside the
+    // `with_logging` accessor + `neutral_loglevel_to_core` helper —
+    // logging guest exports now dispatch through the wasmos bridge
+    // (see `LOGGING_IFACE` + `neutral_loglevel_to_wit_tag`).
+    // `config as core_config_exports` retired alongside the
+    // `with_config` accessor + `core_config_error_to_neutral`
+    // helper — config guest exports now dispatch through the
+    // wasmos bridge (see `CONFIG_IFACE` + `call_config_get_option`
+    // + `value_to_config_error`).
+    runtime as core_runtime_exports,
 };
 // `duckdb_core_bindings::tvm::memory::{bytes, manager}` no longer
 // referenced after Phase 2e's tvm/{bytes,manager} wedges retired
@@ -2935,23 +2944,31 @@ impl CoreExecution {
         f(guest, store)
     }
 
-    fn with_config<F, R>(&mut self, f: F) -> R
+    /// Phase 2e guest-export migration helper — hands the raw
+    /// wasmtime Instance + store to `f` so per-verb migrations can
+    /// dispatch through `sync_export_bridge::call_export` without
+    /// needing a per-interface accessor method. Complements the
+    /// still-typed `with_database` / `with_config` / `with_logging`
+    /// / `with_runtime` / `with_appender` / `with_stream` /
+    /// `with_prepared` helpers for interfaces that haven't been
+    /// migrated yet. Retires alongside `bindings` once every guest-
+    /// export site has moved onto this path.
+    fn with_instance<F, R>(&mut self, f: F) -> R
     where
-        F: FnOnce(&core_config_exports::Guest, wasmtime::StoreContextMut<'_, CoreStoreState>) -> R,
+        F: FnOnce(
+            &wasmtime::component::Instance,
+            wasmtime::StoreContextMut<'_, CoreStoreState>,
+        ) -> R,
     {
-        let guest = self.bindings.duckdb_extension_config();
+        let inst = &self.instance;
         let store = self.store.as_context_mut();
-        f(guest, store)
+        f(inst, store)
     }
 
-    fn with_logging<F, R>(&mut self, f: F) -> R
-    where
-        F: FnOnce(&core_logging_exports::Guest, wasmtime::StoreContextMut<'_, CoreStoreState>) -> R,
-    {
-        let guest = self.bindings.duckdb_extension_logging();
-        let store = self.store.as_context_mut();
-        f(guest, store)
-    }
+    // `with_config` + `with_logging` retired — every config /
+    // logging guest-export site now dispatches through
+    // with_instance + sync_export_bridge::call_export
+    // (`call_config_get_option` helper + inline log call sites).
 }
 
 struct ConnectionEntry {
@@ -9450,92 +9467,304 @@ impl CoreServices {
     }
 }
 
-fn core_trap_to_config_error(err: wasmtime::Error) -> ConfigError {
+/// Lift a wasmos-bridge trap into the neutral [`ConfigError`]
+/// shape used by the ExtensionServices trait. The bridge returns
+/// `RuntimeError` (a wasmos type wrapping the underlying wasmtime
+/// error plus context); its `Display` gives the same diagnostic
+/// text the pre-migration `wasmtime::Error.to_string()` did.
+fn core_trap_to_config_error(err: wasmos_runtime_api::RuntimeError) -> ConfigError {
     ConfigError::InternalConfig(err.to_string())
 }
 
-fn core_config_error_to_neutral(err: core_config_exports::Configerror) -> ConfigError {
-    match err {
-        core_config_exports::Configerror::Invalidkey(msg) => ConfigError::InvalidKey(msg.into()),
-        core_config_exports::Configerror::Typemismatch(msg) => {
-            ConfigError::TypeMismatch(msg.into())
-        }
-        core_config_exports::Configerror::Unavailable(msg) => ConfigError::Unavailable(msg.into()),
-        core_config_exports::Configerror::Internalconfig(msg) => {
-            ConfigError::InternalConfig(msg.into())
-        }
+// `core_config_error_to_neutral` retired — wasmos-bridge dispatch
+// unpacks the configerror variant directly from `Value::Variant`
+// via [`value_to_config_error`] (defined near CONFIG_IFACE).
+
+// `neutral_loglevel_to_core` retired alongside the bindgen-era
+// `guest.call_log(...)` sites — the wasmos wire uses the
+// `neutral_loglevel_to_wit_tag` string tag below directly.
+
+/// Wasmos wire-tag for the neutral log level. WIT enum arm names
+/// are kebab-cased (identical for these five since they're all
+/// single-word) and wasmos lifts/lowers `enum` to
+/// `Value::Enum(String)`.
+fn neutral_loglevel_to_wit_tag(level: LogLevel) -> &'static str {
+    match level {
+        LogLevel::Trace => "trace",
+        LogLevel::Debug => "debug",
+        LogLevel::Info => "info",
+        LogLevel::Warn => "warn",
+        LogLevel::Error => "error",
     }
 }
 
-fn neutral_loglevel_to_core(level: LogLevel) -> core_logging_exports::Loglevel {
-    match level {
-        LogLevel::Trace => core_logging_exports::Loglevel::Trace,
-        LogLevel::Debug => core_logging_exports::Loglevel::Debug,
-        LogLevel::Info => core_logging_exports::Loglevel::Info,
-        LogLevel::Warn => core_logging_exports::Loglevel::Warn,
-        LogLevel::Error => core_logging_exports::Loglevel::Error,
+/// Interface name for the logging guest export. Matches WIT
+/// `package duckdb:extension@5.0.0; interface logging`.
+const LOGGING_IFACE: &str = "duckdb:extension/logging@5.0.0";
+
+/// Interface name for the config guest export. Same package as
+/// logging.
+const CONFIG_IFACE: &str = "duckdb:extension/config@5.0.0";
+
+/// Dispatch a `config.get-<T>(path: string) ->
+/// result<option<T>, configerror>` verb through the wasmos bridge
+/// and unpack the return into a neutral
+/// `Result<Option<T>, ConfigError>`. The `payload_to_native`
+/// closure lifts the `Value` inside `Some(_)` on the Ok arm to
+/// the caller's `T`.
+///
+/// Every `get_*` fn in the ExtensionServices impl above delegates
+/// here — the shape is identical across the 7 typed variants,
+/// only the payload lifter differs.
+fn call_config_get_option<T>(
+    services: &mut CoreServices,
+    method: &str,
+    path: &str,
+    payload_to_native: impl FnOnce(&wasmos_runtime_api::Value) -> Result<T, ConfigError>,
+) -> Result<Option<T>, ConfigError> {
+    use wasmos_runtime_api::Value;
+    let ret = services
+        .with_core(|core| {
+            core.with_instance(|instance, mut store| {
+                wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+                    store.as_context_mut(),
+                    instance,
+                    Some(CONFIG_IFACE),
+                    method,
+                    &[Value::String(path.to_string())],
+                )
+            })
+        })
+        .map_err(core_trap_to_config_error)?;
+    let inner = match ret.as_slice() {
+        [Value::Result(r)] => r,
+        other => {
+            return Err(ConfigError::InternalConfig(
+                format!(
+                    "config.{method}: expected [Value::Result(option<T>, configerror)], got {other:?}"
+                )
+                .into(),
+            ));
+        }
+    };
+    match inner {
+        Ok(Some(opt_payload)) => match opt_payload.as_ref() {
+            Value::Option(inner_opt) => match inner_opt {
+                Some(payload) => Ok(Some(payload_to_native(payload.as_ref())?)),
+                None => Ok(None),
+            },
+            other => Err(ConfigError::InternalConfig(
+                format!(
+                    "config.{method}: expected Value::Option inside Ok payload, got {other:?}"
+                )
+                .into(),
+            )),
+        },
+        Ok(None) => Err(ConfigError::InternalConfig(
+            format!("config.{method}: Ok arm carried no payload").into(),
+        )),
+        Err(Some(err_payload)) => Err(value_to_config_error(err_payload.as_ref(), method)),
+        Err(None) => Err(ConfigError::InternalConfig(
+            format!("config.{method}: Err arm carried no configerror payload").into(),
+        )),
+    }
+}
+
+/// Lift `Value::Variant` (a 4-arm `configerror`) into the neutral
+/// [`ConfigError`] shape the ExtensionServices trait uses. Malformed
+/// shapes fall through to `InternalConfig` with a descriptive
+/// diagnostic anchored to the caller's `method_ctx`.
+fn value_to_config_error(v: &wasmos_runtime_api::Value, method_ctx: &str) -> ConfigError {
+    use wasmos_runtime_api::Value;
+    let (disc, payload) = match v {
+        Value::Variant { discriminant, payload } => (discriminant.as_str(), payload.as_deref()),
+        other => {
+            return ConfigError::InternalConfig(
+                format!(
+                    "config.{method_ctx}: expected configerror Value::Variant, got {other:?}"
+                )
+                .into(),
+            );
+        }
+    };
+    let msg = match payload {
+        Some(Value::String(s)) => s.clone(),
+        other => {
+            return ConfigError::InternalConfig(
+                format!(
+                    "config.{method_ctx}: configerror.{disc} expected string payload, got {other:?}"
+                )
+                .into(),
+            );
+        }
+    };
+    match disc {
+        "invalidkey" => ConfigError::InvalidKey(msg.into()),
+        "typemismatch" => ConfigError::TypeMismatch(msg.into()),
+        "unavailable" => ConfigError::Unavailable(msg.into()),
+        "internalconfig" => ConfigError::InternalConfig(msg.into()),
+        other => ConfigError::InternalConfig(
+            format!("config.{method_ctx}: unknown configerror arm {other:?}").into(),
+        ),
     }
 }
 
 impl ExtensionServices for CoreServices {
     fn provider_version(&mut self) -> Result<String, ConfigError> {
-        self.with_core(|core| core.with_config(|guest, store| guest.call_provider_version(store)))
-            .map_err(core_trap_to_config_error)
+        use wasmos_runtime_api::Value;
+        let ret = self
+            .with_core(|core| {
+                core.with_instance(|instance, mut store| {
+                    wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+                        store.as_context_mut(),
+                        instance,
+                        Some(CONFIG_IFACE),
+                        "provider-version",
+                        &[],
+                    )
+                })
+            })
+            .map_err(core_trap_to_config_error)?;
+        match ret.as_slice() {
+            [Value::String(s)] => Ok(s.clone()),
+            other => Err(ConfigError::InternalConfig(
+                format!("config.provider-version: expected [string], got {other:?}").into(),
+            )),
+        }
     }
 
     fn list_keys(&mut self, prefix: Option<&str>) -> Result<Vec<String>, ConfigError> {
-        self.with_core(|core| core.with_config(|guest, store| guest.call_list_keys(store, prefix)))
-            .map_err(core_trap_to_config_error)
+        use wasmos_runtime_api::Value;
+        let ret = self
+            .with_core(|core| {
+                core.with_instance(|instance, mut store| {
+                    wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+                        store.as_context_mut(),
+                        instance,
+                        Some(CONFIG_IFACE),
+                        "list-keys",
+                        &[Value::Option(
+                            prefix.map(|p| Box::new(Value::String(p.to_string()))),
+                        )],
+                    )
+                })
+            })
+            .map_err(core_trap_to_config_error)?;
+        match ret.as_slice() {
+            [Value::List(items)] => items
+                .iter()
+                .map(|v| match v {
+                    Value::String(s) => Ok(s.clone()),
+                    other => Err(ConfigError::InternalConfig(
+                        format!("config.list-keys: expected string in list, got {other:?}").into(),
+                    )),
+                })
+                .collect(),
+            other => Err(ConfigError::InternalConfig(
+                format!("config.list-keys: expected [list<string>], got {other:?}").into(),
+            )),
+        }
     }
 
     fn get_string(&mut self, path: &str) -> Result<Option<String>, ConfigError> {
-        self.with_core(|core| core.with_config(|guest, store| guest.call_get_string(store, path)))
-            .map_err(core_trap_to_config_error)?
-            .map_err(core_config_error_to_neutral)
+        call_config_get_option(self, "get-string", path, |v| match v {
+            wasmos_runtime_api::Value::String(s) => Ok(s.clone()),
+            other => Err(ConfigError::InternalConfig(
+                format!("config.get-string: expected string, got {other:?}").into(),
+            )),
+        })
     }
 
     fn get_bool(&mut self, path: &str) -> Result<Option<bool>, ConfigError> {
-        self.with_core(|core| core.with_config(|guest, store| guest.call_get_bool(store, path)))
-            .map_err(core_trap_to_config_error)?
-            .map_err(core_config_error_to_neutral)
+        call_config_get_option(self, "get-bool", path, |v| match v {
+            wasmos_runtime_api::Value::Bool(b) => Ok(*b),
+            other => Err(ConfigError::InternalConfig(
+                format!("config.get-bool: expected bool, got {other:?}").into(),
+            )),
+        })
     }
 
     fn get_i64(&mut self, path: &str) -> Result<Option<i64>, ConfigError> {
-        self.with_core(|core| core.with_config(|guest, store| guest.call_get_i64(store, path)))
-            .map_err(core_trap_to_config_error)?
-            .map_err(core_config_error_to_neutral)
+        call_config_get_option(self, "get-i64", path, |v| match v {
+            wasmos_runtime_api::Value::S64(n) => Ok(*n),
+            other => Err(ConfigError::InternalConfig(
+                format!("config.get-i64: expected s64, got {other:?}").into(),
+            )),
+        })
     }
 
     fn get_u64(&mut self, path: &str) -> Result<Option<u64>, ConfigError> {
-        self.with_core(|core| core.with_config(|guest, store| guest.call_get_u64(store, path)))
-            .map_err(core_trap_to_config_error)?
-            .map_err(core_config_error_to_neutral)
+        call_config_get_option(self, "get-u64", path, |v| match v {
+            wasmos_runtime_api::Value::U64(n) => Ok(*n),
+            other => Err(ConfigError::InternalConfig(
+                format!("config.get-u64: expected u64, got {other:?}").into(),
+            )),
+        })
     }
 
     fn get_f64(&mut self, path: &str) -> Result<Option<f64>, ConfigError> {
-        self.with_core(|core| core.with_config(|guest, store| guest.call_get_f64(store, path)))
-            .map_err(core_trap_to_config_error)?
-            .map_err(core_config_error_to_neutral)
+        call_config_get_option(self, "get-f64", path, |v| match v {
+            wasmos_runtime_api::Value::F64(n) => Ok(*n),
+            other => Err(ConfigError::InternalConfig(
+                format!("config.get-f64: expected f64, got {other:?}").into(),
+            )),
+        })
     }
 
     fn get_bytes(&mut self, path: &str) -> Result<Option<Vec<u8>>, ConfigError> {
-        self.with_core(|core| core.with_config(|guest, store| guest.call_get_bytes(store, path)))
-            .map_err(core_trap_to_config_error)?
-            .map_err(core_config_error_to_neutral)
+        call_config_get_option(self, "get-bytes", path, |v| match v {
+            wasmos_runtime_api::Value::Bytes(b) => Ok(b.to_vec()),
+            wasmos_runtime_api::Value::List(items) => items
+                .iter()
+                .map(|it| match it {
+                    wasmos_runtime_api::Value::U8(b) => Ok(*b),
+                    other => Err(ConfigError::InternalConfig(
+                        format!("config.get-bytes: expected u8 in list, got {other:?}").into(),
+                    )),
+                })
+                .collect(),
+            other => Err(ConfigError::InternalConfig(
+                format!("config.get-bytes: expected list<u8>/bytes, got {other:?}").into(),
+            )),
+        })
     }
 
     fn get_string_list(&mut self, path: &str) -> Result<Option<Vec<String>>, ConfigError> {
-        self.with_core(|core| {
-            core.with_config(|guest, store| guest.call_get_string_list(store, path))
+        call_config_get_option(self, "get-string-list", path, |v| match v {
+            wasmos_runtime_api::Value::List(items) => items
+                .iter()
+                .map(|it| match it {
+                    wasmos_runtime_api::Value::String(s) => Ok(s.clone()),
+                    other => Err(ConfigError::InternalConfig(
+                        format!("config.get-string-list: expected string in list, got {other:?}")
+                            .into(),
+                    )),
+                })
+                .collect(),
+            other => Err(ConfigError::InternalConfig(
+                format!("config.get-string-list: expected list<string>, got {other:?}").into(),
+            )),
         })
-        .map_err(core_trap_to_config_error)?
-        .map_err(core_config_error_to_neutral)
     }
 
     fn log(&mut self, level: LogLevel, message: &str, target: Option<&str>) {
+        use wasmos_runtime_api::Value;
+        let level_tag = neutral_loglevel_to_wit_tag(level);
         let result = self.with_core(|core| {
-            core.with_logging(|guest, store| {
-                guest.call_log(store, neutral_loglevel_to_core(level), message, target)
+            core.with_instance(|instance, mut store| {
+                wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+                    store.as_context_mut(),
+                    instance,
+                    Some(LOGGING_IFACE),
+                    "log",
+                    &[
+                        Value::Enum(level_tag.to_string()),
+                        Value::String(message.to_string()),
+                        Value::Option(
+                            target.map(|t| Box::new(Value::String(t.to_string()))),
+                        ),
+                    ],
+                )
             })
         });
         if let Err(err) = result {
@@ -9551,20 +9780,31 @@ impl ExtensionServices for CoreServices {
     }
 
     fn log_fields(&mut self, level: LogLevel, message: &str, fields: &[LogField]) {
-        let converted: Vec<core_logging_exports::Logfield> = fields
-            .iter()
-            .map(|field| core_logging_exports::Logfield {
-                key: field.key.clone().into(),
-                value: field.value.clone().into(),
-            })
-            .collect();
+        use wasmos_runtime_api::Value;
+        let level_tag = neutral_loglevel_to_wit_tag(level);
+        let fields_val = Value::List(
+            fields
+                .iter()
+                .map(|f| {
+                    Value::Record(vec![
+                        ("key".to_string(), Value::String(f.key.clone().into())),
+                        ("value".to_string(), Value::String(f.value.clone().into())),
+                    ])
+                })
+                .collect(),
+        );
         let result = self.with_core(|core| {
-            core.with_logging(|guest, store| {
-                guest.call_log_fields(
-                    store,
-                    neutral_loglevel_to_core(level),
-                    message,
-                    converted.as_slice(),
+            core.with_instance(|instance, mut store| {
+                wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+                    store.as_context_mut(),
+                    instance,
+                    Some(LOGGING_IFACE),
+                    "log-fields",
+                    &[
+                        Value::Enum(level_tag.to_string()),
+                        Value::String(message.to_string()),
+                        fields_val,
+                    ],
                 )
             })
         });
