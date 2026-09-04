@@ -134,12 +134,12 @@ use duckdb_core_bindings::exports::duckdb::component::database as core_db_export
 use duckdb_core_bindings::exports::duckdb::extension::{
     config as core_config_exports, logging as core_logging_exports, runtime as core_runtime_exports,
 };
-// `duckdb_core_bindings::tvm::memory::bytes` no longer referenced
-// after Phase 2e's tvm/bytes wedge retired the bindgen `add_to_
-// linker` call for that interface — see `TvmBytesHost` below. The
-// bindgen module still exists (bindgen! is still called for the
-// full core world), but this crate has no per-alias use for it.
-use duckdb_core_bindings::tvm::memory::manager as core_tvm_manager;
+// `duckdb_core_bindings::tvm::memory::{bytes, manager}` no longer
+// referenced after Phase 2e's tvm/{bytes,manager} wedges retired
+// the bindgen `add_to_linker` call for those interfaces — see
+// [`TvmBytesHost`] and [`TvmManagerHost`] below. The bindgen
+// module still exists (bindgen! is still called for the full core
+// world), but this crate has no per-alias use for either.
 use duckdb_core_bindings::tvm::memory::types as core_tvm_types;
 // ADR-0029 Phase 6.2.o cleanup — the top-level `#[cfg(test)] use
 // ducklink_runtime::duckdb_extension_bindings::...` block (with
@@ -699,60 +699,229 @@ static TVM_REGIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64:
 static TVM_BYTES_WRITTEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static TVM_BYTES_READ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-impl core_tvm_manager::Host for CoreStoreState {
-    fn create_region(
-        &mut self,
-        kind: core_tvm_types::RegionKind,
-        capacity: u32,
-    ) -> Result<u16, core_tvm_types::TvmError> {
-        let mem = tvm_core::VecBackedRegion::new(capacity);
-        // Freelist (not the default Bump): DuckDB deletes spilled blocks as a
-        // sort/hash merge consumes them (tvm_spill_delete -> dealloc), and the
-        // free-list coalesces those holes so a region's footprint tracks the
-        // live set, not the cumulative spill volume. Bump's dealloc is a no-op.
-        let r = self
-            .tvm
-            .create_region_with(
-                tvm_kind_to_core(kind),
-                capacity,
-                tvm_core::AllocatorKind::Freelist,
-                mem,
-            )
-            .map_err(tvm_err_to_wit);
-        if tvm_debug() {
-            if let Ok(id) = &r {
-                let n = TVM_REGIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-                eprintln!(
-                    "[tvm] open region #{n} id={id} kind={kind:?} cap={} MiB (host-owned, beyond wasm 4 GiB)",
-                    capacity >> 20
-                );
+// The bindgen-era `impl core_tvm_manager::Host for CoreStoreState`
+// block that used to sit here is retired under Phase 2e (site 2)
+// of the wasmos-runtime-api migration — see the [`TvmManagerHost`]
+// implementation below. Same wedge shape as tvm:memory/bytes:
+// unit struct + SyncHostCall dispatch by kebab-cased method name,
+// reaches CoreStoreState via ctx.consumer_state, keeps every
+// downstream code path (`tvm.create_region_with`, `tvm.destroy_region`,
+// `tvm.alloc`, `tvm.dealloc`, `tvm_register`, `tvm_resolve`,
+// `tvm_kind_to_core`) unchanged.
+
+/// Interface name for the tvm manager host, matching WIT
+/// `package tvm:memory@0.1.0; interface manager` in
+/// `wit/deps/tvm/tvm.wit`. Verbatim including the `@0.1.0` tag.
+const TVM_MANAGER_IFACE: &str = "tvm:memory/manager@0.1.0";
+
+/// Wasmos-native host impl of `tvm:memory/manager@0.1.0`.
+/// Stateless unit struct — five methods reach [`CoreStoreState`]
+/// via `ctx.consumer_state`.
+struct TvmManagerHost;
+
+impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
+    fn call(
+        &self,
+        ctx: &mut wasmos_runtime_api::HostCallContext<'_>,
+        method: &str,
+        args: Vec<wasmos_runtime_api::Value>,
+    ) -> wasmos_runtime_api::RuntimeResult<Vec<wasmos_runtime_api::Value>> {
+        use wasmos_runtime_api::{RuntimeError, Value};
+        match method {
+            "create-region" => {
+                let (kind, capacity) = match args.as_slice() {
+                    [k, Value::U32(cap)] => (unpack_region_kind(k)?, *cap),
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "{TVM_MANAGER_IFACE}.create-region: expected [region-kind, u32], got {other:?}"
+                        )))
+                    }
+                };
+                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "tvm-manager create-region: consumer_state<CoreStoreState> unavailable",
+                    )
+                })?;
+                let mem = tvm_core::VecBackedRegion::new(capacity);
+                // Freelist (not the default Bump): DuckDB deletes
+                // spilled blocks as a sort/hash merge consumes them
+                // (tvm_spill_delete -> dealloc), and the free-list
+                // coalesces those holes so a region's footprint
+                // tracks the live set, not the cumulative spill
+                // volume. Bump's dealloc is a no-op.
+                let r = state
+                    .tvm
+                    .create_region_with(
+                        tvm_kind_to_core(kind),
+                        capacity,
+                        tvm_core::AllocatorKind::Freelist,
+                        mem,
+                    )
+                    .map_err(tvm_err_to_wit);
+                if tvm_debug() {
+                    if let Ok(id) = &r {
+                        let n = TVM_REGIONS
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                            + 1;
+                        eprintln!(
+                            "[tvm] open region #{n} id={id} kind={kind:?} cap={} MiB (host-owned, beyond wasm 4 GiB)",
+                            capacity >> 20
+                        );
+                    }
+                }
+                match r {
+                    Ok(id) => Ok(vec![Value::Result(Ok(Some(Box::new(Value::U16(id)))))]),
+                    Err(bindgen_err) => Ok(vec![Value::Result(Err(Some(Box::new(
+                        bindgen_tvm_error_to_value(bindgen_err),
+                    ))))]),
+                }
             }
+            "destroy-region" => {
+                let region_id = match args.as_slice() {
+                    [Value::U16(id)] => *id,
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "{TVM_MANAGER_IFACE}.destroy-region: expected [u16], got {other:?}"
+                        )))
+                    }
+                };
+                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "tvm-manager destroy-region: consumer_state<CoreStoreState> unavailable",
+                    )
+                })?;
+                match state.tvm.destroy_region(region_id).map_err(tvm_err_to_wit) {
+                    Ok(()) => Ok(vec![Value::Result(Ok(None))]),
+                    Err(bindgen_err) => Ok(vec![Value::Result(Err(Some(Box::new(
+                        bindgen_tvm_error_to_value(bindgen_err),
+                    ))))]),
+                }
+            }
+            "alloc" => {
+                let (region_id, size) = match args.as_slice() {
+                    [Value::U16(id), Value::U32(sz)] => (*id, *sz),
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "{TVM_MANAGER_IFACE}.alloc: expected [u16, u32], got {other:?}"
+                        )))
+                    }
+                };
+                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "tvm-manager alloc: consumer_state<CoreStoreState> unavailable",
+                    )
+                })?;
+                match state.tvm.alloc(region_id, size).map_err(tvm_err_to_wit) {
+                    Ok(th) => {
+                        let handle = state.tvm_register(region_id, th);
+                        Ok(vec![Value::Result(Ok(Some(Box::new(pack_tvm_handle(
+                            handle,
+                        )))))])
+                    }
+                    Err(bindgen_err) => Ok(vec![Value::Result(Err(Some(Box::new(
+                        bindgen_tvm_error_to_value(bindgen_err),
+                    ))))]),
+                }
+            }
+            "dealloc" => {
+                let handle = match args.as_slice() {
+                    [h] => unpack_tvm_handle(h)?,
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "{TVM_MANAGER_IFACE}.dealloc: expected [handle-record], got {other:?}"
+                        )))
+                    }
+                };
+                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "tvm-manager dealloc: consumer_state<CoreStoreState> unavailable",
+                    )
+                })?;
+                let th = match state.tvm_resolve(handle, true) {
+                    Ok(th) => th,
+                    Err(bindgen_err) => {
+                        return Ok(vec![Value::Result(Err(Some(Box::new(
+                            bindgen_tvm_error_to_value(bindgen_err),
+                        ))))])
+                    }
+                };
+                match state.tvm.dealloc(th).map_err(tvm_err_to_wit) {
+                    Ok(()) => Ok(vec![Value::Result(Ok(None))]),
+                    Err(bindgen_err) => Ok(vec![Value::Result(Err(Some(Box::new(
+                        bindgen_tvm_error_to_value(bindgen_err),
+                    ))))]),
+                }
+            }
+            "describe-region" => {
+                // The bindgen-era impl was an unconditional stub
+                // returning `Err(TvmError::BackingStore(
+                // "describe-region not implemented"))`. Preserved
+                // verbatim — the RegionInfo record shape does not
+                // need to be marshalled because the Ok arm is never
+                // reached in practice.
+                match args.as_slice() {
+                    [Value::U16(_region_id)] => {}
+                    other => {
+                        return Err(RuntimeError::msg(format!(
+                            "{TVM_MANAGER_IFACE}.describe-region: expected [u16], got {other:?}"
+                        )))
+                    }
+                }
+                Ok(vec![Value::Result(Err(Some(Box::new(
+                    bindgen_tvm_error_to_value(core_tvm_types::TvmError::BackingStore(
+                        "describe-region not implemented".into(),
+                    )),
+                ))))])
+            }
+            other => Err(RuntimeError::msg(format!(
+                "{TVM_MANAGER_IFACE}: unknown method {other:?}"
+            ))),
         }
-        r
     }
-    fn destroy_region(&mut self, region_id: u16) -> Result<(), core_tvm_types::TvmError> {
-        self.tvm.destroy_region(region_id).map_err(tvm_err_to_wit)
-    }
-    fn alloc(
-        &mut self,
-        region_id: u16,
-        size: u32,
-    ) -> Result<core_tvm_types::Handle, core_tvm_types::TvmError> {
-        let th = self.tvm.alloc(region_id, size).map_err(tvm_err_to_wit)?;
-        Ok(self.tvm_register(region_id, th))
-    }
-    fn dealloc(&mut self, ptr: core_tvm_types::Handle) -> Result<(), core_tvm_types::TvmError> {
-        let th = self.tvm_resolve(ptr, true)?;
-        self.tvm.dealloc(th).map_err(tvm_err_to_wit)
-    }
-    fn describe_region(
-        &mut self,
-        _region_id: u16,
-    ) -> Result<core_tvm_types::RegionInfo, core_tvm_types::TvmError> {
-        Err(core_tvm_types::TvmError::BackingStore(
-            "describe-region not implemented".into(),
-        ))
-    }
+}
+
+/// Unpack a `tvm:memory/types.region-kind` enum from
+/// `Value::Enum(tag)` into the bindgen [`core_tvm_types::RegionKind`]
+/// so the downstream `tvm_kind_to_core` mapping keeps working
+/// unchanged.
+fn unpack_region_kind(
+    v: &wasmos_runtime_api::Value,
+) -> wasmos_runtime_api::RuntimeResult<core_tvm_types::RegionKind> {
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let tag = match v {
+        Value::Enum(t) => t,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "region-kind: expected Value::Enum, got {other:?}"
+            )))
+        }
+    };
+    Ok(match tag.as_str() {
+        "hot-heap" => core_tvm_types::RegionKind::HotHeap,
+        "object-arena" => core_tvm_types::RegionKind::ObjectArena,
+        "blob-arena" => core_tvm_types::RegionKind::BlobArena,
+        "page-store" => core_tvm_types::RegionKind::PageStore,
+        "scratch" => core_tvm_types::RegionKind::Scratch,
+        "device-state" => core_tvm_types::RegionKind::DeviceState,
+        "code-cache" => core_tvm_types::RegionKind::CodeCache,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "region-kind: unknown tag {other:?}"
+            )))
+        }
+    })
+}
+
+/// Pack a bindgen [`core_tvm_types::Handle`] record into
+/// `Value::Record` with the WIT field names (`region-id`,
+/// `generation`, `offset`). Inverse of [`unpack_tvm_handle`].
+fn pack_tvm_handle(h: core_tvm_types::Handle) -> wasmos_runtime_api::Value {
+    use wasmos_runtime_api::Value;
+    Value::Record(vec![
+        ("region-id".to_string(), Value::U16(h.region_id)),
+        ("generation".to_string(), Value::U16(h.generation)),
+        ("offset".to_string(), Value::U32(h.offset)),
+    ])
 }
 
 // The bindgen-era `impl core_tvm_bytes::Host for CoreStoreState`
@@ -8416,24 +8585,34 @@ fn instantiate_core(
     // table-stream) are DELETED. Those imports no longer exist on the core
     // world -- their capabilities lift to the host's SQL-level ATTACH intercept
     // and write intercept (see HostState::execute). See ADR Decision 3.
-    core_tvm_manager::add_to_linker::<CoreStoreState, CoreStoreState>(&mut linker, |state| state)?;
-    // Phase 2e wedge — retire `tvm:memory/bytes` from bindgen's
-    // add_to_linker and route it through the escape-hatch bridge
-    // instead. See [`TvmBytesHost`] + `TVM_BYTES_IFACE`. The bridge
-    // introspects the component's imports at install-time, so
-    // `component` must already be loaded (it is — see the
-    // `Component::from_file` call above at
-    // `let component = ...;`). Every other core-world import
-    // (host-loader, extension-hooks, callback-dispatch, tvm/manager)
-    // stays on bindgen for now — incremental retirement.
-    wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call::<CoreStoreState>(
-        engine,
-        &mut linker,
-        &component,
-        TVM_BYTES_IFACE,
-        std::sync::Arc::new(TvmBytesHost) as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
-    )
-    .map_err(|e| anyhow::anyhow!("wire tvm:memory/bytes host: {e}"))?;
+    // Phase 2e wedges — retire tvm:memory/{bytes,manager} from
+    // bindgen's add_to_linker and route them through the escape-
+    // hatch bridge instead. See [`TvmBytesHost`] +
+    // [`TvmManagerHost`]. The bridge introspects the component's
+    // imports at install-time, so `component` must already be
+    // loaded (it is — see `Component::from_file` above). Every
+    // other core-world import (host-loader, extension-hooks,
+    // callback-dispatch) stays on bindgen for now — incremental
+    // retirement.
+    for (iface, handler) in [
+        (
+            TVM_BYTES_IFACE,
+            std::sync::Arc::new(TvmBytesHost) as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
+        ),
+        (
+            TVM_MANAGER_IFACE,
+            std::sync::Arc::new(TvmManagerHost) as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
+        ),
+    ] {
+        wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call::<CoreStoreState>(
+            engine,
+            &mut linker,
+            &component,
+            iface,
+            handler,
+        )
+        .map_err(|e| anyhow::anyhow!("wire {iface} host: {e}"))?;
+    }
 
     let mut store = Store::new(
         engine,
