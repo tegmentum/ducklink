@@ -75,9 +75,21 @@ datalink-policy = { git = "https://github.com/tegmentum/datalink.git", tag = "v0
 
 # ADR-0029 Phase 6.2.d.3 — moved from dev-deps to a regular dep so
 # `src/dotcmd_wasmos.rs` can register the `duckdb:dotcmd/spi` handler
-# on production install paths, not just tests. Same rev as the
-# ducklink-runtime + dev-dep pins to keep the crate graph unified.
-wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", tag = "v0.3.2" }
+# on production install paths, not just tests.
+#
+# Switched from `git tag v0.3.2` to a local path checkout so ducklink
+# and wasmos can co-evolve during the Phase-2+ migration that lifts
+# the remaining ~23k lines of direct-wasmtime code onto
+# wasmos-runtime-api. Sibling-clone convention — same as this repo's
+# other `~/git/*` path deps. The pinned git tag can return once the
+# migration lands and wasmos cuts a release that carries every API
+# ducklink-host needs.
+wasmos-runtime-api    = { path = "../../../wasmos/runtime/api" }
+# The runtime facade. `wasmtime-lts` (default) resolves to the v48
+# adapter — matches ducklink-host's existing wasmtime 48 pin. Regular
+# dep (was previously dev-only) so Phase 2 source rewrites can point
+# at it directly rather than importing it conditionally.
+wasmos-runtime-select = { path = "../../../wasmos/runtime/selector", features = ["wasmtime-lts"] }
 
 [dev-dependencies]
 tempfile = "3"
@@ -88,8 +100,9 @@ tempfile = "3"
 # grows. datalink-dynlink-wasmos is a peer-repo git dep at the datalink
 # main rev that ships it (6fbb890+).
 datalink-dynlink-wasmos = { git = "https://github.com/tegmentum/datalink.git", tag = "v0.2.0" }
-wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", tag = "v0.3.2" }
-wasmos-runtime-select = { git = "https://github.com/tegmentum/wasmos.git", tag = "v0.3.2", features = ["wasmtime-lts"] }
+# wasmos-runtime-api + wasmos-runtime-select moved to regular deps
+# above (local path) so production code and tests share one source
+# of truth during the Phase-2+ direct-wasmtime → wasmos migration.
 async-trait = "0.1"
 bytes = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
