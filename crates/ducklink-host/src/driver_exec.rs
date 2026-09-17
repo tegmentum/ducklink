@@ -458,9 +458,9 @@ fn build_driver_wasi_env(args: &[String], preopens: &[(&Path, &str)]) -> WasiEnv
     let mut env = WasiEnvironment::sandboxed()
         .with_args(args.iter().cloned())
         .inherit_env()
+        .inherit_stdout()
+        .inherit_stderr()
         .with_network();
-    env.inherit_stdout = true;
-    env.inherit_stderr = true;
     for (host, guest) in preopens {
         env = env.with_preopen(Preopen::read_write(host.to_path_buf(), (*guest).to_string()));
     }
