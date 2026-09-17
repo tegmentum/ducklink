@@ -373,10 +373,24 @@ Progress since the recipe was written on 2026-09-04:
     directly.
   - #6 (`67d761a1`) — `logging` + `config` guest exports retired
     (the two simple non-resource-carrying guest interfaces).
+  - `f9981f1e` (infra) — FU4 sibling/primary drain-and-archive
+    protocol extracted from the retired
+    `<CoreStoreState as core_extension_hooks::Host>::get_pending_registrations`
+    impl into a first-class
+    `CoreStoreState::drain_pending_registrations_for_replay`
+    method, unblocking the lib test build (wedge #4 had left two
+    test callsites reaching through the retired trait method).
+  - #8 (`e008cd0f`) — `convert_pending_registrations` chain + the
+    12 `bindgen_*_to_value` sub-marshallers + the
+    `neutral_*_to_core` leaf lowerings + the `core_extension_hooks`
+    alias itself all retired. Native `PendingRegistrationsData`
+    marshals directly to `Value` via
+    `native_pending_registrations_to_value`. One bindgen surface
+    permanently gone. Wire form preserved verbatim.
 
-**Wedges remaining under Phase 2e** (estimated 1-3 more):
+**Wedges remaining under Phase 2e** (estimated 2 more):
 
-1. **Guest exports: `duckdb:component/database` + `duckdb:extension/runtime`.**
+1. **Guest exports: `duckdb:component/database` + `duckdb:extension/runtime`** (wedge #7).
    The `with_database` / `with_stream` / `with_prepared` /
    `with_appender` / `with_runtime` helpers on `CoreExecution`
    still hand out bindgen `core_db_exports::Guest{,ResultStream,PreparedStatement,Appender}`
@@ -385,30 +399,22 @@ Progress since the recipe was written on 2026-09-04:
    / ATTACH intercept / write intercept + a scatter of `call_close` /
    `call_register_table_function` / `call_schema` /
    `call_parameter_count` / `call_append_row` / `call_flush`
-   across `HostState` and stream/prepared/appender adapters.
-   Each site converts to `sync_export_bridge::call_export` with
-   the interface + method name spelled out and args marshalled
-   as `Value`. Estimated size: ~800-1500 line net change,
-   comparable to wedge #6 but with resource handles in play.
-2. **Marshaller chain cleanup**: retire
-   `convert_pending_registrations` (`lib.rs:8797`) and its 8
-   sub-converters (`convert_pending_scalar_registration`, etc.)
-   by rewriting `bindgen_pending_registrations_to_value` +
-   sub-marshallers to take native `PendingRegistrationsData` /
-   `PendingScalar` / etc. directly instead of the
-   `core_extension_hooks::*` intermediates. This retires the
-   `core_extension_hooks` alias entirely — one bindgen surface
-   permanently gone. Load-bearing sub-detail: the marshaller
-   chain today also depends on `core_runtime_exports::Logicaltype`
-   via `neutral_logicaltype_to_core`, so retiring
-   `core_extension_hooks` cleanly requires also introducing a
-   native `reg::LogicalType → Value` marshaller. Small
-   ~300-500 line change once (1) lands.
-3. **Delete `duckdb_core_bindings` block + remaining
-   `use core_*` aliases** (`core_types`, `core_column_types`,
-   `core_tvm_types`, `core_db_exports`, `core_runtime_exports`).
-   Trivial once (1) and (2) are done — the bindgen! macro has no
-   remaining consumers.
+   across `HostState` and stream/prepared/appender adapters
+   (~107 total invocations of `with_{database,stream,prepared,
+   appender,runtime}` / `call_execute` / `call_close` /
+   `call_register_table_function` / `call_schema` /
+   `call_parameter_count` / `call_append_row` / `call_flush`
+   at 2026-09-17). Each site converts to
+   `sync_export_bridge::call_export` with the interface + method
+   name spelled out and args marshalled as `Value`. Estimated
+   size: ~800-1500 line net change, comparable to wedge #6 but
+   with resource handles in play.
+2. **Delete `duckdb_core_bindings` block + remaining
+   `use core_*` aliases** (wedge #9). Remaining 6 aliases at
+   2026-09-17: `core_callback_dispatch`, `core_column_types`,
+   `core_types`, `core_db_exports`, `core_runtime_exports`,
+   `core_tvm_types`. Trivial once (1) is done — the bindgen!
+   macro has no remaining consumers.
 
 **Phase 6 (icd-9)** — untouched. Single bindgen site, small
 surface, Path-A recipe applies directly. Lands after ducklink-host
