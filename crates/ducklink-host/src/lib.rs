@@ -555,39 +555,16 @@ impl wasmos_runtime_api::SyncHostCall for ExtensionLoaderHooksHost {
                          consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                // Body is byte-for-byte the bindgen-era impl block's
-                // Phase-4 (FU4) sibling/primary split — sibling stores
-                // serve the shared replay archive; primary stores drain
-                // the manager and append into the archive. The bindgen
-                // -> Value bridge layer happens at the tail, after both
-                // Arc<Mutex<>> handles are released, so a callback
-                // fired downstream can't re-enter either mutex through
-                // a side-effect.
-                let bindgen_pending = if state.is_sibling {
-                    if let Some(archive) = state.replay_archive.as_ref() {
-                        let guard = archive.lock().unwrap_or_else(|e| e.into_inner());
-                        convert_pending_registrations(guard.clone())
-                    } else {
-                        convert_pending_registrations(
-                            ducklink_runtime::PendingRegistrationsData::default(),
-                        )
-                    }
-                } else {
-                    let drained = {
-                        let mut manager = state
-                            .extension_manager
-                            .lock()
-                            .expect("extension manager mutex poisoned");
-                        manager.drain_pending_registrations()
-                    };
-                    if let Some(archive) = state.replay_archive.as_ref() {
-                        let mut guard = archive.lock().unwrap_or_else(|e| e.into_inner());
-                        guard.append(drained.clone());
-                    }
-                    convert_pending_registrations(drained)
-                };
+                // FU4 sibling/primary drain-and-archive protocol
+                // lives on `CoreStoreState`; tests call the same
+                // method so both paths stay on one code path. The
+                // native → bindgen → Value hop happens at the tail,
+                // after the drain's `Arc<Mutex<>>` handles are
+                // released, so a callback fired downstream can't
+                // re-enter either mutex through a side-effect.
+                let native_pending = state.drain_pending_registrations_for_replay();
                 Ok(vec![bindgen_pending_registrations_to_value(
-                    bindgen_pending,
+                    convert_pending_registrations(native_pending),
                 )])
             }
             other => Err(RuntimeError::msg(format!(
@@ -2137,6 +2114,44 @@ fn tvm_kind_to_core(k: core_tvm_types::RegionKind) -> tvm_core::RegionKind {
     }
 }
 impl CoreStoreState {
+    /// FU4 sibling/primary drain-and-archive protocol.
+    ///
+    /// Sibling stores serve the shared archive (a snapshot of every
+    /// registration the primary drain has emitted). Primary stores
+    /// drain their extension manager and append into the archive
+    /// before returning.
+    ///
+    /// This method replaces what used to be
+    /// `<CoreStoreState as core_extension_hooks::Host>::get_pending_registrations`
+    /// before Phase 2e wedge #4 (`d9859350`) retired the trait
+    /// impl. Both [`ExtensionLoaderHooksHost::call`] (the wasmos
+    /// host handler that fires on `LOAD <name>`) and test
+    /// harnesses that need the primary/sibling drain semantics
+    /// call this — keeping the two callers on one code path.
+    fn drain_pending_registrations_for_replay(
+        &mut self,
+    ) -> ducklink_runtime::PendingRegistrationsData {
+        if self.is_sibling {
+            match self.replay_archive.as_ref() {
+                Some(archive) => archive.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+                None => ducklink_runtime::PendingRegistrationsData::default(),
+            }
+        } else {
+            let drained = {
+                let mut manager = self
+                    .extension_manager
+                    .lock()
+                    .expect("extension manager mutex poisoned");
+                manager.drain_pending_registrations()
+            };
+            if let Some(archive) = self.replay_archive.as_ref() {
+                let mut guard = archive.lock().unwrap_or_else(|e| e.into_inner());
+                guard.append(drained.clone());
+            }
+            drained
+        }
+    }
+
     // Record a fresh tvm_core allocation under its (region, offset) slot, bumping
     // the per-slot generation, and return the WIT handle (carrying the slot
     // generation) to hand back to the guest.
@@ -15088,10 +15103,12 @@ mod tests {
             sibling.record_extension_loaded("fu4_stub");
         }
 
-        // Trigger the PRIMARY-side drain via its own
-        // `core_extension_hooks::Host::get_pending_registrations` impl. This
-        // is exactly what the wasm shim would call inside a real LOAD; here
-        // we drive it synchronously by borrowing the primary store's data.
+        // Trigger the PRIMARY-side drain-and-archive protocol via
+        // the same method the wasmos host handler
+        // (`ExtensionLoaderHooksHost::call`) invokes on `LOAD <name>`.
+        // Post Phase 2e wedge #4 (`d9859350`) the trait impl this
+        // used to reach is gone; the drain logic lives on
+        // `CoreStoreState::drain_pending_registrations_for_replay`.
         {
             let mut c = primary_core.lock().unwrap();
             let data: &mut CoreStoreState = c.store.data_mut();
@@ -15100,8 +15117,7 @@ mod tests {
                 "primary CoreStoreState must have `replay_archive = Some(...)` \
                  after `attach_replay_archive` — FU4 wiring"
             );
-            let _returned =
-                <CoreStoreState as core_extension_hooks::Host>::get_pending_registrations(data);
+            let _returned = data.drain_pending_registrations_for_replay();
         }
 
         // Inspect the shared archive directly: the synthetic scalar / table
@@ -15163,17 +15179,16 @@ mod tests {
             );
         }
 
-        // Now drive the sibling's `get_pending_registrations` directly and
-        // confirm it serves the archive (not an empty drain). We call the
-        // trait method on the sibling `CoreStoreState` — mirroring what the
-        // wasm shim would invoke inside a `LOAD <name>` on the sibling.
+        // Now drive the sibling drain-and-archive directly and confirm
+        // it serves the archive (not an empty drain). Same
+        // `CoreStoreState::drain_pending_registrations_for_replay`
+        // method the wasmos host handler uses on `LOAD <name>`.
         {
             let slot_guard = sibling.slot.lock().unwrap_or_else(|e| e.into_inner());
             let slot = slot_guard.as_ref().unwrap();
             let mut sibling_core = slot.core.lock().unwrap_or_else(|e| e.into_inner());
             let data: &mut CoreStoreState = sibling_core.store.data_mut();
-            let served =
-                <CoreStoreState as core_extension_hooks::Host>::get_pending_registrations(data);
+            let served = data.drain_pending_registrations_for_replay();
             let scalar_names: Vec<String> =
                 served.scalars.iter().map(|s| s.name.to_string()).collect();
             let table_names: Vec<String> =
