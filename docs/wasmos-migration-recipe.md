@@ -723,15 +723,26 @@ that no ducklink-family Cargo.toml + no ducklink-family
   storage), and `#[host_iface(sync)]` + `#[derive(HostResourceType)]`
   (compile-time typed dispatch). Consumer adoption of the last
   pair is a separate consumer-side migration wedge.
-- **Wasmos-native `WasiView` hook.** wasmtime-wasi's
-  `WasiView` trait requires each store's state to expose
-  a `wasmtime::component::ResourceTable`. This is the
-  last direct wasmtime-type reference in consumer
-  workloads after the split-tables step; retiring it
-  needs either a wasmos-side WasiCtx wrapper that owns
-  the wasmtime table internally, or a wasmos-native WASI
-  surface that bypasses wasmtime-wasi's `WasiView` trait
-  entirely.
+- ~~**Wasmos-native `WasiView` hook.**~~ ✅ PARTIALLY
+  LANDED (2026-09-17). wasmos ships
+  `wasmos_runtime_wasmtime_v48::SyncStoreState<T>` (wasmos
+  commit `bedff545`) — a public store-data wrapper that
+  owns the wasmtime-wasi `WasiCtx` + wasmtime-wasi-http
+  `WasiHttpCtx` + `wasmtime::component::ResourceTable`
+  internally and implements `WasiView` / `WasiHttpView`
+  itself, so consumer state types no longer expose those
+  fields or the `impl WasiView` boilerplate. All three
+  ducklink-family consumers adopted it (icd-10 `86db4dd`,
+  icd-9 `856e2de`, ducklink-host `82390fb`).
+
+  What remains: consumer surface still names
+  `wasmtime::Store`, `wasmtime::Engine`,
+  `wasmtime::component::{Component, Linker, Instance}` —
+  those disappear only when consumers move to the wasmos-
+  native `Runtime::instantiate` path, which needs the
+  async cascade or a `SyncRuntime` facade (see the "Sync
+  Runtime facade" gap in the "Known gaps" list). Blocker
+  (4) proper is now DOWNSTREAM of blocker (3).
 
 **Estimated scope** (once wasmos-side prerequisites land):
 
