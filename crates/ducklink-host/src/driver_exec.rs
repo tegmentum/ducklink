@@ -54,9 +54,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
-use wasmos_runtime_api::{HostCallContext, RuntimeError, RuntimeResult, SyncHostCall, Value};
+use wasmos_runtime_api::{
+    HostCallContext, Resource as WasmosResource, ResourceTable as WasmosResourceTable,
+    RuntimeError, RuntimeResult, SyncHostCall, Value,
+};
 use wasmos_runtime_wasmtime_v48::{sync_bridge_resource, sync_export_bridge};
-use wasmtime::component::{Component, Linker, Resource, ResourceTable};
+use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{AsContextMut, Engine, Store};
 use wasmtime_wasi::p2::{self, pipe::MemoryInputPipe};
 use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
@@ -129,7 +132,15 @@ impl DriverConnection {
 /// after the first run of a given ducklink binary.
 struct DriverStoreState {
     wasi: WasiCtx,
-    table: ResourceTable,
+    /// `wasmtime::component::ResourceTable` for wasmtime-wasi's
+    /// canonical-ABI resource lifting (WASI resources only). Owned
+    /// by the `WasiView` surface; the workload never pushes into it.
+    wasi_table: ResourceTable,
+    /// `wasmos_runtime_api::ResourceTable` for our own
+    /// `DriverConnection` tracking. Path B split-tables — retires
+    /// the direct dep on `wasmtime::component::Resource<T>` in
+    /// consumer code.
+    conn_table: WasmosResourceTable,
     engine: Engine,
     artifacts: ComponentArtifacts,
     /// Preopens the tool inherits so `open("some/rel.duckdb")` resolves
@@ -141,7 +152,7 @@ impl WasiView for DriverStoreState {
     fn ctx(&mut self) -> WasiCtxView<'_> {
         WasiCtxView {
             ctx: &mut self.wasi,
-            table: &mut self.table,
+            table: &mut self.wasi_table,
         }
     }
 }
@@ -203,8 +214,8 @@ impl SyncHostCall for DriverExecHost {
         // already reaped through another path (e.g. a store teardown
         // in-flight).
         let _ = state
-            .table
-            .delete(Resource::<DriverConnection>::new_own(rep));
+            .conn_table
+            .delete(WasmosResource::<DriverConnection>::from_raw(rep, true));
         Ok(())
     }
 }
@@ -236,10 +247,10 @@ impl DriverExecHost {
             .collect();
         match DriverConnection::open(&state.engine, &state.artifacts, &preopen_refs, &path) {
             Ok(conn) => {
-                let handle = state.table.push(conn).map_err(|e| {
+                let handle = state.conn_table.push(conn).map_err(|e| {
                     RuntimeError::msg(format!("driver-exec open: resource table full: {e}"))
                 })?;
-                let rep = handle.rep();
+                let rep = handle.handle();
                 let resource_value = ctx.new_host_resource(EXEC_IFACE, CONN_RESOURCE, rep)?;
                 Ok(vec![Value::Result(Ok(Some(Box::new(resource_value))))])
             }
@@ -268,12 +279,12 @@ impl DriverExecHost {
         let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
             RuntimeError::msg("driver-exec exec: consumer_state<DriverStoreState> unavailable")
         })?;
-        // `Resource::new_own(rep)` — the rep is stable across the
-        // bridge round-trip; the same rep the guest sees is the same
-        // one the wasmtime ResourceTable indexed at push time.
-        let handle = Resource::<DriverConnection>::new_own(rep);
+        // The rep is stable across the bridge round-trip; the same
+        // rep the guest sees is the same one the wasmos ResourceTable
+        // indexed at push time.
+        let handle = WasmosResource::<DriverConnection>::from_raw(rep, true);
         let conn = state
-            .table
+            .conn_table
             .get_mut(&handle)
             .map_err(|e| RuntimeError::msg(format!("driver-exec exec: bad handle: {e}")))?;
         match conn.exec(&sql) {
@@ -302,9 +313,9 @@ impl DriverExecHost {
         let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
             RuntimeError::msg("driver-exec query: consumer_state<DriverStoreState> unavailable")
         })?;
-        let handle = Resource::<DriverConnection>::new_own(rep);
+        let handle = WasmosResource::<DriverConnection>::from_raw(rep, true);
         let conn = state
-            .table
+            .conn_table
             .get_mut(&handle)
             .map_err(|e| RuntimeError::msg(format!("driver-exec query: bad handle: {e}")))?;
         match conn.query(&sql) {
@@ -367,7 +378,8 @@ pub fn run_driver_tool(
 
     let state = DriverStoreState {
         wasi,
-        table: ResourceTable::new(),
+        wasi_table: ResourceTable::new(),
+        conn_table: WasmosResourceTable::new(),
         engine: engine.clone(),
         artifacts: artifacts.clone(),
         preopens: owned_preopens,
