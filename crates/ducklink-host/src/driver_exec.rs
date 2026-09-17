@@ -55,14 +55,13 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use wasmos_runtime_api::{
-    HostCallContext, Resource as WasmosResource, ResourceTable as WasmosResourceTable,
-    RuntimeError, RuntimeResult, SyncHostCall, Value,
+    HostCallContext, Preopen, Resource as WasmosResource, ResourceTable as WasmosResourceTable,
+    RuntimeError, RuntimeResult, SyncHostCall, Value, WasiEnvironment,
 };
-use wasmos_runtime_wasmtime_v48::{sync_bridge_resource, sync_export_bridge};
-use wasmtime::component::{Component, Linker, ResourceTable};
+use wasmos_runtime_wasmtime_v48::{SyncStoreState, sync_bridge_resource, sync_export_bridge};
+use wasmtime::component::{Component, Linker};
 use wasmtime::{AsContextMut, Engine, Store};
-use wasmtime_wasi::p2::{self, pipe::MemoryInputPipe};
-use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
+use wasmtime_wasi::p2;
 
 use crate::{
     build_engine_for_driver, driver_core_exec, driver_core_query, open_driver_core,
@@ -123,19 +122,19 @@ impl DriverConnection {
     }
 }
 
-/// Store state for the driver-tool wasmtime run. Carries the WASI ctx +
-/// resource table plus the (engine, artifacts, preopens) triple each new
-/// `DriverConnection` needs to bring up its own persistent core.
+/// Ducklink-owned driver-tool state. Wrapped in
+/// `SyncStoreState<DriverStoreState>` before it goes into a
+/// `wasmtime::Store` — the wrapper owns the wasi context + wasi
+/// resource table + wasi-http context, so this struct carries only
+/// the domain fields (the wasmos `ResourceTable` for
+/// `DriverConnection` tracking + the (engine, artifacts, preopens)
+/// triple each new `DriverConnection` needs to bring up its own
+/// persistent core).
 ///
 /// The engine is shared with the tool's own store — same compile cache,
 /// same wasm feature flags — so per-connection core startup is warm-cache
 /// after the first run of a given ducklink binary.
 struct DriverStoreState {
-    wasi: WasiCtx,
-    /// `wasmtime::component::ResourceTable` for wasmtime-wasi's
-    /// canonical-ABI resource lifting (WASI resources only). Owned
-    /// by the `WasiView` surface; the workload never pushes into it.
-    wasi_table: ResourceTable,
     /// `wasmos_runtime_api::ResourceTable` for our own
     /// `DriverConnection` tracking. Path B split-tables — retires
     /// the direct dep on `wasmtime::component::Resource<T>` in
@@ -146,15 +145,6 @@ struct DriverStoreState {
     /// Preopens the tool inherits so `open("some/rel.duckdb")` resolves
     /// against the same cwd as the enclosing `ducklink cron` process.
     preopens: Vec<(PathBuf, String)>,
-}
-
-impl WasiView for DriverStoreState {
-    fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView {
-            ctx: &mut self.wasi,
-            table: &mut self.wasi_table,
-        }
-    }
 }
 
 /// Interface name shared between host-import registration and every
@@ -172,7 +162,7 @@ const CONN_RESOURCE: &str = "connection";
 
 /// Wasmos-native host implementation of `duckdb:driver/exec@5.0.0`.
 /// Stateless — every call reaches store state via
-/// `ctx.consumer_state::<DriverStoreState>()`, matching the bindgen-era
+/// `SyncStoreState::<DriverStoreState>::consumer_from_ctx(ctx)`, matching the bindgen-era
 /// pattern where the same store data was reached through the
 /// bindgen-generated `Host` accessor.
 struct DriverExecHost;
@@ -205,7 +195,7 @@ impl SyncHostCall for DriverExecHost {
                 "{EXEC_IFACE}: unexpected resource drop for {resource_name:?}"
             )));
         }
-        let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
+        let state = SyncStoreState::<DriverStoreState>::consumer_from_ctx(ctx).ok_or_else(|| {
             RuntimeError::msg("driver-exec drop: consumer_state<DriverStoreState> unavailable")
         })?;
         // Ignore-not-found matches the bindgen-era `let _ =
@@ -235,7 +225,7 @@ impl DriverExecHost {
                 )))
             }
         };
-        let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
+        let state = SyncStoreState::<DriverStoreState>::consumer_from_ctx(ctx).ok_or_else(|| {
             RuntimeError::msg("driver-exec open: consumer_state<DriverStoreState> unavailable")
         })?;
         // Snapshot preopens through borrowed refs — mirrors the
@@ -276,7 +266,7 @@ impl DriverExecHost {
             }
         };
         let rep = ctx.resource_rep(&rep_value)?;
-        let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
+        let state = SyncStoreState::<DriverStoreState>::consumer_from_ctx(ctx).ok_or_else(|| {
             RuntimeError::msg("driver-exec exec: consumer_state<DriverStoreState> unavailable")
         })?;
         // The rep is stable across the bridge round-trip; the same
@@ -310,7 +300,7 @@ impl DriverExecHost {
             }
         };
         let rep = ctx.resource_rep(&rep_value)?;
-        let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
+        let state = SyncStoreState::<DriverStoreState>::consumer_from_ctx(ctx).ok_or_else(|| {
             RuntimeError::msg("driver-exec query: consumer_state<DriverStoreState> unavailable")
         })?;
         let handle = WasmosResource::<DriverConnection>::from_raw(rep, true);
@@ -374,16 +364,16 @@ pub fn run_driver_tool(
     argv.push(db.display().to_string());
     argv.extend_from_slice(extra_args);
 
-    let wasi = build_driver_wasi(&argv, preopens)?;
+    let wasi_env = build_driver_wasi_env(&argv, preopens);
 
-    let state = DriverStoreState {
-        wasi,
-        wasi_table: ResourceTable::new(),
+    let driver_state = DriverStoreState {
         conn_table: WasmosResourceTable::new(),
         engine: engine.clone(),
         artifacts: artifacts.clone(),
         preopens: owned_preopens,
     };
+    let state = SyncStoreState::new(Some(&wasi_env), driver_state)
+        .map_err(|e| anyhow::anyhow!("build SyncStoreState wrapper: {e}"))?;
     let mut store = Store::new(&engine, state);
 
     // Load the component BEFORE wiring the exec host imports — the
@@ -398,7 +388,7 @@ pub fn run_driver_tool(
         )
     })?;
 
-    let mut linker = Linker::<DriverStoreState>::new(&engine);
+    let mut linker = Linker::<SyncStoreState<DriverStoreState>>::new(&engine);
     p2::add_to_linker_sync(&mut linker)?;
     // The bridge replaces
     //   driver_exec_bindings::add_to_linker::<DriverStoreState, DriverStoreState>(...)
@@ -407,7 +397,7 @@ pub fn run_driver_tool(
     // `[method]connection.query`) via the DriverExecHost SyncHostCall
     // impl. The bridge is a no-op if the component doesn't actually
     // import `duckdb:driver/exec@5.0.0`.
-    sync_bridge_resource::install_host_call::<DriverStoreState>(
+    sync_bridge_resource::install_host_call::<SyncStoreState<DriverStoreState>>(
         &engine,
         &mut linker,
         &component,
@@ -456,34 +446,34 @@ pub fn run_driver_tool(
     }
 }
 
-/// Build a WASI context for the driver tool: inherits the parent process's
-/// stdio/env/network so the tool's stderr log lines appear alongside the
-/// caller's, and grants the same preopens the persistent cores will see.
-fn build_driver_wasi(args: &[String], preopens: &[(&Path, &str)]) -> Result<WasiCtx> {
-    let mut builder = WasiCtxBuilder::new();
-    builder.args(args);
-    builder.inherit_env();
-    // The tool does no stdin reads; feed it an empty pipe so the WasiCtx
-    // doesn't attach a real (potentially TTY) stdin.
-    builder.stdin(MemoryInputPipe::new(""));
-    builder.inherit_stdout();
-    builder.inherit_stderr();
-    // Grant outbound network / DNS on the off-chance a future driver
-    // variant needs it; harmless to include today.
-    builder.inherit_network();
-    builder.allow_ip_name_lookup(true);
-    for (host, guest) in preopens {
-        builder
-            .preopened_dir(host, guest, FsPerms::ReadWrite)
-            .map_err(|e| {
-                e.context(format!(
-                    "failed to preopen directory {} as {} for cron-driver-tool",
-                    host.display(),
-                    guest
-                ))
-            })?;
+/// Build the portable WASI environment description for the driver
+/// tool: inherits the parent process's stdio/env/network so the
+/// tool's stderr log lines appear alongside the caller's, and grants
+/// the same preopens the persistent cores will see.
+///
+/// The tool does no stdin reads, so `inherit_stdin: false` (closed
+/// stdin) is equivalent to the pre-SyncStoreState pattern of feeding
+/// an empty `MemoryInputPipe` — both return EOF on read.
+///
+/// `inherit_env` semantics are replicated by snapshotting
+/// `std::env::vars()` — the wasmos-side `WasiEnvironment` carries
+/// explicit `(key, value)` pairs rather than a builder-time
+/// inherit toggle.
+fn build_driver_wasi_env(args: &[String], preopens: &[(&Path, &str)]) -> WasiEnvironment {
+    WasiEnvironment {
+        args: args.to_vec(),
+        env: std::env::vars().collect(),
+        inherit_stdin: false,
+        inherit_stdout: true,
+        inherit_stderr: true,
+        preopens: preopens
+            .iter()
+            .map(|(host, guest)| Preopen::read_write(host.to_path_buf(), (*guest).to_string()))
+            .collect(),
+        allow_network: true,
+        allow_ip_name_lookup: true,
+        ..WasiEnvironment::default()
     }
-    Ok(builder.build())
 }
 
 /// Locate the cron-driver-tool wasm alongside the extension artifacts.
