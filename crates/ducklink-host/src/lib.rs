@@ -2976,7 +2976,7 @@ thread_local! {
 #[derive(Clone, Copy)]
 struct PrimaryReentry {
     store: *mut Store<CoreStoreState>,
-    bindings: *const duckdb_core_bindings::Libduckdb,
+    instance: *const wasmtime::component::Instance,
     connection: ResourceAny,
 }
 
@@ -3078,8 +3078,11 @@ impl CoreExecution {
     /// dispatch through `sync_export_bridge::call_export` without
     /// needing a per-interface accessor method. Complements the
     /// still-typed `with_database` / `with_appender` / `with_stream`
-    /// / `with_prepared` helpers for interfaces that haven't been
-    /// migrated yet. Retires alongside `bindings` once every guest-
+    /// / `with_prepared` helpers for interfaces / call-sites that
+    /// haven't been migrated yet (cross-file consumers in
+    /// dotcmd_wasmos, ui_server, quack_server, httpd, replicate,
+    /// extcli — the wedge #7e cross-file migration hasn't landed).
+    /// Retires alongside `bindings` in wedge #9 once every guest-
     /// export site has moved onto this path.
     fn with_instance<F, R>(&mut self, f: F) -> R
     where
@@ -9024,15 +9027,15 @@ impl HostState {
                 // pointer to a freed CoreExecution.
                 //
                 // Borrow-checker note: the raw-pointer coercions (`&mut
-                // core.store as *mut _`, `&core.bindings as *const _`) drop
+                // core.store as *mut _`, `&core.instance as *const _`) drop
                 // their borrows at the end of the coercion expression, so
                 // the subsequent `call_database_execute_on_core(core, ...)`
                 // &mut re-borrow is unaliased.
                 let store_ptr: *mut Store<CoreStoreState> = &mut core.store;
-                let bindings_ptr: *const duckdb_core_bindings::Libduckdb = &core.bindings;
+                let instance_ptr: *const wasmtime::component::Instance = &core.instance;
                 let _reentry = PrimaryReentryGuard::set(PrimaryReentry {
                     store: store_ptr,
-                    bindings: bindings_ptr,
+                    instance: instance_ptr,
                     connection: entry_handle,
                 });
                 call_database_execute_on_core(core, entry_handle, &sql)
@@ -9831,6 +9834,7 @@ enum ExecuteErrKind {
 /// Error shape returned from [`call_database_returning_resource_on_core`].
 /// Callers destructure to route to the appropriate site-specific
 /// error type (`cli_native::Duckerror` vs `String`).
+#[derive(Debug)]
 enum DatabaseVerbErr {
     Duck(cli_native::Duckerror),
     Text(String),
@@ -9905,9 +9909,36 @@ fn call_export_unit_result(
     handle: wasmtime::component::ResourceAny,
     trailing_args: &[wasmos_runtime_api::Value],
 ) -> Result<(), cli_native::Duckerror> {
-    use wasmos_runtime_api::Value;
     let ret = call_export_on_resource(state, iface, method, handle, trailing_args)
         .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
+    unpack_unit_result(iface, method, ret)
+}
+
+/// Direct-on-CoreExecution version of [`call_export_unit_result`]
+/// for test paths / driver paths that already hold a locked
+/// [`CoreExecution`].
+fn call_export_unit_result_on_core(
+    core: &mut CoreExecution,
+    iface: &str,
+    method: &str,
+    handle: wasmtime::component::ResourceAny,
+    trailing_args: &[wasmos_runtime_api::Value],
+) -> Result<(), cli_native::Duckerror> {
+    let ret = call_export_on_resource_core(core, iface, method, handle, trailing_args)
+        .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
+    unpack_unit_result(iface, method, ret)
+}
+
+/// Shared unpacker for `result<_, duckerror>` returns. Splits out
+/// so both [`call_export_unit_result`] and
+/// [`call_export_unit_result_on_core`] share the return-shape
+/// diagnostics.
+fn unpack_unit_result(
+    iface: &str,
+    method: &str,
+    ret: Vec<wasmos_runtime_api::Value>,
+) -> Result<(), cli_native::Duckerror> {
+    use wasmos_runtime_api::Value;
     match ret.as_slice() {
         [Value::Result(Ok(_))] => Ok(()),
         [Value::Result(Err(Some(err_payload)))] => {
@@ -10510,15 +10541,43 @@ unsafe fn primary_nested_exec(
     reentry: PrimaryReentry,
     sql: &str,
 ) -> Result<NestedExecResult, String> {
-    let bindings = unsafe { &*reentry.bindings };
+    use wasmos_runtime_api::Value;
+    use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
+        call_export_with_resources, ExportResourceTable,
+    };
+    let instance = unsafe { &*reentry.instance };
     let store: &mut Store<CoreStoreState> = unsafe { &mut *reentry.store };
-    let guest = bindings.duckdb_component_database();
-    let outcome = guest
-        .call_execute(store.as_context_mut(), reentry.connection, sql)
-        .map_err(|trap| format!("nested-exec: primary call_execute trapped: {trap}"))?;
-    match outcome {
-        Ok(qr) => Ok(query_result_to_nested_exec(qr)),
-        Err(err) => Err(core_duckerror_message(err)),
+    let mut resources = ExportResourceTable::new();
+    let conn_val = resources.register(reentry.connection);
+    let ret = call_export_with_resources(
+        store.as_context_mut(),
+        instance,
+        Some(DATABASE_IFACE),
+        "execute",
+        &[conn_val, Value::String(sql.to_string())],
+        &mut resources,
+    )
+    .map_err(|trap| format!("nested-exec: primary call_execute trapped: {trap}"))?;
+    match ret.as_slice() {
+        [Value::Result(Ok(Some(payload)))] => match value_to_query_result(payload.as_ref()) {
+            Ok(qr) => Ok(cli_query_result_to_nested_exec(qr)),
+            Err(e) => Err(format!(
+                "nested-exec: primary query-result unpack failed: {e}"
+            )),
+        },
+        [Value::Result(Ok(None))] => {
+            Err("nested-exec: primary call_execute Ok arm carried no payload".to_string())
+        }
+        [Value::Result(Err(Some(err_payload)))] => Err(cli_duckerror_message(value_to_duckerror(
+            err_payload.as_ref(),
+            "primary_nested_exec",
+        ))),
+        [Value::Result(Err(None))] => {
+            Err("nested-exec: primary call_execute Err arm carried no payload".to_string())
+        }
+        other => Err(format!(
+            "nested-exec: primary call_execute unexpected shape {other:?}"
+        )),
     }
 }
 
@@ -13951,46 +14010,68 @@ mod tests {
 
     #[test]
     fn core_appender_bulk_inserts_under_wasmtime() -> Result<()> {
+        use wasmos_runtime_api::Value;
         let engine = build_engine()?;
         let artifacts = ComponentArtifacts::resolve_default()?;
         let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &[])?;
         let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
 
-        let conn = core
-            .with_database(|g, s| g.call_open(s, None))?
-            .map_err(|e| anyhow::anyhow!("open: {e}"))?;
-        core.with_database(|g, s| {
-            g.call_execute(s, conn.clone(), "CREATE TABLE t(id BIGINT, name VARCHAR)")
-        })?
-        .map_err(|e| anyhow::anyhow!("create: {e:?}"))?;
+        let conn = call_database_returning_resource_on_core(
+            &mut core,
+            "open",
+            None,
+            &[Value::Option(None)],
+            ExecuteErrKind::PlainString,
+        )?
+        .map_err(|e| anyhow::anyhow!("open: {e:?}"))?;
+        call_database_execute_on_core(&mut core, conn, "CREATE TABLE t(id BIGINT, name VARCHAR)")?
+            .map_err(|e| anyhow::anyhow!("create: {e:?}"))?;
 
         // Bulk-insert rows through the appender.
-        let appender = core
-            .with_database(|g, s| g.call_create_appender(s, conn.clone(), None, "t"))?
-            .map_err(|e| anyhow::anyhow!("create_appender: {e:?}"))?;
+        let appender = call_database_returning_resource_on_core(
+            &mut core,
+            "create-appender",
+            Some(conn),
+            &[Value::Option(None), Value::String("t".to_string())],
+            ExecuteErrKind::Duckerror,
+        )?
+        .map_err(|e| anyhow::anyhow!("create_appender: {e:?}"))?;
         for (id, name) in [(1i64, "alice"), (2, "bob"), (3, "carol")] {
             let values = vec![
-                core_types::Duckvalue::Int64(id),
-                core_types::Duckvalue::Text(name.to_string()),
+                duckvalue_to_value(&cli_native::Duckvalue::Int64(id)),
+                duckvalue_to_value(&cli_native::Duckvalue::Text(name.to_string().into())),
             ];
-            core.with_appender(|g, s| g.call_append_row(s, appender.clone(), &values))?
-                .map_err(|e| anyhow::anyhow!("append_row: {e:?}"))?;
+            call_export_unit_result_on_core(
+                &mut core,
+                DATABASE_IFACE,
+                "[method]appender.append-row",
+                appender,
+                &[Value::List(values)],
+            )
+            .map_err(|e| anyhow::anyhow!("append_row: {e:?}"))?;
         }
-        core.with_appender(|g, s| g.call_flush(s, appender.clone()))?
-            .map_err(|e| anyhow::anyhow!("flush: {e:?}"))?;
+        call_export_unit_result_on_core(
+            &mut core,
+            DATABASE_IFACE,
+            "[method]appender.flush",
+            appender,
+            &[],
+        )
+        .map_err(|e| anyhow::anyhow!("flush: {e:?}"))?;
 
         // Read the appended rows back.
-        let result = core
-            .with_database(|g, s| {
-                g.call_execute(s, conn, "SELECT count(*) AS n, sum(id) AS total FROM t")
-            })?
-            .map_err(|e| anyhow::anyhow!("select: {e:?}"))?;
+        let result = call_database_execute_on_core(
+            &mut core,
+            conn,
+            "SELECT count(*) AS n, sum(id) AS total FROM t",
+        )?
+        .map_err(|e| anyhow::anyhow!("select: {e:?}"))?;
         let cell = |row: usize, col: usize| -> String {
             match result.rows.get(row).and_then(|r| r.get(col)) {
-                Some(core_types::Duckvalue::Int64(v)) => v.to_string(),
-                Some(core_types::Duckvalue::Uint64(v)) => v.to_string(),
-                Some(core_types::Duckvalue::Text(v)) => v.clone(),
+                Some(cli_native::Duckvalue::Int64(v)) => v.to_string(),
+                Some(cli_native::Duckvalue::Uint64(v)) => v.to_string(),
+                Some(cli_native::Duckvalue::Text(v)) => v.to_string(),
                 other => format!("{other:?}"),
             }
         };
@@ -14011,32 +14092,67 @@ mod tests {
         let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
 
-        let conn = core
-            .with_database(|guest, store| guest.call_open(store, None))?
-            .map_err(|e| anyhow::anyhow!("open failed: {e}"))?;
+        use wasmos_runtime_api::Value;
+        let conn = call_database_returning_resource_on_core(
+            &mut core,
+            "open",
+            None,
+            &[Value::Option(None)],
+            ExecuteErrKind::PlainString,
+        )?
+        .map_err(|e| anyhow::anyhow!("open failed: {e:?}"))?;
 
-        let stmt = core
-            .with_database(|guest, store| {
-                guest.call_prepare(
-                    store,
-                    conn.clone(),
-                    "SELECT CAST($1 AS BIGINT) + CAST($2 AS BIGINT) AS total",
-                )
-            })?
-            .map_err(|e| anyhow::anyhow!("prepare failed: {e:?}"))?;
+        let stmt = call_database_returning_resource_on_core(
+            &mut core,
+            "prepare",
+            Some(conn),
+            &[Value::String(
+                "SELECT CAST($1 AS BIGINT) + CAST($2 AS BIGINT) AS total".to_string(),
+            )],
+            ExecuteErrKind::Duckerror,
+        )?
+        .map_err(|e| anyhow::anyhow!("prepare failed: {e:?}"))?;
 
-        let count =
-            core.with_prepared(|guest, store| guest.call_parameter_count(store, stmt.clone()))?;
+        let count_ret = call_export_on_resource_core(
+            &mut core,
+            DATABASE_IFACE,
+            "[method]prepared-statement.parameter-count",
+            stmt,
+            &[],
+        )?;
+        let count = match count_ret.as_slice() {
+            [Value::U32(n)] => *n,
+            other => {
+                return Err(anyhow::anyhow!(
+                    "unexpected parameter-count return: {other:?}"
+                ))
+            }
+        };
         assert_eq!(count, 2, "expected two parameters");
 
         let run = |core: &mut CoreExecution, a: i64, b: i64| -> Result<String> {
             let params = vec![
-                core_types::Duckvalue::Int64(a),
-                core_types::Duckvalue::Int64(b),
+                duckvalue_to_value(&cli_native::Duckvalue::Int64(a)),
+                duckvalue_to_value(&cli_native::Duckvalue::Int64(b)),
             ];
-            let result = core
-                .with_prepared(|guest, store| guest.call_execute(store, stmt.clone(), &params))?
-                .map_err(|e| anyhow::anyhow!("execute failed: {e:?}"))?;
+            let ret = call_export_on_resource_core(
+                core,
+                DATABASE_IFACE,
+                "[method]prepared-statement.execute",
+                stmt,
+                &[Value::List(params)],
+            )?;
+            let result = match ret.as_slice() {
+                [Value::Result(Ok(Some(payload)))] => value_to_query_result(payload.as_ref())
+                    .map_err(|e| anyhow::anyhow!("execute unpack failed: {e}"))?,
+                [Value::Result(Err(Some(err_payload)))] => {
+                    return Err(anyhow::anyhow!(
+                        "execute failed: {:?}",
+                        value_to_duckerror(err_payload.as_ref(), "prepared.execute")
+                    ));
+                }
+                other => return Err(anyhow::anyhow!("execute unexpected shape: {other:?}")),
+            };
             let cell = result
                 .rows
                 .first()
@@ -14044,8 +14160,8 @@ mod tests {
                 .cloned()
                 .ok_or_else(|| anyhow::anyhow!("no result cell"))?;
             Ok(match cell {
-                core_types::Duckvalue::Text(v) => v,
-                core_types::Duckvalue::Int64(v) => v.to_string(),
+                cli_native::Duckvalue::Text(v) => v.to_string(),
+                cli_native::Duckvalue::Int64(v) => v.to_string(),
                 other => format!("{other:?}"),
             })
         };
@@ -14067,15 +14183,41 @@ mod tests {
         let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
 
-        let conn = core
-            .with_database(|guest, store| guest.call_open(store, None))?
-            .map_err(|e| anyhow::anyhow!("open failed: {e}"))?;
+        use wasmos_runtime_api::Value;
+        let conn = call_database_returning_resource_on_core(
+            &mut core,
+            "open",
+            None,
+            &[Value::Option(None)],
+            ExecuteErrKind::PlainString,
+        )?
+        .map_err(|e| anyhow::anyhow!("open failed: {e:?}"))?;
 
-        let bytes = core
-            .with_database(|guest, store| {
-                guest.call_query_arrow(store, conn, "SELECT i::INTEGER AS n FROM range(5) t(i)")
-            })?
-            .map_err(|e| anyhow::anyhow!("query_arrow failed: {e:?}"))?;
+        let bytes_ret = call_export_on_resource_core(
+            &mut core,
+            DATABASE_IFACE,
+            "query-arrow",
+            conn,
+            &[Value::String(
+                "SELECT i::INTEGER AS n FROM range(5) t(i)".to_string(),
+            )],
+        )?;
+        let bytes: Vec<u8> = match bytes_ret.as_slice() {
+            [Value::Result(Ok(Some(payload)))] => match payload.as_ref() {
+                Value::Bytes(b) => b.to_vec(),
+                Value::List(items) => items
+                    .iter()
+                    .map(|v| match v {
+                        Value::U8(b) => Ok(*b),
+                        other => Err(anyhow::anyhow!(
+                            "query-arrow expected u8 in list, got {other:?}"
+                        )),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                other => return Err(anyhow::anyhow!("query-arrow bad payload: {other:?}")),
+            },
+            other => return Err(anyhow::anyhow!("query_arrow unexpected shape: {other:?}")),
+        };
 
         // Decode the IPC stream with an independent Arrow implementation.
         let reader = arrow_ipc::reader::StreamReader::try_new(std::io::Cursor::new(bytes), None)
@@ -14107,13 +14249,19 @@ mod tests {
         let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let read = "SELECT count(*) AS n FROM read_csv_auto('d.csv')";
 
+        use wasmos_runtime_api::Value;
         // Default: external access enabled, read_csv works.
         let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &preopens)?;
         let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager.clone())?;
-        let conn = core
-            .with_database(|g, s| g.call_open(s, None))?
-            .map_err(|e| anyhow::anyhow!("open: {e}"))?;
-        let allowed = core.with_database(|g, s| g.call_execute(s, conn, read))?;
+        let conn = call_database_returning_resource_on_core(
+            &mut core,
+            "open",
+            None,
+            &[Value::Option(None)],
+            ExecuteErrKind::PlainString,
+        )?
+        .map_err(|e| anyhow::anyhow!("open: {e:?}"))?;
+        let allowed = call_database_execute_on_core(&mut core, conn, read)?;
         assert!(
             allowed.is_ok(),
             "read_csv should work by default: {allowed:?}"
@@ -14122,11 +14270,19 @@ mod tests {
         // Opt-in hardening: enable_external_access=false blocks read_csv.
         let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &preopens)?;
         let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
-        let opts = vec![("enable_external_access".to_string(), "false".to_string())];
-        let conn = core
-            .with_database(|g, s| g.call_open_with_config(s, None, &opts))?
-            .map_err(|e| anyhow::anyhow!("open_with_config: {e}"))?;
-        let blocked = core.with_database(|g, s| g.call_execute(s, conn, read))?;
+        let opts_arg = Value::List(vec![Value::Tuple(vec![
+            Value::String("enable_external_access".to_string()),
+            Value::String("false".to_string()),
+        ])]);
+        let conn = call_database_returning_resource_on_core(
+            &mut core,
+            "open-with-config",
+            None,
+            &[Value::Option(None), opts_arg],
+            ExecuteErrKind::PlainString,
+        )?
+        .map_err(|e| anyhow::anyhow!("open_with_config: {e:?}"))?;
+        let blocked = call_database_execute_on_core(&mut core, conn, read)?;
         assert!(
             blocked.is_err(),
             "read_csv should be blocked when external access is disabled, got {blocked:?}"
@@ -14141,19 +14297,29 @@ mod tests {
         let artifacts = ComponentArtifacts::resolve_default()?;
         let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
 
+        use wasmos_runtime_api::Value;
         // A valid option is applied to the connection.
         let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &[])?;
         let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager.clone())?;
         // default_order defaults to ASC; setting it at open time should stick.
-        let options = vec![("default_order".to_string(), "desc".to_string())];
-        let conn = core
-            .with_database(|guest, store| guest.call_open_with_config(store, None, &options))?
-            .map_err(|e| anyhow::anyhow!("open_with_config failed: {e}"))?;
-        let result = core
-            .with_database(|guest, store| {
-                guest.call_execute(store, conn, "SELECT current_setting('default_order') AS v")
-            })?
-            .map_err(|e| anyhow::anyhow!("execute failed: {e:?}"))?;
+        let options_arg = Value::List(vec![Value::Tuple(vec![
+            Value::String("default_order".to_string()),
+            Value::String("desc".to_string()),
+        ])]);
+        let conn = call_database_returning_resource_on_core(
+            &mut core,
+            "open-with-config",
+            None,
+            &[Value::Option(None), options_arg],
+            ExecuteErrKind::PlainString,
+        )?
+        .map_err(|e| anyhow::anyhow!("open_with_config failed: {e:?}"))?;
+        let result = call_database_execute_on_core(
+            &mut core,
+            conn,
+            "SELECT current_setting('default_order') AS v",
+        )?
+        .map_err(|e| anyhow::anyhow!("execute failed: {e:?}"))?;
         let cell = result
             .rows
             .first()
@@ -14161,8 +14327,8 @@ mod tests {
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("no result cell"))?;
         let rendered = match cell {
-            core_types::Duckvalue::Text(v) => v,
-            core_types::Duckvalue::Int64(v) => v.to_string(),
+            cli_native::Duckvalue::Text(v) => v.to_string(),
+            cli_native::Duckvalue::Int64(v) => v.to_string(),
             other => format!("{other:?}"),
         };
         assert_eq!(
@@ -14173,12 +14339,17 @@ mod tests {
         // An invalid value for a known option fails the open.
         let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &[])?;
         let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
-        let bad = vec![(
-            "access_mode".to_string(),
-            "definitely_not_a_mode".to_string(),
-        )];
-        let outcome =
-            core.with_database(|guest, store| guest.call_open_with_config(store, None, &bad))?;
+        let bad_arg = Value::List(vec![Value::Tuple(vec![
+            Value::String("access_mode".to_string()),
+            Value::String("definitely_not_a_mode".to_string()),
+        ])]);
+        let outcome = call_database_returning_resource_on_core(
+            &mut core,
+            "open-with-config",
+            None,
+            &[Value::Option(None), bad_arg],
+            ExecuteErrKind::PlainString,
+        )?;
         assert!(
             outcome.is_err(),
             "expected an invalid config value to fail the open, got {outcome:?}"
@@ -15456,11 +15627,20 @@ mod tests {
         // has to land in this same DB for the test to be meaningful — file
         // sharing across two Databases has WAL semantics that would obscure
         // the catalog-visibility check.
+        use wasmos_runtime_api::Value;
         let db_path = "./opt-a.duckdb";
         let primary_conn = {
             let mut c = primary_core.lock().unwrap();
-            c.with_database(|g, s| g.call_open(s, Some(db_path)))?
-                .map_err(|e| anyhow::anyhow!("primary open failed: {e}"))?
+            call_database_returning_resource_on_core(
+                &mut c,
+                "open",
+                None,
+                &[Value::Option(Some(Box::new(Value::String(
+                    db_path.to_string(),
+                ))))],
+                ExecuteErrKind::PlainString,
+            )?
+            .map_err(|e| anyhow::anyhow!("primary open failed: {e:?}"))?
         };
 
         // Build a `CoreServices` on the primary. Sibling wired as a safety
@@ -15489,18 +15669,18 @@ mod tests {
         // when no outer call is in flight, so this test isolates the
         // dispatch mechanism (guard set -> primary path) from the wasmtime
         // reentrancy question (already answered by `reentrancy_poc.rs`).
-        let (store_ptr, bindings_ptr) = {
+        let (store_ptr, instance_ptr) = {
             let mut c = primary_core.lock().unwrap();
             let store_ptr: *mut Store<CoreStoreState> = &mut c.store;
-            let bindings_ptr: *const duckdb_core_bindings::Libduckdb = &c.bindings;
-            (store_ptr, bindings_ptr)
+            let instance_ptr: *const wasmtime::component::Instance = &c.instance;
+            (store_ptr, instance_ptr)
         };
 
         // CREATE TABLE on the primary via nested_exec.
         {
             let _guard = PrimaryReentryGuard::set(PrimaryReentry {
                 store: store_ptr,
-                bindings: bindings_ptr,
+                instance: instance_ptr,
                 connection: primary_conn,
             });
             services
@@ -15517,7 +15697,7 @@ mod tests {
         // would fail with `Table with name opta_t does not exist`.
         let sel = {
             let mut c = primary_core.lock().unwrap();
-            c.with_database(|g, s| g.call_execute(s, primary_conn, "SELECT count(*) FROM opta_t"))?
+            call_database_execute_on_core(&mut c, primary_conn, "SELECT count(*) FROM opta_t")?
                 .map_err(|e| anyhow::anyhow!("primary SELECT failed: {e:?}"))?
         };
         assert_eq!(
@@ -15527,7 +15707,7 @@ mod tests {
             sel.rows
         );
         assert_eq!(sel.rows[0].len(), 1);
-        let count_cell = spi_value_text(&sel.rows[0][0]);
+        let count_cell = spi_value_text(&convert_cli_duckvalue(sel.rows[0][0].clone()));
         assert_eq!(
             count_cell, "3",
             "expected 3 rows on primary catalog (proves the nested_exec write went to \
