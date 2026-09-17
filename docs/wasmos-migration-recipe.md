@@ -391,7 +391,9 @@ Progress since the recipe was written on 2026-09-04:
 **Wedges remaining under Phase 2e** (estimated 2 more):
 
 1. **Guest exports: `duckdb:component/database`** (wedge #7).
-   **BLOCKED on a wasmos-side prerequisite** (2026-09-17). The
+   **UNBLOCKED — wasmos-side prerequisite landed 2026-09-17
+   as wasmos commit `68970425`** (Option B from the earlier
+   analysis: pass-through resource handle table). The
    `with_database` / `with_stream` / `with_prepared` /
    `with_appender` helpers on `CoreExecution` still hand out
    bindgen `core_db_exports::Guest{,ResultStream,PreparedStatement,Appender}`
@@ -406,51 +408,86 @@ Progress since the recipe was written on 2026-09-04:
    `call_register_table_function` / `call_schema` /
    `call_parameter_count` / `call_append_row` / `call_flush`
    at 2026-09-17). Each site converts to
-   `sync_export_bridge::call_export` with the interface + method
-   name spelled out and args marshalled as `Value`. Estimated
-   size: ~800-1500 line net change, comparable to wedge #6 but
-   with resource handles in play — every appender / stream /
-   prepared entry holds a `wasmtime::component::ResourceAny` that
-   must round-trip through `Value::Resource` when handed back to
-   the guest.
+   `sync_export_bridge::call_export_with_resources` with the
+   interface + method name spelled out and args marshalled as
+   `Value`. Estimated size: ~800-1500 line net change,
+   comparable to wedge #6 but with resource handles in play —
+   every appender / stream / prepared entry holds a
+   `wasmtime::component::ResourceAny` that must round-trip
+   through `Value::Resource` when handed back to the guest.
 
-   **The prerequisite:** `wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export`
-   currently hardcodes empty `resource_discs` +
-   `name_map` when lowering `Value::Resource` args
-   (see the `Session-1 scope` comment in
-   `sync_export_bridge.rs` — resource-carrying method signatures
-   were deferred to a follow-up). Wedge #7 needs the bridge to
-   round-trip guest-defined `ResourceAny` handles: the host
-   receives a `ResourceAny` from an earlier guest export
-   (e.g. `database.open-appender` returning an appender
-   resource), stores it, then hands it back into a later
-   `appender.append-row(handle, values)` call. Today the round-
-   trip loses type identity when it becomes `Value::Resource
-   { store_id: BRIDGE_STORE_ID, handle_id: rep as u64 }` (via
-   `lift_val_for_export`), because on the way back down
-   `lower_value` uses `ResourceType::host_dynamic(disc)` — the
-   discriminant scheme for HOST-MINTED resources — not the
-   guest's own `ResourceType`.
+   **Migration shape** (available in the wasmos v48 adapter as
+   of `68970425`):
 
-   Two candidate wasmos-side shapes for the fix:
-   - **A** — extend `call_export` with an optional pre-built
-     `resource_types: HashMap<String, ResourceType>` param the
-     caller builds once per instance from `Instance::get_export`
-     introspection. The bridge maps names -> discriminants
-     internally and threads them through `lower_value`.
-   - **B** — add a pass-through resource handle table inside
-     the bridge: the lift path stashes the original
-     `ResourceAny` alongside the rep, keyed by handle_id; the
-     lower path recovers the `ResourceAny` verbatim instead of
-     reconstructing via a fresh `new_own(rep, disc)`. Simpler
-     for callers, needs a bridge-scoped side table.
+   ```rust
+   use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
+       call_export_with_resources, ExportResourceTable,
+       EXPORT_TABLE_STORE_ID,
+   };
 
-   Option B is likely lighter for consumer ergonomics. Neither
-   requires ADR-0029 direction changes — resource marshalling
-   for exports was explicitly a Session-N follow-up per the
-   sync_export_bridge module docstring. Land in wasmos as
-   Phase 6.2.i.3 (or similar), then wedge #7 becomes a
-   mechanical mapping of the ~107 call sites.
+   // Add to CoreExecution:
+   struct CoreExecution {
+       store: Store<CoreStoreState>,
+       bindings: duckdb_core_bindings::Libduckdb, // retire in wedge #9
+       instance: wasmtime::component::Instance,
+       resources: ExportResourceTable, // NEW
+   }
+
+   // Guest-export path (returning a resource):
+   let out = call_export_with_resources(
+       core.store.as_context_mut(),
+       &core.instance,
+       Some("duckdb:component/database@5.0.0"),
+       "open-appender",
+       &[/* args as Value */],
+       &mut core.resources,
+   )?;
+   // The Value::Resource inside the Ok arm holds
+   // (store_id: EXPORT_TABLE_STORE_ID, handle_id: <fresh>).
+
+   // AppenderEntry stores handle_id (u64) instead of
+   // ResourceAny; append-row hands it back:
+   let _ = call_export_with_resources(
+       core.store.as_context_mut(),
+       &core.instance,
+       Some("duckdb:component/database/appender@5.0.0"),
+       "append-row",
+       &[
+           Value::Resource {
+               store_id: EXPORT_TABLE_STORE_ID,
+               handle_id: entry.handle_id,
+           },
+           /* values as Value::List */
+       ],
+       &mut core.resources,
+   )?;
+   ```
+
+   The table `take`s ownership on `own<T>` args and `get`s a
+   keep-alive on `borrow<T>` args — dispatch is param-type
+   directed via `Func::ty().params()` introspection. See
+   `wasmos/runtime/wasmtime/v48/src/sync_export_bridge.rs`
+   `call_export_with_resources` for the full contract +
+   `ExportResourceTable` for the handle-side API.
+
+   Wedge #7 is a mechanical mapping of the ~107 call sites
+   onto that pattern, plus:
+   - Adding `resources: ExportResourceTable` to
+     `CoreExecution`.
+   - Changing `AppenderEntry`, `StreamEntry`, `PreparedEntry`,
+     `ConnectionEntry` from `handle: ResourceAny` to
+     `handle_id: u64` (or a small newtype wrapping the pair).
+   - Marshalling `core_types::Duckvalue` args to
+     `Value::List(Value::Variant(...))` shapes at each call
+     site, and unpacking returns symmetrically. The existing
+     `convert_core_duckvalue` / `convert_cli_duckvalue` chains
+     stay usable — they don't touch resources — but adding
+     `native_duckvalue_to_value` / `value_to_native_duckvalue`
+     helpers alongside them (matching the wedge #8 marshaller
+     style) keeps each call site to 3-5 lines of Value
+     construction.
+   - Retiring `with_database` / `with_stream` / `with_prepared` /
+     `with_appender` accessors once every site has moved.
 2. **Delete `duckdb_core_bindings` block + remaining
    `use core_*` aliases** (wedge #9). Remaining 5 aliases at
    2026-09-17: `core_callback_dispatch`, `core_column_types`,
