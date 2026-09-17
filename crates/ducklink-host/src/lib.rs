@@ -7206,26 +7206,66 @@ impl HostState {
         // (each `guest.call_*` reads + releases in-band).
         let alias_ident = spec.alias.clone();
         for shape in &table_shapes {
+            use wasmos_runtime_api::Value;
             let fn_name = at5_synth_fn_name(&alias_ident, &shape.name);
-            let result = self.with_core(|core| {
-                core.with_database(|guest, store| {
-                    guest.call_register_table_function(
-                        store,
-                        entry_handle.clone(),
-                        &fn_name,
-                        shape.columns.as_slice(),
-                        shape.callback,
-                    )
-                })
-            });
-            match result {
-                Ok(Ok(())) => {}
-                Ok(Err(msg)) => {
+            // Column shapes here are `core_db_exports::ColumnDescriptor`
+            // (populated from the at5 spec's core-side WIT view). Marshal
+            // each to Value inline — the two-arm WIT record is trivial.
+            let columns_arg = Value::List(
+                shape
+                    .columns
+                    .iter()
+                    .map(|c| {
+                        Value::Record(vec![
+                            ("name".to_string(), Value::String(c.name.clone())),
+                            (
+                                "ty".to_string(),
+                                logicaltype_to_value(&convert_core_logicaltype(c.ty.clone())),
+                            ),
+                        ])
+                    })
+                    .collect(),
+            );
+            let ret = call_export_on_resource(
+                self,
+                DATABASE_IFACE,
+                "register-table-function",
+                entry_handle,
+                &[
+                    Value::String(fn_name.clone()),
+                    columns_arg,
+                    Value::U32(shape.callback),
+                ],
+            )
+            .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
+            match ret.as_slice() {
+                [Value::Result(Ok(_))] => {}
+                [Value::Result(Err(Some(payload)))] => match payload.as_ref() {
+                    Value::String(msg) => {
+                        return Err(cli_native::Duckerror::Internal(
+                            format!("register_table_function for '{fn_name}' failed: {msg}").into(),
+                        ));
+                    }
+                    other => {
+                        return Err(cli_native::Duckerror::Internal(
+                            format!(
+                                "register-table-function: Err arm expected Value::String, got {other:?}"
+                            )
+                            .into(),
+                        ));
+                    }
+                },
+                [Value::Result(Err(None))] => {
                     return Err(cli_native::Duckerror::Internal(
-                        format!("register_table_function for '{fn_name}' failed: {msg}").into(),
+                        "register-table-function: Err arm carried no payload".into(),
                     ));
                 }
-                Err(trap) => return Err(convert_trap_to_duckerror(trap)),
+                other => {
+                    return Err(cli_native::Duckerror::Internal(
+                        format!("register-table-function: unexpected return shape {other:?}")
+                            .into(),
+                    ));
+                }
             }
         }
 
@@ -8747,51 +8787,108 @@ impl HostState {
         name: String,
         requires: Vec<cli_native::Capabilitykind>,
     ) -> Result<bool, String> {
+        use wasmos_runtime_api::Value;
         let extension_name = name.clone();
         let requested_caps = requires;
         let capability_summary = summarize_cli_capabilities(requested_caps.iter().copied());
-        let capability_list: Vec<core_types::Capabilitykind> = requested_caps
-            .iter()
-            .copied()
-            .map(convert_cli_capability)
-            .collect();
         eprintln!(
             "[ducklink] register_extension requested: name='{extension_name}', capabilities={capability_summary}"
         );
-        let result = match self.with_core(|core| {
-            core.with_database(|guest, store| {
-                guest.call_register_extension(store, &name, capability_list.as_slice())
-            })
+        let capability_arg =
+            Value::List(requested_caps.iter().map(capabilitykind_to_value).collect());
+        let ret = match self.with_core(|core| {
+            use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
+                call_export_with_resources, ExportResourceTable,
+            };
+            let mut resources = ExportResourceTable::new();
+            call_export_with_resources(
+                core.store.as_context_mut(),
+                &core.instance,
+                Some(DATABASE_IFACE),
+                "register-extension",
+                &[Value::String(name.clone()), capability_arg.clone()],
+                &mut resources,
+            )
         }) {
-            Ok(result) => result,
+            Ok(ret) => ret,
             Err(err) => {
                 eprintln!(
                     "[ducklink] failed to invoke core register_extension for '{extension_name}': {err}"
                 );
-                return Err(trap_to_cli_string(err));
+                return Err(err.to_string());
             }
         };
-        match result {
-            Ok(value) => {
-                eprintln!(
-                    "[ducklink] core register_extension completed for '{extension_name}' (registered={value})"
-                );
-                Ok(value)
-            }
-            Err(err) => {
-                eprintln!("[ducklink] core register_extension rejected '{extension_name}': {err}");
-                Err(err)
-            }
+        match ret.as_slice() {
+            [Value::Result(Ok(Some(payload)))] => match payload.as_ref() {
+                Value::Bool(v) => {
+                    eprintln!(
+                        "[ducklink] core register_extension completed for '{extension_name}' (registered={v})"
+                    );
+                    Ok(*v)
+                }
+                other => Err(format!(
+                    "register-extension: expected Value::Bool in Ok, got {other:?}"
+                )),
+            },
+            [Value::Result(Ok(None))] => Err(format!(
+                "register-extension: Ok arm carried no payload for '{extension_name}'"
+            )),
+            [Value::Result(Err(Some(payload)))] => match payload.as_ref() {
+                Value::String(s) => {
+                    eprintln!(
+                        "[ducklink] core register_extension rejected '{extension_name}': {s}"
+                    );
+                    Err(s.clone())
+                }
+                other => Err(format!(
+                    "register-extension: Err arm expected Value::String, got {other:?}"
+                )),
+            },
+            [Value::Result(Err(None))] => Err(format!(
+                "register-extension: Err arm carried no payload for '{extension_name}'"
+            )),
+            other => Err(format!(
+                "register-extension: unexpected return shape {other:?}"
+            )),
         }
     }
 
     fn list_registered_extensions(&mut self) -> Vec<cli_native::ExtensionInfo> {
-        let list = self
+        use wasmos_runtime_api::Value;
+        let ret = self
             .with_core(|core| {
-                core.with_database(|guest, store| guest.call_list_registered_extensions(store))
+                use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
+                    call_export_with_resources, ExportResourceTable,
+                };
+                let mut resources = ExportResourceTable::new();
+                call_export_with_resources(
+                    core.store.as_context_mut(),
+                    &core.instance,
+                    Some(DATABASE_IFACE),
+                    "list-registered-extensions",
+                    &[],
+                    &mut resources,
+                )
             })
             .expect("failed to list registered extensions");
-        list.into_iter().map(convert_core_extension_info).collect()
+        match ret.as_slice() {
+            [Value::List(items)] => items
+                .iter()
+                .filter_map(|v| match value_to_extension_info(v) {
+                    Ok(info) => Some(info),
+                    Err(err) => {
+                        eprintln!("[ducklink] list-registered-extensions bad entry: {err}");
+                        None
+                    }
+                })
+                .collect(),
+            other => {
+                eprintln!(
+                    "[ducklink] list-registered-extensions expected [Value::List(...)], got {other:?}"
+                );
+                Vec::new()
+            }
+        }
     }
 
     /// Phase 2c: bridge a CLI-side `database.register-table-function` call
@@ -8808,33 +8905,37 @@ impl HostState {
         columns: Vec<cli_native::ColumnDescriptor>,
         callback_handle: u32,
     ) -> Result<(), String> {
+        use wasmos_runtime_api::Value;
         let entry_handle = self
             .connections
             .get(&rep)
             .ok_or_else(|| String::from("register_table_function: unknown connection resource"))?
-            .handle
-            .clone();
-        let core_name = name;
-        let core_columns: Vec<core_db_exports::ColumnDescriptor> = columns
-            .into_iter()
-            .map(convert_cli_columndescriptor_to_core)
-            .collect();
-        let result = self
-            .with_core(|core| {
-                core.with_database(|guest, store| {
-                    guest.call_register_table_function(
-                        store,
-                        entry_handle,
-                        &core_name,
-                        core_columns.as_slice(),
-                        callback_handle,
-                    )
-                })
-            })
-            .map_err(trap_to_cli_string)?;
-        match result {
-            Ok(()) => Ok(()),
-            Err(err) => Err(err),
+            .handle;
+        let name_arg = Value::String(name);
+        let columns_arg = Value::List(columns.iter().map(column_descriptor_to_value).collect());
+        let callback_arg = Value::U32(callback_handle);
+        let ret = call_export_on_resource(
+            self,
+            DATABASE_IFACE,
+            "register-table-function",
+            entry_handle,
+            &[name_arg, columns_arg, callback_arg],
+        )
+        .map_err(|e| e.to_string())?;
+        match ret.as_slice() {
+            [Value::Result(Ok(_))] => Ok(()),
+            [Value::Result(Err(Some(payload)))] => match payload.as_ref() {
+                Value::String(s) => Err(s.clone()),
+                other => Err(format!(
+                    "register-table-function: Err arm expected Value::String, got {other:?}"
+                )),
+            },
+            [Value::Result(Err(None))] => {
+                Err("register-table-function: Err arm carried no payload".to_string())
+            }
+            other => Err(format!(
+                "register-table-function: unexpected return shape {other:?}"
+            )),
         }
     }
 }
@@ -10496,10 +10597,29 @@ fn sibling_ensure_slot(sibling: &SiblingState, primary_path: &str) -> Result<Sib
     // Open the sibling's connection to the SAME DB file the primary opened.
     let connection = {
         let mut c = core.lock().unwrap_or_else(|e| e.into_inner());
-        let result = c
-            .with_database(|guest, store| guest.call_open(store, Some(primary_path)))
-            .map_err(|trap| format!("nested-exec: sibling call_open trapped: {trap}"))?;
-        result.map_err(|e| format!("nested-exec: sibling open failed: {e}"))?
+        let path_arg = wasmos_runtime_api::Value::Option(Some(Box::new(
+            wasmos_runtime_api::Value::String(primary_path.to_string()),
+        )));
+        let result = call_database_returning_resource_on_core(
+            &mut c,
+            "open",
+            None,
+            &[path_arg],
+            ExecuteErrKind::PlainString,
+        )
+        .map_err(|trap| format!("nested-exec: sibling call_open trapped: {trap}"))?;
+        match result {
+            Ok(ra) => ra,
+            Err(DatabaseVerbErr::Text(s)) => {
+                return Err(format!("nested-exec: sibling open failed: {s}"));
+            }
+            Err(DatabaseVerbErr::Duck(err)) => {
+                return Err(format!(
+                    "nested-exec: sibling open failed: {}",
+                    cli_duckerror_message(err)
+                ));
+            }
+        }
     };
 
     // Phase 4 follow-up (FU4): replay the primary's extension registrations
@@ -11085,9 +11205,31 @@ pub(crate) fn open_driver_core_with_bootstrap(
     let path_owned: Option<String> = db_path.filter(|s| !s.is_empty()).map(|s| s.to_string());
     let connection = {
         let mut c = core.lock().unwrap_or_else(|e| e.into_inner());
-        c.with_database(|guest, store| guest.call_open(store, path_owned.as_deref()))
-            .map_err(|trap| anyhow::anyhow!("driver-core: call_open trapped: {trap}"))?
-            .map_err(|e| anyhow::anyhow!("driver-core: open failed: {e}"))?
+        let path_arg = wasmos_runtime_api::Value::Option(
+            path_owned
+                .as_deref()
+                .map(|s| Box::new(wasmos_runtime_api::Value::String(s.to_string()))),
+        );
+        let result = call_database_returning_resource_on_core(
+            &mut c,
+            "open",
+            None,
+            &[path_arg],
+            ExecuteErrKind::PlainString,
+        )
+        .map_err(|trap| anyhow::anyhow!("driver-core: call_open trapped: {trap}"))?;
+        match result {
+            Ok(ra) => ra,
+            Err(DatabaseVerbErr::Text(s)) => {
+                return Err(anyhow::anyhow!("driver-core: open failed: {s}"));
+            }
+            Err(DatabaseVerbErr::Duck(err)) => {
+                return Err(anyhow::anyhow!(
+                    "driver-core: open failed: {}",
+                    cli_duckerror_message(err)
+                ));
+            }
+        }
     };
 
     // Bootstrap: run each caller-supplied SQL string once on the fresh
@@ -13463,6 +13605,53 @@ fn extension_info_to_value(info: &cli_native::ExtensionInfo) -> Value {
         ("name".to_string(), Value::String(info.name.clone())),
         ("requires".to_string(), Value::List(requires)),
     ])
+}
+
+/// WIT `column-descriptor { name: string, ty: logicaltype }` —
+/// forward direction. Reverse of [`value_to_column_descriptor`].
+fn column_descriptor_to_value(c: &cli_native::ColumnDescriptor) -> Value {
+    Value::Record(vec![
+        ("name".to_string(), Value::String(c.name.clone())),
+        ("ty".to_string(), logicaltype_to_value(&c.ty)),
+    ])
+}
+
+/// Reverse of [`extension_info_to_value`]. Used by wedge #7-
+/// migrated guest-export call sites (e.g.
+/// `HostState::list_registered_extensions`).
+fn value_to_extension_info(v: &Value) -> RuntimeResult<cli_native::ExtensionInfo> {
+    let fields = match v {
+        Value::Record(f) => f,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "expected extension-info Record, got {other:?}"
+            )));
+        }
+    };
+    let mut name: Option<String> = None;
+    let mut requires: Option<Vec<cli_native::Capabilitykind>> = None;
+    for (k, val) in fields {
+        match (k.as_str(), val) {
+            ("name", Value::String(s)) => name = Some(s.clone()),
+            ("requires", Value::List(items)) => {
+                requires = Some(
+                    items
+                        .iter()
+                        .map(value_to_capabilitykind)
+                        .collect::<Result<_, _>>()?,
+                );
+            }
+            _ => {}
+        }
+    }
+    Ok(cli_native::ExtensionInfo {
+        name: name
+            .ok_or_else(|| RuntimeError::msg("extension-info.name missing"))?
+            .into(),
+        requires: requires
+            .ok_or_else(|| RuntimeError::msg("extension-info.requires missing"))?
+            .into(),
+    })
 }
 
 /// WIT `column-descriptor { name: string, ty: logicaltype }`.
