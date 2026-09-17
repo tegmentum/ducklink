@@ -390,31 +390,75 @@ Progress since the recipe was written on 2026-09-04:
 
 **Wedges remaining under Phase 2e** (estimated 2 more):
 
-1. **Guest exports: `duckdb:component/database` + `duckdb:extension/runtime`** (wedge #7).
-   The `with_database` / `with_stream` / `with_prepared` /
-   `with_appender` / `with_runtime` helpers on `CoreExecution`
-   still hand out bindgen `core_db_exports::Guest{,ResultStream,PreparedStatement,Appender}`
-   / `core_runtime_exports::Guest` typed views. Call sites: ~15+
-   `guest.call_execute(...)` invocations in `HostState::execute`
-   / ATTACH intercept / write intercept + a scatter of `call_close` /
+1. **Guest exports: `duckdb:component/database`** (wedge #7).
+   **BLOCKED on a wasmos-side prerequisite** (2026-09-17). The
+   `with_database` / `with_stream` / `with_prepared` /
+   `with_appender` helpers on `CoreExecution` still hand out
+   bindgen `core_db_exports::Guest{,ResultStream,PreparedStatement,Appender}`
+   typed views. Call sites: ~15+ `guest.call_execute(...)`
+   invocations in `HostState::execute` / ATTACH intercept /
+   write intercept + a scatter of `call_close` /
    `call_register_table_function` / `call_schema` /
    `call_parameter_count` / `call_append_row` / `call_flush`
    across `HostState` and stream/prepared/appender adapters
    (~107 total invocations of `with_{database,stream,prepared,
-   appender,runtime}` / `call_execute` / `call_close` /
+   appender}` / `call_execute` / `call_close` /
    `call_register_table_function` / `call_schema` /
    `call_parameter_count` / `call_append_row` / `call_flush`
    at 2026-09-17). Each site converts to
    `sync_export_bridge::call_export` with the interface + method
    name spelled out and args marshalled as `Value`. Estimated
    size: ~800-1500 line net change, comparable to wedge #6 but
-   with resource handles in play.
+   with resource handles in play — every appender / stream /
+   prepared entry holds a `wasmtime::component::ResourceAny` that
+   must round-trip through `Value::Resource` when handed back to
+   the guest.
+
+   **The prerequisite:** `wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export`
+   currently hardcodes empty `resource_discs` +
+   `name_map` when lowering `Value::Resource` args
+   (see the `Session-1 scope` comment in
+   `sync_export_bridge.rs` — resource-carrying method signatures
+   were deferred to a follow-up). Wedge #7 needs the bridge to
+   round-trip guest-defined `ResourceAny` handles: the host
+   receives a `ResourceAny` from an earlier guest export
+   (e.g. `database.open-appender` returning an appender
+   resource), stores it, then hands it back into a later
+   `appender.append-row(handle, values)` call. Today the round-
+   trip loses type identity when it becomes `Value::Resource
+   { store_id: BRIDGE_STORE_ID, handle_id: rep as u64 }` (via
+   `lift_val_for_export`), because on the way back down
+   `lower_value` uses `ResourceType::host_dynamic(disc)` — the
+   discriminant scheme for HOST-MINTED resources — not the
+   guest's own `ResourceType`.
+
+   Two candidate wasmos-side shapes for the fix:
+   - **A** — extend `call_export` with an optional pre-built
+     `resource_types: HashMap<String, ResourceType>` param the
+     caller builds once per instance from `Instance::get_export`
+     introspection. The bridge maps names -> discriminants
+     internally and threads them through `lower_value`.
+   - **B** — add a pass-through resource handle table inside
+     the bridge: the lift path stashes the original
+     `ResourceAny` alongside the rep, keyed by handle_id; the
+     lower path recovers the `ResourceAny` verbatim instead of
+     reconstructing via a fresh `new_own(rep, disc)`. Simpler
+     for callers, needs a bridge-scoped side table.
+
+   Option B is likely lighter for consumer ergonomics. Neither
+   requires ADR-0029 direction changes — resource marshalling
+   for exports was explicitly a Session-N follow-up per the
+   sync_export_bridge module docstring. Land in wasmos as
+   Phase 6.2.i.3 (or similar), then wedge #7 becomes a
+   mechanical mapping of the ~107 call sites.
 2. **Delete `duckdb_core_bindings` block + remaining
-   `use core_*` aliases** (wedge #9). Remaining 6 aliases at
+   `use core_*` aliases** (wedge #9). Remaining 5 aliases at
    2026-09-17: `core_callback_dispatch`, `core_column_types`,
-   `core_types`, `core_db_exports`, `core_runtime_exports`,
-   `core_tvm_types`. Trivial once (1) is done — the bindgen!
-   macro has no remaining consumers.
+   `core_types`, `core_db_exports`, `core_tvm_types` (was 6;
+   `core_runtime_exports` retired in commit `3a27b2d0` as a
+   zero-caller cleanup alongside its `with_runtime` accessor).
+   Trivial once (1) is done — the bindgen! macro has no
+   remaining consumers.
 
 **Phase 6 (icd-9)** — untouched. Single bindgen site, small
 surface, Path-A recipe applies directly. Lands after ducklink-host
