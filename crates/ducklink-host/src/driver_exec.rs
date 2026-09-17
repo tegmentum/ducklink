@@ -454,26 +454,17 @@ pub fn run_driver_tool(
 /// The tool does no stdin reads, so `inherit_stdin: false` (closed
 /// stdin) is equivalent to the pre-SyncStoreState pattern of feeding
 /// an empty `MemoryInputPipe` — both return EOF on read.
-///
-/// `inherit_env` semantics are replicated by snapshotting
-/// `std::env::vars()` — the wasmos-side `WasiEnvironment` carries
-/// explicit `(key, value)` pairs rather than a builder-time
-/// inherit toggle.
 fn build_driver_wasi_env(args: &[String], preopens: &[(&Path, &str)]) -> WasiEnvironment {
-    WasiEnvironment {
-        args: args.to_vec(),
-        env: std::env::vars().collect(),
-        inherit_stdin: false,
-        inherit_stdout: true,
-        inherit_stderr: true,
-        preopens: preopens
-            .iter()
-            .map(|(host, guest)| Preopen::read_write(host.to_path_buf(), (*guest).to_string()))
-            .collect(),
-        allow_network: true,
-        allow_ip_name_lookup: true,
-        ..WasiEnvironment::default()
+    let mut env = WasiEnvironment::sandboxed()
+        .with_args(args.iter().cloned())
+        .inherit_env()
+        .with_network();
+    env.inherit_stdout = true;
+    env.inherit_stderr = true;
+    for (host, guest) in preopens {
+        env = env.with_preopen(Preopen::read_write(host.to_path_buf(), (*guest).to_string()));
     }
+    env
 }
 
 /// Locate the cron-driver-tool wasm alongside the extension artifacts.
