@@ -3413,6 +3413,21 @@ fn core_duckerror_message(err: core_types::Duckerror) -> String {
     }
 }
 
+/// Same as [`core_duckerror_message`] but for the neutral
+/// `cli_native::Duckerror` (produced by wedge #7 migrated call
+/// sites that go through the wasmos escape hatch instead of the
+/// bindgen typed accessors). Extracts the inner message
+/// verbatim.
+fn cli_duckerror_message(err: cli_native::Duckerror) -> String {
+    match err {
+        cli_native::Duckerror::Invalidargument(m)
+        | cli_native::Duckerror::Unsupported(m)
+        | cli_native::Duckerror::Invalidstate(m)
+        | cli_native::Duckerror::Io(m)
+        | cli_native::Duckerror::Internal(m) => m,
+    }
+}
+
 /// Render a core query result as text: one row per line, tab-separated columns,
 /// NULL as empty, no header.
 fn spi_render_rows(qr: core_db_exports::QueryResult) -> String {
@@ -6522,15 +6537,13 @@ impl HostState {
                 continue;
             }
             let sql = format!("LOAD {name};");
-            let res = self.with_core(|core| {
-                core.with_database(|guest, store| guest.call_execute(store, handle.clone(), &sql))
-            });
+            let res = call_database_execute(self, handle, &sql);
             match res {
                 Ok(Ok(_)) => eprintln!("[autoload] loaded '{name}'"),
                 Ok(Err(err)) => {
                     eprintln!(
                         "[autoload] skipped '{name}': {}",
-                        core_duckerror_message(err)
+                        cli_duckerror_message(err)
                     )
                 }
                 Err(trap) => eprintln!("[autoload] skipped '{name}': {trap}"),
@@ -6677,15 +6690,13 @@ impl HostState {
              WHERE FALSE",
         ];
         for sql in DDL {
-            let res = self.with_core(|core| {
-                core.with_database(|guest, store| guest.call_execute(store, handle.clone(), sql))
-            });
+            let res = call_database_execute(self, *handle, sql);
             match res {
                 Ok(Ok(_)) => {}
                 Ok(Err(err)) => eprintln!(
                     "[ducklink] discovery-view DDL failed: {}: {}",
                     sql,
-                    core_duckerror_message(err)
+                    cli_duckerror_message(err)
                 ),
                 Err(trap) => eprintln!("[ducklink] discovery-view DDL trapped: {}: {}", sql, trap),
             }
@@ -6701,17 +6712,13 @@ impl HostState {
         const PREFIX_MACRO_DDL: &str = "CREATE OR REPLACE MACRO PREFIX(alias, namespace) AS \
              ducklink_prefix(alias, namespace)";
         if self.ducklink_prefix_scalar_registered(handle) {
-            let res = self.with_core(|core| {
-                core.with_database(|guest, store| {
-                    guest.call_execute(store, handle.clone(), PREFIX_MACRO_DDL)
-                })
-            });
+            let res = call_database_execute(self, *handle, PREFIX_MACRO_DDL);
             match res {
                 Ok(Ok(_)) => {}
                 Ok(Err(err)) => eprintln!(
                     "[ducklink] discovery-view DDL failed: {}: {}",
                     PREFIX_MACRO_DDL,
-                    core_duckerror_message(err)
+                    cli_duckerror_message(err)
                 ),
                 Err(trap) => eprintln!(
                     "[ducklink] discovery-view DDL trapped: {}: {}",
@@ -6742,9 +6749,7 @@ impl HostState {
              WHERE function_name = 'ducklink_prefix' \
                AND function_type = 'scalar' \
              LIMIT 1";
-        let res = self.with_core(|core| {
-            core.with_database(|guest, store| guest.call_execute(store, handle.clone(), PROBE))
-        });
+        let res = call_database_execute(self, *handle, PROBE);
         match res {
             Ok(Ok(qr)) => !qr.rows.is_empty(),
             Ok(Err(_)) | Err(_) => false,
@@ -6792,16 +6797,14 @@ impl HostState {
                 continue;
             }
             let sql = format!("LOAD {name};");
-            let res = self.with_core(|core| {
-                core.with_database(|guest, store| guest.call_execute(store, conn.clone(), &sql))
-            });
+            let res = call_database_execute(self, conn, &sql);
             match res {
                 Ok(Ok(_)) => {
                     eprintln!("[ducklink_load] deferred drain flushed via idempotent `{sql}`")
                 }
                 Ok(Err(err)) => eprintln!(
                     "[ducklink_load] deferred drain LOAD for '{name}' returned duckerror: {}",
-                    core_duckerror_message(err)
+                    cli_duckerror_message(err)
                 ),
                 Err(trap) => {
                     eprintln!("[ducklink_load] deferred drain LOAD for '{name}' trapped: {trap}")
@@ -6949,12 +6952,10 @@ impl HostState {
     /// `call_execute` wrapper for one-shot DDL that returns no rows. Maps
     /// wasmtime traps + duckerrors to a single `String` for logging.
     fn run_prefix_ddl(&self, conn: ResourceAny, sql: &str) -> Result<(), String> {
-        let res = self.with_core(|core| {
-            core.with_database(|guest, store| guest.call_execute(store, conn, sql))
-        });
+        let res = call_database_execute(self, conn, sql);
         match res {
             Ok(Ok(_)) => Ok(()),
-            Ok(Err(err)) => Err(core_duckerror_message(err)),
+            Ok(Err(err)) => Err(cli_duckerror_message(err)),
             Err(trap) => Err(format!("trap: {trap}")),
         }
     }
@@ -7234,15 +7235,11 @@ impl HostState {
         // is the correct behaviour — duplicate alias.
         if !self.attached_aliases.contains_key(&alias_ident) {
             let attach_sql = format!("ATTACH ':memory:' AS {alias_ident}");
-            let attach_res = self.with_core(|core| {
-                core.with_database(|guest, store| {
-                    guest.call_execute(store, entry_handle.clone(), &attach_sql)
-                })
-            });
+            let attach_res = call_database_execute(self, entry_handle, &attach_sql);
             match attach_res {
                 Ok(Ok(_)) => {}
-                Ok(Err(err)) => return Err(convert_core_duckerror(err)),
-                Err(trap) => return Err(convert_trap_to_duckerror(trap)),
+                Ok(Err(err)) => return Err(err),
+                Err(trap) => return Err(cli_native::Duckerror::Internal(trap.to_string().into())),
             }
         }
 
@@ -7254,15 +7251,11 @@ impl HostState {
                 table = shape.name,
                 fn_name = fn_name,
             );
-            let view_res = self.with_core(|core| {
-                core.with_database(|guest, store| {
-                    guest.call_execute(store, entry_handle.clone(), &view_sql)
-                })
-            });
+            let view_res = call_database_execute(self, entry_handle, &view_sql);
             match view_res {
                 Ok(Ok(_)) => {}
-                Ok(Err(err)) => return Err(convert_core_duckerror(err)),
-                Err(trap) => return Err(convert_trap_to_duckerror(trap)),
+                Ok(Err(err)) => return Err(err),
+                Err(trap) => return Err(cli_native::Duckerror::Internal(trap.to_string().into())),
             }
         }
 
@@ -9524,8 +9517,29 @@ const DATABASE_IFACE: &str = "duckdb:component/database";
 /// can be dropped on return without leaking — the guest's
 /// canonical-ABI ownership rules govern whether the underlying
 /// resource stays live.
+///
+/// Takes `&HostState` (not `&mut`) because `HostState::with_core`
+/// is `&self`-callable (the internal `Mutex<CoreExecution>` does
+/// the interior mutability). This matches the bindgen accessor
+/// pattern (`self.with_core(|core| core.with_database(...))` was
+/// callable on `&self`), so `&self` methods can migrate without
+/// changing their signature.
 fn call_export_on_resource(
-    state: &mut HostState,
+    state: &HostState,
+    iface: &str,
+    method: &str,
+    handle: wasmtime::component::ResourceAny,
+    trailing_args: &[wasmos_runtime_api::Value],
+) -> Result<Vec<wasmos_runtime_api::Value>, wasmos_runtime_api::RuntimeError> {
+    state.with_core(|core| call_export_on_resource_core(core, iface, method, handle, trailing_args))
+}
+
+/// Direct-on-CoreExecution version of [`call_export_on_resource`]
+/// for call sites that already hold a locked
+/// [`CoreExecution`] (e.g. sibling-core paths that go through
+/// `Mutex<CoreExecution>` outside of [`HostState`]).
+fn call_export_on_resource_core(
+    core: &mut CoreExecution,
     iface: &str,
     method: &str,
     handle: wasmtime::component::ResourceAny,
@@ -9534,21 +9548,59 @@ fn call_export_on_resource(
     use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
         call_export_with_resources, ExportResourceTable,
     };
-    state.with_core(|core| {
-        let mut resources = ExportResourceTable::new();
-        let handle_val = resources.register(handle);
-        let mut args = Vec::with_capacity(1 + trailing_args.len());
-        args.push(handle_val);
-        args.extend_from_slice(trailing_args);
-        call_export_with_resources(
-            core.store.as_context_mut(),
-            &core.instance,
-            Some(iface),
-            method,
-            &args,
-            &mut resources,
-        )
-    })
+    let mut resources = ExportResourceTable::new();
+    let handle_val = resources.register(handle);
+    let mut args = Vec::with_capacity(1 + trailing_args.len());
+    args.push(handle_val);
+    args.extend_from_slice(trailing_args);
+    call_export_with_resources(
+        core.store.as_context_mut(),
+        &core.instance,
+        Some(iface),
+        method,
+        &args,
+        &mut resources,
+    )
+}
+
+/// Direct-on-CoreExecution version of [`call_database_execute`]
+/// for sibling-core / driver-core paths where the caller already
+/// holds a locked [`CoreExecution`].
+fn call_database_execute_on_core(
+    core: &mut CoreExecution,
+    conn_handle: wasmtime::component::ResourceAny,
+    sql: &str,
+) -> Result<Result<cli_native::QueryResult, cli_native::Duckerror>, wasmos_runtime_api::RuntimeError>
+{
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let ret = call_export_on_resource_core(
+        core,
+        DATABASE_IFACE,
+        "execute",
+        conn_handle,
+        &[Value::String(sql.to_string())],
+    )?;
+    match ret.as_slice() {
+        [Value::Result(Ok(Some(payload)))] => match value_to_query_result(payload.as_ref()) {
+            Ok(qr) => Ok(Ok(qr)),
+            Err(e) => Err(RuntimeError::msg(format!(
+                "database.execute: unpack query-result failed: {e}"
+            ))),
+        },
+        [Value::Result(Ok(None))] => Err(RuntimeError::msg(
+            "database.execute: Ok arm carried no query-result payload",
+        )),
+        [Value::Result(Err(Some(err_payload)))] => Ok(Err(value_to_duckerror(
+            err_payload.as_ref(),
+            "database.execute",
+        ))),
+        [Value::Result(Err(None))] => Err(RuntimeError::msg(
+            "database.execute: Err arm carried no duckerror payload",
+        )),
+        other => Err(RuntimeError::msg(format!(
+            "database.execute: unexpected return shape {other:?}"
+        ))),
+    }
 }
 
 /// Dispatch a resource-method guest export whose signature is
@@ -9558,7 +9610,7 @@ fn call_export_on_resource(
 /// appender / result-stream / prepared-statement / connection
 /// side-effect method uses.
 fn call_export_unit_result(
-    state: &mut HostState,
+    state: &HostState,
     iface: &str,
     method: &str,
     handle: wasmtime::component::ResourceAny,
@@ -9590,7 +9642,7 @@ fn call_export_unit_result(
 /// (e.g. `result-stream.close: func()`) — the return slot is
 /// expected to be empty.
 fn call_export_no_return(
-    state: &mut HostState,
+    state: &HostState,
     iface: &str,
     method: &str,
     handle: wasmtime::component::ResourceAny,
@@ -9604,6 +9656,53 @@ fn call_export_no_return(
         )));
     }
     Ok(())
+}
+
+/// Dispatch the `duckdb:component/database.execute` guest export.
+/// Mirrors the bindgen `guest.call_execute(store, conn, sql)`
+/// shape: outer `Ok` = the call reached the guest (or a wasmos-
+/// side marshalling failure); inner `Ok(QueryResult)` = guest
+/// returned Ok; inner `Err(Duckerror)` = guest returned Err.
+///
+/// `conn_handle` is the `ResourceAny` from
+/// `ConnectionEntry.handle`; it's passed as
+/// `borrow<connection>`, so ducklink retains its copy for
+/// subsequent calls.
+fn call_database_execute(
+    state: &HostState,
+    conn_handle: wasmtime::component::ResourceAny,
+    sql: &str,
+) -> Result<Result<cli_native::QueryResult, cli_native::Duckerror>, wasmos_runtime_api::RuntimeError>
+{
+    use wasmos_runtime_api::{RuntimeError, Value};
+    let ret = call_export_on_resource(
+        state,
+        DATABASE_IFACE,
+        "execute",
+        conn_handle,
+        &[Value::String(sql.to_string())],
+    )?;
+    match ret.as_slice() {
+        [Value::Result(Ok(Some(payload)))] => match value_to_query_result(payload.as_ref()) {
+            Ok(qr) => Ok(Ok(qr)),
+            Err(e) => Err(RuntimeError::msg(format!(
+                "database.execute: unpack query-result failed: {e}"
+            ))),
+        },
+        [Value::Result(Ok(None))] => Err(RuntimeError::msg(
+            "database.execute: Ok arm carried no query-result payload",
+        )),
+        [Value::Result(Err(Some(err_payload)))] => Ok(Err(value_to_duckerror(
+            err_payload.as_ref(),
+            "database.execute",
+        ))),
+        [Value::Result(Err(None))] => Err(RuntimeError::msg(
+            "database.execute: Err arm carried no duckerror payload",
+        )),
+        other => Err(RuntimeError::msg(format!(
+            "database.execute: unexpected return shape {other:?}"
+        ))),
+    }
 }
 
 /// Lift a `Value::Variant` carrying a `duckerror` (5 arms, each
@@ -10244,8 +10343,7 @@ fn sibling_ensure_slot(sibling: &SiblingState, primary_path: &str) -> Result<Sib
         {
             let sql = format!("LOAD {name};");
             let mut c = core.lock().unwrap_or_else(|e| e.into_inner());
-            let outcome =
-                c.with_database(|guest, store| guest.call_execute(store, connection, &sql));
+            let outcome = call_database_execute_on_core(&mut c, connection, &sql);
             drop(c);
             match outcome {
                 Ok(Ok(_)) => eprintln!(
@@ -10255,7 +10353,7 @@ fn sibling_ensure_slot(sibling: &SiblingState, primary_path: &str) -> Result<Sib
                 Ok(Err(err)) => eprintln!(
                     "[sibling-replay] LOAD {name} on sibling returned duckerror: {} \
                      (registration replay may be partial)",
-                    core_duckerror_message(err)
+                    cli_duckerror_message(err)
                 ),
                 Err(trap) => eprintln!(
                     "[sibling-replay] LOAD {name} on sibling trapped: {trap} \
