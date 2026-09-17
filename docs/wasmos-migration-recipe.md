@@ -356,8 +356,12 @@ Progress since the recipe was written on 2026-09-04:
   `f233c783`).
 - **Phase 2c ✓** — `dotcmd_bindings` retired (`8e66b826`).
 - **Phase 2d ✓** — `duckdb_cli_bindings` retired (`816ff9bb`).
-- **Phase 2e IN PROGRESS** — `duckdb_core_bindings` is the last
-  remaining `bindgen!` site. Wedges 1-6 landed:
+- **Phase 2e ✓ COMPLETE (2026-09-17, `e9019bd`)** — the last
+  `wasmtime::component::bindgen!` block in ducklink-host has been
+  retired. Wedges #1-#9 landed. The migration arc is closed. What
+  follows is the historical wedge-by-wedge log.
+
+  Wedges 1-6 landed:
   - #1 (`c0026776`) — `tvm:memory/bytes` host-import retired.
   - #2 (`e20b7960`) — `tvm:memory/manager` host-import retired.
   - #3 (`95b7213d`) — `host-extension-loader` host-import retired.
@@ -522,43 +526,58 @@ Progress since the recipe was written on 2026-09-04:
    retired-function tests. `core_types` reference count
    halved from 359 -> 194 (46% reduction).
 
-5. **Wedge #9-b/-c/-d/-e — remaining `core_*` aliases** (not
-   yet started; each a substantial arc on its own). Each is
-   deeply coupled to real live code:
-   - `core_types` (194 refs, was 359) — 178 of the 194
-     remaining are `core_types::Duckvalue` uses inside the
-     callback-dispatch bridge (`CallbackDispatchHost::call`
-     +
-     `convert_core_duckvalue_to_extension` /
-     `convert_extension_duckvalue_to_core` /
-     `core_duckvalue_to_value` / `value_to_core_duckvalue`).
-     The remaining 16 are `core_types::Duckerror` (10) plus
-     the 6 payload-carrying leaf shapes (`Intervalvalue`,
-     `Uuidvalue`, `Hugeintvalue`, `Uhugeintvalue`,
-     `Complexvalue`, `Decimalvalue`).
-   - `core_column_types` (43 refs) — `Colvec` / `Column` /
-     re-exported `Decimalvalue` / `Intervalvalue`. The
-     column-major host-callback marshalling surface. Shares
-     types with core_callback_dispatch.
-   - `core_callback_dispatch` (21 refs) — `Invokeinfo` /
-     `Resultset` / re-exported `Colvec`. The callback host-
-     import types (`call-scalar-batch-col`,
-     `call-aggregate-col`, `call-cast-col`,
-     `call-scalar`, `call-table`, etc.).
-   - `core_tvm_types` (37 refs) — `Handle` / `TvmError` /
-     `RegionKind`. The TVM memory-region types.
+5. **Wedge #9-b/-c/-d/-e landed 2026-09-17** (`e9019bd`) —
+   the final and largest wedge. Every remaining `core_*`
+   alias was redirected from bindgen output to a hand-written
+   runtime mirror of the same WIT shape:
 
-   Each alias would need either (a) parallel native type
-   definitions (structural mirrors) or (b) reusing existing
-   types from `ducklink_runtime::extension` /
-   `cli_native` where they line up. The bindgen! block
-   itself stays alive to generate these types until each
-   alias has migrated to native equivalents. That's a
-   substantial arc on its own — deferred.
+   - `use core_types = ducklink_runtime::extension` — 194
+     references (`Duckvalue` / `Duckerror` / `Logicaltype` /
+     the 6 payload leaves + `Capabilitykind` / `Funcflags` /
+     `Decimalshape`) all resolve to the neutral runtime types
+     defined by hand in
+     `crates/ducklink-runtime/src/extension.rs`.
+   - `use core_column_types = ducklink_runtime::extension` —
+     `Colvec` / `Column` and their re-exports.
+   - `use core_callback_dispatch = ducklink_runtime::extension` —
+     `Invokeinfo` / `Resultset` and their re-exports.
+   - `mod core_tvm_types { pub use tvm_core::{Handle,
+     RegionKind, TvmError}; }` — TVM handles routed to the
+     tvm-core crate's own types. `tvm_core::TvmError` has
+     two additional arms (`UnsupportedAllocator`,
+     `PolicyViolation`) that don't cross the WIT boundary
+     today; `bindgen_tvm_error_to_value` folds them into
+     `backing-store` with a diagnostic string.
+
+   With every code reference redirected, the top-level
+   `pub mod duckdb_core_bindings { wasmtime::component::bindgen!(...) }`
+   block was DELETED. The `duckdb_core_bindings::*` symbol
+   tree (generated trait defs, Host trait, Libduckdb wrapper,
+   Libduckdb{Pre,Indices}, per-interface Guest views, type
+   mirrors) has zero remaining consumers in the crate.
+
+   Compile-time win: `cargo build -p ducklink-host` no
+   longer expands the bindgen! macro. The recipe's Phase 2e
+   closes with zero bindgen sites remaining in ducklink-host.
+
+## Phase 2e status: ✅ COMPLETE
+
+Every bindgen! site in `ducklink-host` is retired. Every
+`with_*` accessor is retired. Every guest-export dispatch
+routes through
+`wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export_with_resources`;
+every host-import wires through
+`wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call`.
+`CoreExecution` holds only `store: Store<CoreStoreState>` +
+`instance: wasmtime::component::Instance` — no bindgen-typed
+wrapper, no Host trait implementations. Runtime behavior is
+preserved (same WIT wire format via the wasmos escape hatch;
+same 128 lib tests passing; same 30 pre-existing infra
+failures unchanged).
 
 **Phase 6 (icd-9)** — untouched. Single bindgen site, small
-surface, Path-A recipe applies directly. Lands after ducklink-host
-is fully clean.
+surface, Path-A recipe applies directly. Lands after
+ducklink-host is fully clean — which it now is.
 
 ## Toolchain gotcha
 
