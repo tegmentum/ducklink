@@ -145,18 +145,21 @@ use duckdb_core_bindings::duckdb::extension::column_types as core_column_types;
 // and ADR wasm-ecosystem-at-5-adr.md Decision 3 + Amendment A1).
 use duckdb_core_bindings::duckdb::extension::types as core_types;
 use duckdb_core_bindings::exports::duckdb::component::database as core_db_exports;
-use duckdb_core_bindings::exports::duckdb::extension::{
-    // `logging as core_logging_exports` retired alongside the
-    // `with_logging` accessor + `neutral_loglevel_to_core` helper —
-    // logging guest exports now dispatch through the wasmos bridge
-    // (see `LOGGING_IFACE` + `neutral_loglevel_to_wit_tag`).
-    // `config as core_config_exports` retired alongside the
-    // `with_config` accessor + `core_config_error_to_neutral`
-    // helper — config guest exports now dispatch through the
-    // wasmos bridge (see `CONFIG_IFACE` + `call_config_get_option`
-    // + `value_to_config_error`).
-    runtime as core_runtime_exports,
-};
+// `duckdb_core_bindings::exports::duckdb::extension::runtime as
+// core_runtime_exports` retired alongside the `with_runtime`
+// accessor (it never had any callers — the `duckdb:extension/
+// runtime` guest world stayed unimported by ducklink-host for the
+// whole life of the ADR-0029 migration). Its predecessors were:
+//   * `logging as core_logging_exports` — retired in wedge #6
+//     alongside the `with_logging` accessor +
+//     `neutral_loglevel_to_core` helper. Logging guest exports
+//     now dispatch through the wasmos bridge (see
+//     `LOGGING_IFACE` + `neutral_loglevel_to_wit_tag`).
+//   * `config as core_config_exports` — retired in wedge #6
+//     alongside the `with_config` accessor +
+//     `core_config_error_to_neutral` helper. Config guest exports
+//     now dispatch through the wasmos bridge (see `CONFIG_IFACE`
+//     + `call_config_get_option` + `value_to_config_error`).
 // `duckdb_core_bindings::tvm::memory::{bytes, manager}` no longer
 // referenced after Phase 2e's tvm/{bytes,manager} wedges retired
 // the bindgen `add_to_linker` call for those interfaces — see
@@ -3067,22 +3070,15 @@ impl CoreExecution {
         f(guest, store)
     }
 
-    fn with_runtime<F, R>(&mut self, f: F) -> R
-    where
-        F: FnOnce(&core_runtime_exports::Guest, wasmtime::StoreContextMut<'_, CoreStoreState>) -> R,
-    {
-        let guest = self.bindings.duckdb_extension_runtime();
-        let store = self.store.as_context_mut();
-        f(guest, store)
-    }
+    // `with_runtime` retired alongside the `core_runtime_exports`
+    // alias — the accessor never had any callers.
 
     /// Phase 2e guest-export migration helper — hands the raw
     /// wasmtime Instance + store to `f` so per-verb migrations can
     /// dispatch through `sync_export_bridge::call_export` without
     /// needing a per-interface accessor method. Complements the
-    /// still-typed `with_database` / `with_config` / `with_logging`
-    /// / `with_runtime` / `with_appender` / `with_stream` /
-    /// `with_prepared` helpers for interfaces that haven't been
+    /// still-typed `with_database` / `with_appender` / `with_stream`
+    /// / `with_prepared` helpers for interfaces that haven't been
     /// migrated yet. Retires alongside `bindings` once every guest-
     /// export site has moved onto this path.
     fn with_instance<F, R>(&mut self, f: F) -> R
