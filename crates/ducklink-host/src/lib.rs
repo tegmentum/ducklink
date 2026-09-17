@@ -7003,10 +7003,8 @@ impl HostState {
     fn drop_connection_resource(&mut self, rep: u32) -> Result<(), cli_native::Duckerror> {
         if let Some(entry) = self.connections.remove(&rep) {
             if !entry.closed {
-                self.with_core(|core| {
-                    core.with_database(|guest, store| guest.call_close(store, entry.handle))
-                })
-                .map_err(|err| cli_native::Duckerror::Internal(trap_to_cli_string(err)))?;
+                call_export_no_return(self, DATABASE_IFACE, "close", entry.handle, &[])
+                    .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
             }
         }
         Ok(())
@@ -8435,11 +8433,19 @@ impl HostState {
 
     fn open(&mut self, path: Option<String>) -> Result<u32, String> {
         let owned = path;
-        let result = self
-            .with_core(|core| {
-                core.with_database(|guest, store| guest.call_open(store, owned.as_deref()))
-            })
-            .map_err(trap_to_cli_string)?;
+        let path_arg = wasmos_runtime_api::Value::Option(
+            owned
+                .as_deref()
+                .map(|s| Box::new(wasmos_runtime_api::Value::String(s.to_string()))),
+        );
+        let result = call_database_returning_resource(
+            self,
+            "open",
+            None,
+            &[path_arg],
+            ExecuteErrKind::PlainString,
+        )
+        .map_err(|e| e.to_string())?;
         match result {
             Ok(handle) => {
                 let id = self.alloc_resource_id();
@@ -8448,7 +8454,7 @@ impl HostState {
                 *self
                     .current_connection
                     .lock()
-                    .unwrap_or_else(|e| e.into_inner()) = Some(handle.clone());
+                    .unwrap_or_else(|e| e.into_inner()) = Some(handle);
                 // nested-exec Direction-1 §5.(b.1): remember which DB the primary
                 // just opened so a later extension `nested_exec` can materialize
                 // the sibling core against the same file. `None` = in-memory,
@@ -8466,7 +8472,8 @@ impl HostState {
                 self.maybe_autoload();
                 Ok(id)
             }
-            Err(err) => Err(err),
+            Err(DatabaseVerbErr::Text(s)) => Err(s),
+            Err(DatabaseVerbErr::Duck(err)) => Err(cli_duckerror_message(err)),
         }
     }
 
@@ -8475,22 +8482,37 @@ impl HostState {
         path: Option<String>,
         options: Vec<(String, String)>,
     ) -> Result<u32, String> {
+        use wasmos_runtime_api::Value;
         let owned_path = path;
         let owned_options = options;
-        let result = self
-            .with_core(|core| {
-                core.with_database(|guest, store| {
-                    guest.call_open_with_config(store, owned_path.as_deref(), &owned_options)
+        let path_arg = Value::Option(
+            owned_path
+                .as_deref()
+                .map(|s| Box::new(Value::String(s.to_string()))),
+        );
+        let options_arg = Value::List(
+            owned_options
+                .iter()
+                .map(|(k, v)| {
+                    Value::Tuple(vec![Value::String(k.clone()), Value::String(v.clone())])
                 })
-            })
-            .map_err(trap_to_cli_string)?;
+                .collect(),
+        );
+        let result = call_database_returning_resource(
+            self,
+            "open-with-config",
+            None,
+            &[path_arg, options_arg],
+            ExecuteErrKind::PlainString,
+        )
+        .map_err(|e| e.to_string())?;
         match result {
             Ok(handle) => {
                 let id = self.alloc_resource_id();
                 *self
                     .current_connection
                     .lock()
-                    .unwrap_or_else(|e| e.into_inner()) = Some(handle.clone());
+                    .unwrap_or_else(|e| e.into_inner()) = Some(handle);
                 if let Some(sibling) = self.sibling.as_ref() {
                     sibling.record_primary_open(sanitize_sibling_open_path(owned_path.as_deref()));
                 }
@@ -8504,18 +8526,17 @@ impl HostState {
                 self.maybe_autoload();
                 Ok(id)
             }
-            Err(err) => Err(err),
+            Err(DatabaseVerbErr::Text(s)) => Err(s),
+            Err(DatabaseVerbErr::Duck(err)) => Err(cli_duckerror_message(err)),
         }
     }
 
     fn close(&mut self, rep: u32) {
         let handle = match self.connections.get(&rep) {
-            Some(entry) if !entry.closed => entry.handle.clone(),
+            Some(entry) if !entry.closed => entry.handle,
             _ => return,
         };
-        if let Err(err) = self
-            .with_core(|core| core.with_database(|guest, store| guest.call_close(store, handle)))
-        {
+        if let Err(err) = call_export_no_return(self, DATABASE_IFACE, "close", handle, &[]) {
             panic!("failed to close connection: {err}");
         }
         if let Some(entry) = self.connections.get_mut(&rep) {
@@ -8525,9 +8546,9 @@ impl HostState {
 
     fn interrupt(&mut self, rep: u32) {
         if let Some(entry) = self.connections.get(&rep) {
-            if let Err(err) = self.with_core(|core| {
-                core.with_database(|guest, store| guest.call_interrupt(store, entry.handle.clone()))
-            }) {
+            let handle = entry.handle;
+            if let Err(err) = call_export_no_return(self, DATABASE_IFACE, "interrupt", handle, &[])
+            {
                 panic!("failed to interrupt connection: {err}");
             }
         }
@@ -8574,38 +8595,76 @@ impl HostState {
     }
 
     fn query_arrow(&mut self, rep: u32, sql: String) -> Result<Vec<u8>, cli_native::Duckerror> {
+        use wasmos_runtime_api::Value;
         let entry = self
             .connections
             .get(&rep)
             .ok_or_else(|| cli_native::Duckerror::Internal("unknown connection".into()))?;
-        let result = self
-            .with_core(|core| {
-                core.with_database(|guest, store| {
-                    guest.call_query_arrow(store, entry.handle.clone(), &sql)
-                })
-            })
-            .map_err(convert_trap_to_duckerror)?;
-        match result {
-            Ok(bytes) => Ok(bytes),
-            Err(err) => Err(convert_core_duckerror(err)),
+        let entry_handle = entry.handle;
+        let ret = call_export_on_resource(
+            self,
+            DATABASE_IFACE,
+            "query-arrow",
+            entry_handle,
+            &[Value::String(sql)],
+        )
+        .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
+        match ret.as_slice() {
+            [Value::Result(Ok(Some(payload)))] => match payload.as_ref() {
+                Value::Bytes(bytes) => Ok(bytes.to_vec()),
+                Value::List(items) => {
+                    let mut out = Vec::with_capacity(items.len());
+                    for it in items {
+                        match it {
+                            Value::U8(b) => out.push(*b),
+                            other => {
+                                return Err(cli_native::Duckerror::Internal(
+                                    format!("query-arrow: expected u8 in list, got {other:?}")
+                                        .into(),
+                                ))
+                            }
+                        }
+                    }
+                    Ok(out)
+                }
+                other => Err(cli_native::Duckerror::Internal(
+                    format!("query-arrow: expected Value::Bytes/List<u8>, got {other:?}").into(),
+                )),
+            },
+            [Value::Result(Ok(None))] => Err(cli_native::Duckerror::Internal(
+                "query-arrow: Ok arm carried no payload".into(),
+            )),
+            [Value::Result(Err(Some(err_payload)))] => Err(value_to_duckerror(
+                err_payload.as_ref(),
+                "database.query-arrow",
+            )),
+            [Value::Result(Err(None))] => Err(cli_native::Duckerror::Internal(
+                "query-arrow: Err arm carried no duckerror payload".into(),
+            )),
+            other => Err(cli_native::Duckerror::Internal(
+                format!("query-arrow: unexpected return shape {other:?}").into(),
+            )),
         }
     }
 
     /// Returns the new stream's u32 rep — the SyncHostCall dispatch
     /// wraps it as `Value::Resource` via `ctx.new_host_resource`.
     fn open_stream(&mut self, rep: u32, sql: String) -> Result<u32, cli_native::Duckerror> {
-        let entry = self
+        use wasmos_runtime_api::Value;
+        let entry_handle = self
             .connections
             .get(&rep)
-            .ok_or_else(|| cli_native::Duckerror::Internal("unknown connection".into()))?;
-        let stream = self
-            .with_core(|core| {
-                core.with_database(|guest, store| {
-                    guest.call_open_stream(store, entry.handle.clone(), &sql)
-                })
-            })
-            .map_err(convert_trap_to_duckerror)?;
-        match stream {
+            .ok_or_else(|| cli_native::Duckerror::Internal("unknown connection".into()))?
+            .handle;
+        let result = call_database_returning_resource(
+            self,
+            "open-stream",
+            Some(entry_handle),
+            &[Value::String(sql)],
+            ExecuteErrKind::Duckerror,
+        )
+        .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
+        match result {
             Ok(handle) => {
                 let id = self.alloc_resource_id();
                 self.streams.insert(
@@ -8617,30 +8676,35 @@ impl HostState {
                 );
                 Ok(id)
             }
-            Err(err) => Err(convert_core_duckerror(err)),
+            Err(DatabaseVerbErr::Duck(err)) => Err(err),
+            Err(DatabaseVerbErr::Text(s)) => Err(cli_native::Duckerror::Internal(s.into())),
         }
     }
 
     /// Returns the new prepared-statement's u32 rep — see `open_stream`.
     fn prepare(&mut self, rep: u32, sql: String) -> Result<u32, cli_native::Duckerror> {
-        let entry = self
+        use wasmos_runtime_api::Value;
+        let entry_handle = self
             .connections
             .get(&rep)
-            .ok_or_else(|| cli_native::Duckerror::Internal("unknown connection".into()))?;
-        let prepared = self
-            .with_core(|core| {
-                core.with_database(|guest, store| {
-                    guest.call_prepare(store, entry.handle.clone(), &sql)
-                })
-            })
-            .map_err(convert_trap_to_duckerror)?;
-        match prepared {
+            .ok_or_else(|| cli_native::Duckerror::Internal("unknown connection".into()))?
+            .handle;
+        let result = call_database_returning_resource(
+            self,
+            "prepare",
+            Some(entry_handle),
+            &[Value::String(sql)],
+            ExecuteErrKind::Duckerror,
+        )
+        .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
+        match result {
             Ok(handle) => {
                 let id = self.alloc_resource_id();
                 self.prepared.insert(id, PreparedEntry { handle });
                 Ok(id)
             }
-            Err(err) => Err(convert_core_duckerror(err)),
+            Err(DatabaseVerbErr::Duck(err)) => Err(err),
+            Err(DatabaseVerbErr::Text(s)) => Err(cli_native::Duckerror::Internal(s.into())),
         }
     }
 
@@ -8651,28 +8715,30 @@ impl HostState {
         schema: Option<String>,
         table: String,
     ) -> Result<u32, cli_native::Duckerror> {
-        let handle = self
+        use wasmos_runtime_api::Value;
+        let entry_handle = self
             .connections
             .get(&rep)
             .ok_or_else(|| cli_native::Duckerror::Internal("unknown connection".into()))?
-            .handle
-            .clone();
-        let owned_schema = schema;
-        let owned_table = table;
-        let appender = self
-            .with_core(|core| {
-                core.with_database(|guest, store| {
-                    guest.call_create_appender(store, handle, owned_schema.as_deref(), &owned_table)
-                })
-            })
-            .map_err(convert_trap_to_duckerror)?;
-        match appender {
+            .handle;
+        let schema_arg = Value::Option(schema.map(|s| Box::new(Value::String(s))));
+        let table_arg = Value::String(table);
+        let result = call_database_returning_resource(
+            self,
+            "create-appender",
+            Some(entry_handle),
+            &[schema_arg, table_arg],
+            ExecuteErrKind::Duckerror,
+        )
+        .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
+        match result {
             Ok(handle) => {
                 let id = self.alloc_resource_id();
                 self.appenders.insert(id, AppenderEntry { handle });
                 Ok(id)
             }
-            Err(err) => Err(convert_core_duckerror(err)),
+            Err(DatabaseVerbErr::Duck(err)) => Err(err),
+            Err(DatabaseVerbErr::Text(s)) => Err(cli_native::Duckerror::Internal(s.into())),
         }
     }
 
@@ -9565,6 +9631,124 @@ fn call_export_on_resource_core(
         &args,
         &mut resources,
     )
+}
+
+/// Dispatch a `database.<verb>(...) -> result<resource, err>`
+/// guest export and extract the returned `ResourceAny` on the
+/// success path. Used by `open` / `open-with-config` / `open-
+/// stream` / `prepare` / `create-appender` — the family of
+/// methods that mint a new resource for ducklink to stash.
+///
+/// The bridge registers the returned `Val::Resource(ra)` into a
+/// per-call [`ExportResourceTable`]; this helper `take`s the
+/// entry out before the table drops, so the original guest-
+/// defined `ResourceType` is preserved verbatim on the
+/// `ResourceAny` returned to the caller.
+///
+/// `err_kind` selects the error-arm shape:
+///   * `ExecuteErrKind::Duckerror` — WIT `duckerror` variant
+///     (5 arms with string payload). Returned as
+///     `cli_native::Duckerror`.
+///   * `ExecuteErrKind::PlainString` — WIT `string` (used by
+///     `open` / `open-with-config`). Returned verbatim.
+fn call_database_returning_resource_on_core(
+    core: &mut CoreExecution,
+    method: &str,
+    input_handle: Option<wasmtime::component::ResourceAny>,
+    other_args: &[wasmos_runtime_api::Value],
+    err_kind: ExecuteErrKind,
+) -> Result<
+    Result<wasmtime::component::ResourceAny, DatabaseVerbErr>,
+    wasmos_runtime_api::RuntimeError,
+> {
+    use wasmos_runtime_api::{RuntimeError, Value};
+    use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
+        call_export_with_resources, ExportResourceTable,
+    };
+    let mut resources = ExportResourceTable::new();
+    let mut args: Vec<Value> = Vec::with_capacity(1 + other_args.len());
+    if let Some(handle) = input_handle {
+        args.push(resources.register(handle));
+    }
+    args.extend_from_slice(other_args);
+    let ret = call_export_with_resources(
+        core.store.as_context_mut(),
+        &core.instance,
+        Some(DATABASE_IFACE),
+        method,
+        &args,
+        &mut resources,
+    )?;
+    match ret.as_slice() {
+        [Value::Result(Ok(Some(payload)))] => match payload.as_ref() {
+            Value::Resource { handle_id, .. } => {
+                let ra = resources.take(*handle_id).ok_or_else(|| {
+                    RuntimeError::msg(format!(
+                        "database.{method}: bridge did not register the returned resource"
+                    ))
+                })?;
+                Ok(Ok(ra))
+            }
+            other => Err(RuntimeError::msg(format!(
+                "database.{method}: expected Value::Resource in Ok payload, got {other:?}"
+            ))),
+        },
+        [Value::Result(Ok(None))] => Err(RuntimeError::msg(format!(
+            "database.{method}: Ok arm carried no resource payload"
+        ))),
+        [Value::Result(Err(Some(err_payload)))] => match err_kind {
+            ExecuteErrKind::Duckerror => Ok(Err(DatabaseVerbErr::Duck(value_to_duckerror(
+                err_payload.as_ref(),
+                &format!("database.{method}"),
+            )))),
+            ExecuteErrKind::PlainString => match err_payload.as_ref() {
+                Value::String(s) => Ok(Err(DatabaseVerbErr::Text(s.clone()))),
+                other => Err(RuntimeError::msg(format!(
+                    "database.{method}: Err arm expected Value::String, got {other:?}"
+                ))),
+            },
+        },
+        [Value::Result(Err(None))] => Err(RuntimeError::msg(format!(
+            "database.{method}: Err arm carried no payload"
+        ))),
+        other => Err(RuntimeError::msg(format!(
+            "database.{method}: unexpected return shape {other:?}"
+        ))),
+    }
+}
+
+/// Discriminator for `database.<verb>` error arms — either
+/// `duckerror` (5-arm variant) or plain `string` (for
+/// `open` / `open-with-config`, which failed to open the DB
+/// before establishing a fully-typed session).
+#[derive(Copy, Clone, Debug)]
+enum ExecuteErrKind {
+    Duckerror,
+    PlainString,
+}
+
+/// Error shape returned from [`call_database_returning_resource_on_core`].
+/// Callers destructure to route to the appropriate site-specific
+/// error type (`cli_native::Duckerror` vs `String`).
+enum DatabaseVerbErr {
+    Duck(cli_native::Duckerror),
+    Text(String),
+}
+
+/// [`HostState`]-shaped wrapper over [`call_database_returning_resource_on_core`].
+fn call_database_returning_resource(
+    state: &HostState,
+    method: &str,
+    input_handle: Option<wasmtime::component::ResourceAny>,
+    other_args: &[wasmos_runtime_api::Value],
+    err_kind: ExecuteErrKind,
+) -> Result<
+    Result<wasmtime::component::ResourceAny, DatabaseVerbErr>,
+    wasmos_runtime_api::RuntimeError,
+> {
+    state.with_core(|core| {
+        call_database_returning_resource_on_core(core, method, input_handle, other_args, err_kind)
+    })
 }
 
 /// Direct-on-CoreExecution version of [`call_database_execute`]
