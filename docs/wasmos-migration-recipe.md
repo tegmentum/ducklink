@@ -306,9 +306,12 @@ Path-B end state for ducklink:
 4. **Fine-grained WASI opt-in** — cli-only / no-filesystem / etc.
    Ducklink's `handler.rs` and `driver_exec.rs` don't need
    `wasi:http` and would benefit from being able to say so.
-5. **Sync `Runtime` facade** — a `SyncRuntime` alongside `Runtime`
-   that mirrors every `async fn` as `fn` for sync consumers. Would
-   remove the sync→async cascade blocker.
+5. ~~**Sync `Runtime` facade**~~ ✅ LANDED (2026-09-17). Ships at
+   `wasmos_runtime_wasmtime_v48::{SyncRuntime, SyncInstance}`
+   (wasmos commit `a98bc76b`) behind the `sync-facade` Cargo
+   feature. Owns a private tokio runtime and block_ons each async
+   `Runtime` / `Instance` method. Retires the sync→async cascade
+   blocker for mid-migration consumers.
 6. **`add_only_http_to_linker` equivalent** — the wasmos analog of
    ducklink's chosen "avoid the double-add clash" pattern.
 
@@ -712,10 +715,19 @@ that no ducklink-family Cargo.toml + no ducklink-family
   three ducklink-family workloads.
 - `wasi:http` consumer plumbing hook OR formal doc that
   declarative HTTP is the answer.
+- ~~The sync→async cascade for mid-migration consumers~~
+  ✅ CLOSED via `SyncRuntime`/`SyncInstance` facade
+  (wasmos commit `a98bc76b`, `sync-facade` Cargo feature).
+  Owns a private tokio runtime, block_ons each async
+  method; consumer surface stays sync.
 - `Instance::call_export` variants that support the
   primary-reentry pattern under async (or a documented
   policy that mid-migration consumers keep sibling
-  reentry on the escape hatch).
+  reentry on the escape hatch). Separate from the
+  sync-facade landing — this is the `unsafe fn
+  primary_nested_exec` TLS-based reentry pattern in
+  ducklink-host, which still needs an async-safe
+  redesign.
 - ~~`with:` map equivalent on `wasmos_runtime_api::HostImports`
   registration~~ ✅ VERIFIED (2026-09-17). Covered by three
   already-shipped features: `p2::add_to_linker_sync` (WASI
@@ -739,10 +751,12 @@ that no ducklink-family Cargo.toml + no ducklink-family
   `wasmtime::Store`, `wasmtime::Engine`,
   `wasmtime::component::{Component, Linker, Instance}` —
   those disappear only when consumers move to the wasmos-
-  native `Runtime::instantiate` path, which needs the
-  async cascade or a `SyncRuntime` facade (see the "Sync
-  Runtime facade" gap in the "Known gaps" list). Blocker
-  (4) proper is now DOWNSTREAM of blocker (3).
+  native `Runtime::instantiate` path. That path is now
+  reachable from sync code without an async cascade via the
+  `SyncRuntime` / `SyncInstance` facade (wasmos commit
+  `a98bc76b`, behind the `sync-facade` Cargo feature).
+  Blocker (4) proper is now a consumer-side migration
+  wedge, no longer wasmos-side blocked.
 
 **Estimated scope** (once wasmos-side prerequisites land):
 
