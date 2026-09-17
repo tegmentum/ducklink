@@ -144,7 +144,11 @@ use duckdb_core_bindings::duckdb::extension::column_types as core_column_types;
 // directly (see the ATTACH intercept + write intercept in HostState::execute
 // and ADR wasm-ecosystem-at-5-adr.md Decision 3 + Amendment A1).
 use duckdb_core_bindings::duckdb::extension::types as core_types;
-use duckdb_core_bindings::exports::duckdb::component::database as core_db_exports;
+// `duckdb_core_bindings::exports::duckdb::component::database as
+// core_db_exports` retired under Phase 2e wedge #9 (2026-09-17).
+// Every guest-export type it re-exported (QueryResult, Row, Columndef,
+// ColumnDescriptor, ExtensionInfo) is now consumed on the
+// cli_native side via the wedge #7 escape-hatch marshallers.
 // `duckdb_core_bindings::exports::duckdb::extension::runtime as
 // core_runtime_exports` retired alongside the `with_runtime`
 // accessor (it never had any callers — the `duckdb:extension/
@@ -3395,19 +3399,11 @@ pub(crate) fn cli_duckerror_message(err: cli_native::Duckerror) -> String {
     }
 }
 
-/// Render a core query result as text: one row per line, tab-separated columns,
-/// NULL as empty, no header.
-fn spi_render_rows(qr: core_db_exports::QueryResult) -> String {
-    let mut out = String::new();
-    for row in qr.rows {
-        let cells: Vec<String> = row.iter().map(spi_value_text).collect();
-        out.push_str(&cells.join("\t"));
-        out.push('\n');
-    }
-    out
-}
+// `spi_render_rows` (core_db_exports::QueryResult -> String) retired
+// under Phase 2e wedge #9 — every caller migrated to the cli_native
+// sibling [`cli_spi_render_rows`] via the wedge #7 escape hatch.
 
-/// Same as [`spi_render_rows`] but for the cli_native
+/// Same as the retired core-typed `spi_render_rows` but for the cli_native
 /// `QueryResult` produced by wedge #7-migrated call sites. Converts
 /// each cell through `convert_cli_duckvalue` so `spi_value_text`
 /// (which takes `core_types::Duckvalue`) can format it.
@@ -7133,7 +7129,7 @@ impl HostState {
         // call outside the lock.
         struct TableShape {
             name: String,
-            columns: Vec<core_db_exports::ColumnDescriptor>,
+            columns: Vec<cli_native::ColumnDescriptor>,
             callback: u32,
         }
         let (catalog_handle, tables, table_shapes) = {
@@ -7152,11 +7148,11 @@ impl HostState {
                 let cols = manager
                     .dispatch_storage_table_columns(catalog_handle, table)
                     .map_err(cli_extension_duckerror)?;
-                let descriptors: Vec<core_db_exports::ColumnDescriptor> = cols
+                let descriptors: Vec<cli_native::ColumnDescriptor> = cols
                     .into_iter()
-                    .map(|c| core_db_exports::ColumnDescriptor {
-                        name: c.name.into(),
-                        ty: convert_extension_logicaltype_to_core(c.logical),
+                    .map(|c| cli_native::ColumnDescriptor {
+                        name: c.name,
+                        ty: convert_extension_logicaltype_to_cli(c.logical),
                     })
                     .collect();
                 let handle = manager.register_at5_scan(
@@ -7192,22 +7188,14 @@ impl HostState {
         for shape in &table_shapes {
             use wasmos_runtime_api::Value;
             let fn_name = at5_synth_fn_name(&alias_ident, &shape.name);
-            // Column shapes here are `core_db_exports::ColumnDescriptor`
-            // (populated from the at5 spec's core-side WIT view). Marshal
-            // each to Value inline — the two-arm WIT record is trivial.
+            // Column shapes are cli_native `ColumnDescriptor` (populated
+            // from the storage-host dispatch, converted at capture time).
+            // Marshal each to Value inline via the wedge #7 shape helper.
             let columns_arg = Value::List(
                 shape
                     .columns
                     .iter()
-                    .map(|c| {
-                        Value::Record(vec![
-                            ("name".to_string(), Value::String(c.name.clone())),
-                            (
-                                "ty".to_string(),
-                                logicaltype_to_value(&convert_core_logicaltype(c.ty.clone())),
-                            ),
-                        ])
-                    })
+                    .map(column_descriptor_to_value)
                     .collect(),
             );
             let ret = call_export_on_resource(
@@ -9033,90 +9021,13 @@ impl HostState {
     }
 }
 
-fn convert_core_query_result(result: core_db_exports::QueryResult) -> cli_native::QueryResult {
-    cli_native::QueryResult {
-        columns: result
-            .columns
-            .into_iter()
-            .map(convert_core_columndef)
-            .collect(),
-        rows: result.rows.into_iter().map(convert_core_row).collect(),
-    }
-}
-
-fn convert_core_row(row: core_db_exports::Row) -> cli_native::Row {
-    row.into_iter().map(convert_core_duckvalue).collect()
-}
-
-fn convert_core_columndef(col: core_db_exports::Columndef) -> cli_native::Columndef {
-    cli_native::Columndef {
-        name: col.name.into(),
-        logical: convert_core_logicaltype(col.logical),
-    }
-}
-
-/// Phase 2c: CLI-side `column-descriptor` -> core-side `column-descriptor`.
-/// The two bindgen expansions generate structurally-identical types (both
-/// vendor the same `duckdb:component/database.column-descriptor` WIT record),
-/// but wasmtime treats them as distinct nominal types so we must convert
-/// explicitly. Used by `HostState::register_table_function` and by
-/// `intercept_attach`.
-fn convert_cli_columndescriptor_to_core(
-    col: cli_native::ColumnDescriptor,
-) -> core_db_exports::ColumnDescriptor {
-    core_db_exports::ColumnDescriptor {
-        name: col.name.into(),
-        ty: convert_cli_logicaltype_to_core(col.ty),
-    }
-}
-
-/// Phase 2c: inverse of `convert_core_logicaltype`. Both `cli_types` and
-/// `core_types` re-export `duckdb:extension/types.logicaltype`; the arm list
-/// must stay in sync with the WIT (see `convert_core_logicaltype` above for
-/// the reverse direction).
-fn convert_cli_logicaltype_to_core(ty: cli_native::Logicaltype) -> core_types::Logicaltype {
-    match ty {
-        cli_native::Logicaltype::Boolean => core_types::Logicaltype::Boolean,
-        cli_native::Logicaltype::Int64 => core_types::Logicaltype::Int64,
-        cli_native::Logicaltype::Uint64 => core_types::Logicaltype::Uint64,
-        cli_native::Logicaltype::Float64 => core_types::Logicaltype::Float64,
-        cli_native::Logicaltype::Text => core_types::Logicaltype::Text,
-        cli_native::Logicaltype::Blob => core_types::Logicaltype::Blob,
-        cli_native::Logicaltype::Int32 => core_types::Logicaltype::Int32,
-        cli_native::Logicaltype::Timestamp => core_types::Logicaltype::Timestamp,
-        cli_native::Logicaltype::Int8 => core_types::Logicaltype::Int8,
-        cli_native::Logicaltype::Int16 => core_types::Logicaltype::Int16,
-        cli_native::Logicaltype::Uint8 => core_types::Logicaltype::Uint8,
-        cli_native::Logicaltype::Uint16 => core_types::Logicaltype::Uint16,
-        cli_native::Logicaltype::Uint32 => core_types::Logicaltype::Uint32,
-        cli_native::Logicaltype::Float32 => core_types::Logicaltype::Float32,
-        cli_native::Logicaltype::Date => core_types::Logicaltype::Date,
-        cli_native::Logicaltype::Time => core_types::Logicaltype::Time,
-        cli_native::Logicaltype::Timestamptz => core_types::Logicaltype::Timestamptz,
-        cli_native::Logicaltype::Decimal(shape) => {
-            core_types::Logicaltype::Decimal(core_types::Decimalshape {
-                width: shape.width,
-                scale: shape.scale,
-            })
-        }
-        cli_native::Logicaltype::Interval => core_types::Logicaltype::Interval,
-        cli_native::Logicaltype::Uuid => core_types::Logicaltype::Uuid,
-        cli_native::Logicaltype::Hugeint => core_types::Logicaltype::Hugeint,
-        cli_native::Logicaltype::Uhugeint => core_types::Logicaltype::Uhugeint,
-        cli_native::Logicaltype::Complex(expr) => core_types::Logicaltype::Complex(expr),
-    }
-}
-
-fn convert_core_extension_info(info: core_db_exports::ExtensionInfo) -> cli_native::ExtensionInfo {
-    cli_native::ExtensionInfo {
-        name: info.name.into(),
-        requires: info
-            .requires
-            .into_iter()
-            .map(convert_core_capabilitykind)
-            .collect(),
-    }
-}
+// Phase 2e wedge #9 dead-code cleanup: `convert_core_query_result` /
+// `convert_core_row` / `convert_core_columndef` /
+// `convert_cli_columndescriptor_to_core` / `convert_cli_logicaltype_to_core`
+// / `convert_core_extension_info` retired here. Every caller migrated to
+// the cli_native siblings via the wedge #7 escape hatch (see
+// `value_to_query_result` / `value_to_columndef` / `value_to_extension_info`
+// near the top of the file).
 
 // The `convert_pending_registrations` chain and its
 // `neutral_logicaltype_to_core` / `neutral_columndef_to_core` /
@@ -10722,29 +10633,17 @@ fn sibling_ensure_slot(sibling: &SiblingState, primary_path: &str) -> Result<Sib
     Ok(SiblingSlot { core, connection })
 }
 
-/// Stringify a wasm-core `QueryResult` into the neutral [`NestedExecResult`]
-/// shape (rows of text cells, mirroring Direction-2's row rendering). Always
-/// populates `rows`; also populates `rows_affected` from the single-column
-/// `Count` scalar DuckDB emits for pure DML.
-fn query_result_to_nested_exec(qr: core_db_exports::QueryResult) -> NestedExecResult {
-    // DuckDB reports DML (INSERT/UPDATE/DELETE with no RETURNING) as a
-    // single-column result named "Count" carrying the affected row count.
-    // Extract it BEFORE stringifying so the caller sees rows_affected without
-    // parsing the string cell back out.
-    let rows_affected = extract_rows_affected(&qr);
-    let rows: Vec<Vec<String>> = qr
-        .rows
-        .iter()
-        .map(|row| row.iter().map(spi_value_text).collect())
-        .collect();
-    NestedExecResult {
-        rows: Some(rows),
-        rows_affected,
-    }
-}
+// Phase 2e wedge #9 dead-code cleanup: `query_result_to_nested_exec` /
+// `extract_rows_affected` (core_db_exports::QueryResult siblings) retired
+// here. Every caller migrated to the cli_native variants
+// [`cli_query_result_to_nested_exec`] + [`cli_extract_rows_affected`]
+// via the wedge #7 escape hatch.
 
-/// Same as [`query_result_to_nested_exec`] but for the cli_native
-/// `QueryResult` produced by wedge #7-migrated call sites.
+/// Stringify a cli_native `QueryResult` into the neutral
+/// [`NestedExecResult`] shape (rows of text cells, mirroring
+/// Direction-2's row rendering). Always populates `rows`; also
+/// populates `rows_affected` from the single-column `Count`
+/// scalar DuckDB emits for pure DML.
 fn cli_query_result_to_nested_exec(qr: cli_native::QueryResult) -> NestedExecResult {
     let rows_affected = cli_extract_rows_affected(&qr);
     let rows: Vec<Vec<String>> = qr
@@ -10762,27 +10661,8 @@ fn cli_query_result_to_nested_exec(qr: cli_native::QueryResult) -> NestedExecRes
     }
 }
 
-/// Detect DuckDB's pure-DML pattern (single row, single column named `Count`
-/// holding an integer) and return the affected-row count. Everything else
-/// returns `None` — the caller relies on `rows` alone for SELECT and mixed
-/// (RETURNING) shapes.
-fn extract_rows_affected(qr: &core_db_exports::QueryResult) -> Option<u64> {
-    if qr.columns.len() != 1 {
-        return None;
-    }
-    if !qr.columns[0].name.eq_ignore_ascii_case("Count") {
-        return None;
-    }
-    let row = qr.rows.first()?;
-    let cell = row.first()?;
-    match cell {
-        core_types::Duckvalue::Int64(v) => Some((*v).max(0) as u64),
-        core_types::Duckvalue::Uint64(v) => Some(*v),
-        core_types::Duckvalue::Int32(v) => Some((*v).max(0) as u64),
-        core_types::Duckvalue::Uint32(v) => Some(*v as u64),
-        _ => None,
-    }
-}
+// `extract_rows_affected` retired alongside `query_result_to_nested_exec`
+// — see the wedge #9 note above. Callers use [`cli_extract_rows_affected`].
 
 /// Run `sql` on `current_connection` using the already-locked `core` executor,
 /// returning rows of stringified cells (NULL -> ""). Factored out so both the
@@ -11982,6 +11862,44 @@ fn convert_core_duckerror_to_extension(
 
 fn map_runtime_trap(err: wasmtime::Error) -> ducklink_runtime::extension::Duckerror {
     ducklink_runtime::extension::Duckerror::Internal(format!("core runtime trap: {err}"))
+}
+
+/// M2a companion: extension WIT -> cli_native WIT. Same arm list as
+/// [`convert_extension_logicaltype_to_core`] but lands on the neutral
+/// cli_native type so wedge #7 / #9 call sites don't need a
+/// two-hop extension -> core -> cli conversion.
+fn convert_extension_logicaltype_to_cli(
+    ty: ducklink_runtime::extension::Logicaltype,
+) -> cli_native::Logicaltype {
+    use ducklink_runtime::extension::Logicaltype as E;
+    match ty {
+        E::Boolean => cli_native::Logicaltype::Boolean,
+        E::Int64 => cli_native::Logicaltype::Int64,
+        E::Uint64 => cli_native::Logicaltype::Uint64,
+        E::Float64 => cli_native::Logicaltype::Float64,
+        E::Text => cli_native::Logicaltype::Text,
+        E::Blob => cli_native::Logicaltype::Blob,
+        E::Int32 => cli_native::Logicaltype::Int32,
+        E::Timestamp => cli_native::Logicaltype::Timestamp,
+        E::Int8 => cli_native::Logicaltype::Int8,
+        E::Int16 => cli_native::Logicaltype::Int16,
+        E::Uint8 => cli_native::Logicaltype::Uint8,
+        E::Uint16 => cli_native::Logicaltype::Uint16,
+        E::Uint32 => cli_native::Logicaltype::Uint32,
+        E::Float32 => cli_native::Logicaltype::Float32,
+        E::Date => cli_native::Logicaltype::Date,
+        E::Time => cli_native::Logicaltype::Time,
+        E::Timestamptz => cli_native::Logicaltype::Timestamptz,
+        E::Decimal(shape) => cli_native::Logicaltype::Decimal(cli_native::Decimalshape {
+            width: shape.width,
+            scale: shape.scale,
+        }),
+        E::Interval => cli_native::Logicaltype::Interval,
+        E::Uuid => cli_native::Logicaltype::Uuid,
+        E::Hugeint => cli_native::Logicaltype::Hugeint,
+        E::Uhugeint => cli_native::Logicaltype::Uhugeint,
+        E::Complex(expr) => cli_native::Logicaltype::Complex(expr),
+    }
 }
 
 // M2a: storage-host result converters (extension-WIT -> core-WIT).
