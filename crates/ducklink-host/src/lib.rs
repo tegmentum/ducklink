@@ -7073,10 +7073,14 @@ impl HostState {
 
     fn drop_appender_resource(&mut self, rep: u32) -> Result<(), cli_native::Duckerror> {
         if let Some(entry) = self.appenders.remove(&rep) {
-            self.with_core(|core| {
-                core.with_appender(|_guest, store| entry.handle.resource_drop(store))
-            })
-            .map_err(|err| cli_native::Duckerror::Internal(trap_to_cli_string(err)))?;
+            // `ResourceAny::resource_drop` runs the guest's canonical-
+            // ABI destructor. Not routed through
+            // `sync_export_bridge::call_export_with_resources` — this
+            // is a wasmtime built-in operation on the handle itself,
+            // not a guest-declared export method (which would be
+            // `[method]appender.close`, invoked from `appender_close`).
+            self.with_core(|core| entry.handle.resource_drop(core.store.as_context_mut()))
+                .map_err(|err| cli_native::Duckerror::Internal(trap_to_cli_string(err)))?;
         }
         Ok(())
     }
@@ -8292,15 +8296,16 @@ impl HostState {
             .appenders
             .get(&rep)
             .ok_or_else(|| cli_native::Duckerror::Internal("unknown appender".into()))?
-            .handle
-            .clone();
-        let core_values: Vec<core_types::Duckvalue> =
-            values.into_iter().map(convert_cli_duckvalue).collect();
-        self.with_core(|core| {
-            core.with_appender(|guest, store| guest.call_append_row(store, handle, &core_values))
-        })
-        .map_err(convert_trap_to_duckerror)?
-        .map_err(convert_core_duckerror)
+            .handle;
+        let values_arg =
+            wasmos_runtime_api::Value::List(values.iter().map(duckvalue_to_value).collect());
+        call_export_unit_result(
+            self,
+            DATABASE_IFACE,
+            "[method]appender.append-row",
+            handle,
+            &[values_arg],
+        )
     }
 
     fn appender_flush(&mut self, rep: u32) -> Result<(), cli_native::Duckerror> {
@@ -8308,11 +8313,8 @@ impl HostState {
             .appenders
             .get(&rep)
             .ok_or_else(|| cli_native::Duckerror::Internal("unknown appender".into()))?
-            .handle
-            .clone();
-        self.with_core(|core| core.with_appender(|guest, store| guest.call_flush(store, handle)))
-            .map_err(convert_trap_to_duckerror)?
-            .map_err(convert_core_duckerror)
+            .handle;
+        call_export_unit_result(self, DATABASE_IFACE, "[method]appender.flush", handle, &[])
     }
 
     fn appender_close(&mut self, rep: u32) -> Result<(), cli_native::Duckerror> {
@@ -8320,11 +8322,8 @@ impl HostState {
             .appenders
             .get(&rep)
             .ok_or_else(|| cli_native::Duckerror::Internal("unknown appender".into()))?
-            .handle
-            .clone();
-        self.with_core(|core| core.with_appender(|guest, store| guest.call_close(store, handle)))
-            .map_err(convert_trap_to_duckerror)?
-            .map_err(convert_core_duckerror)
+            .handle;
+        call_export_unit_result(self, DATABASE_IFACE, "[method]appender.close", handle, &[])
     }
 
     // ─── top-level database interface methods ──────────────────────
@@ -9417,6 +9416,109 @@ const LOGGING_IFACE: &str = "duckdb:extension/logging@5.0.0";
 /// Interface name for the config guest export. Same package as
 /// logging.
 const CONFIG_IFACE: &str = "duckdb:extension/config@5.0.0";
+
+/// Interface name for the top-level database guest export. Matches
+/// WIT `package duckdb:component; interface database` (unversioned;
+/// the `duckdb:component` package carries no `@version` tag).
+const DATABASE_IFACE: &str = "duckdb:component/database";
+
+/// Dispatch a resource-method guest export whose signature is
+/// `<method>(self: {borrow,own}<resource>, ...trailing) ->
+/// result<_, duckerror>` and unpack the unit-result return into
+/// `Result<(), cli_native::Duckerror>` — the shape every
+/// appender / result-stream / prepared-statement / connection
+/// side-effect method uses.
+///
+/// The `handle` is the `ResourceAny` ducklink stashes in the
+/// entry table; it's copied into a fresh
+/// [`ExportResourceTable`] for the duration of the call. Since
+/// ducklink still holds the original `ResourceAny` in its own
+/// entry map, the fresh table can be dropped on return without
+/// leaking a handle — the guest's canonical-ABI ownership rules
+/// govern whether the underlying resource stays live.
+///
+/// Trailing args are appended after the `Value::Resource`
+/// referring to `handle` in the call's `args` slice.
+fn call_export_unit_result(
+    state: &mut HostState,
+    iface: &str,
+    method: &str,
+    handle: wasmtime::component::ResourceAny,
+    trailing_args: &[wasmos_runtime_api::Value],
+) -> Result<(), cli_native::Duckerror> {
+    use wasmos_runtime_api::Value;
+    use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
+        call_export_with_resources, ExportResourceTable,
+    };
+    let ret = state
+        .with_core(|core| {
+            let mut resources = ExportResourceTable::new();
+            let handle_val = resources.register(handle);
+            let mut args = Vec::with_capacity(1 + trailing_args.len());
+            args.push(handle_val);
+            args.extend_from_slice(trailing_args);
+            call_export_with_resources(
+                core.store.as_context_mut(),
+                &core.instance,
+                Some(iface),
+                method,
+                &args,
+                &mut resources,
+            )
+        })
+        .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
+    match ret.as_slice() {
+        [Value::Result(Ok(_))] => Ok(()),
+        [Value::Result(Err(Some(err_payload)))] => {
+            Err(value_to_duckerror(err_payload.as_ref(), method))
+        }
+        [Value::Result(Err(None))] => Err(cli_native::Duckerror::Internal(
+            format!("{iface}.{method}: Err arm carried no duckerror payload").into(),
+        )),
+        other => Err(cli_native::Duckerror::Internal(
+            format!("{iface}.{method}: expected [Value::Result(unit, duckerror)], got {other:?}")
+                .into(),
+        )),
+    }
+}
+
+/// Lift a `Value::Variant` carrying a `duckerror` (5 arms, each
+/// with a string payload) into the neutral
+/// [`cli_native::Duckerror`]. Reverse of
+/// [`duckvalue_to_value`]'s error-side sibling.
+fn value_to_duckerror(v: &wasmos_runtime_api::Value, method_ctx: &str) -> cli_native::Duckerror {
+    use wasmos_runtime_api::Value;
+    let (disc, payload) = match v {
+        Value::Variant {
+            discriminant,
+            payload,
+        } => (discriminant.as_str(), payload.as_deref()),
+        other => {
+            return cli_native::Duckerror::Internal(
+                format!("{method_ctx}: expected duckerror Value::Variant, got {other:?}").into(),
+            );
+        }
+    };
+    let msg = match payload {
+        Some(Value::String(s)) => s.clone(),
+        other => {
+            return cli_native::Duckerror::Internal(
+                format!("{method_ctx}: duckerror.{disc} expected string payload, got {other:?}")
+                    .into(),
+            );
+        }
+    };
+    match disc {
+        "invalidargument" => cli_native::Duckerror::Invalidargument(msg.into()),
+        "unsupported" => cli_native::Duckerror::Unsupported(msg.into()),
+        "invalidstate" => cli_native::Duckerror::Invalidstate(msg.into()),
+        "io" => cli_native::Duckerror::Io(msg.into()),
+        "internal" => cli_native::Duckerror::Internal(msg.into()),
+        other => cli_native::Duckerror::Internal(
+            format!("{method_ctx}: unknown duckerror arm {other:?}").into(),
+        ),
+    }
+}
 
 /// Dispatch a `config.get-<T>(path: string) ->
 /// result<option<T>, configerror>` verb through the wasmos bridge
