@@ -665,14 +665,35 @@ that no ducklink-family Cargo.toml + no ducklink-family
    consumer hook for outbound interception / mock responses /
    per-tenant policy, or a formal ADR that mid-migration
    consumers accept declarative HTTP.
-5. **`with:` map equivalent.** Sites 2/3/5 remapped standard
-   WASI interfaces to specific
-   `wasmtime_wasi::p2::bindings::…` types; site 5 additionally
-   maps a resource type to a native Rust struct
-   (`DriverConnection`). The wasmos surface has no `with:`
-   equivalent today. Path B needs one, or the consumer
-   pattern has to be redesigned around wasmos's own resource
-   table.
+5. **`with:` map equivalent.**
+   ✅ **PATH B STEP VERIFIED (2026-09-17)** — bindgen's `with:`
+   map decomposes into three orthogonal wasmos features that
+   are ALL already shipped:
+   - **Standard-WASI-interface override** (sites 2/3
+     remapped `"wasi:cli/environment"` etc. to
+     `wasmtime_wasi::p2::bindings::cli::environment`): under
+     the escape-hatch bridge, `wasi_p2::add_to_linker_sync`
+     wires up the whole WASI surface in one call — the
+     interface override becomes implicit.
+   - **Native-type resource storage** (site 5 mapped WIT
+     `connection` → native `DriverConnection`):
+     `wasmos_runtime_api::ResourceTable::push::<T>` (Phase 1b
+     landing, wasmos `e174e9e8`) stores native Rust types
+     under `Resource<T>` handles with type-checked
+     `get`/`get_mut`/`delete`.
+   - **Compile-time host-handler signature typing**
+     (bindgen's `impl HostConnection for DriverStoreState`):
+     `#[host_iface(sync)]` on an inherent impl block
+     generates `impl SyncHostCall` doing dispatch-by-kebab-name
+     plus arg-lift/return-lower for typed `Resource<T>` args
+     and returns. `#[derive(HostResourceType)]` on the marker
+     binds the WIT interface + name.
+
+   Together these three cover the full `with:` shape. No new
+   wasmos-side API is needed; what remains is consumer
+   adoption of `#[host_iface(sync)]` in place of the current
+   Vec<Value>-passthrough `SyncHostCall::call` — a
+   consumer-side migration, not a wasmos-side blocker.
 6. **Primary-store reentry TLS.** `unsafe fn primary_nested_exec`
    stashes `*mut Store<CoreStoreState>` +
    `*const wasmtime::component::Instance` in a TLS to
@@ -695,8 +716,13 @@ that no ducklink-family Cargo.toml + no ducklink-family
   primary-reentry pattern under async (or a documented
   policy that mid-migration consumers keep sibling
   reentry on the escape hatch).
-- `with:` map equivalent on `wasmos_runtime_api::HostImports`
-  registration (or an equivalent shape).
+- ~~`with:` map equivalent on `wasmos_runtime_api::HostImports`
+  registration~~ ✅ VERIFIED (2026-09-17). Covered by three
+  already-shipped features: `p2::add_to_linker_sync` (WASI
+  interface remap), `ResourceTable` Phase 1b (native-type
+  storage), and `#[host_iface(sync)]` + `#[derive(HostResourceType)]`
+  (compile-time typed dispatch). Consumer adoption of the last
+  pair is a separate consumer-side migration wedge.
 - **Wasmos-native `WasiView` hook.** wasmtime-wasi's
   `WasiView` trait requires each store's state to expose
   a `wasmtime::component::ResourceTable`. This is the
