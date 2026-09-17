@@ -281,16 +281,34 @@ fn open_persistent(
         ),
         ("autoload_known_extensions".to_string(), "false".to_string()),
     ];
-    let conn = core
-        .with_database(|g, s| g.call_open_with_config(s, Some(guest_db), &open_opts))?
-        .map_err(|e| anyhow!("open database {guest_db}: {e}"))?;
+    use wasmos_runtime_api::Value;
+    let opts_arg = Value::List(
+        open_opts
+            .iter()
+            .map(|(k, v)| Value::Tuple(vec![Value::String(k.clone()), Value::String(v.clone())]))
+            .collect(),
+    );
+    let conn = crate::call_database_returning_resource_on_core(
+        &mut core,
+        "open-with-config",
+        None,
+        &[
+            Value::Option(Some(Box::new(Value::String(guest_db.to_string())))),
+            opts_arg,
+        ],
+        crate::ExecuteErrKind::PlainString,
+    )?
+    .map_err(|e| anyhow!("open database {guest_db}: {e:?}"))?;
     Ok((core, conn))
 }
 
 fn checkpoint(core: &mut CoreExecution, conn: &ResourceAny) -> Result<()> {
-    match core.with_database(|g, s| g.call_execute(s, conn.clone(), "CHECKPOINT")) {
+    match crate::call_database_execute_on_core(core, *conn, "CHECKPOINT") {
         Ok(Ok(_)) => Ok(()),
-        Ok(Err(e)) => Err(anyhow!("CHECKPOINT failed: {}", duckerror_message(&e))),
+        Ok(Err(e)) => Err(anyhow!(
+            "CHECKPOINT failed: {}",
+            crate::cli_duckerror_message(e)
+        )),
         Err(e) => Err(anyhow!("CHECKPOINT trapped: {e}")),
     }
 }

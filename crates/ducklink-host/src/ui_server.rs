@@ -74,16 +74,35 @@ pub fn serve_ui(
         ),
         ("autoload_known_extensions".to_string(), "false".to_string()),
     ];
-    let conn = core
-        .with_database(|g, s| g.call_open_with_config(s, db_arg.as_deref(), &open_opts))?
-        .map_err(|e| anyhow::anyhow!("open database: {e}"))?;
+    use wasmos_runtime_api::Value;
+    let opts_arg = Value::List(
+        open_opts
+            .iter()
+            .map(|(k, v)| Value::Tuple(vec![Value::String(k.clone()), Value::String(v.clone())]))
+            .collect(),
+    );
+    let db_path_arg = Value::Option(
+        db_arg
+            .as_deref()
+            .map(|s| Box::new(Value::String(s.to_string()))),
+    );
+    let conn = crate::call_database_returning_resource_on_core(
+        &mut core,
+        "open-with-config",
+        None,
+        &[db_path_arg, opts_arg],
+        crate::ExecuteErrKind::PlainString,
+    )?
+    .map_err(|e| anyhow::anyhow!("open database: {e:?}"))?;
 
     if mode != UiMode::Console {
         // Initialize the ui extension's HttpServer singleton (bridge mode -- no
         // listen). The real-UI bridge needs it before handling /ddb/* requests.
-        match core.with_database(|g, s| {
-            g.call_execute(s, conn.clone(), "SELECT * FROM start_ui_server()")
-        }) {
+        match crate::call_database_execute_on_core(
+            &mut core,
+            conn,
+            "SELECT * FROM start_ui_server()",
+        ) {
             Ok(Ok(_)) => {}
             other => eprintln!("duckdb-ui: start_ui_server() returned {other:?} (continuing)"),
         }
@@ -240,13 +259,60 @@ fn bridge_ui_request(
     _conn: &ResourceAny,
     req: &Request,
 ) -> Option<(u16, String, Vec<u8>)> {
+    use wasmos_runtime_api::Value;
+    use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
+        call_export_with_resources, ExportResourceTable,
+    };
     // returns (status, "Key: Value\n"-block of all response headers, body)
-    let resp = core
-        .with_database(|g, s| {
-            g.call_handle_ui_request(s, &req.method, &req.path, &req.headers, &req.body)
+    let mut resources = ExportResourceTable::new();
+    let ret = core
+        .with_instance(|instance, store| {
+            call_export_with_resources(
+                store,
+                instance,
+                Some(crate::DATABASE_IFACE),
+                "handle-ui-request",
+                &[
+                    Value::String(req.method.clone()),
+                    Value::String(req.path.clone()),
+                    Value::String(req.headers.clone()),
+                    Value::Bytes(req.body.clone().into()),
+                ],
+                &mut resources,
+            )
         })
-        .ok()??;
-    Some((resp.status, resp.headers, resp.body))
+        .ok()?;
+    let payload = match ret.as_slice() {
+        [Value::Option(Some(p))] => p.as_ref(),
+        _ => return None,
+    };
+    let fields = match payload {
+        Value::Record(f) => f,
+        _ => return None,
+    };
+    let mut status: Option<u16> = None;
+    let mut headers: Option<String> = None;
+    let mut body: Option<Vec<u8>> = None;
+    for (k, v) in fields {
+        match (k.as_str(), v) {
+            ("status", Value::U16(n)) => status = Some(*n),
+            ("headers", Value::String(s)) => headers = Some(s.clone()),
+            ("body", Value::Bytes(b)) => body = Some(b.to_vec()),
+            ("body", Value::List(items)) => {
+                let mut buf = Vec::with_capacity(items.len());
+                for it in items {
+                    if let Value::U8(b) = it {
+                        buf.push(*b);
+                    } else {
+                        return None;
+                    }
+                }
+                body = Some(buf);
+            }
+            _ => {}
+        }
+    }
+    Some((status?, headers?, body?))
 }
 
 /// Serve a captured asset from the offline assets directory.
@@ -348,9 +414,9 @@ fn run_query(core: &mut CoreExecution, conn: &ResourceAny, sql: &str) -> String 
     if sql.is_empty() {
         return r#"{"columns":[],"rows":[],"rowcount":0}"#.to_string();
     }
-    let result = match core.with_database(|g, s| g.call_execute(s, conn.clone(), sql)) {
+    let result = match crate::call_database_execute_on_core(core, *conn, sql) {
         Ok(Ok(r)) => r,
-        Ok(Err(e)) => return json_error(&duckerror_message(&e)),
+        Ok(Err(e)) => return json_error(&crate::cli_duckerror_message(e)),
         Err(e) => return json_error(&format!("{e}")),
     };
     let mut out = String::from("{\"columns\":[");
@@ -370,7 +436,8 @@ fn run_query(core: &mut CoreExecution, conn: &ResourceAny, sql: &str) -> String 
             if ci > 0 {
                 out.push(',');
             }
-            json_value(&mut out, val);
+            let core_val = crate::convert_cli_duckvalue(val.clone());
+            json_value(&mut out, &core_val);
         }
         out.push(']');
     }

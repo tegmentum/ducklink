@@ -2720,15 +2720,14 @@ fn bindgen_tvm_error_to_value(e: core_tvm_types::TvmError) -> wasmos_runtime_api
 
 struct CoreExecution {
     store: Store<CoreStoreState>,
-    bindings: duckdb_core_bindings::Libduckdb,
-    /// Raw wasmtime Instance backing `bindings`. Held alongside
-    /// the bindgen wrapper so Phase 2e's per-interface guest-export
-    /// migration can dispatch through
-    /// `wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export`
-    /// on the raw Instance while the still-typed accessors on
-    /// `bindings` service the interfaces that haven't been retired
-    /// yet. Once every guest-export site has migrated the `bindings`
-    /// field retires and only the Instance remains.
+    /// Raw wasmtime Instance backing the core-wasm guest.
+    /// Every guest-export dispatch routes through
+    /// `wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export_with_resources`
+    /// on this Instance (see the `call_database_*` / `call_export_*`
+    /// helper family). The `bindings: duckdb_core_bindings::Libduckdb`
+    /// field that used to sit here is retired as of Phase 2e
+    /// wedge #7d + wedge #9 (2026-09-17); every consumer has
+    /// migrated onto the escape hatch.
     instance: wasmtime::component::Instance,
 }
 
@@ -3022,68 +3021,33 @@ impl CoreExecution {
         data.is_sibling = is_sibling;
     }
 
-    fn with_database<F, R>(&mut self, f: F) -> R
-    where
-        F: FnOnce(&core_db_exports::Guest, wasmtime::StoreContextMut<'_, CoreStoreState>) -> R,
-    {
-        let guest = self.bindings.duckdb_component_database();
-        let store = self.store.as_context_mut();
-        f(guest, store)
-    }
+    // Phase 2e wedge #7d + #9 (2026-09-17) — every bindgen-typed
+    // guest-export accessor is retired:
+    //
+    //   * `with_database` / `with_stream` / `with_prepared` /
+    //     `with_appender` (this wedge) — all production + test +
+    //     cross-file consumers moved onto
+    //     `sync_export_bridge::call_export_with_resources` via the
+    //     `call_database_*` / `call_export_*` helper family in
+    //     this file (see near `DATABASE_IFACE`).
+    //   * `with_runtime` (commit 3a27b2d0) — the accessor had zero
+    //     callers throughout the migration; retired alongside the
+    //     `core_runtime_exports` alias.
+    //   * `with_config` / `with_logging` (wedge #6, commit 67d761a1)
+    //     — retired when the two simple non-resource-carrying guest
+    //     interfaces moved onto the bridge.
+    //
+    // The `bindings: duckdb_core_bindings::Libduckdb` field that
+    // used to back them is also retired; every guest-export dispatch
+    // routes through the raw `instance: wasmtime::component::Instance`
+    // via [`Self::with_instance`] below.
 
-    fn with_stream<F, R>(&mut self, f: F) -> R
-    where
-        F: FnOnce(
-            core_db_exports::GuestResultStream<'_>,
-            wasmtime::StoreContextMut<'_, CoreStoreState>,
-        ) -> R,
-    {
-        let guest = self.bindings.duckdb_component_database().result_stream();
-        let store = self.store.as_context_mut();
-        f(guest, store)
-    }
-
-    fn with_prepared<F, R>(&mut self, f: F) -> R
-    where
-        F: FnOnce(
-            core_db_exports::GuestPreparedStatement<'_>,
-            wasmtime::StoreContextMut<'_, CoreStoreState>,
-        ) -> R,
-    {
-        let guest = self
-            .bindings
-            .duckdb_component_database()
-            .prepared_statement();
-        let store = self.store.as_context_mut();
-        f(guest, store)
-    }
-
-    fn with_appender<F, R>(&mut self, f: F) -> R
-    where
-        F: FnOnce(
-            core_db_exports::GuestAppender<'_>,
-            wasmtime::StoreContextMut<'_, CoreStoreState>,
-        ) -> R,
-    {
-        let guest = self.bindings.duckdb_component_database().appender();
-        let store = self.store.as_context_mut();
-        f(guest, store)
-    }
-
-    // `with_runtime` retired alongside the `core_runtime_exports`
-    // alias — the accessor never had any callers.
-
-    /// Phase 2e guest-export migration helper — hands the raw
-    /// wasmtime Instance + store to `f` so per-verb migrations can
-    /// dispatch through `sync_export_bridge::call_export` without
-    /// needing a per-interface accessor method. Complements the
-    /// still-typed `with_database` / `with_appender` / `with_stream`
-    /// / `with_prepared` helpers for interfaces / call-sites that
-    /// haven't been migrated yet (cross-file consumers in
-    /// dotcmd_wasmos, ui_server, quack_server, httpd, replicate,
-    /// extcli — the wedge #7e cross-file migration hasn't landed).
-    /// Retires alongside `bindings` in wedge #9 once every guest-
-    /// export site has moved onto this path.
+    /// Guest-export migration helper — hands the raw
+    /// wasmtime Instance + store to `f` for call sites that build
+    /// their own `call_export_with_resources` invocation inline
+    /// (e.g. `register_extension`, `list_registered_extensions`,
+    /// the `handle-quack-request` / `handle-ui-request`
+    /// dispatchers).
     fn with_instance<F, R>(&mut self, f: F) -> R
     where
         F: FnOnce(
@@ -3421,7 +3385,7 @@ fn core_duckerror_message(err: core_types::Duckerror) -> String {
 /// sites that go through the wasmos escape hatch instead of the
 /// bindgen typed accessors). Extracts the inner message
 /// verbatim.
-fn cli_duckerror_message(err: cli_native::Duckerror) -> String {
+pub(crate) fn cli_duckerror_message(err: cli_native::Duckerror) -> String {
     match err {
         cli_native::Duckerror::Invalidargument(m)
         | cli_native::Duckerror::Unsupported(m)
@@ -3437,6 +3401,23 @@ fn spi_render_rows(qr: core_db_exports::QueryResult) -> String {
     let mut out = String::new();
     for row in qr.rows {
         let cells: Vec<String> = row.iter().map(spi_value_text).collect();
+        out.push_str(&cells.join("\t"));
+        out.push('\n');
+    }
+    out
+}
+
+/// Same as [`spi_render_rows`] but for the cli_native
+/// `QueryResult` produced by wedge #7-migrated call sites. Converts
+/// each cell through `convert_cli_duckvalue` so `spi_value_text`
+/// (which takes `core_types::Duckvalue`) can format it.
+pub(crate) fn cli_spi_render_rows(qr: cli_native::QueryResult) -> String {
+    let mut out = String::new();
+    for row in qr.rows {
+        let cells: Vec<String> = row
+            .into_iter()
+            .map(|v| spi_value_text(&convert_cli_duckvalue(v)))
+            .collect();
         out.push_str(&cells.join("\t"));
         out.push('\n');
     }
@@ -9273,7 +9254,7 @@ fn neutral_reg_logicaltype_to_core_types(ty: reg::LogicalType) -> core_types::Lo
 // `convert_extopts_to_loader` retired under Phase 2e wedge #8 — see
 // the retirement note near the top of the marshaller block.
 
-fn convert_core_duckvalue(value: core_types::Duckvalue) -> cli_native::Duckvalue {
+pub(crate) fn convert_core_duckvalue(value: core_types::Duckvalue) -> cli_native::Duckvalue {
     match value {
         core_types::Duckvalue::Null => cli_native::Duckvalue::Null,
         core_types::Duckvalue::Boolean(v) => cli_native::Duckvalue::Boolean(v),
@@ -9333,7 +9314,7 @@ fn convert_core_duckvalue(value: core_types::Duckvalue) -> cli_native::Duckvalue
     }
 }
 
-fn convert_cli_duckvalue(value: cli_native::Duckvalue) -> core_types::Duckvalue {
+pub(crate) fn convert_cli_duckvalue(value: cli_native::Duckvalue) -> core_types::Duckvalue {
     match value {
         cli_native::Duckvalue::Null => core_types::Duckvalue::Null,
         cli_native::Duckvalue::Boolean(v) => core_types::Duckvalue::Boolean(v),
@@ -9675,7 +9656,7 @@ const CONFIG_IFACE: &str = "duckdb:extension/config@5.0.0";
 /// Interface name for the top-level database guest export. Matches
 /// WIT `package duckdb:component; interface database` (unversioned;
 /// the `duckdb:component` package carries no `@version` tag).
-const DATABASE_IFACE: &str = "duckdb:component/database";
+pub(crate) const DATABASE_IFACE: &str = "duckdb:component/database";
 
 /// Generic resource-method dispatch helper. Registers `handle`
 /// into a fresh [`ExportResourceTable`], appends `trailing_args`
@@ -9698,7 +9679,7 @@ const DATABASE_IFACE: &str = "duckdb:component/database";
 /// pattern (`self.with_core(|core| core.with_database(...))` was
 /// callable on `&self`), so `&self` methods can migrate without
 /// changing their signature.
-fn call_export_on_resource(
+pub(crate) fn call_export_on_resource(
     state: &HostState,
     iface: &str,
     method: &str,
@@ -9712,7 +9693,7 @@ fn call_export_on_resource(
 /// for call sites that already hold a locked
 /// [`CoreExecution`] (e.g. sibling-core paths that go through
 /// `Mutex<CoreExecution>` outside of [`HostState`]).
-fn call_export_on_resource_core(
+pub(crate) fn call_export_on_resource_core(
     core: &mut CoreExecution,
     iface: &str,
     method: &str,
@@ -9755,7 +9736,7 @@ fn call_export_on_resource_core(
 ///     `cli_native::Duckerror`.
 ///   * `ExecuteErrKind::PlainString` — WIT `string` (used by
 ///     `open` / `open-with-config`). Returned verbatim.
-fn call_database_returning_resource_on_core(
+pub(crate) fn call_database_returning_resource_on_core(
     core: &mut CoreExecution,
     method: &str,
     input_handle: Option<wasmtime::component::ResourceAny>,
@@ -9826,7 +9807,7 @@ fn call_database_returning_resource_on_core(
 /// `open` / `open-with-config`, which failed to open the DB
 /// before establishing a fully-typed session).
 #[derive(Copy, Clone, Debug)]
-enum ExecuteErrKind {
+pub(crate) enum ExecuteErrKind {
     Duckerror,
     PlainString,
 }
@@ -9835,13 +9816,13 @@ enum ExecuteErrKind {
 /// Callers destructure to route to the appropriate site-specific
 /// error type (`cli_native::Duckerror` vs `String`).
 #[derive(Debug)]
-enum DatabaseVerbErr {
+pub(crate) enum DatabaseVerbErr {
     Duck(cli_native::Duckerror),
     Text(String),
 }
 
 /// [`HostState`]-shaped wrapper over [`call_database_returning_resource_on_core`].
-fn call_database_returning_resource(
+pub(crate) fn call_database_returning_resource(
     state: &HostState,
     method: &str,
     input_handle: Option<wasmtime::component::ResourceAny>,
@@ -9859,7 +9840,7 @@ fn call_database_returning_resource(
 /// Direct-on-CoreExecution version of [`call_database_execute`]
 /// for sibling-core / driver-core paths where the caller already
 /// holds a locked [`CoreExecution`].
-fn call_database_execute_on_core(
+pub(crate) fn call_database_execute_on_core(
     core: &mut CoreExecution,
     conn_handle: wasmtime::component::ResourceAny,
     sql: &str,
@@ -9902,7 +9883,7 @@ fn call_database_execute_on_core(
 /// `Result<(), cli_native::Duckerror>` — the shape every
 /// appender / result-stream / prepared-statement / connection
 /// side-effect method uses.
-fn call_export_unit_result(
+pub(crate) fn call_export_unit_result(
     state: &HostState,
     iface: &str,
     method: &str,
@@ -9917,7 +9898,7 @@ fn call_export_unit_result(
 /// Direct-on-CoreExecution version of [`call_export_unit_result`]
 /// for test paths / driver paths that already hold a locked
 /// [`CoreExecution`].
-fn call_export_unit_result_on_core(
+pub(crate) fn call_export_unit_result_on_core(
     core: &mut CoreExecution,
     iface: &str,
     method: &str,
@@ -9933,7 +9914,7 @@ fn call_export_unit_result_on_core(
 /// so both [`call_export_unit_result`] and
 /// [`call_export_unit_result_on_core`] share the return-shape
 /// diagnostics.
-fn unpack_unit_result(
+pub(crate) fn unpack_unit_result(
     iface: &str,
     method: &str,
     ret: Vec<wasmos_runtime_api::Value>,
@@ -9961,7 +9942,7 @@ fn unpack_unit_result(
 /// Used for method verbs whose only side-effect is on the guest
 /// (e.g. `result-stream.close: func()`) — the return slot is
 /// expected to be empty.
-fn call_export_no_return(
+pub(crate) fn call_export_no_return(
     state: &HostState,
     iface: &str,
     method: &str,
@@ -9988,7 +9969,7 @@ fn call_export_no_return(
 /// `ConnectionEntry.handle`; it's passed as
 /// `borrow<connection>`, so ducklink retains its copy for
 /// subsequent calls.
-fn call_database_execute(
+pub(crate) fn call_database_execute(
     state: &HostState,
     conn_handle: wasmtime::component::ResourceAny,
     sql: &str,
@@ -10029,7 +10010,10 @@ fn call_database_execute(
 /// with a string payload) into the neutral
 /// [`cli_native::Duckerror`]. Reverse of
 /// [`duckvalue_to_value`]'s error-side sibling.
-fn value_to_duckerror(v: &wasmos_runtime_api::Value, method_ctx: &str) -> cli_native::Duckerror {
+pub(crate) fn value_to_duckerror(
+    v: &wasmos_runtime_api::Value,
+    method_ctx: &str,
+) -> cli_native::Duckerror {
     use wasmos_runtime_api::Value;
     let (disc, payload) = match v {
         Value::Variant {
@@ -10947,26 +10931,15 @@ fn instantiate_core(
         },
     );
 
-    // Phase 2e — decompose the bindgen-provided `pre.instantiate(store)`
-    // path into its two building blocks so we can retain the raw
-    // wasmtime Instance alongside the typed Libduckdb wrapper.
-    // Bindgen's own implementation is:
-    //     let instance = pre.instance_pre.instantiate(&mut store)?;
-    //     pre.indices.load(&mut store, &instance)
-    // (see cargo expand output). `LibduckdbPre.indices` is private,
-    // but `LibduckdbIndices::new(&instance_pre)` is public — we
-    // build our own indices from the same InstancePre and drive the
-    // load ourselves. Ends with (bindings, instance) both live and
-    // referring to the SAME wasmtime Instance.
+    // Phase 2e wedge #9 (2026-09-17): retired the bindgen-typed
+    // Libduckdb wrapper alongside the guest-export accessors. Every
+    // guest-export dispatch now goes through
+    // `sync_export_bridge::call_export_with_resources` on the raw
+    // Instance. `pre.instantiate(store)` returns the Instance we
+    // keep on CoreExecution.
     let instance_pre = linker.instantiate_pre(&component)?;
-    let indices = duckdb_core_bindings::LibduckdbIndices::new(&instance_pre)?;
     let instance = instance_pre.instantiate(store.as_context_mut())?;
-    let bindings = indices.load(store.as_context_mut(), &instance)?;
-    Ok(CoreExecution {
-        store,
-        bindings,
-        instance,
-    })
+    Ok(CoreExecution { store, instance })
 }
 
 /// Trust gate for precompiled `.cwasm` files.
@@ -11612,7 +11585,7 @@ fn sanitize_extension_name(raw: &str) -> String {
     sanitized
 }
 
-fn convert_core_duckvalue_to_extension(
+pub(crate) fn convert_core_duckvalue_to_extension(
     value: core_types::Duckvalue,
 ) -> ducklink_runtime::extension::Duckvalue {
     match value {
@@ -13535,7 +13508,7 @@ fn value_to_logicaltype(v: &Value) -> RuntimeResult<cli_native::Logicaltype> {
     }
 }
 
-fn logicaltype_to_value(t: &cli_native::Logicaltype) -> Value {
+pub(crate) fn logicaltype_to_value(t: &cli_native::Logicaltype) -> Value {
     use cli_native::Logicaltype as L;
     let (name, payload): (&str, Option<Value>) = match t {
         L::Boolean => ("boolean", None),
@@ -13624,7 +13597,7 @@ fn value_to_row(v: &Value) -> RuntimeResult<cli_native::Row> {
 
 /// WIT `query-result { columns: list<columndef>, rows: list<row> }`
 /// — the reverse of [`query_result_to_value`].
-fn value_to_query_result(v: &Value) -> RuntimeResult<cli_native::QueryResult> {
+pub(crate) fn value_to_query_result(v: &Value) -> RuntimeResult<cli_native::QueryResult> {
     let fields = match v {
         Value::Record(f) => f,
         other => {
@@ -13668,7 +13641,7 @@ fn extension_info_to_value(info: &cli_native::ExtensionInfo) -> Value {
 
 /// WIT `column-descriptor { name: string, ty: logicaltype }` —
 /// forward direction. Reverse of [`value_to_column_descriptor`].
-fn column_descriptor_to_value(c: &cli_native::ColumnDescriptor) -> Value {
+pub(crate) fn column_descriptor_to_value(c: &cli_native::ColumnDescriptor) -> Value {
     Value::Record(vec![
         ("name".to_string(), Value::String(c.name.clone())),
         ("ty".to_string(), logicaltype_to_value(&c.ty)),
@@ -13678,7 +13651,7 @@ fn column_descriptor_to_value(c: &cli_native::ColumnDescriptor) -> Value {
 /// Reverse of [`extension_info_to_value`]. Used by wedge #7-
 /// migrated guest-export call sites (e.g.
 /// `HostState::list_registered_extensions`).
-fn value_to_extension_info(v: &Value) -> RuntimeResult<cli_native::ExtensionInfo> {
+pub(crate) fn value_to_extension_info(v: &Value) -> RuntimeResult<cli_native::ExtensionInfo> {
     let fields = match v {
         Value::Record(f) => f,
         other => {
@@ -13765,7 +13738,7 @@ fn query_result_to_value(qr: &cli_native::QueryResult) -> Value {
 /// matches the WIT arm names verbatim (`null`, `boolean`, `int64`,
 /// …, `decimal`, `interval`, `uuid`, `hugeint`, `uhugeint`,
 /// `complex`).
-fn duckvalue_to_value(v: &cli_native::Duckvalue) -> Value {
+pub(crate) fn duckvalue_to_value(v: &cli_native::Duckvalue) -> Value {
     use cli_native::Duckvalue as D;
     let (name, payload): (&str, Option<Value>) = match v {
         D::Null => ("null", None),

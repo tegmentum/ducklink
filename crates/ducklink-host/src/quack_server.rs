@@ -64,9 +64,26 @@ pub fn serve_quack(
         ),
         ("autoload_known_extensions".to_string(), "false".to_string()),
     ];
-    let conn = core
-        .with_database(|g, s| g.call_open_with_config(s, db_arg.as_deref(), &open_opts))?
-        .map_err(|e| anyhow::anyhow!("open database: {e}"))?;
+    use wasmos_runtime_api::Value;
+    let opts_arg = Value::List(
+        open_opts
+            .iter()
+            .map(|(k, v)| Value::Tuple(vec![Value::String(k.clone()), Value::String(v.clone())]))
+            .collect(),
+    );
+    let db_path_arg = Value::Option(
+        db_arg
+            .as_deref()
+            .map(|s| Box::new(Value::String(s.to_string()))),
+    );
+    let conn = crate::call_database_returning_resource_on_core(
+        &mut core,
+        "open-with-config",
+        None,
+        &[db_path_arg, opts_arg],
+        crate::ExecuteErrKind::PlainString,
+    )?
+    .map_err(|e| anyhow::anyhow!("open database: {e:?}"))?;
 
     // Build the core-side bridge server (no socket bind on wasi -- CreateServer
     // routes to the listen-less WasiQuackServer). This registers the bridge
@@ -75,13 +92,12 @@ pub fn serve_quack(
         "SELECT * FROM quack_serve('quack:localhost:{port}', token := '{}', allow_other_hostname := true)",
         token.replace('\'', "''")
     );
-    core.with_database(|g, s| g.call_execute(s, conn.clone(), &serve_sql))?
-        .map_err(|e| {
-            anyhow::anyhow!(
-                "quack_serve bridge init failed: {}",
-                crate::ui_server::duckerror_message(&e)
-            )
-        })?;
+    crate::call_database_execute_on_core(&mut core, conn, &serve_sql)?.map_err(|e| {
+        anyhow::anyhow!(
+            "quack_serve bridge init failed: {}",
+            crate::cli_duckerror_message(e)
+        )
+    })?;
 
     let listener = TcpListener::bind(("127.0.0.1", port))
         .with_context(|| format!("could not bind 127.0.0.1:{port}"))?;
@@ -180,8 +196,40 @@ fn handle_connection(
 /// Forward a serialized quack request body to the component's bridged handler;
 /// returns the serialized response body (`application/vnd.duckdb`).
 fn bridge_quack_request(core: &mut CoreExecution, body: Vec<u8>) -> Option<Vec<u8>> {
-    core.with_database(|g, s| g.call_handle_quack_request(s, &body))
-        .ok()?
+    use wasmos_runtime_api::Value;
+    use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
+        call_export_with_resources, ExportResourceTable,
+    };
+    let mut resources = ExportResourceTable::new();
+    let ret = core
+        .with_instance(|instance, store| {
+            call_export_with_resources(
+                store,
+                instance,
+                Some(crate::DATABASE_IFACE),
+                "handle-quack-request",
+                &[Value::Bytes(body.into())],
+                &mut resources,
+            )
+        })
+        .ok()?;
+    match ret.as_slice() {
+        [Value::Option(Some(payload))] => match payload.as_ref() {
+            Value::Bytes(b) => Some(b.to_vec()),
+            Value::List(items) => Some(
+                items
+                    .iter()
+                    .filter_map(|v| match v {
+                        Value::U8(b) => Some(*b),
+                        _ => None,
+                    })
+                    .collect(),
+            ),
+            _ => None,
+        },
+        [Value::Option(None)] => None,
+        _ => None,
+    }
 }
 
 fn write_response(

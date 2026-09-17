@@ -97,9 +97,26 @@ pub fn serve_httpd(
         ),
         ("autoload_known_extensions".to_string(), "false".to_string()),
     ];
-    let conn = core
-        .with_database(|g, s| g.call_open_with_config(s, db_arg.as_deref(), &open_opts))?
-        .map_err(|e| anyhow!("open database: {e}"))?;
+    use wasmos_runtime_api::Value;
+    let opts_arg = Value::List(
+        open_opts
+            .iter()
+            .map(|(k, v)| Value::Tuple(vec![Value::String(k.clone()), Value::String(v.clone())]))
+            .collect(),
+    );
+    let db_path_arg = Value::Option(
+        db_arg
+            .as_deref()
+            .map(|s| Box::new(Value::String(s.to_string()))),
+    );
+    let conn = crate::call_database_returning_resource_on_core(
+        &mut core,
+        "open-with-config",
+        None,
+        &[db_path_arg, opts_arg],
+        crate::ExecuteErrKind::PlainString,
+    )?
+    .map_err(|e| anyhow!("open database: {e:?}"))?;
 
     if opts.init_routes {
         init_routes_table(&mut core, &conn, &opts.routes_table)
@@ -796,12 +813,16 @@ struct Rows {
 
 /// Run SQL with no parameters via `execute`.
 fn db_query(core: &mut CoreExecution, conn: &ResourceAny, sql: &str) -> Result<Rows, String> {
-    match core.with_database(|g, s| g.call_execute(s, conn.clone(), sql)) {
+    match crate::call_database_execute_on_core(core, *conn, sql) {
         Ok(Ok(r)) => Ok(Rows {
-            cols: r.columns.into_iter().map(|c| c.name).collect(),
-            rows: r.rows,
+            cols: r.columns.into_iter().map(|c| c.name.to_string()).collect(),
+            rows: r
+                .rows
+                .into_iter()
+                .map(|row| row.into_iter().map(crate::convert_cli_duckvalue).collect())
+                .collect(),
         }),
-        Ok(Err(e)) => Err(duckerror_message(&e)),
+        Ok(Err(e)) => Err(crate::cli_duckerror_message(e)),
         Err(e) => Err(e.to_string()),
     }
 }
@@ -816,16 +837,33 @@ fn db_query_params(
     sql: &str,
     params: &[core_types::Duckvalue],
 ) -> Result<Rows, String> {
-    let prepared: ResourceAny =
-        match core.with_database(|g, s| g.call_prepare(s, conn.clone(), sql)) {
-            Ok(Ok(p)) => p,
-            Ok(Err(e)) => return Err(duckerror_message(&e)),
-            Err(e) => return Err(e.to_string()),
-        };
+    use wasmos_runtime_api::Value;
+    let prepared: ResourceAny = match crate::call_database_returning_resource_on_core(
+        core,
+        "prepare",
+        Some(*conn),
+        &[Value::String(sql.to_string())],
+        crate::ExecuteErrKind::Duckerror,
+    ) {
+        Ok(Ok(p)) => p,
+        Ok(Err(crate::DatabaseVerbErr::Duck(e))) => return Err(crate::cli_duckerror_message(e)),
+        Ok(Err(crate::DatabaseVerbErr::Text(s))) => return Err(s),
+        Err(e) => return Err(e.to_string()),
+    };
 
-    let count = core
-        .with_prepared(|g, s| g.call_parameter_count(s, prepared))
-        .map_err(|e| e.to_string())? as usize;
+    let count_ret = crate::call_export_on_resource_core(
+        core,
+        crate::DATABASE_IFACE,
+        "[method]prepared-statement.parameter-count",
+        prepared,
+        &[],
+    )
+    .map_err(|e| e.to_string())?;
+    let count = match count_ret.as_slice() {
+        [Value::U32(n)] => *n as usize,
+        other => return Err(format!("parameter-count unexpected: {other:?}")),
+    };
+
     let bound: Vec<core_types::Duckvalue> = (0..count)
         .map(|i| {
             params
@@ -834,18 +872,49 @@ fn db_query_params(
                 .unwrap_or(core_types::Duckvalue::Null)
         })
         .collect();
+    // Marshal the bound params to Value.
+    let params_val = Value::List(
+        bound
+            .into_iter()
+            .map(|v| {
+                let cli = crate::convert_core_duckvalue(v);
+                crate::duckvalue_to_value(&cli)
+            })
+            .collect(),
+    );
 
-    let result = core.with_prepared(|g, s| g.call_execute(s, prepared, &bound));
+    let result = crate::call_export_on_resource_core(
+        core,
+        crate::DATABASE_IFACE,
+        "[method]prepared-statement.execute",
+        prepared,
+        &[params_val],
+    );
     // Free the prepared-statement resource regardless of outcome.
-    let _ = core.with_prepared(|_g, s| prepared.resource_drop(s));
+    let _ = core.with_instance(|_instance, store| prepared.resource_drop(store));
 
-    match result {
-        Ok(Ok(r)) => Ok(Rows {
-            cols: r.columns.into_iter().map(|c| c.name).collect(),
-            rows: r.rows,
-        }),
-        Ok(Err(e)) => Err(duckerror_message(&e)),
-        Err(e) => Err(e.to_string()),
+    let ret = match result {
+        Ok(r) => r,
+        Err(e) => return Err(e.to_string()),
+    };
+    match ret.as_slice() {
+        [Value::Result(Ok(Some(payload)))] => {
+            match crate::value_to_query_result(payload.as_ref()) {
+                Ok(qr) => Ok(Rows {
+                    cols: qr.columns.into_iter().map(|c| c.name.to_string()).collect(),
+                    rows: qr
+                        .rows
+                        .into_iter()
+                        .map(|row| row.into_iter().map(crate::convert_cli_duckvalue).collect())
+                        .collect(),
+                }),
+                Err(e) => Err(format!("execute unpack: {e}")),
+            }
+        }
+        [Value::Result(Err(Some(payload)))] => Err(crate::cli_duckerror_message(
+            crate::value_to_duckerror(payload.as_ref(), "prepared.execute"),
+        )),
+        other => Err(format!("prepared.execute unexpected shape: {other:?}")),
     }
 }
 

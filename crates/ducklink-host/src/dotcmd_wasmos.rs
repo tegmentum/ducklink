@@ -55,7 +55,7 @@ use wasmos_runtime_api::{
 };
 use wasmtime::component::ResourceAny;
 
-use crate::{core_duckerror_message, spi_edit, spi_render_rows, CoreExecution};
+use crate::{spi_edit, CoreExecution};
 
 /// Host struct for the `duckdb:dotcmd/spi` interface.
 ///
@@ -107,14 +107,13 @@ impl SpiHost {
             None => return Ok(Err("spi: no active database connection".to_string())),
         };
         let mut core = self.core.lock().unwrap_or_else(|e| e.into_inner());
-        let result =
-            match core.with_database(|guest, store| guest.call_execute(store, handle, &sql)) {
-                Ok(r) => r,
-                Err(trap) => return Ok(Err(format!("spi query trapped: {trap}"))),
-            };
+        let result = match crate::call_database_execute_on_core(&mut core, handle, &sql) {
+            Ok(r) => r,
+            Err(trap) => return Ok(Err(format!("spi query trapped: {trap}"))),
+        };
         Ok(match result {
-            Ok(qr) => Ok(spi_render_rows(qr)),
-            Err(err) => Err(core_duckerror_message(err)),
+            Ok(qr) => Ok(crate::cli_spi_render_rows(qr)),
+            Err(err) => Err(crate::cli_duckerror_message(err)),
         })
     }
 
