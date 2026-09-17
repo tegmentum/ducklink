@@ -488,14 +488,58 @@ Progress since the recipe was written on 2026-09-04:
      construction.
    - Retiring `with_database` / `with_stream` / `with_prepared` /
      `with_appender` accessors once every site has moved.
-2. **Delete `duckdb_core_bindings` block + remaining
-   `use core_*` aliases** (wedge #9). Remaining 5 aliases at
-   2026-09-17: `core_callback_dispatch`, `core_column_types`,
-   `core_types`, `core_db_exports`, `core_tvm_types` (was 6;
-   `core_runtime_exports` retired in commit `3a27b2d0` as a
-   zero-caller cleanup alongside its `with_runtime` accessor).
-   Trivial once (1) is done — the bindgen! macro has no
-   remaining consumers.
+2. **Wedge #7 landed 2026-09-17** across 9 slices
+   (`0a620f0a`, `9e02f8e5`, `d198f320`, `0cc52386`, `b5deaac4`,
+   `90d79a1f`, `f8ef8230`, `ac506ee5`). Every `with_database` /
+   `with_stream` / `with_prepared` / `with_appender` callsite
+   in ducklink-host is off bindgen — production, tests, and
+   cross-file consumers (`dotcmd_wasmos`, `replicate`,
+   `quack_server`, `ui_server`, `httpd`) all migrated. The
+   four accessors + the `bindings: Libduckdb` field on
+   `CoreExecution` are DELETED; `PrimaryReentry` carries
+   `*const wasmtime::component::Instance` instead of
+   `*const Libduckdb`. Alias count trimmed 6 -> 5 at wedge
+   entry, then 5 -> 4 in wedge #9-a. See below.
+
+3. **Wedge #9-a landed 2026-09-17** (`e9517b3`) — retired
+   the `core_db_exports` alias entirely. The dead-code
+   cluster (`spi_render_rows`, `convert_core_query_result`,
+   `convert_core_row`, `convert_core_columndef`,
+   `convert_cli_columndescriptor_to_core`,
+   `convert_cli_logicaltype_to_core`,
+   `convert_core_extension_info`,
+   `query_result_to_nested_exec`, `extract_rows_affected`)
+   is gone; `intercept_attach`'s at5 `TableShape.columns`
+   flipped from `Vec<core_db_exports::ColumnDescriptor>` to
+   `Vec<cli_native::ColumnDescriptor>` via a new
+   `convert_extension_logicaltype_to_cli`. Bindgen aliases
+   retired: 3 of 6 total (`core_extension_hooks` wedge #8,
+   `core_runtime_exports` zero-caller cleanup,
+   `core_db_exports` wedge #9-a).
+
+4. **Wedge #9-b/-c/-d/-e — remaining `core_*` aliases** (not
+   yet started). Each is deeply coupled to real live code:
+   - `core_types` (359 refs) — `Duckvalue` / `Duckerror` /
+     `Logicaltype` / `Decimalshape` / `Intervalvalue` /
+     `Uuidvalue` / `Hugeintvalue` / `Uhugeintvalue` /
+     `Complexvalue` / `Capabilitykind` / `Funcflags`. The
+     WIT-shared value family, spans every dispatch path.
+   - `core_column_types` (43 refs) — `Colvec` / `Column` /
+     re-exported `Decimalvalue` / `Intervalvalue`. The
+     column-major host-callback marshalling surface.
+   - `core_callback_dispatch` (21 refs) — `Invokeinfo` /
+     `Resultset` / re-exported `Colvec`. The callback host-
+     import types.
+   - `core_tvm_types` (37 refs) — `Handle` / `TvmError` /
+     `RegionKind`. The TVM memory-region types.
+
+   Each alias would need either (a) parallel native type
+   definitions (structural mirrors) or (b) reusing existing
+   types from `ducklink_runtime::extension` /
+   `cli_native` where they line up. The bindgen! block
+   itself stays alive to generate these types until each
+   alias has migrated to native equivalents. That's a
+   substantial arc on its own — deferred.
 
 **Phase 6 (icd-9)** — untouched. Single bindgen site, small
 surface, Path-A recipe applies directly. Lands after ducklink-host
