@@ -643,11 +643,21 @@ that no ducklink-family Cargo.toml + no ducklink-family
    `async fn`. The whole handler layer, sibling-core reentry
    TLS in `HostState::execute`, and every `#[test]` body that
    drives guest exports has to move to `async`.
-3. **Resource marshalling via wasmos's `ResourceTable`.** The
-   wasmos-side placeholder trait (`_phase_1a_placeholder(&self)`)
-   needs its real API (Phase 1b wasmos-side work). Until
-   that's real, Path B is blocked — the ducklink workload
-   IS the validation feeding Phase 1b.
+3. **Resource marshalling via wasmos's `ResourceTable`.**
+   ✅ **PATH B STEP LANDED (2026-09-17)** — wasmos
+   `ResourceTable` Phase 1b API (`push` / `get` / `get_mut` /
+   `delete`) landed at wasmos commit `e174e9e8`; all three
+   consumers migrated their WORKLOAD-OWNED tracking to it
+   (icd-10 `85bbf5d`, icd-9 `2f0f17d`, ducklink-host
+   `b863d0c`). The pattern is split-tables: keep a
+   `wasmtime::component::ResourceTable` for wasmtime-wasi's
+   `WasiView`/`WasiHttpView` (canonical-ABI resource lifting,
+   mandatory dep of the wasi/wasi-http traits) alongside a
+   `wasmos_runtime_api::ResourceTable` for the consumer's own
+   push/get/delete. This eliminates `wasmtime::component::Resource<T>`
+   from consumer signatures; only the WasiView-backing
+   `ResourceTable` type still touches wasmtime — that gap
+   closes when (4) below lands.
 4. **`wasi:http` plumbing hook.** Ducklink-host picks
    `add_only_http_to_linker_sync` explicitly to avoid a
    double-add clash; wasmos-runtime-api auto-wires the full
@@ -673,9 +683,12 @@ that no ducklink-family Cargo.toml + no ducklink-family
 
 **Blocked-on-wasmos work:**
 
-- Phase 1b: real `ResourceTable` trait API in
-  `wasmos_runtime_api::resource` (currently a
-  `_phase_1a_placeholder` stub).
+- ~~Phase 1b: real `ResourceTable` trait API in
+  `wasmos_runtime_api::resource`~~ ✅ LANDED — wasmos
+  `e174e9e8` (2026-09-17). Concrete `push` / `get` /
+  `get_mut` / `delete` API + `ResourceError` enum + 10
+  unit tests. Consumer-owned tracking validated in all
+  three ducklink-family workloads.
 - `wasi:http` consumer plumbing hook OR formal doc that
   declarative HTTP is the answer.
 - `Instance::call_export` variants that support the
@@ -684,6 +697,15 @@ that no ducklink-family Cargo.toml + no ducklink-family
   reentry on the escape hatch).
 - `with:` map equivalent on `wasmos_runtime_api::HostImports`
   registration (or an equivalent shape).
+- **Wasmos-native `WasiView` hook.** wasmtime-wasi's
+  `WasiView` trait requires each store's state to expose
+  a `wasmtime::component::ResourceTable`. This is the
+  last direct wasmtime-type reference in consumer
+  workloads after the split-tables step; retiring it
+  needs either a wasmos-side WasiCtx wrapper that owns
+  the wasmtime table internally, or a wasmos-native WASI
+  surface that bypasses wasmtime-wasi's `WasiView` trait
+  entirely.
 
 **Estimated scope** (once wasmos-side prerequisites land):
 
