@@ -517,19 +517,34 @@ Progress since the recipe was written on 2026-09-04:
    `core_runtime_exports` zero-caller cleanup,
    `core_db_exports` wedge #9-a).
 
-4. **Wedge #9-b/-c/-d/-e — remaining `core_*` aliases** (not
-   yet started). Each is deeply coupled to real live code:
-   - `core_types` (359 refs) — `Duckvalue` / `Duckerror` /
-     `Logicaltype` / `Decimalshape` / `Intervalvalue` /
-     `Uuidvalue` / `Hugeintvalue` / `Uhugeintvalue` /
-     `Complexvalue` / `Capabilitykind` / `Funcflags`. The
-     WIT-shared value family, spans every dispatch path.
+4. **Wedge #9-a follow-up (2026-09-17, commit `1ef699b`)** —
+   dead-code sweep of 14 conversion helpers + 2 subject-of-
+   retired-function tests. `core_types` reference count
+   halved from 359 -> 194 (46% reduction).
+
+5. **Wedge #9-b/-c/-d/-e — remaining `core_*` aliases** (not
+   yet started; each a substantial arc on its own). Each is
+   deeply coupled to real live code:
+   - `core_types` (194 refs, was 359) — 178 of the 194
+     remaining are `core_types::Duckvalue` uses inside the
+     callback-dispatch bridge (`CallbackDispatchHost::call`
+     +
+     `convert_core_duckvalue_to_extension` /
+     `convert_extension_duckvalue_to_core` /
+     `core_duckvalue_to_value` / `value_to_core_duckvalue`).
+     The remaining 16 are `core_types::Duckerror` (10) plus
+     the 6 payload-carrying leaf shapes (`Intervalvalue`,
+     `Uuidvalue`, `Hugeintvalue`, `Uhugeintvalue`,
+     `Complexvalue`, `Decimalvalue`).
    - `core_column_types` (43 refs) — `Colvec` / `Column` /
      re-exported `Decimalvalue` / `Intervalvalue`. The
-     column-major host-callback marshalling surface.
+     column-major host-callback marshalling surface. Shares
+     types with core_callback_dispatch.
    - `core_callback_dispatch` (21 refs) — `Invokeinfo` /
      `Resultset` / re-exported `Colvec`. The callback host-
-     import types.
+     import types (`call-scalar-batch-col`,
+     `call-aggregate-col`, `call-cast-col`,
+     `call-scalar`, `call-table`, etc.).
    - `core_tvm_types` (37 refs) — `Handle` / `TvmError` /
      `RegionKind`. The TVM memory-region types.
 
