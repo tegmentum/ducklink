@@ -575,9 +575,24 @@ preserved (same WIT wire format via the wasmos escape hatch;
 same 128 lib tests passing; same 30 pre-existing infra
 failures unchanged).
 
-**Phase 6 (icd-9)** — untouched. Single bindgen site, small
-surface, Path-A recipe applies directly. Lands after
-ducklink-host is fully clean — which it now is.
+**Phase 6 ✓ COMPLETE** — every sibling consumer of the recipe
+is migrated:
+
+- **icd-9** (2026-09-17, `f94fd16` in `~/git/icd-9`) — the
+  first Path-A sibling migration; ducklink-host's Phase 2b
+  driver_exec pattern ported line-for-line.
+- **icd-10** (2026-09-17, `c1fec76` in `~/git/icd-10`) — same
+  Path-A migration ported from icd-9. Two additional catalog
+  methods over icd-9 (`axes(code)`,
+  `axis-titles(section)`) added their own `unpack_pcs_axes` +
+  `unpack_pcs_axis_title` marshallers. 58 lib tests pass; the
+  `no-default-features` build stays clean (wasmos deps stay
+  optional). `wasmtime` + `wasmtime-wasi` bumped 47 -> 48 to
+  match the wasmos v48 adapter.
+
+The wasmos-migration-recipe arc is closed. Every
+`wasmtime::component::bindgen!` invocation across the
+ducklink family (ducklink-host, icd-9, icd-10) is retired.
 
 ## Toolchain gotcha
 
