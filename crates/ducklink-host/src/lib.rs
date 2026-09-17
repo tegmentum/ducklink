@@ -122,16 +122,16 @@ use anyhow::{Context, Result};
 // (cli_types formerly aliased duckdb_cli_bindings::duckdb::extension::types)
 // `duckdb_core_bindings::duckdb::component::extension_loader_hooks`
 // stays as an in-crate use because the retired `impl Host` block's
-// return type (`core_extension_hooks::PendingRegistrations`) and
-// its ~10 nested types are still referenced by
-// [`convert_pending_registrations`] + its helper conversion
-// functions (line ~7312), which the Phase 2e wedge re-uses inside
-// the new [`ExtensionLoaderHooksHost`] handler before lowering
-// bindgen -> Value. Retiring the alias will happen once the
-// convert_pending_registrations chain is also replaced with a
-// direct PendingRegistrationsData -> Value marshaller — a
-// follow-up cleanup, deliberately not in scope for this wedge.
-use duckdb_core_bindings::duckdb::component::extension_loader_hooks as core_extension_hooks;
+// Phase 2e wedge #8 (2026-09-17): the `core_extension_hooks` alias
+// (`use ... as core_extension_hooks`) that used to sit here is
+// retired. Its host trait impl was retired in wedge #4 (`d9859350`),
+// and the return-type surface (`core_extension_hooks::PendingRegistrations`
+// + its ~10 nested records) was retired here alongside the
+// `convert_pending_registrations` -> `bindgen_pending_registrations_to_value`
+// chain: [`ExtensionLoaderHooksHost::call`] now marshals native
+// `PendingRegistrationsData` directly to [`wasmos_runtime_api::Value`]
+// through [`native_pending_registrations_to_value`]. One less bindgen
+// interface surface in the crate.
 // `duckdb_core_bindings::duckdb::component::host_extension_loader`
 // no longer referenced after Phase 2e's host-extension-loader wedge
 // retired the bindgen `add_to_linker` call for that interface — see
@@ -502,8 +502,8 @@ impl wasmos_runtime_api::SyncHostCall for CoreHostExtensionLoaderHost {
 }
 
 // The bindgen-era `impl core_extension_hooks::Host for CoreStoreState`
-// block that used to sit here is retired under Phase 2e (site 2)
-// of the wasmos-runtime-api migration — see the
+// block that used to sit here is retired under Phase 2e wedge #4
+// (`d9859350`) of the wasmos-runtime-api migration — see the
 // [`ExtensionLoaderHooksHost`] implementation below. Fourth of the
 // five host-import interfaces to migrate off bindgen for the core
 // world (after tvm/bytes, tvm/manager, host-extension-loader).
@@ -511,17 +511,16 @@ impl wasmos_runtime_api::SyncHostCall for CoreHostExtensionLoaderHost {
 // Only one WIT method — `get-pending-registrations()` — but with a
 // hugely nested return record (`pending-registrations` carries 8
 // lists of registration records, each with sub-shapes reaching down
-// to `logicaltype`/`columndef`/`funcflags`). The
-// existing `convert_pending_registrations` conversion chain from
-// `ducklink_runtime::PendingRegistrationsData` -> bindgen
-// `core_extension_hooks::PendingRegistrations` stays as-is; the
-// handler below layers ONE additional pass on top of it —
-// [`bindgen_pending_registrations_to_value`] — which lowers the
-// bindgen record to `Value::Record(...)` for the wasmos bridge's
-// wire format. The bridge then re-lowers Value -> Val for the
-// guest's own bindgen types (identical shape). Redundant work per
-// call, but this method fires once per extension load, so the
-// perf hit is invisible.
+// to `logicaltype`/`columndef`/`funcflags`). Phase 2e wedge #8
+// (2026-09-17) collapsed the two-hop
+// `ducklink_runtime::PendingRegistrationsData ->
+// core_extension_hooks::PendingRegistrations (bindgen) ->
+// Value::Record` into a single native marshaller,
+// [`native_pending_registrations_to_value`], so the bindgen surface
+// is no longer touched here (the guest still sees the same wire
+// form; its own bindgen types re-lower Value -> Val on the other
+// side). Zero-cost per call — this method fires once per extension
+// load.
 
 /// Interface name for the extension-loader-hooks host, matching WIT
 /// `package duckdb:component; interface extension-loader-hooks`.
@@ -558,14 +557,12 @@ impl wasmos_runtime_api::SyncHostCall for ExtensionLoaderHooksHost {
                 // FU4 sibling/primary drain-and-archive protocol
                 // lives on `CoreStoreState`; tests call the same
                 // method so both paths stay on one code path. The
-                // native → bindgen → Value hop happens at the tail,
+                // native -> `Value` marshalling happens at the tail,
                 // after the drain's `Arc<Mutex<>>` handles are
                 // released, so a callback fired downstream can't
                 // re-enter either mutex through a side-effect.
                 let native_pending = state.drain_pending_registrations_for_replay();
-                Ok(vec![bindgen_pending_registrations_to_value(
-                    convert_pending_registrations(native_pending),
-                )])
+                Ok(vec![native_pending_registrations_to_value(native_pending)])
             }
             other => Err(RuntimeError::msg(format!(
                 "{EXTENSION_LOADER_HOOKS_IFACE}: unknown method {other:?}"
@@ -575,372 +572,453 @@ impl wasmos_runtime_api::SyncHostCall for ExtensionLoaderHooksHost {
 }
 
 // -----------------------------------------------------------------
-// Marshallers: bindgen `core_extension_hooks::*` records + their
-// nested WIT types (logicaltype, columndef, funcflags, func-arg,
-// func-opts, ext-opts) -> `wasmos_runtime_api::Value`.
+// Marshallers: native `PendingRegistrationsData` + its `reg::*`
+// entry types -> `wasmos_runtime_api::Value`.
+//
+// Post Phase 2e wedge #8 (2026-09-17). The old chain
+// `PendingRegistrationsData -> core_extension_hooks::* (bindgen)
+// -> Value` collapsed into a single hop: the WIT-shaped record /
+// variant `Value` is now produced directly from `reg::*`, so the
+// `core_extension_hooks` bindgen surface is no longer referenced
+// anywhere in the crate.
+//
+// Wire form is preserved verbatim from the pre-wedge output: same
+// 8 top-level fields (dash-separated names matching WIT), same
+// per-entry field order, same `Value::Variant` shape for
+// `logicaltype`, same `Value::Flags` shape for `funcflags`. Fields
+// present on the neutral `reg::*` type but absent from the WIT
+// (`extension`, `implicit_cost`) are dropped, matching the pre-
+// wedge behavior.
 //
 // One-way lift only (host -> guest). Each helper is small and
-// mechanical; the goal is field-by-name binding so a future WIT
-// reorder doesn't break the marshaller silently. Every fn is
-// `pub(super) fn` scope, private to this crate.
+// mechanical; field-by-name binding so a future WIT reorder
+// doesn't break the marshaller silently.
 // -----------------------------------------------------------------
 
 /// Top-level lift for `pending-registrations` (8 lists of
 /// registration records). Called from
-/// [`ExtensionLoaderHooksHost::call`].
-fn bindgen_pending_registrations_to_value(
-    pr: core_extension_hooks::PendingRegistrations,
+/// [`ExtensionLoaderHooksHost::call`] with a freshly drained
+/// [`PendingRegistrationsData`].
+fn native_pending_registrations_to_value(
+    data: PendingRegistrationsData,
 ) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
+    log_pending_batch_summary(&data);
     Value::Record(vec![
         (
             "scalars".to_string(),
             Value::List(
-                pr.scalars
+                data.scalars
                     .into_iter()
-                    .map(bindgen_scalar_registration_to_value)
+                    .map(native_scalar_registration_to_value)
                     .collect(),
             ),
         ),
         (
             "tables".to_string(),
             Value::List(
-                pr.tables
+                data.tables
                     .into_iter()
-                    .map(bindgen_table_registration_to_value)
+                    .map(native_table_registration_to_value)
                     .collect(),
             ),
         ),
         (
             "aggregates".to_string(),
             Value::List(
-                pr.aggregates
+                data.aggregates
                     .into_iter()
-                    .map(bindgen_aggregate_registration_to_value)
+                    .map(native_aggregate_registration_to_value)
                     .collect(),
             ),
         ),
         (
             "macros".to_string(),
             Value::List(
-                pr.macros
+                data.macros
                     .into_iter()
-                    .map(bindgen_macro_registration_to_value)
+                    .map(native_macro_registration_to_value)
                     .collect(),
             ),
         ),
         (
             "table-macros".to_string(),
             Value::List(
-                pr.table_macros
+                data.table_macros
                     .into_iter()
-                    .map(bindgen_table_macro_registration_to_value)
+                    .map(native_table_macro_registration_to_value)
                     .collect(),
             ),
         ),
         (
             "replacement-scans".to_string(),
             Value::List(
-                pr.replacement_scans
+                data.replacement_scans
                     .into_iter()
-                    .map(bindgen_replacement_scan_registration_to_value)
+                    .map(native_replacement_scan_registration_to_value)
                     .collect(),
             ),
         ),
         (
             "logical-types".to_string(),
             Value::List(
-                pr.logical_types
+                data.logical_types
                     .into_iter()
-                    .map(bindgen_logical_type_registration_to_value)
+                    .map(native_logical_type_registration_to_value)
                     .collect(),
             ),
         ),
         (
             "casts".to_string(),
             Value::List(
-                pr.casts
+                data.casts
                     .into_iter()
-                    .map(bindgen_cast_registration_to_value)
+                    .map(native_cast_registration_to_value)
                     .collect(),
             ),
         ),
     ])
 }
 
-fn bindgen_scalar_registration_to_value(
-    e: core_extension_hooks::ScalarRegistration,
-) -> wasmos_runtime_api::Value {
+fn native_scalar_registration_to_value(entry: PendingScalar) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
+    log_pending_scalar_conversion(&entry);
     Value::Record(vec![
-        ("name".to_string(), Value::String(e.name)),
+        ("name".to_string(), Value::String(entry.name)),
         (
             "arguments".to_string(),
             Value::List(
-                e.arguments
+                entry
+                    .arguments
                     .into_iter()
-                    .map(bindgen_func_arg_to_value)
+                    .map(native_func_arg_to_value)
                     .collect(),
             ),
         ),
         (
             "returns".to_string(),
-            bindgen_logicaltype_to_value(e.returns),
+            native_logicaltype_to_value(entry.returns),
         ),
-        ("callback-handle".to_string(), Value::U32(e.callback_handle)),
+        (
+            "callback-handle".to_string(),
+            Value::U32(entry.callback_handle),
+        ),
         (
             "options".to_string(),
-            Value::Option(e.options.map(|o| Box::new(bindgen_func_opts_to_value(o)))),
+            Value::Option(
+                entry
+                    .options
+                    .map(|o| Box::new(native_func_opts_to_value(o))),
+            ),
         ),
     ])
 }
 
-fn bindgen_table_registration_to_value(
-    e: core_extension_hooks::TableRegistration,
-) -> wasmos_runtime_api::Value {
+fn native_table_registration_to_value(entry: PendingTable) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
+    log_pending_table_conversion(&entry);
     Value::Record(vec![
-        ("name".to_string(), Value::String(e.name)),
+        ("name".to_string(), Value::String(entry.name)),
         (
             "arguments".to_string(),
             Value::List(
-                e.arguments
+                entry
+                    .arguments
                     .into_iter()
-                    .map(bindgen_func_arg_to_value)
+                    .map(native_func_arg_to_value)
                     .collect(),
             ),
         ),
         (
             "columns".to_string(),
             Value::List(
-                e.columns
+                entry
+                    .columns
                     .into_iter()
-                    .map(bindgen_columndef_to_value)
+                    .map(native_columndef_to_value)
                     .collect(),
             ),
         ),
-        ("callback-handle".to_string(), Value::U32(e.callback_handle)),
+        (
+            "callback-handle".to_string(),
+            Value::U32(entry.callback_handle),
+        ),
         (
             "options".to_string(),
-            Value::Option(e.options.map(|o| Box::new(bindgen_ext_opts_to_value(o)))),
+            Value::Option(entry.options.map(|o| Box::new(native_ext_opts_to_value(o)))),
         ),
     ])
 }
 
-fn bindgen_aggregate_registration_to_value(
-    e: core_extension_hooks::AggregateRegistration,
-) -> wasmos_runtime_api::Value {
+fn native_aggregate_registration_to_value(entry: PendingAggregate) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
+    log_pending_aggregate_conversion(&entry);
     Value::Record(vec![
-        ("name".to_string(), Value::String(e.name)),
+        ("name".to_string(), Value::String(entry.name)),
         (
             "arguments".to_string(),
             Value::List(
-                e.arguments
+                entry
+                    .arguments
                     .into_iter()
-                    .map(bindgen_func_arg_to_value)
+                    .map(native_func_arg_to_value)
                     .collect(),
             ),
         ),
         (
             "returns".to_string(),
-            bindgen_logicaltype_to_value(e.returns),
+            native_logicaltype_to_value(entry.returns),
         ),
-        ("callback-handle".to_string(), Value::U32(e.callback_handle)),
+        (
+            "callback-handle".to_string(),
+            Value::U32(entry.callback_handle),
+        ),
         (
             "options".to_string(),
-            Value::Option(e.options.map(|o| Box::new(bindgen_func_opts_to_value(o)))),
+            Value::Option(
+                entry
+                    .options
+                    .map(|o| Box::new(native_func_opts_to_value(o))),
+            ),
         ),
     ])
 }
 
-fn bindgen_macro_registration_to_value(
-    e: core_extension_hooks::MacroRegistration,
-) -> wasmos_runtime_api::Value {
+fn native_macro_registration_to_value(entry: PendingMacro) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     Value::Record(vec![
-        ("schema".to_string(), Value::String(e.schema)),
-        ("name".to_string(), Value::String(e.name)),
+        ("schema".to_string(), Value::String(entry.schema)),
+        ("name".to_string(), Value::String(entry.name)),
         (
             "parameters".to_string(),
-            Value::List(e.parameters.into_iter().map(Value::String).collect()),
+            Value::List(entry.parameters.into_iter().map(Value::String).collect()),
         ),
         (
             "definition-sql".to_string(),
-            Value::String(e.definition_sql),
+            Value::String(entry.definition_sql),
         ),
     ])
 }
 
-fn bindgen_table_macro_registration_to_value(
-    e: core_extension_hooks::TableMacroRegistration,
-) -> wasmos_runtime_api::Value {
+/// Table-macro registration marshaller. Mirrors
+/// [`native_macro_registration_to_value`] — the body-sql /
+/// definition-sql split is deliberate: DuckDB's `CREATE MACRO ...
+/// AS TABLE (…)` (table macros) is a distinct catalog concept from
+/// `CREATE MACRO ... AS (…)` (scalar macros).
+fn native_table_macro_registration_to_value(entry: PendingTableMacro) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     Value::Record(vec![
-        ("schema".to_string(), Value::String(e.schema)),
-        ("name".to_string(), Value::String(e.name)),
+        ("schema".to_string(), Value::String(entry.schema)),
+        ("name".to_string(), Value::String(entry.name)),
         (
             "parameters".to_string(),
-            Value::List(e.parameters.into_iter().map(Value::String).collect()),
+            Value::List(entry.parameters.into_iter().map(Value::String).collect()),
         ),
-        ("body-sql".to_string(), Value::String(e.body_sql)),
+        ("body-sql".to_string(), Value::String(entry.body_sql)),
     ])
 }
 
-fn bindgen_replacement_scan_registration_to_value(
-    e: core_extension_hooks::ReplacementScanRegistration,
+fn native_replacement_scan_registration_to_value(
+    entry: PendingReplacementScan,
 ) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     Value::Record(vec![
         (
             "extensions".to_string(),
-            Value::List(e.extensions.into_iter().map(Value::String).collect()),
+            Value::List(entry.extensions.into_iter().map(Value::String).collect()),
         ),
-        ("function-name".to_string(), Value::String(e.function_name)),
+        (
+            "function-name".to_string(),
+            Value::String(entry.function_name),
+        ),
     ])
 }
 
-fn bindgen_logical_type_registration_to_value(
-    e: core_extension_hooks::LogicalTypeRegistration,
+fn native_logical_type_registration_to_value(
+    entry: PendingLogicalType,
 ) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     Value::Record(vec![
-        ("name".to_string(), Value::String(e.name)),
-        ("physical".to_string(), Value::String(e.physical)),
+        ("name".to_string(), Value::String(entry.name)),
+        ("physical".to_string(), Value::String(entry.physical)),
     ])
 }
 
-fn bindgen_cast_registration_to_value(
-    e: core_extension_hooks::CastRegistration,
-) -> wasmos_runtime_api::Value {
+/// Cast registration marshaller. Drops `implicit_cost` (host-only
+/// C-API knob) to match the WIT surface the guest sees.
+fn native_cast_registration_to_value(entry: PendingCast) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     Value::Record(vec![
-        ("source".to_string(), Value::String(e.source)),
-        ("target".to_string(), Value::String(e.target)),
-        ("callback-handle".to_string(), Value::U32(e.callback_handle)),
+        ("source".to_string(), Value::String(entry.source)),
+        ("target".to_string(), Value::String(entry.target)),
+        (
+            "callback-handle".to_string(),
+            Value::U32(entry.callback_handle),
+        ),
     ])
 }
 
-fn bindgen_func_arg_to_value(a: core_extension_hooks::FuncArg) -> wasmos_runtime_api::Value {
+fn native_func_arg_to_value(arg: reg::FuncArg) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     Value::Record(vec![
         (
             "name".to_string(),
-            Value::Option(a.name.map(|s| Box::new(Value::String(s)))),
+            Value::Option(arg.name.map(|s| Box::new(Value::String(s)))),
         ),
         (
             "logical".to_string(),
-            bindgen_logicaltype_to_value(a.logical),
+            native_logicaltype_to_value(arg.logical),
         ),
     ])
 }
 
-fn bindgen_func_opts_to_value(o: core_extension_hooks::FuncOpts) -> wasmos_runtime_api::Value {
+fn native_func_opts_to_value(opts: reg::FuncOpts) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     Value::Record(vec![
         (
             "description".to_string(),
-            Value::Option(o.description.map(|s| Box::new(Value::String(s)))),
+            Value::Option(opts.description.map(|s| Box::new(Value::String(s)))),
         ),
         (
             "tags".to_string(),
-            Value::List(o.tags.into_iter().map(Value::String).collect()),
+            Value::List(opts.tags.into_iter().map(Value::String).collect()),
         ),
         (
             "attributes".to_string(),
-            bindgen_funcflags_to_value(o.attributes),
+            native_funcflags_to_value(opts.attributes),
         ),
     ])
 }
 
-fn bindgen_ext_opts_to_value(o: core_extension_hooks::ExtOpts) -> wasmos_runtime_api::Value {
+fn native_ext_opts_to_value(opts: reg::ExtOpts) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     Value::Record(vec![
         (
             "description".to_string(),
-            Value::Option(o.description.map(|s| Box::new(Value::String(s)))),
+            Value::Option(opts.description.map(|s| Box::new(Value::String(s)))),
         ),
         (
             "tags".to_string(),
-            Value::List(o.tags.into_iter().map(Value::String).collect()),
+            Value::List(opts.tags.into_iter().map(Value::String).collect()),
         ),
     ])
 }
 
-/// Marshal the bindgen `funcflags` (5-bit flags: deterministic,
-/// commutative, stateless, sideeffecting, deprecated) as
-/// `Value::Flags(Vec<String>)` — the wasmos wire format for WIT
-/// flags is a list of set-flag names by convention.
-fn bindgen_funcflags_to_value(f: core_types::Funcflags) -> wasmos_runtime_api::Value {
+/// Marshal the neutral `reg::FuncFlags` (5 boolean fields:
+/// deterministic, commutative, stateless, side_effecting,
+/// deprecated) as `Value::Flags(Vec<String>)` — the wasmos wire
+/// format for WIT flags is a list of set-flag names by convention.
+/// Flag names on the wire are dash-hyphenated per the WIT
+/// convention (`sideeffecting` matches the WIT spelling, kept
+/// verbatim from the pre-wedge output).
+fn native_funcflags_to_value(flags: reg::FuncFlags) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     let mut set = Vec::with_capacity(5);
-    if f.contains(core_types::Funcflags::DETERMINISTIC) {
+    if flags.deterministic {
         set.push("deterministic".to_string());
     }
-    if f.contains(core_types::Funcflags::COMMUTATIVE) {
+    if flags.commutative {
         set.push("commutative".to_string());
     }
-    if f.contains(core_types::Funcflags::STATELESS) {
+    if flags.stateless {
         set.push("stateless".to_string());
     }
-    if f.contains(core_types::Funcflags::SIDEEFFECTING) {
+    if flags.side_effecting {
         set.push("sideeffecting".to_string());
     }
-    if f.contains(core_types::Funcflags::DEPRECATED) {
+    if flags.deprecated {
         set.push("deprecated".to_string());
     }
     Value::Flags(set)
 }
 
-/// Marshal the bindgen `columndef` record `{name: string, logical:
-/// logicaltype}`.
-fn bindgen_columndef_to_value(c: core_runtime_exports::Columndef) -> wasmos_runtime_api::Value {
+/// Marshal the neutral `reg::ColumnDef` record `{name, logical}`.
+fn native_columndef_to_value(col: reg::ColumnDef) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     Value::Record(vec![
-        ("name".to_string(), Value::String(c.name)),
+        ("name".to_string(), Value::String(col.name)),
         (
             "logical".to_string(),
-            bindgen_logicaltype_to_value(c.logical),
+            native_logicaltype_to_value(col.logical),
         ),
     ])
 }
 
-/// Marshal the bindgen `logicaltype` variant (24 arms, mostly
-/// unit, two payload-carrying: `decimal(decimalshape)` and
-/// `complex(string)`). Arm names match WIT verbatim.
-fn bindgen_logicaltype_to_value(t: core_runtime_exports::Logicaltype) -> wasmos_runtime_api::Value {
-    use core_runtime_exports::Logicaltype as L;
+/// Marshal the neutral `reg::LogicalType` as the WIT `logicaltype`
+/// variant (24 arms, mostly unit; `decimal(decimalshape)` and
+/// `complex(string)` carry payloads). The neutral type has 5
+/// additional structural arms (`List`, `Struct`, `Map`, `Array`,
+/// `Complex`) that the WIT `logicaltype` variant cannot represent
+/// directly (wit-parser 0.251 forbids recursive VALUE types); they
+/// all lower to `complex(<type-expr>)` via
+/// [`neutral_logicaltype_to_type_expr`], matching the pre-wedge
+/// `neutral_logicaltype_to_core` behavior.
+fn native_logicaltype_to_value(ty: reg::LogicalType) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
-    let (discriminant, payload): (&'static str, Option<Box<Value>>) = match t {
-        L::Boolean => ("boolean", None),
-        L::Int64 => ("int64", None),
-        L::Uint64 => ("uint64", None),
-        L::Float64 => ("float64", None),
-        L::Text => ("text", None),
-        L::Blob => ("blob", None),
-        L::Int32 => ("int32", None),
-        L::Timestamp => ("timestamp", None),
-        L::Int8 => ("int8", None),
-        L::Int16 => ("int16", None),
-        L::Uint8 => ("uint8", None),
-        L::Uint16 => ("uint16", None),
-        L::Uint32 => ("uint32", None),
-        L::Float32 => ("float32", None),
-        L::Date => ("date", None),
-        L::Time => ("time", None),
-        L::Timestamptz => ("timestamptz", None),
-        L::Decimal(ds) => (
+    let (discriminant, payload): (&'static str, Option<Box<Value>>) = match ty {
+        reg::LogicalType::Boolean => ("boolean", None),
+        reg::LogicalType::Int64 => ("int64", None),
+        reg::LogicalType::Uint64 => ("uint64", None),
+        reg::LogicalType::Float64 => ("float64", None),
+        reg::LogicalType::Text => ("text", None),
+        reg::LogicalType::Blob => ("blob", None),
+        reg::LogicalType::Int32 => ("int32", None),
+        reg::LogicalType::Timestamp => ("timestamp", None),
+        reg::LogicalType::Int8 => ("int8", None),
+        reg::LogicalType::Int16 => ("int16", None),
+        reg::LogicalType::Uint8 => ("uint8", None),
+        reg::LogicalType::Uint16 => ("uint16", None),
+        reg::LogicalType::Uint32 => ("uint32", None),
+        reg::LogicalType::Float32 => ("float32", None),
+        reg::LogicalType::Date => ("date", None),
+        reg::LogicalType::Time => ("time", None),
+        reg::LogicalType::Timestamptz => ("timestamptz", None),
+        reg::LogicalType::Decimal { width, scale } => (
             "decimal",
             Some(Box::new(Value::Record(vec![
-                ("width".to_string(), Value::U8(ds.width)),
-                ("scale".to_string(), Value::U8(ds.scale)),
+                ("width".to_string(), Value::U8(width)),
+                ("scale".to_string(), Value::U8(scale)),
             ]))),
         ),
-        L::Interval => ("interval", None),
-        L::Uuid => ("uuid", None),
-        L::Hugeint => ("hugeint", None),
-        L::Uhugeint => ("uhugeint", None),
-        L::Complex(s) => ("complex", Some(Box::new(Value::String(s)))),
+        reg::LogicalType::Interval => ("interval", None),
+        reg::LogicalType::Uuid => ("uuid", None),
+        reg::LogicalType::Hugeint => ("hugeint", None),
+        reg::LogicalType::UHugeint => ("uhugeint", None),
+        ty @ (reg::LogicalType::List(_)
+        | reg::LogicalType::Struct(_)
+        | reg::LogicalType::Map(_, _)
+        | reg::LogicalType::Array(_, _)
+        | reg::LogicalType::Complex(_)) => {
+            let expr = match ty {
+                reg::LogicalType::List(elem) => {
+                    format!("LIST({})", neutral_logicaltype_to_type_expr(&elem))
+                }
+                reg::LogicalType::Struct(fields) => {
+                    let mut acc = String::from("STRUCT(");
+                    for (i, (n, t)) in fields.iter().enumerate() {
+                        if i > 0 {
+                            acc.push_str(", ");
+                        }
+                        acc.push_str(n);
+                        acc.push(' ');
+                        acc.push_str(&neutral_logicaltype_to_type_expr(t));
+                    }
+                    acc.push(')');
+                    acc
+                }
+                reg::LogicalType::Map(k, v) => format!(
+                    "MAP({}, {})",
+                    neutral_logicaltype_to_type_expr(&k),
+                    neutral_logicaltype_to_type_expr(&v)
+                ),
+                reg::LogicalType::Array(size, elem) => {
+                    format!("{}[{}]", neutral_logicaltype_to_type_expr(&elem), size)
+                }
+                reg::LogicalType::Complex(expr) => expr,
+                _ => unreachable!("outer match arm restricts to these 5 variants"),
+            };
+            ("complex", Some(Box::new(Value::String(expr))))
+        }
     };
     Value::Variant {
         discriminant: discriminant.to_string(),
@@ -8809,225 +8887,15 @@ fn convert_core_extension_info(info: core_db_exports::ExtensionInfo) -> cli_nati
     }
 }
 
-fn convert_pending_registrations(
-    data: PendingRegistrationsData,
-) -> core_extension_hooks::PendingRegistrations {
-    log_pending_batch_summary(&data);
-    core_extension_hooks::PendingRegistrations {
-        scalars: data
-            .scalars
-            .into_iter()
-            .map(convert_pending_scalar_registration)
-            .collect::<Vec<_>>()
-            .into(),
-        tables: data
-            .tables
-            .into_iter()
-            .map(convert_pending_table_registration)
-            .collect::<Vec<_>>()
-            .into(),
-        aggregates: data
-            .aggregates
-            .into_iter()
-            .map(convert_pending_aggregate_registration)
-            .collect::<Vec<_>>()
-            .into(),
-        macros: data
-            .macros
-            .into_iter()
-            .map(convert_pending_macro_registration)
-            .collect::<Vec<_>>()
-            .into(),
-        table_macros: data
-            .table_macros
-            .into_iter()
-            .map(convert_pending_table_macro_registration)
-            .collect::<Vec<_>>()
-            .into(),
-        replacement_scans: data
-            .replacement_scans
-            .into_iter()
-            .map(convert_pending_replacement_scan_registration)
-            .collect::<Vec<_>>()
-            .into(),
-        logical_types: data
-            .logical_types
-            .into_iter()
-            .map(convert_pending_logical_type_registration)
-            .collect::<Vec<_>>()
-            .into(),
-        casts: data
-            .casts
-            .into_iter()
-            .map(convert_pending_cast_registration)
-            .collect::<Vec<_>>()
-            .into(),
-    }
-}
-
-fn convert_pending_logical_type_registration(
-    entry: PendingLogicalType,
-) -> core_extension_hooks::LogicalTypeRegistration {
-    core_extension_hooks::LogicalTypeRegistration {
-        name: entry.name,
-        physical: entry.physical,
-    }
-}
-
-fn convert_pending_cast_registration(entry: PendingCast) -> core_extension_hooks::CastRegistration {
-    core_extension_hooks::CastRegistration {
-        source: entry.source,
-        target: entry.target,
-        callback_handle: entry.callback_handle,
-    }
-}
-
-fn convert_pending_macro_registration(
-    entry: PendingMacro,
-) -> core_extension_hooks::MacroRegistration {
-    core_extension_hooks::MacroRegistration {
-        schema: entry.schema,
-        name: entry.name,
-        parameters: entry.parameters.into(),
-        definition_sql: entry.definition_sql,
-    }
-}
-
-/// Forwards a captured table-macro registration to the core wasm. Mirrors
-/// `convert_pending_macro_registration` — the body-sql / definition-sql
-/// split is deliberate: DuckDB's `CREATE MACRO ... AS TABLE (…)` (table
-/// macros) is a distinct catalog concept from `CREATE MACRO ... AS (…)`
-/// (scalar macros).
-fn convert_pending_table_macro_registration(
-    entry: PendingTableMacro,
-) -> core_extension_hooks::TableMacroRegistration {
-    core_extension_hooks::TableMacroRegistration {
-        schema: entry.schema,
-        name: entry.name,
-        parameters: entry.parameters.into(),
-        body_sql: entry.body_sql,
-    }
-}
-
-fn convert_pending_replacement_scan_registration(
-    entry: PendingReplacementScan,
-) -> core_extension_hooks::ReplacementScanRegistration {
-    core_extension_hooks::ReplacementScanRegistration {
-        extensions: entry.extensions.into(),
-        function_name: entry.function_name,
-    }
-}
-
-fn convert_pending_scalar_registration(
-    entry: PendingScalar,
-) -> core_extension_hooks::ScalarRegistration {
-    log_pending_scalar_conversion(&entry);
-    core_extension_hooks::ScalarRegistration {
-        name: entry.name,
-        arguments: convert_funcargs_to_loader(entry.arguments),
-        returns: neutral_logicaltype_to_core(entry.returns),
-        callback_handle: entry.callback_handle,
-        options: entry.options.map(convert_funcopts_to_loader),
-    }
-}
-
-fn convert_pending_table_registration(
-    entry: PendingTable,
-) -> core_extension_hooks::TableRegistration {
-    log_pending_table_conversion(&entry);
-    core_extension_hooks::TableRegistration {
-        name: entry.name,
-        arguments: convert_funcargs_to_loader(entry.arguments),
-        columns: entry
-            .columns
-            .into_iter()
-            .map(neutral_columndef_to_core)
-            .collect::<Vec<_>>()
-            .into(),
-        callback_handle: entry.callback_handle,
-        options: entry.options.map(convert_extopts_to_loader),
-    }
-}
-
-fn convert_pending_aggregate_registration(
-    entry: PendingAggregate,
-) -> core_extension_hooks::AggregateRegistration {
-    log_pending_aggregate_conversion(&entry);
-    core_extension_hooks::AggregateRegistration {
-        name: entry.name,
-        arguments: convert_funcargs_to_loader(entry.arguments),
-        returns: neutral_logicaltype_to_core(entry.returns),
-        callback_handle: entry.callback_handle,
-        options: entry.options.map(convert_funcopts_to_loader),
-    }
-}
-
-// Direction-1 sink: neutral `reg::*` capture records -> wasm-DuckDB-core loader
-// types. (Direction 2, the native extension, will provide its own sink against
-// the DuckDB C API.)
-fn neutral_logicaltype_to_core(ty: reg::LogicalType) -> core_runtime_exports::Logicaltype {
-    match ty {
-        reg::LogicalType::Boolean => core_runtime_exports::Logicaltype::Boolean,
-        reg::LogicalType::Int64 => core_runtime_exports::Logicaltype::Int64,
-        reg::LogicalType::Uint64 => core_runtime_exports::Logicaltype::Uint64,
-        reg::LogicalType::Float64 => core_runtime_exports::Logicaltype::Float64,
-        reg::LogicalType::Text => core_runtime_exports::Logicaltype::Text,
-        reg::LogicalType::Blob => core_runtime_exports::Logicaltype::Blob,
-        reg::LogicalType::Int32 => core_runtime_exports::Logicaltype::Int32,
-        reg::LogicalType::Timestamp => core_runtime_exports::Logicaltype::Timestamp,
-        reg::LogicalType::Int8 => core_runtime_exports::Logicaltype::Int8,
-        reg::LogicalType::Int16 => core_runtime_exports::Logicaltype::Int16,
-        reg::LogicalType::Uint8 => core_runtime_exports::Logicaltype::Uint8,
-        reg::LogicalType::Uint16 => core_runtime_exports::Logicaltype::Uint16,
-        reg::LogicalType::Uint32 => core_runtime_exports::Logicaltype::Uint32,
-        reg::LogicalType::Float32 => core_runtime_exports::Logicaltype::Float32,
-        reg::LogicalType::Date => core_runtime_exports::Logicaltype::Date,
-        reg::LogicalType::Time => core_runtime_exports::Logicaltype::Time,
-        reg::LogicalType::Timestamptz => core_runtime_exports::Logicaltype::Timestamptz,
-        // @5.0.0: DECIMAL carries a decimalshape { width, scale } payload
-        // structurally on the variant arm. `core_runtime_exports` re-exports
-        // the shared type from core_types.
-        reg::LogicalType::Decimal { width, scale } => {
-            core_runtime_exports::Logicaltype::Decimal(core_types::Decimalshape { width, scale })
-        }
-        reg::LogicalType::Interval => core_runtime_exports::Logicaltype::Interval,
-        reg::LogicalType::Uuid => core_runtime_exports::Logicaltype::Uuid,
-        // @5.0.0: first-class fieldless 128-bit integer logical types.
-        reg::LogicalType::Hugeint => core_runtime_exports::Logicaltype::Hugeint,
-        reg::LogicalType::UHugeint => core_runtime_exports::Logicaltype::Uhugeint,
-        // S1 (major-5): nested logical types (LIST / STRUCT / MAP / ARRAY)
-        // added on the neutral side ride out as type-expr strings through
-        // core's Complex arm — the core WIT has no nested shape.
-        reg::LogicalType::List(elem) => core_runtime_exports::Logicaltype::Complex(format!(
-            "LIST({})",
-            neutral_logicaltype_to_type_expr(&elem)
-        )),
-        reg::LogicalType::Struct(fields) => {
-            let mut acc = String::from("STRUCT(");
-            for (i, (n, t)) in fields.iter().enumerate() {
-                if i > 0 {
-                    acc.push_str(", ");
-                }
-                acc.push_str(n);
-                acc.push(' ');
-                acc.push_str(&neutral_logicaltype_to_type_expr(t));
-            }
-            acc.push(')');
-            core_runtime_exports::Logicaltype::Complex(acc)
-        }
-        reg::LogicalType::Map(k, v) => core_runtime_exports::Logicaltype::Complex(format!(
-            "MAP({}, {})",
-            neutral_logicaltype_to_type_expr(&k),
-            neutral_logicaltype_to_type_expr(&v)
-        )),
-        reg::LogicalType::Array(size, elem) => core_runtime_exports::Logicaltype::Complex(format!(
-            "{}[{}]",
-            neutral_logicaltype_to_type_expr(&elem),
-            size
-        )),
-        reg::LogicalType::Complex(expr) => core_runtime_exports::Logicaltype::Complex(expr),
-    }
-}
+// The `convert_pending_registrations` chain and its
+// `neutral_logicaltype_to_core` / `neutral_columndef_to_core` /
+// `neutral_funcflags_to_core` helpers that used to sit here are
+// retired under Phase 2e wedge #8 (2026-09-17); native
+// `PendingRegistrationsData` marshals directly to
+// `wasmos_runtime_api::Value` via
+// [`native_pending_registrations_to_value`] and its sub-marshallers
+// near the top of the file. The `core_extension_hooks` bindgen
+// surface has no remaining consumers in the crate.
 
 /// Best-effort rendering of a neutral `reg::LogicalType` as a DuckDB SQL type
 /// expression. Used by the core down-cast when the target (core @4.0.0) has no
@@ -9080,33 +8948,6 @@ fn neutral_logicaltype_to_type_expr(ty: &reg::LogicalType) -> String {
             format!("{}[{}]", neutral_logicaltype_to_type_expr(elem), size)
         }
         reg::LogicalType::Complex(expr) => expr.clone(),
-    }
-}
-
-fn neutral_funcflags_to_core(flags: reg::FuncFlags) -> core_types::Funcflags {
-    let mut result = core_types::Funcflags::empty();
-    if flags.deterministic {
-        result |= core_types::Funcflags::DETERMINISTIC;
-    }
-    if flags.commutative {
-        result |= core_types::Funcflags::COMMUTATIVE;
-    }
-    if flags.stateless {
-        result |= core_types::Funcflags::STATELESS;
-    }
-    if flags.side_effecting {
-        result |= core_types::Funcflags::SIDEEFFECTING;
-    }
-    if flags.deprecated {
-        result |= core_types::Funcflags::DEPRECATED;
-    }
-    result
-}
-
-fn neutral_columndef_to_core(col: reg::ColumnDef) -> core_runtime_exports::Columndef {
-    core_runtime_exports::Columndef {
-        name: col.name,
-        logical: neutral_logicaltype_to_core(col.logical),
     }
 }
 
@@ -9178,32 +9019,9 @@ fn neutral_reg_logicaltype_to_core_types(ty: reg::LogicalType) -> core_types::Lo
 // table-filter shape stays intact; the host builds those directly from its
 // intercepted plan (see ATTACH intercept in HostState::execute).
 
-fn convert_funcargs_to_loader(
-    args: Vec<reg::FuncArg>,
-) -> BindgenVec<core_extension_hooks::FuncArg> {
-    args.into_iter()
-        .map(|arg| core_extension_hooks::FuncArg {
-            name: arg.name,
-            logical: neutral_logicaltype_to_core(arg.logical),
-        })
-        .collect::<Vec<_>>()
-        .into()
-}
-
-fn convert_funcopts_to_loader(opts: reg::FuncOpts) -> core_extension_hooks::FuncOpts {
-    core_extension_hooks::FuncOpts {
-        description: opts.description,
-        tags: opts.tags.into_iter().collect::<Vec<_>>().into(),
-        attributes: neutral_funcflags_to_core(opts.attributes),
-    }
-}
-
-fn convert_extopts_to_loader(opts: reg::ExtOpts) -> core_extension_hooks::ExtOpts {
-    core_extension_hooks::ExtOpts {
-        description: opts.description,
-        tags: opts.tags.into_iter().collect::<Vec<_>>().into(),
-    }
-}
+// `convert_funcargs_to_loader` / `convert_funcopts_to_loader` /
+// `convert_extopts_to_loader` retired under Phase 2e wedge #8 — see
+// the retirement note near the top of the marshaller block.
 
 fn convert_core_duckvalue(value: core_types::Duckvalue) -> cli_native::Duckvalue {
     match value {
@@ -14434,17 +14252,36 @@ mod tests {
     }
 
     #[test]
-    fn neutral_logicaltype_to_core_covers_every_arm() {
-        // Every arm converts without panicking; the Complex arm carries its
-        // owned type-expr through to the core variant.
+    fn native_logicaltype_to_value_covers_every_arm() {
+        // Post-wedge-#8 replacement for
+        // `neutral_logicaltype_to_core_covers_every_arm`. Every neutral
+        // `reg::LogicalType` arm marshals to `Value::Variant` without
+        // panicking, the 5 non-WIT-representable arms (`List` / `Struct` /
+        // `Map` / `Array` / `Complex`) all lower to
+        // `Variant("complex", Some(String(<type-expr>)))`, and the owned
+        // type-expr on the `Complex` arm rides through unchanged.
+        use wasmos_runtime_api::Value;
         for ty in all_neutral_logicaltypes() {
-            let is_complex = matches!(ty, reg::LogicalType::Complex(_));
-            let core = neutral_logicaltype_to_core(ty);
-            if is_complex {
-                assert!(matches!(
-                    core,
-                    core_runtime_exports::Logicaltype::Complex(ref e) if e == "LIST(INTEGER)"
-                ));
+            let is_complex_arm = matches!(ty, reg::LogicalType::Complex(_));
+            let is_list_arm = matches!(ty, reg::LogicalType::List(_));
+            let value = native_logicaltype_to_value(ty);
+            match value {
+                Value::Variant {
+                    discriminant,
+                    payload,
+                } => {
+                    if is_complex_arm {
+                        assert_eq!(discriminant, "complex");
+                        let payload = payload.expect("complex arm carries a String payload");
+                        assert!(matches!(*payload, Value::String(ref s) if s == "LIST(INTEGER)"));
+                    } else if is_list_arm {
+                        // reg::LogicalType::List(Box::new(Int32)) -> complex("LIST(INTEGER)")
+                        assert_eq!(discriminant, "complex");
+                        let payload = payload.expect("list arm lowers to complex(String)");
+                        assert!(matches!(*payload, Value::String(ref s) if s == "LIST(INTEGER)"));
+                    }
+                }
+                other => panic!("expected Variant, got {other:?}"),
             }
         }
     }
@@ -14517,21 +14354,32 @@ mod tests {
     // its ATTACH intercept now. Test removed.
 
     #[test]
-    fn neutral_funcflags_to_core_maps_each_bit() {
-        let none = neutral_funcflags_to_core(reg::FuncFlags::default());
-        assert_eq!(none, core_types::Funcflags::empty());
-        let all = neutral_funcflags_to_core(reg::FuncFlags {
+    fn native_funcflags_to_value_maps_each_bit() {
+        // Post-wedge-#8 replacement for
+        // `neutral_funcflags_to_core_maps_each_bit`. Default
+        // `reg::FuncFlags` marshals to an empty `Value::Flags`;
+        // all-true marshals to a `Value::Flags` carrying every
+        // flag name in WIT-declared order.
+        use wasmos_runtime_api::Value;
+        let none = native_funcflags_to_value(reg::FuncFlags::default());
+        assert!(matches!(none, Value::Flags(ref v) if v.is_empty()));
+        let all = native_funcflags_to_value(reg::FuncFlags {
             deterministic: true,
             commutative: true,
             stateless: true,
             side_effecting: true,
             deprecated: true,
         });
-        assert!(all.contains(core_types::Funcflags::DETERMINISTIC));
-        assert!(all.contains(core_types::Funcflags::COMMUTATIVE));
-        assert!(all.contains(core_types::Funcflags::STATELESS));
-        assert!(all.contains(core_types::Funcflags::SIDEEFFECTING));
-        assert!(all.contains(core_types::Funcflags::DEPRECATED));
+        match all {
+            Value::Flags(names) => {
+                assert!(names.contains(&"deterministic".to_string()));
+                assert!(names.contains(&"commutative".to_string()));
+                assert!(names.contains(&"stateless".to_string()));
+                assert!(names.contains(&"sideeffecting".to_string()));
+                assert!(names.contains(&"deprecated".to_string()));
+            }
+            other => panic!("expected Flags, got {other:?}"),
+        }
     }
 
     #[test]
