@@ -1,21 +1,23 @@
-pub mod duckdb_core_bindings {
-    wasmtime::component::bindgen!({
-        // Phase 2: consume the @5 core world from ducklink's synced mirror
-        // (populated by scripts/sync-cli-wit.sh). No longer references the
-        // out-of-tree duckdb-wasm working copy.
-        path: "../../crates/ducklink-cli/wit/deps/duckdb",
-        world: "duckdb:component/libduckdb",
-        with: {
-            "wasi:cli/environment": wasmtime_wasi::p2::bindings::cli::environment,
-            "wasi:cli/stdout": wasmtime_wasi::p2::bindings::cli::stdout,
-            "wasi:cli/stderr": wasmtime_wasi::p2::bindings::cli::stderr,
-            "wasi:filesystem/preopens": wasmtime_wasi::p2::bindings::filesystem::preopens,
-            "wasi:filesystem/types": wasmtime_wasi::p2::bindings::filesystem::types,
-            "wasi:io/streams": wasmtime_wasi::p2::bindings::io::streams,
-        },
-        require_store_data_send: true,
-    });
-}
+// Phase 2e wedge #9 (2026-09-17): the top-level
+// `wasmtime::component::bindgen!` block for
+// `duckdb:component/libduckdb` — the last remaining bindgen
+// site in ducklink-host — is retired. Every host-import + guest-
+// export dispatch routes through
+// `wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call`
+// / `sync_export_bridge::call_export_with_resources`; every WIT-
+// shared type (`Duckvalue`, `Duckerror`, `Colvec`, `Invokeinfo`,
+// `Resultset`, `Logicaltype`, `Capabilitykind`, `Funcflags`, plus
+// the tvm-memory types) resolves through the `core_types` /
+// `core_column_types` / `core_callback_dispatch` / `core_tvm_types`
+// aliases that now point at
+// `ducklink_runtime::extension::*` (WIT-shared runtime types) and
+// `tvm_core::*` respectively. See the redirect notes on each
+// `use` below.
+//
+// The migration is complete: `cargo build -p ducklink-host` no
+// longer expands the bindgen! macro for this crate, saving both
+// compile time and the entire generated trait / accessor / Host
+// impl surface.
 
 // The `duckdb_cli_bindings` bindgen! macro invocation that used to sit
 // here (world `duckdb:cli/duckdb-cli`) is gone. Under Path A of the
@@ -136,14 +138,28 @@ use anyhow::{Context, Result};
 // no longer referenced after Phase 2e's host-extension-loader wedge
 // retired the bindgen `add_to_linker` call for that interface — see
 // [`CoreHostExtensionLoaderHost`] below.
-use duckdb_core_bindings::duckdb::extension::callback_dispatch as core_callback_dispatch;
-use duckdb_core_bindings::duckdb::extension::column_types as core_column_types;
+// Wedge #9-b redirect (see the `core_types` note below): both aliases
+// point at `ducklink_runtime::extension`, whose types
+// (`Colvec` / `Column` / `Invokeinfo` / `Resultset` / re-exported
+// `Duckvalue` / `Duckerror` / etc.) mirror the callback-dispatch
+// + column-types WIT interfaces one-to-one.
+use ducklink_runtime::extension as core_callback_dispatch;
+use ducklink_runtime::extension as core_column_types;
 // Phase 2 (@5): the 8 `*-host` imports on the core WIT world are DELETED --
 // storage/index/collation/pragma/parser/optimizer/files/table-stream all lift
 // to the host, which orchestrates each per-extension `*-dispatch` export
 // directly (see the ATTACH intercept + write intercept in HostState::execute
 // and ADR wasm-ecosystem-at-5-adr.md Decision 3 + Amendment A1).
-use duckdb_core_bindings::duckdb::extension::types as core_types;
+// Wedge #9-b (2026-09-17): `core_types` alias redirected from the
+// bindgen output to `ducklink_runtime::extension`. Every `core_types::X`
+// reference at compile time resolves to the neutral runtime type of
+// the same WIT shape — the two Rust types are generated from the same
+// `duckdb:extension/types` WIT interface, so their record/variant
+// layouts are byte-identical. The runtime crate's types stay
+// wasmtime-free (defined by hand in `crates/ducklink-runtime/src/extension.rs`
+// per the ADR-0029 direction), so this migration retires the last
+// runtime-code use of `duckdb_core_bindings::duckdb::extension::types`.
+use ducklink_runtime::extension as core_types;
 // `duckdb_core_bindings::exports::duckdb::component::database as
 // core_db_exports` retired under Phase 2e wedge #9 (2026-09-17).
 // Every guest-export type it re-exported (QueryResult, Row, Columndef,
@@ -170,7 +186,15 @@ use duckdb_core_bindings::duckdb::extension::types as core_types;
 // [`TvmBytesHost`] and [`TvmManagerHost`] below. The bindgen
 // module still exists (bindgen! is still called for the full core
 // world), but this crate has no per-alias use for either.
-use duckdb_core_bindings::tvm::memory::types as core_tvm_types;
+// Wedge #9-b redirect: `core_tvm_types::{Handle, TvmError, RegionKind}`
+// aliased to `tvm_core::{Handle, TvmError, RegionKind}`. The two type
+// sets share their runtime shape one-for-one (tvm_core::TvmError has
+// two additional arms — UnsupportedAllocator + PolicyViolation — that
+// don't cross the WIT boundary, but the seven arms the host handler
+// constructs against are exactly what the bindgen version exposed).
+mod core_tvm_types {
+    pub use tvm_core::{Handle, RegionKind, TvmError};
+}
 // ADR-0029 Phase 6.2.o cleanup — the top-level `#[cfg(test)] use
 // ducklink_runtime::duckdb_extension_bindings::...` block (with
 // `runtime`/`types`/`catalog`/`config`/`files`/`logging` interface
@@ -2715,6 +2739,22 @@ fn bindgen_tvm_error_to_value(e: core_tvm_types::TvmError) -> wasmos_runtime_api
             ("backing-store", Some(Box::new(Value::String(msg))))
         }
         core_tvm_types::TvmError::Pinned => ("pinned", None),
+        // The two arms below don't cross the WIT boundary today
+        // (Phase 2e's tvm-memory host-import bridge doesn't lift
+        // them). Fold them into `backing-store` with a diagnostic
+        // string so the guest sees a well-formed variant.
+        core_tvm_types::TvmError::UnsupportedAllocator => (
+            "backing-store",
+            Some(Box::new(Value::String(
+                "unsupported allocator (tvm_core::TvmError::UnsupportedAllocator)".to_string(),
+            ))),
+        ),
+        core_tvm_types::TvmError::PolicyViolation => (
+            "backing-store",
+            Some(Box::new(Value::String(
+                "policy violation (tvm_core::TvmError::PolicyViolation)".to_string(),
+            ))),
+        ),
     };
     Value::Variant {
         discriminant: discriminant.to_string(),

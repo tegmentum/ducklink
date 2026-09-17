@@ -28,11 +28,11 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Context, Result};
 use wasmtime::component::ResourceAny;
 
-use super::duckdb_core_bindings::duckdb::extension::types as core_types;
 use super::{
     build_engine, build_wasi_ctx_inherit, instantiate_core, ComponentArtifacts, CoreExecution,
     ExtensionManager,
 };
+use ducklink_runtime::extension as core_types;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum UiMode {

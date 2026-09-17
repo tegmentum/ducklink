@@ -31,13 +31,13 @@ use std::sync::{Arc, Mutex};
 use anyhow::{anyhow, Context, Result};
 use wasmtime::component::ResourceAny;
 
-use crate::duckdb_core_bindings::duckdb::extension::types as core_types;
 use crate::handler::HandlerRegistry;
 use crate::ui_server::{json_string, json_value};
 use crate::{
     build_engine, build_wasi_ctx_inherit, instantiate_core, ComponentArtifacts, CoreExecution,
     ExtensionManager,
 };
+use ducklink_runtime::extension as core_types;
 
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::{ServerConfig, ServerConnection, StreamOwned};
