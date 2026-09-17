@@ -6964,16 +6964,18 @@ impl HostState {
     /// each row as `Vec<String>` (stringified via `spi_value_text`, so
     /// NULL becomes "").
     fn run_prefix_query(&self, conn: ResourceAny, sql: &str) -> Result<Vec<Vec<String>>, String> {
-        let res = self.with_core(|core| {
-            core.with_database(|guest, store| guest.call_execute(store, conn, sql))
-        });
+        let res = call_database_execute(self, conn, sql);
         match res {
             Ok(Ok(qr)) => Ok(qr
                 .rows
                 .iter()
-                .map(|row| row.iter().map(spi_value_text).collect())
+                .map(|row| {
+                    row.iter()
+                        .map(|v| spi_value_text(&convert_cli_duckvalue(v.clone())))
+                        .collect()
+                })
                 .collect()),
-            Ok(Err(err)) => Err(core_duckerror_message(err)),
+            Ok(Err(err)) => Err(cli_duckerror_message(err)),
             Err(trap) => Err(format!("trap: {trap}")),
         }
     }
@@ -7798,20 +7800,22 @@ impl HostState {
             .map(|p| format!(" WHERE {p}"))
             .unwrap_or_default();
         let sql = format!("SELECT * FROM {alias}.main.{table}{where_sql}");
-        let result = self
-            .with_core(|core| {
-                core.with_database(|guest, store| guest.call_execute(store, entry_handle, &sql))
-            })
-            .map_err(convert_trap_to_duckerror)?;
+        let result = call_database_execute(self, entry_handle, &sql)
+            .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
         let qr = match result {
             Ok(v) => v,
-            Err(err) => return Err(convert_core_duckerror(err)),
+            Err(err) => return Err(err),
         };
         let mut rowids: Vec<i64> = Vec::with_capacity(qr.rows.len());
         let mut rows_ext: Vec<Vec<ducklink_runtime::extension::Duckvalue>> =
             Vec::with_capacity(qr.rows.len());
         for row in qr.rows.into_iter() {
-            let row_vec: Vec<core_types::Duckvalue> = row.into_iter().collect();
+            // Convert cli_native -> core_types per-cell so the existing
+            // `at5_duckvalue_to_i64` + `convert_core_duckvalue_to_extension`
+            // helpers keep working. Would inline as cli-native variants
+            // in a future sweep.
+            let row_vec: Vec<core_types::Duckvalue> =
+                row.into_iter().map(convert_cli_duckvalue).collect();
             let rowid_cell = row_vec.get(rowid_idx).ok_or_else(|| {
                 cli_native::Duckerror::Internal(
                     format!(
@@ -8855,8 +8859,8 @@ impl HostState {
                 // Borrow-checker note: the raw-pointer coercions (`&mut
                 // core.store as *mut _`, `&core.bindings as *const _`) drop
                 // their borrows at the end of the coercion expression, so
-                // the subsequent `core.with_database(...)` &mut re-borrow
-                // is unaliased.
+                // the subsequent `call_database_execute_on_core(core, ...)`
+                // &mut re-borrow is unaliased.
                 let store_ptr: *mut Store<CoreStoreState> = &mut core.store;
                 let bindings_ptr: *const duckdb_core_bindings::Libduckdb = &core.bindings;
                 let _reentry = PrimaryReentryGuard::set(PrimaryReentry {
@@ -8864,16 +8868,16 @@ impl HostState {
                     bindings: bindings_ptr,
                     connection: entry_handle,
                 });
-                core.with_database(|guest, store| guest.call_execute(store, entry_handle, &sql))
+                call_database_execute_on_core(core, entry_handle, &sql)
             })
-            .map_err(convert_trap_to_duckerror)?;
+            .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
         // v1.1: the core is idle again here -> refresh the catalog snapshot so a
         // query-capable component's `query` import (which runs INSIDE a later
         // query, when the core is busy) can still answer catalog SELECTs.
         self.refresh_catalog_snapshot();
         match result {
-            Ok(value) => Ok(convert_core_query_result(value)),
-            Err(err) => Err(convert_core_duckerror(err)),
+            Ok(qr) => Ok(qr),
+            Err(err) => Err(err),
         }
     }
 }
@@ -10173,15 +10177,14 @@ impl ExtensionServices for CoreServices {
         // the primary's, and we're always the outermost frame from the
         // sibling's perspective — no try_lock gymnastics needed.
         let mut core = slot.core.lock().unwrap_or_else(|e| e.into_inner());
-        let outcome = core
-            .with_database(|guest, store| guest.call_execute(store, slot.connection, sql))
+        let outcome = call_database_execute_on_core(&mut core, slot.connection, sql)
             .map_err(|trap| format!("nested-exec: sibling call_execute trapped: {trap}"))?;
         drop(core);
 
         match outcome {
-            Ok(qr) => Ok(query_result_to_nested_exec(qr)),
+            Ok(qr) => Ok(cli_query_result_to_nested_exec(qr)),
             Err(err) => {
-                let msg = core_duckerror_message(err);
+                let msg = cli_duckerror_message(err);
                 if is_extension_related_error(&msg) {
                     Err(format!("{NESTED_EXEC_DIRECTION2_REDIRECT}{msg}"))
                 } else {
@@ -10393,6 +10396,25 @@ fn query_result_to_nested_exec(qr: core_db_exports::QueryResult) -> NestedExecRe
     }
 }
 
+/// Same as [`query_result_to_nested_exec`] but for the cli_native
+/// `QueryResult` produced by wedge #7-migrated call sites.
+fn cli_query_result_to_nested_exec(qr: cli_native::QueryResult) -> NestedExecResult {
+    let rows_affected = cli_extract_rows_affected(&qr);
+    let rows: Vec<Vec<String>> = qr
+        .rows
+        .iter()
+        .map(|row| {
+            row.iter()
+                .map(|v| spi_value_text(&convert_cli_duckvalue(v.clone())))
+                .collect()
+        })
+        .collect();
+    NestedExecResult {
+        rows: Some(rows),
+        rows_affected,
+    }
+}
+
 /// Detect DuckDB's pure-DML pattern (single row, single column named `Count`
 /// holding an integer) and return the affected-row count. Everything else
 /// returns `None` — the caller relies on `rows` alone for SELECT and mixed
@@ -10443,16 +10465,19 @@ fn run_query_on_core(
         .unwrap_or_else(|e| e.into_inner())
         .clone()
         .ok_or_else(|| "query: no active database connection".to_string())?;
-    let result = core
-        .with_database(|guest, store| guest.call_execute(store, handle, sql))
+    let result = call_database_execute_on_core(&mut core, handle, sql)
         .map_err(|trap| format!("query trapped: {trap}"))?;
     match result {
         Ok(qr) => Ok(qr
             .rows
             .iter()
-            .map(|row| row.iter().map(spi_value_text).collect())
+            .map(|row| {
+                row.iter()
+                    .map(|v| spi_value_text(&convert_cli_duckvalue(v.clone())))
+                    .collect()
+            })
             .collect()),
-        Err(err) => Err(core_duckerror_message(err)),
+        Err(err) => Err(cli_duckerror_message(err)),
     }
 }
 
@@ -10887,12 +10912,12 @@ pub(crate) fn open_driver_core_with_bootstrap(
     {
         let mut c = core.lock().unwrap_or_else(|e| e.into_inner());
         for sql in bootstrap_sql {
-            c.with_database(|guest, store| guest.call_execute(store, connection.clone(), sql))
+            call_database_execute_on_core(&mut c, connection, sql)
                 .map_err(|trap| anyhow::anyhow!("driver-core: bootstrap trapped: {trap}"))?
                 .map_err(|e| {
                     anyhow::anyhow!(
                         "driver-core: bootstrap failed: {}",
-                        core_duckerror_message(e)
+                        cli_duckerror_message(e)
                     )
                 })?;
         }
@@ -10913,12 +10938,11 @@ pub(crate) fn driver_core_exec(
     sql: &str,
 ) -> std::result::Result<u64, String> {
     let mut c = state.core.lock().unwrap_or_else(|e| e.into_inner());
-    let result = c
-        .with_database(|guest, store| guest.call_execute(store, state.connection.clone(), sql))
+    let result = call_database_execute_on_core(&mut c, state.connection, sql)
         .map_err(|trap| format!("driver-core: trap: {trap}"))?;
     match result {
-        Ok(qr) => Ok(extract_rows_affected(&qr).unwrap_or(0)),
-        Err(e) => Err(core_duckerror_message(e)),
+        Ok(qr) => Ok(cli_extract_rows_affected(&qr).unwrap_or(0)),
+        Err(e) => Err(cli_duckerror_message(e)),
     }
 }
 
@@ -10929,16 +10953,41 @@ pub(crate) fn driver_core_query(
     sql: &str,
 ) -> std::result::Result<Vec<Vec<String>>, String> {
     let mut c = state.core.lock().unwrap_or_else(|e| e.into_inner());
-    let result = c
-        .with_database(|guest, store| guest.call_execute(store, state.connection.clone(), sql))
+    let result = call_database_execute_on_core(&mut c, state.connection, sql)
         .map_err(|trap| format!("driver-core: trap: {trap}"))?;
     match result {
         Ok(qr) => Ok(qr
             .rows
             .into_iter()
-            .map(|row| row.iter().map(spi_value_text).collect())
+            .map(|row| {
+                row.iter()
+                    .map(|v| spi_value_text(&convert_cli_duckvalue(v.clone())))
+                    .collect()
+            })
             .collect()),
-        Err(e) => Err(core_duckerror_message(e)),
+        Err(e) => Err(cli_duckerror_message(e)),
+    }
+}
+
+/// Same as [`extract_rows_affected`] but for the cli_native
+/// `QueryResult` produced by wedge #7-migrated call sites.
+/// Extracts DuckDB's `Count` single-column result from a DML
+/// return.
+fn cli_extract_rows_affected(qr: &cli_native::QueryResult) -> Option<u64> {
+    if qr.columns.len() != 1 {
+        return None;
+    }
+    if !qr.columns[0].name.eq_ignore_ascii_case("Count") {
+        return None;
+    }
+    let row = qr.rows.first()?;
+    let cell = row.first()?;
+    match cell {
+        cli_native::Duckvalue::Int64(v) => Some((*v).max(0) as u64),
+        cli_native::Duckvalue::Uint64(v) => Some(*v),
+        cli_native::Duckvalue::Int32(v) => Some((*v).max(0) as u64),
+        cli_native::Duckvalue::Uint32(v) => Some(*v as u64),
+        _ => None,
     }
 }
 
