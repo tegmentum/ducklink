@@ -47,9 +47,7 @@ use wasmos_runtime_api::{
     RuntimeResult, SyncHostCall, SyncHostCallAdapter, WitEnum, WitFlags, WitVariant,
 };
 
-use crate::extension::{
-    ExtensionStoreState, PendingOptimizer, PendingParser, PendingSetting,
-};
+use crate::extension::{ExtensionStoreState, PendingOptimizer, PendingParser, PendingSetting};
 
 /// Shared handle to `ExtensionStoreState` used by state-touching
 /// wasmos-native interface handlers. Matches the SharedTvmHost
@@ -131,29 +129,24 @@ impl StateSource {
     ///     Ok(...)
     /// }
     /// ```
-    pub fn hold<'a>(
-        &'a self,
-        ctx: &'a mut HostCallContext<'_>,
-    ) -> RuntimeResult<StateHold<'a>> {
+    pub fn hold<'a>(&'a self, ctx: &'a mut HostCallContext<'_>) -> RuntimeResult<StateHold<'a>> {
         match self {
             StateSource::Shared(shared) => {
                 let guard = shared.lock().expect("ExtensionStoreState mutex poisoned");
                 Ok(StateHold::Guard(guard))
             }
             StateSource::FromCtx => {
-                let s = ctx
-                    .consumer_state::<ExtensionStoreState>()
-                    .ok_or_else(|| {
-                        RuntimeError::msg(
-                            "wasmos-native handler: no ExtensionStoreState in \
+                let s = ctx.consumer_state::<ExtensionStoreState>().ok_or_else(|| {
+                    RuntimeError::msg(
+                        "wasmos-native handler: no ExtensionStoreState in \
                              HostCallContext — the consumer-migration bridge \
                              (wasmos-runtime-wasmtime-v48::sync_bridge_resource) is \
                              required to populate the consumer-state slot at dispatch \
                              time. Handlers built with `bridged()` cannot be invoked \
                              through the wasmos-adapter path; use the corresponding \
                              `new(shared_state)` constructor for that path.",
-                        )
-                    })?;
+                    )
+                })?;
                 Ok(StateHold::Ref(s))
             }
         }
@@ -566,14 +559,18 @@ pub struct ParserHost {
 
 impl ParserHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -598,10 +595,7 @@ impl ParserHost {
 }
 
 /// Register the `duckdb:extension/parser` handler.
-pub fn install_parser_imports(
-    imports: HostImports,
-    state: SharedExtensionState,
-) -> HostImports {
+pub fn install_parser_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
         "duckdb:extension/parser",
         Arc::new(SyncHostCallAdapter::new(ParserHost::new(state)))
@@ -621,14 +615,18 @@ pub struct OptimizerHost {
 
 impl OptimizerHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -653,10 +651,7 @@ impl OptimizerHost {
 }
 
 /// Register the `duckdb:extension/optimizer` handler.
-pub fn install_optimizer_imports(
-    imports: HostImports,
-    state: SharedExtensionState,
-) -> HostImports {
+pub fn install_optimizer_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
         "duckdb:extension/optimizer",
         Arc::new(SyncHostCallAdapter::new(OptimizerHost::new(state)))
@@ -715,14 +710,18 @@ pub struct SettingsHost {
 
 impl SettingsHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -754,10 +753,7 @@ impl SettingsHost {
 }
 
 /// Register the `duckdb:extension/settings` handler.
-pub fn install_settings_imports(
-    imports: HostImports,
-    state: SharedExtensionState,
-) -> HostImports {
+pub fn install_settings_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
         "duckdb:extension/settings",
         Arc::new(SyncHostCallAdapter::new(SettingsHost::new(state)))
@@ -870,14 +866,18 @@ pub struct CoordinateSystemHost {
 
 impl CoordinateSystemHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -932,14 +932,18 @@ pub struct StorageHost {
 
 impl StorageHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -973,10 +977,7 @@ impl StorageHost {
 }
 
 /// Register the `duckdb:extension/storage` handler.
-pub fn install_storage_imports(
-    imports: HostImports,
-    state: SharedExtensionState,
-) -> HostImports {
+pub fn install_storage_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
         "duckdb:extension/storage",
         Arc::new(SyncHostCallAdapter::new(StorageHost::new(state)))
@@ -998,14 +999,18 @@ pub struct LogStorageHost {
 
 impl LogStorageHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -1052,14 +1057,18 @@ pub struct QueryHost {
 
 impl QueryHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -1076,10 +1085,7 @@ impl QueryHost {
 }
 
 /// Register the `duckdb:extension/query` handler.
-pub fn install_query_imports(
-    imports: HostImports,
-    state: SharedExtensionState,
-) -> HostImports {
+pub fn install_query_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
         "duckdb:extension/query",
         Arc::new(SyncHostCallAdapter::new(QueryHost::new(state)))
@@ -1133,23 +1139,24 @@ pub struct ConfigHost {
 
 impl ConfigHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
 #[host_iface(sync)]
 impl ConfigHost {
-    fn provider_version(
-        &self,
-        ctx: &mut HostCallContext<'_>,
-    ) -> RuntimeResult<String> {
+    fn provider_version(&self, ctx: &mut HostCallContext<'_>) -> RuntimeResult<String> {
         let mut g = self.state.hold(ctx)?;
         Ok(g.services_mut().provider_version().unwrap_or_else(|err| {
             eprintln!("extension config provider-version failed: {err:?}");
@@ -1177,7 +1184,9 @@ impl ConfigHost {
         path: String,
     ) -> RuntimeResult<Result<Option<String>, Configerror>> {
         let mut g = self.state.hold(ctx)?;
-        Ok(g.services_mut().get_string(&path).map_err(Configerror::from_neutral))
+        Ok(g.services_mut()
+            .get_string(&path)
+            .map_err(Configerror::from_neutral))
     }
 
     fn get_bool(
@@ -1186,7 +1195,9 @@ impl ConfigHost {
         path: String,
     ) -> RuntimeResult<Result<Option<bool>, Configerror>> {
         let mut g = self.state.hold(ctx)?;
-        Ok(g.services_mut().get_bool(&path).map_err(Configerror::from_neutral))
+        Ok(g.services_mut()
+            .get_bool(&path)
+            .map_err(Configerror::from_neutral))
     }
 
     fn get_i64(
@@ -1195,7 +1206,9 @@ impl ConfigHost {
         path: String,
     ) -> RuntimeResult<Result<Option<i64>, Configerror>> {
         let mut g = self.state.hold(ctx)?;
-        Ok(g.services_mut().get_i64(&path).map_err(Configerror::from_neutral))
+        Ok(g.services_mut()
+            .get_i64(&path)
+            .map_err(Configerror::from_neutral))
     }
 
     fn get_u64(
@@ -1204,7 +1217,9 @@ impl ConfigHost {
         path: String,
     ) -> RuntimeResult<Result<Option<u64>, Configerror>> {
         let mut g = self.state.hold(ctx)?;
-        Ok(g.services_mut().get_u64(&path).map_err(Configerror::from_neutral))
+        Ok(g.services_mut()
+            .get_u64(&path)
+            .map_err(Configerror::from_neutral))
     }
 
     fn get_f64(
@@ -1213,7 +1228,9 @@ impl ConfigHost {
         path: String,
     ) -> RuntimeResult<Result<Option<f64>, Configerror>> {
         let mut g = self.state.hold(ctx)?;
-        Ok(g.services_mut().get_f64(&path).map_err(Configerror::from_neutral))
+        Ok(g.services_mut()
+            .get_f64(&path)
+            .map_err(Configerror::from_neutral))
     }
 
     fn get_bytes(
@@ -1222,7 +1239,9 @@ impl ConfigHost {
         path: String,
     ) -> RuntimeResult<Result<Option<Vec<u8>>, Configerror>> {
         let mut g = self.state.hold(ctx)?;
-        Ok(g.services_mut().get_bytes(&path).map_err(Configerror::from_neutral))
+        Ok(g.services_mut()
+            .get_bytes(&path)
+            .map_err(Configerror::from_neutral))
     }
 
     fn get_string_list(
@@ -1238,10 +1257,7 @@ impl ConfigHost {
 }
 
 /// Register the `duckdb:extension/config` handler.
-pub fn install_config_imports(
-    imports: HostImports,
-    state: SharedExtensionState,
-) -> HostImports {
+pub fn install_config_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
         "duckdb:extension/config",
         Arc::new(SyncHostCallAdapter::new(ConfigHost::new(state)))
@@ -1295,14 +1311,18 @@ pub struct LoggingHost {
 
 impl LoggingHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -1343,10 +1363,7 @@ impl LoggingHost {
 }
 
 /// Register the `duckdb:extension/logging` handler.
-pub fn install_logging_imports(
-    imports: HostImports,
-    state: SharedExtensionState,
-) -> HostImports {
+pub fn install_logging_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
         "duckdb:extension/logging",
         Arc::new(SyncHostCallAdapter::new(LoggingHost::new(state)))
@@ -1396,14 +1413,18 @@ pub struct NestedExecHost {
 
 impl NestedExecHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -1415,7 +1436,9 @@ impl NestedExecHost {
         sql: String,
     ) -> RuntimeResult<Result<ExecResult, String>> {
         let mut g = self.state.hold(ctx)?;
-        Ok(g.services_mut().nested_exec(&sql).map(ExecResult::from_neutral))
+        Ok(g.services_mut()
+            .nested_exec(&sql)
+            .map(ExecResult::from_neutral))
     }
 }
 
@@ -1454,14 +1477,18 @@ pub struct SecretHost {
 
 impl SecretHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -1511,10 +1538,7 @@ impl SecretHost {
 }
 
 /// Register the `duckdb:extension/secret` handler.
-pub fn install_secret_imports(
-    imports: HostImports,
-    state: SharedExtensionState,
-) -> HostImports {
+pub fn install_secret_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
         "duckdb:extension/secret",
         Arc::new(SyncHostCallAdapter::new(SecretHost::new(state)))
@@ -1542,14 +1566,18 @@ pub struct MacroExtHost {
 
 impl MacroExtHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -1577,10 +1605,7 @@ impl MacroExtHost {
 }
 
 /// Register the `duckdb:extension/macro_ext` handler.
-pub fn install_macro_ext_imports(
-    imports: HostImports,
-    state: SharedExtensionState,
-) -> HostImports {
+pub fn install_macro_ext_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
         "duckdb:extension/macro_ext",
         Arc::new(SyncHostCallAdapter::new(MacroExtHost::new(state)))
@@ -1600,14 +1625,18 @@ pub struct TypesExtHost {
 
 impl TypesExtHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -1647,10 +1676,7 @@ impl TypesExtHost {
 }
 
 /// Register the `duckdb:extension/types_ext` handler.
-pub fn install_types_ext_imports(
-    imports: HostImports,
-    state: SharedExtensionState,
-) -> HostImports {
+pub fn install_types_ext_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
         "duckdb:extension/types_ext",
         Arc::new(SyncHostCallAdapter::new(TypesExtHost::new(state)))
@@ -1712,14 +1738,18 @@ pub struct FilesHost {
 
 impl FilesHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -1772,10 +1802,7 @@ impl FilesHost {
 }
 
 /// Register the `duckdb:extension/files` handler.
-pub fn install_files_imports(
-    imports: HostImports,
-    state: SharedExtensionState,
-) -> HostImports {
+pub fn install_files_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
         "duckdb:extension/files",
         Arc::new(SyncHostCallAdapter::new(FilesHost::new(state)))
@@ -1905,14 +1932,18 @@ pub struct ArrowExtHost {
 
 impl ArrowExtHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -1940,10 +1971,7 @@ impl ArrowExtHost {
 }
 
 /// Register the `duckdb:extension/arrow_ext` handler.
-pub fn install_arrow_ext_imports(
-    imports: HostImports,
-    state: SharedExtensionState,
-) -> HostImports {
+pub fn install_arrow_ext_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
         "duckdb:extension/arrow_ext",
         Arc::new(SyncHostCallAdapter::new(ArrowExtHost::new(state)))
@@ -1987,14 +2015,18 @@ pub struct TableStreamHost {
 
 impl TableStreamHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -2013,8 +2045,7 @@ impl TableStreamHost {
         let converted_columns: Vec<crate::reg::ColumnDef> =
             columns.into_iter().map(Columndef::to_reg).collect();
         let mut g = self.state.hold(ctx)?;
-        let global =
-            g.allocate_callback_handle_pub(callback_handle, crate::CallbackKind::Table);
+        let global = g.allocate_callback_handle_pub(callback_handle, crate::CallbackKind::Table);
         let extension = g.extension_name().to_string();
         g.push_pending_filterable_table(crate::reg::FilterableTableReg {
             extension,
@@ -2121,14 +2152,18 @@ pub struct RuntimeExtHost {
 
 impl RuntimeExtHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -2254,14 +2289,18 @@ pub struct CatalogHost {
 
 impl CatalogHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -2335,10 +2374,7 @@ impl CatalogHost {
 }
 
 /// Register the `duckdb:extension/catalog` handler.
-pub fn install_catalog_imports(
-    imports: HostImports,
-    state: SharedExtensionState,
-) -> HostImports {
+pub fn install_catalog_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
         "duckdb:extension/catalog",
         Arc::new(SyncHostCallAdapter::new(CatalogHost::new(state)))
@@ -2395,14 +2431,18 @@ pub struct FileLockHost {
 
 impl FileLockHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -2517,10 +2557,7 @@ impl FileLockHost {
 /// NOTE: the interface's resource-method trait (release +
 /// drop) is NOT wired here. See the module section docstring
 /// for the wasmos-side gap + follow-up plan (Phase 6.2.d.2-n).
-pub fn install_file_lock_imports(
-    imports: HostImports,
-    state: SharedExtensionState,
-) -> HostImports {
+pub fn install_file_lock_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
         "duckdb:extension/file-lock",
         Arc::new(SyncHostCallAdapter::new(FileLockHost::new(state)))
@@ -2630,14 +2667,18 @@ pub struct RuntimeHost {
 
 impl RuntimeHost {
     pub fn new(state: SharedExtensionState) -> Self {
-        Self { state: StateSource::Shared(state) }
+        Self {
+            state: StateSource::Shared(state),
+        }
     }
     /// ADR-0029 Phase 6.2.h.6 — bridged variant for the consumer-
     /// migration bridge. Pulls `&mut ExtensionStoreState` from
     /// `HostCallContext::consumer_state` at dispatch time; the
     /// bridge populates it per-call with `store.data_mut()`.
     pub fn bridged() -> Self {
-        Self { state: StateSource::FromCtx }
+        Self {
+            state: StateSource::FromCtx,
+        }
     }
 }
 
@@ -2675,9 +2716,9 @@ impl RuntimeHost {
             }
             Capabilitykind::Aggregate => {
                 let id = g.init_aggregate_registry();
-                Some(Capability::Aggregate(Resource::<AggregateRegistry>::from_raw(
-                    id, true,
-                )))
+                Some(Capability::Aggregate(
+                    Resource::<AggregateRegistry>::from_raw(id, true),
+                ))
             }
             Capabilitykind::Pragma => {
                 let id = g.alloc_resource_id();
@@ -3025,9 +3066,7 @@ impl RuntimeHost {
         let options_r = options.map(Funcopts::to_reg);
         let mut g = self.state.hold(ctx)?;
         // 1. Validate callback kind.
-        if let Err(e) =
-            g.validate_callback_kind(callback_handle, crate::CallbackKind::Scalar)
-        {
+        if let Err(e) = g.validate_callback_kind(callback_handle, crate::CallbackKind::Scalar) {
             return Ok(Err(kind_validation_to_duckerror(e, "scalar")));
         }
         let extension = g.extension_name().to_string();
@@ -3083,9 +3122,7 @@ impl RuntimeHost {
             tags: o.tags,
         });
         let mut g = self.state.hold(ctx)?;
-        if let Err(e) =
-            g.validate_callback_kind(callback_handle, crate::CallbackKind::Table)
-        {
+        if let Err(e) = g.validate_callback_kind(callback_handle, crate::CallbackKind::Table) {
             return Ok(Err(kind_validation_to_duckerror(e, "a table callback")));
         }
         let extension = g.extension_name().to_string();
@@ -3136,9 +3173,7 @@ impl RuntimeHost {
         let returns_r = returns.to_reg();
         let options_r = options.map(Funcopts::to_reg);
         let mut g = self.state.hold(ctx)?;
-        if let Err(e) =
-            g.validate_callback_kind(callback_handle, crate::CallbackKind::Aggregate)
-        {
+        if let Err(e) = g.validate_callback_kind(callback_handle, crate::CallbackKind::Aggregate) {
             return Ok(Err(kind_validation_to_duckerror(e, "aggregate")));
         }
         let extension = g.extension_name().to_string();
@@ -3184,9 +3219,7 @@ impl RuntimeHost {
     ) -> RuntimeResult<Result<u32, Duckerror>> {
         let callback_handle = callback.handle();
         let mut g = self.state.hold(ctx)?;
-        if let Err(e) =
-            g.validate_callback_kind(callback_handle, crate::CallbackKind::Pragma)
-        {
+        if let Err(e) = g.validate_callback_kind(callback_handle, crate::CallbackKind::Pragma) {
             return Ok(Err(kind_validation_to_duckerror(e, "a pragma")));
         }
         let extension = g.extension_name().to_string();
@@ -3224,12 +3257,10 @@ fn kind_validation_to_duckerror(
 ) -> Duckerror {
     use crate::extension::CallbackValidationError as E;
     match err {
-        E::KindMismatch => Duckerror::Invalidargument(format!(
-            "callback handle is not {kind_phrase}"
-        )),
-        E::UnknownHandle => {
-            Duckerror::Internal(format!("unknown {kind_phrase} callback handle"))
+        E::KindMismatch => {
+            Duckerror::Invalidargument(format!("callback handle is not {kind_phrase}"))
         }
+        E::UnknownHandle => Duckerror::Internal(format!("unknown {kind_phrase} callback handle")),
     }
 }
 
@@ -3290,10 +3321,7 @@ fn unsupported_duckerror_value() -> wasmos_runtime_api::Value {
 /// mangling-convention follow-up plan. Guests that call
 /// registry.register_scalar (etc.) get "no handler" until the
 /// Phase 6.2.d.2-p+ sub-sessions land those overrides.
-pub fn install_runtime_imports(
-    imports: HostImports,
-    state: SharedExtensionState,
-) -> HostImports {
+pub fn install_runtime_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
         "duckdb:extension/runtime",
         Arc::new(SyncHostCallAdapter::new(RuntimeHost::new(state)))
@@ -3349,7 +3377,9 @@ mod tests {
     //! the emitted `impl SyncHostCall` end-to-end via the adapter.
 
     use super::*;
-    use wasmos_runtime_api::{HostCallContext, HostCallCtxImpl, RuntimeError, RuntimeResult, Value};
+    use wasmos_runtime_api::{
+        HostCallContext, HostCallCtxImpl, RuntimeError, RuntimeResult, Value,
+    };
 
     struct StubCtx;
     impl HostCallCtxImpl for StubCtx {
@@ -3390,21 +3420,22 @@ mod tests {
 
         // Return: Result<u32, Duckerror>. Lowers as Value::Result(Err(...)).
         match out.as_slice() {
-            [Value::Result(Err(Some(payload)))] => {
-                match payload.as_ref() {
-                    Value::Variant {
-                        discriminant,
-                        payload: Some(payload),
-                    } if discriminant == "unsupported" => {
-                        if let Value::String(msg) = payload.as_ref() {
-                            assert!(msg.contains("connection open/close"), "unexpected message: {msg}");
-                        } else {
-                            panic!("expected string payload, got {payload:?}");
-                        }
+            [Value::Result(Err(Some(payload)))] => match payload.as_ref() {
+                Value::Variant {
+                    discriminant,
+                    payload: Some(payload),
+                } if discriminant == "unsupported" => {
+                    if let Value::String(msg) = payload.as_ref() {
+                        assert!(
+                            msg.contains("connection open/close"),
+                            "unexpected message: {msg}"
+                        );
+                    } else {
+                        panic!("expected string payload, got {payload:?}");
                     }
-                    other => panic!("expected unsupported variant, got {other:?}"),
                 }
-            }
+                other => panic!("expected unsupported variant, got {other:?}"),
+            },
             other => panic!("expected Result(Err(Some(...))), got {other:?}"),
         }
     }
@@ -3429,7 +3460,10 @@ mod tests {
             .call(&mut ctx, "anything", vec![])
             .expect_err("empty marker should reject every method");
         let msg = format!("{err}");
-        assert!(msg.contains("anything"), "error should name the method: {msg}");
+        assert!(
+            msg.contains("anything"),
+            "error should name the method: {msg}"
+        );
     }
 
     #[test]
@@ -3634,7 +3668,11 @@ mod tests {
         let [Value::Result(Ok(Some(payload)))] = out else {
             panic!("expected [Result(Ok(Some(Resource)))], got {out:?}");
         };
-        let Value::Resource { store_id, handle_id } = payload.as_ref() else {
+        let Value::Resource {
+            store_id,
+            handle_id,
+        } = payload.as_ref()
+        else {
             panic!("expected Resource payload, got {:?}", payload);
         };
         // The stateful stub ctx recorded (interface, name, rep)
@@ -3658,7 +3696,10 @@ mod tests {
     /// OS-level lock.
     fn scratch_lock_path(tag: &str) -> String {
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("ducklink-runtime-test-{tag}-{}.lock", std::process::id()));
+        let path = dir.join(format!(
+            "ducklink-runtime-test-{tag}-{}.lock",
+            std::process::id()
+        ));
         // Ensure the file exists (LockHandleState::acquire_exclusive
         // opens with read+write; a missing file would fail on
         // some platforms).
@@ -3720,11 +3761,7 @@ mod tests {
         // routes here. Return is (); the macro's unit-return
         // wrap emits an empty Vec::new(), so out must be empty.
         let rel_out = host
-            .call(
-                &mut ctx,
-                "[method]lock-handle.release",
-                vec![handle_value],
-            )
+            .call(&mut ctx, "[method]lock-handle.release", vec![handle_value])
             .expect("lock-handle.release dispatch");
         assert!(
             rel_out.is_empty(),
@@ -3922,10 +3959,7 @@ mod tests {
             .call(
                 &mut ctx,
                 "register-parser-extension",
-                vec![
-                    Value::String("my-parser".into()),
-                    Value::U32(4242),
-                ],
+                vec![Value::String("my-parser".into()), Value::U32(4242)],
             )
             .expect("register-parser-extension dispatch");
 
@@ -3954,10 +3988,7 @@ mod tests {
             .call(
                 &mut ctx,
                 "register-parser-extension",
-                vec![
-                    Value::String("another-parser".into()),
-                    Value::U32(4243),
-                ],
+                vec![Value::String("another-parser".into()), Value::U32(4243)],
             )
             .expect("second register dispatch");
         assert_eq!(

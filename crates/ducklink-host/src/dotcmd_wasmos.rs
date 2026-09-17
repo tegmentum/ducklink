@@ -92,7 +92,11 @@ impl SpiHost {
     /// connection"); executor trap → Err("spi query trapped: {trap}");
     /// core `Duckerror` → Err(rendered-message); success →
     /// Ok(rendered-rows).
-    fn query(&self, _ctx: &mut HostCallContext<'_>, sql: String) -> RuntimeResult<Result<String, String>> {
+    fn query(
+        &self,
+        _ctx: &mut HostCallContext<'_>,
+        sql: String,
+    ) -> RuntimeResult<Result<String, String>> {
         let handle = self
             .current_connection
             .lock()
@@ -103,12 +107,11 @@ impl SpiHost {
             None => return Ok(Err("spi: no active database connection".to_string())),
         };
         let mut core = self.core.lock().unwrap_or_else(|e| e.into_inner());
-        let result = match core
-            .with_database(|guest, store| guest.call_execute(store, handle, &sql))
-        {
-            Ok(r) => r,
-            Err(trap) => return Ok(Err(format!("spi query trapped: {trap}"))),
-        };
+        let result =
+            match core.with_database(|guest, store| guest.call_execute(store, handle, &sql)) {
+                Ok(r) => r,
+                Err(trap) => return Ok(Err(format!("spi query trapped: {trap}"))),
+            };
         Ok(match result {
             Ok(qr) => Ok(spi_render_rows(qr)),
             Err(err) => Err(core_duckerror_message(err)),

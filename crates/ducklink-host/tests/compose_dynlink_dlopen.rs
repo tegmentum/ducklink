@@ -62,9 +62,8 @@ async fn dlopen_guest_invokes_shared_provider_and_prints_uppercase() {
         return;
     }
 
-    let runtime: Arc<SelectedRuntime> = Arc::new(
-        SelectedRuntime::new(RuntimeConfig::default()).expect("build SelectedRuntime"),
-    );
+    let runtime: Arc<SelectedRuntime> =
+        Arc::new(SelectedRuntime::new(RuntimeConfig::default()).expect("build SelectedRuntime"));
 
     // 1. Build the shared provider registry and register the echo
     //    provider under id "provider". register_provider compiles
@@ -88,7 +87,10 @@ async fn dlopen_guest_invokes_shared_provider_and_prints_uppercase() {
     let guest_bytes: bytes::Bytes = std::fs::read(&guest_path).expect("read guest").into();
     let guest = runtime
         .compile_component(
-            ComponentSource::Bytes { bytes: guest_bytes.clone(), name: Some("dlopen-guest".into()) },
+            ComponentSource::Bytes {
+                bytes: guest_bytes.clone(),
+                name: Some("dlopen-guest".into()),
+            },
             Default::default(),
         )
         .await
@@ -102,15 +104,23 @@ async fn dlopen_guest_invokes_shared_provider_and_prints_uppercase() {
     let mut instance = runtime
         .instantiate(
             &guest,
-            ExecutionContext::new().with_wasi(env).with_host_imports(host_imports.clone()),
+            ExecutionContext::new()
+                .with_wasi(env)
+                .with_host_imports(host_imports.clone()),
         )
         .await
         .expect("instantiate guest");
 
     let run_result = instance.call_wasi_command().await;
     if let Err(e) = &run_result {
-        eprintln!("=== guest stderr on error ===\n{}", String::from_utf8_lossy(&stderr.lock().unwrap()));
-        eprintln!("=== guest stdout on error ===\n{}", String::from_utf8_lossy(&stdout.lock().unwrap()));
+        eprintln!(
+            "=== guest stderr on error ===\n{}",
+            String::from_utf8_lossy(&stderr.lock().unwrap())
+        );
+        eprintln!(
+            "=== guest stdout on error ===\n{}",
+            String::from_utf8_lossy(&stdout.lock().unwrap())
+        );
         eprintln!("=== error ===\n{e:#?}");
     }
     run_result
@@ -137,7 +147,9 @@ async fn dlopen_guest_invokes_shared_provider_and_prints_uppercase() {
     let mut instance2 = runtime
         .instantiate(
             &guest,
-            ExecutionContext::new().with_wasi(env2).with_host_imports(host_imports),
+            ExecutionContext::new()
+                .with_wasi(env2)
+                .with_host_imports(host_imports),
         )
         .await
         .expect("instantiate guest 2");

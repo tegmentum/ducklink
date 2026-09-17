@@ -54,9 +54,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
-use wasmos_runtime_api::{
-    HostCallContext, RuntimeError, RuntimeResult, SyncHostCall, Value,
-};
+use wasmos_runtime_api::{HostCallContext, RuntimeError, RuntimeResult, SyncHostCall, Value};
 use wasmos_runtime_wasmtime_v48::{sync_bridge_resource, sync_export_bridge};
 use wasmtime::component::{Component, Linker, Resource, ResourceTable};
 use wasmtime::{AsContextMut, Engine, Store};
@@ -196,17 +194,17 @@ impl SyncHostCall for DriverExecHost {
                 "{EXEC_IFACE}: unexpected resource drop for {resource_name:?}"
             )));
         }
-        let state = ctx
-            .consumer_state::<DriverStoreState>()
-            .ok_or_else(|| {
-                RuntimeError::msg("driver-exec drop: consumer_state<DriverStoreState> unavailable")
-            })?;
+        let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
+            RuntimeError::msg("driver-exec drop: consumer_state<DriverStoreState> unavailable")
+        })?;
         // Ignore-not-found matches the bindgen-era `let _ =
         // self.table.delete(rep);` — wasmtime guarantees at-most-once
         // drop, but the bridge routes here even if the entry was
         // already reaped through another path (e.g. a store teardown
         // in-flight).
-        let _ = state.table.delete(Resource::<DriverConnection>::new_own(rep));
+        let _ = state
+            .table
+            .delete(Resource::<DriverConnection>::new_own(rep));
         Ok(())
     }
 }
@@ -226,11 +224,9 @@ impl DriverExecHost {
                 )))
             }
         };
-        let state = ctx
-            .consumer_state::<DriverStoreState>()
-            .ok_or_else(|| {
-                RuntimeError::msg("driver-exec open: consumer_state<DriverStoreState> unavailable")
-            })?;
+        let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
+            RuntimeError::msg("driver-exec open: consumer_state<DriverStoreState> unavailable")
+        })?;
         // Snapshot preopens through borrowed refs — mirrors the
         // bindgen-era impl at line 139-143 verbatim.
         let preopen_refs: Vec<(&Path, &str)> = state
@@ -241,9 +237,7 @@ impl DriverExecHost {
         match DriverConnection::open(&state.engine, &state.artifacts, &preopen_refs, &path) {
             Ok(conn) => {
                 let handle = state.table.push(conn).map_err(|e| {
-                    RuntimeError::msg(format!(
-                        "driver-exec open: resource table full: {e}"
-                    ))
+                    RuntimeError::msg(format!("driver-exec open: resource table full: {e}"))
                 })?;
                 let rep = handle.rep();
                 let resource_value = ctx.new_host_resource(EXEC_IFACE, CONN_RESOURCE, rep)?;
@@ -271,11 +265,9 @@ impl DriverExecHost {
             }
         };
         let rep = ctx.resource_rep(&rep_value)?;
-        let state = ctx
-            .consumer_state::<DriverStoreState>()
-            .ok_or_else(|| {
-                RuntimeError::msg("driver-exec exec: consumer_state<DriverStoreState> unavailable")
-            })?;
+        let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
+            RuntimeError::msg("driver-exec exec: consumer_state<DriverStoreState> unavailable")
+        })?;
         // `Resource::new_own(rep)` — the rep is stable across the
         // bridge round-trip; the same rep the guest sees is the same
         // one the wasmtime ResourceTable indexed at push time.
@@ -307,11 +299,9 @@ impl DriverExecHost {
             }
         };
         let rep = ctx.resource_rep(&rep_value)?;
-        let state = ctx
-            .consumer_state::<DriverStoreState>()
-            .ok_or_else(|| {
-                RuntimeError::msg("driver-exec query: consumer_state<DriverStoreState> unavailable")
-            })?;
+        let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
+            RuntimeError::msg("driver-exec query: consumer_state<DriverStoreState> unavailable")
+        })?;
         let handle = Resource::<DriverConnection>::new_own(rep);
         let conn = state
             .table

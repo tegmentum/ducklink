@@ -14,9 +14,9 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
-use wasmtime::component::{Component, Linker, ResourceTable};
 #[cfg(test)]
 use wasmtime::component::Resource;
+use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{AsContextMut, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
@@ -157,9 +157,7 @@ fn column_from_values(vals: &[&Duckvalue]) -> Colvec {
             let mut out = Vec::with_capacity(n);
             for (r, v) in vals.iter().enumerate() {
                 match v {
-                    D::Uuid(d) => {
-                        out.push(Uuidvalue { hi: d.hi, lo: d.lo })
-                    }
+                    D::Uuid(d) => out.push(Uuidvalue { hi: d.hi, lo: d.lo }),
                     _ => {
                         mark_null(r, &mut validity);
                         out.push(Uuidvalue { hi: 0, lo: 0 });
@@ -231,9 +229,7 @@ fn column_from_values(vals: &[&Duckvalue]) -> Colvec {
 }
 
 /// Pivot a row-major batch to one `colvec` per argument column.
-fn rows_to_colvecs(
-    rows: &[Vec<Duckvalue>],
-) -> Vec<Colvec> {
+fn rows_to_colvecs(rows: &[Vec<Duckvalue>]) -> Vec<Colvec> {
     let ncols = rows.first().map(|r| r.len()).unwrap_or(0);
     (0..ncols)
         .map(|j| {
@@ -1308,7 +1304,6 @@ pub enum RegistryPushError {
 }
 
 impl ExtensionStoreState {
-
     /// ADR-0029 Phase 6.2.d.2 accessor — look up the table function
     /// name that was registered for a given handle. Used by the
     /// `files.register_replacement_scan` handler to resolve the
@@ -1556,7 +1551,6 @@ impl wasmtime::component::HasData for ExtensionStoreState {
 // import added (the `imports_linker` gate in `load_component`).
 crate::impl_compose_dynlink_host!(ExtensionStoreState, dynlink_bridge);
 
-
 // Phase 6.2.l.2 — the empty `impl extension_types::Host for
 // ExtensionStoreState {}` retired here. The base `types` interface
 // has no host imports (it only defines records + variants), so the
@@ -1639,7 +1633,11 @@ impl ExtensionStoreState {
 // MacroDef` records). Same test coverage, no wit-bindgen types.
 #[cfg(test)]
 impl ExtensionStoreState {
-    pub(crate) fn register_logical_type(&mut self, name: String, physical: String) -> Result<u32, String> {
+    pub(crate) fn register_logical_type(
+        &mut self,
+        name: String,
+        physical: String,
+    ) -> Result<u32, String> {
         let handle = self.alloc_resource_id();
         verbose_log!(
             "[extension-manager] catalog register-logical-type '{}' (physical={}) for '{}' -> handle {handle}",
@@ -1662,7 +1660,10 @@ impl ExtensionStoreState {
     ) -> Result<(), String> {
         verbose_log!(
             "[extension-manager] catalog register-macro '{}.{}' ({} params) for '{}'",
-            schema, name, parameters.len(), self.extension_name
+            schema,
+            name,
+            parameters.len(),
+            self.extension_name
         );
         self.pending_macros.push(PendingMacro {
             extension: self.extension_name.clone(),
@@ -1997,7 +1998,9 @@ impl ExtensionStoreState {
     ) -> Result<u32, Duckerror> {
         verbose_log!(
             "[extension-runtime:{}] registered coordinate system {}:{}",
-            self.extension_name, auth_name, code
+            self.extension_name,
+            auth_name,
+            code
         );
         self.pending_coordinate_systems
             .push(PendingCoordinateSystem {
@@ -2419,7 +2422,6 @@ pub struct ExtensionInstance {
     instance: wasmtime::component::Instance,
 }
 
-
 /// ADR-0029 Phase 6.2.i — decode a `wasmos_runtime_api::Value` in the
 /// shape emitted by a guest `duckerror` variant return back to the
 /// wit-bindgen `Duckerror` enum. Used by the
@@ -2449,7 +2451,6 @@ pub struct ExtensionInstance {
 // Duckvalue + record marshalling suite. Callsites reach both via
 // the module-level `use crate::export_marshal::*` import.
 pub(crate) use crate::export_marshal::export_result_to_duckerror;
-
 
 /// M2b: the storage interface's scan types (`scan-request` /
 /// `scan-filter` / `compare-op`) used when driving a pushdown scan
@@ -2544,8 +2545,6 @@ pub enum Duckerror {
     /// diagnostic detail.
     Internal(String),
 }
-
-
 
 impl std::fmt::Display for Duckerror {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -2653,8 +2652,6 @@ pub enum Duckvalue {
     Complex(Complexvalue),
 }
 
-
-
 /// DECIMAL width/scale shape. Mirror of WIT `types.decimalshape`.
 /// Carried on `Logicaltype::Decimal` so DECIMAL type-shape is
 /// structural.
@@ -2705,9 +2702,6 @@ pub struct Columndef {
     pub name: String,
     pub logical: Logicaltype,
 }
-
-
-
 
 // ─── Column-types mirrors ────────────────────────────────────────
 
@@ -2811,14 +2805,11 @@ pub struct Colvec {
     pub rows: u32,
 }
 
-
 // Column-types re-declares decimalvalue, intervalvalue, uuidvalue,
 // and complexvalue with identical layout to their types.wit
 // counterparts. wit-bindgen generates distinct Rust types per WIT
 // declaration, so we bridge column-types' variants through the
 // unified mirrors above.
-
-
 
 // ─── Phase 6.2.m Session 6 — flags mirrors ───────────────────────
 
@@ -2840,21 +2831,28 @@ impl Funcflags {
     pub const DEPRECATED: Self = Self(0b1_0000);
 
     /// Zero-flag value — the identity element of `|`.
-    pub const fn empty() -> Self { Self(0) }
+    pub const fn empty() -> Self {
+        Self(0)
+    }
 
     /// Whether `self` has every flag `other` sets.
-    pub const fn contains(&self, other: Self) -> bool { self.0 & other.0 == other.0 }
+    pub const fn contains(&self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
 }
 
 impl std::ops::BitOr for Funcflags {
     type Output = Self;
-    fn bitor(self, rhs: Self) -> Self { Self(self.0 | rhs.0) }
+    fn bitor(self, rhs: Self) -> Self {
+        Self(self.0 | rhs.0)
+    }
 }
 
 impl std::ops::BitOrAssign for Funcflags {
-    fn bitor_assign(&mut self, rhs: Self) { self.0 |= rhs.0; }
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
 }
-
 
 /// Connection lifecycle event bits. Mirror of WIT
 /// `lifecycle.conn-events` (2-flag bitset: opened + closed).
@@ -2871,16 +2869,24 @@ impl ConnEvents {
     pub const OPENED: Self = Self(0b01);
     pub const CLOSED: Self = Self(0b10);
 
-    pub const fn empty() -> Self { Self(0) }
-    pub const fn contains(&self, other: Self) -> bool { self.0 & other.0 == other.0 }
+    pub const fn empty() -> Self {
+        Self(0)
+    }
+    pub const fn contains(&self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
 }
 
 impl std::ops::BitOr for ConnEvents {
     type Output = Self;
-    fn bitor(self, rhs: Self) -> Self { Self(self.0 | rhs.0) }
+    fn bitor(self, rhs: Self) -> Self {
+        Self(self.0 | rhs.0)
+    }
 }
 impl std::ops::BitOrAssign for ConnEvents {
-    fn bitor_assign(&mut self, rhs: Self) { self.0 |= rhs.0; }
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
 }
 
 // ─── Session 5 mirrors — smaller records / enums ─────────────────
@@ -2966,14 +2972,6 @@ pub struct Loadresult {
     pub requires: Vec<Capabilitykind>,
 }
 
-
-
-
-
-
-
-
-
 /// A resultset returned by a scan / query dispatch: row-major
 /// list of rows, each a list of `Duckvalue`s. Mirror of WIT
 /// `types.resultset` (which is `list<list<duckvalue>>`).
@@ -2983,7 +2981,6 @@ pub type Resultset = Vec<Vec<Duckvalue>>;
 /// batch dispatch. Same wire shape as [`Resultset`] — mirror of WIT
 /// `types.rowbatch`.
 pub type Rowbatch = Vec<Vec<Duckvalue>>;
-
 
 // ADR-0029 Phase 6.2.k — SPI record/enum mirrors.
 //
@@ -3098,16 +3095,12 @@ pub struct LogEntry {
     pub ts_micros: i64,
 }
 
-
 impl ExtensionInstance {
     /// Phase 6.2.j — trimmed constructor. No wit-bindgen typed
     /// dispatchers to stash any more; every `dispatch_*` re-enters
     /// the guest via `sync_export_bridge::call_export` using
     /// `instance` directly.
-    pub fn new(
-        store: Store<ExtensionStoreState>,
-        instance: wasmtime::component::Instance,
-    ) -> Self {
+    pub fn new(store: Store<ExtensionStoreState>, instance: wasmtime::component::Instance) -> Self {
         Self { store, instance }
     }
 
@@ -3128,7 +3121,10 @@ impl ExtensionInstance {
                         .map(|n| Box::new(wasmos_runtime_api::Value::U64(n))),
                 ),
             ),
-            ("iswindow".into(), wasmos_runtime_api::Value::Bool(ctx.iswindow)),
+            (
+                "iswindow".into(),
+                wasmos_runtime_api::Value::Bool(ctx.iswindow),
+            ),
         ]);
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -3140,10 +3136,12 @@ impl ExtensionInstance {
                 duckvalue_list_to_value(args),
                 ctx_val,
             ],
-        ).map_err(|e| Duckerror::Internal(format!("call-scalar dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("call-scalar dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-scalar", |p| {
-            let v = p.ok_or_else(|| Duckerror::Internal(
-                "call-scalar: expected Ok(duckvalue), got None".into()))?;
+            let v = p.ok_or_else(|| {
+                Duckerror::Internal("call-scalar: expected Ok(duckvalue), got None".into())
+            })?;
             value_to_duckvalue(v)
         })
     }
@@ -3177,10 +3175,14 @@ impl ExtensionInstance {
             (
                 "rowindex".into(),
                 wasmos_runtime_api::Value::Option(
-                    ctx.rowindex.map(|n| Box::new(wasmos_runtime_api::Value::U64(n))),
+                    ctx.rowindex
+                        .map(|n| Box::new(wasmos_runtime_api::Value::U64(n))),
                 ),
             ),
-            ("iswindow".into(), wasmos_runtime_api::Value::Bool(ctx.iswindow)),
+            (
+                "iswindow".into(),
+                wasmos_runtime_api::Value::Bool(ctx.iswindow),
+            ),
         ]);
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -3192,10 +3194,12 @@ impl ExtensionInstance {
                 colvec_list_to_value(args),
                 ctx_val,
             ],
-        ).map_err(|e| Duckerror::Internal(format!("call-scalar-batch-col dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("call-scalar-batch-col dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-scalar-batch-col", |p| {
-            let v = p.ok_or_else(|| Duckerror::Internal(
-                "call-scalar-batch-col: expected Ok(colvec), got None".into()))?;
+            let v = p.ok_or_else(|| {
+                Duckerror::Internal("call-scalar-batch-col: expected Ok(colvec), got None".into())
+            })?;
             value_to_colvec(v)
         })
     }
@@ -3216,10 +3220,12 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(dispatcher_handle),
                 duckvalue_list_to_value(args),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("call-table dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("call-table dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-table", |p| {
-            let v = p.ok_or_else(|| Duckerror::Internal(
-                "call-table: expected Ok(resultset), got None".into()))?;
+            let v = p.ok_or_else(|| {
+                Duckerror::Internal("call-table: expected Ok(resultset), got None".into())
+            })?;
             value_to_resultset(v)
         })
     }
@@ -3251,10 +3257,12 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(dispatcher_handle),
                 colvec_list_to_value(args),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("call-aggregate-col dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("call-aggregate-col dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-aggregate-col", |p| {
-            let v = p.ok_or_else(|| Duckerror::Internal(
-                "call-aggregate-col: expected Ok(duckvalue), got None".into()))?;
+            let v = p.ok_or_else(|| {
+                Duckerror::Internal("call-aggregate-col: expected Ok(duckvalue), got None".into())
+            })?;
             value_to_duckvalue(v)
         })
     }
@@ -3276,10 +3284,12 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(dispatcher_handle),
                 duckvalue_list_to_value(args),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("call-pragma dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("call-pragma dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-pragma", |p| {
-            let v = p.ok_or_else(|| Duckerror::Internal(
-                "call-pragma: expected Ok(option<duckvalue>), got None".into()))?;
+            let v = p.ok_or_else(|| {
+                Duckerror::Internal("call-pragma: expected Ok(option<duckvalue>), got None".into())
+            })?;
             value_to_optional_duckvalue(v)
         })
     }
@@ -3304,10 +3314,12 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(dispatcher_handle),
                 colvec_to_value(&arg),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("call-cast-col dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("call-cast-col dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-cast-col", |p| {
-            let v = p.ok_or_else(|| Duckerror::Internal(
-                "call-cast-col: expected Ok(colvec), got None".into()))?;
+            let v = p.ok_or_else(|| {
+                Duckerror::Internal("call-cast-col: expected Ok(colvec), got None".into())
+            })?;
             let c = value_to_colvec(v)?;
             Ok(colvec_to_values(c)
                 .into_iter()
@@ -3359,14 +3371,13 @@ impl ExtensionInstance {
     /// of option names whose values just changed) so the component can refresh
     /// any cached derived state before the next dispatch. Mirrors the
     /// `bindings.duckdb_extension_guest().call_load` shape used at load time.
-    pub fn dispatch_reconfigure(
-        &mut self,
-        keys: &[String],
-    ) -> Result<bool, Duckerror> {
+    pub fn dispatch_reconfigure(&mut self, keys: &[String]) -> Result<bool, Duckerror> {
         // ADR-0029 Phase 6.2.i.4 — sibling of dispatch_shutdown.
         // `keys` list<string> lowers to Value::List of Value::String.
         let keys_val = wasmos_runtime_api::Value::List(
-            keys.iter().map(|k| wasmos_runtime_api::Value::String(k.clone())).collect(),
+            keys.iter()
+                .map(|k| wasmos_runtime_api::Value::String(k.clone()))
+                .collect(),
         );
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -3557,10 +3568,15 @@ impl ExtensionInstance {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let opts_val = wasmos_runtime_api::Value::List(
-            options.iter().map(|(k, v)| wasmos_runtime_api::Value::Tuple(vec![
-                wasmos_runtime_api::Value::String(k.clone()),
-                wasmos_runtime_api::Value::String(v.clone()),
-            ])).collect(),
+            options
+                .iter()
+                .map(|(k, v)| {
+                    wasmos_runtime_api::Value::Tuple(vec![
+                        wasmos_runtime_api::Value::String(k.clone()),
+                        wasmos_runtime_api::Value::String(v.clone()),
+                    ])
+                })
+                .collect(),
         );
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -3573,7 +3589,8 @@ impl ExtensionInstance {
                 columndef_list_to_value(columns),
                 opts_val,
             ],
-        ).map_err(|e| Duckerror::Internal(format!("copy-to-bind dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("copy-to-bind dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "copy-to-bind", |p| lift_u32(p))
     }
 
@@ -3587,7 +3604,9 @@ impl ExtensionInstance {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let rows_val = wasmos_runtime_api::Value::List(
-            rows.iter().map(|row| duckvalue_list_to_value(row)).collect(),
+            rows.iter()
+                .map(|row| duckvalue_list_to_value(row))
+                .collect(),
         );
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -3599,16 +3618,13 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(writer),
                 rows_val,
             ],
-        ).map_err(|e| Duckerror::Internal(format!("copy-to-sink dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("copy-to-sink dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "copy-to-sink", |_| Ok(()))
     }
 
     /// COPY TO: finalize + close; returns rows written.
-    pub fn copy_to_finalize(
-        &mut self,
-        handle: u32,
-        writer: u32,
-    ) -> Result<u64, Duckerror> {
+    pub fn copy_to_finalize(&mut self, handle: u32, writer: u32) -> Result<u64, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -3620,7 +3636,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::U32(writer),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("copy-to-finalize dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("copy-to-finalize dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "copy-to-finalize", |p| lift_u64(p))
     }
 
@@ -3646,10 +3663,15 @@ impl ExtensionInstance {
         // { reader: u32, columns: list<columndef> }.
         use crate::export_marshal::*;
         let opts_val = wasmos_runtime_api::Value::List(
-            options.iter().map(|(k, v)| wasmos_runtime_api::Value::Tuple(vec![
-                wasmos_runtime_api::Value::String(k.clone()),
-                wasmos_runtime_api::Value::String(v.clone()),
-            ])).collect(),
+            options
+                .iter()
+                .map(|(k, v)| {
+                    wasmos_runtime_api::Value::Tuple(vec![
+                        wasmos_runtime_api::Value::String(k.clone()),
+                        wasmos_runtime_api::Value::String(v.clone()),
+                    ])
+                })
+                .collect(),
         );
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -3662,10 +3684,14 @@ impl ExtensionInstance {
                 opts_val,
                 columndef_list_to_value(target_columns),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("copy-from-bind dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("copy-from-bind dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "copy-from-bind", |p| {
-            let rec = p.ok_or_else(|| Duckerror::Internal(
-                "copy-from-bind: expected Ok(copy-from-bind-result), got None".into()))?;
+            let rec = p.ok_or_else(|| {
+                Duckerror::Internal(
+                    "copy-from-bind: expected Ok(copy-from-bind-result), got None".into(),
+                )
+            })?;
             let reader = u32_field(rec, "reader")?;
             let columns = value_to_columndef_list(record_field(rec, "columns")?)?;
             Ok(CopyFromBindResult { reader, columns })
@@ -3691,20 +3717,18 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(reader),
                 wasmos_runtime_api::Value::U32(max_rows),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("copy-from-scan dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("copy-from-scan dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "copy-from-scan", |p| {
-            let v = p.ok_or_else(|| Duckerror::Internal(
-                "copy-from-scan: expected Ok(resultset), got None".into()))?;
+            let v = p.ok_or_else(|| {
+                Duckerror::Internal("copy-from-scan: expected Ok(resultset), got None".into())
+            })?;
             value_to_resultset(v)
         })
     }
 
     /// COPY FROM: close the reader.
-    pub fn copy_from_close(
-        &mut self,
-        handle: u32,
-        reader: u32,
-    ) -> Result<bool, Duckerror> {
+    pub fn copy_from_close(&mut self, handle: u32, reader: u32) -> Result<bool, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -3716,7 +3740,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::U32(reader),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("copy-from-close dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("copy-from-close dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "copy-from-close", |p| lift_bool(p))
     }
 
@@ -3734,10 +3759,18 @@ impl ExtensionInstance {
         // Phase 6.2.i.7 — migrated. secret-kv is record { key:
         // string, value: string }.
         use crate::export_marshal::*;
-        let kv_to_val = |kv: &SecretKv| wasmos_runtime_api::Value::Record(vec![
-            ("key".into(), wasmos_runtime_api::Value::String(kv.key.clone())),
-            ("value".into(), wasmos_runtime_api::Value::String(kv.value.clone())),
-        ]);
+        let kv_to_val = |kv: &SecretKv| {
+            wasmos_runtime_api::Value::Record(vec![
+                (
+                    "key".into(),
+                    wasmos_runtime_api::Value::String(kv.key.clone()),
+                ),
+                (
+                    "value".into(),
+                    wasmos_runtime_api::Value::String(kv.value.clone()),
+                ),
+            ])
+        };
         let params_val = wasmos_runtime_api::Value::List(params.iter().map(kv_to_val).collect());
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -3750,14 +3783,19 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::String(provider.to_string()),
                 params_val,
             ],
-        ).map_err(|e| Duckerror::Internal(format!("create-secret dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("create-secret dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "create-secret", |p| {
-            let list = p.ok_or_else(|| Duckerror::Internal(
-                "create-secret: expected Ok(list<secret-kv>), got None".into()))?;
+            let list = p.ok_or_else(|| {
+                Duckerror::Internal("create-secret: expected Ok(list<secret-kv>), got None".into())
+            })?;
             let items = match list {
                 wasmos_runtime_api::Value::List(items) => items,
-                other => return Err(Duckerror::Internal(format!(
-                    "create-secret: expected List, got {other:?}"))),
+                other => {
+                    return Err(Duckerror::Internal(format!(
+                        "create-secret: expected List, got {other:?}"
+                    )))
+                }
             };
             let mut out = Vec::with_capacity(items.len());
             for item in items {
@@ -3789,15 +3827,12 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::U32(catalog),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("begin-transaction dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("begin-transaction dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "begin-transaction", |p| lift_u32(p))
     }
 
-    pub fn storage_commit_transaction(
-        &mut self,
-        handle: u32,
-        txn: u32,
-    ) -> Result<(), Duckerror> {
+    pub fn storage_commit_transaction(&mut self, handle: u32, txn: u32) -> Result<(), Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -3809,15 +3844,12 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::U32(txn),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("commit-transaction dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("commit-transaction dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "commit-transaction", |_| Ok(()))
     }
 
-    pub fn storage_rollback_transaction(
-        &mut self,
-        handle: u32,
-        txn: u32,
-    ) -> Result<(), Duckerror> {
+    pub fn storage_rollback_transaction(&mut self, handle: u32, txn: u32) -> Result<(), Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -3829,7 +3861,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::U32(txn),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("rollback-transaction dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("rollback-transaction dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "rollback-transaction", |_| Ok(()))
     }
 
@@ -3854,7 +3887,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::String(table.to_string()),
                 columndef_list_to_value(columns),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("create-table dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("create-table dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "create-table", |_| Ok(()))
     }
 
@@ -3868,7 +3902,9 @@ impl ExtensionInstance {
         // Phase 6.2.i.7 — migrated. rows: list<list<duckvalue>>.
         use crate::export_marshal::*;
         let rows_val = wasmos_runtime_api::Value::List(
-            rows.iter().map(|row| duckvalue_list_to_value(row)).collect(),
+            rows.iter()
+                .map(|row| duckvalue_list_to_value(row))
+                .collect(),
         );
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -3881,7 +3917,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::String(table.to_string()),
                 rows_val,
             ],
-        ).map_err(|e| Duckerror::Internal(format!("insert-rows dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("insert-rows dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "insert-rows", |p| lift_u64(p))
     }
 
@@ -3905,7 +3942,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::String(table.to_string()),
                 s64_list_to_value(rowids),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("delete-rows dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("delete-rows dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "delete-rows", |p| lift_u64(p))
     }
 
@@ -3920,7 +3958,9 @@ impl ExtensionInstance {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let rows_val = wasmos_runtime_api::Value::List(
-            rows.iter().map(|row| duckvalue_list_to_value(row)).collect(),
+            rows.iter()
+                .map(|row| duckvalue_list_to_value(row))
+                .collect(),
         );
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -3934,7 +3974,8 @@ impl ExtensionInstance {
                 s64_list_to_value(rowids),
                 rows_val,
             ],
-        ).map_err(|e| Duckerror::Internal(format!("update-rows dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("update-rows dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "update-rows", |p| lift_u64(p))
     }
 
@@ -3949,10 +3990,7 @@ impl ExtensionInstance {
     /// storage-write-dispatch at all) return `Ok(false)` / an error;
     /// callers should treat those the same and keep the legacy
     /// serialize + write-back path.
-    pub fn storage_writes_persist_directly(
-        &mut self,
-        handle: u32,
-    ) -> Result<bool, Duckerror> {
+    pub fn storage_writes_persist_directly(&mut self, handle: u32) -> Result<bool, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -3961,7 +3999,10 @@ impl ExtensionInstance {
             Some("duckdb:extension/storage-write-dispatch@5.0.0"),
             "writes-persist-directly",
             &[wasmos_runtime_api::Value::U32(handle)],
-        ).map_err(|e| Duckerror::Internal(format!("writes-persist-directly dispatch failed: {e}")))?;
+        )
+        .map_err(|e| {
+            Duckerror::Internal(format!("writes-persist-directly dispatch failed: {e}"))
+        })?;
         export_result_to_duckerror(out, "writes-persist-directly", |p| lift_bool(p))
     }
 
@@ -3989,12 +4030,21 @@ impl ExtensionInstance {
             &[
                 wasmos_runtime_api::Value::U32(handle),
                 duckvalue_list_to_value(args),
-                wasmos_runtime_api::Value::List(projection.iter().map(|n| wasmos_runtime_api::Value::U32(*n)).collect()),
+                wasmos_runtime_api::Value::List(
+                    projection
+                        .iter()
+                        .map(|n| wasmos_runtime_api::Value::U32(*n))
+                        .collect(),
+                ),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("call-table-open dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("call-table-open dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-table-open", |p| {
-            let rec = p.ok_or_else(|| Duckerror::Internal(
-                "call-table-open: expected Ok(table-open-result), got None".into()))?;
+            let rec = p.ok_or_else(|| {
+                Duckerror::Internal(
+                    "call-table-open: expected Ok(table-open-result), got None".into(),
+                )
+            })?;
             let cursor = u32_field(rec, "cursor")?;
             let columns = value_to_columndef_list(record_field(rec, "columns")?)?;
             Ok(TableOpenResult { cursor, columns })
@@ -4021,17 +4071,33 @@ impl ExtensionInstance {
         use crate::export_marshal::*;
         // Phase 6.2.k — FilterOp is now the ducklink-runtime-owned
         // mirror; enum-name mapping stays wire-canonical.
-        let filter_op_val = |op: FilterOp| wasmos_runtime_api::Value::Enum(match op {
-            FilterOp::Eq => "eq", FilterOp::Ne => "ne", FilterOp::Lt => "lt", FilterOp::Le => "le",
-            FilterOp::Gt => "gt", FilterOp::Ge => "ge", FilterOp::IsIn => "is-in",
-            FilterOp::IsNull => "is-null", FilterOp::IsNotNull => "is-not-null",
-        }.into());
+        let filter_op_val = |op: FilterOp| {
+            wasmos_runtime_api::Value::Enum(
+                match op {
+                    FilterOp::Eq => "eq",
+                    FilterOp::Ne => "ne",
+                    FilterOp::Lt => "lt",
+                    FilterOp::Le => "le",
+                    FilterOp::Gt => "gt",
+                    FilterOp::Ge => "ge",
+                    FilterOp::IsIn => "is-in",
+                    FilterOp::IsNull => "is-null",
+                    FilterOp::IsNotNull => "is-not-null",
+                }
+                .into(),
+            )
+        };
         let filters_val = wasmos_runtime_api::Value::List(
-            filters.iter().map(|f| wasmos_runtime_api::Value::Record(vec![
-                ("column".into(), wasmos_runtime_api::Value::U32(f.column)),
-                ("op".into(), filter_op_val(f.op)),
-                ("values".into(), duckvalue_list_to_value(&f.values)),
-            ])).collect(),
+            filters
+                .iter()
+                .map(|f| {
+                    wasmos_runtime_api::Value::Record(vec![
+                        ("column".into(), wasmos_runtime_api::Value::U32(f.column)),
+                        ("op".into(), filter_op_val(f.op)),
+                        ("values".into(), duckvalue_list_to_value(&f.values)),
+                    ])
+                })
+                .collect(),
         );
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -4041,13 +4107,24 @@ impl ExtensionInstance {
             &[
                 wasmos_runtime_api::Value::U32(handle),
                 duckvalue_list_to_value(args),
-                wasmos_runtime_api::Value::List(projection.iter().map(|n| wasmos_runtime_api::Value::U32(*n)).collect()),
+                wasmos_runtime_api::Value::List(
+                    projection
+                        .iter()
+                        .map(|n| wasmos_runtime_api::Value::U32(*n))
+                        .collect(),
+                ),
                 filters_val,
             ],
-        ).map_err(|e| Duckerror::Internal(format!("call-table-open-filtered dispatch failed: {e}")))?;
+        )
+        .map_err(|e| {
+            Duckerror::Internal(format!("call-table-open-filtered dispatch failed: {e}"))
+        })?;
         export_result_to_duckerror(out, "call-table-open-filtered", |p| {
-            let rec = p.ok_or_else(|| Duckerror::Internal(
-                "call-table-open-filtered: expected Ok(table-open-result), got None".into()))?;
+            let rec = p.ok_or_else(|| {
+                Duckerror::Internal(
+                    "call-table-open-filtered: expected Ok(table-open-result), got None".into(),
+                )
+            })?;
             let cursor = u32_field(rec, "cursor")?;
             let columns = value_to_columndef_list(record_field(rec, "columns")?)?;
             Ok(TableOpenResult { cursor, columns })
@@ -4073,20 +4150,18 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(cursor),
                 wasmos_runtime_api::Value::U32(max_rows),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("call-table-next dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("call-table-next dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-table-next", |p| {
-            let v = p.ok_or_else(|| Duckerror::Internal(
-                "call-table-next: expected Ok(resultset), got None".into()))?;
+            let v = p.ok_or_else(|| {
+                Duckerror::Internal("call-table-next: expected Ok(resultset), got None".into())
+            })?;
             value_to_resultset(v)
         })
     }
 
     /// Close the streaming cursor and free its state.
-    pub fn table_close(
-        &mut self,
-        handle: u32,
-        cursor: u32,
-    ) -> Result<bool, Duckerror> {
+    pub fn table_close(&mut self, handle: u32, cursor: u32) -> Result<bool, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -4098,7 +4173,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::U32(cursor),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("call-table-close dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("call-table-close dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-table-close", |p| lift_bool(p))
     }
 
@@ -4116,7 +4192,8 @@ impl ExtensionInstance {
             Some("duckdb:extension/aggregate-incr-dispatch@5.0.0"),
             "call-aggregate-init",
             &[wasmos_runtime_api::Value::U32(handle)],
-        ).map_err(|e| Duckerror::Internal(format!("call-aggregate-init dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("call-aggregate-init dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-aggregate-init", |p| lift_u32(p))
     }
 
@@ -4130,7 +4207,9 @@ impl ExtensionInstance {
         // Phase 6.2.i.7 — migrated. Rowbatch = list<list<duckvalue>>.
         use crate::export_marshal::*;
         let rows_val = wasmos_runtime_api::Value::List(
-            rows.iter().map(|row| duckvalue_list_to_value(row)).collect(),
+            rows.iter()
+                .map(|row| duckvalue_list_to_value(row))
+                .collect(),
         );
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -4142,7 +4221,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(state),
                 rows_val,
             ],
-        ).map_err(|e| Duckerror::Internal(format!("call-aggregate-update dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("call-aggregate-update dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-aggregate-update", |_| Ok(()))
     }
 
@@ -4165,16 +4245,13 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(target),
                 wasmos_runtime_api::Value::U32(source),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("call-aggregate-combine dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("call-aggregate-combine dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-aggregate-combine", |_| Ok(()))
     }
 
     /// Produce the final value from `state` and free it.
-    pub fn aggregate_finalize(
-        &mut self,
-        handle: u32,
-        state: u32,
-    ) -> Result<Duckvalue, Duckerror> {
+    pub fn aggregate_finalize(&mut self, handle: u32, state: u32) -> Result<Duckvalue, Duckerror> {
         // Phase 6.2.i.7 — migrated. Returns result<duckvalue, duckerror>.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -4186,10 +4263,16 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::U32(state),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("call-aggregate-finalize dispatch failed: {e}")))?;
+        )
+        .map_err(|e| {
+            Duckerror::Internal(format!("call-aggregate-finalize dispatch failed: {e}"))
+        })?;
         export_result_to_duckerror(out, "call-aggregate-finalize", |p| {
-            let v = p.ok_or_else(|| Duckerror::Internal(
-                "call-aggregate-finalize: expected Ok(duckvalue), got None".into()))?;
+            let v = p.ok_or_else(|| {
+                Duckerror::Internal(
+                    "call-aggregate-finalize: expected Ok(duckvalue), got None".into(),
+                )
+            })?;
             value_to_duckvalue(v)
         })
     }
@@ -4199,11 +4282,7 @@ impl ExtensionInstance {
     // when a connection is opened or closed.
 
     /// Notify the component that connection `connection_id` was opened.
-    pub fn connection_opened(
-        &mut self,
-        handle: u32,
-        connection_id: u64,
-    ) -> Result<(), Duckerror> {
+    pub fn connection_opened(&mut self, handle: u32, connection_id: u64) -> Result<(), Duckerror> {
         // ADR-0029 Phase 6.2.i.5 — migrated from bindings.duckdb_
         // extension_conn_dispatch().call_on_connection_opened(store,
         // handle, connection_id) to sync_export_bridge::call_export.
@@ -4219,18 +4298,12 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U64(connection_id),
             ],
         )
-        .map_err(|e| Duckerror::Internal(format!(
-            "on-connection-opened dispatch failed: {e}"
-        )))?;
+        .map_err(|e| Duckerror::Internal(format!("on-connection-opened dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "on-connection-opened", |_| Ok(()))
     }
 
     /// Notify the component that connection `connection_id` was closed.
-    pub fn connection_closed(
-        &mut self,
-        handle: u32,
-        connection_id: u64,
-    ) -> Result<(), Duckerror> {
+    pub fn connection_closed(&mut self, handle: u32, connection_id: u64) -> Result<(), Duckerror> {
         // ADR-0029 Phase 6.2.i.5 — sibling of connection_opened.
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -4242,9 +4315,7 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U64(connection_id),
             ],
         )
-        .map_err(|e| Duckerror::Internal(format!(
-            "on-connection-closed dispatch failed: {e}"
-        )))?;
+        .map_err(|e| Duckerror::Internal(format!("on-connection-closed dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "on-connection-closed", |_| Ok(()))
     }
 
@@ -4272,16 +4343,13 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U64(offset),
                 bytes_to_value(data),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("file-write dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("file-write dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "file-write", |p| lift_u64(p))
     }
 
     /// Expand a glob `pattern` to matching paths.
-    pub fn file_glob(
-        &mut self,
-        handle: u32,
-        pattern: &str,
-    ) -> Result<Vec<String>, Duckerror> {
+    pub fn file_glob(&mut self, handle: u32, pattern: &str) -> Result<Vec<String>, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -4293,16 +4361,13 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::String(pattern.to_string()),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("file-glob dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("file-glob dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "file-glob", |p| lift_string_list(p))
     }
 
     /// Stat a single `path`.
-    pub fn file_stat(
-        &mut self,
-        handle: u32,
-        path: &str,
-    ) -> Result<FileInfo, Duckerror> {
+    pub fn file_stat(&mut self, handle: u32, path: &str) -> Result<FileInfo, Duckerror> {
         // Phase 6.2.i.7 — migrated. FileInfo record: (path, size,
         // is-directory) — decoded inline.
         use crate::export_marshal::*;
@@ -4315,10 +4380,12 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::String(path.to_string()),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("file-stat dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("file-stat dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "file-stat", |p| {
-            let rec = p.ok_or_else(|| Duckerror::Internal(
-                "file-stat: expected Ok(file-info), got None".into()))?;
+            let rec = p.ok_or_else(|| {
+                Duckerror::Internal("file-stat: expected Ok(file-info), got None".into())
+            })?;
             Ok(FileInfo {
                 path: string_field(rec, "path")?,
                 size: u64_field(rec, "size")?,
@@ -4352,7 +4419,8 @@ impl ExtensionInstance {
                 duckvalue_list_to_value(low),
                 duckvalue_list_to_value(high),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("index-scan dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("index-scan dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "index-scan", |p| lift_s64_list(p))
     }
 
@@ -4375,7 +4443,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(index),
                 s64_list_to_value(rowids),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("index-delete dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("index-delete dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "index-delete", |p| lift_u64(p))
     }
 
@@ -4398,16 +4467,13 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(index),
                 duckvalue_list_to_value(keys),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("index-constraint dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("index-constraint dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "index-constraint", |p| lift_bool(p))
     }
 
     /// Serialize the built index to bytes for persistence.
-    pub fn index_serialize(
-        &mut self,
-        handle: u32,
-        index: u32,
-    ) -> Result<Vec<u8>, Duckerror> {
+    pub fn index_serialize(&mut self, handle: u32, index: u32) -> Result<Vec<u8>, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -4419,7 +4485,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::U32(index),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("index-serialize dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("index-serialize dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "index-serialize", |p| lift_bytes(p))
     }
 
@@ -4428,12 +4495,7 @@ impl ExtensionInstance {
     // and exported settings-dispatch when a user runs `SET <name> = <value>`.
 
     /// Notify the component that option `name` was SET to `value` (rendered text).
-    pub fn setting_set(
-        &mut self,
-        handle: u32,
-        name: &str,
-        value: &str,
-    ) -> Result<(), Duckerror> {
+    pub fn setting_set(&mut self, handle: u32, name: &str, value: &str) -> Result<(), Duckerror> {
         // ADR-0029 Phase 6.2.i.5 — migrated from bindings.duckdb_
         // extension_settings_dispatch().call_on_setting_set(store,
         // handle, name, value) to sync_export_bridge::call_export.
@@ -4448,9 +4510,7 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::String(value.to_string()),
             ],
         )
-        .map_err(|e| Duckerror::Internal(format!(
-            "on-setting-set dispatch failed: {e}"
-        )))?;
+        .map_err(|e| Duckerror::Internal(format!("on-setting-set dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "on-setting-set", |_| Ok(()))
     }
 
@@ -4479,8 +4539,8 @@ impl ExtensionInstance {
         // shape wasmtime's Val::Record consumes uses the WIT
         // spelling.
         let tags_val = match entry.tags {
-            Some(pairs) => wasmos_runtime_api::Value::Option(Some(Box::new(
-                wasmos_runtime_api::Value::List(
+            Some(pairs) => {
+                wasmos_runtime_api::Value::Option(Some(Box::new(wasmos_runtime_api::Value::List(
                     pairs
                         .into_iter()
                         .map(|(k, v)| {
@@ -4490,18 +4550,24 @@ impl ExtensionInstance {
                             ])
                         })
                         .collect(),
-                ),
-            ))),
+                ))))
+            }
             None => wasmos_runtime_api::Value::Option(None),
         };
         let entry_val = wasmos_runtime_api::Value::Record(vec![
-            ("level".to_string(), wasmos_runtime_api::Value::U32(entry.level)),
+            (
+                "level".to_string(),
+                wasmos_runtime_api::Value::U32(entry.level),
+            ),
             (
                 "message".to_string(),
                 wasmos_runtime_api::Value::String(entry.message.clone()),
             ),
             ("tags".to_string(), tags_val),
-            ("ts-micros".to_string(), wasmos_runtime_api::Value::S64(entry.ts_micros)),
+            (
+                "ts-micros".to_string(),
+                wasmos_runtime_api::Value::S64(entry.ts_micros),
+            ),
         ]);
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -4510,9 +4576,7 @@ impl ExtensionInstance {
             "write-log-entry",
             &[wasmos_runtime_api::Value::U32(handle), entry_val],
         )
-        .map_err(|e| Duckerror::Internal(format!(
-            "write-log-entry dispatch failed: {e}"
-        )))?;
+        .map_err(|e| Duckerror::Internal(format!("write-log-entry dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "write-log-entry", |_| Ok(()))
     }
 
@@ -4528,10 +4592,7 @@ impl ExtensionInstance {
     /// Open a scan cursor against the arrow producer named by `callback_handle`.
     /// Returns the guest-side opaque cursor id (which the host then threads
     /// through subsequent `dispatch_arrow_next` / `dispatch_arrow_close` calls).
-    pub fn dispatch_arrow_open(
-        &mut self,
-        callback_handle: u32,
-    ) -> Result<u32, Duckerror> {
+    pub fn dispatch_arrow_open(&mut self, callback_handle: u32) -> Result<u32, Duckerror> {
         // ADR-0029 Phase 6.2.i.6 — migrated. Returns result<u32,
         // duckerror> — Ok payload is the guest-assigned cursor id.
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -4541,9 +4602,7 @@ impl ExtensionInstance {
             "call-arrow-open",
             &[wasmos_runtime_api::Value::U32(callback_handle)],
         )
-        .map_err(|e| Duckerror::Internal(format!(
-            "call-arrow-open dispatch failed: {e}"
-        )))?;
+        .map_err(|e| Duckerror::Internal(format!("call-arrow-open dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-arrow-open", |payload| match payload {
             Some(wasmos_runtime_api::Value::U32(n)) => Ok(*n),
             Some(other) => Err(Duckerror::Internal(format!(
@@ -4574,10 +4633,12 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(callback_handle),
                 wasmos_runtime_api::Value::U32(cursor),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("call-arrow-next dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("call-arrow-next dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-arrow-next", |p| {
-            let rec = p.ok_or_else(|| Duckerror::Internal(
-                "call-arrow-next: expected Ok(resultset), got None".into()))?;
+            let rec = p.ok_or_else(|| {
+                Duckerror::Internal("call-arrow-next: expected Ok(resultset), got None".into())
+            })?;
             value_to_resultset(rec)
         })
     }
@@ -4601,9 +4662,7 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(cursor),
             ],
         )
-        .map_err(|e| Duckerror::Internal(format!(
-            "call-arrow-close dispatch failed: {e}"
-        )))?;
+        .map_err(|e| Duckerror::Internal(format!("call-arrow-close dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-arrow-close", |payload| match payload {
             Some(wasmos_runtime_api::Value::Bool(b)) => Ok(*b),
             Some(other) => Err(Duckerror::Internal(format!(
@@ -4645,7 +4704,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::String(dsn.to_string()),
                 bytes_to_value(bytes),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("attach-blob dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("attach-blob dispatch failed: {e}")))?;
         export_result_to_duckerror(out1, "attach-blob", |_| Ok(()))?;
         // Step 2: storage-attach(handle, dsn, empty) -> result<u32, duckerror>
         let out2 = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -4658,7 +4718,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::String(dsn.to_string()),
                 wasmos_runtime_api::Value::List(Vec::new()),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("storage-attach dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("storage-attach dispatch failed: {e}")))?;
         export_result_to_duckerror(out2, "storage-attach", |p| lift_u32(p))
     }
 
@@ -4678,7 +4739,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::U32(catalog),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("storage-list-tables dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("storage-list-tables dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "storage-list-tables", |p| lift_string_list(p))
     }
 
@@ -4701,10 +4763,14 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(catalog),
                 wasmos_runtime_api::Value::String(table.to_string()),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("storage-table-columns dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("storage-table-columns dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "storage-table-columns", |p| {
-            let v = p.ok_or_else(|| Duckerror::Internal(
-                "storage-table-columns: expected Ok(list<columndef>), got None".into()))?;
+            let v = p.ok_or_else(|| {
+                Duckerror::Internal(
+                    "storage-table-columns: expected Ok(list<columndef>), got None".into(),
+                )
+            })?;
             value_to_columndef_list(v)
         })
     }
@@ -4732,31 +4798,63 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(catalog),
                 {
                     use storage_scan::CompareOp as C;
-                    let op_val = |op: C| wasmos_runtime_api::Value::Enum(match op {
-                        C::Eq => "eq", C::Ne => "ne", C::Lt => "lt", C::Le => "le",
-                        C::Gt => "gt", C::Ge => "ge", C::IsNull => "is-null",
-                        C::IsNotNull => "is-not-null",
-                    }.into());
+                    let op_val = |op: C| {
+                        wasmos_runtime_api::Value::Enum(
+                            match op {
+                                C::Eq => "eq",
+                                C::Ne => "ne",
+                                C::Lt => "lt",
+                                C::Le => "le",
+                                C::Gt => "gt",
+                                C::Ge => "ge",
+                                C::IsNull => "is-null",
+                                C::IsNotNull => "is-not-null",
+                            }
+                            .into(),
+                        )
+                    };
                     let filters_val = wasmos_runtime_api::Value::List(
-                        request.filters.iter().map(|f| wasmos_runtime_api::Value::Record(vec![
-                            ("column".into(), wasmos_runtime_api::Value::U32(f.column)),
-                            ("op".into(), op_val(f.op)),
-                            ("value".into(), duckvalue_to_value(&f.value)),
-                        ])).collect(),
+                        request
+                            .filters
+                            .iter()
+                            .map(|f| {
+                                wasmos_runtime_api::Value::Record(vec![
+                                    ("column".into(), wasmos_runtime_api::Value::U32(f.column)),
+                                    ("op".into(), op_val(f.op)),
+                                    ("value".into(), duckvalue_to_value(&f.value)),
+                                ])
+                            })
+                            .collect(),
                     );
                     wasmos_runtime_api::Value::Record(vec![
-                        ("table".into(), wasmos_runtime_api::Value::String(request.table.clone())),
-                        ("projection".into(), wasmos_runtime_api::Value::List(
-                            request.projection.iter().map(|n| wasmos_runtime_api::Value::U32(*n)).collect(),
-                        )),
+                        (
+                            "table".into(),
+                            wasmos_runtime_api::Value::String(request.table.clone()),
+                        ),
+                        (
+                            "projection".into(),
+                            wasmos_runtime_api::Value::List(
+                                request
+                                    .projection
+                                    .iter()
+                                    .map(|n| wasmos_runtime_api::Value::U32(*n))
+                                    .collect(),
+                            ),
+                        ),
                         ("filters".into(), filters_val),
-                        ("limit".into(), wasmos_runtime_api::Value::Option(
-                            request.limit.map(|n| Box::new(wasmos_runtime_api::Value::U64(n))),
-                        )),
+                        (
+                            "limit".into(),
+                            wasmos_runtime_api::Value::Option(
+                                request
+                                    .limit
+                                    .map(|n| Box::new(wasmos_runtime_api::Value::U64(n))),
+                            ),
+                        ),
                     ])
                 },
             ],
-        ).map_err(|e| Duckerror::Internal(format!("storage-scan-open dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("storage-scan-open dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "storage-scan-open", |p| lift_u32(p))
     }
 
@@ -4782,20 +4880,18 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(scan),
                 wasmos_runtime_api::Value::U32(max_rows),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("storage-scan-next dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("storage-scan-next dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "storage-scan-next", |p| {
-            let rec = p.ok_or_else(|| Duckerror::Internal(
-                "storage-scan-next: expected Ok(resultset), got None".into()))?;
+            let rec = p.ok_or_else(|| {
+                Duckerror::Internal("storage-scan-next: expected Ok(resultset), got None".into())
+            })?;
             value_to_resultset(rec)
         })
     }
 
     /// M2b: close a scan cursor.
-    pub fn storage_scan_close(
-        &mut self,
-        handle: u32,
-        scan: u32,
-    ) -> Result<bool, Duckerror> {
+    pub fn storage_scan_close(&mut self, handle: u32, scan: u32) -> Result<bool, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -4807,7 +4903,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::U32(scan),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("storage-scan-close dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("storage-scan-close dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "storage-scan-close", |p| lift_bool(p))
     }
 
@@ -4819,11 +4916,7 @@ impl ExtensionInstance {
     /// leave the wasm heap). Extensions whose backend isn't a serializable blob
     /// (e.g. remote MySQL/Postgres connections) return
     /// `Duckerror::Unsupported`, which the host treats as a silent no-op.
-    pub fn storage_serialize(
-        &mut self,
-        handle: u32,
-        catalog: u32,
-    ) -> Result<Vec<u8>, Duckerror> {
+    pub fn storage_serialize(&mut self, handle: u32, catalog: u32) -> Result<Vec<u8>, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
@@ -4835,7 +4928,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::U32(catalog),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("storage.serialize dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("storage.serialize dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "storage.serialize", |p| lift_bytes(p))
     }
 
@@ -4870,9 +4964,7 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(dims),
             ],
         )
-        .map_err(|e| Duckerror::Internal(format!(
-            "index-create dispatch failed: {e}"
-        )))?;
+        .map_err(|e| Duckerror::Internal(format!("index-create dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "index-create", |payload| match payload {
             Some(wasmos_runtime_api::Value::U32(n)) => Ok(*n),
             Some(other) => Err(Duckerror::Internal(format!(
@@ -4903,7 +4995,8 @@ impl ExtensionInstance {
                 s64_list_to_value(rowids),
                 f32_matrix_to_value(vectors),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("index-append dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("index-append dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "index-append", |_| Ok(()))
     }
 
@@ -4917,9 +5010,7 @@ impl ExtensionInstance {
             "index-build",
             &[wasmos_runtime_api::Value::U32(handle)],
         )
-        .map_err(|e| Duckerror::Internal(format!(
-            "index-build dispatch failed: {e}"
-        )))?;
+        .map_err(|e| Duckerror::Internal(format!("index-build dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "index-build", |_| Ok(()))
     }
 
@@ -4944,14 +5035,19 @@ impl ExtensionInstance {
                 f32_list_to_value(query),
                 wasmos_runtime_api::Value::U32(k),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("index-search dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("index-search dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "index-search", |p| {
-            let list = p.ok_or_else(|| Duckerror::Internal(
-                "index-search: expected Ok(list<index-hit>), got None".into()))?;
+            let list = p.ok_or_else(|| {
+                Duckerror::Internal("index-search: expected Ok(list<index-hit>), got None".into())
+            })?;
             let items = match list {
                 wasmos_runtime_api::Value::List(items) => items,
-                other => return Err(Duckerror::Internal(format!(
-                    "index-search: expected List, got {other:?}"))),
+                other => {
+                    return Err(Duckerror::Internal(format!(
+                        "index-search: expected List, got {other:?}"
+                    )))
+                }
             };
             let mut out = Vec::with_capacity(items.len());
             for item in items {
@@ -4959,8 +5055,11 @@ impl ExtensionInstance {
                     rowid: s64_field(item, "rowid")?,
                     distance: match record_field(item, "distance")? {
                         wasmos_runtime_api::Value::F32(f) => *f,
-                        o => return Err(Duckerror::Internal(format!(
-                            "index-hit.distance: expected F32, got {o:?}"))),
+                        o => {
+                            return Err(Duckerror::Internal(format!(
+                                "index-hit.distance: expected F32, got {o:?}"
+                            )))
+                        }
                     },
                 });
             }
@@ -4978,9 +5077,7 @@ impl ExtensionInstance {
             "index-drop",
             &[wasmos_runtime_api::Value::U32(handle)],
         )
-        .map_err(|e| Duckerror::Internal(format!(
-            "index-drop dispatch failed: {e}"
-        )))?;
+        .map_err(|e| Duckerror::Internal(format!("index-drop dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "index-drop", |_| Ok(()))
     }
 
@@ -4992,11 +5089,7 @@ impl ExtensionInstance {
 
     /// Open (fetch + cache) `url`. Returns (component-side file handle, size).
     /// `handle` is the files backend's callback-handle (from register-files).
-    pub fn file_open(
-        &mut self,
-        handle: u32,
-        url: &str,
-    ) -> Result<(u32, u64), Duckerror> {
+    pub fn file_open(&mut self, handle: u32, url: &str) -> Result<(u32, u64), Duckerror> {
         // Phase 6.2.i.7 — migrated. Return is result<file-open-result,
         // string> (NOT duckerror — file-dispatch uses string errs);
         // file-open-result record has (handle: u32, size: u64).
@@ -5010,7 +5103,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::String(url.to_string()),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("file-open dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("file-open dispatch failed: {e}")))?;
         export_result_to_string(out, "file-open", |p| {
             let rec = p.ok_or_else(|| "expected Ok(file-open-result), got None".to_string())?;
             let h = u32_field(rec, "handle").map_err(|e| format!("{e:?}"))?;
@@ -5041,7 +5135,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U64(offset),
                 wasmos_runtime_api::Value::U32(len),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("file-read dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("file-read dispatch failed: {e}")))?;
         export_result_to_string(out, "file-read", |p| {
             lift_bytes(p).map_err(|e| format!("{e:?}"))
         })
@@ -5060,7 +5155,8 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::U32(file),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("file-close dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("file-close dispatch failed: {e}")))?;
         export_result_to_string(out, "file-close", |_| Ok(()))
     }
 
@@ -5069,11 +5165,7 @@ impl ExtensionInstance {
     /// Offer the unrecognized statement `query` to the parser extension `handle`.
     /// Returns `Some(rewrite_sql)` if the component claims it (string->SQL rewrite),
     /// or `None` if it declines. Drives `parser-dispatch.call-parse`.
-    pub fn call_parse(
-        &mut self,
-        handle: u32,
-        query: &str,
-    ) -> Result<Option<String>, Duckerror> {
+    pub fn call_parse(&mut self, handle: u32, query: &str) -> Result<Option<String>, Duckerror> {
         // Phase 6.2.i.7 — migrated. Returns result<parse-outcome,
         // duckerror> where parse-outcome is variant { declined,
         // rewrite(string) } — decoded inline.
@@ -5087,23 +5179,31 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::U32(handle),
                 wasmos_runtime_api::Value::String(query.to_string()),
             ],
-        ).map_err(|e| Duckerror::Internal(format!("call-parse dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("call-parse dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-parse", |p| {
-            let v = p.ok_or_else(|| Duckerror::Internal(
-                "call-parse: expected Ok(parse-outcome), got None".into()))?;
+            let v = p.ok_or_else(|| {
+                Duckerror::Internal("call-parse: expected Ok(parse-outcome), got None".into())
+            })?;
             match v {
-                wasmos_runtime_api::Value::Variant { discriminant, payload } => match discriminant.as_str() {
+                wasmos_runtime_api::Value::Variant {
+                    discriminant,
+                    payload,
+                } => match discriminant.as_str() {
                     "declined" => Ok(None),
                     "rewrite" => match payload.as_deref() {
                         Some(wasmos_runtime_api::Value::String(s)) => Ok(Some(s.clone())),
                         other => Err(Duckerror::Internal(format!(
-                            "parse-outcome.rewrite: expected String, got {other:?}"))),
+                            "parse-outcome.rewrite: expected String, got {other:?}"
+                        ))),
                     },
                     other => Err(Duckerror::Internal(format!(
-                        "parse-outcome: unknown discriminant {other:?}"))),
+                        "parse-outcome: unknown discriminant {other:?}"
+                    ))),
                 },
                 other => Err(Duckerror::Internal(format!(
-                    "call-parse: expected Variant, got {other:?}"))),
+                    "call-parse: expected Variant, got {other:?}"
+                ))),
             }
         })
     }
@@ -5132,20 +5232,32 @@ impl ExtensionInstance {
         // ignore Apply-arm's payload structure.
         use crate::export_marshal::*;
         let plan_nodes_val = wasmos_runtime_api::Value::List(
-            nodes.into_iter().map(|(id, op_type, parent, params_json)| {
-                wasmos_runtime_api::Value::Record(vec![
-                    ("id".into(), wasmos_runtime_api::Value::U32(id)),
-                    ("op-type".into(), wasmos_runtime_api::Value::String(op_type)),
-                    ("parent".into(), wasmos_runtime_api::Value::Option(
-                        parent.map(|p| Box::new(wasmos_runtime_api::Value::U32(p))),
-                    )),
-                    ("params-json".into(), wasmos_runtime_api::Value::String(params_json)),
-                ])
-            }).collect(),
+            nodes
+                .into_iter()
+                .map(|(id, op_type, parent, params_json)| {
+                    wasmos_runtime_api::Value::Record(vec![
+                        ("id".into(), wasmos_runtime_api::Value::U32(id)),
+                        ("op-type".into(), wasmos_runtime_api::Value::String(op_type)),
+                        (
+                            "parent".into(),
+                            wasmos_runtime_api::Value::Option(
+                                parent.map(|p| Box::new(wasmos_runtime_api::Value::U32(p))),
+                            ),
+                        ),
+                        (
+                            "params-json".into(),
+                            wasmos_runtime_api::Value::String(params_json),
+                        ),
+                    ])
+                })
+                .collect(),
         );
         let plan_val = wasmos_runtime_api::Value::Record(vec![
             ("nodes".into(), plan_nodes_val),
-            ("query".into(), wasmos_runtime_api::Value::String(query.to_string())),
+            (
+                "query".into(),
+                wasmos_runtime_api::Value::String(query.to_string()),
+            ),
         ]);
         let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
             self.store.as_context_mut(),
@@ -5153,24 +5265,34 @@ impl ExtensionInstance {
             Some("duckdb:extension/optimizer-dispatch@5.0.0"),
             "call-optimize",
             &[wasmos_runtime_api::Value::U32(handle), plan_val],
-        ).map_err(|e| Duckerror::Internal(format!("call-optimize dispatch failed: {e}")))?;
+        )
+        .map_err(|e| Duckerror::Internal(format!("call-optimize dispatch failed: {e}")))?;
         export_result_to_duckerror(out, "call-optimize", |p| {
-            let v = p.ok_or_else(|| Duckerror::Internal(
-                "call-optimize: expected Ok(rewrite-directive), got None".into()))?;
+            let v = p.ok_or_else(|| {
+                Duckerror::Internal(
+                    "call-optimize: expected Ok(rewrite-directive), got None".into(),
+                )
+            })?;
             match v {
-                wasmos_runtime_api::Value::Variant { discriminant, payload } => match discriminant.as_str() {
+                wasmos_runtime_api::Value::Variant {
+                    discriminant,
+                    payload,
+                } => match discriminant.as_str() {
                     "declined" => Ok(None),
                     "rewrite-query" => match payload.as_deref() {
                         Some(wasmos_runtime_api::Value::String(s)) => Ok(Some(s.clone())),
                         other => Err(Duckerror::Internal(format!(
-                            "rewrite-directive.rewrite-query: expected String, got {other:?}"))),
+                            "rewrite-directive.rewrite-query: expected String, got {other:?}"
+                        ))),
                     },
-                    "apply" => Ok(None),  // Structured rewrites collapse to declined per legacy behavior.
+                    "apply" => Ok(None), // Structured rewrites collapse to declined per legacy behavior.
                     other => Err(Duckerror::Internal(format!(
-                        "rewrite-directive: unknown discriminant {other:?}"))),
+                        "rewrite-directive: unknown discriminant {other:?}"
+                    ))),
                 },
                 other => Err(Duckerror::Internal(format!(
-                    "call-optimize: expected Variant, got {other:?}"))),
+                    "call-optimize: expected Variant, got {other:?}"
+                ))),
             }
         })
     }
@@ -5253,7 +5375,10 @@ mod tests {
             L::Date,
             L::Time,
             L::Timestamptz,
-            L::Decimal(Decimalshape { width: 18, scale: 3 }),
+            L::Decimal(Decimalshape {
+                width: 18,
+                scale: 3,
+            }),
             L::Hugeint,
             L::Uhugeint,
             L::Interval,
@@ -5309,7 +5434,9 @@ mod tests {
         let manifest = env!("CARGO_MANIFEST_DIR");
         let aba = std::path::Path::new(manifest).join("../../artifacts/extensions/aba.wasm");
         if !aba.exists() {
-            eprintln!("skipping post-rebuild acceptance test: artifacts/extensions/aba.wasm absent");
+            eprintln!(
+                "skipping post-rebuild acceptance test: artifacts/extensions/aba.wasm absent"
+            );
             return;
         }
 
@@ -5364,8 +5491,7 @@ mod tests {
     #[test]
     fn wasmos_native_load_pintest_a_end_to_end() {
         let manifest = env!("CARGO_MANIFEST_DIR");
-        let path = std::path::Path::new(manifest)
-            .join("../../artifacts/extensions/pintest_a.wasm");
+        let path = std::path::Path::new(manifest).join("../../artifacts/extensions/pintest_a.wasm");
         if !path.exists() {
             eprintln!(
                 "skipping wasmos-native e2e load test: {} absent",
@@ -5402,8 +5528,7 @@ mod tests {
     #[test]
     fn wasmos_native_load_pintest_b_end_to_end() {
         let manifest = env!("CARGO_MANIFEST_DIR");
-        let path = std::path::Path::new(manifest)
-            .join("../../artifacts/extensions/pintest_b.wasm");
+        let path = std::path::Path::new(manifest).join("../../artifacts/extensions/pintest_b.wasm");
         if !path.exists() {
             eprintln!(
                 "skipping wasmos-native pintest_b e2e load test: {} absent",
@@ -5429,8 +5554,7 @@ mod tests {
     #[test]
     fn wasmos_native_load_typetest_end_to_end() {
         let manifest = env!("CARGO_MANIFEST_DIR");
-        let path = std::path::Path::new(manifest)
-            .join("../../artifacts/extensions/typetest.wasm");
+        let path = std::path::Path::new(manifest).join("../../artifacts/extensions/typetest.wasm");
         if !path.exists() {
             eprintln!(
                 "skipping wasmos-native typetest e2e load test: {} absent",
@@ -5456,8 +5580,7 @@ mod tests {
     #[test]
     fn wasmos_native_load_atbash_production_component() {
         let manifest = env!("CARGO_MANIFEST_DIR");
-        let path = std::path::Path::new(manifest)
-            .join("../../artifacts/extensions/atbash.wasm");
+        let path = std::path::Path::new(manifest).join("../../artifacts/extensions/atbash.wasm");
         if !path.exists() {
             eprintln!(
                 "skipping wasmos-native atbash e2e load test: {} absent",
@@ -5481,16 +5604,14 @@ mod tests {
     #[test]
     fn wasmos_native_load_reentrant_on_same_engine() {
         let manifest = env!("CARGO_MANIFEST_DIR");
-        let path = std::path::Path::new(manifest)
-            .join("../../artifacts/extensions/pintest_a.wasm");
+        let path = std::path::Path::new(manifest).join("../../artifacts/extensions/pintest_a.wasm");
         if !path.exists() {
             eprintln!("skipping re-entrant load test: {} absent", path.display());
             return;
         }
         let engine = test_engine();
         // First load.
-        let first = load_artifact(&engine, "pintest_a")
-            .expect("first load should succeed");
+        let first = load_artifact(&engine, "pintest_a").expect("first load should succeed");
         drop(first);
         // Second load on the same engine — must succeed independently.
         let second = load_artifact(&engine, "pintest_a")
@@ -5535,8 +5656,14 @@ mod tests {
     fn convert_funcargs_preserves_names_and_types() {
         use Logicaltype as L;
         let args = vec![
-            Funcarg { name: Some("x".to_string()), logical: L::Int64 },
-            Funcarg { name: None, logical: L::Text },
+            Funcarg {
+                name: Some("x".to_string()),
+                logical: L::Int64,
+            },
+            Funcarg {
+                name: None,
+                logical: L::Text,
+            },
         ];
         let out = convert_extension_funcargs(args);
         assert_eq!(out.len(), 2);
@@ -5550,8 +5677,14 @@ mod tests {
     fn convert_columndefs_preserves_names_and_types() {
         use Logicaltype as L;
         let cols = vec![
-            Columndef { name: "id".to_string(), logical: L::Int32 },
-            Columndef { name: "label".to_string(), logical: L::Complex("VARCHAR[]".to_string()) },
+            Columndef {
+                name: "id".to_string(),
+                logical: L::Int32,
+            },
+            Columndef {
+                name: "label".to_string(),
+                logical: L::Complex("VARCHAR[]".to_string()),
+            },
         ];
         let out = convert_extension_columndefs(cols);
         assert_eq!(out.len(), 2);
@@ -5625,10 +5758,7 @@ mod tests {
         // `register_files → Unsupported` assertion (redundant with the
         // wasmos-side `files_reg_returns_unsupported` test).
         let mut state = test_state();
-        let storage_res = state.register_storage("sqlitewasm".to_string(),
-            7,
-            None,
-        );
+        let storage_res = state.register_storage("sqlitewasm".to_string(), 7, None);
         assert_eq!(storage_res.ok(), Some(7));
         let storages = state.take_pending_storages();
         assert_eq!(storages.len(), 1);
@@ -5689,10 +5819,8 @@ mod tests {
             secret_type_res.is_ok(),
             "register_secret_type should capture (Phase 3)"
         );
-        let secret_provider_res = state.register_secret_provider("s3".to_string(),
-            "credential_chain".to_string(),
-            12,
-        );
+        let secret_provider_res =
+            state.register_secret_provider("s3".to_string(), "credential_chain".to_string(), 12);
         assert!(
             secret_provider_res.is_ok(),
             "register_secret_provider should capture (Phase 3)"
@@ -5721,7 +5849,10 @@ mod tests {
             .register_logical_type_modified("price".to_string(), "DECIMAL(18,3)".to_string())
             .expect("register_logical_type_modified");
         state
-            .register_enum("mood".to_string(), vec!["happy".to_string(), "sad".to_string()])
+            .register_enum(
+                "mood".to_string(),
+                vec!["happy".to_string(), "sad".to_string()],
+            )
             .expect("register_enum");
 
         // Phase 3: both register_secret_* calls capture into pending_secrets.
@@ -5781,7 +5912,10 @@ mod tests {
         state
             .register_scalar_ex(
                 "concat_ws".to_string(),
-                vec![Funcarg { name: Some("sep".to_string()), logical: L::Text }],
+                vec![Funcarg {
+                    name: Some("sep".to_string()),
+                    logical: L::Text,
+                }],
                 Some(L::Text),
                 L::Text,
                 true, // special_null
@@ -5804,7 +5938,10 @@ mod tests {
         state
             .register_arrow_table(
                 "feed".to_string(),
-                vec![Columndef { name: "v".to_string(), logical: L::Int64 }],
+                vec![Columndef {
+                    name: "v".to_string(),
+                    logical: L::Int64,
+                }],
                 23,
             )
             .expect("register_arrow_table");
@@ -5836,7 +5973,6 @@ mod tests {
         assert_eq!(arrow[0].name, "feed");
         assert_eq!(arrow[0].columns.len(), 1);
         assert_eq!(arrow[0].callback_handle, 23);
-
     }
 
     #[test]
@@ -5978,7 +6114,8 @@ mod tests {
     #[test]
     fn nested_exec_select_returns_rows() {
         let mut state = scripted_state();
-        let r = state.nested_exec("SELECT * FROM t".to_string())
+        let r = state
+            .nested_exec("SELECT * FROM t".to_string())
             .expect("select ok");
         let rows = r.rows.expect("SELECT populates rows");
         assert_eq!(rows.len(), 2);
@@ -5992,12 +6129,13 @@ mod tests {
     fn nested_exec_dml_returns_rows_affected() {
         let mut state = scripted_state();
         // First call = SELECT (drains the script's initial arm).
-        let _ = state.nested_exec("SELECT 1".to_string())
+        let _ = state
+            .nested_exec("SELECT 1".to_string())
             .expect("select ok");
         // Second call = DML: rows None, rows_affected Some.
-        let r = state.nested_exec("INSERT INTO t VALUES (3, 'gamma')".to_string(),
-        )
-        .expect("insert ok");
+        let r = state
+            .nested_exec("INSERT INTO t VALUES (3, 'gamma')".to_string())
+            .expect("insert ok");
         assert!(r.rows.is_none());
         assert_eq!(r.rows_affected, Some(7));
     }
@@ -6008,7 +6146,8 @@ mod tests {
         // Host::nested_exec call must fail without ever calling into the sink.
         NESTED_EXEC_DEPTH.with(|d| d.set(NESTED_EXEC_MAX_DEPTH));
         let mut state = scripted_state();
-        let err = state.nested_exec("SELECT 1".to_string())
+        let err = state
+            .nested_exec("SELECT 1".to_string())
             .expect_err("depth-cap error");
         assert!(
             err.contains("max nesting depth"),
@@ -6261,42 +6400,34 @@ fn install_wasmos_migrated_interfaces(
     // returns a fresh instance since these hosts are stateless.
     let migrated: [(&str, fn() -> StdArc<dyn _SyncHostCall>); 7] = [
         // Phase 6.2.h.2 — Session 2 first migration.
-        (
-            "duckdb:extension/lifecycle@5.0.0",
-            || StdArc::new(crate::extension_wasmos::LifecycleHost::new()),
-        ),
+        ("duckdb:extension/lifecycle@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::LifecycleHost::new())
+        }),
         // Phase 6.2.h.3 — the six remaining stateless interfaces.
-        (
-            "duckdb:extension/types@5.0.0",
-            || StdArc::new(crate::extension_wasmos::TypesHost::new()),
-        ),
-        (
-            "duckdb:extension/encoding@5.0.0",
-            || StdArc::new(crate::extension_wasmos::EncodingHost::new()),
-        ),
-        (
-            "duckdb:extension/compression@5.0.0",
-            || StdArc::new(crate::extension_wasmos::CompressionHost::new()),
-        ),
-        (
-            "duckdb:extension/files-reg@5.0.0",
-            || StdArc::new(crate::extension_wasmos::FilesRegHost::new()),
-        ),
-        (
-            "duckdb:extension/index@5.0.0",
-            || StdArc::new(crate::extension_wasmos::IndexHost::new()),
-        ),
-        (
-            "duckdb:extension/collation@5.0.0",
-            || StdArc::new(crate::extension_wasmos::CollationHost::new()),
-        ),
+        ("duckdb:extension/types@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::TypesHost::new())
+        }),
+        ("duckdb:extension/encoding@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::EncodingHost::new())
+        }),
+        ("duckdb:extension/compression@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::CompressionHost::new())
+        }),
+        ("duckdb:extension/files-reg@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::FilesRegHost::new())
+        }),
+        ("duckdb:extension/index@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::IndexHost::new())
+        }),
+        ("duckdb:extension/collation@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::CollationHost::new())
+        }),
     ];
 
     for (iface, factory) in migrated {
-        install_stateless_host_call(engine, linker, component, iface, factory())
-            .map_err(|e| wasmtime::Error::msg(format!(
-                "install_stateless_host_call({iface}) failed: {e}"
-            )))?;
+        install_stateless_host_call(engine, linker, component, iface, factory()).map_err(|e| {
+            wasmtime::Error::msg(format!("install_stateless_host_call({iface}) failed: {e}"))
+        })?;
     }
 
     // ADR-0029 Phase 6.2.h.5 + h.6 — resource-aware bridge
@@ -6320,83 +6451,64 @@ fn install_wasmos_migrated_interfaces(
     // fallback only covers 0-1 resource interfaces.
     let stateful_migrated: [(&str, fn() -> StdArc<dyn _SyncHostCall>); 20] = [
         // File-lock — 1 resource, migrated Phase 6.2.h.5.
-        (
-            "duckdb:extension/file-lock@5.0.0",
-            || StdArc::new(crate::extension_wasmos::FileLockHost::bridged()),
-        ),
+        ("duckdb:extension/file-lock@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::FileLockHost::bridged())
+        }),
         // Resource-free stateful interfaces — Phase 6.2.h.6.
-        (
-            "duckdb:extension/config@5.0.0",
-            || StdArc::new(crate::extension_wasmos::ConfigHost::bridged()),
-        ),
-        (
-            "duckdb:extension/logging@5.0.0",
-            || StdArc::new(crate::extension_wasmos::LoggingHost::bridged()),
-        ),
-        (
-            "duckdb:extension/catalog@5.0.0",
-            || StdArc::new(crate::extension_wasmos::CatalogHost::bridged()),
-        ),
-        (
-            "duckdb:extension/files@5.0.0",
-            || StdArc::new(crate::extension_wasmos::FilesHost::bridged()),
-        ),
-        (
-            "duckdb:extension/storage@5.0.0",
-            || StdArc::new(crate::extension_wasmos::StorageHost::bridged()),
-        ),
-        (
-            "duckdb:extension/query@5.0.0",
-            || StdArc::new(crate::extension_wasmos::QueryHost::bridged()),
-        ),
-        (
-            "duckdb:extension/nested-exec@5.0.0",
-            || StdArc::new(crate::extension_wasmos::NestedExecHost::bridged()),
-        ),
-        (
-            "duckdb:extension/secret@5.0.0",
-            || StdArc::new(crate::extension_wasmos::SecretHost::bridged()),
-        ),
-        (
-            "duckdb:extension/settings@5.0.0",
-            || StdArc::new(crate::extension_wasmos::SettingsHost::bridged()),
-        ),
-        (
-            "duckdb:extension/macro-ext@5.0.0",
-            || StdArc::new(crate::extension_wasmos::MacroExtHost::bridged()),
-        ),
-        (
-            "duckdb:extension/types-ext@5.0.0",
-            || StdArc::new(crate::extension_wasmos::TypesExtHost::bridged()),
-        ),
-        (
-            "duckdb:extension/runtime-ext@5.0.0",
-            || StdArc::new(crate::extension_wasmos::RuntimeExtHost::bridged()),
-        ),
-        (
-            "duckdb:extension/coordinate-system@5.0.0",
-            || StdArc::new(crate::extension_wasmos::CoordinateSystemHost::bridged()),
-        ),
-        (
-            "duckdb:extension/arrow-ext@5.0.0",
-            || StdArc::new(crate::extension_wasmos::ArrowExtHost::bridged()),
-        ),
-        (
-            "duckdb:extension/parser@5.0.0",
-            || StdArc::new(crate::extension_wasmos::ParserHost::bridged()),
-        ),
-        (
-            "duckdb:extension/optimizer@5.0.0",
-            || StdArc::new(crate::extension_wasmos::OptimizerHost::bridged()),
-        ),
-        (
-            "duckdb:extension/table-stream@5.0.0",
-            || StdArc::new(crate::extension_wasmos::TableStreamHost::bridged()),
-        ),
-        (
-            "duckdb:extension/log-storage@5.0.0",
-            || StdArc::new(crate::extension_wasmos::LogStorageHost::bridged()),
-        ),
+        ("duckdb:extension/config@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::ConfigHost::bridged())
+        }),
+        ("duckdb:extension/logging@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::LoggingHost::bridged())
+        }),
+        ("duckdb:extension/catalog@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::CatalogHost::bridged())
+        }),
+        ("duckdb:extension/files@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::FilesHost::bridged())
+        }),
+        ("duckdb:extension/storage@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::StorageHost::bridged())
+        }),
+        ("duckdb:extension/query@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::QueryHost::bridged())
+        }),
+        ("duckdb:extension/nested-exec@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::NestedExecHost::bridged())
+        }),
+        ("duckdb:extension/secret@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::SecretHost::bridged())
+        }),
+        ("duckdb:extension/settings@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::SettingsHost::bridged())
+        }),
+        ("duckdb:extension/macro-ext@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::MacroExtHost::bridged())
+        }),
+        ("duckdb:extension/types-ext@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::TypesExtHost::bridged())
+        }),
+        ("duckdb:extension/runtime-ext@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::RuntimeExtHost::bridged())
+        }),
+        ("duckdb:extension/coordinate-system@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::CoordinateSystemHost::bridged())
+        }),
+        ("duckdb:extension/arrow-ext@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::ArrowExtHost::bridged())
+        }),
+        ("duckdb:extension/parser@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::ParserHost::bridged())
+        }),
+        ("duckdb:extension/optimizer@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::OptimizerHost::bridged())
+        }),
+        ("duckdb:extension/table-stream@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::TableStreamHost::bridged())
+        }),
+        ("duckdb:extension/log-storage@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::LogStorageHost::bridged())
+        }),
         // ADR-0029 Phase 6.2.h.7 — Runtime, the final interface.
         // 10 resource types (5 XxxCallback + 4 XxxRegistry + macro-
         // registry) + the get-capability variant with 5 Resource-
@@ -6404,10 +6516,9 @@ fn install_wasmos_migrated_interfaces(
         // classification on the bridge — every Value::Resource now
         // carries its resource_name in the ctx's name_map, so lower
         // resolves the correct wasmtime discriminant per return.
-        (
-            "duckdb:extension/runtime@5.0.0",
-            || StdArc::new(crate::extension_wasmos::RuntimeHost::bridged()),
-        ),
+        ("duckdb:extension/runtime@5.0.0", || {
+            StdArc::new(crate::extension_wasmos::RuntimeHost::bridged())
+        }),
     ];
 
     for (iface, factory) in stateful_migrated {
@@ -6418,9 +6529,7 @@ fn install_wasmos_migrated_interfaces(
             iface,
             factory(),
         )
-        .map_err(|e| wasmtime::Error::msg(format!(
-            "install_host_call({iface}) failed: {e}"
-        )))?;
+        .map_err(|e| wasmtime::Error::msg(format!("install_host_call({iface}) failed: {e}")))?;
     }
 
     Ok(())
@@ -6520,9 +6629,7 @@ pub fn load_component_with_dynlink(
     // if the component doesn't import lifecycle, the installer is a
     // no-op (matches wasmos wire_host_imports policy).
     install_wasmos_migrated_interfaces(engine, &mut linker, component)
-        .map_err(|e| wasmtime::Error::msg(format!(
-            "wasmos-native import wiring failed: {e}"
-        )))?;
+        .map_err(|e| wasmtime::Error::msg(format!("wasmos-native import wiring failed: {e}")))?;
 
     // Instantiate via the linker to obtain the raw component instance, then build
     // the typed base-world bindings from it. Retaining the raw instance lets a

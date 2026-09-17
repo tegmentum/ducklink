@@ -199,22 +199,32 @@ impl HostCallCtxImpl for StatefulStubCtx {
         // adapter's per-store id.
         let store_id = 0xCAFEu64;
         s.reps.insert((store_id, handle_id), rep);
-        Ok(Value::Resource { store_id, handle_id })
+        Ok(Value::Resource {
+            store_id,
+            handle_id,
+        })
     }
 
     fn resource_rep(&mut self, value: &Value) -> RuntimeResult<u32> {
-        let Value::Resource { store_id, handle_id } = value else {
+        let Value::Resource {
+            store_id,
+            handle_id,
+        } = value
+        else {
             return Err(RuntimeError::msg(format!(
                 "test-support resource_rep: expected Value::Resource, got {value:?}"
             )));
         };
         let s = self.shared.inner.lock().unwrap();
-        s.reps.get(&(*store_id, *handle_id)).copied().ok_or_else(|| {
-            RuntimeError::msg(format!(
-                "test-support resource_rep: no rep recorded for \
+        s.reps
+            .get(&(*store_id, *handle_id))
+            .copied()
+            .ok_or_else(|| {
+                RuntimeError::msg(format!(
+                    "test-support resource_rep: no rep recorded for \
                  (store_id={store_id}, handle_id={handle_id})"
-            ))
-        })
+                ))
+            })
     }
 }
 

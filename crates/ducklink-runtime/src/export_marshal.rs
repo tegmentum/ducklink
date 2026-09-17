@@ -15,7 +15,10 @@ use wasmos_runtime_api::Value;
 
 pub(crate) fn duckerror_from_value(v: &Value) -> crate::extension::Duckerror {
     let (disc, payload) = match v {
-        Value::Variant { discriminant, payload } => (discriminant, payload),
+        Value::Variant {
+            discriminant,
+            payload,
+        } => (discriminant, payload),
         other => {
             return crate::extension::Duckerror::Internal(format!(
                 "export_marshal: expected Variant for duckerror, got {other:?}"
@@ -92,7 +95,9 @@ pub(crate) fn export_result_to_string<T>(
             lift_ok(payload.as_deref()).map_err(crate::extension::Duckerror::Io)
         }
         Value::Result(Err(payload)) => {
-            let s = payload.as_deref().map_or_else(String::new, string_from_value);
+            let s = payload
+                .as_deref()
+                .map_or_else(String::new, string_from_value);
             Err(crate::extension::Duckerror::Io(s))
         }
         other => Err(crate::extension::Duckerror::Internal(format!(
@@ -109,7 +114,9 @@ pub(crate) fn lift_bool(payload: Option<&Value>) -> Result<bool, crate::extensio
         Some(other) => Err(crate::extension::Duckerror::Internal(format!(
             "expected Ok(Bool), got {other:?}"
         ))),
-        None => Err(crate::extension::Duckerror::Internal("expected Ok(Bool), got None".into())),
+        None => Err(crate::extension::Duckerror::Internal(
+            "expected Ok(Bool), got None".into(),
+        )),
     }
 }
 
@@ -119,7 +126,9 @@ pub(crate) fn lift_u32(payload: Option<&Value>) -> Result<u32, crate::extension:
         Some(other) => Err(crate::extension::Duckerror::Internal(format!(
             "expected Ok(U32), got {other:?}"
         ))),
-        None => Err(crate::extension::Duckerror::Internal("expected Ok(U32), got None".into())),
+        None => Err(crate::extension::Duckerror::Internal(
+            "expected Ok(U32), got None".into(),
+        )),
     }
 }
 
@@ -129,7 +138,9 @@ pub(crate) fn lift_u64(payload: Option<&Value>) -> Result<u64, crate::extension:
         Some(other) => Err(crate::extension::Duckerror::Internal(format!(
             "expected Ok(U64), got {other:?}"
         ))),
-        None => Err(crate::extension::Duckerror::Internal("expected Ok(U64), got None".into())),
+        None => Err(crate::extension::Duckerror::Internal(
+            "expected Ok(U64), got None".into(),
+        )),
     }
 }
 
@@ -153,7 +164,9 @@ pub(crate) fn lift_bytes(payload: Option<&Value>) -> Result<Vec<u8>, crate::exte
         Some(other) => Err(crate::extension::Duckerror::Internal(format!(
             "expected Ok(list<u8>), got {other:?}"
         ))),
-        None => Err(crate::extension::Duckerror::Internal("expected Ok(list<u8>), got None".into())),
+        None => Err(crate::extension::Duckerror::Internal(
+            "expected Ok(list<u8>), got None".into(),
+        )),
     }
 }
 
@@ -205,7 +218,9 @@ pub(crate) fn lift_s64_list(
         Some(other) => Err(crate::extension::Duckerror::Internal(format!(
             "expected Ok(list<s64>), got {other:?}"
         ))),
-        None => Err(crate::extension::Duckerror::Internal("expected Ok(list<s64>), got None".into())),
+        None => Err(crate::extension::Duckerror::Internal(
+            "expected Ok(list<s64>), got None".into(),
+        )),
     }
 }
 
@@ -303,7 +318,10 @@ pub(crate) fn duckvalue_to_value(v: &crate::extension::Duckvalue) -> Value {
             ])),
         ),
     };
-    Value::Variant { discriminant: disc.into(), payload: payload.map(Box::new) }
+    Value::Variant {
+        discriminant: disc.into(),
+        payload: payload.map(Box::new),
+    }
 }
 
 pub(crate) fn value_to_duckvalue(
@@ -311,7 +329,10 @@ pub(crate) fn value_to_duckvalue(
 ) -> Result<crate::extension::Duckvalue, crate::extension::Duckerror> {
     use crate::extension::Duckvalue as D;
     let (disc, payload) = match v {
-        Value::Variant { discriminant, payload } => (discriminant, payload),
+        Value::Variant {
+            discriminant,
+            payload,
+        } => (discriminant, payload),
         other => {
             return Err(crate::extension::Duckerror::Internal(format!(
                 "value_to_duckvalue: expected Variant, got {other:?}"
@@ -459,9 +480,7 @@ pub(crate) fn value_to_duckvalue(
 }
 
 fn shape_err(disc: &str, want: &str, got: &Value) -> crate::extension::Duckerror {
-    crate::extension::Duckerror::Internal(format!(
-        "duckvalue.{disc}: expected {want}, got {got:?}"
-    ))
+    crate::extension::Duckerror::Internal(format!("duckvalue.{disc}: expected {want}, got {got:?}"))
 }
 
 // ─── Duckvalue collections ─────────────────────────────────────────
@@ -616,7 +635,10 @@ pub(crate) fn logicaltype_to_value(v: &crate::extension::Logicaltype) -> Value {
         L::Uhugeint => ("uhugeint", None),
         L::Complex(s) => ("complex", Some(Value::String(s.clone()))),
     };
-    Value::Variant { discriminant: disc.into(), payload: payload.map(Box::new) }
+    Value::Variant {
+        discriminant: disc.into(),
+        payload: payload.map(Box::new),
+    }
 }
 
 pub(crate) fn value_to_logicaltype(
@@ -624,7 +646,10 @@ pub(crate) fn value_to_logicaltype(
 ) -> Result<crate::extension::Logicaltype, crate::extension::Duckerror> {
     use crate::extension::Logicaltype as L;
     let (disc, payload) = match v {
-        Value::Variant { discriminant, payload } => (discriminant, payload),
+        Value::Variant {
+            discriminant,
+            payload,
+        } => (discriminant, payload),
         other => {
             return Err(crate::extension::Duckerror::Internal(format!(
                 "value_to_logicaltype: expected Variant, got {other:?}"
@@ -664,9 +689,11 @@ pub(crate) fn value_to_logicaltype(
         "uhugeint" => L::Uhugeint,
         "complex" => match payload.as_deref() {
             Some(Value::String(s)) => L::Complex(s.clone()),
-            other => return Err(crate::extension::Duckerror::Internal(format!(
-                "logicaltype.complex: expected String, got {other:?}"
-            ))),
+            other => {
+                return Err(crate::extension::Duckerror::Internal(format!(
+                    "logicaltype.complex: expected String, got {other:?}"
+                )))
+            }
         },
         other => {
             return Err(crate::extension::Duckerror::Internal(format!(
@@ -738,17 +765,27 @@ pub(crate) fn value_to_colvec(
             for it in items {
                 match it {
                     Value::U8(b) => out.push(*b),
-                    o => return Err(crate::extension::Duckerror::Internal(format!(
-                        "colvec.validity: expected U8, got {o:?}"))),
+                    o => {
+                        return Err(crate::extension::Duckerror::Internal(format!(
+                            "colvec.validity: expected U8, got {o:?}"
+                        )))
+                    }
                 }
             }
             out
         }
-        o => return Err(crate::extension::Duckerror::Internal(format!(
-            "colvec.validity: expected Bytes or List<U8>, got {o:?}"))),
+        o => {
+            return Err(crate::extension::Duckerror::Internal(format!(
+                "colvec.validity: expected Bytes or List<U8>, got {o:?}"
+            )))
+        }
     };
     let rows = u32_field(v, "rows")?;
-    Ok(crate::extension::Colvec { data, validity, rows })
+    Ok(crate::extension::Colvec {
+        data,
+        validity,
+        rows,
+    })
 }
 
 pub(crate) fn colvec_list_to_value(cvs: &[crate::extension::Colvec]) -> Value {
@@ -777,51 +814,122 @@ pub(crate) fn column_to_value(c: &crate::extension::Column) -> Value {
         C::Date(xs) => ("date", primitive_list_val(xs, Value::S32)),
         C::Time(xs) => ("time", primitive_list_val(xs, Value::S64)),
         C::Timestamptz(xs) => ("timestamptz", primitive_list_val(xs, Value::S64)),
-        C::Decimal(xs) => ("decimal", Value::List(xs.iter().map(|d| Value::Record(vec![
-            ("lower".into(), Value::U64(d.lower)),
-            ("upper".into(), Value::U64(d.upper)),
-            ("width".into(), Value::U8(d.width)),
-            ("scale".into(), Value::U8(d.scale)),
-        ])).collect())),
-        C::Interval(xs) => ("interval", Value::List(xs.iter().map(|i| Value::Record(vec![
-            ("months".into(), Value::S32(i.months)),
-            ("days".into(), Value::S32(i.days)),
-            ("micros".into(), Value::S64(i.micros)),
-        ])).collect())),
-        C::Uuid(xs) => ("uuid", Value::List(xs.iter().map(|u| Value::Record(vec![
-            ("hi".into(), Value::U64(u.hi)),
-            ("lo".into(), Value::U64(u.lo)),
-        ])).collect())),
-        C::Text(xs) => ("text", Value::List(xs.iter().map(|s| Value::String(s.clone())).collect())),
-        C::Blob(xs) => ("blob", Value::List(xs.iter().map(|b| bytes_to_value(b)).collect())),
-        C::Hugeint(xs) => ("hugeint", Value::List(xs.iter().map(|h| Value::Record(vec![
-            ("lower".into(), Value::U64(h.lower)),
-            ("upper".into(), Value::S64(h.upper)),
-        ])).collect())),
-        C::Uhugeint(xs) => ("uhugeint", Value::List(xs.iter().map(|h| Value::Record(vec![
-            ("lower".into(), Value::U64(h.lower)),
-            ("upper".into(), Value::U64(h.upper)),
-        ])).collect())),
-        C::ListCol(n) => ("list-col", Value::Record(vec![
-            ("encoded".into(), bytes_to_value(&n.encoded)),
-        ])),
-        C::StructCol(n) => ("struct-col", Value::Record(vec![
-            ("encoded".into(), bytes_to_value(&n.encoded)),
-        ])),
-        C::MapCol(m) => ("map-col", Value::Record(vec![
-            ("keys-encoded".into(), bytes_to_value(&m.keys_encoded)),
-            ("vals-encoded".into(), bytes_to_value(&m.vals_encoded)),
-        ])),
-        C::ArrayCol(a) => ("array-col", Value::Record(vec![
-            ("size".into(), Value::U32(a.size)),
-            ("encoded".into(), bytes_to_value(&a.encoded)),
-        ])),
-        C::Complex(xs) => ("complex", Value::List(xs.iter().map(|c| Value::Record(vec![
-            ("type-expr".into(), Value::String(c.type_expr.clone())),
-            ("json".into(), Value::String(c.json.clone())),
-        ])).collect())),
+        C::Decimal(xs) => (
+            "decimal",
+            Value::List(
+                xs.iter()
+                    .map(|d| {
+                        Value::Record(vec![
+                            ("lower".into(), Value::U64(d.lower)),
+                            ("upper".into(), Value::U64(d.upper)),
+                            ("width".into(), Value::U8(d.width)),
+                            ("scale".into(), Value::U8(d.scale)),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+        C::Interval(xs) => (
+            "interval",
+            Value::List(
+                xs.iter()
+                    .map(|i| {
+                        Value::Record(vec![
+                            ("months".into(), Value::S32(i.months)),
+                            ("days".into(), Value::S32(i.days)),
+                            ("micros".into(), Value::S64(i.micros)),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+        C::Uuid(xs) => (
+            "uuid",
+            Value::List(
+                xs.iter()
+                    .map(|u| {
+                        Value::Record(vec![
+                            ("hi".into(), Value::U64(u.hi)),
+                            ("lo".into(), Value::U64(u.lo)),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+        C::Text(xs) => (
+            "text",
+            Value::List(xs.iter().map(|s| Value::String(s.clone())).collect()),
+        ),
+        C::Blob(xs) => (
+            "blob",
+            Value::List(xs.iter().map(|b| bytes_to_value(b)).collect()),
+        ),
+        C::Hugeint(xs) => (
+            "hugeint",
+            Value::List(
+                xs.iter()
+                    .map(|h| {
+                        Value::Record(vec![
+                            ("lower".into(), Value::U64(h.lower)),
+                            ("upper".into(), Value::S64(h.upper)),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+        C::Uhugeint(xs) => (
+            "uhugeint",
+            Value::List(
+                xs.iter()
+                    .map(|h| {
+                        Value::Record(vec![
+                            ("lower".into(), Value::U64(h.lower)),
+                            ("upper".into(), Value::U64(h.upper)),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+        C::ListCol(n) => (
+            "list-col",
+            Value::Record(vec![("encoded".into(), bytes_to_value(&n.encoded))]),
+        ),
+        C::StructCol(n) => (
+            "struct-col",
+            Value::Record(vec![("encoded".into(), bytes_to_value(&n.encoded))]),
+        ),
+        C::MapCol(m) => (
+            "map-col",
+            Value::Record(vec![
+                ("keys-encoded".into(), bytes_to_value(&m.keys_encoded)),
+                ("vals-encoded".into(), bytes_to_value(&m.vals_encoded)),
+            ]),
+        ),
+        C::ArrayCol(a) => (
+            "array-col",
+            Value::Record(vec![
+                ("size".into(), Value::U32(a.size)),
+                ("encoded".into(), bytes_to_value(&a.encoded)),
+            ]),
+        ),
+        C::Complex(xs) => (
+            "complex",
+            Value::List(
+                xs.iter()
+                    .map(|c| {
+                        Value::Record(vec![
+                            ("type-expr".into(), Value::String(c.type_expr.clone())),
+                            ("json".into(), Value::String(c.json.clone())),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
     };
-    Value::Variant { discriminant: disc.into(), payload: Some(Box::new(payload)) }
+    Value::Variant {
+        discriminant: disc.into(),
+        payload: Some(Box::new(payload)),
+    }
 }
 
 /// Lift a Value::List of a specific primitive kind. Uses a closure
@@ -833,13 +941,19 @@ fn lift_prim_list<T>(
 ) -> Result<Vec<T>, crate::extension::Duckerror> {
     let items = match v {
         Value::List(items) => items,
-        o => return Err(crate::extension::Duckerror::Internal(format!(
-            "expected List for column.{name}, got {o:?}"))),
+        o => {
+            return Err(crate::extension::Duckerror::Internal(format!(
+                "expected List for column.{name}, got {o:?}"
+            )))
+        }
     };
     let mut out = Vec::with_capacity(items.len());
     for (i, item) in items.iter().enumerate() {
-        out.push(extract(item).ok_or_else(|| crate::extension::Duckerror::Internal(format!(
-            "column.{name}[{i}]: shape mismatch, got {item:?}")))?);
+        out.push(extract(item).ok_or_else(|| {
+            crate::extension::Duckerror::Internal(format!(
+                "column.{name}[{i}]: shape mismatch, got {item:?}"
+            ))
+        })?);
     }
     Ok(out)
 }
@@ -849,34 +963,140 @@ pub(crate) fn value_to_column(
 ) -> Result<crate::extension::Column, crate::extension::Duckerror> {
     use crate::extension::Column as C;
     let (disc, payload) = match v {
-        Value::Variant { discriminant, payload } => (discriminant, payload),
-        o => return Err(crate::extension::Duckerror::Internal(format!(
-            "value_to_column: expected Variant, got {o:?}"))),
+        Value::Variant {
+            discriminant,
+            payload,
+        } => (discriminant, payload),
+        o => {
+            return Err(crate::extension::Duckerror::Internal(format!(
+                "value_to_column: expected Variant, got {o:?}"
+            )))
+        }
     };
     let p = payload.as_deref().ok_or_else(|| {
         crate::extension::Duckerror::Internal(format!("column.{disc}: missing payload"))
     })?;
     Ok(match disc.as_str() {
-        "boolean" => C::Boolean(lift_prim_list(p, "boolean", |v| if let Value::Bool(b) = v { Some(*b) } else { None })?),
-        "int64" => C::Int64(lift_prim_list(p, "int64", |v| if let Value::S64(n) = v { Some(*n) } else { None })?),
-        "uint64" => C::Uint64(lift_prim_list(p, "uint64", |v| if let Value::U64(n) = v { Some(*n) } else { None })?),
-        "float64" => C::Float64(lift_prim_list(p, "float64", |v| if let Value::F64(f) = v { Some(*f) } else { None })?),
-        "int32" => C::Int32(lift_prim_list(p, "int32", |v| if let Value::S32(n) = v { Some(*n) } else { None })?),
-        "timestamp" => C::Timestamp(lift_prim_list(p, "timestamp", |v| if let Value::S64(n) = v { Some(*n) } else { None })?),
-        "int8" => C::Int8(lift_prim_list(p, "int8", |v| if let Value::S8(n) = v { Some(*n) } else { None })?),
-        "int16" => C::Int16(lift_prim_list(p, "int16", |v| if let Value::S16(n) = v { Some(*n) } else { None })?),
-        "uint8" => C::Uint8(lift_prim_list(p, "uint8", |v| if let Value::U8(n) = v { Some(*n) } else { None })?),
-        "uint16" => C::Uint16(lift_prim_list(p, "uint16", |v| if let Value::U16(n) = v { Some(*n) } else { None })?),
-        "uint32" => C::Uint32(lift_prim_list(p, "uint32", |v| if let Value::U32(n) = v { Some(*n) } else { None })?),
-        "float32" => C::Float32(lift_prim_list(p, "float32", |v| if let Value::F32(f) = v { Some(*f) } else { None })?),
-        "date" => C::Date(lift_prim_list(p, "date", |v| if let Value::S32(n) = v { Some(*n) } else { None })?),
-        "time" => C::Time(lift_prim_list(p, "time", |v| if let Value::S64(n) = v { Some(*n) } else { None })?),
-        "timestamptz" => C::Timestamptz(lift_prim_list(p, "timestamptz", |v| if let Value::S64(n) = v { Some(*n) } else { None })?),
-        "text" => C::Text(lift_prim_list(p, "text", |v| if let Value::String(s) = v { Some(s.clone()) } else { None })?),
+        "boolean" => C::Boolean(lift_prim_list(p, "boolean", |v| {
+            if let Value::Bool(b) = v {
+                Some(*b)
+            } else {
+                None
+            }
+        })?),
+        "int64" => C::Int64(lift_prim_list(p, "int64", |v| {
+            if let Value::S64(n) = v {
+                Some(*n)
+            } else {
+                None
+            }
+        })?),
+        "uint64" => C::Uint64(lift_prim_list(p, "uint64", |v| {
+            if let Value::U64(n) = v {
+                Some(*n)
+            } else {
+                None
+            }
+        })?),
+        "float64" => C::Float64(lift_prim_list(p, "float64", |v| {
+            if let Value::F64(f) = v {
+                Some(*f)
+            } else {
+                None
+            }
+        })?),
+        "int32" => C::Int32(lift_prim_list(p, "int32", |v| {
+            if let Value::S32(n) = v {
+                Some(*n)
+            } else {
+                None
+            }
+        })?),
+        "timestamp" => C::Timestamp(lift_prim_list(p, "timestamp", |v| {
+            if let Value::S64(n) = v {
+                Some(*n)
+            } else {
+                None
+            }
+        })?),
+        "int8" => C::Int8(lift_prim_list(p, "int8", |v| {
+            if let Value::S8(n) = v {
+                Some(*n)
+            } else {
+                None
+            }
+        })?),
+        "int16" => C::Int16(lift_prim_list(p, "int16", |v| {
+            if let Value::S16(n) = v {
+                Some(*n)
+            } else {
+                None
+            }
+        })?),
+        "uint8" => C::Uint8(lift_prim_list(p, "uint8", |v| {
+            if let Value::U8(n) = v {
+                Some(*n)
+            } else {
+                None
+            }
+        })?),
+        "uint16" => C::Uint16(lift_prim_list(p, "uint16", |v| {
+            if let Value::U16(n) = v {
+                Some(*n)
+            } else {
+                None
+            }
+        })?),
+        "uint32" => C::Uint32(lift_prim_list(p, "uint32", |v| {
+            if let Value::U32(n) = v {
+                Some(*n)
+            } else {
+                None
+            }
+        })?),
+        "float32" => C::Float32(lift_prim_list(p, "float32", |v| {
+            if let Value::F32(f) = v {
+                Some(*f)
+            } else {
+                None
+            }
+        })?),
+        "date" => C::Date(lift_prim_list(p, "date", |v| {
+            if let Value::S32(n) = v {
+                Some(*n)
+            } else {
+                None
+            }
+        })?),
+        "time" => C::Time(lift_prim_list(p, "time", |v| {
+            if let Value::S64(n) = v {
+                Some(*n)
+            } else {
+                None
+            }
+        })?),
+        "timestamptz" => C::Timestamptz(lift_prim_list(p, "timestamptz", |v| {
+            if let Value::S64(n) = v {
+                Some(*n)
+            } else {
+                None
+            }
+        })?),
+        "text" => C::Text(lift_prim_list(p, "text", |v| {
+            if let Value::String(s) = v {
+                Some(s.clone())
+            } else {
+                None
+            }
+        })?),
         "decimal" => {
             let items = match p {
                 Value::List(items) => items,
-                o => return Err(crate::extension::Duckerror::Internal(format!("column.decimal: expected List, got {o:?}"))),
+                o => {
+                    return Err(crate::extension::Duckerror::Internal(format!(
+                        "column.decimal: expected List, got {o:?}"
+                    )))
+                }
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
@@ -892,7 +1112,11 @@ pub(crate) fn value_to_column(
         "interval" => {
             let items = match p {
                 Value::List(items) => items,
-                o => return Err(crate::extension::Duckerror::Internal(format!("column.interval: expected List, got {o:?}"))),
+                o => {
+                    return Err(crate::extension::Duckerror::Internal(format!(
+                        "column.interval: expected List, got {o:?}"
+                    )))
+                }
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
@@ -907,7 +1131,11 @@ pub(crate) fn value_to_column(
         "uuid" => {
             let items = match p {
                 Value::List(items) => items,
-                o => return Err(crate::extension::Duckerror::Internal(format!("column.uuid: expected List, got {o:?}"))),
+                o => {
+                    return Err(crate::extension::Duckerror::Internal(format!(
+                        "column.uuid: expected List, got {o:?}"
+                    )))
+                }
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
@@ -921,7 +1149,11 @@ pub(crate) fn value_to_column(
         "blob" => {
             let items = match p {
                 Value::List(items) => items,
-                o => return Err(crate::extension::Duckerror::Internal(format!("column.blob: expected List, got {o:?}"))),
+                o => {
+                    return Err(crate::extension::Duckerror::Internal(format!(
+                        "column.blob: expected List, got {o:?}"
+                    )))
+                }
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
@@ -932,12 +1164,20 @@ pub(crate) fn value_to_column(
                         for b in bs {
                             match b {
                                 Value::U8(x) => v.push(*x),
-                                o => return Err(crate::extension::Duckerror::Internal(format!("column.blob element: expected U8, got {o:?}"))),
+                                o => {
+                                    return Err(crate::extension::Duckerror::Internal(format!(
+                                        "column.blob element: expected U8, got {o:?}"
+                                    )))
+                                }
                             }
                         }
                         out.push(v);
                     }
-                    o => return Err(crate::extension::Duckerror::Internal(format!("column.blob element: expected Bytes/List, got {o:?}"))),
+                    o => {
+                        return Err(crate::extension::Duckerror::Internal(format!(
+                            "column.blob element: expected Bytes/List, got {o:?}"
+                        )))
+                    }
                 }
             }
             C::Blob(out)
@@ -945,7 +1185,11 @@ pub(crate) fn value_to_column(
         "hugeint" => {
             let items = match p {
                 Value::List(items) => items,
-                o => return Err(crate::extension::Duckerror::Internal(format!("column.hugeint: expected List, got {o:?}"))),
+                o => {
+                    return Err(crate::extension::Duckerror::Internal(format!(
+                        "column.hugeint: expected List, got {o:?}"
+                    )))
+                }
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
@@ -959,7 +1203,11 @@ pub(crate) fn value_to_column(
         "uhugeint" => {
             let items = match p {
                 Value::List(items) => items,
-                o => return Err(crate::extension::Duckerror::Internal(format!("column.uhugeint: expected List, got {o:?}"))),
+                o => {
+                    return Err(crate::extension::Duckerror::Internal(format!(
+                        "column.uhugeint: expected List, got {o:?}"
+                    )))
+                }
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
@@ -987,7 +1235,11 @@ pub(crate) fn value_to_column(
         "complex" => {
             let items = match p {
                 Value::List(items) => items,
-                o => return Err(crate::extension::Duckerror::Internal(format!("column.complex: expected List, got {o:?}"))),
+                o => {
+                    return Err(crate::extension::Duckerror::Internal(format!(
+                        "column.complex: expected List, got {o:?}"
+                    )))
+                }
             };
             let mut out = Vec::with_capacity(items.len());
             for it in items {
@@ -998,8 +1250,11 @@ pub(crate) fn value_to_column(
             }
             C::Complex(out)
         }
-        other => return Err(crate::extension::Duckerror::Internal(format!(
-            "value_to_column: unknown discriminant {other:?}"))),
+        other => {
+            return Err(crate::extension::Duckerror::Internal(format!(
+                "value_to_column: unknown discriminant {other:?}"
+            )))
+        }
     })
 }
 
@@ -1011,14 +1266,17 @@ fn bytes_field(rec: &Value, name: &str) -> Result<Vec<u8>, crate::extension::Duc
             for it in items {
                 match it {
                     Value::U8(b) => out.push(*b),
-                    o => return Err(crate::extension::Duckerror::Internal(format!(
-                        "field {name:?} element: expected U8, got {o:?}"))),
+                    o => {
+                        return Err(crate::extension::Duckerror::Internal(format!(
+                            "field {name:?} element: expected U8, got {o:?}"
+                        )))
+                    }
                 }
             }
             Ok(out)
         }
         o => Err(crate::extension::Duckerror::Internal(format!(
-            "field {name:?}: expected Bytes or List<U8>, got {o:?}"))),
+            "field {name:?}: expected Bytes or List<U8>, got {o:?}"
+        ))),
     }
 }
-

@@ -38,8 +38,8 @@ pub mod duckdb_core_bindings {
 /// `ducklink_runtime::extension` so callers use a single mirror path.
 mod cli_native {
     pub use ducklink_runtime::extension::{
-        Capabilitykind, Columndef, Complexvalue, Decimalshape, Decimalvalue, Duckerror,
-        Duckvalue, Hugeintvalue, Intervalvalue, Logicaltype, Uhugeintvalue, Uuidvalue,
+        Capabilitykind, Columndef, Complexvalue, Decimalshape, Decimalvalue, Duckerror, Duckvalue,
+        Hugeintvalue, Intervalvalue, Logicaltype, Uhugeintvalue, Uuidvalue,
     };
 
     /// Mirror of WIT `duckdb:component/database.query-result`.
@@ -221,8 +221,8 @@ pub mod at5_intercept;
 // `duckdb:dotcmd/spi` host interface that `DotcmdState` implements
 // at line 1337 below. Additive; the existing wit-bindgen path is
 // untouched.
-pub mod dotcmd_wasmos;
 mod delta_rewrite;
+pub mod dotcmd_wasmos;
 mod plan_shape;
 /// Phase D: per-sub-extension `compose:dynlink` bridge + composed-provider
 /// loader (`postgis_core -> {plan, bridge, derived-from}` maps and the
@@ -525,8 +525,7 @@ impl wasmos_runtime_api::SyncHostCall for CoreHostExtensionLoaderHost {
 
 /// Interface name for the extension-loader-hooks host, matching WIT
 /// `package duckdb:component; interface extension-loader-hooks`.
-const EXTENSION_LOADER_HOOKS_IFACE: &str =
-    "duckdb:component/extension-loader-hooks";
+const EXTENSION_LOADER_HOOKS_IFACE: &str = "duckdb:component/extension-loader-hooks";
 
 /// Wasmos-native host impl of
 /// `duckdb:component/extension-loader-hooks`. Single method
@@ -587,7 +586,9 @@ impl wasmos_runtime_api::SyncHostCall for ExtensionLoaderHooksHost {
                     }
                     convert_pending_registrations(drained)
                 };
-                Ok(vec![bindgen_pending_registrations_to_value(bindgen_pending)])
+                Ok(vec![bindgen_pending_registrations_to_value(
+                    bindgen_pending,
+                )])
             }
             other => Err(RuntimeError::msg(format!(
                 "{EXTENSION_LOADER_HOOKS_IFACE}: unknown method {other:?}"
@@ -705,7 +706,10 @@ fn bindgen_scalar_registration_to_value(
                     .collect(),
             ),
         ),
-        ("returns".to_string(), bindgen_logicaltype_to_value(e.returns)),
+        (
+            "returns".to_string(),
+            bindgen_logicaltype_to_value(e.returns),
+        ),
         ("callback-handle".to_string(), Value::U32(e.callback_handle)),
         (
             "options".to_string(),
@@ -761,7 +765,10 @@ fn bindgen_aggregate_registration_to_value(
                     .collect(),
             ),
         ),
-        ("returns".to_string(), bindgen_logicaltype_to_value(e.returns)),
+        (
+            "returns".to_string(),
+            bindgen_logicaltype_to_value(e.returns),
+        ),
         ("callback-handle".to_string(), Value::U32(e.callback_handle)),
         (
             "options".to_string(),
@@ -781,7 +788,10 @@ fn bindgen_macro_registration_to_value(
             "parameters".to_string(),
             Value::List(e.parameters.into_iter().map(Value::String).collect()),
         ),
-        ("definition-sql".to_string(), Value::String(e.definition_sql)),
+        (
+            "definition-sql".to_string(),
+            Value::String(e.definition_sql),
+        ),
     ])
 }
 
@@ -834,22 +844,21 @@ fn bindgen_cast_registration_to_value(
     ])
 }
 
-fn bindgen_func_arg_to_value(
-    a: core_extension_hooks::FuncArg,
-) -> wasmos_runtime_api::Value {
+fn bindgen_func_arg_to_value(a: core_extension_hooks::FuncArg) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     Value::Record(vec![
         (
             "name".to_string(),
             Value::Option(a.name.map(|s| Box::new(Value::String(s)))),
         ),
-        ("logical".to_string(), bindgen_logicaltype_to_value(a.logical)),
+        (
+            "logical".to_string(),
+            bindgen_logicaltype_to_value(a.logical),
+        ),
     ])
 }
 
-fn bindgen_func_opts_to_value(
-    o: core_extension_hooks::FuncOpts,
-) -> wasmos_runtime_api::Value {
+fn bindgen_func_opts_to_value(o: core_extension_hooks::FuncOpts) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     Value::Record(vec![
         (
@@ -867,9 +876,7 @@ fn bindgen_func_opts_to_value(
     ])
 }
 
-fn bindgen_ext_opts_to_value(
-    o: core_extension_hooks::ExtOpts,
-) -> wasmos_runtime_api::Value {
+fn bindgen_ext_opts_to_value(o: core_extension_hooks::ExtOpts) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     Value::Record(vec![
         (
@@ -887,9 +894,7 @@ fn bindgen_ext_opts_to_value(
 /// commutative, stateless, sideeffecting, deprecated) as
 /// `Value::Flags(Vec<String>)` — the wasmos wire format for WIT
 /// flags is a list of set-flag names by convention.
-fn bindgen_funcflags_to_value(
-    f: core_types::Funcflags,
-) -> wasmos_runtime_api::Value {
+fn bindgen_funcflags_to_value(f: core_types::Funcflags) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     let mut set = Vec::with_capacity(5);
     if f.contains(core_types::Funcflags::DETERMINISTIC) {
@@ -912,22 +917,21 @@ fn bindgen_funcflags_to_value(
 
 /// Marshal the bindgen `columndef` record `{name: string, logical:
 /// logicaltype}`.
-fn bindgen_columndef_to_value(
-    c: core_runtime_exports::Columndef,
-) -> wasmos_runtime_api::Value {
+fn bindgen_columndef_to_value(c: core_runtime_exports::Columndef) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     Value::Record(vec![
         ("name".to_string(), Value::String(c.name)),
-        ("logical".to_string(), bindgen_logicaltype_to_value(c.logical)),
+        (
+            "logical".to_string(),
+            bindgen_logicaltype_to_value(c.logical),
+        ),
     ])
 }
 
 /// Marshal the bindgen `logicaltype` variant (24 arms, mostly
 /// unit, two payload-carrying: `decimal(decimalshape)` and
 /// `complex(string)`). Arm names match WIT verbatim.
-fn bindgen_logicaltype_to_value(
-    t: core_runtime_exports::Logicaltype,
-) -> wasmos_runtime_api::Value {
+fn bindgen_logicaltype_to_value(t: core_runtime_exports::Logicaltype) -> wasmos_runtime_api::Value {
     use core_runtime_exports::Logicaltype as L;
     use wasmos_runtime_api::Value;
     let (discriminant, payload): (&'static str, Option<Box<Value>>) = match t {
@@ -1012,8 +1016,7 @@ fn bindgen_logicaltype_to_value(
 
 /// Interface name for the callback-dispatch host, matching WIT
 /// `package duckdb:extension@5.0.0; interface callback-dispatch`.
-const CALLBACK_DISPATCH_IFACE: &str =
-    "duckdb:extension/callback-dispatch@5.0.0";
+const CALLBACK_DISPATCH_IFACE: &str = "duckdb:extension/callback-dispatch@5.0.0";
 
 /// Wasmos-native host impl of `duckdb:extension/callback-dispatch@5.0.0`.
 /// Stateless unit struct — every method reaches [`CoreStoreState`] via
@@ -1033,11 +1036,9 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
         match method {
             "call-scalar" => {
                 let (handle, args_vals, invoke_ctx) = match args.as_slice() {
-                    [Value::U32(h), Value::List(a), c] => (
-                        *h,
-                        a.clone(),
-                        value_to_core_invokeinfo(c)?,
-                    ),
+                    [Value::U32(h), Value::List(a), c] => {
+                        (*h, a.clone(), value_to_core_invokeinfo(c)?)
+                    }
                     other => {
                         return Err(RuntimeError::msg(format!(
                             "{CALLBACK_DISPATCH_IFACE}.call-scalar: expected \
@@ -1047,10 +1048,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                 };
                 let ext_args: Vec<ducklink_runtime::extension::Duckvalue> = args_vals
                     .into_iter()
-                    .map(|v| {
-                        value_to_core_duckvalue(&v)
-                            .map(convert_core_duckvalue_to_extension)
-                    })
+                    .map(|v| value_to_core_duckvalue(&v).map(convert_core_duckvalue_to_extension))
                     .collect::<wasmos_runtime_api::RuntimeResult<_>>()?;
                 let ext_ctx = convert_core_invokeinfo(invoke_ctx);
                 let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
@@ -1074,11 +1072,9 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
             }
             "call-scalar-batch-col" => {
                 let (handle, colvecs, invoke_ctx) = match args.as_slice() {
-                    [Value::U32(h), Value::List(a), c] => (
-                        *h,
-                        a.clone(),
-                        value_to_core_invokeinfo(c)?,
-                    ),
+                    [Value::U32(h), Value::List(a), c] => {
+                        (*h, a.clone(), value_to_core_invokeinfo(c)?)
+                    }
                     other => {
                         return Err(RuntimeError::msg(format!(
                             "{CALLBACK_DISPATCH_IFACE}.call-scalar-batch-col: expected \
@@ -1123,10 +1119,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                 };
                 let ext_args: Vec<ducklink_runtime::extension::Duckvalue> = args_vals
                     .into_iter()
-                    .map(|v| {
-                        value_to_core_duckvalue(&v)
-                            .map(convert_core_duckvalue_to_extension)
-                    })
+                    .map(|v| value_to_core_duckvalue(&v).map(convert_core_duckvalue_to_extension))
                     .collect::<wasmos_runtime_api::RuntimeResult<_>>()?;
                 let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
                     RuntimeError::msg(
@@ -1192,8 +1185,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                     }
                 };
                 let core_colvec = value_to_core_colvec(colvec_v)?;
-                let ext_rows =
-                    core_colvecs_to_ext_rows(std::slice::from_ref(&core_colvec));
+                let ext_rows = core_colvecs_to_ext_rows(std::slice::from_ref(&core_colvec));
                 let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "callback-dispatch call-cast-col: consumer_state<CoreStoreState> unavailable",
@@ -1242,10 +1234,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                 };
                 let ext_args: Vec<ducklink_runtime::extension::Duckvalue> = args_vals
                     .into_iter()
-                    .map(|v| {
-                        value_to_core_duckvalue(&v)
-                            .map(convert_core_duckvalue_to_extension)
-                    })
+                    .map(|v| value_to_core_duckvalue(&v).map(convert_core_duckvalue_to_extension))
                     .collect::<wasmos_runtime_api::RuntimeResult<_>>()?;
                 let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
                     RuntimeError::msg(
@@ -1371,9 +1360,8 @@ fn value_to_core_invokeinfo(
     }
     Ok(core_callback_dispatch::Invokeinfo {
         rowindex,
-        iswindow: iswindow.ok_or_else(|| {
-            RuntimeError::msg("invokeinfo: missing `iswindow: bool`")
-        })?,
+        iswindow: iswindow
+            .ok_or_else(|| RuntimeError::msg("invokeinfo: missing `iswindow: bool`"))?,
     })
 }
 
@@ -1397,19 +1385,11 @@ fn core_duckerror_to_value(err: core_types::Duckerror) -> wasmos_runtime_api::Va
 
 /// `core_callback_dispatch::Resultset` (aliased to
 /// `list<list<duckvalue>>`) -> `Value::List(Vec<Value::List>)`.
-fn core_resultset_to_value(
-    rs: core_callback_dispatch::Resultset,
-) -> wasmos_runtime_api::Value {
+fn core_resultset_to_value(rs: core_callback_dispatch::Resultset) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
     let rows: Vec<Value> = rs
         .into_iter()
-        .map(|row| {
-            Value::List(
-                row.into_iter()
-                    .map(core_duckvalue_to_value)
-                    .collect(),
-            )
-        })
+        .map(|row| Value::List(row.into_iter().map(core_duckvalue_to_value).collect()))
         .collect();
     Value::List(rows)
 }
@@ -1456,8 +1436,7 @@ fn value_to_core_colvec(
         }
     }
     Ok(core_callback_dispatch::Colvec {
-        data: data
-            .ok_or_else(|| RuntimeError::msg("colvec: missing `data: column`"))?,
+        data: data.ok_or_else(|| RuntimeError::msg("colvec: missing `data: column`"))?,
         validity: validity
             .ok_or_else(|| RuntimeError::msg("colvec: missing `validity: list<u8>`"))?,
         rows: rows.ok_or_else(|| RuntimeError::msg("colvec: missing `rows: u32`"))?,
@@ -1489,9 +1468,10 @@ fn value_to_core_column(
     use core_column_types::Column;
     use wasmos_runtime_api::{RuntimeError, Value};
     let (disc, payload) = match v {
-        Value::Variant { discriminant, payload } => {
-            (discriminant.as_str(), payload.as_deref())
-        }
+        Value::Variant {
+            discriminant,
+            payload,
+        } => (discriminant.as_str(), payload.as_deref()),
         other => {
             return Err(RuntimeError::msg(format!(
                 "column: expected Value::Variant, got {other:?}"
@@ -1532,15 +1512,24 @@ fn value_to_core_column(
         ("time", Some(Value::List(items))) => list_of_s64(items).map(Column::Time),
         ("timestamptz", Some(Value::List(items))) => list_of_s64(items).map(Column::Timestamptz),
         ("decimal", Some(Value::List(items))) => {
-            let out = items.iter().map(unpack_decimalvalue).collect::<Result<Vec<_>, _>>()?;
+            let out = items
+                .iter()
+                .map(unpack_decimalvalue)
+                .collect::<Result<Vec<_>, _>>()?;
             Ok(Column::Decimal(out))
         }
         ("interval", Some(Value::List(items))) => {
-            let out = items.iter().map(unpack_intervalvalue).collect::<Result<Vec<_>, _>>()?;
+            let out = items
+                .iter()
+                .map(unpack_intervalvalue)
+                .collect::<Result<Vec<_>, _>>()?;
             Ok(Column::Interval(out))
         }
         ("uuid", Some(Value::List(items))) => {
-            let out = items.iter().map(unpack_uuidvalue).collect::<Result<Vec<_>, _>>()?;
+            let out = items
+                .iter()
+                .map(unpack_uuidvalue)
+                .collect::<Result<Vec<_>, _>>()?;
             Ok(Column::Uuid(out))
         }
         ("text", Some(Value::List(items))) => {
@@ -1604,7 +1593,10 @@ fn value_to_core_column(
         ("map-col", Some(payload_v)) => Ok(Column::MapCol(unpack_map_column(payload_v)?)),
         ("array-col", Some(payload_v)) => Ok(Column::ArrayCol(unpack_array_column(payload_v)?)),
         ("complex", Some(Value::List(items))) => {
-            let out = items.iter().map(unpack_complexvalue).collect::<Result<Vec<_>, _>>()?;
+            let out = items
+                .iter()
+                .map(unpack_complexvalue)
+                .collect::<Result<Vec<_>, _>>()?;
             Ok(Column::Complex(out))
         }
         (other_disc, other_payload) => Err(RuntimeError::msg(format!(
@@ -1623,20 +1615,62 @@ fn core_column_to_value(c: &core_column_types::Column) -> wasmos_runtime_api::Va
             "boolean",
             Value::List(v.iter().copied().map(Value::Bool).collect()),
         ),
-        Column::Int64(v) => ("int64", Value::List(v.iter().copied().map(Value::S64).collect())),
-        Column::Uint64(v) => ("uint64", Value::List(v.iter().copied().map(Value::U64).collect())),
-        Column::Float64(v) => ("float64", Value::List(v.iter().copied().map(Value::F64).collect())),
-        Column::Int32(v) => ("int32", Value::List(v.iter().copied().map(Value::S32).collect())),
-        Column::Timestamp(v) => ("timestamp", Value::List(v.iter().copied().map(Value::S64).collect())),
-        Column::Int8(v) => ("int8", Value::List(v.iter().copied().map(Value::S8).collect())),
-        Column::Int16(v) => ("int16", Value::List(v.iter().copied().map(Value::S16).collect())),
-        Column::Uint8(v) => ("uint8", Value::List(v.iter().copied().map(Value::U8).collect())),
-        Column::Uint16(v) => ("uint16", Value::List(v.iter().copied().map(Value::U16).collect())),
-        Column::Uint32(v) => ("uint32", Value::List(v.iter().copied().map(Value::U32).collect())),
-        Column::Float32(v) => ("float32", Value::List(v.iter().copied().map(Value::F32).collect())),
-        Column::Date(v) => ("date", Value::List(v.iter().copied().map(Value::S32).collect())),
-        Column::Time(v) => ("time", Value::List(v.iter().copied().map(Value::S64).collect())),
-        Column::Timestamptz(v) => ("timestamptz", Value::List(v.iter().copied().map(Value::S64).collect())),
+        Column::Int64(v) => (
+            "int64",
+            Value::List(v.iter().copied().map(Value::S64).collect()),
+        ),
+        Column::Uint64(v) => (
+            "uint64",
+            Value::List(v.iter().copied().map(Value::U64).collect()),
+        ),
+        Column::Float64(v) => (
+            "float64",
+            Value::List(v.iter().copied().map(Value::F64).collect()),
+        ),
+        Column::Int32(v) => (
+            "int32",
+            Value::List(v.iter().copied().map(Value::S32).collect()),
+        ),
+        Column::Timestamp(v) => (
+            "timestamp",
+            Value::List(v.iter().copied().map(Value::S64).collect()),
+        ),
+        Column::Int8(v) => (
+            "int8",
+            Value::List(v.iter().copied().map(Value::S8).collect()),
+        ),
+        Column::Int16(v) => (
+            "int16",
+            Value::List(v.iter().copied().map(Value::S16).collect()),
+        ),
+        Column::Uint8(v) => (
+            "uint8",
+            Value::List(v.iter().copied().map(Value::U8).collect()),
+        ),
+        Column::Uint16(v) => (
+            "uint16",
+            Value::List(v.iter().copied().map(Value::U16).collect()),
+        ),
+        Column::Uint32(v) => (
+            "uint32",
+            Value::List(v.iter().copied().map(Value::U32).collect()),
+        ),
+        Column::Float32(v) => (
+            "float32",
+            Value::List(v.iter().copied().map(Value::F32).collect()),
+        ),
+        Column::Date(v) => (
+            "date",
+            Value::List(v.iter().copied().map(Value::S32).collect()),
+        ),
+        Column::Time(v) => (
+            "time",
+            Value::List(v.iter().copied().map(Value::S64).collect()),
+        ),
+        Column::Timestamptz(v) => (
+            "timestamptz",
+            Value::List(v.iter().copied().map(Value::S64).collect()),
+        ),
         Column::Decimal(v) => (
             "decimal",
             Value::List(v.iter().map(pack_decimalvalue).collect()),
@@ -1645,10 +1679,7 @@ fn core_column_to_value(c: &core_column_types::Column) -> wasmos_runtime_api::Va
             "interval",
             Value::List(v.iter().map(pack_intervalvalue).collect()),
         ),
-        Column::Uuid(v) => (
-            "uuid",
-            Value::List(v.iter().map(pack_uuidvalue).collect()),
-        ),
+        Column::Uuid(v) => ("uuid", Value::List(v.iter().map(pack_uuidvalue).collect())),
         Column::Text(v) => (
             "text",
             Value::List(v.iter().cloned().map(Value::String).collect()),
@@ -1688,7 +1719,9 @@ fn core_column_to_value(c: &core_column_types::Column) -> wasmos_runtime_api::Va
 // compact. Each returns a fresh Vec after per-element unpacking.
 macro_rules! typed_list_helper {
     ($name:ident, $rust:ty, $variant:ident) => {
-        fn $name(items: &[wasmos_runtime_api::Value]) -> wasmos_runtime_api::RuntimeResult<Vec<$rust>> {
+        fn $name(
+            items: &[wasmos_runtime_api::Value],
+        ) -> wasmos_runtime_api::RuntimeResult<Vec<$rust>> {
             use wasmos_runtime_api::{RuntimeError, Value};
             let mut out = Vec::with_capacity(items.len());
             for (i, item) in items.iter().enumerate() {
@@ -1696,7 +1729,13 @@ macro_rules! typed_list_helper {
                     Value::$variant(n) => out.push(*n),
                     other => {
                         return Err(RuntimeError::msg(format!(
-                            concat!("column.", stringify!($name), "[{}]: expected ", stringify!($variant), ", got {:?}"),
+                            concat!(
+                                "column.",
+                                stringify!($name),
+                                "[{}]: expected ",
+                                stringify!($variant),
+                                ", got {:?}"
+                            ),
                             i, other
                         )))
                     }
@@ -1742,7 +1781,12 @@ fn unpack_decimalvalue(
             _ => {}
         }
     }
-    Ok(core_column_types::Decimalvalue { lower, upper, width, scale })
+    Ok(core_column_types::Decimalvalue {
+        lower,
+        upper,
+        width,
+        scale,
+    })
 }
 fn pack_decimalvalue(d: &core_column_types::Decimalvalue) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
@@ -1777,7 +1821,11 @@ fn unpack_intervalvalue(
             _ => {}
         }
     }
-    Ok(core_column_types::Intervalvalue { months, days, micros })
+    Ok(core_column_types::Intervalvalue {
+        months,
+        days,
+        micros,
+    })
 }
 fn pack_intervalvalue(d: &core_column_types::Intervalvalue) -> wasmos_runtime_api::Value {
     use wasmos_runtime_api::Value;
@@ -2199,9 +2247,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                     .map_err(tvm_err_to_wit);
                 if tvm_debug() {
                     if let Ok(id) = &r {
-                        let n = TVM_REGIONS
-                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                            + 1;
+                        let n = TVM_REGIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
                         eprintln!(
                             "[tvm] open region #{n} id={id} kind={kind:?} cap={} MiB (host-owned, beyond wasm 4 GiB)",
                             capacity >> 20
@@ -2407,9 +2453,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                     }
                 };
                 let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
-                    RuntimeError::msg(
-                        "tvm-bytes read: consumer_state<CoreStoreState> unavailable",
-                    )
+                    RuntimeError::msg("tvm-bytes read: consumer_state<CoreStoreState> unavailable")
                 })?;
                 let th = match state.tvm_resolve(handle, false) {
                     Ok(th) => th,
@@ -2423,10 +2467,9 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                     Ok(slice) => {
                         let buf = slice.to_vec();
                         if tvm_debug() {
-                            let t = TVM_BYTES_READ.fetch_add(
-                                len as u64,
-                                std::sync::atomic::Ordering::Relaxed,
-                            ) + len as u64;
+                            let t = TVM_BYTES_READ
+                                .fetch_add(len as u64, std::sync::atomic::Ordering::Relaxed)
+                                + len as u64;
                             eprintln!("[tvm] read {len} B (cumulative {} MiB)", t >> 20);
                         }
                         // Encode `list<u8>` as Value::List(Vec<Value::U8>)
@@ -2475,9 +2518,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                     }
                 };
                 let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
-                    RuntimeError::msg(
-                        "tvm-bytes write: consumer_state<CoreStoreState> unavailable",
-                    )
+                    RuntimeError::msg("tvm-bytes write: consumer_state<CoreStoreState> unavailable")
                 })?;
                 let len = data.len() as u64;
                 let th = match state.tvm_resolve(handle, false) {
@@ -2491,10 +2532,9 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                 match state.tvm.write(th, &data).map_err(tvm_err_to_wit) {
                     Ok(()) => {
                         if tvm_debug() {
-                            let t = TVM_BYTES_WRITTEN.fetch_add(
-                                len,
-                                std::sync::atomic::Ordering::Relaxed,
-                            ) + len;
+                            let t = TVM_BYTES_WRITTEN
+                                .fetch_add(len, std::sync::atomic::Ordering::Relaxed)
+                                + len;
                             eprintln!("[tvm] write {len} B (cumulative {} MiB)", t >> 20);
                         }
                         Ok(vec![Value::Result(Ok(None))])
@@ -2519,7 +2559,9 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
 ///
 /// Field-by-name binding — bindgen's field order is not something a
 /// migration should depend on across a future WIT reorder.
-fn unpack_tvm_handle(v: &wasmos_runtime_api::Value) -> wasmos_runtime_api::RuntimeResult<core_tvm_types::Handle> {
+fn unpack_tvm_handle(
+    v: &wasmos_runtime_api::Value,
+) -> wasmos_runtime_api::RuntimeResult<core_tvm_types::Handle> {
     use wasmos_runtime_api::{RuntimeError, Value};
     let fields = match v {
         Value::Record(f) => f,
@@ -2541,14 +2583,11 @@ fn unpack_tvm_handle(v: &wasmos_runtime_api::Value) -> wasmos_runtime_api::Runti
         }
     }
     Ok(core_tvm_types::Handle {
-        region_id: region_id.ok_or_else(|| {
-            RuntimeError::msg("tvm handle: missing `region-id: u16`")
-        })?,
-        generation: generation.ok_or_else(|| {
-            RuntimeError::msg("tvm handle: missing `generation: u16`")
-        })?,
-        offset: offset
-            .ok_or_else(|| RuntimeError::msg("tvm handle: missing `offset: u32`"))?,
+        region_id: region_id
+            .ok_or_else(|| RuntimeError::msg("tvm handle: missing `region-id: u16`"))?,
+        generation: generation
+            .ok_or_else(|| RuntimeError::msg("tvm handle: missing `generation: u16`"))?,
+        offset: offset.ok_or_else(|| RuntimeError::msg("tvm handle: missing `offset: u32`"))?,
     })
 }
 
@@ -3474,8 +3513,7 @@ impl DotcmdRegistry {
         // two Arc handles by value so it does not need consumer_state.
         // A no-op if the component doesn't actually import the
         // interface (fine for a lone `registry`-only dot command).
-        let spi_host =
-            crate::dotcmd_wasmos::SpiHost::new(core.clone(), current_connection.clone());
+        let spi_host = crate::dotcmd_wasmos::SpiHost::new(core.clone(), current_connection.clone());
         wasmos_runtime_wasmtime_v48::sync_bridge::install_stateless_host_call::<DotcmdState>(
             engine,
             &mut linker,
@@ -3572,17 +3610,16 @@ impl DotcmdRegistry {
         // on graceful error. Trap-shaped errors bubble through the
         // `.map_err` closure below (same shape as the bindgen-era
         // `Err(trap)` arm).
-        let call_result =
-            wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-                inst.store.as_context_mut(),
-                &inst.instance,
-                Some("duckdb:dotcmd/registry@0.2.0"),
-                "invoke",
-                &[
-                    wasmos_runtime_api::Value::U64(id),
-                    wasmos_runtime_api::Value::String(args.to_string()),
-                ],
-            );
+        let call_result = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            inst.store.as_context_mut(),
+            &inst.instance,
+            Some("duckdb:dotcmd/registry@0.2.0"),
+            "invoke",
+            &[
+                wasmos_runtime_api::Value::U64(id),
+                wasmos_runtime_api::Value::String(args.to_string()),
+            ],
+        );
         Some(match call_result {
             Ok(ret) => unpack_invoke_result(&ret).unwrap_or_else(|e| {
                 Err(format!(
@@ -3616,9 +3653,7 @@ fn unpack_command_spec_list(
         .map(|item| {
             let fields = match item {
                 Value::Record(f) => f,
-                other => {
-                    return Err(format!("expected Value::Record in list, got {other:?}"))
-                }
+                other => return Err(format!("expected Value::Record in list, got {other:?}")),
             };
             let mut id: Option<u64> = None;
             let mut name: Option<String> = None;
@@ -3639,8 +3674,7 @@ fn unpack_command_spec_list(
             Ok((
                 name.ok_or_else(|| "command-spec: missing `name: string`".to_string())?,
                 id.ok_or_else(|| "command-spec: missing `id: u64`".to_string())?,
-                summary
-                    .ok_or_else(|| "command-spec: missing `summary: string`".to_string())?,
+                summary.ok_or_else(|| "command-spec: missing `summary: string`".to_string())?,
                 usage.ok_or_else(|| "command-spec: missing `usage: string`".to_string())?,
             ))
         })
@@ -3731,8 +3765,7 @@ fn unpack_invoke_result(
             )),
         },
         Err(None) => Err(
-            "invoke Err payload: expected Some(string) for result<_, string>, got None"
-                .to_string(),
+            "invoke Err payload: expected Some(string) for result<_, string>, got None".to_string(),
         ),
     }
 }
@@ -4194,7 +4227,9 @@ impl ExtensionManager {
                 ))
             })?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            ducklink_runtime::extension::Duckerror::Invalidstate(format!("parser extension '{ext}' not loaded"))
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
+                "parser extension '{ext}' not loaded"
+            ))
         })?;
         let outcome = instance.call_parse(handle, query)?;
         // Defensive boundary: the core RE-PLANS the returned rewrite, so reject an
@@ -4311,7 +4346,9 @@ impl ExtensionManager {
     /// Resolve the storage backend that should service an ATTACH. For M2a the
     /// type name is hardcoded "sqlitewasm" core-side, so prefer that backend and
     /// otherwise fall back to the single registered backend (if unambiguous).
-    fn resolve_storage_backend(&self) -> Result<(String, u32), ducklink_runtime::extension::Duckerror> {
+    fn resolve_storage_backend(
+        &self,
+    ) -> Result<(String, u32), ducklink_runtime::extension::Duckerror> {
         if let Some((ext, handle)) = self.storage_backends.get("sqlitewasm") {
             return Ok((ext.clone(), *handle));
         }
@@ -4330,15 +4367,20 @@ impl ExtensionManager {
                 }
             }
         }
-        Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
-            "no storage backend registered for 'sqlitewasm' (have {} backend(s))",
-            self.storage_backends.len()
-        )))
+        Err(ducklink_runtime::extension::Duckerror::Invalidstate(
+            format!(
+                "no storage backend registered for 'sqlitewasm' (have {} backend(s))",
+                self.storage_backends.len()
+            ),
+        ))
     }
 
     /// Reads the foreign DB file at `dsn`, stages it into the backing component,
     /// and opens the catalog; returns the component-side catalog handle.
-    fn dispatch_storage_attach(&mut self, dsn: &str) -> Result<u32, ducklink_runtime::extension::Duckerror> {
+    fn dispatch_storage_attach(
+        &mut self,
+        dsn: &str,
+    ) -> Result<u32, ducklink_runtime::extension::Duckerror> {
         let (ext, handle) = self.resolve_storage_backend()?;
         eprintln!("[storage-attach] dispatch_storage_attach ext='{ext}' dsn='{dsn}'");
         // The dsn may be a FILE (sqlite-over-blob) or a CONNECTION STRING
@@ -4348,7 +4390,9 @@ impl ExtensionManager {
         // component's storage-attach receives the raw dsn to dial directly.
         let bytes = match std::fs::metadata(dsn) {
             Ok(m) if m.is_file() => std::fs::read(dsn).map_err(|e| {
-                ducklink_runtime::extension::Duckerror::Io(format!("cannot read attach file '{dsn}': {e}"))
+                ducklink_runtime::extension::Duckerror::Io(format!(
+                    "cannot read attach file '{dsn}': {e}"
+                ))
             })?,
             _ => Vec::new(),
         };
@@ -4377,7 +4421,8 @@ impl ExtensionManager {
         &mut self,
         catalog: u32,
         table: &str,
-    ) -> Result<Vec<ducklink_runtime::extension::Columndef>, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<Vec<ducklink_runtime::extension::Columndef>, ducklink_runtime::extension::Duckerror>
+    {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
             ducklink_runtime::extension::Duckerror::Invalidstate(format!(
@@ -4405,7 +4450,10 @@ impl ExtensionManager {
         &mut self,
         scan: u32,
         max_rows: u32,
-    ) -> Result<Vec<Vec<ducklink_runtime::extension::Duckvalue>>, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<
+        Vec<Vec<ducklink_runtime::extension::Duckvalue>>,
+        ducklink_runtime::extension::Duckerror,
+    > {
         let (ext, handle) = self.resolve_storage_backend()?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
             ducklink_runtime::extension::Duckerror::Invalidstate(format!(
@@ -4519,7 +4567,8 @@ impl ExtensionManager {
         &mut self,
         handle: u32,
         _args: &[ducklink_runtime::extension::Duckvalue],
-    ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror>
+    {
         let target = self.at5_scan_targets.get(&handle).cloned().ok_or_else(|| {
             ducklink_runtime::extension::Duckerror::Invalidstate(format!(
                 "unknown AT5 attach-scan handle {handle}"
@@ -4781,7 +4830,10 @@ impl ExtensionManager {
     /// Resolve the index backend that should service a `(type_name)` index
     /// operation. Prefer the exact type-name match; otherwise fall back to the
     /// single registered index backend (if unambiguous).
-    fn resolve_index_backend(&self, type_name: &str) -> Result<String, ducklink_runtime::extension::Duckerror> {
+    fn resolve_index_backend(
+        &self,
+        type_name: &str,
+    ) -> Result<String, ducklink_runtime::extension::Duckerror> {
         if let Some(ext) = self.index_backends.get(type_name) {
             return Ok(ext.clone());
         }
@@ -4796,10 +4848,12 @@ impl ExtensionManager {
                 }
             }
         }
-        Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
-            "no index backend registered for '{type_name}' (have {} backend(s))",
-            self.index_backends.len()
-        )))
+        Err(ducklink_runtime::extension::Duckerror::Invalidstate(
+            format!(
+                "no index backend registered for '{type_name}' (have {} backend(s))",
+                self.index_backends.len()
+            ),
+        ))
     }
 
     fn dispatch_index_create(
@@ -4813,7 +4867,9 @@ impl ExtensionManager {
             "[index-create] dispatch_index_create ext='{ext}' type='{type_name}' name='{index_name}' dims={dims}"
         );
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            ducklink_runtime::extension::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
+                "index extension '{ext}' not loaded"
+            ))
         })?;
         instance.index_create(type_name, index_name, dims)
     }
@@ -4829,15 +4885,22 @@ impl ExtensionManager {
         // single registered backend).
         let ext = self.resolve_index_backend("")?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            ducklink_runtime::extension::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
+                "index extension '{ext}' not loaded"
+            ))
         })?;
         instance.index_append(handle, rowids, vectors)
     }
 
-    fn dispatch_index_build(&mut self, handle: u32) -> Result<(), ducklink_runtime::extension::Duckerror> {
+    fn dispatch_index_build(
+        &mut self,
+        handle: u32,
+    ) -> Result<(), ducklink_runtime::extension::Duckerror> {
         let ext = self.resolve_index_backend("")?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            ducklink_runtime::extension::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
+                "index extension '{ext}' not loaded"
+            ))
         })?;
         instance.index_build(handle)
     }
@@ -4847,18 +4910,26 @@ impl ExtensionManager {
         handle: u32,
         query: &[f32],
         k: u32,
-    ) -> Result<Vec<ducklink_runtime::extension::IndexHit>, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<Vec<ducklink_runtime::extension::IndexHit>, ducklink_runtime::extension::Duckerror>
+    {
         let ext = self.resolve_index_backend("")?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            ducklink_runtime::extension::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
+                "index extension '{ext}' not loaded"
+            ))
         })?;
         instance.index_search(handle, query, k)
     }
 
-    fn dispatch_index_drop(&mut self, handle: u32) -> Result<(), ducklink_runtime::extension::Duckerror> {
+    fn dispatch_index_drop(
+        &mut self,
+        handle: u32,
+    ) -> Result<(), ducklink_runtime::extension::Duckerror> {
         let ext = self.resolve_index_backend("")?;
         let instance = self.extensions.get_mut(&ext).ok_or_else(|| {
-            ducklink_runtime::extension::Duckerror::Invalidstate(format!("index extension '{ext}' not loaded"))
+            ducklink_runtime::extension::Duckerror::Invalidstate(format!(
+                "index extension '{ext}' not loaded"
+            ))
         })?;
         instance.index_drop(handle)
     }
@@ -4940,7 +5011,8 @@ impl ExtensionManager {
         handle: u32,
         args: &[ducklink_runtime::extension::Duckvalue],
         ctx: ducklink_runtime::extension::Invokeinfo,
-    ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror>
+    {
         // `ducklink_prefix` sentinel (scalar form): see
         // [`DUCKLINK_PREFIX_SCALAR_HANDLE`]. Same handler as the table
         // form but wraps its result as a VARCHAR summary.
@@ -4967,17 +5039,17 @@ impl ExtensionManager {
                         "[extension-manager] callback handle {handle} expected scalar but is {:?}",
                         entry.kind
                     );
-                    return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
-                        "callback handle {handle} is not scalar"
-                    )));
+                    return Err(ducklink_runtime::extension::Duckerror::Invalidstate(
+                        format!("callback handle {handle} is not scalar"),
+                    ));
                 }
                 None => {
                     eprintln!(
                         "[extension-manager] dispatch_scalar received unknown handle {handle}"
                     );
-                    return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
-                        "unknown scalar callback handle {handle}"
-                    )));
+                    return Err(ducklink_runtime::extension::Duckerror::Invalidstate(
+                        format!("unknown scalar callback handle {handle}"),
+                    ));
                 }
             }
         };
@@ -4987,9 +5059,9 @@ impl ExtensionManager {
                 eprintln!(
                     "[extension-manager] dispatch_scalar could not find loaded extension '{ext_name}'"
                 );
-                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
-                    "extension {ext_name} is not loaded"
-                )));
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(
+                    format!("extension {ext_name} is not loaded"),
+                ));
             }
         };
         instance.dispatch_scalar(dispatcher_handle, args, ctx)
@@ -5001,7 +5073,8 @@ impl ExtensionManager {
         handle: u32,
         rows: &Vec<Vec<ducklink_runtime::extension::Duckvalue>>,
         ctx: ducklink_runtime::extension::Invokeinfo,
-    ) -> Result<Vec<ducklink_runtime::extension::Duckvalue>, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<Vec<ducklink_runtime::extension::Duckvalue>, ducklink_runtime::extension::Duckerror>
+    {
         // `ducklink_prefix` scalar sentinel: the core batches scalar calls
         // through this columnar entry point. Handle it per-row via the
         // shared native handler so the deferred queue reflects each
@@ -5039,18 +5112,17 @@ impl ExtensionManager {
                 eprintln!(
                     "[extension-manager] dispatch_scalar_batch received unknown handle {handle}"
                 );
-                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
-                    "unknown scalar callback handle {handle}"
-                )));
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(
+                    format!("unknown scalar callback handle {handle}"),
+                ));
             }
         };
         let instance = match self.extensions.get_mut(&*entry.extension) {
             Some(instance) => instance,
             None => {
-                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
-                    "extension {} is not loaded",
-                    entry.extension
-                )));
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(
+                    format!("extension {} is not loaded", entry.extension),
+                ));
             }
         };
         instance.dispatch_scalar_batch(entry.dispatcher_handle, rows, ctx)
@@ -5060,7 +5132,8 @@ impl ExtensionManager {
         &mut self,
         handle: u32,
         args: &[ducklink_runtime::extension::Duckvalue],
-    ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror>
+    {
         // Phase 2c (@5) AT5 attach-scan sentinel range: handles minted by
         // `register_at5_scan` (from `HostState::intercept_attach`) route
         // straight to the storage-dispatch scan path — no wasm component's
@@ -5094,9 +5167,9 @@ impl ExtensionManager {
             Some(entry) => entry,
             None => {
                 eprintln!("[extension-manager] dispatch_table received unknown handle {handle}");
-                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
-                    "unknown table callback handle {handle}"
-                )));
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(
+                    format!("unknown table callback handle {handle}"),
+                ));
             }
         };
         let instance = match self.extensions.get_mut(&*entry.extension) {
@@ -5106,10 +5179,9 @@ impl ExtensionManager {
                     "[extension-manager] dispatch_table could not find loaded extension '{}'",
                     entry.extension
                 );
-                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
-                    "extension {} is not loaded",
-                    entry.extension
-                )));
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(
+                    format!("extension {} is not loaded", entry.extension),
+                ));
             }
         };
         instance.dispatch_table(entry.dispatcher_handle, args)
@@ -5153,7 +5225,8 @@ impl ExtensionManager {
     fn native_ducklink_load(
         &mut self,
         args: &[ducklink_runtime::extension::Duckvalue],
-    ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror>
+    {
         // Positional/named arg 0: extension name (VARCHAR). DuckDB passes named
         // args in order, so the first VARCHAR is the name regardless of whether
         // the caller wrote `ducklink_load('jsonfns')` or
@@ -5193,9 +5266,9 @@ impl ExtensionManager {
                 ));
             }
             other => {
-                return Err(ducklink_runtime::extension::Duckerror::Invalidargument(format!(
-                    "ducklink_load: kind must be 'wasm' or 'native', got '{other}'"
-                )));
+                return Err(ducklink_runtime::extension::Duckerror::Invalidargument(
+                    format!("ducklink_load: kind must be 'wasm' or 'native', got '{other}'"),
+                ));
             }
         }
 
@@ -5209,11 +5282,13 @@ impl ExtensionManager {
             ))
         })?;
         if !loaded_ok {
-            return Err(ducklink_runtime::extension::Duckerror::Invalidargument(format!(
-                "ducklink_load: no admissible provider for '{name}' — no manifest \
+            return Err(ducklink_runtime::extension::Duckerror::Invalidargument(
+                format!(
+                    "ducklink_load: no admissible provider for '{name}' — no manifest \
                  entry, no <extensions-dir>/{sanitized}.wasm shortcut, or the \
                  resolver declined the candidates"
-            )));
+                ),
+            ));
         }
 
         // Drain what the freshly-loaded instance queued so we can report
@@ -5317,10 +5392,12 @@ impl ExtensionManager {
             }
         };
         if !is_safe_prefix_identifier(&alias) || !is_safe_prefix_identifier(&namespace) {
-            return Err(ducklink_runtime::extension::Duckerror::Invalidargument(format!(
-                "ducklink_prefix: alias and namespace must match [A-Za-z0-9_]+ \
+            return Err(ducklink_runtime::extension::Duckerror::Invalidargument(
+                format!(
+                    "ducklink_prefix: alias and namespace must match [A-Za-z0-9_]+ \
                  (got alias='{alias}', namespace='{namespace}')"
-            )));
+                ),
+            ));
         }
         // Dedup within the pending queue — repeated
         // `ducklink_prefix('c','main')` calls in the same statement
@@ -5351,7 +5428,8 @@ impl ExtensionManager {
     fn native_ducklink_prefix_table(
         &mut self,
         args: &[ducklink_runtime::extension::Duckvalue],
-    ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror>
+    {
         let (alias, namespace) = self.native_ducklink_prefix_common(args)?;
         let row: Vec<ducklink_runtime::extension::Duckvalue> = vec![
             ducklink_runtime::extension::Duckvalue::Text(alias),
@@ -5369,7 +5447,8 @@ impl ExtensionManager {
     fn native_ducklink_prefix_scalar(
         &mut self,
         args: &[ducklink_runtime::extension::Duckvalue],
-    ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror>
+    {
         let (alias, namespace) = self.native_ducklink_prefix_common(args)?;
         Ok(ducklink_runtime::extension::Duckvalue::Text(format!(
             "alias='{alias}' namespace='{namespace}' macros=0 (deferred)"
@@ -5399,7 +5478,8 @@ impl ExtensionManager {
         args: &[ducklink_runtime::extension::Duckvalue],
         projection: &[u32],
         filters: &[ducklink_runtime::extension::TableFilter],
-    ) -> Result<ducklink_runtime::extension::TableOpenResult, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<ducklink_runtime::extension::TableOpenResult, ducklink_runtime::extension::Duckerror>
+    {
         let entry = self
             .lookup_callback(handle, CallbackKind::Table)
             .ok_or_else(|| {
@@ -5421,7 +5501,8 @@ impl ExtensionManager {
         handle: u32,
         cursor: u32,
         max_rows: u32,
-    ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<ducklink_runtime::extension::Resultset, ducklink_runtime::extension::Duckerror>
+    {
         let entry = self
             .lookup_callback(handle, CallbackKind::Table)
             .ok_or_else(|| {
@@ -5463,16 +5544,17 @@ impl ExtensionManager {
         &mut self,
         handle: u32,
         rows: &ducklink_runtime::extension::Rowbatch,
-    ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror>
+    {
         let entry = match self.lookup_callback(handle, CallbackKind::Aggregate) {
             Some(entry) => entry,
             None => {
                 eprintln!(
                     "[extension-manager] dispatch_aggregate received unknown handle {handle}"
                 );
-                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
-                    "unknown aggregate callback handle {handle}"
-                )));
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(
+                    format!("unknown aggregate callback handle {handle}"),
+                ));
             }
         };
         let instance = match self.extensions.get_mut(&*entry.extension) {
@@ -5482,10 +5564,9 @@ impl ExtensionManager {
                     "[extension-manager] dispatch_aggregate could not find loaded extension '{}'",
                     entry.extension
                 );
-                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
-                    "extension {} is not loaded",
-                    entry.extension
-                )));
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(
+                    format!("extension {} is not loaded", entry.extension),
+                ));
             }
         };
         instance.dispatch_aggregate(entry.dispatcher_handle, rows)
@@ -5495,14 +5576,17 @@ impl ExtensionManager {
         &mut self,
         handle: u32,
         args: &[ducklink_runtime::extension::Duckvalue],
-    ) -> Result<Option<ducklink_runtime::extension::Duckvalue>, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<
+        Option<ducklink_runtime::extension::Duckvalue>,
+        ducklink_runtime::extension::Duckerror,
+    > {
         let entry = match self.lookup_callback(handle, CallbackKind::Pragma) {
             Some(entry) => entry,
             None => {
                 eprintln!("[extension-manager] dispatch_pragma received unknown handle {handle}");
-                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
-                    "unknown pragma callback handle {handle}"
-                )));
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(
+                    format!("unknown pragma callback handle {handle}"),
+                ));
             }
         };
         let instance = match self.extensions.get_mut(&*entry.extension) {
@@ -5512,10 +5596,9 @@ impl ExtensionManager {
                     "[extension-manager] dispatch_pragma could not find loaded extension '{}'",
                     entry.extension
                 );
-                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
-                    "extension {} is not loaded",
-                    entry.extension
-                )));
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(
+                    format!("extension {} is not loaded", entry.extension),
+                ));
             }
         };
         instance.dispatch_pragma(entry.dispatcher_handle, args)
@@ -5525,23 +5608,23 @@ impl ExtensionManager {
         &mut self,
         handle: u32,
         value: &ducklink_runtime::extension::Duckvalue,
-    ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror> {
+    ) -> Result<ducklink_runtime::extension::Duckvalue, ducklink_runtime::extension::Duckerror>
+    {
         let entry = match self.lookup_callback(handle, CallbackKind::Cast) {
             Some(entry) => entry,
             None => {
                 eprintln!("[extension-manager] dispatch_cast received unknown handle {handle}");
-                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
-                    "unknown cast callback handle {handle}"
-                )));
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(
+                    format!("unknown cast callback handle {handle}"),
+                ));
             }
         };
         let instance = match self.extensions.get_mut(&*entry.extension) {
             Some(instance) => instance,
             None => {
-                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(format!(
-                    "extension {} is not loaded",
-                    entry.extension
-                )))
+                return Err(ducklink_runtime::extension::Duckerror::Invalidstate(
+                    format!("extension {} is not loaded", entry.extension),
+                ))
             }
         };
         instance.dispatch_cast(entry.dispatcher_handle, value)
@@ -7229,23 +7312,24 @@ impl HostState {
                 let rowid_idx = at5_locate_rowid_column(&columns, &alias, &table)?;
                 // Parse the SET RHS values up-front so an unsupported expression
                 // rejects BEFORE any core round-trip.
-                let assignment_values: Vec<(String, ducklink_runtime::extension::Duckvalue)> = assignments
-                    .into_iter()
-                    .map(|(col, expr)| {
-                        let lit = at5_intercept::parse_value_literal(&expr);
-                        literal_to_extension_duckvalue(lit)
-                            .map(|v| (col, v))
-                            .map_err(|reason| {
-                                cli_native::Duckerror::Unsupported(
-                                    format!(
+                let assignment_values: Vec<(String, ducklink_runtime::extension::Duckvalue)> =
+                    assignments
+                        .into_iter()
+                        .map(|(col, expr)| {
+                            let lit = at5_intercept::parse_value_literal(&expr);
+                            literal_to_extension_duckvalue(lit)
+                                .map(|v| (col, v))
+                                .map_err(|reason| {
+                                    cli_native::Duckerror::Unsupported(
+                                        format!(
                                         "Operation not supported on @5 attached tables: {reason}. \
                                          Use the native duckdb build if this pattern is required."
                                     )
-                                    .into(),
-                                )
-                            })
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
+                                        .into(),
+                                    )
+                                })
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
                 // Map each assignment column name to its index in the extension's
                 // declared column list (case-insensitive).
                 let mut assignment_by_idx: Vec<(usize, ducklink_runtime::extension::Duckvalue)> =
@@ -7617,7 +7701,8 @@ impl HostState {
         table: &str,
         rowid_idx: usize,
         where_clause: Option<&str>,
-    ) -> Result<(Vec<i64>, Vec<Vec<ducklink_runtime::extension::Duckvalue>>), cli_native::Duckerror> {
+    ) -> Result<(Vec<i64>, Vec<Vec<ducklink_runtime::extension::Duckvalue>>), cli_native::Duckerror>
+    {
         let where_sql = where_clause
             .map(|p| format!(" WHERE {p}"))
             .unwrap_or_default();
@@ -7632,7 +7717,8 @@ impl HostState {
             Err(err) => return Err(convert_core_duckerror(err)),
         };
         let mut rowids: Vec<i64> = Vec::with_capacity(qr.rows.len());
-        let mut rows_ext: Vec<Vec<ducklink_runtime::extension::Duckvalue>> = Vec::with_capacity(qr.rows.len());
+        let mut rows_ext: Vec<Vec<ducklink_runtime::extension::Duckvalue>> =
+            Vec::with_capacity(qr.rows.len());
         for row in qr.rows.into_iter() {
             let row_vec: Vec<core_types::Duckvalue> = row.into_iter().collect();
             let rowid_cell = row_vec.get(rowid_idx).ok_or_else(|| {
@@ -7773,10 +7859,16 @@ fn cli_extension_duckerror(err: ducklink_runtime::extension::Duckerror) -> cli_n
         ducklink_runtime::extension::Duckerror::Invalidargument(m) => {
             cli_native::Duckerror::Invalidargument(m.into())
         }
-        ducklink_runtime::extension::Duckerror::Unsupported(m) => cli_native::Duckerror::Unsupported(m.into()),
-        ducklink_runtime::extension::Duckerror::Invalidstate(m) => cli_native::Duckerror::Invalidstate(m.into()),
+        ducklink_runtime::extension::Duckerror::Unsupported(m) => {
+            cli_native::Duckerror::Unsupported(m.into())
+        }
+        ducklink_runtime::extension::Duckerror::Invalidstate(m) => {
+            cli_native::Duckerror::Invalidstate(m.into())
+        }
         ducklink_runtime::extension::Duckerror::Io(m) => cli_native::Duckerror::Io(m.into()),
-        ducklink_runtime::extension::Duckerror::Internal(m) => cli_native::Duckerror::Internal(m.into()),
+        ducklink_runtime::extension::Duckerror::Internal(m) => {
+            cli_native::Duckerror::Internal(m.into())
+        }
     }
 }
 
@@ -7817,7 +7909,9 @@ fn parse_sql_type_to_logical(ty: &str) -> ducklink_runtime::extension::Logicalty
         "USMALLINT" => ducklink_runtime::extension::Logicaltype::Uint16,
         "UTINYINT" => ducklink_runtime::extension::Logicaltype::Uint8,
         "REAL" | "FLOAT4" => ducklink_runtime::extension::Logicaltype::Float32,
-        "DOUBLE" | "FLOAT" | "FLOAT8" | "DOUBLE PRECISION" => ducklink_runtime::extension::Logicaltype::Float64,
+        "DOUBLE" | "FLOAT" | "FLOAT8" | "DOUBLE PRECISION" => {
+            ducklink_runtime::extension::Logicaltype::Float64
+        }
         "BOOL" | "BOOLEAN" => ducklink_runtime::extension::Logicaltype::Boolean,
         "TEXT" | "STRING" | "VARCHAR" | "CHAR" => ducklink_runtime::extension::Logicaltype::Text,
         "BLOB" | "BYTEA" | "BYTES" => ducklink_runtime::extension::Logicaltype::Blob,
@@ -7860,7 +7954,9 @@ fn literal_to_extension_duckvalue(
 /// parsed columns into `ducklink_runtime::extension::Columndef` before dispatching
 /// through `storage-write-dispatch.create-table`. Returns `Err(reason)` for
 /// unrecognized types so the caller can surface a clean `Unsupported` error.
-fn sql_type_to_extension_logical(type_text: &str) -> Result<ducklink_runtime::extension::Logicaltype, String> {
+fn sql_type_to_extension_logical(
+    type_text: &str,
+) -> Result<ducklink_runtime::extension::Logicaltype, String> {
     let s = type_text.trim();
     if s.is_empty() {
         return Err("empty type text".to_string());
@@ -7908,11 +8004,15 @@ fn sql_type_to_extension_logical(type_text: &str) -> Result<ducklink_runtime::ex
         "UBIGINT" | "UINT8" => ducklink_runtime::extension::Logicaltype::Uint64,
         "UHUGEINT" | "UINT128" => ducklink_runtime::extension::Logicaltype::Uhugeint,
         "REAL" | "FLOAT" | "FLOAT4" => ducklink_runtime::extension::Logicaltype::Float32,
-        "DOUBLE" | "DOUBLE PRECISION" | "FLOAT8" => ducklink_runtime::extension::Logicaltype::Float64,
+        "DOUBLE" | "DOUBLE PRECISION" | "FLOAT8" => {
+            ducklink_runtime::extension::Logicaltype::Float64
+        }
         "TEXT" | "VARCHAR" | "CHAR" | "CHARACTER" | "STRING" | "CLOB" => {
             ducklink_runtime::extension::Logicaltype::Text
         }
-        "BLOB" | "BYTEA" | "BYTES" | "BINARY" | "VARBINARY" => ducklink_runtime::extension::Logicaltype::Blob,
+        "BLOB" | "BYTEA" | "BYTES" | "BINARY" | "VARBINARY" => {
+            ducklink_runtime::extension::Logicaltype::Blob
+        }
         "DATE" => ducklink_runtime::extension::Logicaltype::Date,
         "TIME" => ducklink_runtime::extension::Logicaltype::Time,
         "TIMESTAMP" | "DATETIME" => ducklink_runtime::extension::Logicaltype::Timestamp,
@@ -7945,7 +8045,9 @@ fn sql_type_to_extension_logical(type_text: &str) -> Result<ducklink_runtime::ex
                 }
                 None => (18, 3), // DuckDB's default DECIMAL when unspecified.
             };
-            ducklink_runtime::extension::Logicaltype::Decimal(ducklink_runtime::extension::Decimalshape { width, scale })
+            ducklink_runtime::extension::Logicaltype::Decimal(
+                ducklink_runtime::extension::Decimalshape { width, scale },
+            )
         }
         other => {
             return Err(format!(
@@ -8298,11 +8400,7 @@ impl HostState {
         self.execute_single_statement(entry_handle, sql_ref)
     }
 
-    fn query_arrow(
-        &mut self,
-        rep: u32,
-        sql: String,
-    ) -> Result<Vec<u8>, cli_native::Duckerror> {
+    fn query_arrow(&mut self, rep: u32, sql: String) -> Result<Vec<u8>, cli_native::Duckerror> {
         let entry = self
             .connections
             .get(&rep)
@@ -8322,11 +8420,7 @@ impl HostState {
 
     /// Returns the new stream's u32 rep — the SyncHostCall dispatch
     /// wraps it as `Value::Resource` via `ctx.new_host_resource`.
-    fn open_stream(
-        &mut self,
-        rep: u32,
-        sql: String,
-    ) -> Result<u32, cli_native::Duckerror> {
+    fn open_stream(&mut self, rep: u32, sql: String) -> Result<u32, cli_native::Duckerror> {
         let entry = self
             .connections
             .get(&rep)
@@ -8355,11 +8449,7 @@ impl HostState {
     }
 
     /// Returns the new prepared-statement's u32 rep — see `open_stream`.
-    fn prepare(
-        &mut self,
-        rep: u32,
-        sql: String,
-    ) -> Result<u32, cli_native::Duckerror> {
+    fn prepare(&mut self, rep: u32, sql: String) -> Result<u32, cli_native::Duckerror> {
         let entry = self
             .connections
             .get(&rep)
@@ -8399,12 +8489,7 @@ impl HostState {
         let appender = self
             .with_core(|core| {
                 core.with_database(|guest, store| {
-                    guest.call_create_appender(
-                        store,
-                        handle,
-                        owned_schema.as_deref(),
-                        &owned_table,
-                    )
+                    guest.call_create_appender(store, handle, owned_schema.as_deref(), &owned_table)
                 })
             })
             .map_err(convert_trap_to_duckerror)?;
@@ -8455,9 +8540,7 @@ impl HostState {
                 Ok(value)
             }
             Err(err) => {
-                eprintln!(
-                    "[ducklink] core register_extension rejected '{extension_name}': {err}"
-                );
+                eprintln!("[ducklink] core register_extension rejected '{extension_name}': {err}");
                 Err(err)
             }
         }
@@ -9554,10 +9637,8 @@ fn call_config_get_option<T>(
                 None => Ok(None),
             },
             other => Err(ConfigError::InternalConfig(
-                format!(
-                    "config.{method}: expected Value::Option inside Ok payload, got {other:?}"
-                )
-                .into(),
+                format!("config.{method}: expected Value::Option inside Ok payload, got {other:?}")
+                    .into(),
             )),
         },
         Ok(None) => Err(ConfigError::InternalConfig(
@@ -9577,13 +9658,14 @@ fn call_config_get_option<T>(
 fn value_to_config_error(v: &wasmos_runtime_api::Value, method_ctx: &str) -> ConfigError {
     use wasmos_runtime_api::Value;
     let (disc, payload) = match v {
-        Value::Variant { discriminant, payload } => (discriminant.as_str(), payload.as_deref()),
+        Value::Variant {
+            discriminant,
+            payload,
+        } => (discriminant.as_str(), payload.as_deref()),
         other => {
             return ConfigError::InternalConfig(
-                format!(
-                    "config.{method_ctx}: expected configerror Value::Variant, got {other:?}"
-                )
-                .into(),
+                format!("config.{method_ctx}: expected configerror Value::Variant, got {other:?}")
+                    .into(),
             );
         }
     };
@@ -9760,9 +9842,7 @@ impl ExtensionServices for CoreServices {
                     &[
                         Value::Enum(level_tag.to_string()),
                         Value::String(message.to_string()),
-                        Value::Option(
-                            target.map(|t| Box::new(Value::String(t.to_string()))),
-                        ),
+                        Value::Option(target.map(|t| Box::new(Value::String(t.to_string())))),
                     ],
                 )
             })
@@ -10272,11 +10352,13 @@ fn instantiate_core(
     for (iface, handler) in [
         (
             TVM_BYTES_IFACE,
-            std::sync::Arc::new(TvmBytesHost) as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
+            std::sync::Arc::new(TvmBytesHost)
+                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
         ),
         (
             TVM_MANAGER_IFACE,
-            std::sync::Arc::new(TvmManagerHost) as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
+            std::sync::Arc::new(TvmManagerHost)
+                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
         ),
         (
             HOST_EXTENSION_LOADER_IFACE,
@@ -10339,7 +10421,11 @@ fn instantiate_core(
     let indices = duckdb_core_bindings::LibduckdbIndices::new(&instance_pre)?;
     let instance = instance_pre.instantiate(store.as_context_mut())?;
     let bindings = indices.load(store.as_context_mut(), &instance)?;
-    Ok(CoreExecution { store, bindings, instance })
+    Ok(CoreExecution {
+        store,
+        bindings,
+        instance,
+    })
 }
 
 /// Trust gate for precompiled `.cwasm` files.
@@ -10939,7 +11025,9 @@ fn sanitize_extension_name(raw: &str) -> String {
     sanitized
 }
 
-fn convert_core_duckvalue_to_extension(value: core_types::Duckvalue) -> ducklink_runtime::extension::Duckvalue {
+fn convert_core_duckvalue_to_extension(
+    value: core_types::Duckvalue,
+) -> ducklink_runtime::extension::Duckvalue {
     match value {
         core_types::Duckvalue::Null => ducklink_runtime::extension::Duckvalue::Null,
         core_types::Duckvalue::Boolean(v) => ducklink_runtime::extension::Duckvalue::Boolean(v),
@@ -10958,48 +11046,55 @@ fn convert_core_duckvalue_to_extension(value: core_types::Duckvalue) -> ducklink
         core_types::Duckvalue::Float32(v) => ducklink_runtime::extension::Duckvalue::Float32(v),
         core_types::Duckvalue::Date(v) => ducklink_runtime::extension::Duckvalue::Date(v),
         core_types::Duckvalue::Time(v) => ducklink_runtime::extension::Duckvalue::Time(v),
-        core_types::Duckvalue::Timestamptz(v) => ducklink_runtime::extension::Duckvalue::Timestamptz(v),
-        core_types::Duckvalue::Decimal(d) => {
-            ducklink_runtime::extension::Duckvalue::Decimal(ducklink_runtime::extension::Decimalvalue {
+        core_types::Duckvalue::Timestamptz(v) => {
+            ducklink_runtime::extension::Duckvalue::Timestamptz(v)
+        }
+        core_types::Duckvalue::Decimal(d) => ducklink_runtime::extension::Duckvalue::Decimal(
+            ducklink_runtime::extension::Decimalvalue {
                 lower: d.lower,
                 upper: d.upper,
                 width: d.width,
                 scale: d.scale,
-            })
-        }
-        core_types::Duckvalue::Interval(iv) => {
-            ducklink_runtime::extension::Duckvalue::Interval(ducklink_runtime::extension::Intervalvalue {
+            },
+        ),
+        core_types::Duckvalue::Interval(iv) => ducklink_runtime::extension::Duckvalue::Interval(
+            ducklink_runtime::extension::Intervalvalue {
                 months: iv.months,
                 days: iv.days,
                 micros: iv.micros,
-            })
-        }
+            },
+        ),
         core_types::Duckvalue::Uuid(u) => {
-            ducklink_runtime::extension::Duckvalue::Uuid(ducklink_runtime::extension::Uuidvalue { hi: u.hi, lo: u.lo })
+            ducklink_runtime::extension::Duckvalue::Uuid(ducklink_runtime::extension::Uuidvalue {
+                hi: u.hi,
+                lo: u.lo,
+            })
         }
         // @5.0.0: first-class 128-bit integer arms carry (lower, upper) halves.
-        core_types::Duckvalue::Hugeint(h) => {
-            ducklink_runtime::extension::Duckvalue::Hugeint(ducklink_runtime::extension::Hugeintvalue {
+        core_types::Duckvalue::Hugeint(h) => ducklink_runtime::extension::Duckvalue::Hugeint(
+            ducklink_runtime::extension::Hugeintvalue {
                 lower: h.lower,
                 upper: h.upper,
-            })
-        }
-        core_types::Duckvalue::Uhugeint(h) => {
-            ducklink_runtime::extension::Duckvalue::Uhugeint(ducklink_runtime::extension::Uhugeintvalue {
+            },
+        ),
+        core_types::Duckvalue::Uhugeint(h) => ducklink_runtime::extension::Duckvalue::Uhugeint(
+            ducklink_runtime::extension::Uhugeintvalue {
                 lower: h.lower,
                 upper: h.upper,
-            })
-        }
-        core_types::Duckvalue::Complex(c) => {
-            ducklink_runtime::extension::Duckvalue::Complex(ducklink_runtime::extension::Complexvalue {
+            },
+        ),
+        core_types::Duckvalue::Complex(c) => ducklink_runtime::extension::Duckvalue::Complex(
+            ducklink_runtime::extension::Complexvalue {
                 type_expr: c.type_expr,
                 json: c.json,
-            })
-        }
+            },
+        ),
     }
 }
 
-fn convert_extension_duckvalue_to_core(value: ducklink_runtime::extension::Duckvalue) -> core_types::Duckvalue {
+fn convert_extension_duckvalue_to_core(
+    value: ducklink_runtime::extension::Duckvalue,
+) -> core_types::Duckvalue {
     match value {
         ducklink_runtime::extension::Duckvalue::Null => core_types::Duckvalue::Null,
         ducklink_runtime::extension::Duckvalue::Boolean(v) => core_types::Duckvalue::Boolean(v),
@@ -11018,7 +11113,9 @@ fn convert_extension_duckvalue_to_core(value: ducklink_runtime::extension::Duckv
         ducklink_runtime::extension::Duckvalue::Float32(v) => core_types::Duckvalue::Float32(v),
         ducklink_runtime::extension::Duckvalue::Date(v) => core_types::Duckvalue::Date(v),
         ducklink_runtime::extension::Duckvalue::Time(v) => core_types::Duckvalue::Time(v),
-        ducklink_runtime::extension::Duckvalue::Timestamptz(v) => core_types::Duckvalue::Timestamptz(v),
+        ducklink_runtime::extension::Duckvalue::Timestamptz(v) => {
+            core_types::Duckvalue::Timestamptz(v)
+        }
         ducklink_runtime::extension::Duckvalue::Decimal(d) => {
             core_types::Duckvalue::Decimal(core_types::Decimalvalue {
                 lower: d.lower,
@@ -11287,21 +11384,37 @@ fn convert_extension_resultset_to_core(
         .collect()
 }
 
-fn convert_extension_duckerror_to_core(err: ducklink_runtime::extension::Duckerror) -> core_types::Duckerror {
+fn convert_extension_duckerror_to_core(
+    err: ducklink_runtime::extension::Duckerror,
+) -> core_types::Duckerror {
     match err {
-        ducklink_runtime::extension::Duckerror::Invalidargument(v) => core_types::Duckerror::Invalidargument(v),
-        ducklink_runtime::extension::Duckerror::Unsupported(v) => core_types::Duckerror::Unsupported(v),
-        ducklink_runtime::extension::Duckerror::Invalidstate(v) => core_types::Duckerror::Invalidstate(v),
+        ducklink_runtime::extension::Duckerror::Invalidargument(v) => {
+            core_types::Duckerror::Invalidargument(v)
+        }
+        ducklink_runtime::extension::Duckerror::Unsupported(v) => {
+            core_types::Duckerror::Unsupported(v)
+        }
+        ducklink_runtime::extension::Duckerror::Invalidstate(v) => {
+            core_types::Duckerror::Invalidstate(v)
+        }
         ducklink_runtime::extension::Duckerror::Io(v) => core_types::Duckerror::Io(v),
         ducklink_runtime::extension::Duckerror::Internal(v) => core_types::Duckerror::Internal(v),
     }
 }
 
-fn convert_core_duckerror_to_extension(err: core_types::Duckerror) -> ducklink_runtime::extension::Duckerror {
+fn convert_core_duckerror_to_extension(
+    err: core_types::Duckerror,
+) -> ducklink_runtime::extension::Duckerror {
     match err {
-        core_types::Duckerror::Invalidargument(v) => ducklink_runtime::extension::Duckerror::Invalidargument(v),
-        core_types::Duckerror::Unsupported(v) => ducklink_runtime::extension::Duckerror::Unsupported(v),
-        core_types::Duckerror::Invalidstate(v) => ducklink_runtime::extension::Duckerror::Invalidstate(v),
+        core_types::Duckerror::Invalidargument(v) => {
+            ducklink_runtime::extension::Duckerror::Invalidargument(v)
+        }
+        core_types::Duckerror::Unsupported(v) => {
+            ducklink_runtime::extension::Duckerror::Unsupported(v)
+        }
+        core_types::Duckerror::Invalidstate(v) => {
+            ducklink_runtime::extension::Duckerror::Invalidstate(v)
+        }
         core_types::Duckerror::Io(v) => ducklink_runtime::extension::Duckerror::Io(v),
         core_types::Duckerror::Internal(v) => ducklink_runtime::extension::Duckerror::Internal(v),
     }
@@ -11332,7 +11445,9 @@ fn convert_extension_logicaltype_to_core(
         ducklink_runtime::extension::Logicaltype::Float32 => core_types::Logicaltype::Float32,
         ducklink_runtime::extension::Logicaltype::Date => core_types::Logicaltype::Date,
         ducklink_runtime::extension::Logicaltype::Time => core_types::Logicaltype::Time,
-        ducklink_runtime::extension::Logicaltype::Timestamptz => core_types::Logicaltype::Timestamptz,
+        ducklink_runtime::extension::Logicaltype::Timestamptz => {
+            core_types::Logicaltype::Timestamptz
+        }
         // @5.0.0: DECIMAL carries decimalshape { width, scale } payload on
         // both sides -- pass through structurally.
         ducklink_runtime::extension::Logicaltype::Decimal(shape) => {
@@ -11346,11 +11461,15 @@ fn convert_extension_logicaltype_to_core(
         // @5.0.0: first-class HUGEINT / UHUGEINT arms on both sides.
         ducklink_runtime::extension::Logicaltype::Hugeint => core_types::Logicaltype::Hugeint,
         ducklink_runtime::extension::Logicaltype::Uhugeint => core_types::Logicaltype::Uhugeint,
-        ducklink_runtime::extension::Logicaltype::Complex(expr) => core_types::Logicaltype::Complex(expr),
+        ducklink_runtime::extension::Logicaltype::Complex(expr) => {
+            core_types::Logicaltype::Complex(expr)
+        }
     }
 }
 
-fn convert_extension_columndef_to_core(col: ducklink_runtime::extension::Columndef) -> core_types::Columndef {
+fn convert_extension_columndef_to_core(
+    col: ducklink_runtime::extension::Columndef,
+) -> core_types::Columndef {
     core_types::Columndef {
         name: col.name,
         logical: convert_extension_logicaltype_to_core(col.logical),
@@ -11380,24 +11499,32 @@ fn convert_core_logicaltype_to_extension(
         core_types::Logicaltype::Float32 => ducklink_runtime::extension::Logicaltype::Float32,
         core_types::Logicaltype::Date => ducklink_runtime::extension::Logicaltype::Date,
         core_types::Logicaltype::Time => ducklink_runtime::extension::Logicaltype::Time,
-        core_types::Logicaltype::Timestamptz => ducklink_runtime::extension::Logicaltype::Timestamptz,
+        core_types::Logicaltype::Timestamptz => {
+            ducklink_runtime::extension::Logicaltype::Timestamptz
+        }
         // @5.0.0: DECIMAL carries decimalshape { width, scale } on both sides.
         core_types::Logicaltype::Decimal(shape) => {
-            ducklink_runtime::extension::Logicaltype::Decimal(ducklink_runtime::extension::Decimalshape {
-                width: shape.width,
-                scale: shape.scale,
-            })
+            ducklink_runtime::extension::Logicaltype::Decimal(
+                ducklink_runtime::extension::Decimalshape {
+                    width: shape.width,
+                    scale: shape.scale,
+                },
+            )
         }
         core_types::Logicaltype::Interval => ducklink_runtime::extension::Logicaltype::Interval,
         core_types::Logicaltype::Uuid => ducklink_runtime::extension::Logicaltype::Uuid,
         // @5.0.0: first-class HUGEINT / UHUGEINT on both sides.
         core_types::Logicaltype::Hugeint => ducklink_runtime::extension::Logicaltype::Hugeint,
         core_types::Logicaltype::Uhugeint => ducklink_runtime::extension::Logicaltype::Uhugeint,
-        core_types::Logicaltype::Complex(expr) => ducklink_runtime::extension::Logicaltype::Complex(expr),
+        core_types::Logicaltype::Complex(expr) => {
+            ducklink_runtime::extension::Logicaltype::Complex(expr)
+        }
     }
 }
 
-fn convert_core_columndef_to_extension(col: core_types::Columndef) -> ducklink_runtime::extension::Columndef {
+fn convert_core_columndef_to_extension(
+    col: core_types::Columndef,
+) -> ducklink_runtime::extension::Columndef {
     ducklink_runtime::extension::Columndef {
         name: col.name,
         logical: convert_core_logicaltype_to_extension(col.logical),
@@ -11922,7 +12049,6 @@ fn run_cli_inner(
         .map_err(|trap| anyhow::anyhow!("cli wasi:cli/run@0.2.6.run(): {trap}"))
 }
 
-
 // ─── Post-Phase-2d bridge wiring — Path A of the wasmos migration ─
 //
 // See `docs/wasmos-migration-recipe.md`. Site 3 of the inventory: the
@@ -12160,8 +12286,7 @@ fn cli_db_open(ctx: &mut HostCallContext<'_>, args: Vec<Value>) -> RuntimeResult
     let state = cli_ctx_state(ctx, "open")?;
     match state.open(path) {
         Ok(rep) => {
-            let resource_value =
-                ctx.new_host_resource(CLI_DB_IFACE, CLI_DB_CONN_RESOURCE, rep)?;
+            let resource_value = ctx.new_host_resource(CLI_DB_IFACE, CLI_DB_CONN_RESOURCE, rep)?;
             Ok(vec![Value::Result(Ok(Some(Box::new(resource_value))))])
         }
         Err(msg) => Ok(vec![Value::Result(Err(Some(Box::new(Value::String(msg)))))]),
@@ -12179,9 +12304,7 @@ fn cli_db_open_with_config(
             for item in opts {
                 match item {
                     Value::Tuple(t) if t.len() == 2 => match (&t[0], &t[1]) {
-                        (Value::String(k), Value::String(v)) => {
-                            kvs.push((k.clone(), v.clone()))
-                        }
+                        (Value::String(k), Value::String(v)) => kvs.push((k.clone(), v.clone())),
                         other => {
                             return Err(RuntimeError::msg(format!(
                                 "{CLI_DB_IFACE}.open-with-config: option tuple elements must \
@@ -12208,8 +12331,7 @@ fn cli_db_open_with_config(
     let state = cli_ctx_state(ctx, "open-with-config")?;
     match state.open_with_config(path, options) {
         Ok(rep) => {
-            let resource_value =
-                ctx.new_host_resource(CLI_DB_IFACE, CLI_DB_CONN_RESOURCE, rep)?;
+            let resource_value = ctx.new_host_resource(CLI_DB_IFACE, CLI_DB_CONN_RESOURCE, rep)?;
             Ok(vec![Value::Result(Ok(Some(Box::new(resource_value))))])
         }
         Err(msg) => Ok(vec![Value::Result(Err(Some(Box::new(Value::String(msg)))))]),
@@ -12224,10 +12346,7 @@ fn cli_db_close(ctx: &mut HostCallContext<'_>, args: Vec<Value>) -> RuntimeResul
     Ok(vec![])
 }
 
-fn cli_db_interrupt(
-    ctx: &mut HostCallContext<'_>,
-    args: Vec<Value>,
-) -> RuntimeResult<Vec<Value>> {
+fn cli_db_interrupt(ctx: &mut HostCallContext<'_>, args: Vec<Value>) -> RuntimeResult<Vec<Value>> {
     let rep_value = expect_single_resource(&args, "interrupt")?;
     let rep = ctx.resource_rep(&rep_value)?;
     let state = cli_ctx_state(ctx, "interrupt")?;
@@ -12240,12 +12359,12 @@ fn cli_db_execute(ctx: &mut HostCallContext<'_>, args: Vec<Value>) -> RuntimeRes
     let rep = ctx.resource_rep(&rep_value)?;
     let state = cli_ctx_state(ctx, "execute")?;
     match state.execute(rep, sql) {
-        Ok(qr) => Ok(vec![Value::Result(Ok(Some(Box::new(query_result_to_value(
-            &qr,
-        )))))]),
-        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(duckerror_to_value(
-            &err,
-        )))))]),
+        Ok(qr) => Ok(vec![Value::Result(Ok(Some(Box::new(
+            query_result_to_value(&qr),
+        ))))]),
+        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(
+            duckerror_to_value(&err),
+        ))))]),
     }
 }
 
@@ -12257,12 +12376,12 @@ fn cli_db_query_arrow(
     let rep = ctx.resource_rep(&rep_value)?;
     let state = cli_ctx_state(ctx, "query-arrow")?;
     match state.query_arrow(rep, sql) {
-        Ok(bytes) => Ok(vec![Value::Result(Ok(Some(Box::new(bytes_to_value_list(
-            &bytes,
-        )))))]),
-        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(duckerror_to_value(
-            &err,
-        )))))]),
+        Ok(bytes) => Ok(vec![Value::Result(Ok(Some(Box::new(
+            bytes_to_value_list(&bytes),
+        ))))]),
+        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(
+            duckerror_to_value(&err),
+        ))))]),
     }
 }
 
@@ -12279,9 +12398,9 @@ fn cli_db_open_stream(
                 ctx.new_host_resource(CLI_DB_IFACE, CLI_DB_STREAM_RESOURCE, rep)?;
             Ok(vec![Value::Result(Ok(Some(Box::new(resource_value))))])
         }
-        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(duckerror_to_value(
-            &err,
-        )))))]),
+        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(
+            duckerror_to_value(&err),
+        ))))]),
     }
 }
 
@@ -12295,9 +12414,9 @@ fn cli_db_prepare(ctx: &mut HostCallContext<'_>, args: Vec<Value>) -> RuntimeRes
                 ctx.new_host_resource(CLI_DB_IFACE, CLI_DB_PREPARED_RESOURCE, rep)?;
             Ok(vec![Value::Result(Ok(Some(Box::new(resource_value))))])
         }
-        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(duckerror_to_value(
-            &err,
-        )))))]),
+        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(
+            duckerror_to_value(&err),
+        ))))]),
     }
 }
 
@@ -12324,9 +12443,9 @@ fn cli_db_create_appender(
                 ctx.new_host_resource(CLI_DB_IFACE, CLI_DB_APPENDER_RESOURCE, rep)?;
             Ok(vec![Value::Result(Ok(Some(Box::new(resource_value))))])
         }
-        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(duckerror_to_value(
-            &err,
-        )))))]),
+        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(
+            duckerror_to_value(&err),
+        ))))]),
     }
 }
 
@@ -12431,14 +12550,14 @@ fn cli_db_stream_next(
                     Value::List(cells)
                 })
                 .collect();
-            Ok(vec![Value::Result(Ok(Some(Box::new(Value::Option(Some(
-                Box::new(Value::List(rows_v)),
-            ))))))])
+            Ok(vec![Value::Result(Ok(Some(Box::new(Value::Option(
+                Some(Box::new(Value::List(rows_v))),
+            )))))])
         }
         Ok(None) => Ok(vec![Value::Result(Ok(Some(Box::new(Value::Option(None)))))]),
-        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(duckerror_to_value(
-            &err,
-        )))))]),
+        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(
+            duckerror_to_value(&err),
+        ))))]),
     }
 }
 
@@ -12457,8 +12576,7 @@ fn cli_db_prepared_parameter_count(
     ctx: &mut HostCallContext<'_>,
     args: Vec<Value>,
 ) -> RuntimeResult<Vec<Value>> {
-    let rep_value =
-        expect_single_resource(&args, "[method]prepared-statement.parameter-count")?;
+    let rep_value = expect_single_resource(&args, "[method]prepared-statement.parameter-count")?;
     let rep = ctx.resource_rep(&rep_value)?;
     let state = cli_ctx_state(ctx, "[method]prepared-statement.parameter-count")?;
     Ok(vec![Value::U32(state.prepared_parameter_count(rep))])
@@ -12485,12 +12603,12 @@ fn cli_db_prepared_execute(
     let rep = ctx.resource_rep(&rep_value)?;
     let state = cli_ctx_state(ctx, "[method]prepared-statement.execute")?;
     match state.prepared_execute(rep, params) {
-        Ok(qr) => Ok(vec![Value::Result(Ok(Some(Box::new(query_result_to_value(
-            &qr,
-        )))))]),
-        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(duckerror_to_value(
-            &err,
-        )))))]),
+        Ok(qr) => Ok(vec![Value::Result(Ok(Some(Box::new(
+            query_result_to_value(&qr),
+        ))))]),
+        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(
+            duckerror_to_value(&err),
+        ))))]),
     }
 }
 
@@ -12516,9 +12634,9 @@ fn cli_db_appender_append_row(
     let state = cli_ctx_state(ctx, "[method]appender.append-row")?;
     match state.appender_append_row(rep, values) {
         Ok(()) => Ok(vec![Value::Result(Ok(None))]),
-        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(duckerror_to_value(
-            &err,
-        )))))]),
+        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(
+            duckerror_to_value(&err),
+        ))))]),
     }
 }
 
@@ -12531,9 +12649,9 @@ fn cli_db_appender_flush(
     let state = cli_ctx_state(ctx, "[method]appender.flush")?;
     match state.appender_flush(rep) {
         Ok(()) => Ok(vec![Value::Result(Ok(None))]),
-        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(duckerror_to_value(
-            &err,
-        )))))]),
+        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(
+            duckerror_to_value(&err),
+        ))))]),
     }
 }
 
@@ -12546,9 +12664,9 @@ fn cli_db_appender_close(
     let state = cli_ctx_state(ctx, "[method]appender.close")?;
     match state.appender_close(rep) {
         Ok(()) => Ok(vec![Value::Result(Ok(None))]),
-        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(duckerror_to_value(
-            &err,
-        )))))]),
+        Err(err) => Ok(vec![Value::Result(Err(Some(Box::new(
+            duckerror_to_value(&err),
+        ))))]),
     }
 }
 
@@ -12633,9 +12751,9 @@ impl SyncHostCall for DotcmdHostHost {
                 // WIT: `invoke: func(name, args) -> result<option<outcome>, string>`
                 let inner = match registry.invoke(&name, &dot_args) {
                     None => Value::Result(Ok(Some(Box::new(Value::Option(None))))),
-                    Some(Ok((text, deltas))) => Value::Result(Ok(Some(Box::new(
-                        Value::Option(Some(Box::new(make_cli_outcome_value(text, deltas)))),
-                    )))),
+                    Some(Ok((text, deltas))) => Value::Result(Ok(Some(Box::new(Value::Option(
+                        Some(Box::new(make_cli_outcome_value(text, deltas))),
+                    ))))),
                     Some(Err(message)) => {
                         Value::Result(Err(Some(Box::new(Value::String(message)))))
                     }
@@ -12737,7 +12855,10 @@ fn duckerror_to_value(err: &cli_native::Duckerror) -> Value {
 fn value_to_capabilitykind(v: &Value) -> RuntimeResult<cli_native::Capabilitykind> {
     let disc = match v {
         Value::Enum(d) => d.as_str(),
-        Value::Variant { discriminant, payload: None } => discriminant.as_str(),
+        Value::Variant {
+            discriminant,
+            payload: None,
+        } => discriminant.as_str(),
         other => {
             return Err(RuntimeError::msg(format!(
                 "expected capabilitykind enum, got {other:?}"
@@ -12767,7 +12888,11 @@ fn capabilitykind_to_value(k: &cli_native::Capabilitykind) -> Value {
 fn value_to_logicaltype(v: &Value) -> RuntimeResult<cli_native::Logicaltype> {
     use cli_native::Logicaltype as L;
     match v {
-        Value::Enum(d) | Value::Variant { discriminant: d, payload: None } => match d.as_str() {
+        Value::Enum(d)
+        | Value::Variant {
+            discriminant: d,
+            payload: None,
+        } => match d.as_str() {
             "boolean" => Ok(L::Boolean),
             "int64" => Ok(L::Int64),
             "uint64" => Ok(L::Uint64),
@@ -12793,29 +12918,30 @@ fn value_to_logicaltype(v: &Value) -> RuntimeResult<cli_native::Logicaltype> {
                 "unknown fieldless logicaltype {other:?}"
             ))),
         },
-        Value::Variant { discriminant, payload: Some(p) } => {
-            match (discriminant.as_str(), p.as_ref()) {
-                ("decimal", Value::Record(fields)) => {
-                    let mut width: Option<u8> = None;
-                    let mut scale: Option<u8> = None;
-                    for (k, v) in fields {
-                        match (k.as_str(), v) {
-                            ("width", Value::U8(n)) => width = Some(*n),
-                            ("scale", Value::U8(n)) => scale = Some(*n),
-                            _ => {}
-                        }
+        Value::Variant {
+            discriminant,
+            payload: Some(p),
+        } => match (discriminant.as_str(), p.as_ref()) {
+            ("decimal", Value::Record(fields)) => {
+                let mut width: Option<u8> = None;
+                let mut scale: Option<u8> = None;
+                for (k, v) in fields {
+                    match (k.as_str(), v) {
+                        ("width", Value::U8(n)) => width = Some(*n),
+                        ("scale", Value::U8(n)) => scale = Some(*n),
+                        _ => {}
                     }
-                    Ok(L::Decimal(cli_native::Decimalshape {
-                        width: width.ok_or_else(|| RuntimeError::msg("decimalshape.width"))?,
-                        scale: scale.ok_or_else(|| RuntimeError::msg("decimalshape.scale"))?,
-                    }))
                 }
-                ("complex", Value::String(s)) => Ok(L::Complex(s.clone())),
-                (d, p) => Err(RuntimeError::msg(format!(
-                    "unknown payload-carrying logicaltype {d:?}: {p:?}"
-                ))),
+                Ok(L::Decimal(cli_native::Decimalshape {
+                    width: width.ok_or_else(|| RuntimeError::msg("decimalshape.width"))?,
+                    scale: scale.ok_or_else(|| RuntimeError::msg("decimalshape.scale"))?,
+                }))
             }
-        }
+            ("complex", Value::String(s)) => Ok(L::Complex(s.clone())),
+            (d, p) => Err(RuntimeError::msg(format!(
+                "unknown payload-carrying logicaltype {d:?}: {p:?}"
+            ))),
+        },
         other => Err(RuntimeError::msg(format!(
             "expected logicaltype variant, got {other:?}"
         ))),
@@ -13006,7 +13132,10 @@ fn duckvalue_to_value(v: &cli_native::Duckvalue) -> Value {
 fn value_to_duckvalue(v: &Value) -> RuntimeResult<cli_native::Duckvalue> {
     use cli_native::Duckvalue as D;
     let (disc, payload) = match v {
-        Value::Variant { discriminant, payload } => (discriminant.as_str(), payload.as_deref()),
+        Value::Variant {
+            discriminant,
+            payload,
+        } => (discriminant.as_str(), payload.as_deref()),
         other => {
             return Err(RuntimeError::msg(format!(
                 "expected duckvalue variant, got {other:?}"
@@ -13046,7 +13175,12 @@ fn value_to_duckvalue(v: &Value) -> RuntimeResult<cli_native::Duckvalue> {
                     _ => {}
                 }
             }
-            Ok(D::Decimal(cli_native::Decimalvalue { lower, upper, width, scale }))
+            Ok(D::Decimal(cli_native::Decimalvalue {
+                lower,
+                upper,
+                width,
+                scale,
+            }))
         }
         ("interval", Some(Value::Record(f))) => {
             let mut months = 0i32;
@@ -13060,7 +13194,11 @@ fn value_to_duckvalue(v: &Value) -> RuntimeResult<cli_native::Duckvalue> {
                     _ => {}
                 }
             }
-            Ok(D::Interval(cli_native::Intervalvalue { months, days, micros }))
+            Ok(D::Interval(cli_native::Intervalvalue {
+                months,
+                days,
+                micros,
+            }))
         }
         ("uuid", Some(Value::Record(f))) => {
             let mut hi = 0u64;
@@ -14236,7 +14374,6 @@ mod tests {
     // `cli_*` sample_extension tests on the production wasmos install
     // path. With that test gone, the fixture had no callers.
 
-
     // ----------------------------------------------------------------------
     // Pure converter unit tests (no engine / no .wasm artifact). These cover
     // the neutral<->core / core<->cli / core<->extension value+type converters
@@ -14606,7 +14743,6 @@ mod tests {
     // sink to lock in the end-to-end guard-fires-through-sink
     // property; that lives in ducklink-runtime where the test-only
     // inherent method is reachable.
-
 
     // ------------------------------------------------------------------
     // nested-exec Direction-1 §7.8 option (a): primary-core re-entry tests.
