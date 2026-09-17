@@ -7012,10 +7012,14 @@ impl HostState {
     fn drop_stream_resource(&mut self, rep: u32) -> Result<(), cli_native::Duckerror> {
         if let Some(entry) = self.streams.remove(&rep) {
             if !entry.closed {
-                self.with_core(|core| {
-                    core.with_stream(|guest, store| guest.call_close(store, entry.handle))
-                })
-                .map_err(|err| cli_native::Duckerror::Internal(trap_to_cli_string(err)))?;
+                call_export_no_return(
+                    self,
+                    DATABASE_IFACE,
+                    "[method]result-stream.close",
+                    entry.handle,
+                    &[],
+                )
+                .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
             }
         }
         Ok(())
@@ -7059,10 +7063,11 @@ impl HostState {
 
     fn drop_prepared_resource(&mut self, rep: u32) -> Result<(), cli_native::Duckerror> {
         if let Some(entry) = self.prepared.remove(&rep) {
-            self.with_core(|core| {
-                core.with_prepared(|_guest, store| entry.handle.resource_drop(store))
-            })
-            .map_err(|err| cli_native::Duckerror::Internal(trap_to_cli_string(err)))?;
+            // Wasmtime's built-in resource-drop (runs the canonical-
+            // ABI destructor). Same treatment as
+            // [`Self::drop_appender_resource`].
+            self.with_core(|core| entry.handle.resource_drop(core.store.as_context_mut()))
+                .map_err(|err| cli_native::Duckerror::Internal(trap_to_cli_string(err)))?;
         }
         Ok(())
     }
@@ -8186,26 +8191,46 @@ impl HostState {
     // ─── result-stream resource methods ────────────────────────────
 
     fn stream_schema(&mut self, rep: u32) -> Vec<cli_native::Columndef> {
+        use wasmos_runtime_api::Value;
         // `schema` returns a plain Vec (no error channel), so a bad/closed
         // handle or a core trap degrades to an empty schema rather than
         // aborting the host from inside this dispatch.
         let handle = match self.streams.get(&rep) {
-            Some(entry) => entry.handle.clone(),
+            Some(entry) => entry.handle,
             None => {
                 eprintln!("[host] schema() for unknown stream handle {}", rep);
                 return Vec::new();
             }
         };
-        let columns = match self
-            .with_core(|core| core.with_stream(|guest, store| guest.call_schema(store, handle)))
-        {
-            Ok(columns) => columns,
+        let ret = match call_export_on_resource(
+            self,
+            DATABASE_IFACE,
+            "[method]result-stream.schema",
+            handle,
+            &[],
+        ) {
+            Ok(v) => v,
             Err(err) => {
                 eprintln!("[host] schema() failed to fetch stream schema: {err}");
                 return Vec::new();
             }
         };
-        columns.into_iter().map(convert_core_columndef).collect()
+        match ret.as_slice() {
+            [Value::List(items)] => items
+                .iter()
+                .filter_map(|v| match value_to_columndef(v) {
+                    Ok(c) => Some(c),
+                    Err(err) => {
+                        eprintln!("[host] schema() bad columndef in return: {err}");
+                        None
+                    }
+                })
+                .collect(),
+            other => {
+                eprintln!("[host] schema() expected [Value::List(...)], got {other:?}");
+                Vec::new()
+            }
+        }
     }
 
     fn stream_next(
@@ -8213,32 +8238,71 @@ impl HostState {
         rep: u32,
         max_rows: u32,
     ) -> Result<Option<Vec<cli_native::Row>>, cli_native::Duckerror> {
+        use wasmos_runtime_api::Value;
         let entry = self
             .streams
             .get(&rep)
             .ok_or_else(|| cli_native::Duckerror::Internal("unknown stream".into()))?;
-        let next = self
-            .with_core(|core| {
-                core.with_stream(|guest, store| {
-                    guest.call_next(store, entry.handle.clone(), max_rows)
-                })
-            })
-            .map_err(convert_trap_to_duckerror)?;
-        match next {
-            Ok(Some(rows)) => Ok(Some(rows.into_iter().map(convert_core_row).collect())),
-            Ok(None) => Ok(None),
-            Err(err) => Err(convert_core_duckerror(err)),
+        let handle = entry.handle;
+        let ret = call_export_on_resource(
+            self,
+            DATABASE_IFACE,
+            "[method]result-stream.next",
+            handle,
+            &[Value::U32(max_rows)],
+        )
+        .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
+        match ret.as_slice() {
+            [Value::Result(Ok(Some(opt_payload)))] => match opt_payload.as_ref() {
+                Value::Option(inner) => match inner {
+                    Some(list_payload) => match list_payload.as_ref() {
+                        Value::List(rows) => {
+                            let rows: Vec<cli_native::Row> = rows
+                                .iter()
+                                .map(value_to_row)
+                                .collect::<Result<_, _>>()
+                                .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
+                            Ok(Some(rows))
+                        }
+                        other => Err(cli_native::Duckerror::Internal(
+                            format!("result-stream.next: expected Value::List inside Some, got {other:?}")
+                                .into(),
+                        )),
+                    },
+                    None => Ok(None),
+                },
+                other => Err(cli_native::Duckerror::Internal(
+                    format!("result-stream.next: expected Value::Option in Ok payload, got {other:?}")
+                        .into(),
+                )),
+            },
+            [Value::Result(Ok(None))] => Err(cli_native::Duckerror::Internal(
+                "result-stream.next: Ok arm carried no option payload".into(),
+            )),
+            [Value::Result(Err(Some(err_payload)))] => {
+                Err(value_to_duckerror(err_payload.as_ref(), "[method]result-stream.next"))
+            }
+            [Value::Result(Err(None))] => Err(cli_native::Duckerror::Internal(
+                "result-stream.next: Err arm carried no duckerror payload".into(),
+            )),
+            other => Err(cli_native::Duckerror::Internal(
+                format!("result-stream.next: unexpected return shape {other:?}").into(),
+            )),
         }
     }
 
     fn stream_close(&mut self, rep: u32) {
         let handle = match self.streams.get(&rep) {
-            Some(entry) if !entry.closed => entry.handle.clone(),
+            Some(entry) if !entry.closed => entry.handle,
             _ => return,
         };
-        if let Err(err) =
-            self.with_core(|core| core.with_stream(|guest, store| guest.call_close(store, handle)))
-        {
+        if let Err(err) = call_export_no_return(
+            self,
+            DATABASE_IFACE,
+            "[method]result-stream.close",
+            handle,
+            &[],
+        ) {
             // `close` has no error channel; a trap here must not abort the host
             // from inside this dispatch. Log and mark the stream closed anyway.
             eprintln!("[host] close() failed to close result stream: {err}");
@@ -8251,14 +8315,23 @@ impl HostState {
     // ─── prepared-statement resource methods ───────────────────────
 
     fn prepared_parameter_count(&mut self, rep: u32) -> u32 {
+        use wasmos_runtime_api::Value;
         let handle = match self.prepared.get(&rep) {
-            Some(entry) => entry.handle.clone(),
+            Some(entry) => entry.handle,
             None => return 0,
         };
-        self.with_core(|core| {
-            core.with_prepared(|guest, store| guest.call_parameter_count(store, handle))
-        })
-        .expect("failed to fetch prepared-statement parameter count")
+        let ret = call_export_on_resource(
+            self,
+            DATABASE_IFACE,
+            "[method]prepared-statement.parameter-count",
+            handle,
+            &[],
+        )
+        .expect("failed to fetch prepared-statement parameter count");
+        match ret.as_slice() {
+            [Value::U32(n)] => *n,
+            other => panic!("parameter-count: expected [Value::U32(_)], got {other:?}"),
+        }
     }
 
     fn prepared_execute(
@@ -8266,22 +8339,37 @@ impl HostState {
         rep: u32,
         params: Vec<cli_native::Duckvalue>,
     ) -> Result<cli_native::QueryResult, cli_native::Duckerror> {
+        use wasmos_runtime_api::Value;
         let handle = self
             .prepared
             .get(&rep)
             .ok_or_else(|| cli_native::Duckerror::Internal("unknown prepared statement".into()))?
-            .handle
-            .clone();
-        let core_params: Vec<core_types::Duckvalue> =
-            params.into_iter().map(convert_cli_duckvalue).collect();
-        let result = self
-            .with_core(|core| {
-                core.with_prepared(|guest, store| guest.call_execute(store, handle, &core_params))
-            })
-            .map_err(convert_trap_to_duckerror)?;
-        match result {
-            Ok(value) => Ok(convert_core_query_result(value)),
-            Err(err) => Err(convert_core_duckerror(err)),
+            .handle;
+        let params_arg = Value::List(params.iter().map(duckvalue_to_value).collect());
+        let ret = call_export_on_resource(
+            self,
+            DATABASE_IFACE,
+            "[method]prepared-statement.execute",
+            handle,
+            &[params_arg],
+        )
+        .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
+        match ret.as_slice() {
+            [Value::Result(Ok(Some(payload)))] => value_to_query_result(payload.as_ref())
+                .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into())),
+            [Value::Result(Ok(None))] => Err(cli_native::Duckerror::Internal(
+                "prepared-statement.execute: Ok arm carried no query-result payload".into(),
+            )),
+            [Value::Result(Err(Some(err_payload)))] => Err(value_to_duckerror(
+                err_payload.as_ref(),
+                "[method]prepared-statement.execute",
+            )),
+            [Value::Result(Err(None))] => Err(cli_native::Duckerror::Internal(
+                "prepared-statement.execute: Err arm carried no duckerror payload".into(),
+            )),
+            other => Err(cli_native::Duckerror::Internal(
+                format!("prepared-statement.execute: unexpected return shape {other:?}").into(),
+            )),
         }
     }
 
@@ -9422,23 +9510,53 @@ const CONFIG_IFACE: &str = "duckdb:extension/config@5.0.0";
 /// the `duckdb:component` package carries no `@version` tag).
 const DATABASE_IFACE: &str = "duckdb:component/database";
 
+/// Generic resource-method dispatch helper. Registers `handle`
+/// into a fresh [`ExportResourceTable`], appends `trailing_args`
+/// after the handle in the call's args slice, invokes
+/// [`call_export_with_resources`], returns the raw
+/// `Vec<Value>` return values for the caller to unpack per
+/// method signature.
+///
+/// The `handle` is the `ResourceAny` ducklink stashes in the
+/// entry table; it's copied into the fresh table for the
+/// duration of the call. Since ducklink still holds the
+/// original `ResourceAny` in its own entry map, the fresh table
+/// can be dropped on return without leaking — the guest's
+/// canonical-ABI ownership rules govern whether the underlying
+/// resource stays live.
+fn call_export_on_resource(
+    state: &mut HostState,
+    iface: &str,
+    method: &str,
+    handle: wasmtime::component::ResourceAny,
+    trailing_args: &[wasmos_runtime_api::Value],
+) -> Result<Vec<wasmos_runtime_api::Value>, wasmos_runtime_api::RuntimeError> {
+    use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
+        call_export_with_resources, ExportResourceTable,
+    };
+    state.with_core(|core| {
+        let mut resources = ExportResourceTable::new();
+        let handle_val = resources.register(handle);
+        let mut args = Vec::with_capacity(1 + trailing_args.len());
+        args.push(handle_val);
+        args.extend_from_slice(trailing_args);
+        call_export_with_resources(
+            core.store.as_context_mut(),
+            &core.instance,
+            Some(iface),
+            method,
+            &args,
+            &mut resources,
+        )
+    })
+}
+
 /// Dispatch a resource-method guest export whose signature is
 /// `<method>(self: {borrow,own}<resource>, ...trailing) ->
 /// result<_, duckerror>` and unpack the unit-result return into
 /// `Result<(), cli_native::Duckerror>` — the shape every
 /// appender / result-stream / prepared-statement / connection
 /// side-effect method uses.
-///
-/// The `handle` is the `ResourceAny` ducklink stashes in the
-/// entry table; it's copied into a fresh
-/// [`ExportResourceTable`] for the duration of the call. Since
-/// ducklink still holds the original `ResourceAny` in its own
-/// entry map, the fresh table can be dropped on return without
-/// leaking a handle — the guest's canonical-ABI ownership rules
-/// govern whether the underlying resource stays live.
-///
-/// Trailing args are appended after the `Value::Resource`
-/// referring to `handle` in the call's `args` slice.
 fn call_export_unit_result(
     state: &mut HostState,
     iface: &str,
@@ -9447,25 +9565,7 @@ fn call_export_unit_result(
     trailing_args: &[wasmos_runtime_api::Value],
 ) -> Result<(), cli_native::Duckerror> {
     use wasmos_runtime_api::Value;
-    use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
-        call_export_with_resources, ExportResourceTable,
-    };
-    let ret = state
-        .with_core(|core| {
-            let mut resources = ExportResourceTable::new();
-            let handle_val = resources.register(handle);
-            let mut args = Vec::with_capacity(1 + trailing_args.len());
-            args.push(handle_val);
-            args.extend_from_slice(trailing_args);
-            call_export_with_resources(
-                core.store.as_context_mut(),
-                &core.instance,
-                Some(iface),
-                method,
-                &args,
-                &mut resources,
-            )
-        })
+    let ret = call_export_on_resource(state, iface, method, handle, trailing_args)
         .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
     match ret.as_slice() {
         [Value::Result(Ok(_))] => Ok(()),
@@ -9480,6 +9580,30 @@ fn call_export_unit_result(
                 .into(),
         )),
     }
+}
+
+/// Dispatch a resource-method guest export whose signature is
+/// `<method>(self: {borrow,own}<resource>, ...trailing)` (no
+/// return value; unit-typed WIT method).
+///
+/// Used for method verbs whose only side-effect is on the guest
+/// (e.g. `result-stream.close: func()`) — the return slot is
+/// expected to be empty.
+fn call_export_no_return(
+    state: &mut HostState,
+    iface: &str,
+    method: &str,
+    handle: wasmtime::component::ResourceAny,
+    trailing_args: &[wasmos_runtime_api::Value],
+) -> Result<(), wasmos_runtime_api::RuntimeError> {
+    use wasmos_runtime_api::RuntimeError;
+    let ret = call_export_on_resource(state, iface, method, handle, trailing_args)?;
+    if !ret.is_empty() {
+        return Err(RuntimeError::msg(format!(
+            "{iface}.{method}: expected no return values, got {ret:?}"
+        )));
+    }
+    Ok(())
 }
 
 /// Lift a `Value::Variant` carrying a `duckerror` (5 arms, each
@@ -12924,6 +13048,81 @@ fn columndef_to_value(c: &cli_native::Columndef) -> Value {
         ("name".to_string(), Value::String(c.name.clone())),
         ("logical".to_string(), logicaltype_to_value(&c.logical)),
     ])
+}
+
+/// WIT `columndef { name: string, logical: logicaltype }` — the
+/// reverse direction. Used by wedge #7 guest-export return unpackers
+/// for `list<columndef>` / `query-result` shapes.
+fn value_to_columndef(v: &Value) -> RuntimeResult<cli_native::Columndef> {
+    let fields = match v {
+        Value::Record(f) => f,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "expected columndef Record, got {other:?}"
+            )));
+        }
+    };
+    let mut name: Option<String> = None;
+    let mut logical: Option<cli_native::Logicaltype> = None;
+    for (k, val) in fields {
+        match (k.as_str(), val) {
+            ("name", Value::String(s)) => name = Some(s.clone()),
+            ("logical", lv) => logical = Some(value_to_logicaltype(lv)?),
+            _ => {}
+        }
+    }
+    Ok(cli_native::Columndef {
+        name: name.ok_or_else(|| RuntimeError::msg("columndef.name missing"))?,
+        logical: logical.ok_or_else(|| RuntimeError::msg("columndef.logical missing"))?,
+    })
+}
+
+/// WIT `row = list<duckvalue>` — the direction guest-export returns take.
+fn value_to_row(v: &Value) -> RuntimeResult<cli_native::Row> {
+    let items = match v {
+        Value::List(items) => items,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "expected row list, got {other:?}"
+            )));
+        }
+    };
+    items.iter().map(value_to_duckvalue).collect()
+}
+
+/// WIT `query-result { columns: list<columndef>, rows: list<row> }`
+/// — the reverse of [`query_result_to_value`].
+fn value_to_query_result(v: &Value) -> RuntimeResult<cli_native::QueryResult> {
+    let fields = match v {
+        Value::Record(f) => f,
+        other => {
+            return Err(RuntimeError::msg(format!(
+                "expected query-result Record, got {other:?}"
+            )));
+        }
+    };
+    let mut columns: Option<Vec<cli_native::Columndef>> = None;
+    let mut rows: Option<Vec<cli_native::Row>> = None;
+    for (k, val) in fields {
+        match (k.as_str(), val) {
+            ("columns", Value::List(items)) => {
+                columns = Some(
+                    items
+                        .iter()
+                        .map(value_to_columndef)
+                        .collect::<Result<_, _>>()?,
+                );
+            }
+            ("rows", Value::List(items)) => {
+                rows = Some(items.iter().map(value_to_row).collect::<Result<_, _>>()?);
+            }
+            _ => {}
+        }
+    }
+    Ok(cli_native::QueryResult {
+        columns: columns.ok_or_else(|| RuntimeError::msg("query-result.columns missing"))?,
+        rows: rows.ok_or_else(|| RuntimeError::msg("query-result.rows missing"))?,
+    })
 }
 
 /// WIT `extension-info { name: string, requires: list<capabilitykind> }`.
