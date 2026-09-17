@@ -33,7 +33,7 @@ use wasmtime::component::ResourceAny;
 
 use crate::duckdb_core_bindings::duckdb::extension::types as core_types;
 use crate::handler::HandlerRegistry;
-use crate::ui_server::{duckerror_message, json_string, json_value};
+use crate::ui_server::{json_string, json_value};
 use crate::{
     build_engine, build_wasi_ctx_inherit, instantiate_core, ComponentArtifacts, CoreExecution,
     ExtensionManager,

@@ -3373,16 +3373,9 @@ fn spi_edit(initial: &str, hint_suffix: &str) -> Result<String, String> {
     contents
 }
 
-/// The human-readable message inside a core Duckerror (drops the variant noise).
-fn core_duckerror_message(err: core_types::Duckerror) -> String {
-    match err {
-        core_types::Duckerror::Invalidargument(m)
-        | core_types::Duckerror::Unsupported(m)
-        | core_types::Duckerror::Invalidstate(m)
-        | core_types::Duckerror::Io(m)
-        | core_types::Duckerror::Internal(m) => m,
-    }
-}
+// `core_duckerror_message` (core_types::Duckerror -> String) retired
+// under wedge #9-a follow-up dead-code sweep. Every caller migrated
+// to [`cli_duckerror_message`] via the wedge #7 escape hatch.
 
 /// Same as [`core_duckerror_message`] but for the neutral
 /// `cli_native::Duckerror` (produced by wedge #7 migrated call
@@ -9093,68 +9086,10 @@ fn neutral_logicaltype_to_type_expr(ty: &reg::LogicalType) -> String {
     }
 }
 
-// 3.1.0 additive minor: a neutral `reg::LogicalType` -> the core `types`
-// Logicaltype (used by the host-import `table-stream-host.filterable-table` shape,
-// whose columndef carries `types.logicaltype`).
-fn neutral_reg_logicaltype_to_core_types(ty: reg::LogicalType) -> core_types::Logicaltype {
-    use core_types::Logicaltype as C;
-    match ty {
-        reg::LogicalType::Boolean => C::Boolean,
-        reg::LogicalType::Int64 => C::Int64,
-        reg::LogicalType::Uint64 => C::Uint64,
-        reg::LogicalType::Float64 => C::Float64,
-        reg::LogicalType::Text => C::Text,
-        reg::LogicalType::Blob => C::Blob,
-        reg::LogicalType::Int32 => C::Int32,
-        reg::LogicalType::Timestamp => C::Timestamp,
-        reg::LogicalType::Int8 => C::Int8,
-        reg::LogicalType::Int16 => C::Int16,
-        reg::LogicalType::Uint8 => C::Uint8,
-        reg::LogicalType::Uint16 => C::Uint16,
-        reg::LogicalType::Uint32 => C::Uint32,
-        reg::LogicalType::Float32 => C::Float32,
-        reg::LogicalType::Date => C::Date,
-        reg::LogicalType::Time => C::Time,
-        reg::LogicalType::Timestamptz => C::Timestamptz,
-        // @5.0.0: DECIMAL carries width/scale on the variant arm.
-        reg::LogicalType::Decimal { width, scale } => {
-            C::Decimal(core_types::Decimalshape { width, scale })
-        }
-        reg::LogicalType::Interval => C::Interval,
-        reg::LogicalType::Uuid => C::Uuid,
-        // @5.0.0: first-class fieldless HUGEINT / UHUGEINT.
-        reg::LogicalType::Hugeint => C::Hugeint,
-        reg::LogicalType::UHugeint => C::Uhugeint,
-        // S1 (major-5): nested types ride out as type-expr strings.
-        reg::LogicalType::List(elem) => {
-            C::Complex(format!("LIST({})", neutral_logicaltype_to_type_expr(&elem)))
-        }
-        reg::LogicalType::Struct(fields) => {
-            let mut acc = String::from("STRUCT(");
-            for (i, (n, t)) in fields.iter().enumerate() {
-                if i > 0 {
-                    acc.push_str(", ");
-                }
-                acc.push_str(n);
-                acc.push(' ');
-                acc.push_str(&neutral_logicaltype_to_type_expr(t));
-            }
-            acc.push(')');
-            C::Complex(acc)
-        }
-        reg::LogicalType::Map(k, v) => C::Complex(format!(
-            "MAP({}, {})",
-            neutral_logicaltype_to_type_expr(&k),
-            neutral_logicaltype_to_type_expr(&v)
-        )),
-        reg::LogicalType::Array(size, elem) => C::Complex(format!(
-            "{}[{}]",
-            neutral_logicaltype_to_type_expr(&elem),
-            size
-        )),
-        reg::LogicalType::Complex(expr) => C::Complex(expr),
-    }
-}
+// `neutral_reg_logicaltype_to_core_types` retired under the wedge #9-a
+// follow-up sweep — the table-stream-host filterable-table shape was
+// deleted in the Phase 2 (@5) core-imports retirement (see the note
+// below); the helper had no live callers post wedge #7.
 
 // Phase 2 (@5): the core no longer imports `table-stream-host`, so there is
 // no ts-filter clause crossing from the core to translate. The extension-side
@@ -9303,80 +9238,13 @@ pub(crate) fn convert_cli_duckvalue(value: cli_native::Duckvalue) -> core_types:
     }
 }
 
-fn convert_core_duckerror(err: core_types::Duckerror) -> cli_native::Duckerror {
-    match err {
-        core_types::Duckerror::Invalidargument(v) => {
-            cli_native::Duckerror::Invalidargument(v.into())
-        }
-        core_types::Duckerror::Unsupported(v) => cli_native::Duckerror::Unsupported(v.into()),
-        core_types::Duckerror::Invalidstate(v) => cli_native::Duckerror::Invalidstate(v.into()),
-        core_types::Duckerror::Io(v) => cli_native::Duckerror::Io(v.into()),
-        core_types::Duckerror::Internal(v) => cli_native::Duckerror::Internal(v.into()),
-    }
-}
-
-fn convert_trap_to_duckerror(err: wasmtime::Error) -> cli_native::Duckerror {
-    cli_native::Duckerror::Internal(err.to_string().into())
-}
-
-fn convert_core_logicaltype(ty: core_types::Logicaltype) -> cli_native::Logicaltype {
-    match ty {
-        core_types::Logicaltype::Boolean => cli_native::Logicaltype::Boolean,
-        core_types::Logicaltype::Int64 => cli_native::Logicaltype::Int64,
-        core_types::Logicaltype::Uint64 => cli_native::Logicaltype::Uint64,
-        core_types::Logicaltype::Float64 => cli_native::Logicaltype::Float64,
-        core_types::Logicaltype::Text => cli_native::Logicaltype::Text,
-        core_types::Logicaltype::Blob => cli_native::Logicaltype::Blob,
-        core_types::Logicaltype::Int32 => cli_native::Logicaltype::Int32,
-        core_types::Logicaltype::Timestamp => cli_native::Logicaltype::Timestamp,
-        core_types::Logicaltype::Int8 => cli_native::Logicaltype::Int8,
-        core_types::Logicaltype::Int16 => cli_native::Logicaltype::Int16,
-        core_types::Logicaltype::Uint8 => cli_native::Logicaltype::Uint8,
-        core_types::Logicaltype::Uint16 => cli_native::Logicaltype::Uint16,
-        core_types::Logicaltype::Uint32 => cli_native::Logicaltype::Uint32,
-        core_types::Logicaltype::Float32 => cli_native::Logicaltype::Float32,
-        core_types::Logicaltype::Date => cli_native::Logicaltype::Date,
-        core_types::Logicaltype::Time => cli_native::Logicaltype::Time,
-        core_types::Logicaltype::Timestamptz => cli_native::Logicaltype::Timestamptz,
-        // @5.0.0: decimal now carries a decimalshape { width, scale } payload.
-        core_types::Logicaltype::Decimal(shape) => {
-            cli_native::Logicaltype::Decimal(cli_native::Decimalshape {
-                width: shape.width,
-                scale: shape.scale,
-            })
-        }
-        core_types::Logicaltype::Interval => cli_native::Logicaltype::Interval,
-        core_types::Logicaltype::Uuid => cli_native::Logicaltype::Uuid,
-        // @5.0.0: first-class 128-bit integer logical types (fieldless).
-        core_types::Logicaltype::Hugeint => cli_native::Logicaltype::Hugeint,
-        core_types::Logicaltype::Uhugeint => cli_native::Logicaltype::Uhugeint,
-        core_types::Logicaltype::Complex(expr) => cli_native::Logicaltype::Complex(expr),
-    }
-}
-
-fn convert_core_capabilitykind(kind: core_types::Capabilitykind) -> cli_native::Capabilitykind {
-    match kind {
-        core_types::Capabilitykind::Scalar => cli_native::Capabilitykind::Scalar,
-        core_types::Capabilitykind::Table => cli_native::Capabilitykind::Table,
-        core_types::Capabilitykind::Aggregate => cli_native::Capabilitykind::Aggregate,
-        core_types::Capabilitykind::Pragma => cli_native::Capabilitykind::Pragma,
-        core_types::Capabilitykind::Macro => cli_native::Capabilitykind::Macro,
-        core_types::Capabilitykind::Catalog => cli_native::Capabilitykind::Catalog,
-        core_types::Capabilitykind::FileFormat => cli_native::Capabilitykind::FileFormat,
-    }
-}
-
-fn convert_cli_capability(kind: cli_native::Capabilitykind) -> core_types::Capabilitykind {
-    match kind {
-        cli_native::Capabilitykind::Scalar => core_types::Capabilitykind::Scalar,
-        cli_native::Capabilitykind::Table => core_types::Capabilitykind::Table,
-        cli_native::Capabilitykind::Aggregate => core_types::Capabilitykind::Aggregate,
-        cli_native::Capabilitykind::Pragma => core_types::Capabilitykind::Pragma,
-        cli_native::Capabilitykind::Macro => core_types::Capabilitykind::Macro,
-        cli_native::Capabilitykind::Catalog => core_types::Capabilitykind::Catalog,
-        cli_native::Capabilitykind::FileFormat => core_types::Capabilitykind::FileFormat,
-    }
-}
+// `convert_core_duckerror`, `convert_trap_to_duckerror`,
+// `convert_core_logicaltype`, `convert_core_capabilitykind`,
+// `convert_cli_capability` retired under the wedge #9-a follow-up
+// dead-code sweep — every caller migrated to the wedge #7 escape-hatch
+// value marshallers (`value_to_duckerror`, `value_to_logicaltype`,
+// `value_to_capabilitykind`) that operate directly against the
+// wasmos wire form without a core-to-cli intermediary.
 
 fn summarize_cli_capabilities<I>(caps: I) -> String
 where
@@ -11842,27 +11710,9 @@ fn convert_extension_duckerror_to_core(
     }
 }
 
-fn convert_core_duckerror_to_extension(
-    err: core_types::Duckerror,
-) -> ducklink_runtime::extension::Duckerror {
-    match err {
-        core_types::Duckerror::Invalidargument(v) => {
-            ducklink_runtime::extension::Duckerror::Invalidargument(v)
-        }
-        core_types::Duckerror::Unsupported(v) => {
-            ducklink_runtime::extension::Duckerror::Unsupported(v)
-        }
-        core_types::Duckerror::Invalidstate(v) => {
-            ducklink_runtime::extension::Duckerror::Invalidstate(v)
-        }
-        core_types::Duckerror::Io(v) => ducklink_runtime::extension::Duckerror::Io(v),
-        core_types::Duckerror::Internal(v) => ducklink_runtime::extension::Duckerror::Internal(v),
-    }
-}
-
-fn map_runtime_trap(err: wasmtime::Error) -> ducklink_runtime::extension::Duckerror {
-    ducklink_runtime::extension::Duckerror::Internal(format!("core runtime trap: {err}"))
-}
+// `convert_core_duckerror_to_extension` + `map_runtime_trap` retired
+// under the wedge #9-a follow-up sweep — no live callers post
+// wedge #7 (callback-dispatch path uses value-based marshalling now).
 
 /// M2a companion: extension WIT -> cli_native WIT. Same arm list as
 /// [`convert_extension_logicaltype_to_core`] but lands on the neutral
@@ -11902,151 +11752,17 @@ fn convert_extension_logicaltype_to_cli(
     }
 }
 
-// M2a: storage-host result converters (extension-WIT -> core-WIT).
-fn convert_extension_logicaltype_to_core(
-    ty: ducklink_runtime::extension::Logicaltype,
-) -> core_types::Logicaltype {
-    match ty {
-        ducklink_runtime::extension::Logicaltype::Boolean => core_types::Logicaltype::Boolean,
-        ducklink_runtime::extension::Logicaltype::Int64 => core_types::Logicaltype::Int64,
-        ducklink_runtime::extension::Logicaltype::Uint64 => core_types::Logicaltype::Uint64,
-        ducklink_runtime::extension::Logicaltype::Float64 => core_types::Logicaltype::Float64,
-        ducklink_runtime::extension::Logicaltype::Text => core_types::Logicaltype::Text,
-        ducklink_runtime::extension::Logicaltype::Blob => core_types::Logicaltype::Blob,
-        ducklink_runtime::extension::Logicaltype::Int32 => core_types::Logicaltype::Int32,
-        ducklink_runtime::extension::Logicaltype::Timestamp => core_types::Logicaltype::Timestamp,
-        ducklink_runtime::extension::Logicaltype::Int8 => core_types::Logicaltype::Int8,
-        ducklink_runtime::extension::Logicaltype::Int16 => core_types::Logicaltype::Int16,
-        ducklink_runtime::extension::Logicaltype::Uint8 => core_types::Logicaltype::Uint8,
-        ducklink_runtime::extension::Logicaltype::Uint16 => core_types::Logicaltype::Uint16,
-        ducklink_runtime::extension::Logicaltype::Uint32 => core_types::Logicaltype::Uint32,
-        ducklink_runtime::extension::Logicaltype::Float32 => core_types::Logicaltype::Float32,
-        ducklink_runtime::extension::Logicaltype::Date => core_types::Logicaltype::Date,
-        ducklink_runtime::extension::Logicaltype::Time => core_types::Logicaltype::Time,
-        ducklink_runtime::extension::Logicaltype::Timestamptz => {
-            core_types::Logicaltype::Timestamptz
-        }
-        // @5.0.0: DECIMAL carries decimalshape { width, scale } payload on
-        // both sides -- pass through structurally.
-        ducklink_runtime::extension::Logicaltype::Decimal(shape) => {
-            core_types::Logicaltype::Decimal(core_types::Decimalshape {
-                width: shape.width,
-                scale: shape.scale,
-            })
-        }
-        ducklink_runtime::extension::Logicaltype::Interval => core_types::Logicaltype::Interval,
-        ducklink_runtime::extension::Logicaltype::Uuid => core_types::Logicaltype::Uuid,
-        // @5.0.0: first-class HUGEINT / UHUGEINT arms on both sides.
-        ducklink_runtime::extension::Logicaltype::Hugeint => core_types::Logicaltype::Hugeint,
-        ducklink_runtime::extension::Logicaltype::Uhugeint => core_types::Logicaltype::Uhugeint,
-        ducklink_runtime::extension::Logicaltype::Complex(expr) => {
-            core_types::Logicaltype::Complex(expr)
-        }
-    }
-}
+// `convert_extension_logicaltype_to_core` retired under the wedge #9-a
+// follow-up sweep — the at5 pre-attach + storage-host consumers all use
+// `convert_extension_logicaltype_to_cli` (defined immediately above)
+// after wedge #9-a flipped `TableShape.columns` from
+// core_db_exports::ColumnDescriptor to cli_native::ColumnDescriptor.
 
-fn convert_extension_columndef_to_core(
-    col: ducklink_runtime::extension::Columndef,
-) -> core_types::Columndef {
-    core_types::Columndef {
-        name: col.name,
-        logical: convert_extension_logicaltype_to_core(col.logical),
-    }
-}
-
-// M2c: inverse mapping used by the write-side storage-host imports (create-table,
-// insert-rows, update-rows) to hand the core -> extension trampoline the same
-// Logicaltype / Columndef shape ExtensionInstance expects.
-fn convert_core_logicaltype_to_extension(
-    ty: core_types::Logicaltype,
-) -> ducklink_runtime::extension::Logicaltype {
-    match ty {
-        core_types::Logicaltype::Boolean => ducklink_runtime::extension::Logicaltype::Boolean,
-        core_types::Logicaltype::Int64 => ducklink_runtime::extension::Logicaltype::Int64,
-        core_types::Logicaltype::Uint64 => ducklink_runtime::extension::Logicaltype::Uint64,
-        core_types::Logicaltype::Float64 => ducklink_runtime::extension::Logicaltype::Float64,
-        core_types::Logicaltype::Text => ducklink_runtime::extension::Logicaltype::Text,
-        core_types::Logicaltype::Blob => ducklink_runtime::extension::Logicaltype::Blob,
-        core_types::Logicaltype::Int32 => ducklink_runtime::extension::Logicaltype::Int32,
-        core_types::Logicaltype::Timestamp => ducklink_runtime::extension::Logicaltype::Timestamp,
-        core_types::Logicaltype::Int8 => ducklink_runtime::extension::Logicaltype::Int8,
-        core_types::Logicaltype::Int16 => ducklink_runtime::extension::Logicaltype::Int16,
-        core_types::Logicaltype::Uint8 => ducklink_runtime::extension::Logicaltype::Uint8,
-        core_types::Logicaltype::Uint16 => ducklink_runtime::extension::Logicaltype::Uint16,
-        core_types::Logicaltype::Uint32 => ducklink_runtime::extension::Logicaltype::Uint32,
-        core_types::Logicaltype::Float32 => ducklink_runtime::extension::Logicaltype::Float32,
-        core_types::Logicaltype::Date => ducklink_runtime::extension::Logicaltype::Date,
-        core_types::Logicaltype::Time => ducklink_runtime::extension::Logicaltype::Time,
-        core_types::Logicaltype::Timestamptz => {
-            ducklink_runtime::extension::Logicaltype::Timestamptz
-        }
-        // @5.0.0: DECIMAL carries decimalshape { width, scale } on both sides.
-        core_types::Logicaltype::Decimal(shape) => {
-            ducklink_runtime::extension::Logicaltype::Decimal(
-                ducklink_runtime::extension::Decimalshape {
-                    width: shape.width,
-                    scale: shape.scale,
-                },
-            )
-        }
-        core_types::Logicaltype::Interval => ducklink_runtime::extension::Logicaltype::Interval,
-        core_types::Logicaltype::Uuid => ducklink_runtime::extension::Logicaltype::Uuid,
-        // @5.0.0: first-class HUGEINT / UHUGEINT on both sides.
-        core_types::Logicaltype::Hugeint => ducklink_runtime::extension::Logicaltype::Hugeint,
-        core_types::Logicaltype::Uhugeint => ducklink_runtime::extension::Logicaltype::Uhugeint,
-        core_types::Logicaltype::Complex(expr) => {
-            ducklink_runtime::extension::Logicaltype::Complex(expr)
-        }
-    }
-}
-
-fn convert_core_columndef_to_extension(
-    col: core_types::Columndef,
-) -> ducklink_runtime::extension::Columndef {
-    ducklink_runtime::extension::Columndef {
-        name: col.name,
-        logical: convert_core_logicaltype_to_extension(col.logical),
-    }
-}
-
-// Phase 2 (@5): translators from core-WIT storage-host scan types to the
-// dispatch-side storage-interface types are DELETED alongside the storage-host
-// import itself. The host now BUILDS scan-requests directly from its ATTACH
-// intercept (in HostState::execute) rather than translating what the core
-// pushed. See ADR Decision 3 + Amendment A1.
-
-/// Short human-readable rendering of a core Duckvalue for the pushdown log line.
-fn describe_core_duckvalue(value: &core_types::Duckvalue) -> String {
-    match value {
-        core_types::Duckvalue::Null => "NULL".to_string(),
-        core_types::Duckvalue::Boolean(v) => v.to_string(),
-        core_types::Duckvalue::Int64(v) => v.to_string(),
-        core_types::Duckvalue::Uint64(v) => v.to_string(),
-        core_types::Duckvalue::Float64(v) => v.to_string(),
-        core_types::Duckvalue::Text(v) => format!("{v:?}"),
-        core_types::Duckvalue::Blob(v) => format!("<blob {} bytes>", v.len()),
-        core_types::Duckvalue::Int32(v) => v.to_string(),
-        core_types::Duckvalue::Timestamp(v) => v.to_string(),
-        core_types::Duckvalue::Int8(v) => v.to_string(),
-        core_types::Duckvalue::Int16(v) => v.to_string(),
-        core_types::Duckvalue::Uint8(v) => v.to_string(),
-        core_types::Duckvalue::Uint16(v) => v.to_string(),
-        core_types::Duckvalue::Uint32(v) => v.to_string(),
-        core_types::Duckvalue::Float32(v) => v.to_string(),
-        core_types::Duckvalue::Date(v) => v.to_string(),
-        core_types::Duckvalue::Time(v) => v.to_string(),
-        core_types::Duckvalue::Timestamptz(v) => v.to_string(),
-        core_types::Duckvalue::Decimal(d) => format_decimal(d.lower, d.upper, d.width, d.scale),
-        core_types::Duckvalue::Interval(iv) => {
-            format!("{}mon {}d {}us", iv.months, iv.days, iv.micros)
-        }
-        core_types::Duckvalue::Uuid(u) => format_uuid(u.hi, u.lo),
-        // @5.0.0: first-class 128-bit integer values.
-        core_types::Duckvalue::Hugeint(h) => format_hugeint(h.lower, h.upper),
-        core_types::Duckvalue::Uhugeint(h) => format_uhugeint(h.lower, h.upper),
-        core_types::Duckvalue::Complex(c) => format!("{}:{}", c.type_expr, c.json),
-    }
-}
+// `convert_extension_columndef_to_core` / `convert_core_logicaltype_to_extension` /
+// `convert_core_columndef_to_extension` / `describe_core_duckvalue` retired under
+// the wedge #9-a follow-up sweep — every consumer moved to the wedge #7 escape
+// hatch (write-side storage-host imports were also retired in Phase 2 @5 per
+// ADR Decision 3 + Amendment A1, so their marshallers have no live callers).
 
 /// Post-Phase-2d (site 3 of the wasmos-migration-recipe): `cli` used
 /// to hold a `duckdb_cli_bindings::DuckdbCli` (the bindgen-generated
@@ -15261,14 +14977,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn describe_core_duckvalue_is_total_and_nonempty() {
-        // The dispatch-path describe helper must handle every arm (a component
-        // returning any variant) without panicking and yield a label.
-        for v in all_core_duckvalues() {
-            assert!(!describe_core_duckvalue(&v).is_empty());
-        }
-    }
+    // `describe_core_duckvalue_is_total_and_nonempty` retired alongside
+    // its subject function under the wedge #9-a follow-up sweep.
 
     // ------------------------------------------------------------------
     // nested-exec Direction-1 §5.(b.1) sibling-core tests.

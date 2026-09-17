@@ -491,15 +491,9 @@ pub(crate) fn json_value(out: &mut String, val: &core_types::Duckvalue) {
     }
 }
 
-pub(crate) fn duckerror_message(err: &core_types::Duckerror) -> String {
-    match err {
-        core_types::Duckerror::Invalidargument(m)
-        | core_types::Duckerror::Unsupported(m)
-        | core_types::Duckerror::Invalidstate(m)
-        | core_types::Duckerror::Io(m)
-        | core_types::Duckerror::Internal(m) => m.clone(),
-    }
-}
+// `duckerror_message(&core_types::Duckerror)` retired under the wedge
+// #9-a follow-up sweep — callers migrated to
+// `crate::cli_duckerror_message` via the wedge #7 escape hatch.
 
 pub(crate) fn json_error(msg: &str) -> String {
     let mut out = String::from("{\"error\":");
@@ -663,17 +657,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn duckerror_message_unwraps_every_variant() {
-        assert_eq!(
-            duckerror_message(&core_types::Duckerror::Invalidargument("bad".into())),
-            "bad"
-        );
-        assert_eq!(
-            duckerror_message(&core_types::Duckerror::Internal("boom".into())),
-            "boom"
-        );
-    }
+    // `duckerror_message_unwraps_every_variant` retired alongside its
+    // subject function under the wedge #9-a follow-up sweep.
 
     #[test]
     fn json_error_wraps_message() {

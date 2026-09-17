@@ -37,7 +37,6 @@ use sha2::{Digest, Sha256};
 use wasmtime::component::ResourceAny;
 
 use crate::sigv4::{self, Credentials};
-use crate::ui_server::duckerror_message;
 use crate::{
     build_engine, build_wasi_ctx_inherit, instantiate_core, ComponentArtifacts, CoreExecution,
     ExtensionManager,
