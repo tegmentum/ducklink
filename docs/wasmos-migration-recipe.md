@@ -356,10 +356,32 @@ Progress since the recipe was written on 2026-09-04:
   `f233c783`).
 - **Phase 2c ✓** — `dotcmd_bindings` retired (`8e66b826`).
 - **Phase 2d ✓** — `duckdb_cli_bindings` retired (`816ff9bb`).
-- **Phase 2e ✓ COMPLETE (2026-09-17, `e9019bd`)** — the last
-  `wasmtime::component::bindgen!` block in ducklink-host has been
-  retired. Wedges #1-#9 landed. The migration arc is closed. What
-  follows is the historical wedge-by-wedge log.
+- **Phase 2e ✓ PATH A COMPLETE (2026-09-17, `e9019bd`)** — the
+  last `wasmtime::component::bindgen!` block in ducklink-host has
+  been retired. Wedges #1-#9 landed. What this closed:
+  - Every consumer-side `bindgen!` invocation.
+  - Every generated `Host` trait impl + typed
+    `bindings.foo_bar().call_xxx()` accessor.
+  - Every guest-export dispatch routes through
+    `sync_export_bridge::call_export_with_resources`.
+  - Every host-import wires through
+    `sync_bridge_resource::install_host_call`.
+
+  What this did NOT close (per Path A's honest end state, §Executive summary):
+  - Direct `use wasmtime::{Engine, Store, StoreContextMut,
+    component::{Linker, Component, Instance}}` in consumer code.
+  - `wasmtime` + `wasmtime-wasi` in `Cargo.toml`.
+  - Every `sync_export_bridge::call_export_with_resources`
+    signature still exposes `wasmtime::component::Instance` +
+    `wasmtime::StoreContextMut<S>` in its public API — these
+    are documented escape hatches (ADR-0029 §27
+    `V48_ADAPTER_ESCAPE_HATCH_FILES` allowlist).
+
+  Path B — moving off the escape hatches to
+  `wasmos_runtime_api::Instance` + `Instance::call_export`
+  (async), dropping the direct wasmtime deps — is the
+  outstanding work. See Path B section below (§"Path B:
+  full-native migration").
 
   Wedges 1-6 landed:
   - #1 (`c0026776`) — `tvm:memory/bytes` host-import retired.
@@ -575,8 +597,10 @@ preserved (same WIT wire format via the wasmos escape hatch;
 same 128 lib tests passing; same 30 pre-existing infra
 failures unchanged).
 
-**Phase 6 ✓ COMPLETE** — every sibling consumer of the recipe
-is migrated:
+**Phase 6 ✓ PATH A COMPLETE** — every sibling consumer of the
+recipe is migrated OFF the `bindgen!` macro but STILL depends
+on `wasmtime` + `wasmtime-wasi` directly (the shared honest end
+state described in §Executive summary):
 
 - **icd-9** (2026-09-17, `f94fd16` in `~/git/icd-9`) — the
   first Path-A sibling migration; ducklink-host's Phase 2b
@@ -590,9 +614,95 @@ is migrated:
   optional). `wasmtime` + `wasmtime-wasi` bumped 47 -> 48 to
   match the wasmos v48 adapter.
 
-The wasmos-migration-recipe arc is closed. Every
-`wasmtime::component::bindgen!` invocation across the
+Every `wasmtime::component::bindgen!` invocation across the
 ducklink family (ducklink-host, icd-9, icd-10) is retired.
+Direct `use wasmtime::…` in consumer code, and `wasmtime` +
+`wasmtime-wasi` in `Cargo.toml`, both REMAIN.
+
+## Path B: full-native migration (outstanding)
+
+Ends the wasmos-runtime-api migration arc's real goal — zero
+direct `wasmtime` dependency in any ducklink-family consumer.
+The escape-hatch bridges (`sync_export_bridge` /
+`sync_bridge_resource` / `sync_bridge` / `async_bridge`)
+themselves stay in wasmos-runtime-wasmtime-v48; the goal is
+that no ducklink-family Cargo.toml + no ducklink-family
+`.rs` file names them.
+
+**What has to change** (per §Executive summary):
+
+1. **Every `use wasmtime::…` removed from consumer code.**
+   `Store<S>` becomes wasmos's opaque store handle (per
+   `wasmos_runtime_api::ExecutionContext` + consumer_state);
+   `Instance` becomes `wasmos_runtime_api::Instance`;
+   `Engine` becomes `wasmos_runtime_api::Runtime` (its
+   `WasmtimeV48Runtime` impl is one option among many);
+   `Linker` disappears (host imports register via
+   `HostImports::register`).
+2. **Sync -> async cascade.** `Instance::call_export` is
+   `async fn`. The whole handler layer, sibling-core reentry
+   TLS in `HostState::execute`, and every `#[test]` body that
+   drives guest exports has to move to `async`.
+3. **Resource marshalling via wasmos's `ResourceTable`.** The
+   wasmos-side placeholder trait (`_phase_1a_placeholder(&self)`)
+   needs its real API (Phase 1b wasmos-side work). Until
+   that's real, Path B is blocked — the ducklink workload
+   IS the validation feeding Phase 1b.
+4. **`wasi:http` plumbing hook.** Ducklink-host picks
+   `add_only_http_to_linker_sync` explicitly to avoid a
+   double-add clash; wasmos-runtime-api auto-wires the full
+   `wasi:http` linker unconditionally. Path B needs either a
+   consumer hook for outbound interception / mock responses /
+   per-tenant policy, or a formal ADR that mid-migration
+   consumers accept declarative HTTP.
+5. **`with:` map equivalent.** Sites 2/3/5 remapped standard
+   WASI interfaces to specific
+   `wasmtime_wasi::p2::bindings::…` types; site 5 additionally
+   maps a resource type to a native Rust struct
+   (`DriverConnection`). The wasmos surface has no `with:`
+   equivalent today. Path B needs one, or the consumer
+   pattern has to be redesigned around wasmos's own resource
+   table.
+6. **Primary-store reentry TLS.** `unsafe fn primary_nested_exec`
+   stashes `*mut Store<CoreStoreState>` +
+   `*const wasmtime::component::Instance` in a TLS to
+   re-enter the primary store from a callback. No
+   wasmos-runtime-api equivalent — needs a redesign that
+   fits async-first semantics (holding a `*mut` across an
+   `.await` is unsound).
+
+**Blocked-on-wasmos work:**
+
+- Phase 1b: real `ResourceTable` trait API in
+  `wasmos_runtime_api::resource` (currently a
+  `_phase_1a_placeholder` stub).
+- `wasi:http` consumer plumbing hook OR formal doc that
+  declarative HTTP is the answer.
+- `Instance::call_export` variants that support the
+  primary-reentry pattern under async (or a documented
+  policy that mid-migration consumers keep sibling
+  reentry on the escape hatch).
+- `with:` map equivalent on `wasmos_runtime_api::HostImports`
+  registration (or an equivalent shape).
+
+**Estimated scope** (once wasmos-side prerequisites land):
+
+- ducklink-host: substantially larger than Path A — the
+  sync -> async cascade alone touches every host handler,
+  every test, and every driver-core / ui-server / httpd /
+  quack-server entry point. Not amenable to the "one wedge
+  per WIT interface" partition Path A used.
+- icd-9 + icd-10: much smaller — each has one `wit_host.rs`
+  file with one `WitDriverExecHost` + 12 `call_*` helpers +
+  one `dispatch()` call site tree. The mechanical shape is
+  bounded by the ~150 lines of `wit_host.rs`.
+
+The next wedge is choosing how to slice Path B given the
+wasmos-side prerequisites' state — the recipe intentionally
+stops short of prescribing wedges here because the wasmos
+side has not committed to shapes for (3)-(5) yet, and
+prescribing wedges before those shapes are known would set
+consumers up to churn.
 
 ## Toolchain gotcha
 
