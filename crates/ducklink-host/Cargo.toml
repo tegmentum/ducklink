@@ -98,7 +98,7 @@ wasmos-runtime-select = { path = "../../../wasmos/runtime/selector", features = 
 # retire `wasmtime::component::bindgen!` sites while keeping direct
 # wasmtime types (see `docs/wasmos-migration-recipe.md`) need this
 # in addition to the select facade.
-wasmos-runtime-wasmtime-v48 = { path = "../../../wasmos/runtime/wasmtime/v48" }
+wasmos-runtime-wasmtime-v48 = { path = "../../../wasmos/runtime/wasmtime/v48", features = ["sync-facade"] }
 
 [dev-dependencies]
 tempfile = "3"

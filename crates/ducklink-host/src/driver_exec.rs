@@ -9,12 +9,16 @@
 //!   * `wasi:clocks/monotonic-clock`, `wasi:clocks/wall-clock`, `wasi:io/poll`
 //!   * `wasi:cli/{environment, stderr, stdout, run}`
 //!
-//! `run_driver_tool()` instantiates the tool with a fresh wasmtime store,
-//! wires the driver-exec Linker binding to this module, and calls the
-//! tool's `wasi:cli/run.run()` — which enters its own tick loop and blocks
-//! on `wasi:clocks/monotonic-clock.subscribe-duration(...)` between ticks.
+//! `run_driver_tool()` instantiates the tool through the wasmos-native
+//! path (`SyncRuntime::compile_component` + `SyncRuntime::instantiate`),
+//! registers the driver-exec host imports via
+//! `HostImports::register_sync`, and calls the tool's
+//! `wasi:cli/run.run()` through `SyncInstance::call_wasi_command`. The
+//! tool enters its own tick loop and blocks on
+//! `wasi:clocks/monotonic-clock.subscribe-duration(...)` between ticks.
 //! Exiting is: the tool returns from `run()` (only happens in `--once`
-//! mode) or the host is signalled (SIGINT propagates through wasmtime).
+//! mode) or the host is signalled (SIGINT propagates through the
+//! private tokio runtime SyncRuntime owns).
 //!
 //! ## Dispatch model
 //!
@@ -32,36 +36,46 @@
 //! per SQL call, prepended `LOAD cron; LOAD cron_scheduler;` to every
 //! script, and CSV-scraped the CLI's box-mode output.
 //!
-//! ## Migration note (Phase 2b of ADR-0029, see
-//! `docs/wasmos-migration-recipe.md`)
+//! ## Migration note (ADR-0029, see `docs/wasmos-migration-recipe.md`)
 //!
-//! The former `wasmtime::component::bindgen!` sites for
-//! `duckdb:driver/exec@5.0.0` (`impl Host` + `impl HostConnection`
-//! for `DriverStoreState`) are gone. Host imports now flow through
-//! `wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call`
-//! with a single `SyncHostCall` handler that dispatches by kebab-cased
-//! method name (`"open"`, `"[method]connection.exec"`,
-//! `"[method]connection.query"`, drop routed to `on_resource_drop`).
-//! The bindgen `with:` map that bound the WIT `connection` resource to
-//! this crate's native `DriverConnection` becomes explicit: the bridge
-//! auto-registers the wasm-side resource type via
-//! `ResourceType::host_dynamic(N)`, and this handler stores
-//! `DriverConnection` in the wasmtime `ResourceTable` under the rep the
-//! bridge assigns — same storage shape, no lookup magic. Guest export
-//! `wasi:cli/run@0.2.6.run` dispatches through `sync_export_bridge`.
+//! - **Phase 2b (Path A)** — the former
+//!   `wasmtime::component::bindgen!` sites for
+//!   `duckdb:driver/exec@5.0.0` were replaced by a single
+//!   `SyncHostCall` handler dispatching by kebab-cased method name
+//!   (`"open"`, `"[method]connection.exec"`,
+//!   `"[method]connection.query"`, drop routed to
+//!   `on_resource_drop`). Host imports flowed through
+//!   `wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call`
+//!   (the escape-hatch bridge).
+//! - **Path B (this file, 2026-09-21)** — the escape-hatch bridge is
+//!   gone. `run_driver_tool` now compiles + instantiates through
+//!   `wasmos_runtime_wasmtime_v48::SyncRuntime` (the sync facade
+//!   over the wasmos-native async path). Host imports register via
+//!   `HostImports::register_sync`. Guest exports dispatch through
+//!   `SyncInstance::call_wasi_command`. The `wasmtime::Store` /
+//!   `wasmtime::Engine` / `wasmtime::component::{Component, Linker,
+//!   Instance}` names no longer appear in this file except for
+//!   `DriverStoreState.engine` (which
+//!   `DriverConnection::open` still needs to bring up the persistent
+//!   DuckDB core wasm — legitimate ducklink-host-internal use, not a
+//!   consumer-side leak).
+//!
+//! The wasm-side `connection` resource type is auto-registered by
+//! the wasmos-native adapter's `wire_host_imports` — same
+//! `ResourceType::host_dynamic(N)` mechanism, just moved from the
+//! escape-hatch bridge to the wasmos-native path.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
 use wasmos_runtime_api::{
-    HostCallContext, Preopen, Resource as WasmosResource, ResourceTable as WasmosResourceTable,
-    RuntimeError, RuntimeResult, SyncHostCall, Value, WasiEnvironment,
+    CompileOptions, ComponentSource, ExecutionContext, HostCallContext, HostImports, Preopen,
+    Resource as WasmosResource, ResourceTable as WasmosResourceTable, RuntimeConfig, RuntimeError,
+    RuntimeResult, SyncHostCall, Value, WasiEnvironment,
 };
-use wasmos_runtime_wasmtime_v48::{SyncStoreState, sync_bridge_resource, sync_export_bridge};
-use wasmtime::component::{Component, Linker};
-use wasmtime::{AsContextMut, Engine, Store};
-use wasmtime_wasi::p2;
+use wasmos_runtime_wasmtime_v48::SyncRuntime;
+use wasmtime::Engine;
 
 use crate::{
     build_engine_for_driver, driver_core_exec, driver_core_query, open_driver_core,
@@ -122,23 +136,29 @@ impl DriverConnection {
     }
 }
 
-/// Ducklink-owned driver-tool state. Wrapped in
-/// `SyncStoreState<DriverStoreState>` before it goes into a
-/// `wasmtime::Store` — the wrapper owns the wasi context + wasi
-/// resource table + wasi-http context, so this struct carries only
-/// the domain fields (the wasmos `ResourceTable` for
-/// `DriverConnection` tracking + the (engine, artifacts, preopens)
-/// triple each new `DriverConnection` needs to bring up its own
-/// persistent core).
+/// Ducklink-owned driver-tool state, plumbed through
+/// [`ExecutionContext::with_consumer_state`] on the wasmos-native
+/// path. Host handlers reach it from a [`HostCallContext`] via
+/// `ctx.consumer_state::<DriverStoreState>()`.
 ///
-/// The engine is shared with the tool's own store — same compile cache,
-/// same wasm feature flags — so per-connection core startup is warm-cache
-/// after the first run of a given ducklink binary.
+/// The wasi context + wasi resource table + wasi-http context live
+/// inside the adapter's `AdapterHostState` (internal to
+/// wasmos-runtime-wasmtime-v48), so this struct carries only its
+/// domain fields: the wasmos `ResourceTable` for `DriverConnection`
+/// tracking + the (engine, artifacts, preopens) triple each new
+/// `DriverConnection` needs to bring up its own persistent core.
+///
+/// The `engine` field is a `wasmtime::Engine` because
+/// `DriverConnection::open` (called from the host handler) spins up
+/// the persistent DuckDB core wasm inside its own wasmtime store —
+/// legitimate ducklink-host-internal use, not a consumer-side
+/// wasmtime leak. Full migration of that machinery to wasmos-native
+/// is a separate multi-file rewrite (see the migration recipe).
 struct DriverStoreState {
     /// `wasmos_runtime_api::ResourceTable` for our own
-    /// `DriverConnection` tracking. Path B split-tables — retires
-    /// the direct dep on `wasmtime::component::Resource<T>` in
-    /// consumer code.
+    /// `DriverConnection` tracking. Split-tables step retired the
+    /// direct dep on `wasmtime::component::Resource<T>` in consumer
+    /// code.
     conn_table: WasmosResourceTable,
     engine: Engine,
     artifacts: ComponentArtifacts,
@@ -162,7 +182,7 @@ const CONN_RESOURCE: &str = "connection";
 
 /// Wasmos-native host implementation of `duckdb:driver/exec@5.0.0`.
 /// Stateless — every call reaches store state via
-/// `SyncStoreState::<DriverStoreState>::consumer_from_ctx(ctx)`, matching the bindgen-era
+/// `ctx.consumer_state::<DriverStoreState>()`, matching the bindgen-era
 /// pattern where the same store data was reached through the
 /// bindgen-generated `Host` accessor.
 struct DriverExecHost;
@@ -195,7 +215,7 @@ impl SyncHostCall for DriverExecHost {
                 "{EXEC_IFACE}: unexpected resource drop for {resource_name:?}"
             )));
         }
-        let state = SyncStoreState::<DriverStoreState>::consumer_from_ctx(ctx).ok_or_else(|| {
+        let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
             RuntimeError::msg("driver-exec drop: consumer_state<DriverStoreState> unavailable")
         })?;
         // Ignore-not-found matches the bindgen-era `let _ =
@@ -225,7 +245,7 @@ impl DriverExecHost {
                 )))
             }
         };
-        let state = SyncStoreState::<DriverStoreState>::consumer_from_ctx(ctx).ok_or_else(|| {
+        let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
             RuntimeError::msg("driver-exec open: consumer_state<DriverStoreState> unavailable")
         })?;
         // Snapshot preopens through borrowed refs — mirrors the
@@ -266,7 +286,7 @@ impl DriverExecHost {
             }
         };
         let rep = ctx.resource_rep(&rep_value)?;
-        let state = SyncStoreState::<DriverStoreState>::consumer_from_ctx(ctx).ok_or_else(|| {
+        let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
             RuntimeError::msg("driver-exec exec: consumer_state<DriverStoreState> unavailable")
         })?;
         // The rep is stable across the bridge round-trip; the same
@@ -300,7 +320,7 @@ impl DriverExecHost {
             }
         };
         let rep = ctx.resource_rep(&rep_value)?;
-        let state = SyncStoreState::<DriverStoreState>::consumer_from_ctx(ctx).ok_or_else(|| {
+        let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
             RuntimeError::msg("driver-exec query: consumer_state<DriverStoreState> unavailable")
         })?;
         let handle = WasmosResource::<DriverConnection>::from_raw(rep, true);
@@ -346,6 +366,13 @@ pub fn run_driver_tool(
     preopens: &[(&Path, &str)],
     extra_args: &[String],
 ) -> Result<Result<(), ()>> {
+    // DriverStoreState holds a wasmtime::Engine because
+    // DriverConnection::open (called from the DriverExecHost handler)
+    // spins up a persistent DuckDB core wasm inside its own store —
+    // wasmtime-native ducklink-host machinery, not a consumer-side
+    // wasmtime leak. The Engine we hand it is the same one used by
+    // SyncRuntime under the hood (both come from
+    // `build_engine_for_driver`), so per-core startup is warm-cache.
     let engine = build_engine_for_driver()?;
 
     // Duplicate the preopens so we can hand one copy to the tool's WasiCtx
@@ -366,84 +393,56 @@ pub fn run_driver_tool(
 
     let wasi_env = build_driver_wasi_env(&argv, preopens);
 
+    // Wasmos-native path — SyncRuntime owns the wasmtime Store / Engine /
+    // Linker / Component / Instance internally. This function's public
+    // surface names no wasmtime types beyond the DriverStoreState.engine
+    // field that DriverConnection::open() still requires.
+    let sync_rt = SyncRuntime::new(RuntimeConfig::default())
+        .map_err(|e| anyhow::anyhow!("build SyncRuntime: {e}"))?;
+
+    let compiled = sync_rt
+        .compile_component(
+            ComponentSource::Path {
+                path: tool_wasm.to_path_buf(),
+                name: Some("cron-driver-tool".to_string()),
+            },
+            CompileOptions::default(),
+        )
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "failed to compile cron-driver-tool component from {}: {e}",
+                tool_wasm.display()
+            )
+        })?;
+
     let driver_state = DriverStoreState {
         conn_table: WasmosResourceTable::new(),
-        engine: engine.clone(),
+        engine,
         artifacts: artifacts.clone(),
         preopens: owned_preopens,
     };
-    let state = SyncStoreState::new(Some(&wasi_env), driver_state)
-        .map_err(|e| anyhow::anyhow!("build SyncStoreState wrapper: {e}"))?;
-    let mut store = Store::new(&engine, state);
 
-    // Load the component BEFORE wiring the exec host imports — the
-    // bridge introspects the component's imported interfaces to
-    // determine which resource types to auto-register. Bindgen's
-    // `add_to_linker` did not need this because the generated code
-    // knew the resource shape at macro-expansion time.
-    let component = Component::from_file(&engine, tool_wasm).map_err(|e| {
-        anyhow::anyhow!(
-            "failed to load cron-driver-tool component from {}: {e}",
-            tool_wasm.display()
-        )
-    })?;
+    // Register the duckdb:driver/exec host imports via HostImports.
+    // The adapter's wire_host_imports auto-registers the `connection`
+    // resource type by introspecting the component's imports at
+    // instantiate time — same shape sync_bridge_resource used to do.
+    let host_imports = HostImports::new().register_sync(EXEC_IFACE, DriverExecHost);
 
-    let mut linker = Linker::<SyncStoreState<DriverStoreState>>::new(&engine);
-    p2::add_to_linker_sync(&mut linker)?;
-    // The bridge replaces
-    //   driver_exec_bindings::add_to_linker::<DriverStoreState, DriverStoreState>(...)
-    // — one call registers the `connection` resource + all three
-    // methods (`open`, `[method]connection.exec`,
-    // `[method]connection.query`) via the DriverExecHost SyncHostCall
-    // impl. The bridge is a no-op if the component doesn't actually
-    // import `duckdb:driver/exec@5.0.0`.
-    sync_bridge_resource::install_host_call::<SyncStoreState<DriverStoreState>>(
-        &engine,
-        &mut linker,
-        &component,
-        EXEC_IFACE,
-        Arc::new(DriverExecHost),
-    )
-    .map_err(|e| anyhow::anyhow!("wire duckdb:driver/exec host: {e}"))?;
+    let ctx = ExecutionContext::new()
+        .with_wasi(wasi_env)
+        .with_host_imports(host_imports)
+        .with_consumer_state(driver_state);
 
-    let instance_pre = linker.instantiate_pre(&component)?;
-    let instance = instance_pre.instantiate(store.as_context_mut())?;
-    // The bindgen path was:
-    //   let tool_pre = CronDriverToolPre::new(instance_pre)?;
-    //   let tool: CronDriverTool = tool_pre.instantiate(store.as_context_mut())?;
-    //   tool.wasi_cli_run().call_run(store.as_context_mut())?
-    // Under the bridge, dispatch through sync_export_bridge — the
-    // interface name matches the world's `export wasi:cli/run@0.2.6;`
-    // verbatim; the method `run` takes no args and returns `result`
-    // (both arms empty).
-    let ret = sync_export_bridge::call_export(
-        store.as_context_mut(),
-        &instance,
-        Some("wasi:cli/run@0.2.6"),
-        "run",
-        &[],
-    )
-    .map_err(|e| anyhow::anyhow!("driver-tool wasi:cli/run.run(): {e}"))?;
+    let mut instance = sync_rt
+        .instantiate(&compiled, ctx)
+        .map_err(|e| anyhow::anyhow!("instantiate cron-driver-tool: {e}"))?;
 
-    // Unpack `result` — both arms carry no payload, so both
-    // `Ok(None)` and `Err(None)` are the expected shapes.
-    // `Ok(Some(_))` / `Err(Some(_))` are contract violations for a
-    // `result` without payloads.
-    match ret.as_slice() {
-        [Value::Result(inner)] => match inner {
-            Ok(None) => Ok(Ok(())),
-            Err(None) => Ok(Err(())),
-            Ok(Some(payload)) => Err(anyhow::anyhow!(
-                "driver-tool run(): unexpected Ok payload {payload:?} for result<_, _>"
-            )),
-            Err(Some(payload)) => Err(anyhow::anyhow!(
-                "driver-tool run(): unexpected Err payload {payload:?} for result<_, _>"
-            )),
-        },
-        other => Err(anyhow::anyhow!(
-            "driver-tool run(): expected exactly one Value::Result return, got {other:?}"
-        )),
-    }
+    // Wasmos-native wasi:cli/run.run dispatcher — mirrors the tool's
+    // `wasi_cli_run().call_run(...)` bindgen path with the two-arm
+    // unpacking already handled inside SyncInstance::call_wasi_command.
+    instance
+        .call_wasi_command()
+        .map_err(|e| anyhow::anyhow!("driver-tool wasi:cli/run.run(): {e}"))
 }
 
 /// Build the portable WASI environment description for the driver
