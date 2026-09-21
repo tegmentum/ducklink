@@ -746,10 +746,23 @@ can compile.
 6. **Primary-store reentry TLS.** `unsafe fn primary_nested_exec`
    stashes `*mut Store<CoreStoreState>` +
    `*const wasmtime::component::Instance` in a TLS to
-   re-enter the primary store from a callback. No
-   wasmos-runtime-api equivalent — needs a redesign that
-   fits async-first semantics (holding a `*mut` across an
-   `.await` is unsound).
+   re-enter the primary store from a callback.
+
+   ✅ **DESIGN LANDED (2026-09-21)** —
+   [wasmos phase-6-22-async-safe-reentry.md](../../../wasmos/docs/design/runtime-abstraction/phase-6-22-async-safe-reentry.md)
+   (wasmos commit `993db508`). Proposes a
+   `ReentryCapability<'a>` primitive on `HostCallContext` that
+   reborrows the enclosing call_export's store context —
+   analogous to wasmtime's `Caller<'a, T>` but through the
+   wasmos-runtime-api opaque surface. Retires the raw
+   `*mut Store<T>` + `thread_local!` pattern in favor of an
+   async-safe lifetime-bound reborrow.
+
+   Implementation gated on review sign-off + workload-derivation
+   cross-check (candidate: girder's `HostState::execute`). Once
+   the wasmos primitive lands (~1-2 days work), the ducklink
+   migration is ~10 lines of straight-line async code
+   replacing the TLS / RAII / `unsafe fn` scaffolding.
 
 **Blocked-on-wasmos work:**
 
@@ -766,14 +779,13 @@ can compile.
   (wasmos commit `a98bc76b`, `sync-facade` Cargo feature).
   Owns a private tokio runtime, block_ons each async
   method; consumer surface stays sync.
-- `Instance::call_export` variants that support the
-  primary-reentry pattern under async (or a documented
-  policy that mid-migration consumers keep sibling
-  reentry on the escape hatch). Separate from the
-  sync-facade landing — this is the `unsafe fn
-  primary_nested_exec` TLS-based reentry pattern in
-  ducklink-host, which still needs an async-safe
-  redesign.
+- ~~`Instance::call_export` variants that support the
+  primary-reentry pattern under async~~ ✅ DESIGN LANDED
+  (2026-09-21). See
+  [wasmos phase-6-22-async-safe-reentry.md](../../../wasmos/docs/design/runtime-abstraction/phase-6-22-async-safe-reentry.md)
+  (wasmos commit `993db508`) for the
+  `ReentryCapability<'a>` primitive. Implementation gated on
+  review + workload cross-check.
 - ~~`with:` map equivalent on `wasmos_runtime_api::HostImports`
   registration~~ ✅ VERIFIED (2026-09-17). Covered by three
   already-shipped features: `p2::add_to_linker_sync` (WASI
