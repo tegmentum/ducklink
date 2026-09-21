@@ -748,21 +748,36 @@ can compile.
    `*const wasmtime::component::Instance` in a TLS to
    re-enter the primary store from a callback.
 
-   ✅ **DESIGN LANDED (2026-09-21)** —
-   [wasmos phase-6-22-async-safe-reentry.md](../../../wasmos/docs/design/runtime-abstraction/phase-6-22-async-safe-reentry.md)
-   (wasmos commit `993db508`). Proposes a
-   `ReentryCapability<'a>` primitive on `HostCallContext` that
-   reborrows the enclosing call_export's store context —
-   analogous to wasmtime's `Caller<'a, T>` but through the
-   wasmos-runtime-api opaque surface. Retires the raw
-   `*mut Store<T>` + `thread_local!` pattern in favor of an
-   async-safe lifetime-bound reborrow.
+   ✅ **DESIGN + API LANDED (2026-09-21)** —
+   [wasmos phase-6-22-async-safe-reentry.md](../../../wasmos/docs/design/runtime-abstraction/phase-6-22-async-safe-reentry.md).
+   `ReentryCapability<'a>` + `ReentryCapabilityImpl<'a>` shipped at
+   wasmos commit `0097cdf2`; v48 adapter's
+   `WasmtimeReentryCapability` wired at same commit. Tests +
+   constraint finding at wasmos commit `4ffbc7e3`.
 
-   Implementation gated on review sign-off + workload-derivation
-   cross-check (candidate: girder's `HostState::execute`). Once
-   the wasmos primitive lands (~1-2 days work), the ducklink
-   migration is ~10 lines of straight-line async code
-   replacing the TLS / RAII / `unsafe fn` scaffolding.
+   ⚠️ **BLOCKED on wasmtime constraint** — v48 adapter deliberately
+   does NOT advertise `WASMOS_HOST_CALLBACK_REENTRY` because
+   wasmtime 48's async component model tracks which instance is
+   entered on each guest task and rejects nested calls with
+   `CannotEnterComponent`. Ducklink's existing
+   `primary_nested_exec` works today only because ducklink runs
+   sync-only wasmtime without `wasm_component_model_async(true)` —
+   moving to wasmos's async-native path breaks this specific
+   reentry pattern.
+
+   Follow-up options (per the design doc's §Follow-up):
+   1. `RuntimeConfig::allow_host_callback_reentry` knob that
+      trades `wasm_component_model_async` for reentry support.
+      Ducklink would opt in; other workloads (streams / futures)
+      wouldn't.
+   2. Investigate wasmtime's concurrent-mode reentry primitives.
+
+   Until one of those lands, ducklink stays on the sync
+   escape hatch (`sync_export_bridge` +
+   `unsafe fn primary_nested_exec`) for the primary-reentry path.
+   The remaining ducklink Path B migration (moving off the sync
+   escape hatch to wasmos-native) is gated on this specific
+   capability.
 
 **Blocked-on-wasmos work:**
 
@@ -779,13 +794,16 @@ can compile.
   (wasmos commit `a98bc76b`, `sync-facade` Cargo feature).
   Owns a private tokio runtime, block_ons each async
   method; consumer surface stays sync.
-- ~~`Instance::call_export` variants that support the
-  primary-reentry pattern under async~~ ✅ DESIGN LANDED
-  (2026-09-21). See
-  [wasmos phase-6-22-async-safe-reentry.md](../../../wasmos/docs/design/runtime-abstraction/phase-6-22-async-safe-reentry.md)
-  (wasmos commit `993db508`) for the
-  `ReentryCapability<'a>` primitive. Implementation gated on
-  review + workload cross-check.
+- `Instance::call_export` variants that support the
+  primary-reentry pattern under async — ✅ API LANDED
+  (2026-09-21, wasmos commits `993db508` design + `0097cdf2`
+  API/adapter + `4ffbc7e3` tests). ⚠️ Capability NOT advertised
+  under default config: wasmtime 48's async component-model
+  reentry gate rejects the nested call with
+  `CannotEnterComponent`. Ducklink stays on the sync escape
+  hatch for `primary_nested_exec` until a follow-up config knob
+  (or a wasmtime concurrent-mode reentry primitive) lands. See
+  the design doc's §Follow-up for the two options.
 - ~~`with:` map equivalent on `wasmos_runtime_api::HostImports`
   registration~~ ✅ VERIFIED (2026-09-17). Covered by three
   already-shipped features: `p2::add_to_linker_sync` (WASI
