@@ -622,7 +622,7 @@ ducklink family (ducklink-host, icd-9, icd-10) is retired.
 Direct `use wasmtime::…` in consumer code, and `wasmtime` +
 `wasmtime-wasi` in `Cargo.toml`, both REMAIN.
 
-## Path B: full-native migration (outstanding)
+## Path B: full-native migration (partially landed 2026-09-21)
 
 Ends the wasmos-runtime-api migration arc's real goal — zero
 direct `wasmtime` dependency in any ducklink-family consumer.
@@ -631,6 +631,52 @@ The escape-hatch bridges (`sync_export_bridge` /
 themselves stay in wasmos-runtime-wasmtime-v48; the goal is
 that no ducklink-family Cargo.toml + no ducklink-family
 `.rs` file names them.
+
+**Landed consumer migrations (2026-09-21):**
+
+- ✅ `driver_exec.rs::run_driver_tool` — moved to
+  `SyncRuntime::compile_component` + `SyncRuntime::instantiate` +
+  `HostImports::register_sync` + `SyncInstance::call_wasi_command`.
+  Retired `sync_bridge_resource::install_host_call` +
+  `sync_export_bridge::call_export`. `DriverStoreState.engine`
+  (wasmtime::Engine) remains as a legitimate ducklink-internal
+  reference — `DriverConnection::open` spins up the persistent
+  DuckDB core wasm and that machinery is not a Path B target
+  yet. Ducklink commit `0e10007`.
+- ✅ `handler.rs::HandlerRegistry` — fully retired every direct
+  wasmtime type. Stores compiled components as
+  `wasmos_runtime_api::CompiledComponent`; each invoke goes
+  through `SyncRuntime::instantiate` +
+  `SyncInstance::call_export("iface#method", args)`.
+  Ducklink commit `59151d3`. Third consumer to leave the escape
+  hatch (after icd-9 and icd-10, though those are wrappers over
+  ducklink).
+
+**Remaining Path B work in ducklink-host:**
+
+The 16k-line `lib.rs` still uses wasmtime types extensively —
+but those uses are the DuckDB CORE machinery (spinning up
+`ducklink-core.wasm`, dispatching guest exports on it, plumbing
+`ResourceAny` handles for connection resources, running the
+sibling-store TLS reentry pattern). This is ducklink-host
+*being a wasm host*, not ducklink-host *consuming the wasmos
+API*. Retiring these would require moving the DuckDB core
+itself through `SyncRuntime` — a multi-file rewrite touching
+`CoreExecution`, `ExtensionManager`, the primary-reentry TLS,
+and every `with_database` / `with_appender` / `with_stream` /
+`with_prepared` helper.
+
+Similarly, `quack_server.rs`, `ui_server.rs`, `replicate.rs`,
+`httpd.rs`, `cron_cli.rs`, `dotcmd_wasmos.rs` all name
+`wasmtime::Engine` or `wasmtime::component::ResourceAny` — but
+each of those references crosses into `CoreExecution` / the
+DuckDB core, not the driver/handler tool components. Same
+"ducklink IS the host" story.
+
+Estimated scope for lib.rs migration: ~2 weeks. Requires
+async-safe redesign of the primary-store reentry TLS
+(`unsafe fn primary_nested_exec`) before the async cascade
+can compile.
 
 **What has to change** (per §Executive summary):
 
