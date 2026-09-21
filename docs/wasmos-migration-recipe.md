@@ -306,14 +306,26 @@ Path-B end state for ducklink:
 4. **Fine-grained WASI opt-in** — cli-only / no-filesystem / etc.
    Ducklink's `handler.rs` and `driver_exec.rs` don't need
    `wasi:http` and would benefit from being able to say so.
+   ✅ PARTIALLY CLOSED (2026-09-21) — `WasiEnvironment::enable_http`
+   toggle shipped at wasmos commit `78addf1e`, plus
+   `.without_http()` builder. Consumers whose guests don't import
+   wasi:http can now skip the linker installation. Finer-grained
+   wasi:cli / wasi:filesystem opt-outs are workload-derivation
+   deferred (no consumer has asked yet).
 5. ~~**Sync `Runtime` facade**~~ ✅ LANDED (2026-09-17). Ships at
    `wasmos_runtime_wasmtime_v48::{SyncRuntime, SyncInstance}`
    (wasmos commit `a98bc76b`) behind the `sync-facade` Cargo
    feature. Owns a private tokio runtime and block_ons each async
    `Runtime` / `Instance` method. Retires the sync→async cascade
    blocker for mid-migration consumers.
-6. **`add_only_http_to_linker` equivalent** — the wasmos analog of
-   ducklink's chosen "avoid the double-add clash" pattern.
+6. ~~**`add_only_http_to_linker` equivalent**~~ ✅ CLOSED
+   (2026-09-21) — the "double-add clash" ducklink cited was
+   escape-hatch-specific (a consumer-owned linker + wasmos-
+   auto-wired wasi:http both trying to install the same
+   interface). Under the wasmos-native path there's no
+   consumer-owned linker at all; ducklink's chosen pattern
+   maps onto `WasiEnvironment::enable_http` (per item 4) —
+   consumers who don't want wasi:http auto-wired say so.
 
 ---
 
@@ -707,13 +719,23 @@ can compile.
    from consumer signatures; only the WasiView-backing
    `ResourceTable` type still touches wasmtime — that gap
    closes when (4) below lands.
-4. **`wasi:http` plumbing hook.** Ducklink-host picks
-   `add_only_http_to_linker_sync` explicitly to avoid a
-   double-add clash; wasmos-runtime-api auto-wires the full
-   `wasi:http` linker unconditionally. Path B needs either a
-   consumer hook for outbound interception / mock responses /
-   per-tenant policy, or a formal ADR that mid-migration
-   consumers accept declarative HTTP.
+4. **`wasi:http` plumbing hook.**
+   ✅ PARTIALLY CLOSED (2026-09-21) — wasmos ships
+   `WasiEnvironment::enable_http` at commit `78addf1e`. Consumers
+   who don't want wasi:http auto-wired opt out at instantiate time
+   via `WasiEnvironment { enable_http: false, .. }` (or the
+   `.without_http()` builder). Ducklink's double-add clash was
+   escape-hatch-specific; under the wasmos-native path there's no
+   consumer-owned linker at all, and the opt-in flag covers the
+   remaining "handler.rs doesn't need wasi:http" concern.
+
+   The DECLARATIVE side is closed. A per-request outbound-HTTP
+   interceptor / mock / rewrite hook is workload-derivation
+   deferred — no consumer has asked for it yet. Consumers who
+   need per-tenant HTTP policy today have declarative
+   `HttpAllowlist` support (per-instance allow/deny by
+   host/scheme/port) via `ExecutionContext::http_allowlist`;
+   fuller interception falls through to the escape hatch.
 5. **`with:` map equivalent.**
    ✅ **PATH B STEP VERIFIED (2026-09-17)** — bindgen's `with:`
    map decomposes into three orthogonal wasmos features that
@@ -792,8 +814,13 @@ can compile.
   `get_mut` / `delete` API + `ResourceError` enum + 10
   unit tests. Consumer-owned tracking validated in all
   three ducklink-family workloads.
-- `wasi:http` consumer plumbing hook OR formal doc that
-  declarative HTTP is the answer.
+- ~~`wasi:http` consumer plumbing hook OR formal doc that
+  declarative HTTP is the answer~~ ✅ PARTIALLY CLOSED
+  (2026-09-21). `WasiEnvironment::enable_http` opt-in flag
+  shipped at wasmos commit `78addf1e`; the declarative side is
+  closed (allowlist + auto-wire opt-in). A per-request outbound
+  interceptor hook remains workload-derivation deferred — no
+  consumer has asked yet.
 - ~~The sync→async cascade for mid-migration consumers~~
   ✅ CLOSED via `SyncRuntime`/`SyncInstance` facade
   (wasmos commit `a98bc76b`, `sync-facade` Cargo feature).
