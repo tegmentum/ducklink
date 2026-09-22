@@ -412,7 +412,7 @@ use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 /// (retires the local `WasiView` / `WasiHttpView` impls).
 ///
 /// Every host-callback dispatch reaches here via
-/// `ctx.consumer_state::<CoreStoreState>()` on today's shape and
+/// `ctx.consumer_state::<CoreInnerState>()` on today's shape and
 /// through `SyncStoreState::consumer_from_ctx::<CoreInnerState>()`
 /// after the wrapper flip.
 struct CoreInnerState {
@@ -496,7 +496,7 @@ impl wasmos_runtime_api::SyncHostCall for CoreHostExtensionLoaderHost {
                         )))
                     }
                 };
-                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "host-extension-loader request-load: \
                          consumer_state<CoreStoreState> unavailable",
@@ -568,7 +568,7 @@ impl wasmos_runtime_api::SyncHostCall for ExtensionLoaderHooksHost {
                         args.len()
                     )));
                 }
-                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "extension-loader-hooks get-pending-registrations: \
                          consumer_state<CoreStoreState> unavailable",
@@ -1126,7 +1126,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                     .map(|v| value_to_core_duckvalue(&v).map(convert_core_duckvalue_to_extension))
                     .collect::<wasmos_runtime_api::RuntimeResult<_>>()?;
                 let ext_ctx = convert_core_invokeinfo(invoke_ctx);
-                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "callback-dispatch call-scalar: consumer_state<CoreStoreState> unavailable",
                     )
@@ -1162,7 +1162,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                     .collect::<wasmos_runtime_api::RuntimeResult<_>>()?;
                 let ext_rows = core_colvecs_to_ext_rows(&core_colvecs);
                 let ext_ctx = convert_core_invokeinfo(invoke_ctx);
-                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "callback-dispatch call-scalar-batch-col: consumer_state<CoreStoreState> unavailable",
                     )
@@ -1194,7 +1194,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                     .into_iter()
                     .map(|v| value_to_core_duckvalue(&v).map(convert_core_duckvalue_to_extension))
                     .collect::<wasmos_runtime_api::RuntimeResult<_>>()?;
-                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "callback-dispatch call-table: consumer_state<CoreStoreState> unavailable",
                     )
@@ -1227,7 +1227,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                     .map(value_to_core_colvec)
                     .collect::<wasmos_runtime_api::RuntimeResult<_>>()?;
                 let ext_rows = core_colvecs_to_ext_rows(&core_colvecs);
-                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "callback-dispatch call-aggregate-col: consumer_state<CoreStoreState> unavailable",
                     )
@@ -1257,7 +1257,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                 };
                 let core_colvec = value_to_core_colvec(colvec_v)?;
                 let ext_rows = core_colvecs_to_ext_rows(std::slice::from_ref(&core_colvec));
-                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "callback-dispatch call-cast-col: consumer_state<CoreStoreState> unavailable",
                     )
@@ -1306,7 +1306,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                     .into_iter()
                     .map(|v| value_to_core_duckvalue(&v).map(convert_core_duckvalue_to_extension))
                     .collect::<wasmos_runtime_api::RuntimeResult<_>>()?;
-                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "callback-dispatch call-pragma: consumer_state<CoreStoreState> unavailable",
                     )
@@ -1338,7 +1338,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                 };
                 let core_v = value_to_core_duckvalue(value_v)?;
                 let ext_v = convert_core_duckvalue_to_extension(core_v);
-                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "callback-dispatch call-cast: consumer_state<CoreStoreState> unavailable",
                     )
@@ -2452,7 +2452,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                         )))
                     }
                 };
-                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "tvm-manager create-region: consumer_state<CoreStoreState> unavailable",
                     )
@@ -2497,7 +2497,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                         )))
                     }
                 };
-                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "tvm-manager destroy-region: consumer_state<CoreStoreState> unavailable",
                     )
@@ -2518,7 +2518,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                         )))
                     }
                 };
-                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "tvm-manager alloc: consumer_state<CoreStoreState> unavailable",
                     )
@@ -2544,7 +2544,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                         )))
                     }
                 };
-                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "tvm-manager dealloc: consumer_state<CoreStoreState> unavailable",
                     )
@@ -2679,7 +2679,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                         )))
                     }
                 };
-                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg("tvm-bytes read: consumer_state<CoreStoreState> unavailable")
                 })?;
                 let th = match state.tvm_resolve(handle, false) {
@@ -2744,7 +2744,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                         )))
                     }
                 };
-                let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
+                let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg("tvm-bytes write: consumer_state<CoreStoreState> unavailable")
                 })?;
                 let len = data.len() as u64;
@@ -2866,16 +2866,21 @@ fn bindgen_tvm_error_to_value(e: core_tvm_types::TvmError) -> wasmos_runtime_api
 }
 
 struct CoreExecution {
-    store: Store<CoreStoreState>,
-    /// Raw wasmtime Instance backing the core-wasm guest.
-    /// Every guest-export dispatch routes through
-    /// `wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export_with_resources`
-    /// on this Instance (see the `call_database_*` / `call_export_*`
-    /// helper family). The `bindings: duckdb_core_bindings::Libduckdb`
-    /// field that used to sit here is retired as of Phase 2e
-    /// wedge #7d + wedge #9 (2026-09-17); every consumer has
-    /// migrated onto the escape hatch.
-    instance: wasmtime::component::Instance,
+    /// Wasmos-native synchronous facade over the core wasm
+    /// instance. Owns the underlying wasmtime store + component
+    /// instance internally (their raw types no longer surface in
+    /// ducklink code). Every guest-export dispatch routes through
+    /// `sync_inst.call_export("iface#method", args)`; the
+    /// cross-instance sync reentry path (used by
+    /// `primary_nested_exec`) snapshots a `SyncCrossInstanceHandle`
+    /// via `sync_inst.cross_instance_reentry_handle()`.
+    ///
+    /// See `docs/path-b-closure-slice-3-execution.md` for the
+    /// migration record; wasmos Phase 6.24 (`SyncCrossInstanceHandle`)
+    /// + `SyncInstance::resource_drop` + `call_export_via_store` are
+    /// the primitives that made this landing possible without
+    /// leaking any wasmtime type into consumer signatures.
+    sync_inst: wasmos_runtime_wasmtime_v48::SyncInstance,
 }
 
 /// Opaque handle to a live wasm-side resource inside a
@@ -2892,32 +2897,45 @@ struct CoreExecution {
 /// `ResourceAny` is; consumers can pass it by value or by
 /// reference without ceremony.
 ///
-/// This is a real newtype (`repr(transparent)` around
-/// `ResourceAny`), not a `pub type` alias — the wasmtime type does
-/// not leak through into consumer signatures via trait bounds or
-/// generic parameters.
-#[repr(transparent)]
+/// Under Slice 3 of the Path B closure this is a two-`u64`
+/// wasmos-native handle (`store_id` + `handle_id`, the fields
+/// carried inside `wasmos_runtime_api::Value::Resource`). No
+/// wasmtime type in the definition or in any conversion.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct CoreResourceHandle(pub(crate) wasmtime::component::ResourceAny);
-
-impl From<wasmtime::component::ResourceAny> for CoreResourceHandle {
-    fn from(ra: wasmtime::component::ResourceAny) -> Self {
-        Self(ra)
-    }
+pub(crate) struct CoreResourceHandle {
+    pub(crate) store_id: u64,
+    pub(crate) handle_id: u64,
 }
 
-impl From<CoreResourceHandle> for wasmtime::component::ResourceAny {
-    fn from(h: CoreResourceHandle) -> Self {
-        h.0
+impl CoreResourceHandle {
+    pub(crate) fn as_value(self) -> wasmos_runtime_api::Value {
+        wasmos_runtime_api::Value::Resource {
+            store_id: self.store_id,
+            handle_id: self.handle_id,
+        }
+    }
+
+    pub(crate) fn from_value(
+        v: &wasmos_runtime_api::Value,
+    ) -> Option<Self> {
+        match v {
+            wasmos_runtime_api::Value::Resource {
+                store_id,
+                handle_id,
+            } => Some(Self {
+                store_id: *store_id,
+                handle_id: *handle_id,
+            }),
+            _ => None,
+        }
     }
 }
 
 impl CoreExecution {
     /// Wrapper-flavour of
     /// [`call_database_returning_resource_on_core`] — same behaviour,
-    /// signature swaps `wasmtime::component::ResourceAny` for
-    /// [`CoreResourceHandle`] so consumer modules don't need to
-    /// name the wasmtime type.
+    /// signature uses [`CoreResourceHandle`] throughout so consumer
+    /// modules don't touch wasmos internals directly.
     pub(crate) fn call_database_returning_handle(
         &mut self,
         method: &str,
@@ -2926,21 +2944,18 @@ impl CoreExecution {
         err_kind: ExecuteErrKind,
     ) -> Result<Result<CoreResourceHandle, DatabaseVerbErr>, wasmos_runtime_api::RuntimeError>
     {
-        let input = input_handle.map(|h| h.0);
-        call_database_returning_resource_on_core(self, method, input, other_args, err_kind)
-            .map(|inner| inner.map(CoreResourceHandle))
+        call_database_returning_resource_on_core(self, method, input_handle, other_args, err_kind)
     }
 
     /// Wrapper-flavour of [`call_database_execute_on_core`] — same
-    /// behaviour, signature takes a [`CoreResourceHandle`] instead
-    /// of the raw wasmtime type.
+    /// behaviour, signature takes a [`CoreResourceHandle`].
     pub(crate) fn execute_on_handle(
         &mut self,
         conn_handle: CoreResourceHandle,
         sql: &str,
     ) -> Result<Result<cli_native::QueryResult, cli_native::Duckerror>, wasmos_runtime_api::RuntimeError>
     {
-        call_database_execute_on_core(self, conn_handle.0, sql)
+        call_database_execute_on_core(self, conn_handle, sql)
     }
 
     /// Wrapper-flavour of [`call_export_on_resource_core`] — same
@@ -2952,46 +2967,35 @@ impl CoreExecution {
         handle: CoreResourceHandle,
         trailing_args: &[wasmos_runtime_api::Value],
     ) -> Result<Vec<wasmos_runtime_api::Value>, wasmos_runtime_api::RuntimeError> {
-        call_export_on_resource_core(self, iface, method, handle.0, trailing_args)
+        call_export_on_resource_core(self, iface, method, handle, trailing_args)
     }
 
     /// Bridge a guest export whose signature does not carry a
     /// leading resource handle — the `handle-quack-request` /
-    /// `handle-ui-request` shape used by the ui/quack servers. The
-    /// method owns its `ExportResourceTable` because those two
-    /// exports don't thread resource handles back to the host.
+    /// `handle-ui-request` shape used by the ui/quack servers.
     ///
-    /// Wraps [`sync_export_bridge::call_export_with_resources`] so
-    /// consumer modules don't hold a `wasmtime::component::Instance`
-    /// or a `StoreContextMut<CoreStoreState>` in scope.
+    /// Under Slice 3 this is a straight
+    /// [`wasmos_runtime_wasmtime_v48::SyncInstance::call_export`]
+    /// through the interface#method spelling wasmos uses.
     pub(crate) fn call_bridge_export(
         &mut self,
         iface: &str,
         method: &str,
         args: &[wasmos_runtime_api::Value],
     ) -> Result<Vec<wasmos_runtime_api::Value>, wasmos_runtime_api::RuntimeError> {
-        use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
-            call_export_with_resources, ExportResourceTable,
-        };
-        let mut resources = ExportResourceTable::new();
-        call_export_with_resources(
-            self.store.as_context_mut(),
-            &self.instance,
-            Some(iface),
-            method,
-            args,
-            &mut resources,
-        )
+        self.sync_inst.call_export(&format!("{iface}#{method}"), args)
     }
 
-    /// Free a core resource handle. Encapsulates the wasmtime-
-    /// native `ResourceAny::resource_drop` so consumer modules don't
-    /// need to name the wasmtime type at their drop-site.
+    /// Free a core resource handle. Delegates to the wasmos-native
+    /// drop primitive `SyncInstance::resource_drop` so consumers
+    /// don't touch `wasmtime::component::ResourceAny` at their
+    /// drop-site.
     pub(crate) fn resource_drop_handle(
         &mut self,
         handle: CoreResourceHandle,
-    ) -> wasmtime::Result<()> {
-        handle.0.resource_drop(self.store.as_context_mut())
+    ) -> Result<(), wasmos_runtime_api::RuntimeError> {
+        self.sync_inst
+            .resource_drop(handle.store_id, handle.handle_id)
     }
 }
 
@@ -3123,7 +3127,7 @@ impl SiblingState {
 /// subsequent call for the process lifetime.
 struct SiblingSlot {
     core: Arc<Mutex<CoreExecution>>,
-    connection: ResourceAny,
+    connection: CoreResourceHandle,
 }
 
 /// Normalize whatever the primary passed to `open` into the form the sibling
@@ -3238,9 +3242,8 @@ thread_local! {
 
 #[derive(Clone, Copy)]
 struct PrimaryReentry {
-    store: *mut Store<CoreStoreState>,
-    instance: *const wasmtime::component::Instance,
-    connection: ResourceAny,
+    handle: wasmos_runtime_wasmtime_v48::SyncCrossInstanceHandle,
+    connection: CoreResourceHandle,
 }
 
 /// RAII: install `entry` in `PRIMARY_STORE_REENTRY` and restore the
@@ -3280,7 +3283,16 @@ impl CoreExecution {
         archive: Arc<Mutex<ducklink_runtime::PendingRegistrationsData>>,
         is_sibling: bool,
     ) {
-        let data = self.store.data_mut();
+        // Reach the consumer state (CoreInnerState) through the
+        // wasmos-native accessor. Under Slice 3 the box is
+        // CoreInnerState directly (no more SyncStoreState wrap).
+        let any = self
+            .sync_inst
+            .consumer_state_mut()
+            .expect("CoreExecution's SyncInstance was built with consumer_state");
+        let data = any
+            .downcast_mut::<CoreInnerState>()
+            .expect("CoreExecution's consumer_state is CoreInnerState");
         data.set_replay_archive(archive);
         data.set_is_sibling(is_sibling);
     }
@@ -3318,21 +3330,21 @@ impl CoreExecution {
 }
 
 struct ConnectionEntry {
-    handle: ResourceAny,
+    handle: CoreResourceHandle,
     closed: bool,
 }
 
 struct StreamEntry {
-    handle: ResourceAny,
+    handle: CoreResourceHandle,
     closed: bool,
 }
 
 struct PreparedEntry {
-    handle: ResourceAny,
+    handle: CoreResourceHandle,
 }
 
 struct AppenderEntry {
-    handle: ResourceAny,
+    handle: CoreResourceHandle,
 }
 
 // CallbackKind / CallbackEntry / CallbackRegistry moved to the `ducklink-runtime`
@@ -3769,7 +3781,7 @@ impl DotcmdRegistry {
         engine: &Engine,
         dir: &Path,
         core: Arc<Mutex<CoreExecution>>,
-        current_connection: Arc<Mutex<Option<ResourceAny>>>,
+        current_connection: Arc<Mutex<Option<CoreResourceHandle>>>,
         extension_manager: Arc<Mutex<ExtensionManager>>,
     ) -> Self {
         let mut components = Vec::new();
@@ -3822,7 +3834,7 @@ impl DotcmdRegistry {
         engine: &Engine,
         path: &Path,
         core: Arc<Mutex<CoreExecution>>,
-        current_connection: Arc<Mutex<Option<ResourceAny>>>,
+        current_connection: Arc<Mutex<Option<CoreResourceHandle>>>,
         extension_manager: Arc<Mutex<ExtensionManager>>,
     ) -> wasmtime::Result<(DotcmdInstance, Vec<(String, u64, String, String)>)> {
         let component = load_component(engine, path).map_err(wasmtime::Error::msg)?;
@@ -4211,7 +4223,7 @@ struct ExtensionManager {
     // v1.1 live-query host import: the CLI's live connection, shared so a
     // query-capable component's `query` import (catalog completion) runs on the
     // same connection the user is on. Cloned into each component's CoreServices.
-    current_connection: Arc<Mutex<Option<ResourceAny>>>,
+    current_connection: Arc<Mutex<Option<CoreResourceHandle>>>,
     // v1.1 live-query host import: the re-entrancy fallback catalog snapshot,
     // shared with each component's CoreServices + refreshed at CLI boundaries.
     catalog_snapshot: Arc<Mutex<CatalogSnapshot>>,
@@ -5309,7 +5321,7 @@ impl ExtensionManager {
     /// v1.1 live-query host import: share the CLI's live connection so a
     /// query-capable component's `query` import runs catalog SELECTs on the same
     /// connection the user is on.
-    fn attach_current_connection(&mut self, conn: Arc<Mutex<Option<ResourceAny>>>) {
+    fn attach_current_connection(&mut self, conn: Arc<Mutex<Option<CoreResourceHandle>>>) {
         self.current_connection = conn;
     }
 
@@ -6533,7 +6545,7 @@ pub struct HostState {
     extension_manager: Arc<Mutex<ExtensionManager>>,
     dotcmd_registry: Arc<Mutex<DotcmdRegistry>>,
     /// The CLI's live connection handle, shared with dot-command components' spi.
-    current_connection: Arc<Mutex<Option<ResourceAny>>>,
+    current_connection: Arc<Mutex<Option<CoreResourceHandle>>>,
     next_resource_id: u32,
     connections: HashMap<u32, ConnectionEntry>,
     streams: HashMap<u32, StreamEntry>,
@@ -6795,7 +6807,7 @@ impl HostState {
     ///
     /// Non-fatal: DDL failures are logged and skipped rather than aborting
     /// the connection.
-    fn create_ducklink_schema(&mut self, handle: &ResourceAny) {
+    fn create_ducklink_schema(&mut self, handle: &CoreResourceHandle) {
         // `ducklink.search(query)` is a MACRO (takes a bound query argument)
         // — the other eight are VIEWs. Statements are executed one at a time
         // because the CLI's `execute` boundary is a single-statement call.
@@ -6958,7 +6970,7 @@ impl HostState {
     /// so a lean host that never triggered `drain_pending_registrations`
     /// (no autoloaded extension) doesn't surface a scary "Scalar Function
     /// does not exist" error at connection open.
-    fn ducklink_prefix_scalar_registered(&self, handle: &ResourceAny) -> bool {
+    fn ducklink_prefix_scalar_registered(&self, handle: &CoreResourceHandle) -> bool {
         const PROBE: &str = "SELECT 1 FROM duckdb_functions() \
              WHERE function_name = 'ducklink_prefix' \
                AND function_type = 'scalar' \
@@ -6989,7 +7001,7 @@ impl HostState {
     /// See [`ExtensionManager::native_ducklink_load`] for why the drain has
     /// to be deferred (dispatch runs inside the core's callback path — the
     /// wasm store is mid-call and can't re-enter `call_execute`).
-    fn flush_deferred_ducklink_loads(&mut self, conn: ResourceAny) {
+    fn flush_deferred_ducklink_loads(&mut self, conn: CoreResourceHandle) {
         let names = {
             let mut manager = self
                 .extension_manager
@@ -7051,7 +7063,7 @@ impl HostState {
     /// Best-effort: any per-statement DDL error is logged and the pass
     /// continues, so a single bad function shape doesn't abort the
     /// user's next SQL.
-    fn flush_deferred_prefix_declarations(&mut self, conn: ResourceAny) {
+    fn flush_deferred_prefix_declarations(&mut self, conn: CoreResourceHandle) {
         let pairs = {
             let mut manager = self
                 .extension_manager
@@ -7092,7 +7104,7 @@ impl HostState {
     /// `create_prefix_aliases` + `persist_prefix` pair.
     fn apply_prefix_declaration(
         &mut self,
-        conn: ResourceAny,
+        conn: CoreResourceHandle,
         alias: &str,
         namespace: &str,
     ) -> Result<usize, String> {
@@ -7165,7 +7177,7 @@ impl HostState {
 
     /// `call_execute` wrapper for one-shot DDL that returns no rows. Maps
     /// wasmtime traps + duckerrors to a single `String` for logging.
-    fn run_prefix_ddl(&self, conn: ResourceAny, sql: &str) -> Result<(), String> {
+    fn run_prefix_ddl(&self, conn: CoreResourceHandle, sql: &str) -> Result<(), String> {
         let res = call_database_execute(self, conn, sql);
         match res {
             Ok(Ok(_)) => Ok(()),
@@ -7177,7 +7189,7 @@ impl HostState {
     /// `call_execute` wrapper for a query whose rows we need. Returns
     /// each row as `Vec<String>` (stringified via `spi_value_text`, so
     /// NULL becomes "").
-    fn run_prefix_query(&self, conn: ResourceAny, sql: &str) -> Result<Vec<Vec<String>>, String> {
+    fn run_prefix_query(&self, conn: CoreResourceHandle, sql: &str) -> Result<Vec<Vec<String>>, String> {
         let res = call_database_execute(self, conn, sql);
         match res {
             Ok(Ok(qr)) => Ok(qr
@@ -7278,11 +7290,11 @@ impl HostState {
 
     fn drop_prepared_resource(&mut self, rep: u32) -> Result<(), cli_native::Duckerror> {
         if let Some(entry) = self.prepared.remove(&rep) {
-            // Wasmtime's built-in resource-drop (runs the canonical-
-            // ABI destructor). Same treatment as
-            // [`Self::drop_appender_resource`].
-            self.with_core(|core| entry.handle.resource_drop(core.store.as_context_mut()))
-                .map_err(|err| cli_native::Duckerror::Internal(trap_to_cli_string(err)))?;
+            // Path B Slice 3: wasmos-native drop via
+            // SyncInstance::resource_drop. Runs the guest's
+            // canonical-ABI destructor.
+            self.with_core(|core| core.resource_drop_handle(entry.handle))
+                .map_err(|err| cli_native::Duckerror::Internal(err.to_string().into()))?;
         }
         Ok(())
     }
@@ -7293,14 +7305,13 @@ impl HostState {
 
     fn drop_appender_resource(&mut self, rep: u32) -> Result<(), cli_native::Duckerror> {
         if let Some(entry) = self.appenders.remove(&rep) {
-            // `ResourceAny::resource_drop` runs the guest's canonical-
-            // ABI destructor. Not routed through
-            // `sync_export_bridge::call_export_with_resources` — this
-            // is a wasmtime built-in operation on the handle itself,
-            // not a guest-declared export method (which would be
+            // Path B Slice 3: wasmos-native drop primitive. Not
+            // routed through the escape-hatch bridge — this is a
+            // built-in operation on the handle itself, not a
+            // guest-declared export method (which would be
             // `[method]appender.close`, invoked from `appender_close`).
-            self.with_core(|core| entry.handle.resource_drop(core.store.as_context_mut()))
-                .map_err(|err| cli_native::Duckerror::Internal(trap_to_cli_string(err)))?;
+            self.with_core(|core| core.resource_drop_handle(entry.handle))
+                .map_err(|err| cli_native::Duckerror::Internal(err.to_string().into()))?;
         }
         Ok(())
     }
@@ -7324,7 +7335,7 @@ impl HostState {
     /// return). The caller unwraps into `Ok(...)` at `execute`'s bottom.
     fn intercept_attach(
         &mut self,
-        entry_handle: ResourceAny,
+        entry_handle: CoreResourceHandle,
         spec: at5_intercept::AttachSpec,
     ) -> Result<cli_native::QueryResult, cli_native::Duckerror> {
         let attach_note = format!(
@@ -7563,7 +7574,7 @@ impl HostState {
     /// the parser (Risk 8 non-goals) and are surfaced with `Unsupported`.
     fn intercept_write(
         &mut self,
-        entry_handle: ResourceAny,
+        entry_handle: CoreResourceHandle,
         route: at5_intercept::WriteRoute,
     ) -> Result<cli_native::QueryResult, cli_native::Duckerror> {
         use at5_intercept::WriteRoute;
@@ -8033,7 +8044,7 @@ impl HostState {
     /// non-rowid position without touching rowid itself.
     fn at5_prescan_rows(
         &mut self,
-        entry_handle: ResourceAny,
+        entry_handle: CoreResourceHandle,
         alias: &str,
         table: &str,
         rowid_idx: usize,
@@ -9134,7 +9145,7 @@ impl HostState {
     /// `Resource<Connection>` boundary (which is not `Clone`).
     fn execute_single_statement(
         &mut self,
-        entry_handle: ResourceAny,
+        entry_handle: CoreResourceHandle,
         sql: &str,
     ) -> Result<cli_native::QueryResult, cli_native::Duckerror> {
         // `ducklink_load(name)` deferred drain: if the user's PREVIOUS
@@ -9209,16 +9220,22 @@ impl HostState {
                 // (Ok, Err, panic), so a nested_exec never sees a stale
                 // pointer to a freed CoreExecution.
                 //
-                // Borrow-checker note: the raw-pointer coercions (`&mut
-                // core.store as *mut _`, `&core.instance as *const _`) drop
-                // their borrows at the end of the coercion expression, so
-                // the subsequent `call_database_execute_on_core(core, ...)`
-                // &mut re-borrow is unaliased.
-                let store_ptr: *mut Store<CoreStoreState> = &mut core.store;
-                let instance_ptr: *const wasmtime::component::Instance = &core.instance;
+                // Path B Slice 3: snapshot a wasmos-native
+                // SyncCrossInstanceHandle for the primary core.
+                // Under the wasmos primitive the handle is Copy
+                // and TLS-stashable — no raw pointer discipline
+                // in ducklink code.
+                //
+                // SAFETY: PrimaryReentryGuard::set installs this
+                // reentry before entering the outer call_execute.
+                // The core SyncInstance is quiescent from the
+                // deeper reentry's perspective (the outer call is
+                // running on the EXTENSION SyncInstance, not the
+                // core). Same OS thread across the whole callback
+                // chain.
+                let handle = unsafe { core.sync_inst.cross_instance_reentry_handle() };
                 let _reentry = PrimaryReentryGuard::set(PrimaryReentry {
-                    store: store_ptr,
-                    instance: instance_ptr,
+                    handle,
                     connection: entry_handle,
                 });
                 call_database_execute_on_core(core, entry_handle, &sql)
@@ -9593,7 +9610,7 @@ struct CoreServices {
     core: Arc<Mutex<CoreExecution>>,
     // v1.1 live-query host import: the CLI's live connection, used by `query` to
     // run catalog SELECTs (e.g. autocomplete's table/column completion).
-    current_connection: Arc<Mutex<Option<ResourceAny>>>,
+    current_connection: Arc<Mutex<Option<CoreResourceHandle>>>,
     // v1.1 live-query host import: the re-entrancy fallback snapshot (see
     // CatalogSnapshot). Served when the core is busy (the table-function case).
     catalog_snapshot: Arc<Mutex<CatalogSnapshot>>,
@@ -9683,7 +9700,7 @@ pub(crate) fn call_export_on_resource(
     state: &HostState,
     iface: &str,
     method: &str,
-    handle: wasmtime::component::ResourceAny,
+    handle: CoreResourceHandle,
     trailing_args: &[wasmos_runtime_api::Value],
 ) -> Result<Vec<wasmos_runtime_api::Value>, wasmos_runtime_api::RuntimeError> {
     state.with_core(|core| call_export_on_resource_core(core, iface, method, handle, trailing_args))
@@ -9697,25 +9714,14 @@ pub(crate) fn call_export_on_resource_core(
     core: &mut CoreExecution,
     iface: &str,
     method: &str,
-    handle: wasmtime::component::ResourceAny,
+    handle: CoreResourceHandle,
     trailing_args: &[wasmos_runtime_api::Value],
 ) -> Result<Vec<wasmos_runtime_api::Value>, wasmos_runtime_api::RuntimeError> {
-    use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
-        call_export_with_resources, ExportResourceTable,
-    };
-    let mut resources = ExportResourceTable::new();
-    let handle_val = resources.register(handle);
     let mut args = Vec::with_capacity(1 + trailing_args.len());
-    args.push(handle_val);
+    args.push(handle.as_value());
     args.extend_from_slice(trailing_args);
-    call_export_with_resources(
-        core.store.as_context_mut(),
-        &core.instance,
-        Some(iface),
-        method,
-        &args,
-        &mut resources,
-    )
+    core.sync_inst
+        .call_export(&format!("{iface}#{method}"), &args)
 }
 
 /// Dispatch a `database.<verb>(...) -> result<resource, err>`
@@ -9739,41 +9745,28 @@ pub(crate) fn call_export_on_resource_core(
 pub(crate) fn call_database_returning_resource_on_core(
     core: &mut CoreExecution,
     method: &str,
-    input_handle: Option<wasmtime::component::ResourceAny>,
+    input_handle: Option<CoreResourceHandle>,
     other_args: &[wasmos_runtime_api::Value],
     err_kind: ExecuteErrKind,
-) -> Result<
-    Result<wasmtime::component::ResourceAny, DatabaseVerbErr>,
-    wasmos_runtime_api::RuntimeError,
-> {
+) -> Result<Result<CoreResourceHandle, DatabaseVerbErr>, wasmos_runtime_api::RuntimeError> {
     use wasmos_runtime_api::{RuntimeError, Value};
-    use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
-        call_export_with_resources, ExportResourceTable,
-    };
-    let mut resources = ExportResourceTable::new();
     let mut args: Vec<Value> = Vec::with_capacity(1 + other_args.len());
     if let Some(handle) = input_handle {
-        args.push(resources.register(handle));
+        args.push(handle.as_value());
     }
     args.extend_from_slice(other_args);
-    let ret = call_export_with_resources(
-        core.store.as_context_mut(),
-        &core.instance,
-        Some(DATABASE_IFACE),
-        method,
-        &args,
-        &mut resources,
-    )?;
+    let ret = core
+        .sync_inst
+        .call_export(&format!("{DATABASE_IFACE}#{method}"), &args)?;
     match ret.as_slice() {
         [Value::Result(Ok(Some(payload)))] => match payload.as_ref() {
-            Value::Resource { handle_id, .. } => {
-                let ra = resources.take(*handle_id).ok_or_else(|| {
-                    RuntimeError::msg(format!(
-                        "database.{method}: bridge did not register the returned resource"
-                    ))
-                })?;
-                Ok(Ok(ra))
-            }
+            Value::Resource {
+                store_id,
+                handle_id,
+            } => Ok(Ok(CoreResourceHandle {
+                store_id: *store_id,
+                handle_id: *handle_id,
+            })),
             other => Err(RuntimeError::msg(format!(
                 "database.{method}: expected Value::Resource in Ok payload, got {other:?}"
             ))),
@@ -9825,13 +9818,10 @@ pub(crate) enum DatabaseVerbErr {
 pub(crate) fn call_database_returning_resource(
     state: &HostState,
     method: &str,
-    input_handle: Option<wasmtime::component::ResourceAny>,
+    input_handle: Option<CoreResourceHandle>,
     other_args: &[wasmos_runtime_api::Value],
     err_kind: ExecuteErrKind,
-) -> Result<
-    Result<wasmtime::component::ResourceAny, DatabaseVerbErr>,
-    wasmos_runtime_api::RuntimeError,
-> {
+) -> Result<Result<CoreResourceHandle, DatabaseVerbErr>, wasmos_runtime_api::RuntimeError> {
     state.with_core(|core| {
         call_database_returning_resource_on_core(core, method, input_handle, other_args, err_kind)
     })
@@ -9842,7 +9832,7 @@ pub(crate) fn call_database_returning_resource(
 /// holds a locked [`CoreExecution`].
 pub(crate) fn call_database_execute_on_core(
     core: &mut CoreExecution,
-    conn_handle: wasmtime::component::ResourceAny,
+    conn_handle: CoreResourceHandle,
     sql: &str,
 ) -> Result<Result<cli_native::QueryResult, cli_native::Duckerror>, wasmos_runtime_api::RuntimeError>
 {
@@ -9887,7 +9877,7 @@ pub(crate) fn call_export_unit_result(
     state: &HostState,
     iface: &str,
     method: &str,
-    handle: wasmtime::component::ResourceAny,
+    handle: CoreResourceHandle,
     trailing_args: &[wasmos_runtime_api::Value],
 ) -> Result<(), cli_native::Duckerror> {
     let ret = call_export_on_resource(state, iface, method, handle, trailing_args)
@@ -9903,7 +9893,7 @@ pub(crate) fn call_export_unit_result_on_core(
     core: &mut CoreExecution,
     iface: &str,
     method: &str,
-    handle: wasmtime::component::ResourceAny,
+    handle: CoreResourceHandle,
     trailing_args: &[wasmos_runtime_api::Value],
 ) -> Result<(), cli_native::Duckerror> {
     let ret = call_export_on_resource_core(core, iface, method, handle, trailing_args)
@@ -9947,7 +9937,7 @@ pub(crate) fn call_export_no_return(
     state: &HostState,
     iface: &str,
     method: &str,
-    handle: wasmtime::component::ResourceAny,
+    handle: CoreResourceHandle,
     trailing_args: &[wasmos_runtime_api::Value],
 ) -> Result<(), wasmos_runtime_api::RuntimeError> {
     use wasmos_runtime_api::RuntimeError;
@@ -9972,7 +9962,7 @@ pub(crate) fn call_export_no_return(
 /// subsequent calls.
 pub(crate) fn call_database_execute(
     state: &HostState,
-    conn_handle: wasmtime::component::ResourceAny,
+    conn_handle: CoreResourceHandle,
     sql: &str,
 ) -> Result<Result<cli_native::QueryResult, cli_native::Duckerror>, wasmos_runtime_api::RuntimeError>
 {
@@ -10501,21 +10491,23 @@ unsafe fn primary_nested_exec(
     sql: &str,
 ) -> Result<NestedExecResult, String> {
     use wasmos_runtime_api::Value;
-    use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
-        call_export_with_resources, ExportResourceTable,
-    };
-    let instance = unsafe { &*reentry.instance };
-    let store: &mut Store<CoreStoreState> = unsafe { &mut *reentry.store };
-    let mut resources = ExportResourceTable::new();
-    let conn_val = resources.register(reentry.connection);
-    let ret = call_export_with_resources(
-        store.as_context_mut(),
-        instance,
-        Some(DATABASE_IFACE),
-        "execute",
-        &[conn_val, Value::String(sql.to_string())],
-        &mut resources,
-    )
+    // Path B Slice 3: cross-instance reentry via wasmos's
+    // wasmos-native dispatch surface. No wasmtime types.
+    let mut handle = reentry.handle;
+    // SAFETY: The core SyncInstance is quiescent from this
+    // reentry's perspective — the outer call is running on TARGET
+    // (extension SyncInstance), not SOURCE (core). Same OS thread
+    // guaranteed by wasmtime's sync callback dispatch. See
+    // `SyncCrossInstanceHandle::call_export_via_store` safety block.
+    let ret = unsafe {
+        handle.call_export_via_store(
+            &format!("{DATABASE_IFACE}#execute"),
+            &[
+                reentry.connection.as_value(),
+                Value::String(sql.to_string()),
+            ],
+        )
+    }
     .map_err(|trap| format!("nested-exec: primary call_execute trapped: {trap}"))?;
     match ret.as_slice() {
         [Value::Result(Ok(Some(payload)))] => match value_to_query_result(payload.as_ref()) {
@@ -10747,7 +10739,7 @@ fn component_imports_query(engine: &Engine, component: &Component) -> bool {
 
 fn run_query_on_core(
     mut core: std::sync::MutexGuard<'_, CoreExecution>,
-    current_connection: &Arc<Mutex<Option<ResourceAny>>>,
+    current_connection: &Arc<Mutex<Option<CoreResourceHandle>>>,
     sql: &str,
 ) -> Result<Vec<Vec<String>>, String> {
     let handle = current_connection
@@ -10790,69 +10782,44 @@ fn instantiate_core(
     wasi_env: wasmos_runtime_api::WasiEnvironment,
     extension_manager: Arc<Mutex<ExtensionManager>>,
 ) -> Result<CoreExecution> {
-    let component = load_component(engine, component_path).with_context(|| {
+    // Path B closure Slice 3: wasmos-native construction. The
+    // wasmtime engine that ducklink's build_engine() produces is
+    // wrapped via WasmtimeV48Runtime::from_engine + SyncRuntime::
+    // from_runtime so we reuse ducklink's engine config while
+    // switching dispatch to the wasmos-native path.
+    let bytes = std::fs::read(component_path).with_context(|| {
         format!(
-            "failed to load core component at {}",
+            "failed to read core component at {}",
             component_path.display()
         )
     })?;
-    let mut linker = Linker::<CoreStoreState>::new(engine);
-    p2::add_to_linker_sync(&mut linker)?;
-    add_wasi_http_to_linker(&mut linker)?;
-    // Phase 2 (@5): the 8 `*-host` linker registrations
-    // (storage / index / collation / pragma / parser / optimizer / files /
-    // table-stream) are DELETED. Those imports no longer exist on the core
-    // world -- their capabilities lift to the host's SQL-level ATTACH intercept
-    // and write intercept (see HostState::execute). See ADR Decision 3.
-    // Phase 2e wedges — ALL FIVE core-world host imports now route
-    // through the escape-hatch bridge:
-    //   * tvm:memory/{bytes,manager}
-    //   * duckdb:component/{host-extension-loader,extension-loader-hooks}
-    //   * duckdb:extension/callback-dispatch (last one, this wedge)
-    // See [`TvmBytesHost`] + [`TvmManagerHost`] +
-    // [`CoreHostExtensionLoaderHost`] + [`ExtensionLoaderHooksHost`] +
-    // [`CallbackDispatchHost`]. The bridge introspects the
-    // component's imports at install-time, so `component` must
-    // already be loaded (it is — see `Component::from_file`
-    // above). No bindgen `add_to_linker` calls left on the core
-    // world's host imports; only guest export sites still touch
-    // the bindgen typed accessors.
-    for (iface, handler) in [
-        (
-            TVM_BYTES_IFACE,
-            std::sync::Arc::new(TvmBytesHost)
-                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
-        ),
-        (
-            TVM_MANAGER_IFACE,
-            std::sync::Arc::new(TvmManagerHost)
-                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
-        ),
-        (
-            HOST_EXTENSION_LOADER_IFACE,
-            std::sync::Arc::new(CoreHostExtensionLoaderHost)
-                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
-        ),
-        (
-            EXTENSION_LOADER_HOOKS_IFACE,
-            std::sync::Arc::new(ExtensionLoaderHooksHost)
-                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
-        ),
-        (
-            CALLBACK_DISPATCH_IFACE,
-            std::sync::Arc::new(CallbackDispatchHost)
-                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
-        ),
-    ] {
-        wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call::<CoreStoreState>(
-            engine,
-            &mut linker,
-            &component,
-            iface,
-            handler,
+    let inner_rt = wasmos_runtime_wasmtime_v48::WasmtimeV48Runtime::from_engine(
+        engine.clone(),
+        wasmos_runtime_api::RuntimeConfig::default(),
+    )
+    .map_err(|e| anyhow::anyhow!("build WasmtimeV48Runtime: {e:?}"))?;
+    let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::from_runtime(inner_rt)
+        .map_err(|e| anyhow::anyhow!("build SyncRuntime: {e:?}"))?;
+    let compiled = sync_rt
+        .compile_component(
+            wasmos_runtime_api::ComponentSource::Bytes {
+                bytes: bytes.into(),
+                name: Some(component_path.display().to_string()),
+            },
+            wasmos_runtime_api::CompileOptions::default(),
         )
-        .map_err(|e| anyhow::anyhow!("wire {iface} host: {e}"))?;
-    }
+        .map_err(|e| anyhow::anyhow!("compile core component: {e:?}"))?;
+
+    // All five core-world host imports registered through the
+    // wasmos-native surface. Handlers downcast their ctx.consumer_state
+    // to CoreInnerState directly (see the 16 handler sites migrated
+    // in step 6 of the execution guide).
+    let imports = wasmos_runtime_api::HostImports::new()
+        .register_sync(TVM_BYTES_IFACE, TvmBytesHost)
+        .register_sync(TVM_MANAGER_IFACE, TvmManagerHost)
+        .register_sync(HOST_EXTENSION_LOADER_IFACE, CoreHostExtensionLoaderHost)
+        .register_sync(EXTENSION_LOADER_HOOKS_IFACE, ExtensionLoaderHooksHost)
+        .register_sync(CALLBACK_DISPATCH_IFACE, CallbackDispatchHost);
 
     // Phase 4 follow-up (FU4): defaults — a primary caller wires the
     // shared archive via `CoreExecution::attach_replay_archive(archive,
@@ -10860,28 +10827,22 @@ fn instantiate_core(
     // does the same with `is_sibling = true` on the sibling store.
     // Test paths that never wire a SiblingState keep both defaults,
     // reproducing the pre-FU4 behaviour (plain drain, no archive).
-    let core_state = wasmos_runtime_wasmtime_v48::SyncStoreState::new(
-        Some(&wasi_env),
-        CoreInnerState {
-            extension_manager,
-            tvm: tvm_core::RegionDirectory::new(),
-            tvm_slots: std::collections::HashMap::new(),
-            replay_archive: None,
-            is_sibling: false,
-        },
-    )
-    .map_err(|e| anyhow::anyhow!("build SyncStoreState: {e:?}"))?;
-    let mut store = Store::new(engine, core_state);
+    let inner_state = CoreInnerState {
+        extension_manager,
+        tvm: tvm_core::RegionDirectory::new(),
+        tvm_slots: std::collections::HashMap::new(),
+        replay_archive: None,
+        is_sibling: false,
+    };
 
-    // Phase 2e wedge #9 (2026-09-17): retired the bindgen-typed
-    // Libduckdb wrapper alongside the guest-export accessors. Every
-    // guest-export dispatch now goes through
-    // `sync_export_bridge::call_export_with_resources` on the raw
-    // Instance. `pre.instantiate(store)` returns the Instance we
-    // keep on CoreExecution.
-    let instance_pre = linker.instantiate_pre(&component)?;
-    let instance = instance_pre.instantiate(store.as_context_mut())?;
-    Ok(CoreExecution { store, instance })
+    let ctx = wasmos_runtime_api::ExecutionContext::new()
+        .with_wasi(wasi_env)
+        .with_host_imports(imports)
+        .with_consumer_state(inner_state);
+    let sync_inst = sync_rt
+        .instantiate(&compiled, ctx)
+        .map_err(|e| anyhow::anyhow!("instantiate core: {e:?}"))?;
+    Ok(CoreExecution { sync_inst })
 }
 
 /// Trust gate for precompiled `.cwasm` files.
@@ -11110,7 +11071,7 @@ pub fn build_engine_for_driver() -> Result<Engine> {
 /// side-tables.
 pub(crate) struct DriverCoreState {
     core: Arc<Mutex<CoreExecution>>,
-    connection: wasmtime::component::ResourceAny,
+    connection: CoreResourceHandle,
     // Kept alive so the extension registry stays valid across calls.
     _extension_manager: Arc<Mutex<ExtensionManager>>,
 }
@@ -15488,18 +15449,18 @@ mod tests {
         // when no outer call is in flight, so this test isolates the
         // dispatch mechanism (guard set -> primary path) from the wasmtime
         // reentrancy question (already answered by `reentrancy_poc.rs`).
-        let (store_ptr, instance_ptr) = {
+        let handle = {
             let mut c = primary_core.lock().unwrap();
-            let store_ptr: *mut Store<CoreStoreState> = &mut c.store;
-            let instance_ptr: *const wasmtime::component::Instance = &c.instance;
-            (store_ptr, instance_ptr)
+            // SAFETY: primary_core is quiescent (no outer call in flight);
+            // the returned SyncCrossInstanceHandle is used single-threaded
+            // through PrimaryReentryGuard::set below.
+            unsafe { c.sync_inst.cross_instance_reentry_handle() }
         };
 
         // CREATE TABLE on the primary via nested_exec.
         {
             let _guard = PrimaryReentryGuard::set(PrimaryReentry {
-                store: store_ptr,
-                instance: instance_ptr,
+                handle,
                 connection: primary_conn,
             });
             services
@@ -15633,8 +15594,16 @@ mod tests {
         let slot = slot_guard
             .as_ref()
             .expect("sibling slot populated after nested_exec");
-        let sibling_core_guard = slot.core.lock().unwrap_or_else(|e| e.into_inner());
-        let sibling_mgr = &sibling_core_guard.store.data().consumer.extension_manager;
+        let mut sibling_core_guard = slot.core.lock().unwrap_or_else(|e| e.into_inner());
+        let any = sibling_core_guard
+            .sync_inst
+            .consumer_state_mut()
+            .expect("sibling CoreExecution has consumer_state");
+        let data = any
+            .downcast_mut::<CoreInnerState>()
+            .expect("sibling consumer_state is CoreInnerState");
+        let sibling_mgr = data.extension_manager.clone();
+        let sibling_mgr = &sibling_mgr;
         assert!(
             Arc::ptr_eq(sibling_mgr, &primary_mgr),
             "sibling CoreStoreState.extension_manager must be Arc-identical to primary's \
@@ -15775,10 +15744,16 @@ mod tests {
         // `CoreStoreState::drain_pending_registrations_for_replay`.
         {
             let mut c = primary_core.lock().unwrap();
-            let data: &mut CoreStoreState = c.store.data_mut();
+            let any = c
+                .sync_inst
+                .consumer_state_mut()
+                .expect("primary CoreExecution has consumer_state");
+            let data = any
+                .downcast_mut::<CoreInnerState>()
+                .expect("primary consumer_state is CoreInnerState");
             assert!(
                 data.replay_archive_is_some(),
-                "primary CoreStoreState must have `replay_archive = Some(...)` \
+                "primary CoreInnerState must have `replay_archive = Some(...)` \
                  after `attach_replay_archive` — FU4 wiring"
             );
             let _returned = data.drain_pending_registrations_for_replay();
@@ -15825,18 +15800,23 @@ mod tests {
             let slot = slot_guard
                 .as_ref()
                 .expect("sibling slot populated after nested_exec");
-            let sibling_core_guard = slot.core.lock().unwrap_or_else(|e| e.into_inner());
-            let data = sibling_core_guard.store.data();
+            let mut sibling_core_guard = slot.core.lock().unwrap_or_else(|e| e.into_inner());
+            let any = sibling_core_guard
+                .sync_inst
+                .consumer_state_mut()
+                .expect("sibling CoreExecution has consumer_state");
+            let data = any
+                .downcast_mut::<CoreInnerState>()
+                .expect("sibling consumer_state is CoreInnerState");
             assert!(
                 data.is_sibling(),
-                "sibling CoreStoreState must have `is_sibling = true` \
+                "sibling CoreInnerState must have `is_sibling = true` \
                  after `attach_replay_archive(_, true)` — FU4 wiring"
             );
             let archive = data
-                .consumer
                 .replay_archive
                 .as_ref()
-                .expect("sibling CoreStoreState must have `replay_archive = Some(...)`");
+                .expect("sibling CoreInnerState must have `replay_archive = Some(...)`");
             assert!(
                 Arc::ptr_eq(archive, &sibling.replay_archive),
                 "sibling's replay_archive must be Arc-identical to \
@@ -15852,7 +15832,13 @@ mod tests {
             let slot_guard = sibling.slot.lock().unwrap_or_else(|e| e.into_inner());
             let slot = slot_guard.as_ref().unwrap();
             let mut sibling_core = slot.core.lock().unwrap_or_else(|e| e.into_inner());
-            let data: &mut CoreStoreState = sibling_core.store.data_mut();
+            let any = sibling_core
+                .sync_inst
+                .consumer_state_mut()
+                .expect("sibling CoreExecution has consumer_state");
+            let data = any
+                .downcast_mut::<CoreInnerState>()
+                .expect("sibling consumer_state is CoreInnerState");
             let served = data.drain_pending_registrations_for_replay();
             let scalar_names: Vec<String> =
                 served.scalars.iter().map(|s| s.name.to_string()).collect();

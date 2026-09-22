@@ -23,7 +23,7 @@
 //!
 //! `DotcmdState`'s fields are already `Arc<Mutex<...>>` shared
 //! handles (`core: Arc<Mutex<CoreExecution>>` +
-//! `current_connection: Arc<Mutex<Option<ResourceAny>>>`), so the
+//! `current_connection: Arc<Mutex<Option<crate::CoreResourceHandle>>>`), so the
 //! wasmos-native handler captures them individually — no wrap-the-
 //! whole-state pattern needed. This is cleaner than the
 //! `SharedExtensionState = Arc<Mutex<ExtensionStoreState>>` pattern
@@ -68,14 +68,14 @@ use crate::{spi_edit, CoreExecution};
 #[derive(Clone)]
 pub struct SpiHost {
     core: Arc<Mutex<CoreExecution>>,
-    current_connection: Arc<Mutex<Option<ResourceAny>>>,
+    current_connection: Arc<Mutex<Option<crate::CoreResourceHandle>>>,
 }
 
 impl SpiHost {
     /// Construct a new `SpiHost` capturing the two shared handles.
     pub fn new(
         core: Arc<Mutex<CoreExecution>>,
-        current_connection: Arc<Mutex<Option<ResourceAny>>>,
+        current_connection: Arc<Mutex<Option<crate::CoreResourceHandle>>>,
     ) -> Self {
         Self {
             core,
@@ -148,7 +148,7 @@ impl SpiHost {
 pub fn install_spi_imports(
     imports: HostImports,
     core: Arc<Mutex<CoreExecution>>,
-    current_connection: Arc<Mutex<Option<ResourceAny>>>,
+    current_connection: Arc<Mutex<Option<crate::CoreResourceHandle>>>,
 ) -> HostImports {
     let host = SpiHost::new(core, current_connection);
     imports.register(
