@@ -250,47 +250,42 @@ exactly why Slice 2 landed as prep.
 
 ### 7. `CoreResourceHandle` migration (~line 2901)
 
-**Constraint:** `SyncCrossInstanceHandle::call_export_sync` uses
-`ExportResourceTable` internally, which stores
-`wasmtime::component::ResourceAny`. The bridge is currently the
-only supported path for cross-instance dispatch.
-
-For **in-instance** dispatch through `sync_inst.call_export`,
-resources are `Value::Resource { store_id, handle_id }` — no
-wasmtime type at the surface.
-
-**Recommended shape:**
+Gap closed by wasmos `daeaed79`. Adopt the single-field
+wasmos-native shape:
 
 ```rust
 // AFTER
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct CoreResourceHandle {
-    // Wasmos-native reference — used for in-instance dispatch
-    // via sync_inst.call_export.
-    pub(crate) value: wasmos_runtime_api::Value, // Value::Resource
-    // Wasmtime-typed handle — used for cross-instance dispatch
-    // through SyncCrossInstanceHandle + ExportResourceTable.
-    // Populated from the store's resource table when the
-    // resource is minted; kept alongside the wasmos value form.
-    //
-    // NOTE: this field re-exposes wasmtime::ResourceAny inside
-    // ducklink. Its retirement is a future Slice (potentially a
-    // wasmos-side extension to SyncCrossInstanceHandle that
-    // accepts Value::Resource directly). Documented as a known
-    // partial-retirement gap.
-    pub(crate) raw: wasmtime::component::ResourceAny,
+    pub(crate) store_id: u64,
+    pub(crate) handle_id: u64,
+}
+
+impl CoreResourceHandle {
+    pub(crate) fn as_value(self) -> wasmos_runtime_api::Value {
+        wasmos_runtime_api::Value::Resource {
+            store_id: self.store_id,
+            handle_id: self.handle_id,
+        }
+    }
+
+    pub(crate) fn from_value(v: &wasmos_runtime_api::Value)
+        -> Option<Self>
+    {
+        match v {
+            wasmos_runtime_api::Value::Resource { store_id, handle_id } => {
+                Some(Self { store_id: *store_id, handle_id: *handle_id })
+            }
+            _ => None,
+        }
+    }
 }
 ```
 
-**Alternate approach — verify before adopting:** if wasmos's
-internal `AdapterHostState.peek_resource(store_id, handle_id)`
-returns the underlying `ResourceAny` on demand, ducklink could
-store ONLY the Value::Resource shape and derive the wasmtime type
-via a wasmos accessor when needed for cross-instance dispatch.
-Check `runtime/wasmtime/v48/src/host_state.rs::AdapterHostState`
-for `peek_resource` visibility. If it's crate-private, either
-export it publicly (small wasmos-side change, one commit) or
-adopt the dual-field shape above.
+No `wasmtime::component::ResourceAny` field. Consumers hold
+`CoreResourceHandle`, convert to `Value::Resource` at dispatch
+time (both in-instance and cross-instance paths accept the
+wasmos-native shape).
 
 ### 8. `primary_nested_exec` rewire (~line 10499)
 
@@ -322,19 +317,17 @@ unsafe fn primary_nested_exec(
     // ...
 }
 
-// AFTER
+// AFTER — no wasmtime types anywhere
 #[derive(Clone, Copy)]
 struct PrimaryReentry {
     handle: SyncCrossInstanceHandle,
-    connection: wasmtime::component::ResourceAny, // still wasmtime — see step 7
+    connection: CoreResourceHandle,
 }
 
 unsafe fn primary_nested_exec(
     reentry: PrimaryReentry,
     sql: &str,
 ) -> Result<NestedExecResult, String> {
-    let mut resources = ExportResourceTable::new();
-    let conn_val = resources.register(reentry.connection);
     let mut handle = reentry.handle;
     // SAFETY: HostState::execute installs this reentry via
     // PrimaryReentryGuard::set immediately before the outer
@@ -343,11 +336,9 @@ unsafe fn primary_nested_exec(
     // = extension SyncInstance, not source = core). Same OS
     // thread guaranteed by wasmtime's sync callback dispatch.
     let ret = unsafe {
-        handle.call_export_sync(
-            Some(DATABASE_IFACE),
-            "execute",
-            &[conn_val, Value::String(sql.to_string())],
-            &mut resources,
+        handle.call_export_via_store(
+            &format!("{DATABASE_IFACE}#execute"),
+            &[reentry.connection.as_value(), Value::String(sql.to_string())],
         )
     }
     .map_err(|e| format!("nested-exec: primary call_execute trapped: {e}"))?;
@@ -505,27 +496,28 @@ Path B closure — Slices 2+3+4.5 (SyncStoreState wrap retirement)
 and Phase 6 (Cargo dep drop) remain as follow-up cleanup.
 ```
 
-## Known partial-retirement gaps
+## Known partial-retirement gaps — ALL CLOSED (2026-09-22)
 
-1. `PrimaryReentry.connection: wasmtime::component::ResourceAny`
-   — required by `SyncCrossInstanceHandle`'s reliance on
-   `ExportResourceTable`. Retiring this needs either a wasmos-side
-   extension to accept `Value::Resource` directly in
-   `SyncCrossInstanceHandle::call_export_sync`, or a ducklink-side
-   conversion via a future wasmos accessor on
-   `AdapterHostState.peek_resource`.
-2. `CoreResourceHandle` retains a wasmtime-typed field in the
-   dual-field shape (for the cross-instance dispatch path only).
-   Same underlying constraint as gap #1.
-3. ~~`resource_drop_handle` needs a wasmos-native drop primitive~~
-   **CLOSED 2026-09-22** (wasmos `9a7c61ea`). Use
-   `sync_inst.resource_drop(store_id, handle_id)`.
+All three gaps flagged at the design stage were closed with
+wasmos-side additions before Slice 3 execution began:
 
-Gaps #1 + #2 survive Slice 3 as internal uses of
-`wasmtime::component::ResourceAny` on the cross-instance dispatch
-path only. Final wasmtime dep drop (Phase 6) requires
-resolving them via a small wasmos-side extension to
-`SyncCrossInstanceHandle`.
+1. ~~`PrimaryReentry.connection: wasmtime::component::ResourceAny`~~
+   **CLOSED** (wasmos `daeaed79`). Use
+   `SyncCrossInstanceHandle::call_export_via_store(name, args)`
+   with `Value::Resource` entries in `args`; wasmos looks the
+   resource up via the source's per-instance
+   `AdapterHostState` table. `PrimaryReentry.connection` becomes
+   a plain `Value::Resource` — no wasmtime type.
+2. ~~`CoreResourceHandle` dual-field shape~~ **CLOSED** — same
+   underlying wasmos primitive. `CoreResourceHandle` wraps
+   `Value::Resource` (or `(store_id, handle_id)` fields) only.
+3. ~~`resource_drop_handle`~~ **CLOSED** (wasmos `9a7c61ea`).
+   Use `sync_inst.resource_drop(store_id, handle_id)`.
+
+**Consequence:** Slice 3 lands with **zero** internal uses of
+`wasmtime::component::ResourceAny` on the consumer surface —
+including on the cross-instance dispatch path. Phase 6's Cargo
+dep drop becomes a pure remove-the-imports mechanical change.
 
 ## Verification checklist
 
