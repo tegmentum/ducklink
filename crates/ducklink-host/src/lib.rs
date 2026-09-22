@@ -3002,14 +3002,14 @@ impl CoreExecution {
 /// [`CoreServices`] (which lazily instantiates a second [`CoreExecution`] over
 /// the same DB on first `nested_exec`).
 ///
-/// The sibling runs in its own [`wasmtime::Store`] with a fresh
+/// The sibling runs in its own wasmos-native `SyncInstance` with a fresh
 /// [`ExtensionManager`] and an idle mutex, so a `nested-exec` from inside an
 /// outer statement's callback does NOT re-enter the primary core's store or
 /// take the primary's contended mutex. See `nested-exec-direction-1-plan.md`
 /// §5.(b.1).
 ///
 /// **Phase 4 (2026-07-26).** When `extension_manager` is `Some`, the sibling's
-/// [`CoreStoreState`] is wired to the PRIMARY's [`ExtensionManager`] instead of
+/// [`CoreInnerState`] is wired to the PRIMARY's [`ExtensionManager`] instead of
 /// a fresh one — so `nested-exec` SQL run through the sibling can dispatch
 /// against the extensions the primary has loaded (their [`ExtensionInstance`]
 /// map + shared callback registry). When `None` (narrow test paths that never
@@ -10459,32 +10459,31 @@ impl ExtensionServices for CoreServices {
     }
 }
 
-/// Option (a) nested-exec: dispatch `sql` on the PRIMARY core store +
-/// the outer CLI connection using the raw pointers snapshotted by
+/// Option (a) nested-exec: dispatch `sql` on the PRIMARY core using the
+/// wasmos-native `SyncCrossInstanceHandle` snapshotted by
 /// [`PrimaryReentryGuard`] in `HostState::execute`. The write lands on
 /// the primary connection, so the outer statement's catalog + any
 /// subsequent CLI statement see it immediately.
 ///
 /// # Safety
 ///
-/// * `reentry.store` must name a live `Store<CoreStoreState>` whose
-///   `&mut` borrow is logically held by an outer `HostState::execute`
-///   frame on the same thread — set by [`PrimaryReentryGuard::set`] and
-///   cleared on drop, so a stale slot is impossible.
-/// * `reentry.bindings` must point to the [`duckdb_core_bindings::Libduckdb`]
-///   attached to the same `CoreExecution`.
-/// * `reentry.connection` must be a live [`ResourceAny`] in that store's
-///   resource table (the CLI's entry connection recorded by
+/// * `reentry.handle` must have been snapshotted from a live primary
+///   `CoreExecution.sync_inst` via
+///   `SyncInstance::cross_instance_reentry_handle`, and the underlying
+///   `SyncInstance` must still be alive at dispatch time — enforced by
+///   [`PrimaryReentryGuard::set`]'s RAII shape in `HostState::execute`.
+/// * `reentry.connection` must name a resource live in the primary
+///   core's resource table (the CLI's entry connection recorded by
 ///   `HostState::execute`).
 ///
-/// wasmtime tolerates the re-entrant `call_execute` (verified by
-/// `tests/reentrancy_poc.rs::wall2_wasmtime_permits_reentry_from_host_callback_with_caller`).
-/// The Rust `&mut Store<T>` fabricated from the raw pointer aliases the
-/// outer stack frame's `&mut StoreInner<T>` for the duration of this
-/// call, but wasmtime's internal store state is designed for this
-/// pattern (Caller/StoreContextMut is the safe surface of the same
-/// primitive; here we go around wit-bindgen's data-only adapter to reach
-/// it).
+/// Cross-instance sync reentry semantics are documented on
+/// [`wasmos_runtime_wasmtime_v48::SyncCrossInstanceHandle::call_export_via_store`]
+/// — safe when the source instance is quiescent, dispatched on the
+/// same OS thread, no aliasing borrows active on the source's store.
+/// Ducklink's HostState::execute holds all three by construction: the
+/// outer call runs on the EXTENSION SyncInstance (not the CORE), same
+/// thread guaranteed by wasmtime's sync callback dispatch, and no
+/// competing borrow on the core exists during the callback chain.
 unsafe fn primary_nested_exec(
     reentry: PrimaryReentry,
     sql: &str,
