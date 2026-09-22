@@ -792,19 +792,40 @@ can compile.
      locks the `CannotEnterComponent` trap under the default
      async config.
 
-   **Ducklink migration**: `primary_nested_exec` retirement is now
-   unblocked. Consumer surface is:
-   1. Build the runtime with `RuntimeConfig { allow_host_callback_reentry: true, .. }`
-      (or via `SyncRuntime::new(...)` with that config).
-   2. Replace `PrimaryReentryGuard` + `PRIMARY_STORE_REENTRY` TLS +
-      `unsafe fn primary_nested_exec` with a
-      `CoreStoreState.entry_connection: Option<Value>` field set
-      at `open` time.
-   3. In `nested_exec`, call
-      `ctx.reentry()?.call_export("duckdb:component/database#execute", &[conn, sql]).await`.
+   **Ducklink migration** (2026-09-21 scope revision): the
+   wasmos primitive itself is ready. The ducklink-side retirement
+   of `unsafe fn primary_nested_exec` is not a self-contained
+   refactor as first estimated. It requires a cross-crate public
+   API break in `ducklink-runtime`:
 
-   Estimated size: ~10 lines of straight-line async code replacing
-   ~80 lines of `unsafe` / TLS / RAII scaffolding.
+   - `pub trait ExtensionServices` (`extension.rs:533`) is the
+     surface extension authors implement. Its
+     `nested_exec(&mut self, sql: &str)` method has no reentry
+     context parameter.
+   - To pass a reentry handle from the callback-dispatch frame
+     down to `nested_exec` safely (without raw pointers), the
+     trait signature would need to grow a context parameter
+     like `nested_exec(&mut self, ctx: &mut ReentryCtx<'_>, sql: &str)`.
+   - Every `impl ExtensionServices` — native-DuckDB directions,
+     ducklink-host's own implementations, third-party extensions
+     using ducklink's SDK — would need to update. This is a
+     semver-major API break with ecosystem coordination cost.
+
+   **Alternative that keeps the current safety story**: `unsafe
+   fn primary_nested_exec` follows the same pattern wasmtime
+   itself uses for host-callback reentry (see the
+   `wall2_wasmtime_permits_reentry_from_host_callback_with_caller`
+   POC test that ducklink already ships in
+   `tests/reentrancy_poc.rs`). The `unsafe` block carries a
+   strict SAFETY invariant tied to wasmtime's internal store
+   aliasing tolerance. It is a defensible pattern; retirement
+   is a preference, not a soundness bug.
+
+   **Original size estimate revised**: "~10 lines replacing ~80"
+   applies to the LOCAL retirement at the primary_nested_exec
+   site. The infrastructure changes needed to safely thread
+   reentry context through the ExtensionServices trait are
+   1-2 weeks of ecosystem-coordinated work, not local surgery.
 
 **Blocked-on-wasmos work:**
 
