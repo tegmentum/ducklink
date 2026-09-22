@@ -3094,6 +3094,47 @@ impl ExtensionInstance {
         Self { store, instance }
     }
 
+    /// Path B follow-up #2 step 3 (2026-09-22) — the single funnel
+    /// through which every `dispatch_*` / capability re-entry method
+    /// in this `impl` block reaches the guest. Wraps the wasmos
+    /// `sync_export_bridge::call_export` bridge so the store +
+    /// instance escape hatch (`self.store.as_context_mut()` + `&self.instance`)
+    /// lives in exactly one place. The upcoming step 6 flip retires
+    /// the wasmtime `Store` + `Instance` fields for a SyncInstance;
+    /// only this method and `with_inner_state` change then, not the
+    /// 65+ dispatch call sites.
+    ///
+    /// Mirrors ducklink `fd879cc` (`CoreExecution::call_bridge_export`).
+    fn call_bridge_export(
+        &mut self,
+        iface: Option<&str>,
+        method: &str,
+        args: &[wasmos_runtime_api::Value],
+    ) -> Result<Vec<wasmos_runtime_api::Value>, wasmos_runtime_api::RuntimeError> {
+        wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
+            self.store.as_context_mut(),
+            &self.instance,
+            iface,
+            method,
+            args,
+        )
+    }
+
+    /// Path B follow-up #2 step 3 (2026-09-22) — encapsulates the
+    /// `let mut ctx = self.store.as_context_mut(); (*ctx.data_mut()).consumer`
+    /// escape hatch that the `drain_pending` / `take_pending_*`
+    /// drainers reach for. Same funnel role as `call_bridge_export`
+    /// — the step 6 SyncInstance flip changes only this method, not
+    /// the 21 drain call sites. The `unsafe` deref is preserved
+    /// verbatim so borrow-checker semantics don't shift between
+    /// today's `ctx.data_mut()` reborrow and tomorrow's SyncInstance
+    /// state accessor.
+    fn with_inner_state<R>(&mut self, f: impl FnOnce(&mut ExtensionInnerState) -> R) -> R {
+        let mut ctx = self.store.as_context_mut();
+        let data: *mut ExtensionStoreState = ctx.data_mut();
+        unsafe { f(&mut (*data).consumer) }
+    }
+
     pub fn dispatch_scalar(
         &mut self,
         dispatcher_handle: u32,
@@ -3116,9 +3157,7 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::Bool(ctx.iswindow),
             ),
         ]);
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/callback-dispatch@5.0.0"),
             "call-scalar",
             &[
@@ -3174,9 +3213,7 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::Bool(ctx.iswindow),
             ),
         ]);
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/callback-dispatch@5.0.0"),
             "call-scalar-batch-col",
             &[
@@ -3201,9 +3238,7 @@ impl ExtensionInstance {
     ) -> Result<Resultset, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/callback-dispatch@5.0.0"),
             "call-table",
             &[
@@ -3238,9 +3273,7 @@ impl ExtensionInstance {
     ) -> Result<Duckvalue, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/callback-dispatch@5.0.0"),
             "call-aggregate-col",
             &[
@@ -3265,9 +3298,7 @@ impl ExtensionInstance {
         // Phase 6.2.i.7 — migrated. Returns result<option<duckvalue>,
         // duckerror>.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/callback-dispatch@5.0.0"),
             "call-pragma",
             &[
@@ -3295,9 +3326,7 @@ impl ExtensionInstance {
         // value via colvec_to_values.
         use crate::export_marshal::*;
         let arg = column_from_values(&[value]);
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/callback-dispatch@5.0.0"),
             "call-cast-col",
             &[
@@ -3319,9 +3348,7 @@ impl ExtensionInstance {
     }
 
     pub fn drain_pending(&mut self) -> PendingRegistrationsData {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.drain_pending() }
+        self.with_inner_state(|s| s.drain_pending())
     }
 
     /// Drive the component's `guest.shutdown` export. The C API installer in
@@ -3337,9 +3364,7 @@ impl ExtensionInstance {
         // names + wire semantics; the Ok payload is `bool` and the
         // Err payload is `duckerror` (decoded via export_result_to_
         // duckerror + duckerror_from_value).
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/guest@5.0.0"),
             "shutdown",
             &[],
@@ -3369,9 +3394,7 @@ impl ExtensionInstance {
                 .map(|k| wasmos_runtime_api::Value::String(k.clone()))
                 .collect(),
         );
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/guest@5.0.0"),
             "reconfigure",
             &[keys_val],
@@ -3391,145 +3414,107 @@ impl ExtensionInstance {
     /// Drains only the captured storage-backend registrations (see
     /// `ExtensionStoreState::take_pending_storages`).
     pub fn take_pending_storages(&mut self) -> Vec<crate::reg::StorageReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_storages() }
+        self.with_inner_state(|s| s.take_pending_storages())
     }
 
     /// Item 3 / M2a: drains the captured custom-index TYPE registrations (see
     /// `ExtensionStoreState::take_pending_indexes`).
     pub fn take_pending_indexes(&mut self) -> Vec<crate::reg::IndexReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_indexes() }
+        self.with_inner_state(|s| s.take_pending_indexes())
     }
 
     /// httpfs M2: drains the captured files-backend registrations (see
     /// `ExtensionStoreState::take_pending_files`).
     pub fn take_pending_files(&mut self) -> Vec<crate::reg::FilesReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_files() }
+        self.with_inner_state(|s| s.take_pending_files())
     }
 
     /// Item 2: drains the captured collation registrations (see
     /// `ExtensionStoreState::take_pending_collations`).
     pub fn take_pending_collations(&mut self) -> Vec<crate::reg::CollationReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_collations() }
+        self.with_inner_state(|s| s.take_pending_collations())
     }
 
     /// Item 4: drains the captured pragma registrations (see
     /// `ExtensionStoreState::take_pending_pragmas`).
     pub fn take_pending_pragmas(&mut self) -> Vec<crate::reg::PragmaReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_pragmas() }
+        self.with_inner_state(|s| s.take_pending_pragmas())
     }
 
     // --- 2.1.0 additive drains (mirror take_pending_pragmas) ---
 
     /// 2.1.0 (Item 1): drains the captured COPY-handler registrations.
     pub fn take_pending_copy_handlers(&mut self) -> Vec<crate::reg::CopyHandlerReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_copy_handlers() }
+        self.with_inner_state(|s| s.take_pending_copy_handlers())
     }
 
     /// 2.1.0 (Item 2): drains the captured secret type/provider registrations.
     pub fn take_pending_secrets(&mut self) -> Vec<crate::reg::SecretReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_secrets() }
+        self.with_inner_state(|s| s.take_pending_secrets())
     }
 
     /// 2.1.0 (Item 3): drains the captured option/settings registrations.
     pub fn take_pending_settings(&mut self) -> Vec<crate::reg::SettingReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_settings() }
+        self.with_inner_state(|s| s.take_pending_settings())
     }
 
     /// 2.1.0 (Item 5): drains the captured table-macro registrations.
     pub fn take_pending_table_macros(&mut self) -> Vec<crate::reg::TableMacroReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_table_macros() }
+        self.with_inner_state(|s| s.take_pending_table_macros())
     }
 
     /// 2.1.0 (Item 5): drains the captured modified-logical-type registrations.
     pub fn take_pending_modified_types(&mut self) -> Vec<crate::reg::ModifiedTypeReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_modified_types() }
+        self.with_inner_state(|s| s.take_pending_modified_types())
     }
 
     /// 2.1.0 (Item 5): drains the captured ENUM-type registrations.
     pub fn take_pending_enum_types(&mut self) -> Vec<crate::reg::EnumTypeReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_enum_types() }
+        self.with_inner_state(|s| s.take_pending_enum_types())
     }
 
     // --- 2.2.0 additive drains (Items 6-7; mirror the 2.1.0 drains) ---
 
     /// 2.2.0 (Item 6): drains the captured richer scalar (scalar-ex) registrations.
     pub fn take_pending_scalar_ex(&mut self) -> Vec<crate::reg::ScalarExReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_scalar_ex() }
+        self.with_inner_state(|s| s.take_pending_scalar_ex())
     }
 
     /// 2.2.0 (Item 7): drains the captured connection-lifecycle subscriptions.
     pub fn take_pending_conn_callbacks(&mut self) -> Vec<crate::reg::ConnCallbackReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_conn_callbacks() }
+        self.with_inner_state(|s| s.take_pending_conn_callbacks())
     }
 
     /// 2.2.0 (Item 7): drains the captured coordinate-system (CRS) registrations.
     pub fn take_pending_coordinate_systems(&mut self) -> Vec<crate::reg::CoordinateSystemReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_coordinate_systems() }
+        self.with_inner_state(|s| s.take_pending_coordinate_systems())
     }
 
     /// 2.2.0 (Item 7): drains the captured Arrow-table-producer registrations.
     pub fn take_pending_arrow_tables(&mut self) -> Vec<crate::reg::ArrowTableReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_arrow_tables() }
+        self.with_inner_state(|s| s.take_pending_arrow_tables())
     }
 
     /// 2.2.0 (Item 7): drains the captured text-encoding registrations.
     pub fn take_pending_encodings(&mut self) -> Vec<crate::reg::EncodingReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_encodings() }
+        self.with_inner_state(|s| s.take_pending_encodings())
     }
 
     /// 2.2.0 (Item 7): drains the captured compression-codec registrations.
     pub fn take_pending_compressions(&mut self) -> Vec<crate::reg::CompressionReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_compressions() }
+        self.with_inner_state(|s| s.take_pending_compressions())
     }
 
     /// 2.3.0 / v3: drains the captured parser-extension registrations. The core
     /// shim wires each into a DuckDB `ParserExtension`.
     pub fn take_pending_parsers(&mut self) -> Vec<crate::reg::ParserReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_parsers() }
+        self.with_inner_state(|s| s.take_pending_parsers())
     }
 
     /// 2.3.0 / v3: drains the captured optimizer-rule registrations. The core shim
     /// wires each into a DuckDB `OptimizerExtension`.
     pub fn take_pending_optimizers(&mut self) -> Vec<crate::reg::OptimizerReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_optimizers() }
+        self.with_inner_state(|s| s.take_pending_optimizers())
     }
 
     /// 3.1.0: drains the captured streaming/filter-pushdown table-fn registrations
@@ -3537,9 +3522,7 @@ impl ExtensionInstance {
     /// wires each into a C++ streaming `TableFunction` with `filter_pushdown = true`
     /// that drives the component's `table-stream-dispatch.call-table-open-filtered`.
     pub fn take_pending_filterable_tables(&mut self) -> Vec<crate::reg::FilterableTableReg> {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).consumer.take_pending_filterable_tables() }
+        self.with_inner_state(|s| s.take_pending_filterable_tables())
     }
 
     // --- 2.1.0 (Item 1): copy-dispatch re-entry ---
@@ -3568,9 +3551,7 @@ impl ExtensionInstance {
                 })
                 .collect(),
         );
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/copy-dispatch@5.0.0"),
             "copy-to-bind",
             &[
@@ -3598,9 +3579,7 @@ impl ExtensionInstance {
                 .map(|row| duckvalue_list_to_value(row))
                 .collect(),
         );
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/copy-dispatch@5.0.0"),
             "copy-to-sink",
             &[
@@ -3617,9 +3596,7 @@ impl ExtensionInstance {
     pub fn copy_to_finalize(&mut self, handle: u32, writer: u32) -> Result<u64, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/copy-dispatch@5.0.0"),
             "copy-to-finalize",
             &[
@@ -3663,9 +3640,7 @@ impl ExtensionInstance {
                 })
                 .collect(),
         );
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/copy-dispatch@5.0.0"),
             "copy-from-bind",
             &[
@@ -3697,9 +3672,7 @@ impl ExtensionInstance {
     ) -> Result<Vec<Vec<Duckvalue>>, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/copy-dispatch@5.0.0"),
             "copy-from-scan",
             &[
@@ -3721,9 +3694,7 @@ impl ExtensionInstance {
     pub fn copy_from_close(&mut self, handle: u32, reader: u32) -> Result<bool, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/copy-dispatch@5.0.0"),
             "copy-from-close",
             &[
@@ -3762,9 +3733,7 @@ impl ExtensionInstance {
             ])
         };
         let params_val = wasmos_runtime_api::Value::List(params.iter().map(kv_to_val).collect());
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/secret-dispatch@5.0.0"),
             "create-secret",
             &[
@@ -3808,9 +3777,7 @@ impl ExtensionInstance {
     ) -> Result<u32, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/storage-write-dispatch@5.0.0"),
             "begin-transaction",
             &[
@@ -3825,9 +3792,7 @@ impl ExtensionInstance {
     pub fn storage_commit_transaction(&mut self, handle: u32, txn: u32) -> Result<(), Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/storage-write-dispatch@5.0.0"),
             "commit-transaction",
             &[
@@ -3842,9 +3807,7 @@ impl ExtensionInstance {
     pub fn storage_rollback_transaction(&mut self, handle: u32, txn: u32) -> Result<(), Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/storage-write-dispatch@5.0.0"),
             "rollback-transaction",
             &[
@@ -3866,9 +3829,7 @@ impl ExtensionInstance {
         // Phase 6.2.i.7 — migrated. columns: list<columndef> where
         // columndef = record { name: string, logical: logicaltype }.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/storage-write-dispatch@5.0.0"),
             "create-table",
             &[
@@ -3896,9 +3857,7 @@ impl ExtensionInstance {
                 .map(|row| duckvalue_list_to_value(row))
                 .collect(),
         );
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/storage-write-dispatch@5.0.0"),
             "insert-rows",
             &[
@@ -3921,9 +3880,7 @@ impl ExtensionInstance {
     ) -> Result<u64, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/storage-write-dispatch@5.0.0"),
             "delete-rows",
             &[
@@ -3952,9 +3909,7 @@ impl ExtensionInstance {
                 .map(|row| duckvalue_list_to_value(row))
                 .collect(),
         );
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/storage-write-dispatch@5.0.0"),
             "update-rows",
             &[
@@ -3983,9 +3938,7 @@ impl ExtensionInstance {
     pub fn storage_writes_persist_directly(&mut self, handle: u32) -> Result<bool, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/storage-write-dispatch@5.0.0"),
             "writes-persist-directly",
             &[wasmos_runtime_api::Value::U32(handle)],
@@ -4012,9 +3965,7 @@ impl ExtensionInstance {
         // Phase 6.2.i.7 — migrated. table-open-result: record
         // { cursor: u32, columns: list<columndef> }.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/table-stream-dispatch@5.0.0"),
             "call-table-open",
             &[
@@ -4089,9 +4040,7 @@ impl ExtensionInstance {
                 })
                 .collect(),
         );
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/table-stream-dispatch@5.0.0"),
             "call-table-open-filtered",
             &[
@@ -4130,9 +4079,7 @@ impl ExtensionInstance {
     ) -> Result<Resultset, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/table-stream-dispatch@5.0.0"),
             "call-table-next",
             &[
@@ -4154,9 +4101,7 @@ impl ExtensionInstance {
     pub fn table_close(&mut self, handle: u32, cursor: u32) -> Result<bool, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/table-stream-dispatch@5.0.0"),
             "call-table-close",
             &[
@@ -4176,9 +4121,7 @@ impl ExtensionInstance {
     pub fn aggregate_init(&mut self, handle: u32) -> Result<u32, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/aggregate-incr-dispatch@5.0.0"),
             "call-aggregate-init",
             &[wasmos_runtime_api::Value::U32(handle)],
@@ -4201,9 +4144,7 @@ impl ExtensionInstance {
                 .map(|row| duckvalue_list_to_value(row))
                 .collect(),
         );
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/aggregate-incr-dispatch@5.0.0"),
             "call-aggregate-update",
             &[
@@ -4225,9 +4166,7 @@ impl ExtensionInstance {
     ) -> Result<(), Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/aggregate-incr-dispatch@5.0.0"),
             "call-aggregate-combine",
             &[
@@ -4244,9 +4183,7 @@ impl ExtensionInstance {
     pub fn aggregate_finalize(&mut self, handle: u32, state: u32) -> Result<Duckvalue, Duckerror> {
         // Phase 6.2.i.7 — migrated. Returns result<duckvalue, duckerror>.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/aggregate-incr-dispatch@5.0.0"),
             "call-aggregate-finalize",
             &[
@@ -4278,9 +4215,7 @@ impl ExtensionInstance {
         // handle, connection_id) to sync_export_bridge::call_export.
         // Same wire semantics; return is result<_, duckerror> —
         // Ok(None) on success, Err(duckerror) on guest error.
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/conn-dispatch@5.0.0"),
             "on-connection-opened",
             &[
@@ -4295,9 +4230,7 @@ impl ExtensionInstance {
     /// Notify the component that connection `connection_id` was closed.
     pub fn connection_closed(&mut self, handle: u32, connection_id: u64) -> Result<(), Duckerror> {
         // ADR-0029 Phase 6.2.i.5 — sibling of connection_opened.
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/conn-dispatch@5.0.0"),
             "on-connection-closed",
             &[
@@ -4322,9 +4255,7 @@ impl ExtensionInstance {
     ) -> Result<u64, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/file-write-dispatch@5.0.0"),
             "file-write",
             &[
@@ -4342,9 +4273,7 @@ impl ExtensionInstance {
     pub fn file_glob(&mut self, handle: u32, pattern: &str) -> Result<Vec<String>, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/file-write-dispatch@5.0.0"),
             "file-glob",
             &[
@@ -4361,9 +4290,7 @@ impl ExtensionInstance {
         // Phase 6.2.i.7 — migrated. FileInfo record: (path, size,
         // is-directory) — decoded inline.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/file-write-dispatch@5.0.0"),
             "file-stat",
             &[
@@ -4398,9 +4325,7 @@ impl ExtensionInstance {
     ) -> Result<Vec<i64>, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/index-write-dispatch@5.0.0"),
             "index-scan",
             &[
@@ -4423,9 +4348,7 @@ impl ExtensionInstance {
     ) -> Result<u64, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/index-write-dispatch@5.0.0"),
             "index-delete",
             &[
@@ -4447,9 +4370,7 @@ impl ExtensionInstance {
     ) -> Result<bool, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/index-write-dispatch@5.0.0"),
             "index-constraint",
             &[
@@ -4466,9 +4387,7 @@ impl ExtensionInstance {
     pub fn index_serialize(&mut self, handle: u32, index: u32) -> Result<Vec<u8>, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/index-write-dispatch@5.0.0"),
             "index-serialize",
             &[
@@ -4489,9 +4408,7 @@ impl ExtensionInstance {
         // ADR-0029 Phase 6.2.i.5 — migrated from bindings.duckdb_
         // extension_settings_dispatch().call_on_setting_set(store,
         // handle, name, value) to sync_export_bridge::call_export.
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/settings-dispatch@5.0.0"),
             "on-setting-set",
             &[
@@ -4559,9 +4476,7 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::S64(entry.ts_micros),
             ),
         ]);
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/log-storage-dispatch@5.0.0"),
             "write-log-entry",
             &[wasmos_runtime_api::Value::U32(handle), entry_val],
@@ -4585,9 +4500,7 @@ impl ExtensionInstance {
     pub fn dispatch_arrow_open(&mut self, callback_handle: u32) -> Result<u32, Duckerror> {
         // ADR-0029 Phase 6.2.i.6 — migrated. Returns result<u32,
         // duckerror> — Ok payload is the guest-assigned cursor id.
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/arrow-ext-dispatch@5.0.0"),
             "call-arrow-open",
             &[wasmos_runtime_api::Value::U32(callback_handle)],
@@ -4614,9 +4527,7 @@ impl ExtensionInstance {
     ) -> Result<Resultset, Duckerror> {
         // Phase 6.2.i.7 — migrated. Resultset = list<list<duckvalue>>.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/arrow-ext-dispatch@5.0.0"),
             "call-arrow-next",
             &[
@@ -4642,9 +4553,7 @@ impl ExtensionInstance {
     ) -> Result<bool, Duckerror> {
         // ADR-0029 Phase 6.2.i.6 — migrated. Returns result<bool,
         // duckerror>.
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/arrow-ext-dispatch@5.0.0"),
             "call-arrow-close",
             &[
@@ -4684,9 +4593,7 @@ impl ExtensionInstance {
         // attach-blob).
         use crate::export_marshal::*;
         // Step 1: attach-blob(handle, dsn, bytes) -> result<_, duckerror>
-        let out1 = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out1 = self.call_bridge_export(
             Some("duckdb:extension/storage-dispatch@5.0.0"),
             "attach-blob",
             &[
@@ -4698,9 +4605,7 @@ impl ExtensionInstance {
         .map_err(|e| Duckerror::Internal(format!("attach-blob dispatch failed: {e}")))?;
         export_result_to_duckerror(out1, "attach-blob", |_| Ok(()))?;
         // Step 2: storage-attach(handle, dsn, empty) -> result<u32, duckerror>
-        let out2 = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out2 = self.call_bridge_export(
             Some("duckdb:extension/storage-dispatch@5.0.0"),
             "storage-attach",
             &[
@@ -4720,9 +4625,7 @@ impl ExtensionInstance {
     ) -> Result<Vec<String>, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/storage-dispatch@5.0.0"),
             "storage-list-tables",
             &[
@@ -4743,9 +4646,7 @@ impl ExtensionInstance {
         // Phase 6.2.i.7 — migrated. Returns result<list<columndef>,
         // duckerror>; columndef decoded via value_to_columndef_list.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/storage-dispatch@5.0.0"),
             "storage-table-columns",
             &[
@@ -4778,9 +4679,7 @@ impl ExtensionInstance {
         // Duckvalue clone), so filter values marshal through the
         // shared `duckvalue_to_value` without a bridge.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/storage-dispatch@5.0.0"),
             "storage-scan-open",
             &[
@@ -4860,9 +4759,7 @@ impl ExtensionInstance {
         // value_to_resultset decodes directly into
         // Vec<Vec<Duckvalue>>.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/storage-dispatch@5.0.0"),
             "storage-scan-next",
             &[
@@ -4884,9 +4781,7 @@ impl ExtensionInstance {
     pub fn storage_scan_close(&mut self, handle: u32, scan: u32) -> Result<bool, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/storage-dispatch@5.0.0"),
             "storage-scan-close",
             &[
@@ -4909,9 +4804,7 @@ impl ExtensionInstance {
     pub fn storage_serialize(&mut self, handle: u32, catalog: u32) -> Result<Vec<u8>, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/storage-dispatch@5.0.0"),
             "serialize",
             &[
@@ -4943,9 +4836,7 @@ impl ExtensionInstance {
         // needed because the wire duckerror shape is canonical WIT +
         // `duckerror_from_value` decodes directly into
         // `Duckerror`.
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/index-dispatch@5.0.0"),
             "index-create",
             &[
@@ -4975,9 +4866,7 @@ impl ExtensionInstance {
     ) -> Result<(), Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/index-dispatch@5.0.0"),
             "index-append",
             &[
@@ -4993,9 +4882,7 @@ impl ExtensionInstance {
     /// Finalize: build the ANN map from every appended row.
     pub fn index_build(&mut self, handle: u32) -> Result<(), Duckerror> {
         // ADR-0029 Phase 6.2.i.6 — migrated.
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/index-dispatch@5.0.0"),
             "index-build",
             &[wasmos_runtime_api::Value::U32(handle)],
@@ -5015,9 +4902,7 @@ impl ExtensionInstance {
         // duckerror> where index-hit is record { rowid: s64, distance:
         // f32 } — decoded inline.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/index-dispatch@5.0.0"),
             "index-search",
             &[
@@ -5060,9 +4945,7 @@ impl ExtensionInstance {
     /// Free the index + handle.
     pub fn index_drop(&mut self, handle: u32) -> Result<(), Duckerror> {
         // ADR-0029 Phase 6.2.i.6 — migrated.
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/index-dispatch@5.0.0"),
             "index-drop",
             &[wasmos_runtime_api::Value::U32(handle)],
@@ -5084,9 +4967,7 @@ impl ExtensionInstance {
         // string> (NOT duckerror — file-dispatch uses string errs);
         // file-open-result record has (handle: u32, size: u64).
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/file-dispatch@5.0.0"),
             "file-open",
             &[
@@ -5114,9 +4995,7 @@ impl ExtensionInstance {
     ) -> Result<Vec<u8>, Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/file-dispatch@5.0.0"),
             "file-read",
             &[
@@ -5136,9 +5015,7 @@ impl ExtensionInstance {
     pub fn file_close(&mut self, handle: u32, file: u32) -> Result<(), Duckerror> {
         // Phase 6.2.i.7 — migrated.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/file-dispatch@5.0.0"),
             "file-close",
             &[
@@ -5160,9 +5037,7 @@ impl ExtensionInstance {
         // duckerror> where parse-outcome is variant { declined,
         // rewrite(string) } — decoded inline.
         use crate::export_marshal::*;
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/parser-dispatch@5.0.0"),
             "call-parse",
             &[
@@ -5249,9 +5124,7 @@ impl ExtensionInstance {
                 wasmos_runtime_api::Value::String(query.to_string()),
             ),
         ]);
-        let out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
+        let out = self.call_bridge_export(
             Some("duckdb:extension/optimizer-dispatch@5.0.0"),
             "call-optimize",
             &[wasmos_runtime_api::Value::U32(handle), plan_val],
