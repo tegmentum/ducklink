@@ -37,7 +37,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
-use wasmtime::Engine;
+use ducklink_runtime::EngineHandle as Engine;
 
 use crate::{
     build_engine_for_driver, driver_core_exec, driver_core_query, open_driver_core,

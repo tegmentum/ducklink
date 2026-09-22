@@ -22,6 +22,50 @@ use std::sync::{Arc, Mutex, OnceLock, Weak};
 use wasmtime::component::Component;
 use wasmtime::Engine;
 
+// Path B closure Phase 6 encapsulation (2026-09-22): re-export the
+// wasmtime-typed pieces ducklink-host still needs so it can name
+// them without a direct wasmtime Cargo dep. The types themselves
+// come from the wasmtime crate transitively through this crate;
+// consumers write `ducklink_runtime::EngineHandle` etc. instead
+// of importing `wasmtime` directly.
+pub use wasmtime::component::Component as ComponentHandle;
+pub use wasmtime::Engine as EngineHandle;
+
+/// Re-exports of the wasmtime-wasi + wasmtime-wasi-http types
+/// ducklink-host still names in its extension-load-thread WasiCtx
+/// construction path. Consumers reach these through
+/// `ducklink_runtime::wasi::WasiCtxBuilder` etc. instead of
+/// importing `wasmtime_wasi` directly.
+pub mod wasi {
+    pub use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
+    pub use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder};
+}
+
+/// Build the wasmtime `Engine` ducklink uses for extension loading
+/// + the CoreExecution/sibling paths. Wraps the previous
+/// `ducklink_host::build_engine` implementation verbatim so callers
+/// can stop naming `wasmtime::Config` / `wasmtime::Cache` directly.
+///
+/// Configures:
+/// - `wasm_component_model(true)` — always on.
+/// - `wasm_exceptions(true)` — DuckDB uses -fwasm-exceptions.
+/// - `wasmtime::Cache::from_file(None)` — persistent disk cache at
+///   wasmtime's XDG-default location. Cold builds ~7s; warm hits are
+///   milliseconds. Errors are logged as warnings and the engine
+///   builds without a cache.
+pub fn build_engine() -> wasmtime::Result<Engine> {
+    let mut config = wasmtime::Config::new();
+    config.wasm_component_model(true);
+    config.wasm_exceptions(true);
+    match wasmtime::Cache::from_file(None) {
+        Ok(cache) => {
+            config.cache(Some(cache));
+        }
+        Err(err) => eprintln!("warning: wasmtime compile cache unavailable: {err}"),
+    }
+    Engine::new(&config)
+}
+
 /// Whether `DUCKLINK_LOG=verbose` (case-insensitive) is set at process start.
 /// Gates the per-registration `[extension-manager]` / `[extension-runtime:…]`
 /// diagnostic prints so `LOAD ducklink` + `ducklink_load('<name>')` is silent

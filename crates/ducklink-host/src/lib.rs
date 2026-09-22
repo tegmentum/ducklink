@@ -226,8 +226,14 @@ use ducklink_runtime::{
 // typed `Resource<cli_native::{Connection, ResultStream, …}>` uses is
 // gone, and the surviving `Resource<DotcmdRegistry>` / `ResourceAny`
 // paths import `Resource` locally where needed.
-use wasmtime::component::Component;
-use wasmtime::{AsContextMut, Config, Engine};
+// Path B closure Phase 6 (2026-09-22): Component + Engine are
+// re-exported from ducklink-runtime (which owns the wasmtime dep
+// for the extension-loading bindgen path). Naming them through
+// the runtime crate lets ducklink-host stop depending on wasmtime
+// directly. Their underlying types are still wasmtime::* — the
+// re-export is purely a Cargo-dep encapsulation, not a semantic
+// wrapper.
+use ducklink_runtime::{ComponentHandle as Component, EngineHandle as Engine};
 
 /// The `compose:dynlink/linker` host implementation still lives in
 /// `ducklink-runtime`. Re-exported for external consumers; the
@@ -383,8 +389,9 @@ pub use replicate::{run_backup, run_restore, ReplicaState, S3Target};
 // shared Cloudflare R2 extension-distribution bucket (reuses `sigv4`).
 pub mod publish;
 pub use publish::{plan_publish, print_dry_run, run_publish, PlanInputs, PublishPlan};
-use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
-use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder};
+use ducklink_runtime::wasi::{
+    FsPerms, MemoryInputPipe, MemoryOutputPipe, WasiCtx, WasiCtxBuilder,
+};
 // wasmtime_wasi::p2 + wasmtime_wasi::WasiCtxView + WasiView imports
 // retired 2026-09-22 — every remaining wasmtime-wasi consumer in this
 // file uses only pipes / FsPerms / WasiCtx types. WasiHttpCtx +
@@ -11235,81 +11242,26 @@ fn cli_extract_rows_affected(qr: &cli_native::QueryResult) -> Option<u64> {
     }
 }
 
+// Path B closure Phase 6 (2026-09-22): local build_engine
+// relocated to ducklink-runtime (see
+// ducklink_runtime::build_engine). Kept here as a thin
+// re-export so the ~15 in-crate call sites remain
+// `build_engine()?` and don't have to spell out the runtime
+// crate at each site.
 fn build_engine() -> Result<Engine> {
-    let mut config = Config::new();
-    config.wasm_component_model(true);
-    // DuckDB (compiled with -fwasm-exceptions, standardized encoding) uses wasm
-    // exception handling; enable the proposal so throws unwind and are caught
-    // instead of aborting the module.
-    config.wasm_exceptions(true);
-    // Cache compiled artifacts on disk. The core component is ~96 MB of wasm;
-    // Cranelift-compiling it from scratch costs ~7s and otherwise happens on
-    // EVERY invocation (it dominates total runtime -- a trivial query takes as
-    // long as a 20M-row sort). With the cache, the first run compiles + stores
-    // and every later run deserializes in ~milliseconds (keyed by content +
-    // compiler config + wasmtime version, so a rebuilt component recompiles once).
-    match wasmtime::Cache::from_file(None) {
-        Ok(cache) => {
-            config.cache(Some(cache));
-        }
-        Err(err) => eprintln!("warning: wasmtime compile cache unavailable: {err}"),
-    }
-    Engine::new(&config).map_err(|e| e.context("failed to create Wasmtime engine").into())
+    ducklink_runtime::build_engine()
+        .map_err(|e| anyhow::anyhow!("build wasmtime engine: {e}"))
 }
 
-fn build_wasi_ctx_with_pipes(
-    args: &[String],
-    preopens: &[(&Path, &str)],
-    stdin: MemoryInputPipe,
-    stdout: MemoryOutputPipe,
-    stderr: MemoryOutputPipe,
-) -> Result<WasiCtx> {
-    let mut builder = WasiCtxBuilder::new();
-    builder.args(args);
-    builder.stdin(stdin);
-    builder.stdout(stdout);
-    builder.stderr(stderr);
-    builder.inherit_env();
-    // Grant outbound network so wasi:sockets-backed code (e.g. httpfs over the
-    // linked openssl/mbedtls + wasi-libc BSD sockets) can connect + resolve DNS.
-    builder.inherit_network();
-    builder.allow_ip_name_lookup(true);
-    for (host, guest) in preopens {
-        builder
-            .preopened_dir(host, guest, FsPerms::ReadWrite)
-            .map_err(|e| {
-                e.context(format!(
-                    "failed to preopen directory {} as {}",
-                    host.display(),
-                    guest
-                ))
-            })?;
-    }
-    Ok(builder.build())
-}
-
-fn build_wasi_ctx_inherit(args: &[String], preopens: &[(&Path, &str)]) -> Result<WasiCtx> {
-    let mut builder = WasiCtxBuilder::new();
-    builder.args(args);
-    builder.inherit_env();
-    builder.inherit_stdin();
-    builder.inherit_stdout();
-    builder.inherit_stderr();
-    builder.inherit_network();
-    builder.allow_ip_name_lookup(true);
-    for (host, guest) in preopens {
-        builder
-            .preopened_dir(host, guest, FsPerms::ReadWrite)
-            .map_err(|e| {
-                e.context(format!(
-                    "failed to preopen directory {} as {}",
-                    host.display(),
-                    guest
-                ))
-            })?;
-    }
-    Ok(builder.build())
-}
+// build_wasi_ctx_with_pipes + build_wasi_ctx_inherit retired
+// 2026-09-22 — CliHarness + run_cli_capture + shell driver +
+// instantiate_core all migrated to wasmos-native
+// build_wasi_env_inherit (returning WasiEnvironment) below.
+// No wasmtime-wasi WasiCtx / WasiCtxBuilder / FsPerms /
+// MemoryInputPipe / MemoryOutputPipe callers remain in
+// ducklink-host — the ExtensionManager load thread that used
+// WasiCtxBuilder is the sole exception, and that keeps a local
+// import scoped to its function.
 
 /// Path B Phase 1e prep — wasmos-native mirror of
 /// [`build_wasi_ctx_inherit`]. Returns a [`WasiEnvironment`] that

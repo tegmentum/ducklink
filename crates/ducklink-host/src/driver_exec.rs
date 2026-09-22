@@ -74,7 +74,7 @@ use wasmos_runtime_api::{
     RuntimeError, RuntimeResult, WasiEnvironment, host_iface,
 };
 use wasmos_runtime_wasmtime_v48::SyncRuntime;
-use wasmtime::Engine;
+use ducklink_runtime::EngineHandle as Engine;
 
 use crate::{
     build_engine_for_driver, driver_core_exec, driver_core_query, open_driver_core,
