@@ -226,13 +226,15 @@ use ducklink_runtime::{
 // typed `Resource<cli_native::{Connection, ResultStream, …}>` uses is
 // gone, and the surviving `Resource<DotcmdRegistry>` / `ResourceAny`
 // paths import `Resource` locally where needed.
-use wasmtime::component::{Component, Linker, ResourceTable};
-use wasmtime::{AsContextMut, Config, Engine, Store, StoreContextMut};
+use wasmtime::component::Component;
+use wasmtime::{AsContextMut, Config, Engine};
 
-/// The `compose:dynlink/linker` host implementation now lives in
-/// `ducklink-runtime` (so the extension load path can wire it); re-exported
-/// here under the original path so the dotcmd path + tests are unchanged.
-use ducklink_runtime::compose_dynlink;
+/// The `compose:dynlink/linker` host implementation still lives in
+/// `ducklink-runtime`. Re-exported for external consumers; the
+/// ducklink-host DotcmdInstance path no longer uses it directly
+/// (retired 2026-09-22 alongside the wasmos-native SyncInstance
+/// migration — dot-command components that import the linker are
+/// gated in `DotcmdRegistry::load_one`).
 pub use ducklink_runtime::compose_dynlink::{ProviderPreopen, ProviderRegistry};
 // ADR-0029 Phase 6.2.d.1: compose_dynlink_test_support module removed.
 //
@@ -381,23 +383,15 @@ pub use replicate::{run_backup, run_restore, ReplicaState, S3Target};
 // shared Cloudflare R2 extension-distribution bucket (reuses `sigv4`).
 pub mod publish;
 pub use publish::{plan_publish, print_dry_run, run_publish, PlanInputs, PublishPlan};
-use wasmtime_wasi::p2::{
-    self,
-    pipe::{MemoryInputPipe, MemoryOutputPipe},
-};
-use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
-// wasi:http/{types,outgoing-handler}@0.2.9 host wiring. The composed
-// cache.wasm imports wasi:http via the s3-wasm HTTPS transport (commit
-// d2b8870); every store type this host builds a linker for must (a) impl
-// WasiHttpView and (b) call `add_only_http_to_linker_sync` alongside the
-// existing `p2::add_to_linker_sync`. Using `add_only_http_to_linker_sync`
-// (not the full `add_to_linker_sync`) avoids re-adding wasi:cli/filesystem/
-// etc, which would clash with the wasmtime_wasi call.
-//
-// wasmtime-wasi-http 48 moved `WasiHttpView` / `WasiHttpCtxView` from
-// `p2` up to the crate root (kept the linker fn under `p2`).
-use wasmtime_wasi_http::p2::add_only_http_to_linker_sync as add_wasi_http_to_linker;
-use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
+use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder};
+// wasmtime_wasi::p2 + wasmtime_wasi::WasiCtxView + WasiView imports
+// retired 2026-09-22 — every remaining wasmtime-wasi consumer in this
+// file uses only pipes / FsPerms / WasiCtx types. WasiHttpCtx +
+// WasiHttpCtxView + WasiHttpView + add_only_http_to_linker_sync
+// retired at the same time — no store type in this crate impls
+// WasiView / WasiHttpView any longer (they moved to wasmos's
+// AdapterHostState under the SyncInstance migrations).
 
 // Post-Phase-2d: the `type CliString = wasmtime::component::__internal
 // ::String;` alias is retired — the CLI bindgen block that used it is
@@ -3416,62 +3410,52 @@ fn network_grant_allows(extension: &str) -> bool {
     network_grant_policy(extension).is_granted(datalink_policy::Capability::Http)
 }
 
-/// Store data for a dot-command component: just wasi (the component imports it
-/// for std even though the `duckdb:dotcmd` world declares no WIT imports).
+/// Store data for a dot-command component. Under the wasmos-native path
+/// (2026-09-22, follow-up to Slice 3), the wasi + wasi_http + table
+/// fields are retired — wasmos's `AdapterHostState` owns them and
+/// provides the WasiView/WasiHttpView blanket impls. The
+/// compose:dynlink/linker bridge migration to wasmos-native install
+/// remains pending (a dot-command that imports the linker is
+/// currently skipped by `DotcmdRegistry::load_one` with a warning
+/// rather than failing the whole registry load).
 struct DotcmdState {
-    wasi: WasiCtx,
-    /// wasi:http host context (see the module-level `add_wasi_http_to_linker`
-    /// import). Wired unconditionally so a future dot-command component can
-    /// import wasi:http without a per-component gate.
-    wasi_http: WasiHttpCtx,
-    table: ResourceTable,
     // Post-Phase-2c: `core` and `current_connection` are no longer on
     // DotcmdState — the SPI host `crate::dotcmd_wasmos::SpiHost`
     // captures its own Arc clones at register-time in `load_one`, so
-    // the fields would only ever be dead here. Load_one still takes
-    // both as params (they flow directly into `SpiHost::new(...)`).
+    // the fields would only ever be dead here.
     //
     // Retained on the store data even though the surviving `spi.query` no
     // longer reads it — a follow-up dotcmd feature (e.g. the schema-qualified
     // prefix model migration) is expected to route through the manager again.
     #[allow(dead_code)]
     extension_manager: Arc<Mutex<ExtensionManager>>,
-    /// compose:dynlink/linker bridge state. A `DynLinkBridge` is present
-    /// ONLY when this dot-command component imports `compose:dynlink/linker`
-    /// (the `imports_linker` gate in `load_one`); components that don't
-    /// import it carry `None` and pay nothing.
-    dynlink: Option<compose_dynlink::DynLinkBridge>,
 }
-impl WasiView for DotcmdState {
-    fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView {
-            ctx: &mut self.wasi,
-            table: &mut self.table,
-        }
-    }
-}
-impl WasiHttpView for DotcmdState {
-    fn http(&mut self) -> WasiHttpCtxView<'_> {
-        WasiHttpCtxView {
-            ctx: &mut self.wasi_http,
-            table: &mut self.table,
-            hooks: Default::default(),
-        }
-    }
-}
-impl DotcmdState {
-    /// Expose the dynlink bridge for the linker Host trait impl. Only ever
-    /// reached after the `imports_linker` gate set `dynlink = Some(..)`, so
-    /// a guest that imports the linker always has a bridge.
-    fn dynlink_bridge(&mut self) -> &mut compose_dynlink::DynLinkBridge {
-        self.dynlink
-            .as_mut()
-            .expect("compose:dynlink/linker invoked on a dot command that did not import it")
-    }
-}
-// Generate the compose:dynlink/linker Host + HostInstance trait impls for
-// DotcmdState, delegating to its bridge (one shared implementation).
-ducklink_runtime::impl_compose_dynlink_host!(DotcmdState, dynlink_bridge);
+
+// impl WasiView for DotcmdState + impl WasiHttpView for DotcmdState
+// retired 2026-09-22 alongside DotcmdInstance's SyncInstance
+// migration. Wasmos AdapterHostState provides both blanket impls.
+
+// The `dynlink_bridge` accessor + `impl_compose_dynlink_host!(
+// DotcmdState, dynlink_bridge)` macro expansion are retired under
+// the same landing. Under the wasmos-native install path, a
+// dot-command component that imports compose:dynlink/linker would
+// register its bridge through `datalink_dynlink_wasmos::install_host_imports`
+// on a HostImports builder; ducklink hasn't yet grown a
+// wasmos-native provider registry alongside the wasmtime one, so
+// dot-command components that import the linker are currently
+// skipped in load_one with an eprintln warning. Retiring the
+// existing wasmtime-shaped registry is deferred to the joint
+// compose_dynlink migration alongside ExtensionStoreState.
+// impl DotcmdState { ... } block retired 2026-09-22 — nothing to
+// expose today. The `dynlink_bridge` accessor + the associated
+// `impl_compose_dynlink_host!(DotcmdState, dynlink_bridge)` macro
+// expansion are retired alongside the shift to the wasmos-native
+// SyncInstance path. Dot-command components that import
+// `compose:dynlink/linker` are currently skipped by
+// `DotcmdRegistry::load_one` (see the imported-instance-names
+// gate there); adding the wasmos-native install for that path is
+// tracked with the joint compose_dynlink migration in
+// `docs/path-b-closure-plan.md`.
 
 /// Process-global shared provider registry for the dot-command dlopen path.
 /// Built once against the host engine; a pylon-shaped provider registered
@@ -3757,12 +3741,14 @@ pub(crate) fn format_uuid(hi: u64, lo: u64) -> String {
 }
 
 /// A loaded pluggable dot-command component (its own wasmtime store + instance).
-/// Post-migration (Phase 2c) holds a bare `wasmtime::component::Instance`
-/// instead of the bindgen-generated `Dotcmd` wrapper; export dispatch
-/// runs through `sync_export_bridge::call_export` per verb.
+/// Post-Slice-3 follow-up: DotcmdInstance holds a wasmos-native
+/// [`wasmos_runtime_wasmtime_v48::SyncInstance`]. Export dispatch
+/// runs through `sync_inst.call_export_reentrant("iface#method",
+/// args)` per verb — safe from any sync context including within
+/// another tokio runtime, matching the primitive used by
+/// CoreExecution.
 struct DotcmdInstance {
-    store: Store<DotcmdState>,
-    instance: wasmtime::component::Instance,
+    sync_inst: wasmos_runtime_wasmtime_v48::SyncInstance,
 }
 
 /// Registry of pluggable dot-command components. Each declares its commands via
@@ -3838,97 +3824,77 @@ impl DotcmdRegistry {
     }
 
     fn load_one(
-        engine: &Engine,
+        _engine: &Engine,
         path: &Path,
         core: Arc<Mutex<CoreExecution>>,
         current_connection: Arc<Mutex<Option<CoreResourceHandle>>>,
         extension_manager: Arc<Mutex<ExtensionManager>>,
     ) -> anyhow::Result<(DotcmdInstance, Vec<(String, u64, String, String)>)> {
-        let component = load_component(engine, path)?;
-        let mut linker = Linker::<DotcmdState>::new(engine);
-        p2::add_to_linker_sync(&mut linker)?;
-        add_wasi_http_to_linker(&mut linker)?;
-        // Install `duckdb:dotcmd/spi@0.2.0` via the stateless bridge —
-        // spi has no resources per the WIT, and SpiHost captures its
-        // two Arc handles by value so it does not need consumer_state.
-        // A no-op if the component doesn't actually import the
-        // interface (fine for a lone `registry`-only dot command).
-        let spi_host = crate::dotcmd_wasmos::SpiHost::new(core.clone(), current_connection.clone());
-        wasmos_runtime_wasmtime_v48::sync_bridge::install_stateless_host_call::<DotcmdState>(
-            engine,
-            &mut linker,
-            &component,
-            "duckdb:dotcmd/spi@0.2.0",
-            // SpiHost implements SyncHostCall directly via
-            // `#[host_iface(sync)]` — the bridge wants the sync
-            // trait, no SyncHostCallAdapter wrap needed (that
-            // adapter converts to the async HostCall used by the
-            // wasmos-native `HostImports::register` path).
-            Arc::new(spi_host) as Arc<dyn wasmos_runtime_api::SyncHostCall>,
-        )
-        .map_err(|e| anyhow::anyhow!("wire duckdb:dotcmd/spi: {e}"))?;
-        // compose:dynlink/linker: conditionally satisfy a guest-driven
-        // dlopen import. ONLY components that actually import the linker get
-        // the host import + a bridge — every other dot command is unaffected
-        // and pays nothing (the gate mirrors the framework's `imports_linker`).
-        let imports_dynlink = compose_dynlink::imports_linker(engine, &component);
-        let dynlink = if imports_dynlink {
-            eprintln!(
-                "[dotcmd] '{}' imports compose:dynlink/linker; wiring the shared-provider bridge",
+        // Path B follow-up (2026-09-22): wasmos-native construction
+        // mirrors CliHarness + shell driver. Compose_dynlink support
+        // for dot-commands is temporarily degraded — components that
+        // import `compose:dynlink/linker` are skipped with a warning
+        // (the wasmos-native install path needs a
+        // datalink_dynlink_wasmos-flavoured provider registry
+        // alongside ducklink's existing wasmtime-shaped one). Retiring
+        // this gap is tracked with the joint compose_dynlink migration
+        // in docs/path-b-closure-plan.md.
+        let bytes = std::fs::read(path)
+            .with_context(|| format!("read dot-command component at {}", path.display()))?;
+        let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::new(ducklink_runtime_config())
+            .map_err(|e| anyhow::anyhow!("build dot-command SyncRuntime: {e:?}"))?;
+        let compiled = sync_rt
+            .compile_component(
+                wasmos_runtime_api::ComponentSource::Bytes {
+                    bytes: bytes.into(),
+                    name: Some(path.display().to_string()),
+                },
+                wasmos_runtime_api::CompileOptions::default(),
+            )
+            .map_err(|e| anyhow::anyhow!("compile dot-command component: {e:?}"))?;
+
+        // compose:dynlink/linker gate — currently unsupported on the
+        // wasmos-native path. Bail out cleanly so `DotcmdRegistry::load`
+        // can log-and-skip without failing the whole registry load.
+        let imports = compiled.imported_instance_names();
+        if imports.iter().any(|n| n == "compose:dynlink/linker") {
+            anyhow::bail!(
+                "compose:dynlink/linker not yet supported on the wasmos-native \
+                 dot-command path (component: {})",
                 path.display()
             );
-            compose_dynlink::add_to_linker::<DotcmdState>(&mut linker)
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
-            // A per-loader provider registry: empty until a provider is
-            // registered (`ExtensionManager::register_dynlink_provider`).
-            Some(compose_dynlink::new_resident(
-                dotcmd_provider_registry(engine).clone(),
-            ))
-        } else {
-            None
-        };
-        let wasi = WasiCtxBuilder::new().inherit_stdio().build();
-        let mut store = Store::new(
-            engine,
-            DotcmdState {
-                wasi,
-                wasi_http: WasiHttpCtx::new(),
-                table: ResourceTable::new(),
-                // `core` + `current_connection` params flowed into
-                // `SpiHost::new(...)` above via `.clone()` — Arc
-                // handles are cheap and DotcmdState no longer needs
-                // to carry them (see the field-set comment above).
-                extension_manager,
-                dynlink,
-            },
-        );
-        // Post-Phase-2c: the bindgen path was
-        //   let bindings = dotcmd_bindings::Dotcmd::instantiate(
-        //       &mut store, &component, &linker)?;
-        //   let specs = bindings.duckdb_dotcmd_registry()
-        //       .call_list_commands(&mut store)?;
-        // Under the bridge we take the Pre path — cheaper for repeated
-        // dispatch since each `sync_export_bridge::call_export` in the
-        // `invoke` hot path only walks the export index by name, and
-        // `linker.instantiate_pre` amortises the linker walk here.
-        let instance_pre = linker.instantiate_pre(&component)?;
-        let instance = instance_pre.instantiate(store.as_context_mut())?;
+        }
 
-        let list_ret = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            store.as_context_mut(),
-            &instance,
-            Some("duckdb:dotcmd/registry@0.2.0"),
-            "list-commands",
-            &[],
-        )
-        .map_err(|e| anyhow::anyhow!("dotcmd registry.list-commands: {e}"))?;
+        // Install `duckdb:dotcmd/spi@0.2.0` through wasmos-native
+        // HostImports::register_sync. SpiHost captures its Arc handles
+        // by value so no consumer_state is needed for the SPI itself.
+        let spi_host = crate::dotcmd_wasmos::SpiHost::new(core.clone(), current_connection.clone());
+        let imports_builder = wasmos_runtime_api::HostImports::new()
+            .register_sync("duckdb:dotcmd/spi@0.2.0", spi_host);
+
+        // Retained fields on DotcmdState: extension_manager only (see
+        // the struct's docstring for the field-set rationale).
+        let state = DotcmdState { extension_manager };
+        let ctx = wasmos_runtime_api::ExecutionContext::new()
+            .with_wasi(build_wasi_env_inherit(&[], &[]))
+            .with_host_imports(imports_builder)
+            .with_consumer_state(state);
+        let mut sync_inst = sync_rt
+            .instantiate(&compiled, ctx)
+            .map_err(|e| anyhow::anyhow!("instantiate dot-command component: {e:?}"))?;
+
+        // Dispatch `duckdb:dotcmd/registry@0.2.0.list-commands` via the
+        // reentrant-safe call primitive (matches CoreExecution's shape).
+        let list_ret = sync_inst
+            .call_export_reentrant("duckdb:dotcmd/registry@0.2.0#list-commands", &[])
+            .map_err(|e| anyhow::anyhow!("dotcmd registry.list-commands: {e}"))?;
         let specs = unpack_command_spec_list(&list_ret).map_err(|e| {
             anyhow::anyhow!(
                 "dotcmd registry.list-commands: {e} (from {})",
                 path.display()
             )
         })?;
-        Ok((DotcmdInstance { store, instance }, specs))
+        Ok((DotcmdInstance { sync_inst }, specs))
     }
 
     /// Invoke `.name args`. None = no registered command by that name (the CLI
@@ -3941,8 +3907,9 @@ impl DotcmdRegistry {
     ) -> Option<Result<(String, Vec<(String, String)>), String>> {
         let (idx, id) = *self.by_name.get(&name.to_ascii_lowercase())?;
         let inst = &mut self.components[idx];
-        // Post-Phase-2c: dispatch via sync_export_bridge with positional
-        // Value args + return. WIT signature is
+        // Path B follow-up: wasmos-native dispatch through the
+        // reentrant-safe primitive (matches CoreExecution's shape).
+        // WIT signature is
         //   invoke: func(id: u64, args: string) ->
         //       result<invoke-result, string>
         // — a `Value::Result(Ok(Some(Value::Record{invoke-result})))` on
@@ -3950,11 +3917,8 @@ impl DotcmdRegistry {
         // on graceful error. Trap-shaped errors bubble through the
         // `.map_err` closure below (same shape as the bindgen-era
         // `Err(trap)` arm).
-        let call_result = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            inst.store.as_context_mut(),
-            &inst.instance,
-            Some("duckdb:dotcmd/registry@0.2.0"),
-            "invoke",
+        let call_result = inst.sync_inst.call_export_reentrant(
+            "duckdb:dotcmd/registry@0.2.0#invoke",
             &[
                 wasmos_runtime_api::Value::U64(id),
                 wasmos_runtime_api::Value::String(args.to_string()),
