@@ -169,28 +169,34 @@ trade away `wasm_component_model_async` / concurrency / streams
   Handler error-message strings tidied to name CoreInnerState.
 
 **What remains for full Path B closure:** Phase 6 (wasmtime Cargo
-dep drop) is blocked on migrating three remaining consumer
-paths: CLI harness (`CliHarness`), engine builder
-(`build_engine_for_driver` returns `wasmtime::Engine`), and
-`DotcmdInstance` (uses `wasmtime::component::Instance` +
-`Store<DotcmdState>` + compose_dynlink linker integration).
+dep drop) is blocked on two remaining consumer paths:
+- engine builder (`build_engine_for_driver` returns
+  `wasmtime::Engine`) — external API used by cron_cli.rs and
+  replicate.rs
+- `DotcmdInstance` (uses `wasmtime::component::Instance` +
+  `Store<DotcmdState>` + compose_dynlink linker integration) —
+  compose_dynlink migration is Phase 6.2.d.3, coordination with
+  ducklink-runtime
 
-The ExtensionManager `wasmtime::Result` interop closed in
-`0b0a302` — six functions migrated to `anyhow::Result`; the
-dead `trap_to_cli_string` helper retired. Uses in lib.rs drop
-from 44 → 24 after that cleanup.
+CliHarness + run_cli_inner + wire_cli_bridged_host_imports +
+dispatch_cli_run all landed on the wasmos-native path
+(`1ac637c`, 2026-09-22). The ExtensionManager `wasmtime::Result`
+interop closed in `0b0a302`.
 
-Ducklink-host's wasmtime uses now sit at **24 lines** (down from
-~110 at Slice 2 start — a **-78% reduction** across the arc):
+Ducklink-host's wasmtime uses now sit at **19 lines** (down from
+~110 at Slice 2 start — a **-83% reduction** across the arc):
 - 8 in the import `use wasmtime::…` lines (still needed by
-  CliHarness/DotcmdInstance/build_engine)
-- ~5 in doc comments (archaeological / historical)
-- ~5 in struct fields (CliHarness.instance, DotcmdInstance.instance)
-- ~6 in function bodies (CliHarness setup, DotcmdRegistry::load_one)
+  DotcmdInstance/build_engine)
+- ~7 in archaeological doc comments (migration history)
+- ~4 in real code — DotcmdInstance.instance,
+  DotcmdInstance.store (via Store<DotcmdState>),
+  wasmtime::Cache::from_file, DotcmdRegistry::load_one's Linker
+  + compose_dynlink integration
 
-Each remaining consumer is its own migration arc; none block
-another. Full Cargo dep drop still requires all three migrations
-to land together (imports become unused).
+The two remaining consumer arcs are independent; neither blocks
+the other. Full Cargo dep drop requires both to land plus
+retiring the archaeological doc references (or updating the
+lint to allow bare `wasmtime` mentions in comments).
 
 Path Slices 1+2 (`aae7e12` + `d07469e`) remain valid prep for
 whichever path is chosen.
