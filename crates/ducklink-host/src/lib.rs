@@ -3203,30 +3203,17 @@ impl CoreExecution {
     // The `bindings: duckdb_core_bindings::Libduckdb` field that
     // used to back them is also retired; every guest-export dispatch
     // routes through the raw `instance: wasmtime::component::Instance`
-    // via [`Self::with_instance`] below.
-
-    /// Guest-export migration helper — hands the raw
-    /// wasmtime Instance + store to `f` for call sites that build
-    /// their own `call_export_with_resources` invocation inline
-    /// (e.g. `register_extension`, `list_registered_extensions`,
-    /// the `handle-quack-request` / `handle-ui-request`
-    /// dispatchers).
-    fn with_instance<F, R>(&mut self, f: F) -> R
-    where
-        F: FnOnce(
-            &wasmtime::component::Instance,
-            wasmtime::StoreContextMut<'_, CoreStoreState>,
-        ) -> R,
-    {
-        let inst = &self.instance;
-        let store = self.store.as_context_mut();
-        f(inst, store)
-    }
+    // via the `call_bridge_export` + `resource_drop_handle` wrappers
+    // defined above. The original `with_instance` escape hatch
+    // (which handed out `wasmtime::StoreContextMut<CoreStoreState>`
+    // + `&wasmtime::component::Instance`) was retired 2026-09-21
+    // once every internal + consumer caller migrated onto the
+    // wrappers — no callers remain, and its wasmtime-typed
+    // signature was blocking Phase 6's Cargo-dep drop.
 
     // `with_config` + `with_logging` retired — every config /
     // logging guest-export site now dispatches through
-    // with_instance + sync_export_bridge::call_export
-    // (`call_config_get_option` helper + inline log call sites).
+    // `call_bridge_export`.
 }
 
 struct ConnectionEntry {
