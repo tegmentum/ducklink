@@ -3128,21 +3128,27 @@ impl ExtensionInstance {
     /// syntax `call_export` expects (see
     /// [`wasmos_runtime_wasmtime_v48::instance::resolve_export`]).
     ///
-    /// `call_export` (async via the SyncRuntime's private tokio)
-    /// rather than `call_export_reentrant` (sync `Func::call`):
-    /// wasmos's `Runtime::instantiate` puts the store into async-
-    /// required mode, and same-store sync `Func::call` post-
-    /// instantiation fails with "store configuration requires that
-    /// *_async functions are used instead" on a
-    /// `WasmtimeV48Runtime::from_engine`-wrapped engine. The
-    /// reentrant primitive is the correct shape when the caller may
-    /// be running inside another tokio runtime (as `CoreExecution
-    /// ::call_bridge_export` documents for its own use); wasmos's
-    /// current async-instantiate seam blocks that path here — the
-    /// resolution belongs on the wasmos side (extend `SyncRuntime`
-    /// to support post-instantiate sync reentry symmetrically with
-    /// `SyncRuntime::new`-managed engines). Recorded as a
-    /// wasmos-API gap in the step 4 landing report.
+    /// Follow-up (2026-09-22, wasmos `c7fdc6c2`) — flipped to
+    /// [`SyncInstance::call_export_reentrant`], the reentry-safe
+    /// primitive this method exists to reach. Paired with
+    /// `RuntimeConfig::with_sync_dispatch(true)` at the runtime
+    /// construction site (`load_component_with_dynlink`), wasmos
+    /// wires the extension linker via wasmtime's sync `func_new` +
+    /// sync WASI installers so the store's `async_required` flag
+    /// stays `false` post-instantiate; sibling sync `Func::call`
+    /// (which is what `call_export_reentrant` uses) then succeeds
+    /// on the same `WasmtimeV48Runtime::from_engine`-wrapped engine.
+    ///
+    /// Why reentrant: `dispatch_*` reaches this funnel from inside
+    /// a host handler that is itself running on some other tokio
+    /// runtime (a core-execution export firing a scalar callback
+    /// into this extension). The old `call_export` path used
+    /// wasmos's private tokio `block_on`, which panicked with
+    /// "Cannot start a runtime from within a runtime" when the
+    /// caller was already on a runtime. `call_export_reentrant`
+    /// dispatches synchronously via wasmtime's `Func::call`,
+    /// bypassing tokio entirely, so it's safe from any sync
+    /// context including inside another runtime's executor thread.
     fn call_bridge_export(
         &mut self,
         iface: Option<&str>,
@@ -3153,7 +3159,7 @@ impl ExtensionInstance {
             Some(i) => format!("{i}#{method}"),
             None => method.to_string(),
         };
-        self.sync_inst.call_export(&qualified, args)
+        self.sync_inst.call_export_reentrant(&qualified, args)
     }
 
     /// Path B follow-up #2 step 3 (2026-09-22) — encapsulates the
@@ -6344,9 +6350,26 @@ pub fn load_component_with_dynlink(
     // trap ("fuel is not configured in this store"). See commit `28a0663d`
     // (portable `with_consume_fuel(bool)` knob) — this is exactly the
     // "trusted runner: opt out of fuel" case that knob was added for.
+    //
+    // `with_sync_dispatch(true)` (wasmos `c7fdc6c2`) — wasmos swaps its
+    // v48 adapter to wire the linker + host imports + WASI through the
+    // sync wasmtime APIs (`add_to_linker_sync`, `func_new`, `resource`,
+    // `instantiate_pre_sync`). The produced `InstancePre`'s asyncness
+    // stays `No`, the store's `async_required` flag stays `false` post-
+    // instantiate, and sibling sync `Func::call` — used by
+    // `SyncInstance::call_export_reentrant` in `call_bridge_export`
+    // below — succeeds on this `from_engine`-wrapped runtime. Without
+    // this flag the reentrant primitive traps with "store configuration
+    // requires that *_async functions are used instead". The ducklink
+    // extension host imports registered via `install_extension_imports
+    // _stateful` are all `#[host_iface(sync)]` — wasmos wraps them in
+    // `SyncHostCallAdapter` which returns Ready on first poll, so the
+    // sync-linker `futures::executor::block_on` is a single-poll no-op.
     let wasmos_runtime = wasmos_runtime_wasmtime_v48::WasmtimeV48Runtime::from_engine(
         engine.clone(),
-        wasmos_runtime_api::RuntimeConfig::default().with_consume_fuel(false),
+        wasmos_runtime_api::RuntimeConfig::default()
+            .with_consume_fuel(false)
+            .with_sync_dispatch(true),
     )
     .map_err(|e| {
         wasmtime::Error::msg(format!(
@@ -6439,33 +6462,15 @@ pub fn load_component_with_dynlink(
     // it with no args, lift the returned `result<loadresult, duckerror>`
     // to a Rust Result.
     //
-    // `call_export` (not the reentrant sibling) is used here because
-    // the extension-manager driver invokes this loader synchronously
-    // from an OS thread that is not itself inside a tokio runtime, so
-    // wasmos's private tokio can `block_on` the async instantiation
-    // safely. The dispatch_* methods on `ExtensionInstance` — reached
-    // from a host handler that IS running on another SyncInstance's
-    // tokio (a core-execution export firing a scalar callback into
-    // this extension) — dispatch through `call_bridge_export` which
-    // uses the reentrant-safe primitive.
-    // `call_export` (async via the SyncRuntime's private tokio) rather
-    // than `call_export_reentrant` (sync `Func::call`): wasmos's
-    // `Runtime::instantiate` puts the store into async-required mode,
-    // and same-store sync `Func::call` post-instantiation fails with
-    // "store configuration requires that *_async functions are used
-    // instead" on a `WasmtimeV48Runtime::from_engine`-wrapped engine —
-    // even one whose `wasm_component_model_async(false)` explicitly
-    // trades away async instantiate. `call_export` sidesteps that by
-    // driving the guest's `load()` through the async path itself. The
-    // caller invokes `load_component_with_dynlink` from an OS thread
-    // that is not itself inside a tokio runtime (ExtensionManager
-    // spawns a fresh thread for the load), so the private tokio's
-    // `block_on` is legal here. See the deliverable's wasmos-API-gap
-    // note; the resolution belongs on wasmos's side (fold `from_engine`
-    // into `Runtime::instantiate` so post-instantiate sync reentry is
-    // supported symmetrically with `SyncRuntime::new`-managed engines).
+    // Follow-up (2026-09-22, wasmos `c7fdc6c2`) — with
+    // `with_sync_dispatch(true)` on the RuntimeConfig above, wasmos
+    // wires the extension linker sync so `call_export_reentrant`
+    // (sync `Func::call`) succeeds on this store. Uniform with the
+    // reentrant dispatch through `call_bridge_export` for every
+    // subsequent `dispatch_*` call on the returned `ExtensionInstance`
+    // — one dispatch shape for load + all export re-entries.
     let load_out = sync_inst
-        .call_export("duckdb:extension/guest@5.0.0#load", &[])
+        .call_export_reentrant("duckdb:extension/guest@5.0.0#load", &[])
         .map_err(|e| {
             wasmtime::Error::msg(format!(
                 "extension component '{extension_name}' load() dispatch failed: {e}"
