@@ -61,9 +61,12 @@ bang commit.
 | 1c    | Wasmos gap: `Instance::consumer_state_mut`                | 0.5 day   | LOW          | ✅ 2026-09-21 (wasmos d05cb2a3) |
 | 1d    | Extract `CoreInnerState` from `CoreStoreState`            | 0.5 day   | MEDIUM       | ✅ 2026-09-21 (7c41ce8) |
 | 1e    | Flip `CoreStoreState` → `SyncStoreState<CoreInnerState>`  | 1 day     | MEDIUM       | ✅ 2026-09-22 (5f3b1e8) |
-| 2     | 5 store-construction sites → SyncRuntime                 | 2-3 days  | HIGH         | PENDING (blocked on 1e) |
-| 3     | Host-import registrations → HostImports::register_sync   | 2-3 days  | MEDIUM       | PENDING (blocked on 2) |
-| 4     | Guest-export dispatch → SyncInstance::call_export        | 1-2 days  | MEDIUM       | PENDING (blocked on 1e + 2) |
+| 2+3+4 | Combined arc — split into 5 Path 2 slices below           | 5 sessions | HIGH        | IN PROGRESS 2026-09-22 |
+| 2+3+4.1 | `CoreState` accessor trait (helper interface layer)     | ~2 hrs    | LOW          | ✅ 2026-09-22 (aae7e12) |
+| 2+3+4.2 | Migrate 25 handler sites onto `CoreState` trait         | ~1 hr     | LOW          | ✅ 2026-09-22 (d07469e) |
+| 2+3+4.3 | Swap `CoreExecution` to `SyncInstance`; migrate to `HostImports::register_sync`; flip consumer_state box `SyncStoreState<CoreInnerState>` → `CoreInnerState` | ~4-5 hrs | HIGH | PENDING |
+| 2+3+4.4 | Retire escape-hatch helpers + `primary_nested_exec` ambient reentry via `HostCallContext::reentry().call_export_sync()` | ~4-5 hrs | MEDIUM | PENDING |
+| 2+3+4.5 | Retire `SyncStoreState<CoreInnerState>` wrap; `CoreInnerState` boxes directly | ~2 hrs | LOW | PENDING |
 | 5     | `primary_nested_exec` retirement (ExtensionServices break) | 3-5 days | ECOSYSTEM    | PARTIAL 2026-09-22 — wasmos primitive `ReentryCapability::call_export_sync` shipped (wasmos 12af8721); consumer-side application blocked on Phase 2+3+4 OR wasmos-side BridgeCtx reentry extension |
 | 6     | Drop direct wasmtime Cargo deps                          | 0.5 day   | LOW          | PENDING (blocked on 1-5) |
 
