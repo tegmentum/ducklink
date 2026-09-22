@@ -2981,7 +2981,15 @@ impl CoreExecution {
         method: &str,
         args: &[wasmos_runtime_api::Value],
     ) -> Result<Vec<wasmos_runtime_api::Value>, wasmos_runtime_api::RuntimeError> {
-        self.sync_inst.call_export(&format!("{iface}#{method}"), args)
+        // Reentrant-safe dispatch (wasmos 88d45bc1): avoids
+        // sync_inst.call_export's internal tokio.block_on so external
+        // consumers embedding a SyncInstance inside their own tokio
+        // pipeline (their SyncRuntime, #[tokio::main] binary, or
+        // #[tokio::test]) don't hit "Cannot start a runtime from
+        // within a runtime". See the regression report at
+        // docs/path-b-closure-plan.md's "Reentrant-safe dispatch" note.
+        self.sync_inst
+            .call_export_reentrant(&format!("{iface}#{method}"), args)
     }
 
     /// Free a core resource handle. Delegates to the wasmos-native
@@ -9705,8 +9713,9 @@ pub(crate) fn call_export_on_resource_core(
     let mut args = Vec::with_capacity(1 + trailing_args.len());
     args.push(handle.as_value());
     args.extend_from_slice(trailing_args);
+    // Reentrant-safe — see call_bridge_export's rationale.
     core.sync_inst
-        .call_export(&format!("{iface}#{method}"), &args)
+        .call_export_reentrant(&format!("{iface}#{method}"), &args)
 }
 
 /// Dispatch a `database.<verb>(...) -> result<resource, err>`
@@ -9740,9 +9749,10 @@ pub(crate) fn call_database_returning_resource_on_core(
         args.push(handle.as_value());
     }
     args.extend_from_slice(other_args);
+    // Reentrant-safe — see call_bridge_export's rationale.
     let ret = core
         .sync_inst
-        .call_export(&format!("{DATABASE_IFACE}#{method}"), &args)?;
+        .call_export_reentrant(&format!("{DATABASE_IFACE}#{method}"), &args)?;
     match ret.as_slice() {
         [Value::Result(Ok(Some(payload)))] => match payload.as_ref() {
             Value::Resource {
