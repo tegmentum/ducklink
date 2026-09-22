@@ -445,13 +445,13 @@ struct CoreInnerState {
     is_sibling: bool,
 }
 
-/// Path B Phase 1e (2026-09-22) — `CoreStoreState` is the wasmos-
-/// native store-data wrapper `SyncStoreState<CoreInnerState>`.
-/// The wasmos crate provides the `WasiView` + `WasiHttpView`
-/// blanket impls, so the local hand-rolled impls are retired.
-/// `WasiCtx` + `WasiHttpCtx` + `ResourceTable` live inside the
-/// wrapper; ducklink-only state sits on `.consumer` (renamed from
-/// `.inner` under the flip).
+/// Path B Slice 3 (2026-09-22) — `CoreExecution` no longer routes
+/// through this alias (its `sync_inst: SyncInstance` field owns
+/// the store internally via wasmos's own `AdapterHostState`). The
+/// alias survives for the standalone-shell driver
+/// (`run_standalone_shell` below) which still holds a wasmtime
+/// `Store<CoreStoreState>` + escape-hatch-bridge dispatch;
+/// migrating that path is a separate arc from Slice 3.
 type CoreStoreState = wasmos_runtime_wasmtime_v48::SyncStoreState<CoreInnerState>;
 
 
@@ -499,7 +499,7 @@ impl wasmos_runtime_api::SyncHostCall for CoreHostExtensionLoaderHost {
                 let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "host-extension-loader request-load: \
-                         consumer_state<CoreStoreState> unavailable",
+                         consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
                 let mut manager = state.extension_manager()
@@ -571,7 +571,7 @@ impl wasmos_runtime_api::SyncHostCall for ExtensionLoaderHooksHost {
                 let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
                         "extension-loader-hooks get-pending-registrations: \
-                         consumer_state<CoreStoreState> unavailable",
+                         consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
                 // FU4 sibling/primary drain-and-archive protocol
@@ -1128,7 +1128,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                 let ext_ctx = convert_core_invokeinfo(invoke_ctx);
                 let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
-                        "callback-dispatch call-scalar: consumer_state<CoreStoreState> unavailable",
+                        "callback-dispatch call-scalar: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
                 let mut manager = state.extension_manager()
@@ -1164,7 +1164,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                 let ext_ctx = convert_core_invokeinfo(invoke_ctx);
                 let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
-                        "callback-dispatch call-scalar-batch-col: consumer_state<CoreStoreState> unavailable",
+                        "callback-dispatch call-scalar-batch-col: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
                 let mut manager = state.extension_manager()
@@ -1196,7 +1196,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                     .collect::<wasmos_runtime_api::RuntimeResult<_>>()?;
                 let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
-                        "callback-dispatch call-table: consumer_state<CoreStoreState> unavailable",
+                        "callback-dispatch call-table: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
                 let mut manager = state.extension_manager()
@@ -1229,7 +1229,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                 let ext_rows = core_colvecs_to_ext_rows(&core_colvecs);
                 let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
-                        "callback-dispatch call-aggregate-col: consumer_state<CoreStoreState> unavailable",
+                        "callback-dispatch call-aggregate-col: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
                 let mut manager = state.extension_manager()
@@ -1259,7 +1259,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                 let ext_rows = core_colvecs_to_ext_rows(std::slice::from_ref(&core_colvec));
                 let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
-                        "callback-dispatch call-cast-col: consumer_state<CoreStoreState> unavailable",
+                        "callback-dispatch call-cast-col: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
                 let mut manager = state.extension_manager()
@@ -1308,7 +1308,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                     .collect::<wasmos_runtime_api::RuntimeResult<_>>()?;
                 let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
-                        "callback-dispatch call-pragma: consumer_state<CoreStoreState> unavailable",
+                        "callback-dispatch call-pragma: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
                 let mut manager = state.extension_manager()
@@ -1340,7 +1340,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                 let ext_v = convert_core_duckvalue_to_extension(core_v);
                 let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
-                        "callback-dispatch call-cast: consumer_state<CoreStoreState> unavailable",
+                        "callback-dispatch call-cast: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
                 let mut manager = state.extension_manager()
@@ -2454,7 +2454,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                 };
                 let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
-                        "tvm-manager create-region: consumer_state<CoreStoreState> unavailable",
+                        "tvm-manager create-region: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
                 let mem = tvm_core::VecBackedRegion::new(capacity);
@@ -2499,7 +2499,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                 };
                 let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
-                        "tvm-manager destroy-region: consumer_state<CoreStoreState> unavailable",
+                        "tvm-manager destroy-region: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
                 match state.tvm().destroy_region(region_id).map_err(tvm_err_to_wit) {
@@ -2520,7 +2520,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                 };
                 let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
-                        "tvm-manager alloc: consumer_state<CoreStoreState> unavailable",
+                        "tvm-manager alloc: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
                 match state.tvm().alloc(region_id, size).map_err(tvm_err_to_wit) {
@@ -2546,7 +2546,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                 };
                 let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
                     RuntimeError::msg(
-                        "tvm-manager dealloc: consumer_state<CoreStoreState> unavailable",
+                        "tvm-manager dealloc: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
                 let th = match state.tvm_resolve(handle, true) {
@@ -2680,7 +2680,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                     }
                 };
                 let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
-                    RuntimeError::msg("tvm-bytes read: consumer_state<CoreStoreState> unavailable")
+                    RuntimeError::msg("tvm-bytes read: consumer_state<CoreInnerState> unavailable")
                 })?;
                 let th = match state.tvm_resolve(handle, false) {
                     Ok(th) => th,
@@ -2745,7 +2745,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                     }
                 };
                 let state = ctx.consumer_state::<CoreInnerState>().ok_or_else(|| {
-                    RuntimeError::msg("tvm-bytes write: consumer_state<CoreStoreState> unavailable")
+                    RuntimeError::msg("tvm-bytes write: consumer_state<CoreInnerState> unavailable")
                 })?;
                 let len = data.len() as u64;
                 let th = match state.tvm_resolve(handle, false) {
