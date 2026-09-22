@@ -66,13 +66,12 @@
 //! escape-hatch bridge to the wasmos-native path.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use anyhow::Result;
 use wasmos_runtime_api::{
     CompileOptions, ComponentSource, ExecutionContext, HostCallContext, HostImports,
     HostResourceType, Preopen, Resource, ResourceTable as WasmosResourceTable, RuntimeConfig,
-    RuntimeError, RuntimeResult, Value, WasiEnvironment, host_iface,
+    RuntimeError, RuntimeResult, WasiEnvironment, host_iface,
 };
 use wasmos_runtime_wasmtime_v48::SyncRuntime;
 use wasmtime::Engine;

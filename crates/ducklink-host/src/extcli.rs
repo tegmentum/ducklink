@@ -25,7 +25,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use serde_json::Value;
 
 use crate::resolver::{
-    self, render_reasoning, ContentRef, Env, Outcome, ProviderKind, ResolvePolicy,
+    self, render_reasoning, ContentRef, Env, ProviderKind, ResolvePolicy,
 };
 
 // ---------------------------------------------------------------------------
