@@ -3834,8 +3834,8 @@ impl DotcmdRegistry {
         core: Arc<Mutex<CoreExecution>>,
         current_connection: Arc<Mutex<Option<CoreResourceHandle>>>,
         extension_manager: Arc<Mutex<ExtensionManager>>,
-    ) -> wasmtime::Result<(DotcmdInstance, Vec<(String, u64, String, String)>)> {
-        let component = load_component(engine, path).map_err(wasmtime::Error::msg)?;
+    ) -> anyhow::Result<(DotcmdInstance, Vec<(String, u64, String, String)>)> {
+        let component = load_component(engine, path)?;
         let mut linker = Linker::<DotcmdState>::new(engine);
         p2::add_to_linker_sync(&mut linker)?;
         add_wasi_http_to_linker(&mut linker)?;
@@ -3857,7 +3857,7 @@ impl DotcmdRegistry {
             // wasmos-native `HostImports::register` path).
             Arc::new(spi_host) as Arc<dyn wasmos_runtime_api::SyncHostCall>,
         )
-        .map_err(|e| wasmtime::Error::msg(format!("wire duckdb:dotcmd/spi: {e}")))?;
+        .map_err(|e| anyhow::anyhow!("wire duckdb:dotcmd/spi: {e}"))?;
         // compose:dynlink/linker: conditionally satisfy a guest-driven
         // dlopen import. ONLY components that actually import the linker get
         // the host import + a bridge — every other dot command is unaffected
@@ -3869,7 +3869,7 @@ impl DotcmdRegistry {
                 path.display()
             );
             compose_dynlink::add_to_linker::<DotcmdState>(&mut linker)
-                .map_err(|e| wasmtime::Error::msg(e.to_string()))?;
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
             // A per-loader provider registry: empty until a provider is
             // registered (`ExtensionManager::register_dynlink_provider`).
             Some(compose_dynlink::new_resident(
@@ -3912,12 +3912,12 @@ impl DotcmdRegistry {
             "list-commands",
             &[],
         )
-        .map_err(|e| wasmtime::Error::msg(format!("dotcmd registry.list-commands: {e}")))?;
+        .map_err(|e| anyhow::anyhow!("dotcmd registry.list-commands: {e}"))?;
         let specs = unpack_command_spec_list(&list_ret).map_err(|e| {
-            wasmtime::Error::msg(format!(
+            anyhow::anyhow!(
                 "dotcmd registry.list-commands: {e} (from {})",
                 path.display()
-            ))
+            )
         })?;
         Ok((DotcmdInstance { store, instance }, specs))
     }
@@ -5969,7 +5969,7 @@ impl ExtensionManager {
         registry.get(handle).filter(|entry| entry.kind == kind)
     }
 
-    fn ensure_extension_loaded(&mut self, name: &str) -> wasmtime::Result<bool> {
+    fn ensure_extension_loaded(&mut self, name: &str) -> anyhow::Result<bool> {
         let sanitized = sanitize_extension_name(name);
         if self.extensions.contains_key(&sanitized) {
             return Ok(true);
@@ -6074,7 +6074,7 @@ impl ExtensionManager {
         // 99% of loads that don't (every non-autocomplete extension), the
         // snapshot stays disabled so plain queries pay nothing (see
         // `refresh_catalog_snapshot`'s `enabled` short-circuit).
-        let handle = thread::spawn(move || -> wasmtime::Result<(ExtensionInstance, bool)> {
+        let handle = thread::spawn(move || -> anyhow::Result<(ExtensionInstance, bool)> {
             // Outbound network is a GRANTED capability for extension components,
             // off by default and opt-in via `DUCKLINK_NETWORK_GRANT`. This mirrors
             // how DuckDB function capabilities are declared-then-granted (the
@@ -6113,10 +6113,10 @@ impl ExtensionManager {
             attach_sqlitewasm_preopens(&mut builder, &extension_name);
             let wasi = builder.build();
             let component = Component::from_file(&engine, &artifact_path).map_err(|err| {
-                wasmtime::Error::msg(format!(
+                anyhow::anyhow!(
                     "failed to load component for {extension_name} at {}: {err}",
                     artifact_path.display()
-                ))
+                )
             })?;
             // Detect whether this component imports the live-query capability
             // (`duckdb:extension/query`) BEFORE instantiating; only those (e.g.
@@ -6141,6 +6141,7 @@ impl ExtensionManager {
                 Some(dynlink_registry),
             )
             .map(|instance| (instance, imports_query))
+            .map_err(|e| anyhow::anyhow!("{e}"))
         });
 
         let (instance, imports_query) = match handle.join() {
@@ -6152,9 +6153,9 @@ impl ExtensionManager {
                 }
             },
             Err(err) => {
-                return Err(wasmtime::Error::msg(format!(
+                return Err(anyhow::anyhow!(
                     "extension loader thread panicked: {err:?}"
-                )))
+                ))
             }
         };
         // PERF GATE: enable the CLI-boundary catalog-snapshot refresh ONLY when a
@@ -7250,7 +7251,7 @@ impl HostState {
         Ok(())
     }
 
-    fn preload_extension(&mut self, name: &str) -> wasmtime::Result<()> {
+    fn preload_extension(&mut self, name: &str) -> anyhow::Result<()> {
         let mut manager = self
             .extension_manager
             .lock()
@@ -7264,7 +7265,7 @@ impl HostState {
         }
     }
 
-    fn request_extension_load(&mut self, name: &str) -> wasmtime::Result<bool> {
+    fn request_extension_load(&mut self, name: &str) -> anyhow::Result<bool> {
         let mut manager = self
             .extension_manager
             .lock()
@@ -10760,15 +10761,12 @@ fn run_query_on_core(
     }
 }
 
-/// Post-Phase-2d: `cli_native::Duckerror::Internal(...)` now carries a
-/// plain `String` (the shared `ducklink_runtime::extension::Duckerror`
-/// mirror uses `String`), so this helper returns bare `String` — the
-/// bindgen alias `CliString = wasmtime::component::__internal::String`
-/// is no longer part of any signature this crate binds against.
-fn trap_to_cli_string(err: wasmtime::Error) -> String {
-    err.to_string()
-}
-
+// `trap_to_cli_string` was an identity helper turning wasmtime::Error
+// into String; retired 2026-09-22 alongside the wasmtime::Result →
+// anyhow::Result migration. Last caller was in a `.map_err` chain
+// inside a `resource_drop` site that now goes through
+// SyncInstance::resource_drop (no wasmtime type at the boundary).
+//
 // `core_err_to_cli(err: cli_types::Duckerror) -> cli_types::Duckerror`
 // was an identity stub that had no callers post-Phase-6.2.m; retired
 // with the site-3 migration alongside the `cli_types` alias itself.
@@ -12109,7 +12107,7 @@ impl CliHarness {
         Ok(())
     }
 
-    pub fn run(&mut self) -> wasmtime::Result<Result<(), ()>> {
+    pub fn run(&mut self) -> anyhow::Result<Result<(), ()>> {
         // Post-Phase-2d: dispatch the CLI's `wasi:cli/run@0.2.6.run`
         // export through `sync_export_bridge::call_export`. The
         // versioned interface name matches the world's `export
@@ -12119,9 +12117,9 @@ impl CliHarness {
         let result = dispatch_cli_run(self.instance, self.store.as_context_mut());
         if let Ok(Ok(())) = result {
             if let Err(err) = self.store.data_mut().drain_pending_resource_drops() {
-                return Err(wasmtime::Error::msg(format!(
+                return Err(anyhow::anyhow!(
                     "failed to finalize resource drops: {err:?}"
-                )));
+                ));
             }
         }
         result
@@ -12463,11 +12461,11 @@ fn wire_cli_bridged_host_imports(
 /// Dispatch the CLI's `wasi:cli/run@0.2.6.run` export through
 /// `sync_export_bridge` and unpack the `result<_, _>` return. Return
 /// shape mirrors the bindgen-era `cli.wasi_cli_run().call_run(store)`
-/// signature: `wasmtime::Result<Result<(), ()>>`.
+/// signature: `anyhow::Result<Result<(), ()>>`.
 fn dispatch_cli_run(
     instance: wasmtime::component::Instance,
     mut store: StoreContextMut<'_, HostState>,
-) -> wasmtime::Result<Result<(), ()>> {
+) -> anyhow::Result<Result<(), ()>> {
     let ret = sync_export_bridge::call_export(
         store.as_context_mut(),
         &instance,
@@ -12475,21 +12473,21 @@ fn dispatch_cli_run(
         "run",
         &[],
     )
-    .map_err(|e| wasmtime::Error::msg(format!("cli wasi:cli/run.run(): {e}")))?;
+    .map_err(|e| anyhow::anyhow!("cli wasi:cli/run.run(): {e}"))?;
     match ret.as_slice() {
         [Value::Result(inner)] => match inner {
             Ok(None) => Ok(Ok(())),
             Err(None) => Ok(Err(())),
-            Ok(Some(payload)) => Err(wasmtime::Error::msg(format!(
+            Ok(Some(payload)) => Err(anyhow::anyhow!(
                 "cli run(): unexpected Ok payload {payload:?} for result<_, _>"
-            ))),
-            Err(Some(payload)) => Err(wasmtime::Error::msg(format!(
+            )),
+            Err(Some(payload)) => Err(anyhow::anyhow!(
                 "cli run(): unexpected Err payload {payload:?} for result<_, _>"
-            ))),
+            )),
         },
-        other => Err(wasmtime::Error::msg(format!(
+        other => Err(anyhow::anyhow!(
             "cli run(): expected exactly one Value::Result return, got {other:?}"
-        ))),
+        )),
     }
 }
 
