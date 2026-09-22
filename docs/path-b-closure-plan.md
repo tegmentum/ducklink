@@ -60,7 +60,7 @@ bang commit.
 | 1b    | Retire dead HasData impls                                 | 0.1 day   | LOW          | ✅ 2026-09-21 (00d5c51) |
 | 1c    | Wasmos gap: `Instance::consumer_state_mut`                | 0.5 day   | LOW          | ✅ 2026-09-21 (wasmos d05cb2a3) |
 | 1d    | Extract `CoreInnerState` from `CoreStoreState`            | 0.5 day   | MEDIUM       | ✅ 2026-09-21 (7c41ce8) |
-| 1e    | Flip `CoreStoreState` → `SyncStoreState<CoreInnerState>`  | 1 day     | MEDIUM       | PENDING (needs WasiEnvironment pipe support on wasmos side) |
+| 1e    | Flip `CoreStoreState` → `SyncStoreState<CoreInnerState>`  | 1 day     | MEDIUM       | ✅ 2026-09-22 (5f3b1e8) |
 | 2     | 5 store-construction sites → SyncRuntime                 | 2-3 days  | HIGH         | PENDING (blocked on 1e) |
 | 3     | Host-import registrations → HostImports::register_sync   | 2-3 days  | MEDIUM       | PENDING (blocked on 2) |
 | 4     | Guest-export dispatch → SyncInstance::call_export        | 1-2 days  | MEDIUM       | PENDING (blocked on 1e + 2) |
