@@ -28,7 +28,7 @@ use anyhow::{Context, Result};
 
 use super::{
     build_engine, build_wasi_ctx_inherit, instantiate_core, ComponentArtifacts, CoreExecution,
-    ExtensionManager,
+    CoreResourceHandle, ExtensionManager,
 };
 
 const QUACK_CONTENT_TYPE: &str = "application/vnd.duckdb";
@@ -76,14 +76,14 @@ pub fn serve_quack(
             .as_deref()
             .map(|s| Box::new(Value::String(s.to_string()))),
     );
-    let conn = crate::call_database_returning_resource_on_core(
-        &mut core,
-        "open-with-config",
-        None,
-        &[db_path_arg, opts_arg],
-        crate::ExecuteErrKind::PlainString,
-    )?
-    .map_err(|e| anyhow::anyhow!("open database: {e:?}"))?;
+    let conn = core
+        .call_database_returning_handle(
+            "open-with-config",
+            None,
+            &[db_path_arg, opts_arg],
+            crate::ExecuteErrKind::PlainString,
+        )?
+        .map_err(|e| anyhow::anyhow!("open database: {e:?}"))?;
 
     // Build the core-side bridge server (no socket bind on wasi -- CreateServer
     // routes to the listen-less WasiQuackServer). This registers the bridge
@@ -92,7 +92,7 @@ pub fn serve_quack(
         "SELECT * FROM quack_serve('quack:localhost:{port}', token := '{}', allow_other_hostname := true)",
         token.replace('\'', "''")
     );
-    crate::call_database_execute_on_core(&mut core, conn, &serve_sql)?.map_err(|e| {
+    core.execute_on_handle(conn, &serve_sql)?.map_err(|e| {
         anyhow::anyhow!(
             "quack_serve bridge init failed: {}",
             crate::cli_duckerror_message(e)
@@ -165,7 +165,7 @@ fn read_request(stream: &mut TcpStream) -> Result<Option<Request>> {
 fn handle_connection(
     stream: &mut TcpStream,
     core: &mut CoreExecution,
-    _conn: &wasmtime::component::ResourceAny,
+    _conn: &CoreResourceHandle,
 ) -> Result<()> {
     let req = match read_request(stream)? {
         Some(r) => r,

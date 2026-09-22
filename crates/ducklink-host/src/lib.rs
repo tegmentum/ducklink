@@ -2775,6 +2775,84 @@ struct CoreExecution {
     instance: wasmtime::component::Instance,
 }
 
+/// Opaque handle to a live wasm-side resource inside a
+/// [`CoreExecution`] — connections, prepared statements,
+/// appenders, and result streams all share this shape. Wraps a
+/// `wasmtime::component::ResourceAny` so ducklink-host code
+/// modules that consume the [`CoreExecution`] shape do not need to
+/// name the wasmtime type in their own signatures.
+///
+/// Consumers that used to write `use wasmtime::component::ResourceAny;`
+/// and then thread `ResourceAny` values through their own fns
+/// (`replicate.rs`, `ui_server.rs`, `httpd.rs`, `quack_server.rs`)
+/// use `CoreResourceHandle` instead. The wrapper is `Copy` because
+/// `ResourceAny` is; consumers can pass it by value or by
+/// reference without ceremony.
+///
+/// This is a real newtype (`repr(transparent)` around
+/// `ResourceAny`), not a `pub type` alias — the wasmtime type does
+/// not leak through into consumer signatures via trait bounds or
+/// generic parameters.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct CoreResourceHandle(pub(crate) wasmtime::component::ResourceAny);
+
+impl From<wasmtime::component::ResourceAny> for CoreResourceHandle {
+    fn from(ra: wasmtime::component::ResourceAny) -> Self {
+        Self(ra)
+    }
+}
+
+impl From<CoreResourceHandle> for wasmtime::component::ResourceAny {
+    fn from(h: CoreResourceHandle) -> Self {
+        h.0
+    }
+}
+
+impl CoreExecution {
+    /// Wrapper-flavour of
+    /// [`call_database_returning_resource_on_core`] — same behaviour,
+    /// signature swaps `wasmtime::component::ResourceAny` for
+    /// [`CoreResourceHandle`] so consumer modules don't need to
+    /// name the wasmtime type.
+    pub(crate) fn call_database_returning_handle(
+        &mut self,
+        method: &str,
+        input_handle: Option<CoreResourceHandle>,
+        other_args: &[wasmos_runtime_api::Value],
+        err_kind: ExecuteErrKind,
+    ) -> Result<Result<CoreResourceHandle, DatabaseVerbErr>, wasmos_runtime_api::RuntimeError>
+    {
+        let input = input_handle.map(|h| h.0);
+        call_database_returning_resource_on_core(self, method, input, other_args, err_kind)
+            .map(|inner| inner.map(CoreResourceHandle))
+    }
+
+    /// Wrapper-flavour of [`call_database_execute_on_core`] — same
+    /// behaviour, signature takes a [`CoreResourceHandle`] instead
+    /// of the raw wasmtime type.
+    pub(crate) fn execute_on_handle(
+        &mut self,
+        conn_handle: CoreResourceHandle,
+        sql: &str,
+    ) -> Result<Result<cli_native::QueryResult, cli_native::Duckerror>, wasmos_runtime_api::RuntimeError>
+    {
+        call_database_execute_on_core(self, conn_handle.0, sql)
+    }
+
+    /// Wrapper-flavour of [`call_export_on_resource_core`] — same
+    /// behaviour, signature takes a [`CoreResourceHandle`].
+    pub(crate) fn call_export_on_handle(
+        &mut self,
+        iface: &str,
+        method: &str,
+        handle: CoreResourceHandle,
+        trailing_args: &[wasmos_runtime_api::Value],
+    ) -> Result<Vec<wasmos_runtime_api::Value>, wasmos_runtime_api::RuntimeError> {
+        call_export_on_resource_core(self, iface, method, handle.0, trailing_args)
+    }
+}
+
 /// The `nested-exec` Direction-1 §5.(b.1) sibling-core state, shared between
 /// [`HostState`] (which records the primary's opened DB path) and every
 /// [`CoreServices`] (which lazily instantiates a second [`CoreExecution`] over

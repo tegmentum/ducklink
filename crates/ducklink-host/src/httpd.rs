@@ -29,13 +29,12 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, Context, Result};
-use wasmtime::component::ResourceAny;
 
 use crate::handler::HandlerRegistry;
 use crate::ui_server::{json_string, json_value};
 use crate::{
     build_engine, build_wasi_ctx_inherit, instantiate_core, ComponentArtifacts, CoreExecution,
-    ExtensionManager,
+    CoreResourceHandle, ExtensionManager,
 };
 use ducklink_runtime::extension as core_types;
 
@@ -109,14 +108,14 @@ pub fn serve_httpd(
             .as_deref()
             .map(|s| Box::new(Value::String(s.to_string()))),
     );
-    let conn = crate::call_database_returning_resource_on_core(
-        &mut core,
-        "open-with-config",
-        None,
-        &[db_path_arg, opts_arg],
-        crate::ExecuteErrKind::PlainString,
-    )?
-    .map_err(|e| anyhow!("open database: {e:?}"))?;
+    let conn = core
+        .call_database_returning_handle(
+            "open-with-config",
+            None,
+            &[db_path_arg, opts_arg],
+            crate::ExecuteErrKind::PlainString,
+        )?
+        .map_err(|e| anyhow!("open database: {e:?}"))?;
 
     if opts.init_routes {
         init_routes_table(&mut core, &conn, &opts.routes_table)
@@ -246,7 +245,7 @@ fn read_request<S: Read>(stream: &mut S) -> Result<Option<Request>> {
 fn serve_conn<S: Read + Write>(
     stream: &mut S,
     core: &mut CoreExecution,
-    conn: &ResourceAny,
+    conn: &CoreResourceHandle,
     routes_table: &str,
     peer: &str,
     handlers: Option<&HandlerRegistry>,
@@ -323,7 +322,7 @@ fn reason_phrase(status: u16) -> &'static str {
 
 fn handle(
     core: &mut CoreExecution,
-    conn: &ResourceAny,
+    conn: &CoreResourceHandle,
     req: &Request,
     routes_table: &str,
     peer: &str,
@@ -422,7 +421,7 @@ fn percent_decode(s: &str) -> String {
 }
 
 /// Run admin SQL and emit `{columns, rows, rowcount}` (200) or `{error}` (422).
-fn run_sql(core: &mut CoreExecution, conn: &ResourceAny, sql: &str) -> HttpResponse {
+fn run_sql(core: &mut CoreExecution, conn: &CoreResourceHandle, sql: &str) -> HttpResponse {
     if sql.is_empty() {
         return HttpResponse::json(200, r#"{"columns":[],"rows":[],"rowcount":0}"#.to_string());
     }
@@ -465,7 +464,7 @@ fn is_safe_ident(s: &str) -> bool {
 /// Look up the best-matching route. `None` → fall through to built-ins / 404.
 fn lookup(
     core: &mut CoreExecution,
-    conn: &ResourceAny,
+    conn: &CoreResourceHandle,
     method: &str,
     path: &str,
     table: &str,
@@ -523,7 +522,7 @@ fn lookup(
 
 fn execute_route(
     core: &mut CoreExecution,
-    conn: &ResourceAny,
+    conn: &CoreResourceHandle,
     m: &RouteMatch,
     req: &Request,
     peer: &str,
@@ -693,7 +692,7 @@ fn ordered_handler_params(sql: &str, req: &Request, peer: &str) -> Vec<core_type
 
 fn execute_sql(
     core: &mut CoreExecution,
-    conn: &ResourceAny,
+    conn: &CoreResourceHandle,
     m: &RouteMatch,
     req: &Request,
     peer: &str,
@@ -707,7 +706,7 @@ fn execute_sql(
 
 fn execute_blob(
     core: &mut CoreExecution,
-    conn: &ResourceAny,
+    conn: &CoreResourceHandle,
     m: &RouteMatch,
     req: &Request,
     peer: &str,
@@ -812,8 +811,8 @@ struct Rows {
 }
 
 /// Run SQL with no parameters via `execute`.
-fn db_query(core: &mut CoreExecution, conn: &ResourceAny, sql: &str) -> Result<Rows, String> {
-    match crate::call_database_execute_on_core(core, *conn, sql) {
+fn db_query(core: &mut CoreExecution, conn: &CoreResourceHandle, sql: &str) -> Result<Rows, String> {
+    match core.execute_on_handle(*conn, sql) {
         Ok(Ok(r)) => Ok(Rows {
             cols: r.columns.into_iter().map(|c| c.name.to_string()).collect(),
             rows: r
@@ -833,13 +832,12 @@ fn db_query(core: &mut CoreExecution, conn: &ResourceAny, sql: &str) -> Result<R
 /// 2-param lookup binds [method, path].
 fn db_query_params(
     core: &mut CoreExecution,
-    conn: &ResourceAny,
+    conn: &CoreResourceHandle,
     sql: &str,
     params: &[core_types::Duckvalue],
 ) -> Result<Rows, String> {
     use wasmos_runtime_api::Value;
-    let prepared: ResourceAny = match crate::call_database_returning_resource_on_core(
-        core,
+    let prepared: CoreResourceHandle = match core.call_database_returning_handle(
         "prepare",
         Some(*conn),
         &[Value::String(sql.to_string())],
@@ -851,14 +849,14 @@ fn db_query_params(
         Err(e) => return Err(e.to_string()),
     };
 
-    let count_ret = crate::call_export_on_resource_core(
-        core,
-        crate::DATABASE_IFACE,
-        "[method]prepared-statement.parameter-count",
-        prepared,
-        &[],
-    )
-    .map_err(|e| e.to_string())?;
+    let count_ret = core
+        .call_export_on_handle(
+            crate::DATABASE_IFACE,
+            "[method]prepared-statement.parameter-count",
+            prepared,
+            &[],
+        )
+        .map_err(|e| e.to_string())?;
     let count = match count_ret.as_slice() {
         [Value::U32(n)] => *n as usize,
         other => return Err(format!("parameter-count unexpected: {other:?}")),
@@ -883,15 +881,16 @@ fn db_query_params(
             .collect(),
     );
 
-    let result = crate::call_export_on_resource_core(
-        core,
+    let result = core.call_export_on_handle(
         crate::DATABASE_IFACE,
         "[method]prepared-statement.execute",
         prepared,
         &[params_val],
     );
     // Free the prepared-statement resource regardless of outcome.
-    let _ = core.with_instance(|_instance, store| prepared.resource_drop(store));
+    // `resource_drop` is a wasmtime-native method on ResourceAny;
+    // unwrap the CoreResourceHandle at this specific boundary.
+    let _ = core.with_instance(|_instance, store| prepared.0.resource_drop(store));
 
     let ret = match result {
         Ok(r) => r,
@@ -1038,7 +1037,7 @@ fn clamp_status(s: i64) -> u16 {
 // Routes-table bootstrap
 // ---------------------------------------------------------------------------
 
-fn init_routes_table(core: &mut CoreExecution, conn: &ResourceAny, table: &str) -> Result<()> {
+fn init_routes_table(core: &mut CoreExecution, conn: &CoreResourceHandle, table: &str) -> Result<()> {
     if !is_safe_ident(table) {
         anyhow::bail!("bad routes table name");
     }

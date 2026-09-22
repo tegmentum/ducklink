@@ -34,12 +34,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use wasmtime::component::ResourceAny;
 
 use crate::sigv4::{self, Credentials};
 use crate::{
     build_engine, build_wasi_ctx_inherit, instantiate_core, ComponentArtifacts, CoreExecution,
-    ExtensionManager,
+    CoreResourceHandle, ExtensionManager,
 };
 
 /// Parsed `s3://bucket/prefix` destination.
@@ -267,7 +266,7 @@ fn open_persistent(
     artifacts: &ComponentArtifacts,
     guest_db: &str,
     preopens: &[(&Path, &str)],
-) -> Result<(CoreExecution, ResourceAny)> {
+) -> Result<(CoreExecution, CoreResourceHandle)> {
     let engine = build_engine()?;
     let wasi = build_wasi_ctx_inherit(&[String::from("ducklink-backup")], preopens)?;
     let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
@@ -287,22 +286,22 @@ fn open_persistent(
             .map(|(k, v)| Value::Tuple(vec![Value::String(k.clone()), Value::String(v.clone())]))
             .collect(),
     );
-    let conn = crate::call_database_returning_resource_on_core(
-        &mut core,
-        "open-with-config",
-        None,
-        &[
-            Value::Option(Some(Box::new(Value::String(guest_db.to_string())))),
-            opts_arg,
-        ],
-        crate::ExecuteErrKind::PlainString,
-    )?
-    .map_err(|e| anyhow!("open database {guest_db}: {e:?}"))?;
+    let conn = core
+        .call_database_returning_handle(
+            "open-with-config",
+            None,
+            &[
+                Value::Option(Some(Box::new(Value::String(guest_db.to_string())))),
+                opts_arg,
+            ],
+            crate::ExecuteErrKind::PlainString,
+        )?
+        .map_err(|e| anyhow!("open database {guest_db}: {e:?}"))?;
     Ok((core, conn))
 }
 
-fn checkpoint(core: &mut CoreExecution, conn: &ResourceAny) -> Result<()> {
-    match crate::call_database_execute_on_core(core, *conn, "CHECKPOINT") {
+fn checkpoint(core: &mut CoreExecution, conn: &CoreResourceHandle) -> Result<()> {
+    match core.execute_on_handle(*conn, "CHECKPOINT") {
         Ok(Ok(_)) => Ok(()),
         Ok(Err(e)) => Err(anyhow!(
             "CHECKPOINT failed: {}",
@@ -317,7 +316,7 @@ fn checkpoint(core: &mut CoreExecution, conn: &ResourceAny) -> Result<()> {
 /// `prev` is the last state (for the generation counter).
 fn snapshot_once(
     core: &mut CoreExecution,
-    conn: &ResourceAny,
+    conn: &CoreResourceHandle,
     host_db: &Path,
     s3: &S3Client,
     target: &S3Target,

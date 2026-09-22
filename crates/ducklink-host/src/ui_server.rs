@@ -26,11 +26,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
-use wasmtime::component::ResourceAny;
 
 use super::{
     build_engine, build_wasi_ctx_inherit, instantiate_core, ComponentArtifacts, CoreExecution,
-    ExtensionManager,
+    CoreResourceHandle, ExtensionManager,
 };
 use ducklink_runtime::extension as core_types;
 
@@ -86,23 +85,19 @@ pub fn serve_ui(
             .as_deref()
             .map(|s| Box::new(Value::String(s.to_string()))),
     );
-    let conn = crate::call_database_returning_resource_on_core(
-        &mut core,
-        "open-with-config",
-        None,
-        &[db_path_arg, opts_arg],
-        crate::ExecuteErrKind::PlainString,
-    )?
-    .map_err(|e| anyhow::anyhow!("open database: {e:?}"))?;
+    let conn = core
+        .call_database_returning_handle(
+            "open-with-config",
+            None,
+            &[db_path_arg, opts_arg],
+            crate::ExecuteErrKind::PlainString,
+        )?
+        .map_err(|e| anyhow::anyhow!("open database: {e:?}"))?;
 
     if mode != UiMode::Console {
         // Initialize the ui extension's HttpServer singleton (bridge mode -- no
         // listen). The real-UI bridge needs it before handling /ddb/* requests.
-        match crate::call_database_execute_on_core(
-            &mut core,
-            conn,
-            "SELECT * FROM start_ui_server()",
-        ) {
+        match core.execute_on_handle(conn, "SELECT * FROM start_ui_server()") {
             Ok(Ok(_)) => {}
             other => eprintln!("duckdb-ui: start_ui_server() returned {other:?} (continuing)"),
         }
@@ -203,7 +198,7 @@ fn is_ui_endpoint(path: &str) -> bool {
 fn handle_connection(
     stream: &mut TcpStream,
     core: &mut CoreExecution,
-    conn: &ResourceAny,
+    conn: &CoreResourceHandle,
     mode: UiMode,
     assets_dir: &Path,
 ) -> Result<()> {
@@ -256,7 +251,7 @@ fn handle_connection(
 /// Forward a duckdb-ui request to the component's bridged HttpServer handler.
 fn bridge_ui_request(
     core: &mut CoreExecution,
-    _conn: &ResourceAny,
+    _conn: &CoreResourceHandle,
     req: &Request,
 ) -> Option<(u16, String, Vec<u8>)> {
     use wasmos_runtime_api::Value;
@@ -410,11 +405,11 @@ fn mime_for(path: &Path) -> &'static str {
 
 // --- console mode (the built-in tiny SQL console) ---------------------------
 
-fn run_query(core: &mut CoreExecution, conn: &ResourceAny, sql: &str) -> String {
+fn run_query(core: &mut CoreExecution, conn: &CoreResourceHandle, sql: &str) -> String {
     if sql.is_empty() {
         return r#"{"columns":[],"rows":[],"rowcount":0}"#.to_string();
     }
-    let result = match crate::call_database_execute_on_core(core, *conn, sql) {
+    let result = match core.execute_on_handle(*conn, sql) {
         Ok(Ok(r)) => r,
         Ok(Err(e)) => return json_error(&crate::cli_duckerror_message(e)),
         Err(e) => return json_error(&format!("{e}")),
