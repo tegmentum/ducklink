@@ -1,12 +1,33 @@
 # Ducklink Path B closure plan
 
-**Status:** planning (2026-09-21). This is the execution plan for
-closing out Path B for ducklink-host — retiring every direct
-`wasmtime::*` type from ducklink-host source files, retiring
-`unsafe fn primary_nested_exec`, and dropping the direct
-`wasmtime` Cargo dep. Complements the migration-recipe
+**Status:** Phase 1 preparatory sub-slices landed 2026-09-21
+(commits `fd879cc`, `9ff6bf5`, `73ea896`); Phase 1 type-swap
+itself still pending. This is the execution plan for closing out
+Path B for ducklink-host — retiring every direct `wasmtime::*`
+type from ducklink-host source files, retiring `unsafe fn
+primary_nested_exec`, and dropping the direct `wasmtime` Cargo
+dep. Complements the migration-recipe
 (`docs/wasmos-migration-recipe.md`) which tracks per-consumer
 state; this doc lays out the ordered execution path.
+
+**Phase 1 preparatory landings (2026-09-21):**
+- `fd879cc` — `CoreExecution::call_bridge_export` +
+  `resource_drop_handle` methods encapsulate the escape-hatch
+  bridge; 3 consumer files (quack_server, ui_server, httpd) no
+  longer name `wasmtime::component::Instance` or
+  `StoreContextMut` at call sites.
+- `9ff6bf5` — 5 config/logging dispatch sites inside
+  `impl ExtensionServices for CoreServices` migrated onto
+  `call_bridge_export`; retires the last `with_instance` callers
+  in lib.rs.
+- `73ea896` — 2 extension-management dispatch sites
+  (register_extension, list_registered_extensions) migrated.
+- **Result:** no consumer-facing wasmtime types outside lib.rs's
+  internal helpers; store/instance access is fully encapsulated
+  behind `CoreExecution` methods. Sets up the actual Phase 1
+  type-swap (7 `.store` / `.instance` internal accessors on
+  `CoreExecution` and 5 `Store::new` construction sites) as a
+  contained refactor.
 
 **Prereqs (all shipped):**
 - ✅ `wasmos_runtime_wasmtime_v48::SyncRuntime` + `SyncInstance` facade
