@@ -264,17 +264,17 @@ impl DriverExecHost {
     /// `duckdb:driver/exec.connection.query(sql: string) ->
     /// result<list<list<string>>, string>`.
     ///
-    /// `Vec<Vec<String>>` (list<list<string>>) is a nested-container
-    /// return the `#[host_iface(sync)]` classifier doesn't auto-lift
-    /// yet — construct the Value::Result manually via a
-    /// `RuntimeResult<Value>` passthrough.
+    /// Typed nested-container return: `Vec<Vec<String>>` flows
+    /// through the macro's Custom fallback + `WitBridge` blanket
+    /// impls (`Vec<T: WitBridge>`, `String: WitBridge`) — no
+    /// manual `Value::Result` construction needed.
     #[method("[method]connection.query")]
     fn connection_query(
         &self,
         ctx: &mut HostCallContext<'_>,
         conn: Resource<DriverConnection>,
         sql: String,
-    ) -> RuntimeResult<Value> {
+    ) -> RuntimeResult<Result<Vec<Vec<String>>, String>> {
         let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
             RuntimeError::msg("driver-exec query: consumer_state<DriverStoreState> unavailable")
         })?;
@@ -282,16 +282,7 @@ impl DriverExecHost {
             .conn_table
             .get_mut(&conn)
             .map_err(|e| RuntimeError::msg(format!("driver-exec query: bad handle: {e}")))?;
-        Ok(match payload.query(&sql) {
-            Ok(rows) => {
-                let outer: Vec<Value> = rows
-                    .into_iter()
-                    .map(|row| Value::List(row.into_iter().map(Value::String).collect()))
-                    .collect();
-                Value::Result(Ok(Some(Box::new(Value::List(outer)))))
-            }
-            Err(e) => Value::Result(Err(Some(Box::new(Value::String(e))))),
-        })
+        Ok(payload.query(&sql))
     }
 
     /// wasmtime-side drop notification for the `connection` resource
