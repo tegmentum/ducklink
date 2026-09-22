@@ -3299,28 +3299,29 @@ impl CoreExecution {
     // guest-export accessor is retired:
     //
     //   * `with_database` / `with_stream` / `with_prepared` /
-    //     `with_appender` (this wedge) — all production + test +
-    //     cross-file consumers moved onto
-    //     `sync_export_bridge::call_export_with_resources` via the
-    //     `call_database_*` / `call_export_*` helper family in
-    //     this file (see near `DATABASE_IFACE`).
-    //   * `with_runtime` (commit 3a27b2d0) — the accessor had zero
-    //     callers throughout the migration; retired alongside the
-    //     `core_runtime_exports` alias.
-    //   * `with_config` / `with_logging` (wedge #6, commit 67d761a1)
-    //     — retired when the two simple non-resource-carrying guest
-    //     interfaces moved onto the bridge.
+    //     `with_appender` — all production + test + cross-file
+    //     consumers moved onto the escape-hatch bridge.
+    //   * `with_runtime` (commit 3a27b2d0), `with_config` /
+    //     `with_logging` (wedge #6) — retired similarly.
+    //   * `with_instance` (2026-09-21) — the last remaining
+    //     escape hatch handing out
+    //     `wasmtime::StoreContextMut<CoreStoreState>` +
+    //     `&wasmtime::component::Instance` was retired once every
+    //     internal + consumer caller migrated onto the wrappers.
     //
-    // The `bindings: duckdb_core_bindings::Libduckdb` field that
-    // used to back them is also retired; every guest-export dispatch
-    // routes through the raw `instance: wasmtime::component::Instance`
-    // via the `call_bridge_export` + `resource_drop_handle` wrappers
-    // defined above. The original `with_instance` escape hatch
-    // (which handed out `wasmtime::StoreContextMut<CoreStoreState>`
-    // + `&wasmtime::component::Instance`) was retired 2026-09-21
-    // once every internal + consumer caller migrated onto the
-    // wrappers — no callers remain, and its wasmtime-typed
-    // signature was blocking Phase 6's Cargo-dep drop.
+    // Path B Slice 3 (2026-09-22, ad3156a) — the escape-hatch
+    // bridge itself is retired on the CoreExecution path. Every
+    // guest-export dispatch now routes through
+    // `self.sync_inst.call_export("iface#method", args)` (wasmos-
+    // native SyncInstance) via the `call_bridge_export` +
+    // `resource_drop_handle` wrappers defined above.
+    // `resource_drop_handle` uses `SyncInstance::resource_drop`
+    // for wasmos-native resource cleanup. No `sync_export_bridge`
+    // + `ExportResourceTable` escape-hatch code path remains on
+    // CoreExecution — only the cross-instance sync reentry path
+    // (`primary_nested_exec` via `SyncCrossInstanceHandle`) still
+    // touches the sync bridge, and that's a wasmos-vetted
+    // primitive (Phase 6.24).
 
     // `with_config` + `with_logging` retired — every config /
     // logging guest-export site now dispatches through
