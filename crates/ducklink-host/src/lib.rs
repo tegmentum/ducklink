@@ -209,7 +209,6 @@ mod core_tvm_types {
 // tests) below, which drive the production wasmos install path
 // through the real CLI.
 use ducklink_runtime::{CallbackEntry, CallbackKind, CallbackRegistry};
-use wasmtime::component::__internal::Vec as BindgenVec;
 // M2b: the storage interface's scan types (scan-request / scan-filter /
 // compare-op) used to drive a pushdown scan into a storage component.
 use ducklink_runtime::extension::storage_scan;
