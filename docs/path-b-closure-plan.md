@@ -169,32 +169,148 @@ trade away `wasm_component_model_async` / concurrency / streams
   Handler error-message strings tidied to name CoreInnerState.
 
 **What remains for full Path B closure:** Phase 6 (wasmtime Cargo
-dep drop) is blocked on two remaining consumer paths:
-- engine builder (`build_engine_for_driver` returns
-  `wasmtime::Engine`) — external API used by cron_cli.rs and
-  replicate.rs
-- `DotcmdInstance` (uses `wasmtime::component::Instance` +
-  `Store<DotcmdState>` + compose_dynlink linker integration) —
-  compose_dynlink migration is Phase 6.2.d.3, coordination with
-  ducklink-runtime
+dep drop) is blocked on three deeply-cascading consumer paths.
+Each has been investigated in-session (2026-09-22, post-`39ac622`);
+none is a single-session migration.
+
+### Blocker 1 — `DotcmdInstance` + `compose_dynlink` linker integration
+
+Current shape (`crates/ducklink-host/src/lib.rs:3757`):
+```rust
+struct DotcmdInstance {
+    store: Store<DotcmdState>,
+    instance: wasmtime::component::Instance,
+}
+```
+
+Uses `compose_dynlink::add_to_linker::<DotcmdState>(&mut linker)`
+from the wasmtime-shaped `datalink_dynlink` crate. The
+wasmos-native counterpart (`datalink_dynlink_wasmos::
+install_host_imports`) exists and takes a `HostImports` +
+`Arc<ProviderBackend>` — but with a DIFFERENT `ProviderRegistry`
+type than the wasmtime-shaped one that ducklink currently uses
+process-wide.
+
+**Concrete unblock condition (Phase 6.2.d.4, coordinated
+ducklink-runtime + ducklink-host migration):**
+1. Migrate ducklink's process-wide provider registry from
+   `datalink_dynlink::ProviderRegistry` (constructed with
+   `wasmtime::Engine`) to `datalink_dynlink_wasmos::ProviderRegistry`
+   (constructed with `Arc<dyn wasmos_runtime_api::Runtime>`).
+   Cascades through: `dynlink_provider_registry()` (lib.rs:3488),
+   `register_env_providers()`, `sub_ext::SubExtLoader`
+   (which currently uses the wasmtime `ProviderRegistry` and has
+   test call-sites like `sub_ext.rs:586,633` that construct
+   `Engine` directly).
+2. Migrate `ExtensionStoreState` in `ducklink-runtime` off the
+   `impl_compose_dynlink_host!` wasmtime-macro path onto the
+   wasmos `HostImports::register` path.
+3. Once both are on the wasmos path, DotcmdInstance rewrites to
+   `SyncInstance` + `HostImports::register(compose:dynlink/linker,
+   ResidentBackend::new(registry))` at instantiate time. The
+   `store` and `instance` fields disappear behind `SyncInstance`.
+
+**Estimated scope:** 3-5 focused sessions. Cross-crate ordering
+matters — the ProviderRegistry migration is atomic (breaks all
+callers simultaneously), so it lands as one coordinated commit
+per ducklink-runtime + ducklink-host repo.
+
+### Blocker 2 — `build_engine_for_driver` returns `wasmtime::Engine`
+
+Current shape (`crates/ducklink-host/src/lib.rs:11051`):
+```rust
+pub fn build_engine_for_driver() -> Result<Engine> { build_engine() }
+```
+
+Callers (all inside ducklink-host — no external API break needed):
+- `cron_cli.rs` — 7 sites, each `let engine = build_engine_for_driver()?;`
+  then passes to `open_state(&engine, ...)` → `open_driver_core(engine, ...)`.
+- `driver_exec.rs:333` — one site, threads through `DriverStoreState.engine`.
+
+`open_driver_core_with_bootstrap()` uses the engine ONLY for
+`ExtensionManager::new(engine.clone())`. `ExtensionManager`
+stores + uses that engine for compiling extension `.wasm` files
+(bindgen path) and for constructing per-extension components.
+The `instantiate_core()` path already builds its own SyncRuntime
+internally and does NOT use the passed-in engine.
+
+**Concrete unblock condition:** migrate `ExtensionManager` off
+`wasmtime::Engine` onto `Arc<SyncRuntime>` (or a wasmos-native
+compile-cache factory). The bindgen extension-load pipeline uses
+`wasmtime::component::Component::new(&engine, bytes)` + linker
++ store — retiring these is a large multi-file rewrite touching
+extension-load, extension-instance, extension-dispatch (see
+`crates/ducklink-host/src/lib.rs` around ExtensionManager +
+`ExtensionInstance` from ~line 6540).
+
+**Estimated scope:** 5-8 focused sessions. Once ExtensionManager
+is wasmos-native, `build_engine_for_driver` can return
+`Arc<SyncRuntime>` (or a thin `DriverRuntime` newtype) and the
+callers change their local variable type only.
+
+### Blocker 3 — `wasmtime::Cache::from_file` in `build_engine()`
+
+Current shape (`crates/ducklink-host/src/lib.rs:11260`): configures
+the shared wasmtime compile cache so ~96 MB core component
+compilation amortises across CLI invocations. Retirement requires
+wasmos-side `RuntimeConfig` to accept a compile-cache handle
+(a future primitive; not on any active roadmap doc as of
+2026-09-22).
+
+**Concrete unblock condition:** wasmos-side addition of
+`RuntimeConfig::with_compile_cache_from_file(Option<PathBuf>)` or
+similar. Documented as "future wasmos gap" in `instantiate_core`
+comment at lib.rs:10780+. This is legitimately outside the ducklink
+team's scope until wasmos adds the primitive.
+
+**Estimated scope:** 1-2 wasmos sessions (design + primitive +
+adapter plumb-through), then a mechanical ducklink update.
+
+### Session summary (2026-09-22, post-`39ac622`)
+
+Investigation confirmed all three items are genuinely
+multi-session blockers, not overlooked one-liners. The remaining
+`wasmtime::` residue in `crates/ducklink-host/src/lib.rs`
+(currently 19 refs) breaks down as:
+- 2 real-code import lines (`use wasmtime::…` at :229-230) —
+  live, feed Blockers 1 + 2.
+- 3 real-code type/method sites — `DotcmdInstance.instance` at
+  :3765 (Blocker 1), `wasmtime::Cache::from_file` at :11260
+  (Blocker 3), one Linker construction at :3843 (part of
+  Blocker 1's compose_dynlink surface).
+- ~14 archaeological doc comments (comments describing retired
+  code — intentionally preserved as migration history per
+  `feedback_wasmos_foundational_correctness`).
+
+Blocker 1 investigation confirmed `datalink-dynlink-wasmos`
+(the wasmos-native ProviderBackend crate at
+`~/git/datalink/crates/datalink-dynlink-wasmos/`) exists and
+its `install_host_imports` API is production-shaped, but the
+ducklink-side switchover (Phase 6.2.d.4) has not landed.
+
+Blocker 2 investigation confirmed the `open_driver_core`
+threading only reaches ExtensionManager — no test or external
+consumer directly consumes the `wasmtime::Engine` return type,
+so the switchover is scoped to ducklink-host + one type flip
+per caller once ExtensionManager migrates.
+
+Blocker 3 remains an acknowledged wasmos-side gap.
+
+Ducklink-host's wasmtime uses now sit at **19 lines** (down from
+~110 at Slice 2 start — a **-83% reduction** across the arc):
+- 2 real-code `use wasmtime::…` import lines (feed Blockers 1 + 2)
+- 3 real-code type/method sites (Blockers 1 + 3)
+- ~14 archaeological doc comments (migration history — preserved)
 
 CliHarness + run_cli_inner + wire_cli_bridged_host_imports +
 dispatch_cli_run all landed on the wasmos-native path
 (`1ac637c`, 2026-09-22). The ExtensionManager `wasmtime::Result`
-interop closed in `0b0a302`.
+interop closed in `0b0a302`. The standalone-shell driver migrated
+in `4f56c37`. Cross-instance CoreExecution dispatch fixed in
+`39ac622`.
 
-Ducklink-host's wasmtime uses now sit at **19 lines** (down from
-~110 at Slice 2 start — a **-83% reduction** across the arc):
-- 8 in the import `use wasmtime::…` lines (still needed by
-  DotcmdInstance/build_engine)
-- ~7 in archaeological doc comments (migration history)
-- ~4 in real code — DotcmdInstance.instance,
-  DotcmdInstance.store (via Store<DotcmdState>),
-  wasmtime::Cache::from_file, DotcmdRegistry::load_one's Linker
-  + compose_dynlink integration
-
-The two remaining consumer arcs are independent; neither blocks
-the other. Full Cargo dep drop requires both to land plus
+The three remaining consumer arcs are independent; neither blocks
+the others. Full Cargo dep drop requires all three to land plus
 retiring the archaeological doc references (or updating the
 lint to allow bare `wasmtime` mentions in comments).
 
