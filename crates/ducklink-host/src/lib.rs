@@ -226,7 +226,7 @@ use ducklink_runtime::{
 // typed `Resource<cli_native::{Connection, ResultStream, …}>` uses is
 // gone, and the surviving `Resource<DotcmdRegistry>` / `ResourceAny`
 // paths import `Resource` locally where needed.
-use wasmtime::component::{Component, Linker, ResourceAny, ResourceTable};
+use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{AsContextMut, Config, Engine, Store, StoreContextMut};
 
 /// The `compose:dynlink/linker` host implementation now lives in
@@ -445,15 +445,13 @@ struct CoreInnerState {
     is_sibling: bool,
 }
 
-/// Path B Slice 3 (2026-09-22) — `CoreExecution` no longer routes
-/// through this alias (its `sync_inst: SyncInstance` field owns
-/// the store internally via wasmos's own `AdapterHostState`). The
-/// alias survives for the standalone-shell driver
-/// (`run_standalone_shell` below) which still holds a wasmtime
-/// `Store<CoreStoreState>` + escape-hatch-bridge dispatch;
-/// migrating that path is a separate arc from Slice 3.
-type CoreStoreState = wasmos_runtime_wasmtime_v48::SyncStoreState<CoreInnerState>;
-
+// Path B Slice 3 + shell-driver follow-up (2026-09-22) — the
+// `type CoreStoreState = SyncStoreState<CoreInnerState>` alias is
+// FULLY RETIRED. CoreExecution moved to `sync_inst: SyncInstance`
+// under Slice 3 (ad3156a); the standalone-shell driver
+// (run_shell_with_stdio) migrated to SyncRuntime + SyncInstance
+// alongside this retirement. Historical references in comments +
+// error strings preserved for archaeological continuity.
 
 // The bindgen-era `impl core_host_loader::Host for CoreStoreState`
 // block that used to sit here is retired under Phase 2e (site 2)
@@ -12196,84 +12194,61 @@ pub fn run_shell_with_stdio(
         manager.attach_current_connection(Arc::new(Mutex::new(None)));
     }
 
-    // CoreStoreState implements the host-extension-loader / extension-loader-hooks
-    // / callback-dispatch Host traits via the ExtensionManager -- exactly the
-    // imports the shell command declares.
-    let mut linker = Linker::<CoreStoreState>::new(&engine);
-    p2::add_to_linker_sync(&mut linker)?;
-    add_wasi_http_to_linker(&mut linker)?;
-    // Phase 2e wedges — this shell path historically only wired
-    // host-extension-loader / extension-hooks / callback-dispatch
-    // (no tvm imports for the shell world). Now host-extension-
-    // loader AND extension-loader-hooks AND callback-dispatch all
-    // route through the bridge now. No bindgen `add_to_linker`
-    // calls remain on the shell path either. The bridge needs the
-    // component's imports at install-time, so the component load
-    // moved BEFORE the bridge install (was originally after the
-    // store construction — the reordering only matters for the
-    // bridge's import-introspection pass; wasmtime allows linker
-    // use before/after component load).
-
-    let component = load_component(&engine, shell_component).with_context(|| {
+    // Path B follow-up (2026-09-22): shell driver migrated to
+    // wasmos-native SyncRuntime + SyncInstance. Retires the last
+    // Store<CoreStoreState> construction that shared the
+    // CoreStoreState alias with CoreExecution — the alias is now
+    // truly unused by ducklink-host and can be removed alongside
+    // the wasmtime Cargo dep drop.
+    let shell_bytes = std::fs::read(shell_component).with_context(|| {
         format!(
-            "failed to load shell component from {}",
+            "failed to read shell component from {}",
             shell_component.display()
         )
     })?;
-
-    for (iface, handler) in [
-        (
-            HOST_EXTENSION_LOADER_IFACE,
-            std::sync::Arc::new(CoreHostExtensionLoaderHost)
-                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
-        ),
-        (
-            EXTENSION_LOADER_HOOKS_IFACE,
-            std::sync::Arc::new(ExtensionLoaderHooksHost)
-                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
-        ),
-        (
-            CALLBACK_DISPATCH_IFACE,
-            std::sync::Arc::new(CallbackDispatchHost)
-                as std::sync::Arc<dyn wasmos_runtime_api::SyncHostCall>,
-        ),
-    ] {
-        wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call::<CoreStoreState>(
-            &engine,
-            &mut linker,
-            &component,
-            iface,
-            handler,
+    let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::new(
+        wasmos_runtime_api::RuntimeConfig::default(),
+    )
+    .map_err(|e| anyhow::anyhow!("build shell SyncRuntime: {e:?}"))?;
+    let compiled = sync_rt
+        .compile_component(
+            wasmos_runtime_api::ComponentSource::Bytes {
+                bytes: shell_bytes.into(),
+                name: Some(shell_component.display().to_string()),
+            },
+            wasmos_runtime_api::CompileOptions::default(),
         )
-        .map_err(|e| anyhow::anyhow!("wire {iface} (shell path): {e}"))?;
-    }
+        .map_err(|e| anyhow::anyhow!("compile shell component: {e:?}"))?;
+
+    // The shell world imports host-extension-loader + extension-loader-hooks
+    // + callback-dispatch (no tvm). Same three handlers as instantiate_core's
+    // subset.
+    let imports = wasmos_runtime_api::HostImports::new()
+        .register_sync(HOST_EXTENSION_LOADER_IFACE, CoreHostExtensionLoaderHost)
+        .register_sync(EXTENSION_LOADER_HOOKS_IFACE, ExtensionLoaderHooksHost)
+        .register_sync(CALLBACK_DISPATCH_IFACE, CallbackDispatchHost);
 
     // Phase 4 follow-up (FU4): the standalone-shell driver never
     // constructs a SiblingState, so the archive stays disabled.
     // `is_sibling = false` keeps the shell's core on the historical
     // drain path (identical pre-FU4 behaviour).
-    let shell_state = wasmos_runtime_wasmtime_v48::SyncStoreState::new(
-        Some(&shell_env),
-        CoreInnerState {
-            extension_manager: extension_manager.clone(),
-            tvm: tvm_core::RegionDirectory::new(),
-            tvm_slots: std::collections::HashMap::new(),
-            replay_archive: None,
-            is_sibling: false,
-        },
-    )
-    .map_err(|e| anyhow::anyhow!("build shell SyncStoreState: {e:?}"))?;
-    let mut store = Store::new(&engine, shell_state);
-    let instance = linker.instantiate(store.as_context_mut(), &component)?;
-    let (_, run_iface) = instance
-        .get_export(store.as_context_mut(), None, "wasi:cli/run@0.2.0")
-        .context("shell component missing wasi:cli/run@0.2.0 export")?;
-    let (_, run_idx) = instance
-        .get_export(store.as_context_mut(), Some(&run_iface), "run")
-        .context("shell component missing run function")?;
-    let run = instance.get_typed_func::<(), (Result<(), ()>,)>(store.as_context_mut(), run_idx)?;
-    let (result,) = run.call(store.as_context_mut(), ())?;
-    Ok(result)
+    let inner_state = CoreInnerState {
+        extension_manager: extension_manager.clone(),
+        tvm: tvm_core::RegionDirectory::new(),
+        tvm_slots: std::collections::HashMap::new(),
+        replay_archive: None,
+        is_sibling: false,
+    };
+    let ctx = wasmos_runtime_api::ExecutionContext::new()
+        .with_wasi(shell_env)
+        .with_host_imports(imports)
+        .with_consumer_state(inner_state);
+    let mut sync_inst = sync_rt
+        .instantiate(&compiled, ctx)
+        .map_err(|e| anyhow::anyhow!("instantiate shell component: {e:?}"))?;
+    sync_inst
+        .call_wasi_command()
+        .map_err(|e| anyhow::anyhow!("shell wasi:cli/run: {e:?}"))
 }
 
 pub fn run_cli_with_stdio(

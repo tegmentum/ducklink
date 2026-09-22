@@ -53,7 +53,6 @@ use std::sync::{Arc, Mutex};
 use wasmos_runtime_api::{
     host_iface, HostCallContext, HostImports, RuntimeResult, SyncHostCall, SyncHostCallAdapter,
 };
-use wasmtime::component::ResourceAny;
 
 use crate::{spi_edit, CoreExecution};
 
