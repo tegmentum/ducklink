@@ -6380,43 +6380,16 @@ pub fn load_component_with_dynlink(
     let shared_state: crate::extension_wasmos::SharedExtensionState = std::sync::Arc::new(
         Mutex::new(ExtensionInnerState::new(services, callback_registry, extension_name.clone())),
     );
-    let host_imports_raw = crate::extension_wasmos::install_extension_imports_stateful(
+    // The `install_XXX_imports` functions in `extension_wasmos` register
+    // each interface under its WIT-canonical fully-qualified name
+    // (`duckdb:extension/<kebab-local>@5.0.0`), matching what real @5.0.0
+    // components encode in their imports. Wasmos does verbatim
+    // interface-name matching in its import-resolution path, so the
+    // handlers land at the exact keys the guest looks up.
+    let mut host_imports = crate::extension_wasmos::install_extension_imports_stateful(
         wasmos_runtime_api::HostImports::new(),
         shared_state.clone(),
     );
-    // The `install_XXX_imports` functions in `extension_wasmos` register
-    // each `duckdb:extension/*` interface under its BARE name (no version
-    // tag) and, for five of them, using SNAKE_CASE (`macro_ext`,
-    // `types_ext`, `arrow_ext`, `table_stream`, `runtime_ext`) rather
-    // than the WIT-canonical KEBAB-case. Real @5.0.0 components import
-    // the fully-qualified, kebab-cased form (e.g.
-    // `duckdb:extension/runtime@5.0.0`), and wasmos does verbatim
-    // interface-name matching — so a direct pass-through leaves every
-    // real extension failing with "matching implementation was not found
-    // in the linker" (surfaces immediately on `pintest_a`, which imports
-    // `duckdb:extension/runtime@5.0.0`).
-    //
-    // Rebuild the set with the canonical names: kebab-cased local part
-    // plus the `@5.0.0` version tag. Every registered interface is
-    // aliased; non-`duckdb:extension/*` interfaces (e.g. WASI, which
-    // isn't in this set) pass through unchanged (safety net — there are
-    // none today).
-    //
-    // The wasmos-side API gap (install fns emitting the wrong names) is
-    // recorded in the step 4 report so it can be corrected at
-    // `extension_wasmos.rs` in a follow-up pass; canonicalising here
-    // keeps the load path shipping without waiting on that refactor.
-    let mut host_imports = wasmos_runtime_api::HostImports::new();
-    for (iface, handler) in host_imports_raw.iter() {
-        let canonical =
-            if let Some(local) = iface.strip_prefix("duckdb:extension/") {
-                let local_kebab: String = local.replace('_', "-");
-                format!("duckdb:extension/{local_kebab}@5.0.0")
-            } else {
-                iface.to_string()
-            };
-        host_imports = host_imports.register(canonical, handler.clone());
-    }
 
     // `compose:dynlink/linker@0.1.0` — install iff the component
     // imports it AND the caller supplied a backend (ducklink-host's

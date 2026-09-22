@@ -322,7 +322,7 @@ impl TypesHost {}
 /// Register the `duckdb:extension/types` handler.
 pub fn install_types_imports(imports: HostImports) -> HostImports {
     imports.register(
-        "duckdb:extension/types",
+        "duckdb:extension/types@5.0.0",
         Arc::new(SyncHostCallAdapter::new(TypesHost::new()))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -362,7 +362,7 @@ impl EncodingHost {
 /// Register the `duckdb:extension/encoding` handler.
 pub fn install_encoding_imports(imports: HostImports) -> HostImports {
     imports.register(
-        "duckdb:extension/encoding",
+        "duckdb:extension/encoding@5.0.0",
         Arc::new(SyncHostCallAdapter::new(EncodingHost::new()))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -401,7 +401,7 @@ impl CompressionHost {
 /// Register the `duckdb:extension/compression` handler.
 pub fn install_compression_imports(imports: HostImports) -> HostImports {
     imports.register(
-        "duckdb:extension/compression",
+        "duckdb:extension/compression@5.0.0",
         Arc::new(SyncHostCallAdapter::new(CompressionHost::new()))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -437,7 +437,7 @@ impl FilesRegHost {
 /// Register the `duckdb:extension/files-reg` handler.
 pub fn install_files_reg_imports(imports: HostImports) -> HostImports {
     imports.register(
-        "duckdb:extension/files-reg",
+        "duckdb:extension/files-reg@5.0.0",
         Arc::new(SyncHostCallAdapter::new(FilesRegHost::new()))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -605,7 +605,7 @@ impl ParserHost {
 /// Register the `duckdb:extension/parser` handler.
 pub fn install_parser_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
-        "duckdb:extension/parser",
+        "duckdb:extension/parser@5.0.0",
         Arc::new(SyncHostCallAdapter::new(ParserHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -661,7 +661,7 @@ impl OptimizerHost {
 /// Register the `duckdb:extension/optimizer` handler.
 pub fn install_optimizer_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
-        "duckdb:extension/optimizer",
+        "duckdb:extension/optimizer@5.0.0",
         Arc::new(SyncHostCallAdapter::new(OptimizerHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -763,7 +763,7 @@ impl SettingsHost {
 /// Register the `duckdb:extension/settings` handler.
 pub fn install_settings_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
-        "duckdb:extension/settings",
+        "duckdb:extension/settings@5.0.0",
         Arc::new(SyncHostCallAdapter::new(SettingsHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -809,7 +809,7 @@ impl IndexHost {
 /// Register the `duckdb:extension/index` handler.
 pub fn install_index_imports(imports: HostImports) -> HostImports {
     imports.register(
-        "duckdb:extension/index",
+        "duckdb:extension/index@5.0.0",
         Arc::new(SyncHostCallAdapter::new(IndexHost::new()))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -848,7 +848,7 @@ impl CollationHost {
 /// Register the `duckdb:extension/collation` handler.
 pub fn install_collation_imports(imports: HostImports) -> HostImports {
     imports.register(
-        "duckdb:extension/collation",
+        "duckdb:extension/collation@5.0.0",
         Arc::new(SyncHostCallAdapter::new(CollationHost::new()))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -914,7 +914,7 @@ pub fn install_coordinate_system_imports(
     state: SharedExtensionState,
 ) -> HostImports {
     imports.register(
-        "duckdb:extension/coordinate-system",
+        "duckdb:extension/coordinate-system@5.0.0",
         Arc::new(SyncHostCallAdapter::new(CoordinateSystemHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -987,7 +987,7 @@ impl StorageHost {
 /// Register the `duckdb:extension/storage` handler.
 pub fn install_storage_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
-        "duckdb:extension/storage",
+        "duckdb:extension/storage@5.0.0",
         Arc::new(SyncHostCallAdapter::new(StorageHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -1047,7 +1047,7 @@ pub fn install_log_storage_imports(
     state: SharedExtensionState,
 ) -> HostImports {
     imports.register(
-        "duckdb:extension/log-storage",
+        "duckdb:extension/log-storage@5.0.0",
         Arc::new(SyncHostCallAdapter::new(LogStorageHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -1095,7 +1095,7 @@ impl QueryHost {
 /// Register the `duckdb:extension/query` handler.
 pub fn install_query_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
-        "duckdb:extension/query",
+        "duckdb:extension/query@5.0.0",
         Arc::new(SyncHostCallAdapter::new(QueryHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -1267,7 +1267,7 @@ impl ConfigHost {
 /// Register the `duckdb:extension/config` handler.
 pub fn install_config_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
-        "duckdb:extension/config",
+        "duckdb:extension/config@5.0.0",
         Arc::new(SyncHostCallAdapter::new(ConfigHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -1373,7 +1373,7 @@ impl LoggingHost {
 /// Register the `duckdb:extension/logging` handler.
 pub fn install_logging_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
-        "duckdb:extension/logging",
+        "duckdb:extension/logging@5.0.0",
         Arc::new(SyncHostCallAdapter::new(LoggingHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -1456,7 +1456,7 @@ pub fn install_nested_exec_imports(
     state: SharedExtensionState,
 ) -> HostImports {
     imports.register(
-        "duckdb:extension/nested-exec",
+        "duckdb:extension/nested-exec@5.0.0",
         Arc::new(SyncHostCallAdapter::new(NestedExecHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -1548,7 +1548,7 @@ impl SecretHost {
 /// Register the `duckdb:extension/secret` handler.
 pub fn install_secret_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
-        "duckdb:extension/secret",
+        "duckdb:extension/secret@5.0.0",
         Arc::new(SyncHostCallAdapter::new(SecretHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -1612,10 +1612,10 @@ impl MacroExtHost {
     }
 }
 
-/// Register the `duckdb:extension/macro_ext` handler.
+/// Register the `duckdb:extension/macro-ext` handler.
 pub fn install_macro_ext_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
-        "duckdb:extension/macro_ext",
+        "duckdb:extension/macro-ext@5.0.0",
         Arc::new(SyncHostCallAdapter::new(MacroExtHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -1683,10 +1683,10 @@ impl TypesExtHost {
     }
 }
 
-/// Register the `duckdb:extension/types_ext` handler.
+/// Register the `duckdb:extension/types-ext` handler.
 pub fn install_types_ext_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
-        "duckdb:extension/types_ext",
+        "duckdb:extension/types-ext@5.0.0",
         Arc::new(SyncHostCallAdapter::new(TypesExtHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -1812,7 +1812,7 @@ impl FilesHost {
 /// Register the `duckdb:extension/files` handler.
 pub fn install_files_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
-        "duckdb:extension/files",
+        "duckdb:extension/files@5.0.0",
         Arc::new(SyncHostCallAdapter::new(FilesHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -1978,10 +1978,10 @@ impl ArrowExtHost {
     }
 }
 
-/// Register the `duckdb:extension/arrow_ext` handler.
+/// Register the `duckdb:extension/arrow-ext` handler.
 pub fn install_arrow_ext_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
-        "duckdb:extension/arrow_ext",
+        "duckdb:extension/arrow-ext@5.0.0",
         Arc::new(SyncHostCallAdapter::new(ArrowExtHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -2066,13 +2066,13 @@ impl TableStreamHost {
     }
 }
 
-/// Register the `duckdb:extension/table_stream` handler.
+/// Register the `duckdb:extension/table-stream` handler.
 pub fn install_table_stream_imports(
     imports: HostImports,
     state: SharedExtensionState,
 ) -> HostImports {
     imports.register(
-        "duckdb:extension/table_stream",
+        "duckdb:extension/table-stream@5.0.0",
         Arc::new(SyncHostCallAdapter::new(TableStreamHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -2216,13 +2216,13 @@ impl RuntimeExtHost {
     }
 }
 
-/// Register the `duckdb:extension/runtime_ext` handler.
+/// Register the `duckdb:extension/runtime-ext` handler.
 pub fn install_runtime_ext_imports(
     imports: HostImports,
     state: SharedExtensionState,
 ) -> HostImports {
     imports.register(
-        "duckdb:extension/runtime_ext",
+        "duckdb:extension/runtime-ext@5.0.0",
         Arc::new(SyncHostCallAdapter::new(RuntimeExtHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -2384,7 +2384,7 @@ impl CatalogHost {
 /// Register the `duckdb:extension/catalog` handler.
 pub fn install_catalog_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
-        "duckdb:extension/catalog",
+        "duckdb:extension/catalog@5.0.0",
         Arc::new(SyncHostCallAdapter::new(CatalogHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -2567,7 +2567,7 @@ impl FileLockHost {
 /// for the wasmos-side gap + follow-up plan (Phase 6.2.d.2-n).
 pub fn install_file_lock_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
-        "duckdb:extension/file-lock",
+        "duckdb:extension/file-lock@5.0.0",
         Arc::new(SyncHostCallAdapter::new(FileLockHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -3331,7 +3331,7 @@ fn unsupported_duckerror_value() -> wasmos_runtime_api::Value {
 /// Phase 6.2.d.2-p+ sub-sessions land those overrides.
 pub fn install_runtime_imports(imports: HostImports, state: SharedExtensionState) -> HostImports {
     imports.register(
-        "duckdb:extension/runtime",
+        "duckdb:extension/runtime@5.0.0",
         Arc::new(SyncHostCallAdapter::new(RuntimeHost::new(state)))
             as Arc<dyn wasmos_runtime_api::HostCall>,
     )
@@ -3364,7 +3364,7 @@ const _RUNTIME_ERROR: fn() = || {
 pub fn install_lifecycle_imports(imports: HostImports) -> HostImports {
     let host = LifecycleHost::new();
     imports.register(
-        "duckdb:extension/lifecycle",
+        "duckdb:extension/lifecycle@5.0.0",
         Arc::new(SyncHostCallAdapter::new(host)) as Arc<dyn wasmos_runtime_api::HostCall>,
     )
 }
@@ -3452,7 +3452,7 @@ mod tests {
     fn install_registers_the_interface() {
         let imports = install_lifecycle_imports(HostImports::new());
         assert!(
-            imports.get("duckdb:extension/lifecycle").is_some(),
+            imports.get("duckdb:extension/lifecycle@5.0.0").is_some(),
             "lifecycle interface should be registered"
         );
     }
@@ -3542,11 +3542,11 @@ mod tests {
     fn install_extension_registers_all_five() {
         let imports = install_extension_imports(HostImports::new());
         for iface in [
-            "duckdb:extension/lifecycle",
-            "duckdb:extension/types",
-            "duckdb:extension/encoding",
-            "duckdb:extension/compression",
-            "duckdb:extension/files-reg",
+            "duckdb:extension/lifecycle@5.0.0",
+            "duckdb:extension/types@5.0.0",
+            "duckdb:extension/encoding@5.0.0",
+            "duckdb:extension/compression@5.0.0",
+            "duckdb:extension/files-reg@5.0.0",
         ] {
             assert!(
                 imports.get(iface).is_some(),
@@ -3606,13 +3606,13 @@ mod tests {
         let imports = install_index_imports(imports);
         let imports = install_collation_imports(imports);
         for iface in [
-            "duckdb:extension/lifecycle",
-            "duckdb:extension/types",
-            "duckdb:extension/encoding",
-            "duckdb:extension/compression",
-            "duckdb:extension/files-reg",
-            "duckdb:extension/index",
-            "duckdb:extension/collation",
+            "duckdb:extension/lifecycle@5.0.0",
+            "duckdb:extension/types@5.0.0",
+            "duckdb:extension/encoding@5.0.0",
+            "duckdb:extension/compression@5.0.0",
+            "duckdb:extension/files-reg@5.0.0",
+            "duckdb:extension/index@5.0.0",
+            "duckdb:extension/collation@5.0.0",
         ] {
             assert!(
                 imports.get(iface).is_some(),
