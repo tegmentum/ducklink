@@ -46,7 +46,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use wasmos_runtime_api::{HostCallContext, HostCallCtxImpl, RuntimeError, RuntimeResult, Value};
 
-use crate::extension::{ConfigError, ExtensionServices, ExtensionStoreState, LogField, LogLevel};
+use crate::extension::{ConfigError, ExtensionInnerState, ExtensionServices, LogField, LogLevel};
 use crate::extension_wasmos::SharedExtensionState;
 use crate::CallbackRegistry;
 
@@ -94,14 +94,19 @@ impl ExtensionServices for NoopServices {
 
 // ─── ExtensionStoreState builders ──────────────────────────────────
 
-/// Build a fresh, sandboxed `ExtensionStoreState` wired to
+/// Build a fresh, sandboxed `ExtensionInnerState` wired to
 /// `NoopServices` + an empty `CallbackRegistry`. Extension name is
 /// `"testext"`; that's the label the state uses in Duckerror messages
 /// so tests asserting on error text should expect it.
-pub(crate) fn test_state() -> ExtensionStoreState {
-    let wasi = wasmtime_wasi::WasiCtxBuilder::new().build();
-    ExtensionStoreState::new(
-        wasi,
+///
+/// Path B follow-up #2 step 2 (2026-09-22): the fixture now returns
+/// the ducklink-only inner slice directly. The wasmtime store data
+/// wrapper (`ExtensionStoreState = SyncStoreState<ExtensionInnerState>`)
+/// is a wasi/wasi-http glue carrier; tests that exercise host-import
+/// dispatch handlers only need the inner slice, so we skip the
+/// wrapper on the fixture path.
+pub(crate) fn test_state() -> ExtensionInnerState {
+    ExtensionInnerState::new(
         Box::new(NoopServices),
         Arc::new(RwLock::new(CallbackRegistry::default())),
         "testext".to_string(),
@@ -111,7 +116,7 @@ pub(crate) fn test_state() -> ExtensionStoreState {
 /// The wasmos-native mirror's `SharedExtensionState` wrapping a
 /// fresh [`test_state`]. Consumed by `extension_wasmos`'s
 /// `#[host_iface(sync)]` handlers, which each accept
-/// `Arc<Mutex<ExtensionStoreState>>` at construction time.
+/// `Arc<Mutex<ExtensionInnerState>>` at construction time.
 pub(crate) fn shared_test_state() -> SharedExtensionState {
     Arc::new(Mutex::new(test_state()))
 }

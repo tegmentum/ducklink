@@ -440,8 +440,9 @@ pub use extension::{
     add_extension_interfaces_to_linker, describe_runtime_logicaltype, load_component,
     load_component_with_dynlink, summarize_extopts, summarize_funcopts,
     summarize_registration_names, summarize_runtime_columns, summarize_runtime_funcargs,
-    ConfigError, ExtensionInstance, ExtensionServices, ExtensionStoreState, LogEntry, LogField,
-    LogLevel, NestedExecResult, PendingRegistrationsData, NESTED_EXEC_MAX_DEPTH,
+    ConfigError, ExtensionInnerState, ExtensionInstance, ExtensionServices, ExtensionStoreState,
+    LogEntry, LogField, LogLevel, NestedExecResult, PendingRegistrationsData,
+    NESTED_EXEC_MAX_DEPTH,
 };
 
 /// The generated wasmtime bindings for the `duckdb:extension-host` world.

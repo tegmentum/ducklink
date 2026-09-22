@@ -14,12 +14,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
-#[cfg(test)]
-use wasmtime::component::Resource;
-use wasmtime::component::{Component, Linker, ResourceTable};
+use wasmtime::component::{Component, Linker};
 use wasmtime::{AsContextMut, Engine, Store};
-use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
-use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 // Phase 6.2.o — the wit-bindgen wrapper `duckdb_extension_bindings`
 // retired entirely (Phase 6.2.n Sessions 3-5 migrated every
@@ -829,77 +825,68 @@ pub struct ExtensionInnerState {
     next_lock_handle: u32,
 }
 
-/// Per-component wasmtime store data: wasi context + capability capture buffers
-/// + the config/logging sink + the shared callback registry.
-pub struct ExtensionStoreState {
-    table: ResourceTable,
-    wasi: WasiCtx,
-    /// wasi:http host context. Present on every extension store so the shared
-    /// `base_linker` can wire `wasi:http/{types,outgoing-handler}@0.2.9`. Only
-    /// extensions whose composed component actually imports wasi:http (today:
-    /// the s3-wasm-composed `cache.wasm`) exercise this; every other extension
-    /// pays nothing beyond an unused `WasiHttpCtx` in its store.
-    wasi_http: WasiHttpCtx,
-    /// Ducklink-only per-instance state. See [`ExtensionInnerState`].
-    inner: ExtensionInnerState,
-}
+/// Per-component wasmtime store data.
+///
+/// Path B follow-up #2 step 2 (2026-09-22) — flipped from a hand-rolled
+/// struct to a `SyncStoreState<ExtensionInnerState>` alias. The wasmos
+/// crate provides the `WasiView` + `WasiHttpView` blanket impls, so the
+/// local hand-rolled impls retired here. `WasiCtx` + `WasiHttpCtx` +
+/// `ResourceTable` live inside the wrapper; ducklink-only state sits on
+/// `.consumer` (was `.inner` on the struct shape). Mirrors the
+/// CoreStoreState flip in ducklink `5f3b1e8`.
+pub type ExtensionStoreState = wasmos_runtime_wasmtime_v48::SyncStoreState<ExtensionInnerState>;
 
-impl ExtensionStoreState {
-    /// Fresh per-component store data. `compose:dynlink/linker` support
-    /// (previously carried as an `Option<DynLinkBridge>` inside
-    /// [`ExtensionInnerState`]) migrated to the wasmos-native install
-    /// path in Path B follow-up #2 (2026-09-22) — no per-store bridge
-    /// state is threaded here any more.
+impl ExtensionInnerState {
+    /// Fresh per-component ducklink-only state slice, ready to be
+    /// wrapped in a `SyncStoreState`. `compose:dynlink/linker` support
+    /// (previously carried as an `Option<DynLinkBridge>` here)
+    /// migrated to the wasmos-native install path in Path B follow-up
+    /// #2 (2026-09-22) — no per-store bridge state is threaded here
+    /// any more.
     pub fn new(
-        wasi: WasiCtx,
         services: Box<dyn ExtensionServices>,
         callback_registry: Arc<RwLock<CallbackRegistry>>,
         extension_name: String,
     ) -> Self {
         Self {
-            table: ResourceTable::new(),
-            wasi,
-            wasi_http: WasiHttpCtx::new(),
-            inner: ExtensionInnerState {
-                services,
-                next_resource_id: 1,
-                scalar_registries: HashMap::new(),
-                table_registries: HashMap::new(),
-                aggregate_registries: HashMap::new(),
-                pending_scalars: Vec::new(),
-                pending_tables: Vec::new(),
-                pending_aggregates: Vec::new(),
-                pending_macros: Vec::new(),
-                pending_replacement_scans: Vec::new(),
-                pending_logical_types: Vec::new(),
-                pending_casts: Vec::new(),
-                pending_storages: Vec::new(),
-                pending_indexes: Vec::new(),
-                pending_files: Vec::new(),
-                pending_collations: Vec::new(),
-                pending_pragmas: Vec::new(),
-                pending_copy_handlers: Vec::new(),
-                pending_secrets: Vec::new(),
-                pending_settings: Vec::new(),
-                pending_table_macros: Vec::new(),
-                pending_modified_types: Vec::new(),
-                pending_enum_types: Vec::new(),
-                pending_scalar_ex: Vec::new(),
-                pending_conn_callbacks: Vec::new(),
-                pending_coordinate_systems: Vec::new(),
-                pending_arrow_tables: Vec::new(),
-                pending_encodings: Vec::new(),
-                pending_compressions: Vec::new(),
-                pending_parsers: Vec::new(),
-                pending_optimizers: Vec::new(),
-                pending_filterable_tables: Vec::new(),
-                pending_log_storages: Vec::new(),
-                table_handle_names: HashMap::new(),
-                callback_registry,
-                extension_name,
-                lock_handles: HashMap::new(),
-                next_lock_handle: 1,
-            },
+            services,
+            next_resource_id: 1,
+            scalar_registries: HashMap::new(),
+            table_registries: HashMap::new(),
+            aggregate_registries: HashMap::new(),
+            pending_scalars: Vec::new(),
+            pending_tables: Vec::new(),
+            pending_aggregates: Vec::new(),
+            pending_macros: Vec::new(),
+            pending_replacement_scans: Vec::new(),
+            pending_logical_types: Vec::new(),
+            pending_casts: Vec::new(),
+            pending_storages: Vec::new(),
+            pending_indexes: Vec::new(),
+            pending_files: Vec::new(),
+            pending_collations: Vec::new(),
+            pending_pragmas: Vec::new(),
+            pending_copy_handlers: Vec::new(),
+            pending_secrets: Vec::new(),
+            pending_settings: Vec::new(),
+            pending_table_macros: Vec::new(),
+            pending_modified_types: Vec::new(),
+            pending_enum_types: Vec::new(),
+            pending_scalar_ex: Vec::new(),
+            pending_conn_callbacks: Vec::new(),
+            pending_coordinate_systems: Vec::new(),
+            pending_arrow_tables: Vec::new(),
+            pending_encodings: Vec::new(),
+            pending_compressions: Vec::new(),
+            pending_parsers: Vec::new(),
+            pending_optimizers: Vec::new(),
+            pending_filterable_tables: Vec::new(),
+            pending_log_storages: Vec::new(),
+            table_handle_names: HashMap::new(),
+            callback_registry,
+            extension_name,
+            lock_handles: HashMap::new(),
+            next_lock_handle: 1,
         }
     }
 
@@ -908,16 +895,16 @@ impl ExtensionStoreState {
     /// (never reused) so a component that stashes an id after `release`
     /// cannot accidentally alias a freshly-acquired lock.
     fn alloc_lock_handle(&mut self, state: LockHandleState) -> u32 {
-        let id = self.inner.next_lock_handle;
-        self.inner.next_lock_handle = self.inner.next_lock_handle.wrapping_add(1).max(1);
-        self.inner.lock_handles.insert(id, state);
+        let id = self.next_lock_handle;
+        self.next_lock_handle = self.next_lock_handle.wrapping_add(1).max(1);
+        self.lock_handles.insert(id, state);
         id
     }
 
     /// Drop the state for `id` (releasing the flock via
     /// `LockHandleState::Drop`). No-op if the id was already released.
     fn free_lock_handle(&mut self, id: u32) {
-        self.inner.lock_handles.remove(&id);
+        self.lock_handles.remove(&id);
     }
 
     // Path B follow-up #2 (2026-09-22) — the `dynlink_bridge()`
@@ -935,8 +922,8 @@ impl ExtensionStoreState {
     // HostImports`. No behavior change; the invariant that the
     // returned id is nonzero + monotonic (wrapping) is preserved.
     pub fn alloc_resource_id(&mut self) -> u32 {
-        let id = self.inner.next_resource_id;
-        self.inner.next_resource_id = self.inner.next_resource_id.wrapping_add(1).max(1);
+        let id = self.next_resource_id;
+        self.next_resource_id = self.next_resource_id.wrapping_add(1).max(1);
         id
     }
 
@@ -945,37 +932,37 @@ impl ExtensionStoreState {
     /// tagging. Read-only; the field is set at construction time
     /// via `Self::new` / `Self::with_dynlink`.
     pub fn extension_name(&self) -> &str {
-        &self.inner.extension_name
+        &self.extension_name
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_settings`.
     pub fn push_pending_setting(&mut self, setting: PendingSetting) {
-        self.inner.pending_settings.push(setting);
+        self.pending_settings.push(setting);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_parsers`.
     pub fn push_pending_parser(&mut self, parser: PendingParser) {
-        self.inner.pending_parsers.push(parser);
+        self.pending_parsers.push(parser);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_optimizers`.
     pub fn push_pending_optimizer(&mut self, optimizer: PendingOptimizer) {
-        self.inner.pending_optimizers.push(optimizer);
+        self.pending_optimizers.push(optimizer);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_coordinate_systems`.
     pub fn push_pending_coordinate_system(&mut self, entry: reg::CoordinateSystemReg) {
-        self.inner.pending_coordinate_systems.push(entry);
+        self.pending_coordinate_systems.push(entry);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_storages`.
     pub fn push_pending_storage(&mut self, entry: reg::StorageReg) {
-        self.inner.pending_storages.push(entry);
+        self.pending_storages.push(entry);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_log_storages`.
     pub fn push_pending_log_storage(&mut self, entry: PendingLogStorage) {
-        self.inner.pending_log_storages.push(entry);
+        self.pending_log_storages.push(entry);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — allocate a globally-routable
@@ -997,67 +984,67 @@ impl ExtensionStoreState {
     /// through the neutral `ExtensionServices::query` sink. Mirrors
     /// the wit-bindgen `extension_query::Host::query` body.
     pub fn services_query(&mut self, sql: &str) -> Result<Vec<Vec<String>>, String> {
-        self.inner.services.query(sql)
+        self.services.query(sql)
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_secrets`.
     pub fn push_pending_secret(&mut self, entry: reg::SecretReg) {
-        self.inner.pending_secrets.push(entry);
+        self.pending_secrets.push(entry);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_table_macros`.
     pub fn push_pending_table_macro(&mut self, entry: reg::TableMacroReg) {
-        self.inner.pending_table_macros.push(entry);
+        self.pending_table_macros.push(entry);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_modified_types`.
     pub fn push_pending_modified_type(&mut self, entry: reg::ModifiedTypeReg) {
-        self.inner.pending_modified_types.push(entry);
+        self.pending_modified_types.push(entry);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_enum_types`.
     pub fn push_pending_enum_type(&mut self, entry: reg::EnumTypeReg) {
-        self.inner.pending_enum_types.push(entry);
+        self.pending_enum_types.push(entry);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_replacement_scans`.
     pub fn push_pending_replacement_scan(&mut self, entry: reg::ReplacementScanReg) {
-        self.inner.pending_replacement_scans.push(entry);
+        self.pending_replacement_scans.push(entry);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_copy_handlers`.
     pub fn push_pending_copy_handler(&mut self, entry: reg::CopyHandlerReg) {
-        self.inner.pending_copy_handlers.push(entry);
+        self.pending_copy_handlers.push(entry);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_arrow_tables`.
     pub fn push_pending_arrow_table(&mut self, entry: reg::ArrowTableReg) {
-        self.inner.pending_arrow_tables.push(entry);
+        self.pending_arrow_tables.push(entry);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_filterable_tables`.
     pub fn push_pending_filterable_table(&mut self, entry: reg::FilterableTableReg) {
-        self.inner.pending_filterable_tables.push(entry);
+        self.pending_filterable_tables.push(entry);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_scalar_ex`.
     pub fn push_pending_scalar_ex(&mut self, entry: reg::ScalarExReg) {
-        self.inner.pending_scalar_ex.push(entry);
+        self.pending_scalar_ex.push(entry);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_logical_types`.
     pub fn push_pending_logical_type(&mut self, entry: reg::LogicalTypeReg) {
-        self.inner.pending_logical_types.push(entry);
+        self.pending_logical_types.push(entry);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_macros`.
     pub fn push_pending_macro(&mut self, entry: reg::MacroReg) {
-        self.inner.pending_macros.push(entry);
+        self.pending_macros.push(entry);
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — append to `pending_casts`.
     pub fn push_pending_cast(&mut self, entry: reg::CastReg) {
-        self.inner.pending_casts.push(entry);
+        self.pending_casts.push(entry);
     }
 
     /// ADR-0029 Phase 6.2.d.2-m accessor — acquire an exclusive
@@ -1097,7 +1084,7 @@ impl ExtensionStoreState {
     /// "extension X holds N file locks" in a diagnostic dump).
     /// Zero for extensions that don't import `file-lock`.
     pub fn active_lock_handle_count(&self) -> usize {
-        self.inner.lock_handles.len()
+        self.lock_handles.len()
     }
 
     /// ADR-0029 Phase 6.2.g accessor — true when `id` currently
@@ -1106,7 +1093,7 @@ impl ExtensionStoreState {
     /// for tests that need to verify a specific handle survived /
     /// was released.
     pub fn contains_lock_handle(&self, id: u32) -> bool {
-        self.inner.lock_handles.contains_key(&id)
+        self.lock_handles.contains_key(&id)
     }
 
     /// ADR-0029 Phase 6.2.g accessor — clone-out of the shared
@@ -1117,7 +1104,7 @@ impl ExtensionStoreState {
     /// handle without threading the registry through the fixture
     /// twice).
     pub fn callback_registry_handle(&self) -> Arc<RwLock<crate::CallbackRegistry>> {
-        Arc::clone(&self.inner.callback_registry)
+        Arc::clone(&self.callback_registry)
     }
 
     /// ADR-0029 Phase 6.2.g accessor — current length of the
@@ -1128,7 +1115,7 @@ impl ExtensionStoreState {
     /// [`active_lock_handle_count`](Self::active_lock_handle_count)
     /// for the parser-registration capture path.
     pub fn pending_parser_count(&self) -> usize {
-        self.inner.pending_parsers.len()
+        self.pending_parsers.len()
     }
 
     /// ADR-0029 Phase 6.2.d.2-o accessor — allocate a fresh
@@ -1138,7 +1125,7 @@ impl ExtensionStoreState {
     /// `runtime.get-capability(scalar)`.
     pub fn init_scalar_registry(&mut self) -> u32 {
         let id = self.alloc_resource_id();
-        self.inner.scalar_registries
+        self.scalar_registries
             .insert(id, PendingScalarRegistry::default());
         id
     }
@@ -1147,7 +1134,7 @@ impl ExtensionStoreState {
     /// `init_scalar_registry` for `runtime.table-registry`.
     pub fn init_table_registry(&mut self) -> u32 {
         let id = self.alloc_resource_id();
-        self.inner.table_registries
+        self.table_registries
             .insert(id, PendingTableRegistry::default());
         id
     }
@@ -1156,7 +1143,7 @@ impl ExtensionStoreState {
     /// `init_scalar_registry` for `runtime.aggregate-registry`.
     pub fn init_aggregate_registry(&mut self) -> u32 {
         let id = self.alloc_resource_id();
-        self.inner.aggregate_registries
+        self.aggregate_registries
             .insert(id, PendingAggregateRegistry::default());
         id
     }
@@ -1190,7 +1177,7 @@ impl ExtensionStoreState {
         callback_handle: u32,
         expected: crate::CallbackKind,
     ) -> Result<(), CallbackValidationError> {
-        let registry = self.inner
+        let registry = self
             .callback_registry
             .read()
             .unwrap_or_else(|e| e.into_inner());
@@ -1211,7 +1198,7 @@ impl ExtensionStoreState {
         registry_id: u32,
         entry: reg::ScalarReg,
     ) -> Result<u32, RegistryPushError> {
-        let registry = self.inner
+        let registry = self
             .scalar_registries
             .get_mut(&registry_id)
             .ok_or(RegistryPushError::UnknownRegistry)?;
@@ -1229,13 +1216,13 @@ impl ExtensionStoreState {
         entry: reg::TableReg,
     ) -> Result<u32, RegistryPushError> {
         let table_name = entry.name.clone();
-        let registry = self.inner
+        let registry = self
             .table_registries
             .get_mut(&registry_id)
             .ok_or(RegistryPushError::UnknownRegistry)?;
         registry.entries.push(entry);
         let handle = self.alloc_resource_id();
-        self.inner.table_handle_names.insert(handle, table_name);
+        self.table_handle_names.insert(handle, table_name);
         Ok(handle)
     }
 
@@ -1246,7 +1233,7 @@ impl ExtensionStoreState {
         registry_id: u32,
         entry: reg::AggregateReg,
     ) -> Result<u32, RegistryPushError> {
-        let registry = self.inner
+        let registry = self
             .aggregate_registries
             .get_mut(&registry_id)
             .ok_or(RegistryPushError::UnknownRegistry)?;
@@ -1259,7 +1246,7 @@ impl ExtensionStoreState {
     /// `pending_pragmas` from `register_call`. Kept as a distinct
     /// accessor so the wasmos handler mirrors that shape.
     pub fn pragma_registry_push_call(&mut self, entry: reg::PragmaReg) -> u32 {
-        self.inner.pending_pragmas.push(entry);
+        self.pending_pragmas.push(entry);
         self.alloc_resource_id()
     }
 
@@ -1272,24 +1259,24 @@ impl ExtensionStoreState {
     /// the same destructor-gap noted for other resources — this
     /// handler is dead code until the adapter gap closes.
     pub fn drain_scalar_registry(&mut self, rep: u32) {
-        if let Some(registry) = self.inner.scalar_registries.remove(&rep) {
-            self.inner.pending_scalars.extend(registry.entries);
+        if let Some(registry) = self.scalar_registries.remove(&rep) {
+            self.pending_scalars.extend(registry.entries);
         }
     }
 
     /// ADR-0029 Phase 6.2.d.2-q — sibling of
     /// `drain_scalar_registry` for tables.
     pub fn drain_table_registry(&mut self, rep: u32) {
-        if let Some(registry) = self.inner.table_registries.remove(&rep) {
-            self.inner.pending_tables.extend(registry.entries);
+        if let Some(registry) = self.table_registries.remove(&rep) {
+            self.pending_tables.extend(registry.entries);
         }
     }
 
     /// ADR-0029 Phase 6.2.d.2-q — sibling of
     /// `drain_scalar_registry` for aggregates.
     pub fn drain_aggregate_registry(&mut self, rep: u32) {
-        if let Some(registry) = self.inner.aggregate_registries.remove(&rep) {
-            self.inner.pending_aggregates.extend(registry.entries);
+        if let Some(registry) = self.aggregate_registries.remove(&rep) {
+            self.pending_aggregates.extend(registry.entries);
         }
     }
 }
@@ -1317,7 +1304,7 @@ pub enum RegistryPushError {
     UnknownRegistry,
 }
 
-impl ExtensionStoreState {
+impl ExtensionInnerState {
     /// ADR-0029 Phase 6.2.d.2 accessor — look up the table function
     /// name that was registered for a given handle. Used by the
     /// `files.register_replacement_scan` handler to resolve the
@@ -1325,7 +1312,7 @@ impl ExtensionStoreState {
     /// `None` if the handle was never registered (the wit-bindgen
     /// counterpart returns Err in that case).
     pub fn lookup_table_handle_name(&self, handle: u32) -> Option<String> {
-        self.inner.table_handle_names.get(&handle).cloned()
+        self.table_handle_names.get(&handle).cloned()
     }
 
     /// ADR-0029 Phase 6.2.d.2 accessor — mutable borrow of the
@@ -1335,19 +1322,19 @@ impl ExtensionStoreState {
     /// log, log_fields, nested_exec, ...) without one delegator
     /// per method.
     pub fn services_mut(&mut self) -> &mut dyn ExtensionServices {
-        &mut *self.inner.services
+        &mut *self.services
     }
 
     fn allocate_callback_handle(&self, dispatcher_handle: u32, kind: CallbackKind) -> u32 {
-        let mut registry = self.inner
+        let mut registry = self
             .callback_registry
             .write()
             .unwrap_or_else(|e| e.into_inner());
-        registry.allocate(&self.inner.extension_name, kind, dispatcher_handle)
+        registry.allocate(&self.extension_name, kind, dispatcher_handle)
     }
 
     fn release_callback_handle(&self, handle: u32) {
-        let mut registry = self.inner
+        let mut registry = self
             .callback_registry
             .write()
             .unwrap_or_else(|e| e.into_inner());
@@ -1359,7 +1346,7 @@ impl ExtensionStoreState {
     /// `drain_pending` hook flow. Used right after `load()` so an ATTACH backend
     /// is routable before the core ever drains function registrations.
     fn take_pending_storages(&mut self) -> Vec<PendingStorage> {
-        std::mem::take(&mut self.inner.pending_storages)
+        std::mem::take(&mut self.pending_storages)
     }
 
     /// Item 3 / M2a: drains ONLY the captured custom-index TYPE registrations,
@@ -1368,14 +1355,14 @@ impl ExtensionStoreState {
     /// IndexType for each, routing `CREATE INDEX ... USING <type>` to the
     /// component's index-dispatch export).
     fn take_pending_indexes(&mut self) -> Vec<PendingIndex> {
-        std::mem::take(&mut self.inner.pending_indexes)
+        std::mem::take(&mut self.pending_indexes)
     }
 
     /// Drains ONLY the captured files-backend registrations (httpfs M2), used
     /// right after `load()` so the host knows which component backs http(s)
     /// reads before any query runs.
     fn take_pending_files(&mut self) -> Vec<PendingFiles> {
-        std::mem::take(&mut self.inner.pending_files)
+        std::mem::take(&mut self.pending_files)
     }
 
     /// Drains ONLY the captured collation registrations (Item 2), used right
@@ -1385,7 +1372,7 @@ impl ExtensionStoreState {
     /// wrapping each as a DuckDB collation reusing the already-registered
     /// sort-key scalar.
     fn take_pending_collations(&mut self) -> Vec<PendingCollation> {
-        std::mem::take(&mut self.inner.pending_collations)
+        std::mem::take(&mut self.pending_collations)
     }
 
     /// Item 4: drains ONLY the captured pragma registrations, used right after
@@ -1394,92 +1381,92 @@ impl ExtensionStoreState {
     /// goes through `PendingRegistrationsData` instead), where the core
     /// intercepts `PRAGMA <name>(...)`.
     fn take_pending_pragmas(&mut self) -> Vec<PendingPragma> {
-        std::mem::take(&mut self.inner.pending_pragmas)
+        std::mem::take(&mut self.pending_pragmas)
     }
 
     // --- 2.1.0 additive drains (mirror take_pending_pragmas) ---
     fn take_pending_copy_handlers(&mut self) -> Vec<PendingCopyHandler> {
-        std::mem::take(&mut self.inner.pending_copy_handlers)
+        std::mem::take(&mut self.pending_copy_handlers)
     }
     fn take_pending_secrets(&mut self) -> Vec<PendingSecret> {
-        std::mem::take(&mut self.inner.pending_secrets)
+        std::mem::take(&mut self.pending_secrets)
     }
     fn take_pending_settings(&mut self) -> Vec<PendingSetting> {
-        std::mem::take(&mut self.inner.pending_settings)
+        std::mem::take(&mut self.pending_settings)
     }
     fn take_pending_table_macros(&mut self) -> Vec<PendingTableMacro> {
-        std::mem::take(&mut self.inner.pending_table_macros)
+        std::mem::take(&mut self.pending_table_macros)
     }
     fn take_pending_modified_types(&mut self) -> Vec<PendingModifiedType> {
-        std::mem::take(&mut self.inner.pending_modified_types)
+        std::mem::take(&mut self.pending_modified_types)
     }
     fn take_pending_enum_types(&mut self) -> Vec<PendingEnumType> {
-        std::mem::take(&mut self.inner.pending_enum_types)
+        std::mem::take(&mut self.pending_enum_types)
     }
 
     // --- 2.2.0 additive drains (Items 6-7; mirror the 2.1.0 drains) ---
     fn take_pending_scalar_ex(&mut self) -> Vec<PendingScalarEx> {
-        std::mem::take(&mut self.inner.pending_scalar_ex)
+        std::mem::take(&mut self.pending_scalar_ex)
     }
     fn take_pending_conn_callbacks(&mut self) -> Vec<PendingConnCallback> {
-        std::mem::take(&mut self.inner.pending_conn_callbacks)
+        std::mem::take(&mut self.pending_conn_callbacks)
     }
     fn take_pending_coordinate_systems(&mut self) -> Vec<PendingCoordinateSystem> {
-        std::mem::take(&mut self.inner.pending_coordinate_systems)
+        std::mem::take(&mut self.pending_coordinate_systems)
     }
     fn take_pending_arrow_tables(&mut self) -> Vec<PendingArrowTable> {
-        std::mem::take(&mut self.inner.pending_arrow_tables)
+        std::mem::take(&mut self.pending_arrow_tables)
     }
     fn take_pending_encodings(&mut self) -> Vec<PendingEncoding> {
-        std::mem::take(&mut self.inner.pending_encodings)
+        std::mem::take(&mut self.pending_encodings)
     }
     fn take_pending_compressions(&mut self) -> Vec<PendingCompression> {
-        std::mem::take(&mut self.inner.pending_compressions)
+        std::mem::take(&mut self.pending_compressions)
     }
 
     // --- 2.3.0 / v3 additive drains ---
     fn take_pending_parsers(&mut self) -> Vec<PendingParser> {
-        std::mem::take(&mut self.inner.pending_parsers)
+        std::mem::take(&mut self.pending_parsers)
     }
     fn take_pending_optimizers(&mut self) -> Vec<PendingOptimizer> {
-        std::mem::take(&mut self.inner.pending_optimizers)
+        std::mem::take(&mut self.pending_optimizers)
     }
     // --- 3.1.0 additive drain ---
     fn take_pending_filterable_tables(&mut self) -> Vec<PendingFilterableTable> {
-        std::mem::take(&mut self.inner.pending_filterable_tables)
+        std::mem::take(&mut self.pending_filterable_tables)
     }
 
     // --- Phase: drain-plumbing additive drain (mirror take_pending_pragmas) ---
     fn take_pending_log_storages(&mut self) -> Vec<PendingLogStorage> {
-        std::mem::take(&mut self.inner.pending_log_storages)
+        std::mem::take(&mut self.pending_log_storages)
     }
 
     fn drain_pending(&mut self) -> PendingRegistrationsData {
         // Combine registrations retained from dropped registries with any that
         // belong to registries still held alive by the guest.
-        let mut scalars = std::mem::take(&mut self.inner.pending_scalars);
+        let mut scalars = std::mem::take(&mut self.pending_scalars);
         scalars.extend(
-            self.inner.scalar_registries
+            self.scalar_registries
                 .drain()
                 .flat_map(|(_, registry)| registry.entries),
         );
-        let mut tables = std::mem::take(&mut self.inner.pending_tables);
+        let mut tables = std::mem::take(&mut self.pending_tables);
         tables.extend(
-            self.inner.table_registries
+            self.table_registries
                 .drain()
                 .flat_map(|(_, registry)| registry.entries),
         );
-        let mut aggregates = std::mem::take(&mut self.inner.pending_aggregates);
+        let mut aggregates = std::mem::take(&mut self.pending_aggregates);
         aggregates.extend(
-            self.inner.aggregate_registries
+            self.aggregate_registries
                 .drain()
                 .flat_map(|(_, registry)| registry.entries),
         );
-        let macros = std::mem::take(&mut self.inner.pending_macros);
-        let replacement_scans = std::mem::take(&mut self.inner.pending_replacement_scans);
-        let logical_types = std::mem::take(&mut self.inner.pending_logical_types);
-        let casts = std::mem::take(&mut self.inner.pending_casts);
-        let storages = std::mem::take(&mut self.inner.pending_storages);
+        let macros = std::mem::take(&mut self.pending_macros);
+        let replacement_scans = std::mem::take(&mut self.pending_replacement_scans);
+        let logical_types = std::mem::take(&mut self.pending_logical_types);
+        let casts = std::mem::take(&mut self.pending_casts);
+        let storages = std::mem::take(&mut self.pending_storages);
         // Additive drains (Phase: drain-plumbing). These were previously
         // captured but never forwarded into `PendingRegistrationsData`;
         // draining them here plugs the leak between the runtime and the
@@ -1526,7 +1513,7 @@ impl ExtensionStoreState {
             summarize_registration_names(&pending.macros, |entry| entry.name.as_str());
         verbose_log!(
             "[extension-runtime:{}] draining pending registrations: scalars={} ({scalar_names}), tables={} ({table_names}), aggregates={} ({aggregate_names}), macros={} ({macro_names})",
-            self.inner.extension_name,
+            self.extension_name,
             pending.scalars.len(),
             pending.tables.len(),
             pending.aggregates.len(),
@@ -1536,38 +1523,22 @@ impl ExtensionStoreState {
     }
 }
 
-impl WasiView for ExtensionStoreState {
-    fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView {
-            ctx: &mut self.wasi,
-            table: &mut self.table,
-        }
-    }
-}
-
-impl WasiHttpView for ExtensionStoreState {
-    fn http(&mut self) -> WasiHttpCtxView<'_> {
-        WasiHttpCtxView {
-            ctx: &mut self.wasi_http,
-            table: &mut self.table,
-            hooks: Default::default(),
-        }
-    }
-}
-
-impl wasmtime::component::HasData for ExtensionStoreState {
-    type Data<'a> = &'a mut ExtensionStoreState;
-}
-
-// Path B follow-up #2 (2026-09-22): the
-// `impl_compose_dynlink_host!(ExtensionStoreState, dynlink_bridge)`
-// macro invocation retired here. Under the SyncStoreState<T> alias
-// flip (step 2), the macro's `impl foreign_trait for
+// Path B follow-up #2 step 2 (2026-09-22): the hand-rolled
+// `impl WasiView`, `impl WasiHttpView`, and `impl HasData` blocks
+// for `ExtensionStoreState` retired here. `SyncStoreState<T>` (the
+// wasmos wrapper the alias now names) provides `WasiView` +
+// `WasiHttpView` blanket impls itself; `HasData` isn't needed on the
+// escape-hatch bridge path since guest exports are dispatched via
+// `sync_export_bridge::call_export` on the raw `Instance`.
+//
+// The `impl_compose_dynlink_host!(ExtensionStoreState, dynlink_bridge)`
+// macro invocation is also gone (retired in ducklink 0afb98b0): under
+// the alias flip its `impl foreign_trait for
 // SyncStoreState<ExtensionInnerState>` expansion trips Rust's E0117
-// orphan rule. The wasmos-native install path
+// orphan rule, and the wasmos-native install path
 // (`datalink_dynlink_wasmos::install_host_imports` on a HostImports
 // builder, mirroring DotcmdInstance in ducklink 69444225) replaces
-// this wiring; see `load_component_with_dynlink` below for the
+// that wiring; see `load_component_with_dynlink` below for the
 // per-load install decision.
 
 // Phase 6.2.l.2 — the empty `impl extension_types::Host for
@@ -1577,7 +1548,7 @@ impl wasmtime::component::HasData for ExtensionStoreState {
 // extension_wasmos.rs is the equivalent zero-method marker.
 
 #[cfg(test)]
-impl ExtensionStoreState {
+impl ExtensionInnerState {
     // Item 4: a component declares a PRAGMA in `load()`. The host captures its
     // name + the callback handle into the neutral pending buffer; the core
     // later pulls the list via `drain_pending`'s `pragmas` field on
@@ -1598,7 +1569,7 @@ impl ExtensionStoreState {
         callback_handle: u32,
     ) -> Result<u32, Duckerror> {
         {
-            let registry = self.inner
+            let registry = self
                 .callback_registry
                 .read()
                 .unwrap_or_else(|e| e.into_inner());
@@ -1619,10 +1590,10 @@ impl ExtensionStoreState {
 
         verbose_log!(
             "[extension-runtime:{}] registered pragma '{name}' (callback={callback_handle})",
-            self.inner.extension_name
+            self.extension_name
         );
-        self.inner.pending_pragmas.push(PendingPragma {
-            extension: self.inner.extension_name.clone(),
+        self.pending_pragmas.push(PendingPragma {
+            extension: self.extension_name.clone(),
             name,
             callback_handle,
         });
@@ -1639,7 +1610,7 @@ impl ExtensionStoreState {
 // `impl extension_logging::Host` retired here. No test in this
 // crate exercised them; the wasmos-native `ConfigHost` and
 // `LoggingHost` in extension_wasmos.rs delegate to the same
-// `self.inner.services.*` sink methods on the production dispatch
+// `self.services.*` sink methods on the production dispatch
 // path. The `ExtensionServices` trait itself is unchanged.
 
 // The `catalog` and `files` interfaces are part of the extension world so that
@@ -1651,7 +1622,7 @@ impl ExtensionStoreState {
 // signatures inlined (were `catalog::LogicalType` / `catalog::
 // MacroDef` records). Same test coverage, no wit-bindgen types.
 #[cfg(test)]
-impl ExtensionStoreState {
+impl ExtensionInnerState {
     pub(crate) fn register_logical_type(
         &mut self,
         name: String,
@@ -1660,10 +1631,10 @@ impl ExtensionStoreState {
         let handle = self.alloc_resource_id();
         verbose_log!(
             "[extension-manager] catalog register-logical-type '{}' (physical={}) for '{}' -> handle {handle}",
-            name, physical, self.inner.extension_name
+            name, physical, self.extension_name
         );
-        self.inner.pending_logical_types.push(PendingLogicalType {
-            extension: self.inner.extension_name.clone(),
+        self.pending_logical_types.push(PendingLogicalType {
+            extension: self.extension_name.clone(),
             name,
             physical,
         });
@@ -1682,10 +1653,10 @@ impl ExtensionStoreState {
             schema,
             name,
             parameters.len(),
-            self.inner.extension_name
+            self.extension_name
         );
-        self.inner.pending_macros.push(PendingMacro {
-            extension: self.inner.extension_name.clone(),
+        self.pending_macros.push(PendingMacro {
+            extension: self.extension_name.clone(),
             schema,
             name,
             parameters,
@@ -1698,7 +1669,7 @@ impl ExtensionStoreState {
 // Phase 6.2.n Session 3 — files register-* signatures inlined
 // (were `files::ReplacementScan` / `files::CopyHandler` records).
 #[cfg(test)]
-impl ExtensionStoreState {
+impl ExtensionInnerState {
     pub(crate) fn register_replacement_scan(
         &mut self,
         table_function: u32,
@@ -1707,7 +1678,7 @@ impl ExtensionStoreState {
         // so a string works for the log line without losing content.
         mode: &str,
     ) -> Result<u32, String> {
-        let function_name = self.inner
+        let function_name = self
             .table_handle_names
             .get(&table_function)
             .cloned()
@@ -1720,10 +1691,10 @@ impl ExtensionStoreState {
         let id = self.alloc_resource_id();
         verbose_log!(
             "[extension-manager] files register-replacement-scan exts={:?} ({}) -> '{}' for '{}' (id {id})",
-            extensions, mode, function_name, self.inner.extension_name
+            extensions, mode, function_name, self.extension_name
         );
-        self.inner.pending_replacement_scans.push(PendingReplacementScan {
-            extension: self.inner.extension_name.clone(),
+        self.pending_replacement_scans.push(PendingReplacementScan {
+            extension: self.extension_name.clone(),
             extensions,
             function_name,
         });
@@ -1738,10 +1709,10 @@ impl ExtensionStoreState {
         let id = self.alloc_resource_id();
         verbose_log!(
             "[extension-manager] files register-copy-handler ext='{}' (function={}) for '{}' -> id {id}",
-            extension, function, self.inner.extension_name
+            extension, function, self.extension_name
         );
-        self.inner.pending_copy_handlers.push(PendingCopyHandler {
-            extension: self.inner.extension_name.clone(),
+        self.pending_copy_handlers.push(PendingCopyHandler {
+            extension: self.extension_name.clone(),
             file_extension: extension,
             function_handle: function,
         });
@@ -1755,7 +1726,7 @@ impl ExtensionStoreState {
 // neutral pending buffer. Materializing a concrete secret is driven through the
 // component's exported `secret-dispatch`.
 #[cfg(test)]
-impl ExtensionStoreState {
+impl ExtensionInnerState {
     pub(crate) fn register_secret_type(
         &mut self,
         type_name: String,
@@ -1776,11 +1747,11 @@ impl ExtensionStoreState {
         verbose_log!(
             "[extension-runtime:{}] registered secret type '{type_name}' \
              (registry={registry_id}, callback={callback_handle}, params={})",
-            self.inner.extension_name,
+            self.extension_name,
             params.len()
         );
-        self.inner.pending_secrets.push(PendingSecret {
-            extension: self.inner.extension_name.clone(),
+        self.pending_secrets.push(PendingSecret {
+            extension: self.extension_name.clone(),
             type_name,
             provider: None,
             params,
@@ -1803,10 +1774,10 @@ impl ExtensionStoreState {
         verbose_log!(
             "[extension-runtime:{}] registered secret provider '{type_name}'/'{provider}' \
              (registry={registry_id}, callback={callback_handle})",
-            self.inner.extension_name
+            self.extension_name
         );
-        self.inner.pending_secrets.push(PendingSecret {
-            extension: self.inner.extension_name.clone(),
+        self.pending_secrets.push(PendingSecret {
+            extension: self.extension_name.clone(),
             type_name,
             provider: Some(provider),
             params: Vec::new(),
@@ -1820,7 +1791,7 @@ impl ExtensionStoreState {
 // option (distinct from reading config via `config`). Captured into the neutral
 // pending buffer; the direction-specific sink surfaces it to the database.
 #[cfg(test)]
-impl ExtensionStoreState {
+impl ExtensionInnerState {
     pub(crate) fn register_option(
         &mut self,
         name: String,
@@ -1835,10 +1806,10 @@ impl ExtensionStoreState {
     ) -> Result<(), Duckerror> {
         verbose_log!(
             "[extension-runtime:{}] registered option '{name}' (type={ty}, scope={scope})",
-            self.inner.extension_name
+            self.extension_name
         );
-        self.inner.pending_settings.push(PendingSetting {
-            extension: self.inner.extension_name.clone(),
+        self.pending_settings.push(PendingSetting {
+            extension: self.extension_name.clone(),
             name,
             description,
             ty,
@@ -1877,7 +1848,7 @@ impl ExtensionStoreState {
 // 2.1.0 (Item 5): the `macro-ext` interface adds TABLE macros (a relation body)
 // on top of the existing scalar-macro registration.
 #[cfg(test)]
-impl ExtensionStoreState {
+impl ExtensionInnerState {
     pub(crate) fn register_table_macro(
         &mut self,
         schema: String,
@@ -1887,11 +1858,11 @@ impl ExtensionStoreState {
     ) -> Result<(), Duckerror> {
         verbose_log!(
             "[extension-runtime:{}] registered table macro '{schema}.{name}' ({} params)",
-            self.inner.extension_name,
+            self.extension_name,
             parameters.len()
         );
-        self.inner.pending_table_macros.push(PendingTableMacro {
-            extension: self.inner.extension_name.clone(),
+        self.pending_table_macros.push(PendingTableMacro {
+            extension: self.extension_name.clone(),
             schema,
             name,
             parameters: parameters.into_iter().collect(),
@@ -1904,7 +1875,7 @@ impl ExtensionStoreState {
 // 2.1.0 (Item 5): the `types-ext` interface adds modified logical types (over a
 // type-expression, riding the escape hatch) and ENUM types. `types` stays FROZEN.
 #[cfg(test)]
-impl ExtensionStoreState {
+impl ExtensionInnerState {
     pub(crate) fn register_logical_type_modified(
         &mut self,
         name: String,
@@ -1912,10 +1883,10 @@ impl ExtensionStoreState {
     ) -> Result<u32, Duckerror> {
         verbose_log!(
             "[extension-runtime:{}] registered modified logical type '{name}' = {type_expr}",
-            self.inner.extension_name
+            self.extension_name
         );
-        self.inner.pending_modified_types.push(PendingModifiedType {
-            extension: self.inner.extension_name.clone(),
+        self.pending_modified_types.push(PendingModifiedType {
+            extension: self.extension_name.clone(),
             name,
             type_expr,
         });
@@ -1929,11 +1900,11 @@ impl ExtensionStoreState {
     ) -> Result<u32, Duckerror> {
         verbose_log!(
             "[extension-runtime:{}] registered enum type '{name}' ({} members)",
-            self.inner.extension_name,
+            self.extension_name,
             members.len()
         );
-        self.inner.pending_enum_types.push(PendingEnumType {
-            extension: self.inner.extension_name.clone(),
+        self.pending_enum_types.push(PendingEnumType {
+            extension: self.extension_name.clone(),
             name,
             members,
         });
@@ -1947,7 +1918,7 @@ impl ExtensionStoreState {
 // direction-specific sink forwards it. A callback handle is allocated exactly
 // like the base scalar path so invocations route to the owning component.
 #[cfg(test)]
-impl ExtensionStoreState {
+impl ExtensionInnerState {
     pub(crate) fn register_scalar_ex(
         &mut self,
         name: String,
@@ -1979,11 +1950,11 @@ impl ExtensionStoreState {
         let registry_id = self.alloc_resource_id();
         verbose_log!(
             "[extension-runtime:{}] registered scalar-ex '{name}' (registry={registry_id}, callback={callback_handle}, varargs={}, special_null={special_null}, volatile={volatile})",
-            self.inner.extension_name,
+            self.extension_name,
             varargs.is_some()
         );
-        self.inner.pending_scalar_ex.push(PendingScalarEx {
-            extension: self.inner.extension_name.clone(),
+        self.pending_scalar_ex.push(PendingScalarEx {
+            extension: self.extension_name.clone(),
             name,
             arguments,
             varargs,
@@ -2008,7 +1979,7 @@ impl ExtensionStoreState {
 // them so the core can resolve geometry SRIDs. Registration only -- reprojection
 // (GDAL/PROJ ST_Transform) is OUT OF SCOPE for 2.2.0.
 #[cfg(test)]
-impl ExtensionStoreState {
+impl ExtensionInnerState {
     pub(crate) fn register_coordinate_system(
         &mut self,
         auth_name: String,
@@ -2017,13 +1988,13 @@ impl ExtensionStoreState {
     ) -> Result<u32, Duckerror> {
         verbose_log!(
             "[extension-runtime:{}] registered coordinate system {}:{}",
-            self.inner.extension_name,
+            self.extension_name,
             auth_name,
             code
         );
-        self.inner.pending_coordinate_systems
+        self.pending_coordinate_systems
             .push(PendingCoordinateSystem {
-                extension: self.inner.extension_name.clone(),
+                extension: self.extension_name.clone(),
                 auth_name,
                 code,
                 wkt,
@@ -2036,7 +2007,7 @@ impl ExtensionStoreState {
 // table producer; the host captures the declaration and streams the batches via
 // the producer's callback handle (reusing the table cursor shape).
 #[cfg(test)]
-impl ExtensionStoreState {
+impl ExtensionInnerState {
     pub(crate) fn register_arrow_table(
         &mut self,
         name: String,
@@ -2050,11 +2021,11 @@ impl ExtensionStoreState {
         let columns = convert_extension_columndefs(schema);
         verbose_log!(
             "[extension-runtime:{}] registered arrow table '{name}' ({} columns, callback={callback_handle})",
-            self.inner.extension_name,
+            self.extension_name,
             columns.len()
         );
-        self.inner.pending_arrow_tables.push(PendingArrowTable {
-            extension: self.inner.extension_name.clone(),
+        self.pending_arrow_tables.push(PendingArrowTable {
+            extension: self.extension_name.clone(),
             name,
             columns,
             callback_handle,
@@ -2085,7 +2056,7 @@ impl ExtensionStoreState {
 // `storage-dispatch` export. No C-API `duckdb_register_storage_extension`
 // is involved -- see ADR Amendments A1 + B1/B2.
 #[cfg(test)]
-impl ExtensionStoreState {
+impl ExtensionInnerState {
     pub(crate) fn register_storage(
         &mut self,
         type_name: String,
@@ -2098,8 +2069,8 @@ impl ExtensionStoreState {
             description: o.description,
             tags: o.tags,
         });
-        self.inner.pending_storages.push(reg::StorageReg {
-            extension: self.inner.extension_name.clone(),
+        self.pending_storages.push(reg::StorageReg {
+            extension: self.extension_name.clone(),
             type_name,
             callback_handle,
             options: neutral_options,
@@ -2136,7 +2107,7 @@ impl ExtensionStoreState {
 // invokes `fieldbook_run` cannot spiral out of control. Forwards to the
 // direction-specific `ExtensionServices::nested_exec` sink for the actual work.
 #[cfg(test)]
-impl ExtensionStoreState {
+impl ExtensionInnerState {
     /// Phase 6.2.n Session 2 — returns the neutral `NestedExecResult`
     /// mirror directly (was `extension_nested_exec::ExecResult` via
     /// `neutral_nestedresult_to_wit`). Both types have the same
@@ -2144,7 +2115,7 @@ impl ExtensionStoreState {
     /// working without edits.
     fn nested_exec(&mut self, sql: String) -> Result<NestedExecResult, String> {
         let _depth = NestedExecDepthGuard::enter()?;
-        self.inner.services.nested_exec(&sql)
+        self.services.nested_exec(&sql)
     }
 }
 
@@ -3350,7 +3321,7 @@ impl ExtensionInstance {
     pub fn drain_pending(&mut self) -> PendingRegistrationsData {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).drain_pending() }
+        unsafe { (*data).consumer.drain_pending() }
     }
 
     /// Drive the component's `guest.shutdown` export. The C API installer in
@@ -3422,7 +3393,7 @@ impl ExtensionInstance {
     pub fn take_pending_storages(&mut self) -> Vec<crate::reg::StorageReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_storages() }
+        unsafe { (*data).consumer.take_pending_storages() }
     }
 
     /// Item 3 / M2a: drains the captured custom-index TYPE registrations (see
@@ -3430,7 +3401,7 @@ impl ExtensionInstance {
     pub fn take_pending_indexes(&mut self) -> Vec<crate::reg::IndexReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_indexes() }
+        unsafe { (*data).consumer.take_pending_indexes() }
     }
 
     /// httpfs M2: drains the captured files-backend registrations (see
@@ -3438,7 +3409,7 @@ impl ExtensionInstance {
     pub fn take_pending_files(&mut self) -> Vec<crate::reg::FilesReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_files() }
+        unsafe { (*data).consumer.take_pending_files() }
     }
 
     /// Item 2: drains the captured collation registrations (see
@@ -3446,7 +3417,7 @@ impl ExtensionInstance {
     pub fn take_pending_collations(&mut self) -> Vec<crate::reg::CollationReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_collations() }
+        unsafe { (*data).consumer.take_pending_collations() }
     }
 
     /// Item 4: drains the captured pragma registrations (see
@@ -3454,7 +3425,7 @@ impl ExtensionInstance {
     pub fn take_pending_pragmas(&mut self) -> Vec<crate::reg::PragmaReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_pragmas() }
+        unsafe { (*data).consumer.take_pending_pragmas() }
     }
 
     // --- 2.1.0 additive drains (mirror take_pending_pragmas) ---
@@ -3463,42 +3434,42 @@ impl ExtensionInstance {
     pub fn take_pending_copy_handlers(&mut self) -> Vec<crate::reg::CopyHandlerReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_copy_handlers() }
+        unsafe { (*data).consumer.take_pending_copy_handlers() }
     }
 
     /// 2.1.0 (Item 2): drains the captured secret type/provider registrations.
     pub fn take_pending_secrets(&mut self) -> Vec<crate::reg::SecretReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_secrets() }
+        unsafe { (*data).consumer.take_pending_secrets() }
     }
 
     /// 2.1.0 (Item 3): drains the captured option/settings registrations.
     pub fn take_pending_settings(&mut self) -> Vec<crate::reg::SettingReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_settings() }
+        unsafe { (*data).consumer.take_pending_settings() }
     }
 
     /// 2.1.0 (Item 5): drains the captured table-macro registrations.
     pub fn take_pending_table_macros(&mut self) -> Vec<crate::reg::TableMacroReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_table_macros() }
+        unsafe { (*data).consumer.take_pending_table_macros() }
     }
 
     /// 2.1.0 (Item 5): drains the captured modified-logical-type registrations.
     pub fn take_pending_modified_types(&mut self) -> Vec<crate::reg::ModifiedTypeReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_modified_types() }
+        unsafe { (*data).consumer.take_pending_modified_types() }
     }
 
     /// 2.1.0 (Item 5): drains the captured ENUM-type registrations.
     pub fn take_pending_enum_types(&mut self) -> Vec<crate::reg::EnumTypeReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_enum_types() }
+        unsafe { (*data).consumer.take_pending_enum_types() }
     }
 
     // --- 2.2.0 additive drains (Items 6-7; mirror the 2.1.0 drains) ---
@@ -3507,42 +3478,42 @@ impl ExtensionInstance {
     pub fn take_pending_scalar_ex(&mut self) -> Vec<crate::reg::ScalarExReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_scalar_ex() }
+        unsafe { (*data).consumer.take_pending_scalar_ex() }
     }
 
     /// 2.2.0 (Item 7): drains the captured connection-lifecycle subscriptions.
     pub fn take_pending_conn_callbacks(&mut self) -> Vec<crate::reg::ConnCallbackReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_conn_callbacks() }
+        unsafe { (*data).consumer.take_pending_conn_callbacks() }
     }
 
     /// 2.2.0 (Item 7): drains the captured coordinate-system (CRS) registrations.
     pub fn take_pending_coordinate_systems(&mut self) -> Vec<crate::reg::CoordinateSystemReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_coordinate_systems() }
+        unsafe { (*data).consumer.take_pending_coordinate_systems() }
     }
 
     /// 2.2.0 (Item 7): drains the captured Arrow-table-producer registrations.
     pub fn take_pending_arrow_tables(&mut self) -> Vec<crate::reg::ArrowTableReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_arrow_tables() }
+        unsafe { (*data).consumer.take_pending_arrow_tables() }
     }
 
     /// 2.2.0 (Item 7): drains the captured text-encoding registrations.
     pub fn take_pending_encodings(&mut self) -> Vec<crate::reg::EncodingReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_encodings() }
+        unsafe { (*data).consumer.take_pending_encodings() }
     }
 
     /// 2.2.0 (Item 7): drains the captured compression-codec registrations.
     pub fn take_pending_compressions(&mut self) -> Vec<crate::reg::CompressionReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_compressions() }
+        unsafe { (*data).consumer.take_pending_compressions() }
     }
 
     /// 2.3.0 / v3: drains the captured parser-extension registrations. The core
@@ -3550,7 +3521,7 @@ impl ExtensionInstance {
     pub fn take_pending_parsers(&mut self) -> Vec<crate::reg::ParserReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_parsers() }
+        unsafe { (*data).consumer.take_pending_parsers() }
     }
 
     /// 2.3.0 / v3: drains the captured optimizer-rule registrations. The core shim
@@ -3558,7 +3529,7 @@ impl ExtensionInstance {
     pub fn take_pending_optimizers(&mut self) -> Vec<crate::reg::OptimizerReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_optimizers() }
+        unsafe { (*data).consumer.take_pending_optimizers() }
     }
 
     /// 3.1.0: drains the captured streaming/filter-pushdown table-fn registrations
@@ -3568,7 +3539,7 @@ impl ExtensionInstance {
     pub fn take_pending_filterable_tables(&mut self) -> Vec<crate::reg::FilterableTableReg> {
         let mut ctx = self.store.as_context_mut();
         let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { (*data).take_pending_filterable_tables() }
+        unsafe { (*data).consumer.take_pending_filterable_tables() }
     }
 
     // --- 2.1.0 (Item 1): copy-dispatch re-entry ---
@@ -5421,13 +5392,15 @@ mod tests {
             .join(format!("{name}.wasm"));
         let bytes = std::fs::read(&path).expect("read artifact");
         let component = Component::new(engine, &bytes)?;
-        let wasi = wasmtime_wasi::WasiCtxBuilder::new()
-            .inherit_stderr()
-            .build();
+        // Path B follow-up #2 step 2 (2026-09-22): the load path now
+        // consumes a portable `WasiEnvironment` (not a wasmtime-shaped
+        // `WasiCtx`). Preserve the pre-flip `inherit_stderr()`
+        // behaviour via the wasmos builder.
+        let wasi_env = wasmos_runtime_api::WasiEnvironment::default().inherit_stderr();
         load_component(
             engine,
             &component,
-            wasi,
+            &wasi_env,
             Box::new(NoopServices),
             Arc::new(RwLock::new(CallbackRegistry::default())),
             name.to_string(),
@@ -6113,10 +6086,8 @@ mod tests {
         }
     }
 
-    fn scripted_state() -> ExtensionStoreState {
-        let wasi = wasmtime_wasi::WasiCtxBuilder::new().build();
-        ExtensionStoreState::new(
-            wasi,
+    fn scripted_state() -> ExtensionInnerState {
+        ExtensionInnerState::new(
             Box::new(ScriptedNestedServices {
                 select_rows: vec![
                     vec!["1".to_string(), "alpha".to_string()],
@@ -6566,7 +6537,7 @@ fn install_wasmos_migrated_interfaces(
 pub fn load_component(
     engine: &Engine,
     component: &Component,
-    wasi: WasiCtx,
+    wasi: &wasmos_runtime_api::WasiEnvironment,
     services: Box<dyn ExtensionServices>,
     callback_registry: Arc<RwLock<CallbackRegistry>>,
     extension_name: String,
@@ -6598,7 +6569,7 @@ pub fn load_component(
 pub fn load_component_with_dynlink(
     engine: &Engine,
     component: &Component,
-    wasi: WasiCtx,
+    wasi: &wasmos_runtime_api::WasiEnvironment,
     services: Box<dyn ExtensionServices>,
     callback_registry: Arc<RwLock<CallbackRegistry>>,
     extension_name: String,
@@ -6642,15 +6613,19 @@ pub fn load_component_with_dynlink(
         );
     }
 
-    let mut store = Store::new(
-        engine,
-        ExtensionStoreState::new(
-            wasi,
-            services,
-            callback_registry,
-            extension_name.clone(),
-        ),
-    );
+    // Path B follow-up #2 step 2 (2026-09-22): the store data is now the
+    // wasmos `SyncStoreState<ExtensionInnerState>` wrapper — WasiCtx +
+    // WasiHttpCtx + ResourceTable live inside; ducklink state on
+    // `.consumer`. `SyncStoreState::new` builds the wasi contexts from
+    // the portable `WasiEnvironment` description.
+    let ext_state = wasmos_runtime_wasmtime_v48::SyncStoreState::new(
+        Some(wasi),
+        ExtensionInnerState::new(services, callback_registry, extension_name.clone()),
+    )
+    .map_err(|e| {
+        wasmtime::Error::msg(format!("build ExtensionStoreState wrapper: {e:?}"))
+    })?;
+    let mut store = Store::new(engine, ext_state);
 
     // ADR-0029 Phase 6.2.h.2 — wire the wasmos-migrated interfaces
     // per-load. Session 2 covers Lifecycle only; future sessions add

@@ -47,7 +47,9 @@ use wasmos_runtime_api::{
     RuntimeResult, SyncHostCall, SyncHostCallAdapter, WitEnum, WitFlags, WitVariant,
 };
 
-use crate::extension::{ExtensionStoreState, PendingOptimizer, PendingParser, PendingSetting};
+use crate::extension::{
+    ExtensionInnerState, PendingOptimizer, PendingParser, PendingSetting,
+};
 
 /// Shared handle to `ExtensionStoreState` used by state-touching
 /// wasmos-native interface handlers. Matches the SharedTvmHost
@@ -58,8 +60,8 @@ use crate::extension::{ExtensionStoreState, PendingOptimizer, PendingParser, Pen
 /// Consumers construct one at instantiation:
 ///
 /// ```rust,ignore
-/// let state = ExtensionStoreState::new(...);
-/// let shared: SharedExtensionState = Arc::new(Mutex::new(state));
+/// let inner = ExtensionInnerState::new(services, registry, name);
+/// let shared: SharedExtensionState = Arc::new(Mutex::new(inner));
 /// let imports = install_extension_imports_stateful(
 ///     HostImports::new(),
 ///     shared,
@@ -69,7 +71,7 @@ use crate::extension::{ExtensionStoreState, PendingOptimizer, PendingParser, Pen
 /// Alternative wire-compatible design (extract per-field locks
 /// into a smaller shared struct) is a Phase 6.2.d.2-d follow-up
 /// if per-call lock contention shows up in benchmarks.
-pub type SharedExtensionState = Arc<Mutex<ExtensionStoreState>>;
+pub type SharedExtensionState = Arc<Mutex<ExtensionInnerState>>;
 
 /// ADR-0029 Phase 6.2.h.5 — dual-mode state source for wasmos-native
 /// interface handlers.
@@ -136,17 +138,23 @@ impl StateSource {
                 Ok(StateHold::Guard(guard))
             }
             StateSource::FromCtx => {
-                let s = ctx.consumer_state::<ExtensionStoreState>().ok_or_else(|| {
-                    RuntimeError::msg(
-                        "wasmos-native handler: no ExtensionStoreState in \
-                             HostCallContext — the consumer-migration bridge \
-                             (wasmos-runtime-wasmtime-v48::sync_bridge_resource) is \
-                             required to populate the consumer-state slot at dispatch \
-                             time. Handlers built with `bridged()` cannot be invoked \
-                             through the wasmos-adapter path; use the corresponding \
-                             `new(shared_state)` constructor for that path.",
-                    )
-                })?;
+                // Path B follow-up #2 step 2 (2026-09-22): the store's
+                // data is now the wasmos `SyncStoreState<ExtensionInnerState>`
+                // wrapper; project through `.consumer` to reach the
+                // ducklink-only inner slice.
+                let s = wasmos_runtime_wasmtime_v48::SyncStoreState::<ExtensionInnerState>
+                    ::consumer_from_ctx(ctx)
+                    .ok_or_else(|| {
+                        RuntimeError::msg(
+                            "wasmos-native handler: no SyncStoreState<ExtensionInnerState> \
+                                 in HostCallContext — the consumer-migration bridge \
+                                 (wasmos-runtime-wasmtime-v48::sync_bridge_resource) is \
+                                 required to populate the consumer-state slot at dispatch \
+                                 time. Handlers built with `bridged()` cannot be invoked \
+                                 through the wasmos-adapter path; use the corresponding \
+                                 `new(shared_state)` constructor for that path.",
+                        )
+                    })?;
                 Ok(StateHold::Ref(s))
             }
         }
@@ -161,15 +169,15 @@ pub enum StateHold<'a> {
     /// A live mutex guard. Dropped at end-of-scope releases the
     /// lock — matches the wasmos-adapter path semantics where
     /// each host-call fully brackets its state access.
-    Guard(std::sync::MutexGuard<'a, ExtensionStoreState>),
+    Guard(std::sync::MutexGuard<'a, ExtensionInnerState>),
     /// A plain mutable reference. No lock semantics — the bridge
     /// path relies on wasmtime's own single-threaded dispatch to
     /// enforce mutual exclusion.
-    Ref(&'a mut ExtensionStoreState),
+    Ref(&'a mut ExtensionInnerState),
 }
 
 impl<'a> std::ops::Deref for StateHold<'a> {
-    type Target = ExtensionStoreState;
+    type Target = ExtensionInnerState;
     fn deref(&self) -> &Self::Target {
         match self {
             StateHold::Guard(g) => &**g,

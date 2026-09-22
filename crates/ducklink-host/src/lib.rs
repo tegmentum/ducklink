@@ -6211,17 +6211,28 @@ impl ExtensionManager {
                     "denied (opt in with DUCKLINK_NETWORK_GRANT=all|<names>)"
                 }
             );
-            let mut builder = WasiCtxBuilder::new();
-            builder.inherit_env().inherit_stdio();
+            // Path B follow-up #2 step 2 (2026-09-22): build the extension
+            // WASI environment through the portable
+            // [`wasmos_runtime_api::WasiEnvironment`] builder; the wasmos
+            // `SyncStoreState::new` in ducklink-runtime's `load_component`
+            // materialises a `WasiCtx` from this description at
+            // instantiation time. Preserves pre-flip behaviour verbatim:
+            // inherit env + stdio, network only when granted, cache-root
+            // + sqlitewasm preopens routed through the same helpers.
+            let mut wasi_env = wasmos_runtime_api::WasiEnvironment::default()
+                .inherit_env()
+                .inherit_stdin()
+                .inherit_stdout()
+                .inherit_stderr();
             if grant_network {
-                builder.inherit_network().allow_ip_name_lookup(true);
+                wasi_env = wasi_env.with_network();
             }
             // Grant the extension access to the absolute cache-root paths from
             // DUCKLINK_LOCAL_CACHE / DUCKLINK_GLOBAL_CACHE. The cache
             // extension resolves those verbatim; without a matching preopen
             // (guest name == absolute host path) WASI rejects
             // `<abs>/objects` etc. with `No such file or directory`.
-            attach_cache_env_preopens(&mut builder);
+            attach_cache_env_preopens(&mut wasi_env);
             // Grant sqlitewasm access to ATTACH DSN paths so it can self-persist
             // through wasivfs (sqlite-lib SPI) rather than shuttling bytes across
             // the wasm boundary. Preopens cwd (as ".") so relative DSNs Just
@@ -6229,8 +6240,7 @@ impl ExtensionManager {
             // abspath) extends the reach to any dir the operator names — mirrors
             // the `DUCKLINK_LOCAL_CACHE` shape. Skipped for extensions other
             // than sqlitewasm to keep the fs grant scoped.
-            attach_sqlitewasm_preopens(&mut builder, &extension_name);
-            let wasi = builder.build();
+            attach_sqlitewasm_preopens(&mut wasi_env, &extension_name);
             let component = Component::from_file(&engine, &artifact_path).map_err(|err| {
                 anyhow::anyhow!(
                     "failed to load component for {extension_name} at {}: {err}",
@@ -6248,7 +6258,7 @@ impl ExtensionManager {
             ducklink_runtime::load_component_with_dynlink(
                 &engine,
                 &component,
-                wasi,
+                &wasi_env,
                 Box::new(CoreServices {
                     core,
                     current_connection,
@@ -16231,18 +16241,21 @@ fn cache_env_preopens() -> Vec<(PathBuf, String)> {
 }
 
 /// Attach absolute cache-root preopens (`cache_env_preopens()`) to a
-/// `WasiCtxBuilder`. Used at the extension-loader's per-extension WasiCtx
-/// construction site, where preopens are built inline rather than through
-/// `build_wasi_ctx_*` / `resolve_preopens_with_default`. Missing/invalid
-/// vars are already logged inside `cache_env_preopens()`.
-fn attach_cache_env_preopens(builder: &mut WasiCtxBuilder) {
+/// [`wasmos_runtime_api::WasiEnvironment`]. Used at the extension-loader's
+/// per-extension WasiEnvironment construction site, where preopens are
+/// built inline rather than through the `build_wasi_env_*` helpers.
+/// Missing/invalid vars are already logged inside `cache_env_preopens()`.
+///
+/// Path B follow-up #2 step 2 (2026-09-22): the wasmtime-shaped
+/// `WasiCtxBuilder` accumulation retired here in favour of appending
+/// [`wasmos_runtime_api::Preopen::read_write`] entries onto the portable
+/// [`WasiEnvironment::preopens`] vector; the wasmos adapter re-applies
+/// them at `SyncStoreState::new` time using the same read/write mode
+/// that `FsPerms::ReadWrite` supplied.
+fn attach_cache_env_preopens(env: &mut wasmos_runtime_api::WasiEnvironment) {
     for (host, guest) in cache_env_preopens() {
-        if let Err(e) = builder.preopened_dir(&host, &guest, FsPerms::ReadWrite) {
-            eprintln!(
-                "ducklink-host: failed to preopen cache root {}: {e}",
-                host.display()
-            );
-        }
+        env.preopens
+            .push(wasmos_runtime_api::Preopen::read_write(host, guest));
     }
 }
 
@@ -16266,18 +16279,17 @@ fn attach_cache_env_preopens(builder: &mut WasiCtxBuilder) {
 /// ATTACH time. No dynamic preopens — wasmtime preopens are static per
 /// WasiCtx — so an operator with DBs outside cwd sets
 /// DUCKLINK_SQLITEWASM_DATADIR before LOAD sqlitewasm.
-fn attach_sqlitewasm_preopens(builder: &mut WasiCtxBuilder, extension_name: &str) {
+fn attach_sqlitewasm_preopens(
+    env: &mut wasmos_runtime_api::WasiEnvironment,
+    extension_name: &str,
+) {
     if extension_name != "sqlitewasm" {
         return;
     }
     match std::env::current_dir() {
         Ok(cwd) => {
-            if let Err(e) = builder.preopened_dir(&cwd, ".", FsPerms::ReadWrite) {
-                eprintln!(
-                    "ducklink-host: failed to preopen cwd for sqlitewasm ({}): {e}",
-                    cwd.display()
-                );
-            }
+            env.preopens
+                .push(wasmos_runtime_api::Preopen::read_write(cwd, "."));
         }
         Err(e) => {
             eprintln!("ducklink-host: sqlitewasm preopens: cannot read cwd ({e})");
@@ -16305,11 +16317,7 @@ fn attach_sqlitewasm_preopens(builder: &mut WasiCtxBuilder, extension_name: &str
             return;
         }
         let guest = path.to_string_lossy().into_owned();
-        if let Err(e) = builder.preopened_dir(&path, &guest, FsPerms::ReadWrite) {
-            eprintln!(
-                "ducklink-host: failed to preopen sqlitewasm datadir {}: {e}",
-                path.display()
-            );
-        }
+        env.preopens
+            .push(wasmos_runtime_api::Preopen::read_write(path, guest));
     }
 }
