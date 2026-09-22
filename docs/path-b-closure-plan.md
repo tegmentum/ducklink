@@ -1,9 +1,11 @@
 # Ducklink Path B closure plan
 
-**Status (2026-09-22): PARTIAL.** All Path B closure phases
-through CliHarness migration have landed. Phase 6 (wasmtime
-Cargo dep drop) is blocked on three cross-crate migrations
-documented at the bottom of the phase table.
+**Status (2026-09-22): FULLY CLOSED (`0960423`).** All Path B
+closure phases through the Phase 6 Cargo dep drop have landed.
+Ducklink-host no longer holds `wasmtime`, `wasmtime-wasi`, or
+`wasmtime-wasi-http` as direct Cargo dependencies — verified via
+`cargo tree -p ducklink-host --depth 1 | grep wasmtime` (prints
+only the wasmos adapter `wasmos-runtime-wasmtime-v48`).
 
 - Slice 3 atomic surgery landed (`ad3156a`): CoreExecution flipped
   to wasmos-native SyncInstance; `primary_nested_exec` rewired
@@ -102,7 +104,7 @@ bang commit.
 | 2+3+4.4 | (merged into 2+3+4.3 — see arc note)                    |            |             | N/A |
 | 2+3+4.5 | Retire `SyncStoreState<CoreInnerState>` wrap from CoreExecution path | ~2 hrs | LOW | ✅ 2026-09-22 (`a79c6f6` initial; fully retired in `4f56c37` after shell-driver follow-up migration) |
 | 5     | `ExtensionServices` semver-major trait break — NO LONGER NEEDED | — | — | RETIRED (Phase 6.24 makes ctx-threading unnecessary — nested_exec keeps its `&mut self, sql` signature, internally holds a `SyncCrossInstanceHandle` and dispatches through it) |
-| 6     | Drop direct wasmtime Cargo deps                          | multi-arc | MEDIUM | BLOCKED on ExtensionManager only — CliHarness ✅ (`1ac637c`), standalone-shell ✅ (`4f56c37`), compile-cache restored on wasmos-native paths ✅ (`39a5525`), DotcmdInstance ✅ (`bc39d9f` with documented degradation for pylon dot-cmds that import `compose:dynlink/linker`). Remaining: ExtensionManager Engine cascade via `build_engine_for_driver` (est. 5-8 sessions). Full details: agent commit `b45bfe8`. |
+| 6     | Drop direct wasmtime Cargo deps                          | multi-arc | MEDIUM | ✅ 2026-09-22 (`0960423`) — ducklink-host has no direct wasmtime / wasmtime-wasi / wasmtime-wasi-http Cargo deps. Encapsulation via ducklink-runtime re-exports (`EngineHandle`, `ComponentHandle`, `wasi::*`) + `ducklink_runtime::build_engine()` relocation. ExtensionManager keeps its `Engine` field alive but reaches it through the ducklink-runtime re-export; a full ExtensionManager migration off wasmtime types remains a future arc but is no longer prerequisite for the Cargo drop. |
 
 **Fusion note (2026-09-22 discovery):** Slice 2+3+4.3 originally
 scoped to keep `primary_nested_exec`'s raw-pointer TLS pattern
