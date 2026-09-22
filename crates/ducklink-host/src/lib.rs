@@ -2851,6 +2851,45 @@ impl CoreExecution {
     ) -> Result<Vec<wasmos_runtime_api::Value>, wasmos_runtime_api::RuntimeError> {
         call_export_on_resource_core(self, iface, method, handle.0, trailing_args)
     }
+
+    /// Bridge a guest export whose signature does not carry a
+    /// leading resource handle — the `handle-quack-request` /
+    /// `handle-ui-request` shape used by the ui/quack servers. The
+    /// method owns its `ExportResourceTable` because those two
+    /// exports don't thread resource handles back to the host.
+    ///
+    /// Wraps [`sync_export_bridge::call_export_with_resources`] so
+    /// consumer modules don't hold a `wasmtime::component::Instance`
+    /// or a `StoreContextMut<CoreStoreState>` in scope.
+    pub(crate) fn call_bridge_export(
+        &mut self,
+        iface: &str,
+        method: &str,
+        args: &[wasmos_runtime_api::Value],
+    ) -> Result<Vec<wasmos_runtime_api::Value>, wasmos_runtime_api::RuntimeError> {
+        use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
+            call_export_with_resources, ExportResourceTable,
+        };
+        let mut resources = ExportResourceTable::new();
+        call_export_with_resources(
+            self.store.as_context_mut(),
+            &self.instance,
+            Some(iface),
+            method,
+            args,
+            &mut resources,
+        )
+    }
+
+    /// Free a core resource handle. Encapsulates the wasmtime-
+    /// native `ResourceAny::resource_drop` so consumer modules don't
+    /// need to name the wasmtime type at their drop-site.
+    pub(crate) fn resource_drop_handle(
+        &mut self,
+        handle: CoreResourceHandle,
+    ) -> wasmtime::Result<()> {
+        handle.0.resource_drop(self.store.as_context_mut())
+    }
 }
 
 /// The `nested-exec` Direction-1 §5.(b.1) sibling-core state, shared between

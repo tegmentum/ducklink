@@ -255,27 +255,18 @@ fn bridge_ui_request(
     req: &Request,
 ) -> Option<(u16, String, Vec<u8>)> {
     use wasmos_runtime_api::Value;
-    use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
-        call_export_with_resources, ExportResourceTable,
-    };
     // returns (status, "Key: Value\n"-block of all response headers, body)
-    let mut resources = ExportResourceTable::new();
     let ret = core
-        .with_instance(|instance, store| {
-            call_export_with_resources(
-                store,
-                instance,
-                Some(crate::DATABASE_IFACE),
-                "handle-ui-request",
-                &[
-                    Value::String(req.method.clone()),
-                    Value::String(req.path.clone()),
-                    Value::String(req.headers.clone()),
-                    Value::Bytes(req.body.clone().into()),
-                ],
-                &mut resources,
-            )
-        })
+        .call_bridge_export(
+            crate::DATABASE_IFACE,
+            "handle-ui-request",
+            &[
+                Value::String(req.method.clone()),
+                Value::String(req.path.clone()),
+                Value::String(req.headers.clone()),
+                Value::Bytes(req.body.clone().into()),
+            ],
+        )
         .ok()?;
     let payload = match ret.as_slice() {
         [Value::Option(Some(p))] => p.as_ref(),

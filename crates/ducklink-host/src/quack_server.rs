@@ -197,21 +197,12 @@ fn handle_connection(
 /// returns the serialized response body (`application/vnd.duckdb`).
 fn bridge_quack_request(core: &mut CoreExecution, body: Vec<u8>) -> Option<Vec<u8>> {
     use wasmos_runtime_api::Value;
-    use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
-        call_export_with_resources, ExportResourceTable,
-    };
-    let mut resources = ExportResourceTable::new();
     let ret = core
-        .with_instance(|instance, store| {
-            call_export_with_resources(
-                store,
-                instance,
-                Some(crate::DATABASE_IFACE),
-                "handle-quack-request",
-                &[Value::Bytes(body.into())],
-                &mut resources,
-            )
-        })
+        .call_bridge_export(
+            crate::DATABASE_IFACE,
+            "handle-quack-request",
+            &[Value::Bytes(body.into())],
+        )
         .ok()?;
     match ret.as_slice() {
         [Value::Option(Some(payload))] => match payload.as_ref() {

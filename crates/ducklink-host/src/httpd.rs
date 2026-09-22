@@ -888,9 +888,7 @@ fn db_query_params(
         &[params_val],
     );
     // Free the prepared-statement resource regardless of outcome.
-    // `resource_drop` is a wasmtime-native method on ResourceAny;
-    // unwrap the CoreResourceHandle at this specific boundary.
-    let _ = core.with_instance(|_instance, store| prepared.0.resource_drop(store));
+    let _ = core.resource_drop_handle(prepared);
 
     let ret = match result {
         Ok(r) => r,
