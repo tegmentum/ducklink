@@ -66,7 +66,7 @@ bang commit.
 | 2+3+4.2 | Migrate 25 handler sites onto `CoreState` trait         | ~1 hr     | LOW          | ✅ 2026-09-22 (d07469e) |
 | 2+3+4.3 | Swap `CoreExecution` to `SyncInstance`; migrate to `HostImports::register_sync`; flip consumer_state box; rewire `primary_nested_exec` onto wasmos Phase 6.24 primitive | ~1-2 wks | HIGH | ✅ 2026-09-22 (`ad3156a`) |
 | 2+3+4.4 | (merged into 2+3+4.3 — see arc note)                    |            |             | N/A |
-| 2+3+4.5 | Retire `SyncStoreState<CoreInnerState>` wrap from CoreExecution path | ~2 hrs | LOW | ✅ 2026-09-22 (`a79c6f6` — alias retained for shell driver path) |
+| 2+3+4.5 | Retire `SyncStoreState<CoreInnerState>` wrap from CoreExecution path | ~2 hrs | LOW | ✅ 2026-09-22 (`a79c6f6` initial; fully retired in `4f56c37` after shell-driver follow-up migration) |
 | 5     | `ExtensionServices` semver-major trait break — NO LONGER NEEDED | — | — | RETIRED (Phase 6.24 makes ctx-threading unnecessary — nested_exec keeps its `&mut self, sql` signature, internally holds a `SyncCrossInstanceHandle` and dispatches through it) |
 | 6     | Drop direct wasmtime Cargo deps                          | multi-arc | MEDIUM | PENDING — blocked on CLI harness (`CliHarness`), standalone-shell driver (`run_standalone_shell`), ExtensionManager, and engine builder (`build_engine_for_driver`) migrations. Not a small follow-up. |
 
@@ -169,14 +169,16 @@ trade away `wasm_component_model_async` / concurrency / streams
   Handler error-message strings tidied to name CoreInnerState.
 
 **What remains for full Path B closure:** Phase 6 (wasmtime Cargo
-dep drop) is blocked on migrating four separate consumer paths:
-CLI harness (`CliHarness`), standalone-shell driver
-(`run_standalone_shell`), ExtensionManager (uses `wasmtime::Result`
-for error interop), and engine builder (`build_engine_for_driver`
-returns `wasmtime::Engine`). Not a small follow-up — each of
-those has its own migration story. Slice 3's CoreExecution
-retirement is complete; the remaining wasmtime uses are outside
-CoreExecution's surface.
+dep drop) is blocked on migrating three remaining consumer
+paths: CLI harness (`CliHarness`), ExtensionManager (uses
+`wasmtime::Result` for error interop), and engine builder
+(`build_engine_for_driver` returns `wasmtime::Engine`). The
+standalone-shell driver already migrated (`4f56c37`).
+
+Ducklink-host's wasmtime uses now sit at 52 lines (down from
+~110 at Slice 2 start; down from 68 immediately after Slice 3).
+Each remaining consumer is its own migration arc; none block
+another.
 
 Path Slices 1+2 (`aae7e12` + `d07469e`) remain valid prep for
 whichever path is chosen.
