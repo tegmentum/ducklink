@@ -64,11 +64,11 @@ bang commit.
 | 2+3+4 | Combined arc — split into 5 Path 2 slices below           | 5 sessions | HIGH        | IN PROGRESS 2026-09-22 |
 | 2+3+4.1 | `CoreState` accessor trait (helper interface layer)     | ~2 hrs    | LOW          | ✅ 2026-09-22 (aae7e12) |
 | 2+3+4.2 | Migrate 25 handler sites onto `CoreState` trait         | ~1 hr     | LOW          | ✅ 2026-09-22 (d07469e) |
-| 2+3+4.3 | Swap `CoreExecution` to `SyncInstance`; migrate to `HostImports::register_sync`; flip consumer_state box; retire `primary_nested_exec` TLS ← must fuse with Phase 5 | ~2-3 wks | HIGH | BLOCKED — see fusion note |
-| 2+3+4.4 | (fused into 2+3+4.3 per fusion note)                    |            |             | N/A |
+| 2+3+4.3 | Swap `CoreExecution` to `SyncInstance`; migrate to `HostImports::register_sync`; flip consumer_state box; rewire `primary_nested_exec` onto wasmos Phase 6.24 primitive | ~1-2 wks | HIGH | UNBLOCKED 2026-09-22 — Phase 6.24 shipped (wasmos `d25b2e67`) |
+| 2+3+4.4 | (merged into 2+3+4.3 — see arc note)                    |            |             | N/A |
 | 2+3+4.5 | Retire `SyncStoreState<CoreInnerState>` wrap; `CoreInnerState` boxes directly | ~2 hrs | LOW | PENDING (after 2+3+4.3) |
-| 5     | `primary_nested_exec` retirement (ExtensionServices break) | 3-5 days | ECOSYSTEM    | FUSED into 2+3+4.3 per fusion note; wasmos primitive `ReentryCapability::call_export_sync` shipped (wasmos 12af8721) |
-| 6     | Drop direct wasmtime Cargo deps                          | 0.5 day   | LOW          | PENDING (blocked on 1-5) |
+| 5     | `ExtensionServices` semver-major trait break — NO LONGER NEEDED | — | — | RETIRED (Phase 6.24 makes ctx-threading unnecessary — nested_exec keeps its `&mut self, sql` signature, internally holds a `SyncCrossInstanceHandle` and dispatches through it) |
+| 6     | Drop direct wasmtime Cargo deps                          | 0.5 day   | LOW          | PENDING (blocked on 2+3+4.3, 2+3+4.5) |
 
 **Fusion note (2026-09-22 discovery):** Slice 2+3+4.3 originally
 scoped to keep `primary_nested_exec`'s raw-pointer TLS pattern
@@ -130,14 +130,30 @@ C. **Accept Path B partial.** Retire wasmtime Cargo dep and
    still blocked until (A) lands, because `primary_nested_exec`
    currently types on `Store<CoreStoreState>`.
 
-**Path forward — recommend (A):** ship the wasmos cross-instance
-sync reentry primitive first. Ducklink then rewires
-`primary_nested_exec` onto it, unblocking Slice 2+3+4.3 and
-Phase 5 (which now becomes a much smaller trait change since
-ctx-threading is no longer needed — nested_exec still takes just
-`&mut self, sql`, and internally calls the wasmos primitive).
-Total estimated calendar: ~3 weeks (2-3 wasmos sessions + 1-2
-ducklink sessions).
+**Path forward — Path (A) executed:** wasmos Phase 6.24 shipped
+2026-09-22 as three commits:
+
+- `958d5d66` — design doc `phase-6-24-cross-instance-sync-reentry.md`
+- `d25b2e67` — `SyncCrossInstanceHandle` + `SyncInstance::cross_instance_reentry_handle`
+  in the v48 adapter + integration tests
+- `c66c7a5d` — state-of-the-abstraction Phase 6.24 entry
+
+**Bonus finding**: cross-instance sync reentry works under the
+default `RuntimeConfig` (`allow_host_callback_reentry = false`)
+too. Unlike Phase 6.22's same-instance primitive, wasmtime's
+`may_enter` gate on the source has no "already-entered" state to
+reject the entry, because the entered instance is the CALLER's,
+not the source's. Consumers using the primitive don't have to
+trade away `wasm_component_model_async` / concurrency / streams
+/ futures / component-model threading.
+
+**Ducklink-side rewire (Slice 2+3+4.3):** `primary_nested_exec`'s
+raw pointer fields swap to `SyncCrossInstanceHandle` (also `Copy`,
+also TLS-stashable). Extension's `nested_exec` keeps its
+`&mut self, sql` signature — no ctx-threading, no
+`ExtensionServices` semver break. Phase 5 retires from the plan.
+Total remaining ducklink work: ~1-2 focused sessions for the
+atomic swap + Slice 2+3+4.5 cleanup + Phase 6 Cargo drop.
 
 Path Slices 1+2 (`aae7e12` + `d07469e`) remain valid prep for
 whichever path is chosen.
