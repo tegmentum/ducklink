@@ -11283,6 +11283,31 @@ fn build_wasi_ctx_inherit(args: &[String], preopens: &[(&Path, &str)]) -> Result
     Ok(builder.build())
 }
 
+/// Path B Phase 1e prep — wasmos-native mirror of
+/// [`build_wasi_ctx_inherit`]. Returns a [`WasiEnvironment`] that
+/// [`wasmos_runtime_wasmtime_v48::SyncStoreState::new`] can consume
+/// directly, so the Store construction sites can flip off
+/// `wasmtime_wasi::WasiCtx` in one atomic slice.
+///
+/// Same knobs as `build_wasi_ctx_inherit`: args, inherit stdio +
+/// env + network, IP name lookup, read-write preopens.
+#[allow(dead_code)]
+fn build_wasi_env_inherit(
+    args: &[String],
+    preopens: &[(&Path, &str)],
+) -> wasmos_runtime_api::WasiEnvironment {
+    use wasmos_runtime_api::{Preopen, WasiEnvironment};
+    let mut env = WasiEnvironment::inherit_stdio()
+        .with_args(args.iter().cloned())
+        .inherit_env()
+        .with_network()
+        .with_ip_name_lookup();
+    for (host, guest) in preopens {
+        env = env.with_preopen(Preopen::read_write(*host, guest.to_string()));
+    }
+    env
+}
+
 /// The repository root the host was built from (compile-time `CARGO_MANIFEST_DIR`).
 /// Used to locate the bundled `registry/index.json` + `artifacts/extensions/`
 /// when nothing more specific (cwd / env override) applies.
