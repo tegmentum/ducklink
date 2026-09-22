@@ -37,7 +37,7 @@ use sha2::{Digest, Sha256};
 
 use crate::sigv4::{self, Credentials};
 use crate::{
-    build_engine, build_wasi_ctx_inherit, instantiate_core, ComponentArtifacts, CoreExecution,
+    build_engine, build_wasi_env_inherit, instantiate_core, ComponentArtifacts, CoreExecution,
     CoreResourceHandle, ExtensionManager,
 };
 
@@ -268,7 +268,7 @@ fn open_persistent(
     preopens: &[(&Path, &str)],
 ) -> Result<(CoreExecution, CoreResourceHandle)> {
     let engine = build_engine()?;
-    let wasi = build_wasi_ctx_inherit(&[String::from("ducklink-backup")], preopens)?;
+    let wasi = build_wasi_env_inherit(&[String::from("ducklink-backup")], preopens);
     let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
     let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)
         .context("failed to instantiate the core component")?;

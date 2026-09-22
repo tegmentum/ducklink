@@ -445,35 +445,14 @@ struct CoreInnerState {
     is_sibling: bool,
 }
 
-struct CoreStoreState {
-    table: ResourceTable,
-    wasi: WasiCtx,
-    /// wasi:http host context (see the module-level `add_wasi_http_to_linker`
-    /// import). Unused today by the core component itself; kept here so the
-    /// `WasiHttpView` impl below has a store-owned `WasiHttpCtx` to project.
-    wasi_http: WasiHttpCtx,
-    /// Ducklink-only per-instance state. See [`CoreInnerState`].
-    inner: CoreInnerState,
-}
-
-impl WasiView for CoreStoreState {
-    fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView {
-            ctx: &mut self.wasi,
-            table: &mut self.table,
-        }
-    }
-}
-
-impl WasiHttpView for CoreStoreState {
-    fn http(&mut self) -> WasiHttpCtxView<'_> {
-        WasiHttpCtxView {
-            ctx: &mut self.wasi_http,
-            table: &mut self.table,
-            hooks: Default::default(),
-        }
-    }
-}
+/// Path B Phase 1e (2026-09-22) — `CoreStoreState` is the wasmos-
+/// native store-data wrapper `SyncStoreState<CoreInnerState>`.
+/// The wasmos crate provides the `WasiView` + `WasiHttpView`
+/// blanket impls, so the local hand-rolled impls are retired.
+/// `WasiCtx` + `WasiHttpCtx` + `ResourceTable` live inside the
+/// wrapper; ducklink-only state sits on `.consumer` (renamed from
+/// `.inner` under the flip).
+type CoreStoreState = wasmos_runtime_wasmtime_v48::SyncStoreState<CoreInnerState>;
 
 
 // The bindgen-era `impl core_host_loader::Host for CoreStoreState`
@@ -523,7 +502,7 @@ impl wasmos_runtime_api::SyncHostCall for CoreHostExtensionLoaderHost {
                          consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state.inner.extension_manager
+                let mut manager = state.consumer.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let loaded = match manager.ensure_extension_loaded(&name) {
@@ -602,7 +581,7 @@ impl wasmos_runtime_api::SyncHostCall for ExtensionLoaderHooksHost {
                 // after the drain's `Arc<Mutex<>>` handles are
                 // released, so a callback fired downstream can't
                 // re-enter either mutex through a side-effect.
-                let native_pending = state.inner.drain_pending_registrations_for_replay();
+                let native_pending = state.consumer.drain_pending_registrations_for_replay();
                 Ok(vec![native_pending_registrations_to_value(native_pending)])
             }
             other => Err(RuntimeError::msg(format!(
@@ -1152,7 +1131,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-scalar: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state.inner.extension_manager
+                let mut manager = state.consumer.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -1188,7 +1167,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-scalar-batch-col: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state.inner.extension_manager
+                let mut manager = state.consumer.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -1220,7 +1199,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-table: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state.inner.extension_manager
+                let mut manager = state.consumer.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -1253,7 +1232,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-aggregate-col: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state.inner.extension_manager
+                let mut manager = state.consumer.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -1283,7 +1262,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-cast-col: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state.inner.extension_manager
+                let mut manager = state.consumer.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let mut ext_out: Vec<ducklink_runtime::extension::Duckvalue> =
@@ -1332,7 +1311,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-pragma: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state.inner.extension_manager
+                let mut manager = state.consumer.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -1364,7 +1343,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-cast: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state.inner.extension_manager
+                let mut manager = state.consumer.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -2363,7 +2342,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                 // coalesces those holes so a region's footprint
                 // tracks the live set, not the cumulative spill
                 // volume. Bump's dealloc is a no-op.
-                let r = state.inner.tvm
+                let r = state.consumer.tvm
                     .create_region_with(
                         tvm_kind_to_core(kind),
                         capacity,
@@ -2401,7 +2380,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                         "tvm-manager destroy-region: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                match state.inner.tvm.destroy_region(region_id).map_err(tvm_err_to_wit) {
+                match state.consumer.tvm.destroy_region(region_id).map_err(tvm_err_to_wit) {
                     Ok(()) => Ok(vec![Value::Result(Ok(None))]),
                     Err(bindgen_err) => Ok(vec![Value::Result(Err(Some(Box::new(
                         bindgen_tvm_error_to_value(bindgen_err),
@@ -2422,9 +2401,9 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                         "tvm-manager alloc: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                match state.inner.tvm.alloc(region_id, size).map_err(tvm_err_to_wit) {
+                match state.consumer.tvm.alloc(region_id, size).map_err(tvm_err_to_wit) {
                     Ok(th) => {
-                        let handle = state.inner.tvm_register(region_id, th);
+                        let handle = state.consumer.tvm_register(region_id, th);
                         Ok(vec![Value::Result(Ok(Some(Box::new(pack_tvm_handle(
                             handle,
                         )))))])
@@ -2448,7 +2427,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                         "tvm-manager dealloc: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let th = match state.inner.tvm_resolve(handle, true) {
+                let th = match state.consumer.tvm_resolve(handle, true) {
                     Ok(th) => th,
                     Err(bindgen_err) => {
                         return Ok(vec![Value::Result(Err(Some(Box::new(
@@ -2456,7 +2435,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                         ))))])
                     }
                 };
-                match state.inner.tvm.dealloc(th).map_err(tvm_err_to_wit) {
+                match state.consumer.tvm.dealloc(th).map_err(tvm_err_to_wit) {
                     Ok(()) => Ok(vec![Value::Result(Ok(None))]),
                     Err(bindgen_err) => Ok(vec![Value::Result(Err(Some(Box::new(
                         bindgen_tvm_error_to_value(bindgen_err),
@@ -2581,7 +2560,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                 let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
                     RuntimeError::msg("tvm-bytes read: consumer_state<CoreStoreState> unavailable")
                 })?;
-                let th = match state.inner.tvm_resolve(handle, false) {
+                let th = match state.consumer.tvm_resolve(handle, false) {
                     Ok(th) => th,
                     Err(bindgen_err) => {
                         return Ok(vec![Value::Result(Err(Some(Box::new(
@@ -2589,7 +2568,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                         ))))])
                     }
                 };
-                match state.inner.tvm.region_slice_at(th, len).map_err(tvm_err_to_wit) {
+                match state.consumer.tvm.region_slice_at(th, len).map_err(tvm_err_to_wit) {
                     Ok(slice) => {
                         let buf = slice.to_vec();
                         if tvm_debug() {
@@ -2647,7 +2626,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                     RuntimeError::msg("tvm-bytes write: consumer_state<CoreStoreState> unavailable")
                 })?;
                 let len = data.len() as u64;
-                let th = match state.inner.tvm_resolve(handle, false) {
+                let th = match state.consumer.tvm_resolve(handle, false) {
                     Ok(th) => th,
                     Err(bindgen_err) => {
                         return Ok(vec![Value::Result(Err(Some(Box::new(
@@ -2655,7 +2634,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                         ))))])
                     }
                 };
-                match state.inner.tvm.write(th, &data).map_err(tvm_err_to_wit) {
+                match state.consumer.tvm.write(th, &data).map_err(tvm_err_to_wit) {
                     Ok(()) => {
                         if tvm_debug() {
                             let t = TVM_BYTES_WRITTEN
@@ -3180,8 +3159,8 @@ impl CoreExecution {
         is_sibling: bool,
     ) {
         let data = self.store.data_mut();
-        data.inner.replay_archive = Some(archive);
-        data.inner.is_sibling = is_sibling;
+        data.consumer.replay_archive = Some(archive);
+        data.consumer.is_sibling = is_sibling;
     }
 
     // Phase 2e wedge #7d + #9 (2026-09-17) — every bindgen-typed
@@ -10446,8 +10425,7 @@ fn sibling_ensure_slot(sibling: &SiblingState, primary_path: &str) -> Result<Sib
         .iter()
         .map(|(host, guest)| (host.as_path(), guest.as_str()))
         .collect();
-    let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core-sibling")], &preopen_refs)
-        .map_err(|e| format!("nested-exec: sibling WASI ctx: {e}"))?;
+    let wasi = build_wasi_env_inherit(&[String::from("duckdb-core-sibling")], &preopen_refs);
     // Phase 4: if the harness wired the primary's `ExtensionManager` onto this
     // `SiblingState`, the sibling core's `CoreStoreState` binds to that SHARED
     // manager — its `callback-dispatch` host import then routes to the
@@ -10671,7 +10649,7 @@ fn trap_to_cli_string(err: wasmtime::Error) -> String {
 fn instantiate_core(
     engine: &Engine,
     component_path: &Path,
-    wasi_ctx: WasiCtx,
+    wasi_env: wasmos_runtime_api::WasiEnvironment,
     extension_manager: Arc<Mutex<ExtensionManager>>,
 ) -> Result<CoreExecution> {
     let component = load_component(engine, component_path).with_context(|| {
@@ -10738,27 +10716,24 @@ fn instantiate_core(
         .map_err(|e| anyhow::anyhow!("wire {iface} host: {e}"))?;
     }
 
-    let mut store = Store::new(
-        engine,
-        CoreStoreState {
-            table: ResourceTable::new(),
-            wasi: wasi_ctx,
-            wasi_http: WasiHttpCtx::new(),
-            // Phase 4 follow-up (FU4): defaults — a primary caller wires the
-            // shared archive via `CoreExecution::attach_replay_archive(archive,
-            // false)` once its `SiblingState` exists; `sibling_ensure_slot`
-            // does the same with `is_sibling = true` on the sibling store.
-            // Test paths that never wire a SiblingState keep both defaults,
-            // reproducing the pre-FU4 behaviour (plain drain, no archive).
-            inner: CoreInnerState {
-                extension_manager,
-                tvm: tvm_core::RegionDirectory::new(),
-                tvm_slots: std::collections::HashMap::new(),
-                replay_archive: None,
-                is_sibling: false,
-            },
+    // Phase 4 follow-up (FU4): defaults — a primary caller wires the
+    // shared archive via `CoreExecution::attach_replay_archive(archive,
+    // false)` once its `SiblingState` exists; `sibling_ensure_slot`
+    // does the same with `is_sibling = true` on the sibling store.
+    // Test paths that never wire a SiblingState keep both defaults,
+    // reproducing the pre-FU4 behaviour (plain drain, no archive).
+    let core_state = wasmos_runtime_wasmtime_v48::SyncStoreState::new(
+        Some(&wasi_env),
+        CoreInnerState {
+            extension_manager,
+            tvm: tvm_core::RegionDirectory::new(),
+            tvm_slots: std::collections::HashMap::new(),
+            replay_archive: None,
+            is_sibling: false,
         },
-    );
+    )
+    .map_err(|e| anyhow::anyhow!("build SyncStoreState: {e:?}"))?;
+    let mut store = Store::new(engine, core_state);
 
     // Phase 2e wedge #9 (2026-09-17): retired the bindgen-typed
     // Libduckdb wrapper alongside the guest-export accessors. Every
@@ -11048,12 +11023,12 @@ pub(crate) fn open_driver_core_with_bootstrap(
     db_path: Option<&str>,
     bootstrap_sql: &[&str],
 ) -> Result<DriverCoreState> {
-    let core_wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], preopens)?;
+    let core_env = build_wasi_env_inherit(&[String::from("duckdb-core")], preopens);
     let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
     let core_exec = instantiate_core(
         engine,
         &artifacts.core_component,
-        core_wasi,
+        core_env,
         extension_manager.clone(),
     )?;
     let core = Arc::new(Mutex::new(core_exec));
@@ -11262,8 +11237,7 @@ fn build_wasi_ctx_inherit(args: &[String], preopens: &[(&Path, &str)]) -> Result
 ///
 /// Same knobs as `build_wasi_ctx_inherit`: args, inherit stdio +
 /// env + network, IP name lookup, read-write preopens.
-#[allow(dead_code)]
-fn build_wasi_env_inherit(
+pub(crate) fn build_wasi_env_inherit(
     args: &[String],
     preopens: &[(&Path, &str)],
 ) -> wasmos_runtime_api::WasiEnvironment {
@@ -11910,19 +11884,20 @@ impl CliHarness {
 
         let cli_wasi =
             build_wasi_ctx_with_pipes(&args_vec, &preopen_refs, stdin, stdout_clone, stderr_clone)?;
-        let core_wasi = build_wasi_ctx_with_pipes(
-            &[String::from("duckdb-core")],
-            &preopen_refs,
-            MemoryInputPipe::new(""),
-            stdout.clone(),
-            stderr.clone(),
-        )?;
+        // Path B Phase 1e: the core-side environment is built via
+        // wasmos-native WasiEnvironment. The core doesn't write to
+        // stdio in CliHarness usage (all shell output routes through
+        // the CLI component's `wasi:cli/run`), so a plain inherit-
+        // style env matches the pre-flip behaviour without needing to
+        // share the MemoryOutputPipe across the wasmtime-wasi and
+        // wasmos-wasi paths.
+        let core_env = build_wasi_env_inherit(&[String::from("duckdb-core")], &preopen_refs);
 
         let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let core_exec = instantiate_core(
             &engine,
             &artifacts.core_component,
-            core_wasi,
+            core_env,
             extension_manager.clone(),
         )?;
         let core = Arc::new(Mutex::new(core_exec));
@@ -12095,8 +12070,8 @@ pub fn run_shell_with_stdio(
         .map(|(host, guest)| (host.as_path(), guest.as_str()))
         .collect();
     let args_vec: Vec<String> = args.iter().map(|s| s.as_ref().to_owned()).collect();
-    let shell_wasi = build_wasi_ctx_inherit(&args_vec, &preopen_refs)?;
-    let core_wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &preopen_refs)?;
+    let shell_env = build_wasi_env_inherit(&args_vec, &preopen_refs);
+    let core_env = build_wasi_env_inherit(&[String::from("duckdb-core")], &preopen_refs);
 
     // The composed core is instantiated purely as the CoreServices provider
     // (config/logging/live-query) for extension LOADs; the SHELL runs queries.
@@ -12104,7 +12079,7 @@ pub fn run_shell_with_stdio(
     let core_exec = instantiate_core(
         &engine,
         &artifacts.core_component,
-        core_wasi,
+        core_env,
         extension_manager.clone(),
     )?;
     let core = Arc::new(Mutex::new(core_exec));
@@ -12168,25 +12143,22 @@ pub fn run_shell_with_stdio(
         .map_err(|e| anyhow::anyhow!("wire {iface} (shell path): {e}"))?;
     }
 
-    let mut store = Store::new(
-        &engine,
-        CoreStoreState {
-            table: ResourceTable::new(),
-            wasi: shell_wasi,
-            wasi_http: WasiHttpCtx::new(),
-            // Phase 4 follow-up (FU4): the standalone-shell driver never
-            // constructs a SiblingState, so the archive stays disabled.
-            // `is_sibling = false` keeps the shell's core on the historical
-            // drain path (identical pre-FU4 behaviour).
-            inner: CoreInnerState {
-                extension_manager: extension_manager.clone(),
-                tvm: tvm_core::RegionDirectory::new(),
-                tvm_slots: std::collections::HashMap::new(),
-                replay_archive: None,
-                is_sibling: false,
-            },
+    // Phase 4 follow-up (FU4): the standalone-shell driver never
+    // constructs a SiblingState, so the archive stays disabled.
+    // `is_sibling = false` keeps the shell's core on the historical
+    // drain path (identical pre-FU4 behaviour).
+    let shell_state = wasmos_runtime_wasmtime_v48::SyncStoreState::new(
+        Some(&shell_env),
+        CoreInnerState {
+            extension_manager: extension_manager.clone(),
+            tvm: tvm_core::RegionDirectory::new(),
+            tvm_slots: std::collections::HashMap::new(),
+            replay_archive: None,
+            is_sibling: false,
         },
-    );
+    )
+    .map_err(|e| anyhow::anyhow!("build shell SyncStoreState: {e:?}"))?;
+    let mut store = Store::new(&engine, shell_state);
     let instance = linker.instantiate(store.as_context_mut(), &component)?;
     let (_, run_iface) = instance
         .get_export(store.as_context_mut(), None, "wasi:cli/run@0.2.0")
@@ -12255,13 +12227,13 @@ fn run_cli_inner(
         .iter()
         .map(|(host, guest)| (host.as_path(), guest.as_str()))
         .collect();
-    let core_wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &preopen_refs)?;
+    let core_env = build_wasi_env_inherit(&[String::from("duckdb-core")], &preopen_refs);
 
     let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
     let core_exec = instantiate_core(
         &engine,
         &artifacts.core_component,
-        core_wasi,
+        core_env,
         extension_manager.clone(),
     )?;
     let core = Arc::new(Mutex::new(core_exec));
@@ -15667,7 +15639,7 @@ mod tests {
             let mut c = primary_core.lock().unwrap();
             let data: &mut CoreStoreState = c.store.data_mut();
             assert!(
-                data.inner.replay_archive.is_some(),
+                data.consumer.replay_archive.is_some(),
                 "primary CoreStoreState must have `replay_archive = Some(...)` \
                  after `attach_replay_archive` — FU4 wiring"
             );
@@ -15718,7 +15690,7 @@ mod tests {
             let sibling_core_guard = slot.core.lock().unwrap_or_else(|e| e.into_inner());
             let data = sibling_core_guard.store.data();
             assert!(
-                data.inner.is_sibling,
+                data.consumer.is_sibling,
                 "sibling CoreStoreState must have `is_sibling = true` \
                  after `attach_replay_archive(_, true)` — FU4 wiring"
             );

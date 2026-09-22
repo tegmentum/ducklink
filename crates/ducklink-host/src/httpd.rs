@@ -33,7 +33,7 @@ use anyhow::{anyhow, Context, Result};
 use crate::handler::HandlerRegistry;
 use crate::ui_server::{json_string, json_value};
 use crate::{
-    build_engine, build_wasi_ctx_inherit, instantiate_core, ComponentArtifacts, CoreExecution,
+    build_engine, build_wasi_env_inherit, instantiate_core, ComponentArtifacts, CoreExecution,
     CoreResourceHandle, ExtensionManager,
 };
 use ducklink_runtime::extension as core_types;
@@ -78,7 +78,7 @@ pub fn serve_httpd(
     handlers: Option<HandlerRegistry>,
 ) -> Result<()> {
     let engine = build_engine()?;
-    let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-httpd")], preopen_refs)?;
+    let wasi = build_wasi_env_inherit(&[String::from("duckdb-httpd")], preopen_refs);
     let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
     let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)
         .context("failed to instantiate the core component")?;
