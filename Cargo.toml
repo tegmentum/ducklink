@@ -258,3 +258,21 @@ exclude = [
 ]
 
 resolver = "2"
+
+# Unify wasmos-runtime-api across the workspace.
+#
+# `datalink-dynlink-wasmos` is a git dep (pinned at tag v0.2.0 in
+# crates/ducklink-host/Cargo.toml) that itself pulls
+# `wasmos-runtime-api` from the wasmos repo at tag v0.3.2. Ducklink's
+# own crates depend on `wasmos-runtime-api` via the local sibling
+# checkout (`../wasmos/runtime/api`). Without a patch, cargo sees two
+# distinct sources for the same crate and the `Runtime` trait
+# instantiated by each side is a different type — so
+# `WasmtimeV48Runtime` (built against the local api) does not
+# `impl Runtime` from the git-tag api, and `install_host_imports`
+# returns a `HostImports` from the wrong type universe. Redirect the
+# git source to the sibling checkout so both sides see the same
+# `wasmos-runtime-api` crate.
+[patch."https://github.com/tegmentum/wasmos.git"]
+wasmos-runtime-api = { path = "../wasmos/runtime/api" }
+wasmos-runtime-wasmtime-v48 = { path = "../wasmos/runtime/wasmtime/v48" }
