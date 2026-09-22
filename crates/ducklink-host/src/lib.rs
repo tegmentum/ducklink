@@ -9773,10 +9773,26 @@ pub(crate) fn call_export_unit_result(
     unpack_unit_result(iface, method, ret)
 }
 
+/// Direct-on-CoreExecution version of [`call_export_unit_result`]
+/// for test paths / driver paths that already hold a locked
+/// [`CoreExecution`]. (Retired 2026-09-21, restored 2026-09-22
+/// after `cfg(test)` sites were found still calling it.)
+pub(crate) fn call_export_unit_result_on_core(
+    core: &mut CoreExecution,
+    iface: &str,
+    method: &str,
+    handle: wasmtime::component::ResourceAny,
+    trailing_args: &[wasmos_runtime_api::Value],
+) -> Result<(), cli_native::Duckerror> {
+    let ret = call_export_on_resource_core(core, iface, method, handle, trailing_args)
+        .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
+    unpack_unit_result(iface, method, ret)
+}
+
 /// Shared unpacker for `result<_, duckerror>` returns. Splits out
-/// so both [`call_export_unit_result`] and its ex-companion
-/// (retired 2026-09-21 — the on-core variant had no callers)
-/// share the return-shape diagnostics.
+/// so both [`call_export_unit_result`] and
+/// [`call_export_unit_result_on_core`] share the return-shape
+/// diagnostics.
 pub(crate) fn unpack_unit_result(
     iface: &str,
     method: &str,
@@ -13700,7 +13716,7 @@ mod tests {
         use wasmos_runtime_api::Value;
         let engine = build_engine()?;
         let artifacts = ComponentArtifacts::resolve_default()?;
-        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &[])?;
+        let wasi = build_wasi_env_inherit(&[String::from("duckdb-core")], &[]);
         let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
 
@@ -13775,7 +13791,7 @@ mod tests {
         // (jco) verification of the same core component.
         let engine = build_engine()?;
         let artifacts = ComponentArtifacts::resolve_default()?;
-        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &[])?;
+        let wasi = build_wasi_env_inherit(&[String::from("duckdb-core")], &[]);
         let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
 
@@ -13866,7 +13882,7 @@ mod tests {
 
         let engine = build_engine()?;
         let artifacts = ComponentArtifacts::resolve_default()?;
-        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &[])?;
+        let wasi = build_wasi_env_inherit(&[String::from("duckdb-core")], &[]);
         let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
 
@@ -13938,7 +13954,7 @@ mod tests {
 
         use wasmos_runtime_api::Value;
         // Default: external access enabled, read_csv works.
-        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &preopens)?;
+        let wasi = build_wasi_env_inherit(&[String::from("duckdb-core")], &preopens);
         let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager.clone())?;
         let conn = call_database_returning_resource_on_core(
             &mut core,
@@ -13955,7 +13971,7 @@ mod tests {
         );
 
         // Opt-in hardening: enable_external_access=false blocks read_csv.
-        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &preopens)?;
+        let wasi = build_wasi_env_inherit(&[String::from("duckdb-core")], &preopens);
         let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
         let opts_arg = Value::List(vec![Value::Tuple(vec![
             Value::String("enable_external_access".to_string()),
@@ -13986,7 +14002,7 @@ mod tests {
 
         use wasmos_runtime_api::Value;
         // A valid option is applied to the connection.
-        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &[])?;
+        let wasi = build_wasi_env_inherit(&[String::from("duckdb-core")], &[]);
         let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager.clone())?;
         // default_order defaults to ASC; setting it at open time should stick.
         let options_arg = Value::List(vec![Value::Tuple(vec![
@@ -14024,7 +14040,7 @@ mod tests {
         );
 
         // An invalid value for a known option fails the open.
-        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core")], &[])?;
+        let wasi = build_wasi_env_inherit(&[String::from("duckdb-core")], &[]);
         let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
         let bad_arg = Value::List(vec![Value::Tuple(vec![
             Value::String("access_mode".to_string()),
@@ -15085,7 +15101,7 @@ mod tests {
         // Throwaway primary — nested_exec never reads it, but the struct
         // holds an Arc<Mutex<CoreExecution>> so we build a fresh one.
         let primary_wasi =
-            build_wasi_ctx_inherit(&[String::from("duckdb-core-primary-throwaway")], &[])?;
+            build_wasi_env_inherit(&[String::from("duckdb-core-primary-throwaway")], &[]);
         let primary_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let primary_core = Arc::new(Mutex::new(instantiate_core(
             &engine,
@@ -15298,7 +15314,7 @@ mod tests {
         // The primary preopens the temp dir at `.` so the guest can `open
         // "./opt-a.duckdb"`. Same shape the CLI uses (see build_wasi_ctx_*).
         let preopens: Vec<(&Path, &str)> = vec![(tmp.path(), ".")];
-        let wasi = build_wasi_ctx_inherit(&[String::from("duckdb-core-optA")], &preopens)?;
+        let wasi = build_wasi_env_inherit(&[String::from("duckdb-core-optA")], &preopens);
         let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let primary_core_exec =
             instantiate_core(&engine, &artifacts.core_component, wasi, extension_manager)?;
@@ -15439,7 +15455,7 @@ mod tests {
         // slot runs the SQL), but its `ExtensionManager` IS shared onto the
         // sibling below, so it's constructed here as the source of truth.
         let primary_wasi =
-            build_wasi_ctx_inherit(&[String::from("duckdb-core-primary-shared")], &[])?;
+            build_wasi_env_inherit(&[String::from("duckdb-core-primary-shared")], &[]);
         let primary_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let primary_core = Arc::new(Mutex::new(instantiate_core(
             &engine,
@@ -15496,7 +15512,7 @@ mod tests {
             .as_ref()
             .expect("sibling slot populated after nested_exec");
         let sibling_core_guard = slot.core.lock().unwrap_or_else(|e| e.into_inner());
-        let sibling_mgr = &sibling_core_guard.store.data().extension_manager;
+        let sibling_mgr = &sibling_core_guard.store.data().consumer.extension_manager;
         assert!(
             Arc::ptr_eq(sibling_mgr, &primary_mgr),
             "sibling CoreStoreState.extension_manager must be Arc-identical to primary's \
@@ -15643,7 +15659,7 @@ mod tests {
                 "primary CoreStoreState must have `replay_archive = Some(...)` \
                  after `attach_replay_archive` — FU4 wiring"
             );
-            let _returned = data.drain_pending_registrations_for_replay();
+            let _returned = data.consumer.drain_pending_registrations_for_replay();
         }
 
         // Inspect the shared archive directly: the synthetic scalar / table
@@ -15695,6 +15711,7 @@ mod tests {
                  after `attach_replay_archive(_, true)` — FU4 wiring"
             );
             let archive = data
+                .consumer
                 .replay_archive
                 .as_ref()
                 .expect("sibling CoreStoreState must have `replay_archive = Some(...)`");
@@ -15714,7 +15731,7 @@ mod tests {
             let slot = slot_guard.as_ref().unwrap();
             let mut sibling_core = slot.core.lock().unwrap_or_else(|e| e.into_inner());
             let data: &mut CoreStoreState = sibling_core.store.data_mut();
-            let served = data.drain_pending_registrations_for_replay();
+            let served = data.consumer.drain_pending_registrations_for_replay();
             let scalar_names: Vec<String> =
                 served.scalars.iter().map(|s| s.name.to_string()).collect();
             let table_names: Vec<String> =
