@@ -9794,25 +9794,10 @@ pub(crate) fn call_export_unit_result(
     unpack_unit_result(iface, method, ret)
 }
 
-/// Direct-on-CoreExecution version of [`call_export_unit_result`]
-/// for test paths / driver paths that already hold a locked
-/// [`CoreExecution`].
-pub(crate) fn call_export_unit_result_on_core(
-    core: &mut CoreExecution,
-    iface: &str,
-    method: &str,
-    handle: wasmtime::component::ResourceAny,
-    trailing_args: &[wasmos_runtime_api::Value],
-) -> Result<(), cli_native::Duckerror> {
-    let ret = call_export_on_resource_core(core, iface, method, handle, trailing_args)
-        .map_err(|e| cli_native::Duckerror::Internal(e.to_string().into()))?;
-    unpack_unit_result(iface, method, ret)
-}
-
 /// Shared unpacker for `result<_, duckerror>` returns. Splits out
-/// so both [`call_export_unit_result`] and
-/// [`call_export_unit_result_on_core`] share the return-shape
-/// diagnostics.
+/// so both [`call_export_unit_result`] and its ex-companion
+/// (retired 2026-09-21 — the on-core variant had no callers)
+/// share the return-shape diagnostics.
 pub(crate) fn unpack_unit_result(
     iface: &str,
     method: &str,
