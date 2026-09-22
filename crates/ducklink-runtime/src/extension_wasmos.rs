@@ -205,9 +205,11 @@ impl<'a> std::ops::DerefMut for StateHold<'a> {
 //
 // - **Stateless interfaces** (this session, Phase 6.2.d.2-a/b) —
 //   interfaces whose handlers reach for no ExtensionStoreState
-//   fields. Currently: `lifecycle`, `types`, `encoding`,
-//   `compression`, `files_reg`. All either empty markers or
-//   `Unsupported` returns.
+//   fields. Currently: `duckdb:extension/lifecycle@5.0.0`,
+//   `duckdb:extension/types@5.0.0`, `duckdb:extension/encoding@5.0.0`,
+//   `duckdb:extension/compression@5.0.0`,
+//   `duckdb:extension/files-reg@5.0.0`. All either empty markers
+//   or `Unsupported` returns.
 // - **State-sharing interfaces** (Phase 6.2.d.2-c, future) —
 //   interfaces whose handlers append to `pending_*` buffers or
 //   read `extension_name` / `alloc_resource_id()`. Blocked on an
@@ -223,7 +225,10 @@ impl<'a> std::ops::DerefMut for StateHold<'a> {
 //         drain owned by ExtensionStoreState (async-friendly but
 //         changes the ownership model most).
 // - **Resource-carrying interfaces** (Phase 6.2.d.2-d, future) —
-//   `extension_runtime`, `runtime_ext`, `storage`, `nested_exec`.
+//   `duckdb:extension/runtime@5.0.0`,
+//   `duckdb:extension/runtime-ext@5.0.0`,
+//   `duckdb:extension/storage@5.0.0`,
+//   `duckdb:extension/nested-exec@5.0.0`.
 //   Each returns `Resource<T>`; needs the state architecture from
 //   the previous bucket plus `#[wit_ctx]` on the return-carrying
 //   variants.
@@ -452,18 +457,29 @@ pub fn install_files_reg_imports(imports: HostImports) -> HostImports {
 /// interfaces automatically.
 ///
 /// Interfaces registered today:
-/// - `duckdb:extension/lifecycle`
-/// - `duckdb:extension/types`
-/// - `duckdb:extension/encoding`
-/// - `duckdb:extension/compression`
-/// - `duckdb:extension/files-reg`
+/// - `duckdb:extension/lifecycle@5.0.0`
+/// - `duckdb:extension/types@5.0.0`
+/// - `duckdb:extension/encoding@5.0.0`
+/// - `duckdb:extension/compression@5.0.0`
+/// - `duckdb:extension/files-reg@5.0.0`
 ///
 /// **Not yet registered** (need state-sharing architecture per
-/// module docstring): `runtime`, `config`, `logging`, `catalog`,
-/// `files`, `secret`, `settings`, `parser`, `optimizer`,
-/// `table_stream`, `macro_ext`, `types_ext`, `runtime_ext`,
-/// `coordinate_system`, `arrow_ext`, `log_storage`, `storage`,
-/// `index`, `collation`, `query`, `nested_exec`, `file_lock`.
+/// module docstring): `duckdb:extension/runtime@5.0.0`,
+/// `duckdb:extension/config@5.0.0`, `duckdb:extension/logging@5.0.0`,
+/// `duckdb:extension/catalog@5.0.0`, `duckdb:extension/files@5.0.0`,
+/// `duckdb:extension/secret@5.0.0`, `duckdb:extension/settings@5.0.0`,
+/// `duckdb:extension/parser@5.0.0`, `duckdb:extension/optimizer@5.0.0`,
+/// `duckdb:extension/table-stream@5.0.0`,
+/// `duckdb:extension/macro-ext@5.0.0`,
+/// `duckdb:extension/types-ext@5.0.0`,
+/// `duckdb:extension/runtime-ext@5.0.0`,
+/// `duckdb:extension/coordinate-system@5.0.0`,
+/// `duckdb:extension/arrow-ext@5.0.0`,
+/// `duckdb:extension/log-storage@5.0.0`,
+/// `duckdb:extension/storage@5.0.0`, `duckdb:extension/index@5.0.0`,
+/// `duckdb:extension/collation@5.0.0`, `duckdb:extension/query@5.0.0`,
+/// `duckdb:extension/nested-exec@5.0.0`,
+/// `duckdb:extension/file-lock@5.0.0`.
 ///
 /// A guest importing any of these unmigrated interfaces will fail
 /// instantiation with an "unresolved import" error under the
