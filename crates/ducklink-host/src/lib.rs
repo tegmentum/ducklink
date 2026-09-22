@@ -10777,29 +10777,35 @@ fn trap_to_cli_string(err: wasmtime::Error) -> String {
 // with the site-3 migration alongside the `cli_types` alias itself.
 
 fn instantiate_core(
-    engine: &Engine,
+    _engine: &Engine,
     component_path: &Path,
     wasi_env: wasmos_runtime_api::WasiEnvironment,
     extension_manager: Arc<Mutex<ExtensionManager>>,
 ) -> Result<CoreExecution> {
-    // Path B closure Slice 3: wasmos-native construction. The
-    // wasmtime engine that ducklink's build_engine() produces is
-    // wrapped via WasmtimeV48Runtime::from_engine + SyncRuntime::
-    // from_runtime so we reuse ducklink's engine config while
-    // switching dispatch to the wasmos-native path.
+    // Path B closure Slice 3: wasmos-native construction. Build a
+    // fresh SyncRuntime rather than wrapping ducklink's engine —
+    // wasmos configures wasmtime with consume_fuel, epoch_interruption,
+    // wasm_gc, wasm_threads, allocation_strategy, etc. that its own
+    // instantiate flow depends on. Ducklink's build_engine() is
+    // deliberately minimal and doesn't match; passing it to
+    // WasmtimeV48Runtime::from_engine causes wasmos to fail with
+    // "fuel is not configured in this store" or similar at store
+    // setup. The compile cache loss vs ducklink's engine is a
+    // known-partial retirement gap (documented in
+    // docs/path-b-closure-plan.md) — a future arc could add a
+    // `wasmtime::Cache` handoff on wasmos RuntimeConfig, or ducklink
+    // migrates build_engine to align with wasmos's config.
+    let _ = _engine;
     let bytes = std::fs::read(component_path).with_context(|| {
         format!(
             "failed to read core component at {}",
             component_path.display()
         )
     })?;
-    let inner_rt = wasmos_runtime_wasmtime_v48::WasmtimeV48Runtime::from_engine(
-        engine.clone(),
+    let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::new(
         wasmos_runtime_api::RuntimeConfig::default(),
     )
-    .map_err(|e| anyhow::anyhow!("build WasmtimeV48Runtime: {e:?}"))?;
-    let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::from_runtime(inner_rt)
-        .map_err(|e| anyhow::anyhow!("build SyncRuntime: {e:?}"))?;
+    .map_err(|e| anyhow::anyhow!("build SyncRuntime: {e:?}"))?;
     let compiled = sync_rt
         .compile_component(
             wasmos_runtime_api::ComponentSource::Bytes {
