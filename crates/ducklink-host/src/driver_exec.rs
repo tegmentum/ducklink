@@ -70,9 +70,9 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use wasmos_runtime_api::{
-    CompileOptions, ComponentSource, ExecutionContext, HostCallContext, HostImports, Preopen,
-    Resource as WasmosResource, ResourceTable as WasmosResourceTable, RuntimeConfig, RuntimeError,
-    RuntimeResult, SyncHostCall, Value, WasiEnvironment,
+    CompileOptions, ComponentSource, ExecutionContext, HostCallContext, HostImports,
+    HostResourceType, Preopen, Resource, ResourceTable as WasmosResourceTable, RuntimeConfig,
+    RuntimeError, RuntimeResult, Value, WasiEnvironment, host_iface,
 };
 use wasmos_runtime_wasmtime_v48::SyncRuntime;
 use wasmtime::Engine;
@@ -87,6 +87,14 @@ use crate::{
 /// core + opens a real DuckDB connection + LOADs the two cron extensions
 /// once; `exec/query` reuse that same store; dropping the resource drops
 /// the core (via `ResourceTable::delete`).
+///
+/// `#[derive(HostResourceType)]` lets `#[host_iface(sync)]`-generated
+/// dispatch code lift a guest-side handle to `Resource<DriverConnection>`
+/// via `HostCallContext::typed_resource_rep` automatically — the
+/// consumer's inherent-impl methods can take a typed `Resource<DriverConnection>`
+/// arg instead of hand-unpacking `Value::Resource`.
+#[derive(HostResourceType)]
+#[wit_resource(interface = "duckdb:driver/exec@5.0.0", name = "connection")]
 pub struct DriverConnection {
     state: DriverCoreState,
 }
@@ -187,69 +195,35 @@ const CONN_RESOURCE: &str = "connection";
 /// bindgen-generated `Host` accessor.
 struct DriverExecHost;
 
-impl SyncHostCall for DriverExecHost {
-    fn call(
-        &self,
-        ctx: &mut HostCallContext<'_>,
-        method: &str,
-        args: Vec<Value>,
-    ) -> RuntimeResult<Vec<Value>> {
-        match method {
-            "open" => self.host_open(ctx, args),
-            "[method]connection.exec" => self.host_exec(ctx, args),
-            "[method]connection.query" => self.host_query(ctx, args),
-            other => Err(RuntimeError::msg(format!(
-                "{EXEC_IFACE}: unknown method {other:?}"
-            ))),
-        }
-    }
-
-    fn on_resource_drop(
-        &self,
-        ctx: &mut HostCallContext<'_>,
-        resource_name: &str,
-        rep: u32,
-    ) -> RuntimeResult<()> {
-        if resource_name != CONN_RESOURCE {
-            return Err(RuntimeError::msg(format!(
-                "{EXEC_IFACE}: unexpected resource drop for {resource_name:?}"
-            )));
-        }
-        let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
-            RuntimeError::msg("driver-exec drop: consumer_state<DriverStoreState> unavailable")
-        })?;
-        // Ignore-not-found matches the bindgen-era `let _ =
-        // self.table.delete(rep);` — wasmtime guarantees at-most-once
-        // drop, but the bridge routes here even if the entry was
-        // already reaped through another path (e.g. a store teardown
-        // in-flight).
-        let _ = state
-            .conn_table
-            .delete(WasmosResource::<DriverConnection>::from_raw(rep, true));
-        Ok(())
-    }
-}
-
+/// `#[host_iface(sync)]` generates `impl SyncHostCall for
+/// DriverExecHost` doing method-name dispatch (kebab-cased fn
+/// name, or the explicit `#[method("...")]` string) and typed
+/// arg-lift / return-lower. Retires the manual
+/// `match method { ... }` block + the `impl DriverExecHost {
+/// fn host_open, ... }` inherent-impl split — everything lives in
+/// one block whose fn signatures ARE the wasi:driver/exec@5.0.0
+/// method surface expressed in Rust.
+#[host_iface(sync)]
 impl DriverExecHost {
-    /// `duckdb:driver/exec.open(path: string) -> result<connection, string>`
-    fn host_open(
+    /// `duckdb:driver/exec.open(path: string) -> result<connection, string>`.
+    ///
+    /// The macro emits Value::Result marshalling from the
+    /// `Result<Resource<DriverConnection>, String>` return type —
+    /// the Ok arm becomes `Value::Result(Ok(Some(Value::Resource)))`
+    /// keyed by `DriverConnection::INTERFACE` +
+    /// `DriverConnection::NAME` (from the `HostResourceType` derive
+    /// on the struct itself); the Err arm becomes
+    /// `Value::Result(Err(Some(Value::String(_))))`.
+    fn open(
         &self,
         ctx: &mut HostCallContext<'_>,
-        args: Vec<Value>,
-    ) -> RuntimeResult<Vec<Value>> {
-        let path = match args.as_slice() {
-            [Value::String(p)] => p.clone(),
-            other => {
-                return Err(RuntimeError::msg(format!(
-                    "{EXEC_IFACE}.open: expected [Value::String], got {other:?}"
-                )))
-            }
-        };
+        path: String,
+    ) -> RuntimeResult<Result<Resource<DriverConnection>, String>> {
         let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
             RuntimeError::msg("driver-exec open: consumer_state<DriverStoreState> unavailable")
         })?;
-        // Snapshot preopens through borrowed refs — mirrors the
-        // bindgen-era impl at line 139-143 verbatim.
+        // Snapshot preopens through borrowed refs so DriverConnection::open
+        // sees the same preopen shape the driver-tool inherits.
         let preopen_refs: Vec<(&Path, &str)> = state
             .preopens
             .iter()
@@ -260,89 +234,82 @@ impl DriverExecHost {
                 let handle = state.conn_table.push(conn).map_err(|e| {
                     RuntimeError::msg(format!("driver-exec open: resource table full: {e}"))
                 })?;
-                let rep = handle.handle();
-                let resource_value = ctx.new_host_resource(EXEC_IFACE, CONN_RESOURCE, rep)?;
-                Ok(vec![Value::Result(Ok(Some(Box::new(resource_value))))])
+                Ok(Ok(handle))
             }
-            Err(e) => Ok(vec![Value::Result(Err(Some(Box::new(Value::String(
-                format!("driver-exec open: {e:#}"),
-            )))))]),
+            Err(e) => Ok(Err(format!("driver-exec open: {e:#}"))),
         }
     }
 
-    /// `duckdb:driver/exec.connection.exec(sql: string) -> result<u64, string>`
-    fn host_exec(
+    /// `duckdb:driver/exec.connection.exec(sql: string) -> result<u64, string>`.
+    /// Typed `Resource<DriverConnection>` arg lifts through the
+    /// `HostResourceType` classifier; the return type marshals
+    /// `Result<u64, String>` → `Value::Result(Value::U64 | Value::String)`.
+    #[method("[method]connection.exec")]
+    fn connection_exec(
         &self,
         ctx: &mut HostCallContext<'_>,
-        args: Vec<Value>,
-    ) -> RuntimeResult<Vec<Value>> {
-        let (rep_value, sql) = match args.as_slice() {
-            [r @ Value::Resource { .. }, Value::String(s)] => (r.clone(), s.clone()),
-            other => {
-                return Err(RuntimeError::msg(format!(
-                    "{EXEC_IFACE}.[method]connection.exec: expected \
-                     [Value::Resource, Value::String], got {other:?}"
-                )))
-            }
-        };
-        let rep = ctx.resource_rep(&rep_value)?;
+        conn: Resource<DriverConnection>,
+        sql: String,
+    ) -> RuntimeResult<Result<u64, String>> {
         let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
             RuntimeError::msg("driver-exec exec: consumer_state<DriverStoreState> unavailable")
         })?;
-        // The rep is stable across the bridge round-trip; the same
-        // rep the guest sees is the same one the wasmos ResourceTable
-        // indexed at push time.
-        let handle = WasmosResource::<DriverConnection>::from_raw(rep, true);
-        let conn = state
+        let payload = state
             .conn_table
-            .get_mut(&handle)
+            .get_mut(&conn)
             .map_err(|e| RuntimeError::msg(format!("driver-exec exec: bad handle: {e}")))?;
-        match conn.exec(&sql) {
-            Ok(n) => Ok(vec![Value::Result(Ok(Some(Box::new(Value::U64(n)))))]),
-            Err(e) => Ok(vec![Value::Result(Err(Some(Box::new(Value::String(e)))))]),
-        }
+        Ok(payload.exec(&sql))
     }
 
     /// `duckdb:driver/exec.connection.query(sql: string) ->
-    /// result<list<list<string>>, string>`
-    fn host_query(
+    /// result<list<list<string>>, string>`.
+    ///
+    /// `Vec<Vec<String>>` (list<list<string>>) is a nested-container
+    /// return the `#[host_iface(sync)]` classifier doesn't auto-lift
+    /// yet — construct the Value::Result manually via a
+    /// `RuntimeResult<Value>` passthrough.
+    #[method("[method]connection.query")]
+    fn connection_query(
         &self,
         ctx: &mut HostCallContext<'_>,
-        args: Vec<Value>,
-    ) -> RuntimeResult<Vec<Value>> {
-        let (rep_value, sql) = match args.as_slice() {
-            [r @ Value::Resource { .. }, Value::String(s)] => (r.clone(), s.clone()),
-            other => {
-                return Err(RuntimeError::msg(format!(
-                    "{EXEC_IFACE}.[method]connection.query: expected \
-                     [Value::Resource, Value::String], got {other:?}"
-                )))
-            }
-        };
-        let rep = ctx.resource_rep(&rep_value)?;
+        conn: Resource<DriverConnection>,
+        sql: String,
+    ) -> RuntimeResult<Value> {
         let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
             RuntimeError::msg("driver-exec query: consumer_state<DriverStoreState> unavailable")
         })?;
-        let handle = WasmosResource::<DriverConnection>::from_raw(rep, true);
-        let conn = state
+        let payload = state
             .conn_table
-            .get_mut(&handle)
+            .get_mut(&conn)
             .map_err(|e| RuntimeError::msg(format!("driver-exec query: bad handle: {e}")))?;
-        match conn.query(&sql) {
+        Ok(match payload.query(&sql) {
             Ok(rows) => {
-                // Encode list<list<string>> as
-                // Value::List(Vec<Value::List(Vec<Value::String>)>).
                 let outer: Vec<Value> = rows
                     .into_iter()
-                    .map(|row| {
-                        let inner: Vec<Value> = row.into_iter().map(Value::String).collect();
-                        Value::List(inner)
-                    })
+                    .map(|row| Value::List(row.into_iter().map(Value::String).collect()))
                     .collect();
-                Ok(vec![Value::Result(Ok(Some(Box::new(Value::List(outer)))))])
+                Value::Result(Ok(Some(Box::new(Value::List(outer)))))
             }
-            Err(e) => Ok(vec![Value::Result(Err(Some(Box::new(Value::String(e)))))]),
-        }
+            Err(e) => Value::Result(Err(Some(Box::new(Value::String(e))))),
+        })
+    }
+
+    /// wasmtime-side drop notification for the `connection` resource
+    /// type. Ignore-not-found matches the bindgen-era pattern —
+    /// wasmtime guarantees at-most-once drop but the bridge routes
+    /// here even if the entry was already reaped through another
+    /// path (e.g. a store teardown in-flight).
+    #[method("[resource-drop]connection")]
+    fn connection_drop(
+        &self,
+        ctx: &mut HostCallContext<'_>,
+        conn: Resource<DriverConnection>,
+    ) -> RuntimeResult<()> {
+        let state = ctx.consumer_state::<DriverStoreState>().ok_or_else(|| {
+            RuntimeError::msg("driver-exec drop: consumer_state<DriverStoreState> unavailable")
+        })?;
+        let _ = state.conn_table.delete(conn);
+        Ok(())
     }
 }
 
