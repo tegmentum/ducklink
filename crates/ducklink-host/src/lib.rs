@@ -10002,15 +10002,11 @@ fn call_config_get_option<T>(
     use wasmos_runtime_api::Value;
     let ret = services
         .with_core(|core| {
-            core.with_instance(|instance, mut store| {
-                wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-                    store.as_context_mut(),
-                    instance,
-                    Some(CONFIG_IFACE),
-                    method,
-                    &[Value::String(path.to_string())],
-                )
-            })
+            core.call_bridge_export(
+                CONFIG_IFACE,
+                method,
+                &[Value::String(path.to_string())],
+            )
         })
         .map_err(core_trap_to_config_error)?;
     let inner = match ret.as_slice() {
@@ -10089,17 +10085,7 @@ impl ExtensionServices for CoreServices {
     fn provider_version(&mut self) -> Result<String, ConfigError> {
         use wasmos_runtime_api::Value;
         let ret = self
-            .with_core(|core| {
-                core.with_instance(|instance, mut store| {
-                    wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-                        store.as_context_mut(),
-                        instance,
-                        Some(CONFIG_IFACE),
-                        "provider-version",
-                        &[],
-                    )
-                })
-            })
+            .with_core(|core| core.call_bridge_export(CONFIG_IFACE, "provider-version", &[]))
             .map_err(core_trap_to_config_error)?;
         match ret.as_slice() {
             [Value::String(s)] => Ok(s.clone()),
@@ -10113,17 +10099,13 @@ impl ExtensionServices for CoreServices {
         use wasmos_runtime_api::Value;
         let ret = self
             .with_core(|core| {
-                core.with_instance(|instance, mut store| {
-                    wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-                        store.as_context_mut(),
-                        instance,
-                        Some(CONFIG_IFACE),
-                        "list-keys",
-                        &[Value::Option(
-                            prefix.map(|p| Box::new(Value::String(p.to_string()))),
-                        )],
-                    )
-                })
+                core.call_bridge_export(
+                    CONFIG_IFACE,
+                    "list-keys",
+                    &[Value::Option(
+                        prefix.map(|p| Box::new(Value::String(p.to_string()))),
+                    )],
+                )
             })
             .map_err(core_trap_to_config_error)?;
         match ret.as_slice() {
@@ -10227,19 +10209,15 @@ impl ExtensionServices for CoreServices {
         use wasmos_runtime_api::Value;
         let level_tag = neutral_loglevel_to_wit_tag(level);
         let result = self.with_core(|core| {
-            core.with_instance(|instance, mut store| {
-                wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-                    store.as_context_mut(),
-                    instance,
-                    Some(LOGGING_IFACE),
-                    "log",
-                    &[
-                        Value::Enum(level_tag.to_string()),
-                        Value::String(message.to_string()),
-                        Value::Option(target.map(|t| Box::new(Value::String(t.to_string())))),
-                    ],
-                )
-            })
+            core.call_bridge_export(
+                LOGGING_IFACE,
+                "log",
+                &[
+                    Value::Enum(level_tag.to_string()),
+                    Value::String(message.to_string()),
+                    Value::Option(target.map(|t| Box::new(Value::String(t.to_string())))),
+                ],
+            )
         });
         if let Err(err) = result {
             match target {
@@ -10268,19 +10246,15 @@ impl ExtensionServices for CoreServices {
                 .collect(),
         );
         let result = self.with_core(|core| {
-            core.with_instance(|instance, mut store| {
-                wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-                    store.as_context_mut(),
-                    instance,
-                    Some(LOGGING_IFACE),
-                    "log-fields",
-                    &[
-                        Value::Enum(level_tag.to_string()),
-                        Value::String(message.to_string()),
-                        fields_val,
-                    ],
-                )
-            })
+            core.call_bridge_export(
+                LOGGING_IFACE,
+                "log-fields",
+                &[
+                    Value::Enum(level_tag.to_string()),
+                    Value::String(message.to_string()),
+                    fields_val,
+                ],
+            )
         });
         if let Err(err) = result {
             eprintln!("[duckdb-extension:{level:?}] {message} (core log_fields failed: {err})");
