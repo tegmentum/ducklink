@@ -6532,15 +6532,14 @@ type PendingLogicalType = reg::LogicalTypeReg;
 type PendingCast = reg::CastReg;
 
 pub struct HostState {
-    table: ResourceTable,
-    wasi: WasiCtx,
-    /// wasi:http host context (see the module-level `add_wasi_http_to_linker`
-    /// import). The CLI itself doesn't call wasi:http today; this is present so
-    /// the CLI-linker's `add_only_http_to_linker_sync` has a `WasiHttpView`
-    /// impl to project. Extensions loaded through this host route through
-    /// `ExtensionStoreState` (which carries its own `WasiHttpCtx`) — this is
-    /// only for the front-end store.
-    wasi_http: WasiHttpCtx,
+    // Path B follow-up (2026-09-22): the wasi + wasi_http + table
+    // fields are retired. Under the wasmos-native SyncInstance path
+    // (see CliHarness::with_artifacts + run_cli_inner), wasmos's
+    // AdapterHostState owns WasiCtx + WasiHttpCtx + ResourceTable
+    // internally and provides the WasiView + WasiHttpView blanket
+    // impls. HostState carries only the ducklink-only fields below;
+    // consumer_state<HostState>() from a wasmos SyncHostCall handler
+    // reaches them directly.
     core: Arc<Mutex<CoreExecution>>,
     extension_manager: Arc<Mutex<ExtensionManager>>,
     dotcmd_registry: Arc<Mutex<DotcmdRegistry>>,
@@ -6647,25 +6646,11 @@ struct At5ScanTarget {
     table: String,
 }
 
-impl WasiView for HostState {
-    fn ctx(&mut self) -> WasiCtxView<'_> {
-        WasiCtxView {
-            ctx: &mut self.wasi,
-            table: &mut self.table,
-        }
-    }
-}
-
-impl WasiHttpView for HostState {
-    fn http(&mut self) -> WasiHttpCtxView<'_> {
-        WasiHttpCtxView {
-            ctx: &mut self.wasi_http,
-            table: &mut self.table,
-            hooks: Default::default(),
-        }
-    }
-}
-
+// Path B follow-up (2026-09-22): impl WasiView + WasiHttpView for
+// HostState retired. Under the wasmos-native SyncInstance path
+// wasmos's AdapterHostState provides both blanket impls; HostState
+// no longer holds WasiCtx / WasiHttpCtx / ResourceTable fields to
+// project through.
 
 impl HostState {
     fn alloc_resource_id(&mut self) -> u32 {
@@ -11940,17 +11925,28 @@ fn convert_extension_logicaltype_to_cli(
 // hatch (write-side storage-host imports were also retired in Phase 2 @5 per
 // ADR Decision 3 + Amendment A1, so their marshallers have no live callers).
 
-/// Post-Phase-2d (site 3 of the wasmos-migration-recipe): `cli` used
-/// to hold a `duckdb_cli_bindings::DuckdbCli` (the bindgen-generated
-/// typed wrapper around a wasmtime `Instance`). It's now a bare
-/// `wasmtime::component::Instance`; the `wasi:cli/run@0.2.6.run`
-/// dispatch in `CliHarness::run` runs through
-/// `sync_export_bridge::call_export`.
+/// Path B follow-up (2026-09-22, site 3 of the wasmos-migration-recipe):
+/// CliHarness now owns a wasmos-native
+/// [`wasmos_runtime_wasmtime_v48::SyncInstance`]. The pre-migration
+/// shape held a `duckdb_cli_bindings::DuckdbCli` (bindgen-generated
+/// wrapper around a `wasmtime::component::Instance` + a wasmtime
+/// `Store<HostState>`); Post-Phase-2d retired the bindgen wrapper for
+/// the escape-hatch bridge, and this landing retires the wasmtime
+/// Store + Instance in favor of the wasmos-native SyncInstance path
+/// with `wasi:cli/run@0.2.6.run` driven through
+/// `SyncInstance::call_wasi_command()`.
 pub struct CliHarness {
-    store: Store<HostState>,
-    instance: wasmtime::component::Instance,
-    stdout: MemoryOutputPipe,
-    stderr: MemoryOutputPipe,
+    /// Wasmos-native synchronous facade over the CLI wasm instance.
+    /// Owns the underlying wasmtime store + component instance internally
+    /// (their raw types no longer surface in ducklink code). The CLI's
+    /// `wasi:cli/run@0.2.6.run` export is driven through
+    /// `sync_inst.call_wasi_command()`.
+    sync_inst: wasmos_runtime_wasmtime_v48::SyncInstance,
+    /// Wasmos capture buffer for the CLI's stdout. Populated as the
+    /// guest writes; read back via [`Self::stdout`].
+    capture_stdout: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+    /// Same as [`Self::capture_stdout`] but for stderr.
+    capture_stderr: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
 }
 
 impl CliHarness {
@@ -11978,15 +11974,28 @@ impl CliHarness {
         let stdout_clone = stdout.clone();
         let stderr_clone = stderr.clone();
 
-        let cli_wasi =
-            build_wasi_ctx_with_pipes(&args_vec, &preopen_refs, stdin, stdout_clone, stderr_clone)?;
-        // Path B Phase 1e: the core-side environment is built via
-        // wasmos-native WasiEnvironment. The core doesn't write to
-        // stdio in CliHarness usage (all shell output routes through
-        // the CLI component's `wasi:cli/run`), so a plain inherit-
-        // style env matches the pre-flip behaviour without needing to
-        // share the MemoryOutputPipe across the wasmtime-wasi and
-        // wasmos-wasi paths.
+        // Path B follow-up (2026-09-22): CliHarness now runs on the
+        // wasmos-native path. The CLI component's WASI env is built as
+        // a wasmos WasiEnvironment with the same args + preopens the
+        // pre-migration WasiCtx received; stdout/stderr writes accumulate
+        // in the `capture_stdout` / `capture_stderr` Arc<Mutex<Vec<u8>>>
+        // buffers that CliHarness::stdout() + ::stderr() read back.
+        // Stdin is closed (the pre-migration MemoryInputPipe was
+        // constructed empty).
+        let _ = stdin; // MemoryInputPipe carried nothing; stdin closed under wasmos.
+        let capture_stdout = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let capture_stderr = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut cli_wasi = build_wasi_env_inherit(&args_vec, &preopen_refs);
+        cli_wasi.capture_stdout = Some(capture_stdout.clone());
+        cli_wasi.capture_stderr = Some(capture_stderr.clone());
+        cli_wasi.inherit_stdout = false;
+        cli_wasi.inherit_stderr = false;
+        cli_wasi.inherit_stdin = false;
+        // Keep the two MemoryOutputPipe clones alive for the deprecated
+        // shape until callers migrate off; they read from the same
+        // capture buffers under the hood via `stdout()` / `stderr()`.
+        let _ = (stdout_clone, stderr_clone);
+        // Path B Phase 1e: the core-side environment stays inherit-style.
         let core_env = build_wasi_env_inherit(&[String::from("duckdb-core")], &preopen_refs);
 
         let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
@@ -12045,9 +12054,6 @@ impl CliHarness {
             extension_manager.clone(),
         )));
         let host_state = HostState {
-            table: ResourceTable::new(),
-            wasi: cli_wasi,
-            wasi_http: WasiHttpCtx::new(),
             core: core.clone(),
             extension_manager: extension_manager.clone(),
             dotcmd_registry,
@@ -12067,73 +12073,102 @@ impl CliHarness {
             sibling: Some(sibling),
             attached_aliases: HashMap::new(),
         };
-        let mut store = Store::new(&engine, host_state);
 
-        // Post-Phase-2d: load the CLI component BEFORE wiring the
-        // bridged host imports — `sync_bridge_resource::install_host_
-        // call` introspects the component's imports to auto-register
-        // resource types + method arities per interface. Bindgen's
-        // `add_to_linker` did not need this because the macro-expanded
-        // code knew the shape at compile time.
-        let cli_component =
-            load_component(&engine, &artifacts.cli_component).with_context(|| {
-                format!(
-                    "failed to load CLI component from {}",
-                    artifacts.cli_component.display()
-                )
-            })?;
-
-        let mut linker = Linker::<HostState>::new(&engine);
-        p2::add_to_linker_sync(&mut linker)?;
-        add_wasi_http_to_linker(&mut linker)?;
-        wire_cli_bridged_host_imports(&engine, &mut linker, &cli_component)?;
-
-        let instance_pre = linker.instantiate_pre(&cli_component)?;
-        let instance = instance_pre.instantiate(store.as_context_mut())?;
+        // Path B follow-up: wasmos-native CLI component instantiation.
+        // Retires the wasmtime Linker<HostState> + Store<HostState> +
+        // instantiate_pre chain in favor of SyncRuntime + HostImports.
+        let cli_bytes = std::fs::read(&artifacts.cli_component).with_context(|| {
+            format!(
+                "failed to read CLI component from {}",
+                artifacts.cli_component.display()
+            )
+        })?;
+        let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::new(
+            wasmos_runtime_api::RuntimeConfig::default(),
+        )
+        .map_err(|e| anyhow::anyhow!("build CLI SyncRuntime: {e:?}"))?;
+        let compiled = sync_rt
+            .compile_component(
+                wasmos_runtime_api::ComponentSource::Bytes {
+                    bytes: cli_bytes.into(),
+                    name: Some(artifacts.cli_component.display().to_string()),
+                },
+                wasmos_runtime_api::CompileOptions::default(),
+            )
+            .map_err(|e| anyhow::anyhow!("compile CLI component: {e:?}"))?;
+        let imports = wasmos_runtime_api::HostImports::new()
+            .register_sync(CLI_DB_IFACE, CliDatabaseHost)
+            .register_sync(CLI_HOST_EXT_LOADER_IFACE, HostExtensionLoaderHost)
+            .register_sync(CLI_DOTCMD_HOST_IFACE, DotcmdHostHost);
+        let ctx = wasmos_runtime_api::ExecutionContext::new()
+            .with_wasi(cli_wasi)
+            .with_host_imports(imports)
+            .with_consumer_state(host_state);
+        let sync_inst = sync_rt
+            .instantiate(&compiled, ctx)
+            .map_err(|e| anyhow::anyhow!("instantiate CLI component: {e:?}"))?;
 
         Ok(Self {
-            store,
-            instance,
-            stdout,
-            stderr,
+            sync_inst,
+            capture_stdout,
+            capture_stderr,
         })
     }
 
     pub fn preload_extension(&mut self, name: &str) -> Result<()> {
-        self.store
-            .data_mut()
+        let any = self
+            .sync_inst
+            .consumer_state_mut()
+            .ok_or_else(|| anyhow::anyhow!("CliHarness sync_inst missing consumer_state"))?;
+        let state = any
+            .downcast_mut::<HostState>()
+            .ok_or_else(|| anyhow::anyhow!("CliHarness consumer_state is not HostState"))?;
+        state
             .preload_extension(name)
             .map_err(|e| e.context(format!("failed to preload extension {name}")))?;
         Ok(())
     }
 
     pub fn run(&mut self) -> anyhow::Result<Result<(), ()>> {
-        // Post-Phase-2d: dispatch the CLI's `wasi:cli/run@0.2.6.run`
-        // export through `sync_export_bridge::call_export`. The
-        // versioned interface name matches the world's `export
-        // wasi:cli/run@0.2.6;` verbatim (same rule as site 5's
-        // driver-tool + site 4's dotcmd). `run` takes no args and
-        // returns `result<_, _>` (both arms empty).
-        let result = dispatch_cli_run(self.instance, self.store.as_context_mut());
-        if let Ok(Ok(())) = result {
-            if let Err(err) = self.store.data_mut().drain_pending_resource_drops() {
+        // Path B follow-up: dispatch the CLI's `wasi:cli/run@0.2.6.run`
+        // export through wasmos's native call_wasi_command (which drives
+        // the wasip2 Command binding wasmos wires at instantiate time).
+        let result = self
+            .sync_inst
+            .call_wasi_command()
+            .map_err(|e| anyhow::anyhow!("cli wasi:cli/run.run(): {e}"))?;
+        if let Ok(()) = result {
+            let any = self
+                .sync_inst
+                .consumer_state_mut()
+                .ok_or_else(|| anyhow::anyhow!("sync_inst missing consumer_state"))?;
+            let state = any
+                .downcast_mut::<HostState>()
+                .ok_or_else(|| anyhow::anyhow!("consumer_state is not HostState"))?;
+            if let Err(err) = state.drain_pending_resource_drops() {
                 return Err(anyhow::anyhow!(
                     "failed to finalize resource drops: {err:?}"
                 ));
             }
         }
-        result
+        Ok(result)
     }
 
     pub fn stdout(&self) -> Result<String> {
-        String::from_utf8(self.stdout.contents().to_vec())
-            .context("stdout stream contained invalid UTF-8")
+        let buf = self
+            .capture_stdout
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        String::from_utf8(buf.clone()).context("stdout stream contained invalid UTF-8")
     }
 
     #[allow(dead_code)]
     pub fn stderr(&self) -> Result<String> {
-        String::from_utf8(self.stderr.contents().to_vec())
-            .context("stderr stream contained invalid UTF-8")
+        let buf = self
+            .capture_stderr
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        String::from_utf8(buf.clone()).context("stderr stream contained invalid UTF-8")
     }
 }
 
@@ -12253,7 +12288,7 @@ pub fn run_cli_with_stdio(
         .map(|(host, guest)| (host.as_path(), guest.as_str()))
         .collect();
     let args_vec: Vec<String> = args.iter().map(|s| s.as_ref().to_owned()).collect();
-    let cli_wasi = build_wasi_ctx_inherit(&args_vec, &preopen_refs)?;
+    let cli_wasi = build_wasi_env_inherit(&args_vec, &preopen_refs);
     run_cli_inner(artifacts, owned_preopens, cli_wasi)
 }
 
@@ -12274,14 +12309,22 @@ pub fn run_cli_capture(
         .map(|(host, guest)| (host.as_path(), guest.as_str()))
         .collect();
     let args_vec: Vec<String> = args.iter().map(|s| s.as_ref().to_owned()).collect();
-    let stdin = MemoryInputPipe::new(stdin_bytes.to_vec());
-    let stdout = MemoryOutputPipe::new(usize::MAX);
-    let stderr = MemoryOutputPipe::new(usize::MAX);
-    let cli_wasi =
-        build_wasi_ctx_with_pipes(&args_vec, &preopen_refs, stdin, stdout.clone(), stderr)?;
+    // Path B follow-up: capture the CLI's stdout via wasmos-native
+    // WasiEnvironment.capture_stdout instead of the retired
+    // build_wasi_ctx_with_pipes shape. stdin_bytes fed via
+    // WasiStdinPipe. stderr is inherited (host-side log lines).
+    let capture_stdout = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let stdin_pipe = wasmos_runtime_api::WasiStdinPipe::new();
+    stdin_pipe.push(stdin_bytes.to_vec());
+    let mut cli_wasi = build_wasi_env_inherit(&args_vec, &preopen_refs);
+    cli_wasi.stdin = Some(stdin_pipe);
+    cli_wasi.inherit_stdin = false;
+    cli_wasi.inherit_stdout = false;
+    cli_wasi.capture_stdout = Some(capture_stdout.clone());
     // The CLI's own exit Result is irrelevant here; we want its captured output.
     let _ = run_cli_inner(artifacts, owned_preopens, cli_wasi)?;
-    Ok(String::from_utf8_lossy(&stdout.contents()).into_owned())
+    let buf = capture_stdout.lock().unwrap_or_else(|e| e.into_inner());
+    Ok(String::from_utf8_lossy(&buf).into_owned())
 }
 
 /// Shared core of the CLI run path: instantiate the composed core + dotcmd
@@ -12291,7 +12334,7 @@ pub fn run_cli_capture(
 fn run_cli_inner(
     artifacts: &ComponentArtifacts,
     owned_preopens: Vec<(PathBuf, String)>,
-    cli_wasi: WasiCtx,
+    cli_wasi: wasmos_runtime_api::WasiEnvironment,
 ) -> Result<Result<(), ()>> {
     let engine = build_engine()?;
     let preopen_refs: Vec<(&Path, &str)> = owned_preopens
@@ -12347,9 +12390,6 @@ fn run_cli_inner(
         extension_manager.clone(),
     )));
     let host_state = HostState {
-        table: ResourceTable::new(),
-        wasi: cli_wasi,
-        wasi_http: WasiHttpCtx::new(),
         core: core.clone(),
         extension_manager: extension_manager.clone(),
         dotcmd_registry,
@@ -12369,28 +12409,45 @@ fn run_cli_inner(
         sibling: Some(sibling),
         attached_aliases: HashMap::new(),
     };
-    let mut store = Store::new(&engine, host_state);
 
-    // Post-Phase-2d: mirror of `CliHarness::with_artifacts` — load the
-    // CLI component before wire-up so the bridged host-import
-    // installer can introspect its imports.
-    let cli_component = load_component(&engine, &artifacts.cli_component).with_context(|| {
+    // Path B follow-up: wasmos-native CLI component instantiation
+    // (mirror of CliHarness::with_artifacts). Retires the wasmtime
+    // Linker<HostState> + Store<HostState> + instantiate_pre chain in
+    // favor of SyncRuntime + HostImports::register_sync.
+    let cli_bytes = std::fs::read(&artifacts.cli_component).with_context(|| {
         format!(
-            "failed to load CLI component from {}",
+            "failed to read CLI component from {}",
             artifacts.cli_component.display()
         )
     })?;
+    let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::new(
+        wasmos_runtime_api::RuntimeConfig::default(),
+    )
+    .map_err(|e| anyhow::anyhow!("build CLI SyncRuntime: {e:?}"))?;
+    let compiled = sync_rt
+        .compile_component(
+            wasmos_runtime_api::ComponentSource::Bytes {
+                bytes: cli_bytes.into(),
+                name: Some(artifacts.cli_component.display().to_string()),
+            },
+            wasmos_runtime_api::CompileOptions::default(),
+        )
+        .map_err(|e| anyhow::anyhow!("compile CLI component: {e:?}"))?;
+    let imports = wasmos_runtime_api::HostImports::new()
+        .register_sync(CLI_DB_IFACE, CliDatabaseHost)
+        .register_sync(CLI_HOST_EXT_LOADER_IFACE, HostExtensionLoaderHost)
+        .register_sync(CLI_DOTCMD_HOST_IFACE, DotcmdHostHost);
+    let ctx = wasmos_runtime_api::ExecutionContext::new()
+        .with_wasi(cli_wasi)
+        .with_host_imports(imports)
+        .with_consumer_state(host_state);
+    let mut sync_inst = sync_rt
+        .instantiate(&compiled, ctx)
+        .map_err(|e| anyhow::anyhow!("instantiate CLI component: {e:?}"))?;
 
-    let mut linker = Linker::<HostState>::new(&engine);
-    p2::add_to_linker_sync(&mut linker)?;
-    add_wasi_http_to_linker(&mut linker)?;
-    wire_cli_bridged_host_imports(&engine, &mut linker, &cli_component)?;
-
-    let instance_pre = linker.instantiate_pre(&cli_component)?;
-    let instance = instance_pre.instantiate(store.as_context_mut())?;
-
-    dispatch_cli_run(instance, store.as_context_mut())
-        .map_err(|trap| anyhow::anyhow!("cli wasi:cli/run@0.2.6.run(): {trap}"))
+    sync_inst
+        .call_wasi_command()
+        .map_err(|e| anyhow::anyhow!("cli wasi:cli/run@0.2.6.run(): {e}"))
 }
 
 // ─── Post-Phase-2d bridge wiring — Path A of the wasmos migration ─
@@ -12422,74 +12479,21 @@ const CLI_DB_STREAM_RESOURCE: &str = "result-stream";
 const CLI_DB_PREPARED_RESOURCE: &str = "prepared-statement";
 const CLI_DB_APPENDER_RESOURCE: &str = "appender";
 
-/// Wire the three bridged host-import interfaces the CLI world
-/// depends on. Called from both `CliHarness::with_artifacts` and
-/// `run_cli_inner` after the component is loaded (the bridge
-/// introspects the component's imports).
-fn wire_cli_bridged_host_imports(
-    engine: &Engine,
-    linker: &mut Linker<HostState>,
-    cli_component: &wasmtime::component::Component,
-) -> Result<()> {
-    sync_bridge_resource::install_host_call::<HostState>(
-        engine,
-        linker,
-        cli_component,
-        CLI_DB_IFACE,
-        Arc::new(CliDatabaseHost),
-    )
-    .map_err(|e| anyhow::anyhow!("wire {CLI_DB_IFACE}: {e}"))?;
-    sync_bridge_resource::install_host_call::<HostState>(
-        engine,
-        linker,
-        cli_component,
-        CLI_HOST_EXT_LOADER_IFACE,
-        Arc::new(HostExtensionLoaderHost),
-    )
-    .map_err(|e| anyhow::anyhow!("wire {CLI_HOST_EXT_LOADER_IFACE}: {e}"))?;
-    sync_bridge_resource::install_host_call::<HostState>(
-        engine,
-        linker,
-        cli_component,
-        CLI_DOTCMD_HOST_IFACE,
-        Arc::new(DotcmdHostHost),
-    )
-    .map_err(|e| anyhow::anyhow!("wire {CLI_DOTCMD_HOST_IFACE}: {e}"))?;
-    Ok(())
-}
-
-/// Dispatch the CLI's `wasi:cli/run@0.2.6.run` export through
-/// `sync_export_bridge` and unpack the `result<_, _>` return. Return
-/// shape mirrors the bindgen-era `cli.wasi_cli_run().call_run(store)`
-/// signature: `anyhow::Result<Result<(), ()>>`.
-fn dispatch_cli_run(
-    instance: wasmtime::component::Instance,
-    mut store: StoreContextMut<'_, HostState>,
-) -> anyhow::Result<Result<(), ()>> {
-    let ret = sync_export_bridge::call_export(
-        store.as_context_mut(),
-        &instance,
-        Some("wasi:cli/run@0.2.6"),
-        "run",
-        &[],
-    )
-    .map_err(|e| anyhow::anyhow!("cli wasi:cli/run.run(): {e}"))?;
-    match ret.as_slice() {
-        [Value::Result(inner)] => match inner {
-            Ok(None) => Ok(Ok(())),
-            Err(None) => Ok(Err(())),
-            Ok(Some(payload)) => Err(anyhow::anyhow!(
-                "cli run(): unexpected Ok payload {payload:?} for result<_, _>"
-            )),
-            Err(Some(payload)) => Err(anyhow::anyhow!(
-                "cli run(): unexpected Err payload {payload:?} for result<_, _>"
-            )),
-        },
-        other => Err(anyhow::anyhow!(
-            "cli run(): expected exactly one Value::Result return, got {other:?}"
-        )),
-    }
-}
+// Path B follow-up (2026-09-22):
+//   * `wire_cli_bridged_host_imports` retired. Under the wasmos-native
+//     CLI path (CliHarness::with_artifacts + run_cli_inner), the three
+//     CLI host interfaces (duckdb:component/database +
+//     host-extension-loader + duckdb:cli/dotcmd-host) register via
+//     wasmos_runtime_api::HostImports::register_sync at instantiate
+//     time; the handlers (`CliDatabaseHost`, `HostExtensionLoaderHost`,
+//     `DotcmdHostHost`) are unchanged — they already used
+//     `ctx.consumer_state::<HostState>()` under the escape-hatch
+//     bridge, and that same call reaches HostState from the
+//     wasmos-native ctx.
+//   * `dispatch_cli_run` retired. The CLI's wasi:cli/run@0.2.6.run
+//     export now dispatches through `SyncInstance::call_wasi_command()`
+//     which wraps the wasip2 Command binding wasmos wires at
+//     instantiate time.
 
 /// Wasmos-native handler for `duckdb:component/database`. Dispatches
 /// by kebab-cased WIT method name; routes resource drops to the
