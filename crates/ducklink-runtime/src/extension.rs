@@ -807,11 +807,14 @@ pub struct ExtensionInnerState {
     table_handle_names: HashMap<u32, String>,
     callback_registry: Arc<RwLock<CallbackRegistry>>,
     extension_name: String,
-    /// `Some(..)` only for a component that imports `compose:dynlink/linker`
-    /// (the gate is in `load_component`); every other extension is unaffected
-    /// and pays nothing. The bridge resolves/invokes the shared, resident
-    /// provider (e.g. the one warmed ~38 MB pylon) on the guest's behalf.
-    dynlink: Option<crate::compose_dynlink::DynLinkBridge>,
+    // Path B follow-up #2 (2026-09-22): the wasmtime-shaped
+    // `dynlink: Option<crate::compose_dynlink::DynLinkBridge>` field
+    // retired here alongside the `impl_compose_dynlink_host!(
+    // ExtensionStoreState, dynlink_bridge)` macro. The
+    // `compose:dynlink/linker` host is now installed via the
+    // wasmos-native `datalink_dynlink_wasmos::install_host_imports`
+    // path (mirroring the DotcmdInstance approach from
+    // ducklink 69444225); no per-store bridge state is needed.
     /// Live `duckdb:extension/file-lock.lock-handle` resources held by the
     /// guest. Keyed by the `rep` id embedded in the wit-bindgen `Resource`
     /// handle (allocated via [`ExtensionStoreState::alloc_lock_handle`]);
@@ -842,23 +845,16 @@ pub struct ExtensionStoreState {
 }
 
 impl ExtensionStoreState {
+    /// Fresh per-component store data. `compose:dynlink/linker` support
+    /// (previously carried as an `Option<DynLinkBridge>` inside
+    /// [`ExtensionInnerState`]) migrated to the wasmos-native install
+    /// path in Path B follow-up #2 (2026-09-22) — no per-store bridge
+    /// state is threaded here any more.
     pub fn new(
         wasi: WasiCtx,
         services: Box<dyn ExtensionServices>,
         callback_registry: Arc<RwLock<CallbackRegistry>>,
         extension_name: String,
-    ) -> Self {
-        Self::with_dynlink(wasi, services, callback_registry, extension_name, None)
-    }
-
-    /// Like [`new`](Self::new) but also carries an optional
-    /// `compose:dynlink/linker` bridge (for a component that imports it).
-    pub fn with_dynlink(
-        wasi: WasiCtx,
-        services: Box<dyn ExtensionServices>,
-        callback_registry: Arc<RwLock<CallbackRegistry>>,
-        extension_name: String,
-        dynlink: Option<crate::compose_dynlink::DynLinkBridge>,
     ) -> Self {
         Self {
             table: ResourceTable::new(),
@@ -901,7 +897,6 @@ impl ExtensionStoreState {
                 table_handle_names: HashMap::new(),
                 callback_registry,
                 extension_name,
-                dynlink,
                 lock_handles: HashMap::new(),
                 next_lock_handle: 1,
             },
@@ -925,14 +920,14 @@ impl ExtensionStoreState {
         self.inner.lock_handles.remove(&id);
     }
 
-    /// Accessor for the dynlink bridge, used by `impl_compose_dynlink_host!`.
-    /// Reached only after the `imports_linker` gate set `dynlink = Some(..)`,
-    /// so the `expect` never fires for a component wired through that gate.
-    fn dynlink_bridge(&mut self) -> &mut crate::compose_dynlink::DynLinkBridge {
-        self.inner.dynlink
-            .as_mut()
-            .expect("dynlink bridge present only when the component imports compose:dynlink/linker")
-    }
+    // Path B follow-up #2 (2026-09-22) — the `dynlink_bridge()`
+    // accessor + the `impl_compose_dynlink_host!(ExtensionStoreState,
+    // dynlink_bridge)` macro invocation that used to sit below the
+    // main `impl` block are retired here. `compose:dynlink/linker` is
+    // now installed via the wasmos-native
+    // `datalink_dynlink_wasmos::install_host_imports` path (mirroring
+    // DotcmdInstance in ducklink 69444225); no per-store bridge state
+    // is required.
 
     // ADR-0029 Phase 6.2.d.2 — visibility bumped from `fn` to
     // `pub fn` so `crate::extension_wasmos` can allocate resource
@@ -1564,11 +1559,16 @@ impl wasmtime::component::HasData for ExtensionStoreState {
     type Data<'a> = &'a mut ExtensionStoreState;
 }
 
-// Satisfy a guest's `compose:dynlink/linker` import by delegating to the ONE
-// bridge implementation (resolve/invoke against the shared, resident provider
-// registry). Only components that actually import the linker get the host
-// import added (the `imports_linker` gate in `load_component`).
-crate::impl_compose_dynlink_host!(ExtensionStoreState, dynlink_bridge);
+// Path B follow-up #2 (2026-09-22): the
+// `impl_compose_dynlink_host!(ExtensionStoreState, dynlink_bridge)`
+// macro invocation retired here. Under the SyncStoreState<T> alias
+// flip (step 2), the macro's `impl foreign_trait for
+// SyncStoreState<ExtensionInnerState>` expansion trips Rust's E0117
+// orphan rule. The wasmos-native install path
+// (`datalink_dynlink_wasmos::install_host_imports` on a HostImports
+// builder, mirroring DotcmdInstance in ducklink 69444225) replaces
+// this wiring; see `load_component_with_dynlink` below for the
+// per-load install decision.
 
 // Phase 6.2.l.2 — the empty `impl extension_types::Host for
 // ExtensionStoreState {}` retired here. The base `types` interface
@@ -6582,13 +6582,19 @@ pub fn load_component(
     )
 }
 
-/// Like [`load_component`] but also wires `compose:dynlink/linker` for a
-/// component that imports it: the host import is added to the guest linker
-/// (gated on `imports_linker`) and a [`DynLinkBridge`](crate::compose_dynlink::DynLinkBridge)
-/// over the supplied shared provider `registry` is moved into the store
-/// state. This is how an `ml_kmeans`-style aggregate reaches the one resident,
-/// shared pylon provider. A component that does NOT import the linker (every
-/// other extension) is unaffected even if a registry is supplied.
+/// Like [`load_component`] but preserves the API shape from before Path B
+/// follow-up #2 (2026-09-22). The `dynlink_registry` argument is retained
+/// for source-compatibility with pre-migration callers but is no longer
+/// consulted — `compose:dynlink/linker` support migrated from the local
+/// wasmtime-shaped `add_to_linker` install to the wasmos-native
+/// [`datalink_dynlink_wasmos::install_host_imports`] path (mirroring the
+/// DotcmdInstance pattern in ducklink `69444225`). During the coexistence
+/// window a linker-importing component (`ml_kmeans`, `postgis_core`, …)
+/// installed through this entry point emits a diagnostic and its
+/// instantiation surfaces the unresolved import — the follow-up landing
+/// that plumbs a wasmos-native `ResidentBackend` through this signature
+/// restores the full path. Components that do NOT import the linker (the
+/// overwhelming majority) are unaffected.
 pub fn load_component_with_dynlink(
     engine: &Engine,
     component: &Component,
@@ -6613,30 +6619,36 @@ pub fn load_component_with_dynlink(
     // creates it once); a second Engine would hit the else arm and rebuild.
     let mut linker = base_linker(engine)?;
 
-    // compose:dynlink/linker: conditionally satisfy a guest-driven provider
-    // import. ONLY a component that actually imports the linker gets the host
-    // import + a bridge; every other extension pays nothing (the gate mirrors
-    // the framework's `imports_linker`).
-    let dynlink = match dynlink_registry {
-        Some(registry) if crate::compose_dynlink::imports_linker(engine, component) => {
-            verbose_log!(
-                "[extension-runtime:{extension_name}] imports compose:dynlink/linker; wiring the shared-provider bridge"
-            );
-            crate::compose_dynlink::add_to_linker::<ExtensionStoreState>(&mut linker)
-                .map_err(|e| wasmtime::Error::msg(e.to_string()))?;
-            Some(crate::compose_dynlink::new_resident(registry))
-        }
-        _ => None,
-    };
+    // Path B follow-up #2 (2026-09-22): the wasmtime-shaped
+    // `compose_dynlink::add_to_linker::<ExtensionStoreState>` install
+    // retired here alongside the `impl_compose_dynlink_host!` macro.
+    // The `dynlink_registry` arg is preserved on the signature so
+    // callers built against the pre-migration shape still compile;
+    // the field is intentionally dropped once we log the deprecation
+    // note. Extensions that DO import `compose:dynlink/linker` will
+    // surface the unresolved import from `instantiate_pre` below with
+    // wasmtime's own diagnostic — the follow-up landing (mirroring
+    // ducklink `69444225` for DotcmdInstance) restores the install via
+    // `datalink_dynlink_wasmos::install_host_imports` on a wasmos-
+    // native HostImports/SyncRuntime boundary.
+    let _ = dynlink_registry;
+    if crate::compose_dynlink::imports_linker(engine, component) {
+        eprintln!(
+            "[extension-runtime:{extension_name}] component imports \
+             compose:dynlink/linker but the wasmtime-shaped install \
+             retired in Path B follow-up #2; instantiation will fail \
+             until the wasmos-native install lands (see \
+             docs/path-b-closure-plan.md)."
+        );
+    }
 
     let mut store = Store::new(
         engine,
-        ExtensionStoreState::with_dynlink(
+        ExtensionStoreState::new(
             wasi,
             services,
             callback_registry,
             extension_name.clone(),
-            dynlink,
         ),
     );
 
