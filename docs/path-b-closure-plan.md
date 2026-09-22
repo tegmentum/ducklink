@@ -72,43 +72,75 @@ bang commit.
 
 **Fusion note (2026-09-22 discovery):** Slice 2+3+4.3 originally
 scoped to keep `primary_nested_exec`'s raw-pointer TLS pattern
-intact. Investigation this session revealed that pattern cannot
-survive the `CoreExecution → SyncInstance` swap because:
+intact. Investigation revealed reentry cannot use
+`sync_inst.call_export` (nested `block_on` on the tokio executor
+thread deadlocks — the exact problem `call_export_sync` was added
+to solve) and `ReentryCapability<'a>` cannot be stashed in TLS
+(lifetime-bound). So reentry has to reach the callback's `ctx`
+on-stack.
 
-1. `SyncInstance::call_export` uses `block_on` internally; a
-   nested `sync_inst.call_export` from inside a callback on the
-   tokio executor thread deadlocks (the exact problem
-   `ReentryCapability::call_export_sync` was added to solve).
-2. `ReentryCapability<'a>` and `HostCallContext<'a>` are both
-   lifetime-bound; neither can be stashed in TLS the way
-   `PrimaryReentry { store: *mut, instance: *const }` currently is.
-3. Therefore reentry MUST reach the callback's `ctx` on-stack —
-   which requires `ExtensionServices::nested_exec` to receive
-   `ctx: &mut HostCallContext<'_>` as a parameter, i.e. the
-   Phase 5 semver-major trait break.
+**Follow-up discovery (2026-09-22, same session):** the ctx-based
+approach doesn't work either — because ducklink's
+`primary_nested_exec` is a CROSS-INSTANCE reentry, not
+same-instance. Trace of the actual flow:
 
-**Consequence:** Slice 2+3+4.3 = Slice 2+3+4.4 = Phase 5, all
-one atomic surgery. Total ~2-3 weeks focused ducklink-team work
-plus 1-2 weeks ecosystem coordination for third-party extensions
-using `ExtensionServices`. Not viable as a single-session slice.
+- Layer 1: `HostState::execute` → `core.sync_inst.call_export(execute)`
+- Layer 2: core guest → `callback-dispatch` host import →
+  `extension_manager.dispatch_scalar(…)` → the extension's
+  `ext_inst.call_export(call-scalar)` — a DIFFERENT SyncInstance
+  than layer 1
+- Layer 3: extension guest → `duckdb:extension/nested-exec` host
+  import → `state.services.nested_exec(sql)` [`CoreServices` impl]
+  → wants to run SQL on the CORE (layer 1's instance)
 
-**Escape hatches considered and rejected:**
-- Add unsafe raw-store accessors to wasmos SyncInstance
-  (violates "no APIs added solely for one consumer" per memory).
-- Keep dual-shape state (SyncInstance + raw Store side-by-side)
-  transitionally (bifurcation is ugly, still leaves wasmtime
-  dep alive, doesn't retire the unsafe pattern).
-- TLS-stash HostCallContext pointer with lifetime laundering
-  (matches today's unsafe pattern but wasmos's async reentry
-  boundary is stricter than wasmtime's — the inner async fn
-  driving `block_on` holds &mut Store<AdapterHostState>
-  exclusively; a nested access via a laundered ctx pointer
-  would race the outer borrow at the wasmtime-side, not just
-  at the type-system level).
+The `ctx` inside layer 3's host handler reenters the EXTENSION
+instance (layer 2's), not the CORE. `ReentryCapability` documents
+this explicitly: "Only reaches back into the SAME instance that
+dispatched this host handler. Reentry across instances is a
+separate future primitive."
 
-**Path forward:** either bank Path 2 Slices 1+2 as delivered
-prep + revert to Phase 5 planning, OR resume with a dedicated
-2-3 week arc treating 2+3+4.3+4.4+Phase-5 as one landing.
+**Consequence:** Path B "fully closed" (retire raw-pointer TLS)
+requires either:
+
+A. **Wasmos-side cross-instance sync reentry primitive.** A real
+   design + implementation project — probably an unsafe raw-store
+   accessor from `SyncInstance` (e.g.
+   `unsafe fn primary_store_ptr()`) surfaced as a supported
+   wasmos primitive, plus a matching sync_export_bridge-flavour
+   dispatch that works when the outer instance holds
+   `Store<AdapterHostState>`. Applies to ANY consumer with
+   cross-instance sync callback flows, not just ducklink — so it
+   passes the "primitives must stand independently on wasm-level
+   shape" bar (per memory `feedback_wasmos_not_fiji_specific`).
+2-3 wasmos-side sessions.
+
+B. **Restructure ducklink's nested-exec** to avoid cross-instance
+   reentry. Options: run nested SQL on a sibling core with
+   post-hoc replay to primary (loses same-catalog visibility);
+   thread the SQL back up to layer 2 as an out-of-band effect
+   (async yield pattern; major reshape). Estimated 1-2 weeks
+   design + implementation.
+
+C. **Accept Path B partial.** Retire wasmtime Cargo dep and
+   consumer-file wasmtime types where possible; keep
+   `primary_nested_exec` + `PRIMARY_STORE_REENTRY` as a
+   documented unsafe internal pattern. This is the plan doc's
+   original "Alternative pragmatic scope". Estimated 6-10 days
+   focused work — but the CoreExecution swap (Slice 2+3+4.3) is
+   still blocked until (A) lands, because `primary_nested_exec`
+   currently types on `Store<CoreStoreState>`.
+
+**Path forward — recommend (A):** ship the wasmos cross-instance
+sync reentry primitive first. Ducklink then rewires
+`primary_nested_exec` onto it, unblocking Slice 2+3+4.3 and
+Phase 5 (which now becomes a much smaller trait change since
+ctx-threading is no longer needed — nested_exec still takes just
+`&mut self, sql`, and internally calls the wasmos primitive).
+Total estimated calendar: ~3 weeks (2-3 wasmos sessions + 1-2
+ducklink sessions).
+
+Path Slices 1+2 (`aae7e12` + `d07469e`) remain valid prep for
+whichever path is chosen.
 
 **Total realistic scope:** 3-4 weeks focused ducklink-team work.
 Phase 5 adds 1-2 weeks ecosystem lag for extension-author
