@@ -16,6 +16,8 @@ path = "src/main.rs"
 # extension use, so signatures match what gets registered.
 ducklink-runtime = { path = "../../crates/ducklink-runtime" }
 wasmtime = { version = "48.0.0", features = ["component-model", "cache"] }
-wasmtime-wasi = "48.0.0"
+# Path B follow-up #2 step 4 (2026-09-22): the loader consumes a portable
+# `WasiEnvironment` built through `wasmos_runtime_api::WasiEnvironment`.
+wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", tag = "v0.3.2" }
 anyhow = "1"
 serde_json = { version = "1", features = ["preserve_order"] }

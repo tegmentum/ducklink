@@ -7,15 +7,19 @@
 //! seam — the `ducklink` host routes it to DuckDB-compiled-to-wasm; the native
 //! `ducklink` extension will route it to native DuckDB.
 //!
-//! `ExtensionInstance` is a loaded component: its `Store<ExtensionStoreState>`
-//! plus generated bindings, with `dispatch_*` re-entering the guest's
-//! `callback-dispatch` export for each DuckDB-side invocation.
+//! `ExtensionInstance` is a loaded component: a wasmos-native
+//! [`wasmos_runtime_wasmtime_v48::SyncInstance`] plus a shared handle
+//! to the `ExtensionInnerState` its 27 wasmos-native host handlers
+//! mutate, with `dispatch_*` re-entering the guest's
+//! `callback-dispatch` export via
+//! [`wasmos_runtime_wasmtime_v48::SyncInstance::call_export_reentrant`]
+//! for each DuckDB-side invocation.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use wasmtime::component::{Component, Linker};
-use wasmtime::{AsContextMut, Engine, Store};
+use wasmtime::Engine;
 
 // Phase 6.2.o — the wit-bindgen wrapper `duckdb_extension_bindings`
 // retired entirely (Phase 6.2.n Sessions 3-5 migrated every
@@ -2386,10 +2390,11 @@ pub fn describe_runtime_logicaltype(ty: &reg::LogicalType) -> String {
 // ExtensionInstance
 // ---------------------------------------------------------------------------
 
-/// A loaded extension component: its wasmtime store + raw component
-/// instance. `dispatch_*` re-enter the guest's exports via the wasmos
-/// sync export bridge (see Phase 6.2.i for the migration off wit-
-/// bindgen typed dispatchers).
+/// A loaded extension component: a wasmos-native [`SyncInstance`] +
+/// the shared [`ExtensionInnerState`] the host handlers mutate.
+/// `dispatch_*` re-enter the guest's exports via
+/// [`SyncInstance::call_export_reentrant`] (see Phase 6.2.i for the
+/// migration off wit-bindgen typed dispatchers).
 ///
 /// ADR-0029 Phase 6.2.j — struct trimmed after the Phase 6.2.i
 /// export-migration completed. The former `bindings: DuckdbExtension`
@@ -2398,8 +2403,9 @@ pub fn describe_runtime_logicaltype(ty: &reg::LogicalType) -> String {
 /// storage_write, table_stream, aggregate_incr, conn, file_write,
 /// index_write, settings, log_storage, arrow_ext) all retired here —
 /// every dispatch now flows through
-/// `wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export`
-/// using the raw `instance`, no typed dispatcher struct required.
+/// [`wasmos_runtime_wasmtime_v48::SyncInstance::call_export_reentrant`]
+/// against the wasmos-native instance, no typed dispatcher struct
+/// required.
 ///
 /// Phase 6.2.k retired the last of those wrapper modules whose only
 /// remaining role was per-world type re-exports. `FileInfo`,
@@ -2407,9 +2413,20 @@ pub fn describe_runtime_logicaltype(ty: &reg::LogicalType) -> String {
 /// `FilterOp`, `TableFilter`, `SecretKv` now live as plain Rust
 /// mirror structs on `crate::extension` directly — no wit-bindgen
 /// dependency in ducklink-runtime's public SPI record surface.
+///
+/// Path B follow-up #2 step 4 (2026-09-22) — the wasmtime `Store` +
+/// `Instance` fields retired for a wasmos-native `SyncInstance` +
+/// a `SharedExtensionState` (Arc<Mutex<ExtensionInnerState>>).
+/// Every state-touching drainer routes through
+/// [`Self::with_inner_state`] (which locks the mutex) and every
+/// export dispatch through [`Self::call_bridge_export`] (which uses
+/// `sync_inst.call_export_reentrant`), so the 65+ dispatch call
+/// sites and 21 drainers migrated cleanly on the step 3 encapsulation.
+/// Mirrors the DotcmdInstance shape in ducklink-host (commit
+/// `bc39d9f`).
 pub struct ExtensionInstance {
-    store: Store<ExtensionStoreState>,
-    instance: wasmtime::component::Instance,
+    sync_inst: wasmos_runtime_wasmtime_v48::SyncInstance,
+    state: crate::extension_wasmos::SharedExtensionState,
 }
 
 /// ADR-0029 Phase 6.2.i — decode a `wasmos_runtime_api::Value` in the
@@ -3086,53 +3103,77 @@ pub struct LogEntry {
 }
 
 impl ExtensionInstance {
-    /// Phase 6.2.j — trimmed constructor. No wit-bindgen typed
-    /// dispatchers to stash any more; every `dispatch_*` re-enters
-    /// the guest via `sync_export_bridge::call_export` using
-    /// `instance` directly.
-    pub fn new(store: Store<ExtensionStoreState>, instance: wasmtime::component::Instance) -> Self {
-        Self { store, instance }
+    /// Path B follow-up #2 step 4 (2026-09-22) — SyncInstance-shaped
+    /// constructor. Takes the wasmos-native instance plus the shared
+    /// handle to the `ExtensionInnerState` the 27 host handlers
+    /// mutate (populated by `install_extension_imports_stateful` on
+    /// the same Arc).
+    pub fn new(
+        sync_inst: wasmos_runtime_wasmtime_v48::SyncInstance,
+        state: crate::extension_wasmos::SharedExtensionState,
+    ) -> Self {
+        Self { sync_inst, state }
     }
 
     /// Path B follow-up #2 step 3 (2026-09-22) — the single funnel
     /// through which every `dispatch_*` / capability re-entry method
-    /// in this `impl` block reaches the guest. Wraps the wasmos
-    /// `sync_export_bridge::call_export` bridge so the store +
-    /// instance escape hatch (`self.store.as_context_mut()` + `&self.instance`)
-    /// lives in exactly one place. The upcoming step 6 flip retires
-    /// the wasmtime `Store` + `Instance` fields for a SyncInstance;
-    /// only this method and `with_inner_state` change then, not the
-    /// 65+ dispatch call sites.
+    /// in this `impl` block reaches the guest.
     ///
-    /// Mirrors ducklink `fd879cc` (`CoreExecution::call_bridge_export`).
+    /// Step 4 (2026-09-22) — the funnel now dispatches through
+    /// [`wasmos_runtime_wasmtime_v48::SyncInstance::call_export`]
+    /// against the wasmos-native instance. Preserves the pre-flip
+    /// call shape (`Some(iface), method, args`) so the 65+ dispatch
+    /// call sites need no edit; the qualified-export name is
+    /// assembled here (`"iface#method"`) — matching the resolver
+    /// syntax `call_export` expects (see
+    /// [`wasmos_runtime_wasmtime_v48::instance::resolve_export`]).
+    ///
+    /// `call_export` (async via the SyncRuntime's private tokio)
+    /// rather than `call_export_reentrant` (sync `Func::call`):
+    /// wasmos's `Runtime::instantiate` puts the store into async-
+    /// required mode, and same-store sync `Func::call` post-
+    /// instantiation fails with "store configuration requires that
+    /// *_async functions are used instead" on a
+    /// `WasmtimeV48Runtime::from_engine`-wrapped engine. The
+    /// reentrant primitive is the correct shape when the caller may
+    /// be running inside another tokio runtime (as `CoreExecution
+    /// ::call_bridge_export` documents for its own use); wasmos's
+    /// current async-instantiate seam blocks that path here — the
+    /// resolution belongs on the wasmos side (extend `SyncRuntime`
+    /// to support post-instantiate sync reentry symmetrically with
+    /// `SyncRuntime::new`-managed engines). Recorded as a
+    /// wasmos-API gap in the step 4 landing report.
     fn call_bridge_export(
         &mut self,
         iface: Option<&str>,
         method: &str,
         args: &[wasmos_runtime_api::Value],
     ) -> Result<Vec<wasmos_runtime_api::Value>, wasmos_runtime_api::RuntimeError> {
-        wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-            self.store.as_context_mut(),
-            &self.instance,
-            iface,
-            method,
-            args,
-        )
+        let qualified: String = match iface {
+            Some(i) => format!("{i}#{method}"),
+            None => method.to_string(),
+        };
+        self.sync_inst.call_export(&qualified, args)
     }
 
     /// Path B follow-up #2 step 3 (2026-09-22) — encapsulates the
-    /// `let mut ctx = self.store.as_context_mut(); (*ctx.data_mut()).consumer`
-    /// escape hatch that the `drain_pending` / `take_pending_*`
-    /// drainers reach for. Same funnel role as `call_bridge_export`
-    /// — the step 6 SyncInstance flip changes only this method, not
-    /// the 21 drain call sites. The `unsafe` deref is preserved
-    /// verbatim so borrow-checker semantics don't shift between
-    /// today's `ctx.data_mut()` reborrow and tomorrow's SyncInstance
-    /// state accessor.
+    /// escape-hatch access to the `ExtensionInnerState` the
+    /// `drain_pending` / `take_pending_*` drainers reach for.
+    ///
+    /// Step 4 (2026-09-22) — reads the state via the
+    /// `SharedExtensionState = Arc<Mutex<ExtensionInnerState>>`
+    /// handle shared with the 27 wasmos-native host handlers
+    /// installed by `install_extension_imports_stateful`. The mutex
+    /// is briefly locked for each drainer call — a semantic shift
+    /// from the pre-flip direct `ctx.data_mut()` access, mirrored
+    /// throughout the wasmos-native install path since Phase 6.2.d.2.
+    /// `unwrap_or_else(|e| e.into_inner())` recovers the state on
+    /// poisoning so a panicked host handler mid-mutation doesn't
+    /// abort the extension teardown (matches the SpiHost pattern in
+    /// `ducklink-host::dotcmd_wasmos`).
     fn with_inner_state<R>(&mut self, f: impl FnOnce(&mut ExtensionInnerState) -> R) -> R {
-        let mut ctx = self.store.as_context_mut();
-        let data: *mut ExtensionStoreState = ctx.data_mut();
-        unsafe { f(&mut (*data).consumer) }
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        f(&mut *guard)
     }
 
     pub fn dispatch_scalar(
@@ -5251,10 +5292,25 @@ mod tests {
     }
 
     /// Build a component-model engine (with wasm-exceptions) the way the host does.
+    /// Path B follow-up #2 step 4 (2026-09-22): the wasmos-native load path
+    /// runs the guest's `load()` export through `SyncInstance::call_export_
+    /// reentrant`, which requires `wasm_component_model_async(false)` on the
+    /// engine (same-instance sync reentry — wasmtime's async component model
+    /// otherwise refuses the sync `Func::call` with "store configuration
+    /// requires that *_async functions are used instead"). `epoch_interruption
+    /// (true)` is also enabled so `Store::set_epoch_deadline` (called
+    /// unconditionally from wasmos's `Runtime::instantiate`) does not trap.
     fn test_engine() -> Engine {
         let mut config = wasmtime::Config::new();
         config.wasm_component_model(true);
         config.wasm_exceptions(true);
+        // Path B follow-up #2 step 4 (2026-09-22): the wasmos-native
+        // load path wraps this engine with `SyncRuntime::from_runtime`
+        // + `WasmtimeV48Runtime::from_engine`, and wasmos's
+        // `Runtime::instantiate` calls `store.set_epoch_deadline`
+        // unconditionally. Without `epoch_interruption(true)` on the
+        // engine, that call traps at store setup.
+        config.epoch_interruption(true);
         Engine::new(&config).expect("engine")
     }
 
@@ -6156,40 +6212,20 @@ mod tests {
     // dispatch path.
 }
 
-/// Process-global cache for the base [`Linker`] template — the one populated
-/// by [`add_extension_interfaces_to_linker`]. Built lazily on the first load
-/// and cloned on every subsequent load, so the ~25 `add_to_linker` calls the
-/// linker construction requires run ONCE per process instead of once per
-/// component load. Guarded by an [`Engine`] identity check so a hypothetical
-/// second Engine gets its own fresh linker rather than incorrectly reusing
-/// one bound to a different engine.
-static BASE_LINKER_CACHE: OnceLock<Mutex<Option<(Engine, Linker<ExtensionStoreState>)>>> =
-    OnceLock::new();
-
-/// Return a `Linker<ExtensionStoreState>` populated with the base extension
-/// interfaces for `engine`. First call runs
-/// [`add_extension_interfaces_to_linker`]; subsequent calls (with the same
-/// engine) clone the cached template. A different engine falls back to a
-/// fresh build.
-fn base_linker(engine: &Engine) -> wasmtime::Result<Linker<ExtensionStoreState>> {
-    let cell = BASE_LINKER_CACHE.get_or_init(|| Mutex::new(None));
-    let mut guard = cell.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some((cached_engine, cached_linker)) = guard.as_ref() {
-        if Engine::same(cached_engine, engine) {
-            return Ok(cached_linker.clone());
-        }
-    }
-    let mut linker = Linker::<ExtensionStoreState>::new(engine);
-    add_extension_interfaces_to_linker(&mut linker)?;
-    *guard = Some((engine.clone(), linker.clone()));
-    Ok(linker)
-}
-
 /// Add the full `duckdb:extension` capability surface to `linker`: the wasip2
 /// preview interfaces (so the component's WASI imports resolve) plus all six
 /// extension interfaces (types, runtime, config, logging, catalog, files), each
-/// dispatched to the `ExtensionStoreState`. Used by both directions before
-/// instantiating a component.
+/// dispatched to the `ExtensionStoreState`.
+///
+/// Path B follow-up #2 step 4 (2026-09-22) — retained as a public API
+/// escape hatch for consumers still building a `Linker<ExtensionStoreState>`
+/// out-of-band (the native-extension mirror re-exports the same shape).
+/// The production load path in [`load_component_with_dynlink`] no longer
+/// calls this: `duckdb:extension/*` imports install through
+/// [`crate::extension_wasmos::install_extension_imports_stateful`] on a
+/// wasmos-native [`wasmos_runtime_api::HostImports`] set instead. When
+/// the native-extension mirror also migrates off the wasmtime `Linker`
+/// shape this fn retires here alongside.
 pub fn add_extension_interfaces_to_linker(
     linker: &mut Linker<ExtensionStoreState>,
 ) -> wasmtime::Result<()> {
@@ -6201,200 +6237,12 @@ pub fn add_extension_interfaces_to_linker(
     // wasi:http `add_to_linker_sync` re-adds the wasi:http/proxy world and
     // would collide.
     wasmtime_wasi_http::p2::add_only_http_to_linker_sync(linker)?;
-    // ADR-0029 Phase 6.2.h — every `duckdb:extension/*` host import
+    // ADR-0029 Phase 6.2.h — the 27 `duckdb:extension/*` host imports
     // used to be wired here through wit-bindgen's `extension_xxx::
-    // add_to_linker`. The full 27-interface sweep is now on the
-    // wasmos install path (`install_wasmos_migrated_interfaces`) —
-    // see the phase-by-phase attribution in the git log (Phase
-    // 6.2.h.2 through 6.2.h.7) or the state-of-the-abstraction doc.
-    // The `Host` trait impls immediately below survive as test
-    // scaffolding for register/lifecycle unit tests but no linker
-    // path invokes them any more. Phase 6.2.l retired the last of
-    // the commented-out `add_to_linker` calls that used to sit here.
-    Ok(())
-}
-
-/// ADR-0029 Phase 6.2.h.2 — wire the wasmos-migrated interfaces on
-/// `linker` for `component`. Called per-load from
-/// [`load_component_with_dynlink`] because the wasmos
-/// `install_stateless_host_call` bridge needs the [`Component`] in scope
-/// to enumerate method signatures at wire time (the wit-bindgen
-/// `add_to_linker` shape doesn't; the interface shape is compile-time-
-/// known via bindgen).
-///
-/// Interfaces migrated so far:
-///
-/// - `duckdb:extension/lifecycle` — Phase 6.2.h.2. 1 method.
-/// - `duckdb:extension/types` — Phase 6.2.h.3. 0 methods (marker).
-/// - `duckdb:extension/encoding` — Phase 6.2.h.3. 1 method.
-/// - `duckdb:extension/compression` — Phase 6.2.h.3. 1 method.
-/// - `duckdb:extension/files-reg` — Phase 6.2.h.3. 1 method.
-/// - `duckdb:extension/index` — Phase 6.2.h.3. 1 method.
-/// - `duckdb:extension/collation` — Phase 6.2.h.3. 1 method.
-///
-/// All 7 are stateless (no `SharedExtensionState` — fresh instance per
-/// load is safe) and resource-free (no `Resource<T>` in any method
-/// signature). The `#[host_iface(sync)]`-emitted `impl SyncHostCall`
-/// on each host struct provides the dispatch entry point.
-///
-/// Future sessions add the resource-aware bridge for the
-/// Resource<T>-carrying interfaces (Runtime, FileLock, Files, Catalog,
-/// ...).
-///
-/// **Non-blocking behaviour**: if `component` doesn't import a given
-/// migrated interface, the bridge no-ops for that interface — matches
-/// the wasmos `wire_host_imports` policy so a shared installer works
-/// across a mixed extension set.
-fn install_wasmos_migrated_interfaces(
-    engine: &Engine,
-    linker: &mut Linker<ExtensionStoreState>,
-    component: &Component,
-) -> wasmtime::Result<()> {
-    use std::sync::Arc as StdArc;
-    use wasmos_runtime_api::SyncHostCall as _SyncHostCall;
-    use wasmos_runtime_wasmtime_v48::sync_bridge::install_stateless_host_call;
-
-    // Table of (iface-name, handler-factory) pairs, one row per
-    // migrated interface. Keeps the wiring uniform — every additional
-    // stateless-no-resource interface migrates as one new entry, and
-    // the loop enforces the same error-mapping shape for each.
-    //
-    // The handler-factory closure returns Arc<dyn SyncHostCall>; each
-    // returns a fresh instance since these hosts are stateless.
-    let migrated: [(&str, fn() -> StdArc<dyn _SyncHostCall>); 7] = [
-        // Phase 6.2.h.2 — Session 2 first migration.
-        ("duckdb:extension/lifecycle@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::LifecycleHost::new())
-        }),
-        // Phase 6.2.h.3 — the six remaining stateless interfaces.
-        ("duckdb:extension/types@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::TypesHost::new())
-        }),
-        ("duckdb:extension/encoding@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::EncodingHost::new())
-        }),
-        ("duckdb:extension/compression@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::CompressionHost::new())
-        }),
-        ("duckdb:extension/files-reg@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::FilesRegHost::new())
-        }),
-        ("duckdb:extension/index@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::IndexHost::new())
-        }),
-        ("duckdb:extension/collation@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::CollationHost::new())
-        }),
-    ];
-
-    for (iface, factory) in migrated {
-        install_stateless_host_call(engine, linker, component, iface, factory()).map_err(|e| {
-            wasmtime::Error::msg(format!("install_stateless_host_call({iface}) failed: {e}"))
-        })?;
-    }
-
-    // ADR-0029 Phase 6.2.h.5 + h.6 — resource-aware bridge
-    // migrations. Every stateful-plus-resource-free interface
-    // wires here via `install_host_call`, using `XxxHost::bridged()`
-    // — the StateSource::FromCtx constructor. The bridge populates
-    // `HostCallContext::consumer_state` per-call with
-    // `store.data_mut()`; each handler's `self.state.hold(ctx)?`
-    // pulls the state's mutable reference from ctx and operates on
-    // it directly — no divergent state instance.
-    //
-    // File_lock IS the sole resource-carrying interface in this
-    // table (1 resource: `lock-handle`); every other entry has
-    // zero resources. `install_host_call` handles both cleanly: for
-    // zero-resource interfaces the resource-discs map stays empty
-    // and no resource marshal happens.
-    //
-    // Runtime (10 resources, multi-resource) DEFERRED to
-    // Phase 6.2.h.7 pending per-return-type discriminant
-    // classification on the bridge — the single-`sole_disc`
-    // fallback only covers 0-1 resource interfaces.
-    let stateful_migrated: [(&str, fn() -> StdArc<dyn _SyncHostCall>); 20] = [
-        // File-lock — 1 resource, migrated Phase 6.2.h.5.
-        ("duckdb:extension/file-lock@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::FileLockHost::bridged())
-        }),
-        // Resource-free stateful interfaces — Phase 6.2.h.6.
-        ("duckdb:extension/config@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::ConfigHost::bridged())
-        }),
-        ("duckdb:extension/logging@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::LoggingHost::bridged())
-        }),
-        ("duckdb:extension/catalog@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::CatalogHost::bridged())
-        }),
-        ("duckdb:extension/files@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::FilesHost::bridged())
-        }),
-        ("duckdb:extension/storage@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::StorageHost::bridged())
-        }),
-        ("duckdb:extension/query@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::QueryHost::bridged())
-        }),
-        ("duckdb:extension/nested-exec@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::NestedExecHost::bridged())
-        }),
-        ("duckdb:extension/secret@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::SecretHost::bridged())
-        }),
-        ("duckdb:extension/settings@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::SettingsHost::bridged())
-        }),
-        ("duckdb:extension/macro-ext@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::MacroExtHost::bridged())
-        }),
-        ("duckdb:extension/types-ext@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::TypesExtHost::bridged())
-        }),
-        ("duckdb:extension/runtime-ext@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::RuntimeExtHost::bridged())
-        }),
-        ("duckdb:extension/coordinate-system@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::CoordinateSystemHost::bridged())
-        }),
-        ("duckdb:extension/arrow-ext@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::ArrowExtHost::bridged())
-        }),
-        ("duckdb:extension/parser@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::ParserHost::bridged())
-        }),
-        ("duckdb:extension/optimizer@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::OptimizerHost::bridged())
-        }),
-        ("duckdb:extension/table-stream@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::TableStreamHost::bridged())
-        }),
-        ("duckdb:extension/log-storage@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::LogStorageHost::bridged())
-        }),
-        // ADR-0029 Phase 6.2.h.7 — Runtime, the final interface.
-        // 10 resource types (5 XxxCallback + 4 XxxRegistry + macro-
-        // registry) + the get-capability variant with 5 Resource-
-        // carrying arms. Enabled by Phase 6.2.h.7's multi-resource
-        // classification on the bridge — every Value::Resource now
-        // carries its resource_name in the ctx's name_map, so lower
-        // resolves the correct wasmtime discriminant per return.
-        ("duckdb:extension/runtime@5.0.0", || {
-            StdArc::new(crate::extension_wasmos::RuntimeHost::bridged())
-        }),
-    ];
-
-    for (iface, factory) in stateful_migrated {
-        wasmos_runtime_wasmtime_v48::sync_bridge_resource::install_host_call(
-            engine,
-            linker,
-            component,
-            iface,
-            factory(),
-        )
-        .map_err(|e| wasmtime::Error::msg(format!("install_host_call({iface}) failed: {e}")))?;
-    }
-
+    // add_to_linker` (later through the wasmos sync bridge onto this
+    // Linker; retired step 4). Every wire-up now lives on the
+    // wasmos-native install path
+    // (`crate::extension_wasmos::install_extension_imports_stateful`).
     Ok(())
 }
 
@@ -6426,19 +6274,33 @@ pub fn load_component(
     )
 }
 
-/// Like [`load_component`] but preserves the API shape from before Path B
-/// follow-up #2 (2026-09-22). The `dynlink_registry` argument is retained
-/// for source-compatibility with pre-migration callers but is no longer
-/// consulted — `compose:dynlink/linker` support migrated from the local
-/// wasmtime-shaped `add_to_linker` install to the wasmos-native
-/// [`datalink_dynlink_wasmos::install_host_imports`] path (mirroring the
-/// DotcmdInstance pattern in ducklink `69444225`). During the coexistence
-/// window a linker-importing component (`ml_kmeans`, `postgis_core`, …)
-/// installed through this entry point emits a diagnostic and its
-/// instantiation surfaces the unresolved import — the follow-up landing
-/// that plumbs a wasmos-native `ResidentBackend` through this signature
-/// restores the full path. Components that do NOT import the linker (the
-/// overwhelming majority) are unaffected.
+/// Like [`load_component`] but accepts an optional wasmos-native
+/// `compose:dynlink/linker` backend so components that import the
+/// linker (`ml_kmeans`, `spatialproj`, sub-extension bridges, …) load
+/// through the same `datalink_dynlink_wasmos::install_host_imports`
+/// path DotcmdInstance already uses (ducklink `69444225`).
+///
+/// Path B follow-up #2 step 4 (2026-09-22) — the load path retired
+/// its wasmtime-shaped `Linker<ExtensionStoreState>` + `Store<...>`
+/// scaffolding for the wasmos-native
+/// [`wasmos_runtime_wasmtime_v48::SyncRuntime`] + [`HostImports`]
+/// stack. The 27 `duckdb:extension/*` host imports are installed via
+/// [`crate::extension_wasmos::install_extension_imports_stateful`]
+/// (`SharedExtensionState` handle threaded through the same
+/// `Arc<Mutex<ExtensionInnerState>>` [`ExtensionInstance`] holds);
+/// `compose:dynlink/linker@0.1.0` is installed conditionally when
+/// `dynlink_backend` is `Some(_)` AND the component actually imports
+/// the interface (keeping the `~unused-path` cost out of every
+/// non-dynlink extension). Wasi/wasi-http come from the portable
+/// [`wasmos_runtime_api::WasiEnvironment`] the caller supplies.
+///
+/// `dynlink_backend`: pass ducklink-host's process-global
+/// `dotcmd_wasmos_provider_registry().backend.clone()` here — dot-
+/// commands and extensions share the same registry so operators keep
+/// one `DUCKLINK_PROVIDERS` spec. `None` (test / catalog-sig-extract)
+/// makes the load path skip the install; a linker-importing component
+/// under such a caller will surface an unresolved-import error at
+/// instantiation, matching the pre-flip diagnostic shape.
 pub fn load_component_with_dynlink(
     engine: &Engine,
     component: &Component,
@@ -6446,112 +6308,196 @@ pub fn load_component_with_dynlink(
     services: Box<dyn ExtensionServices>,
     callback_registry: Arc<RwLock<CallbackRegistry>>,
     extension_name: String,
-    dynlink_registry: Option<crate::compose_dynlink::ProviderRegistry>,
+    dynlink_backend: Option<std::sync::Arc<datalink_dynlink_wasmos::ResidentBackend>>,
 ) -> wasmtime::Result<ExtensionInstance> {
     // Contract guard: reject a component whose duckdb:extension contract major
     // differs from this host's (or is unversioned/legacy) BEFORE instantiating,
     // so a mismatched component never silently marshals corrupted values.
+    // Wasmtime-shaped for now; the introspection under it already runs on the
+    // wasmos `CompiledComponent` handle via `contract_guard_bridge` (Phase 6.1b).
     crate::check_component_contract(engine, component, &extension_name)?;
 
-    // H4: cache the fully-built base Linker (wasip2 + 24 duckdb:extension
-    // interfaces) in a process-global OnceLock, keyed by Engine identity.
-    // Every subsequent load clones the cached linker instead of running
-    // ~25 `add_to_linker` calls. `Linker` is Clone and cheap.
+    // ── Wasmos-native runtime + compiled-component handle ────────────
     //
-    // Different Engines are rejected: `Engine::same` compares refcounted
-    // ids. In practice ducklink runs one Engine per process (Engine2::new
-    // creates it once); a second Engine would hit the else arm and rebuild.
-    let mut linker = base_linker(engine)?;
-
-    // Path B follow-up #2 (2026-09-22): the wasmtime-shaped
-    // `compose_dynlink::add_to_linker::<ExtensionStoreState>` install
-    // retired here alongside the `impl_compose_dynlink_host!` macro.
-    // The `dynlink_registry` arg is preserved on the signature so
-    // callers built against the pre-migration shape still compile;
-    // the field is intentionally dropped once we log the deprecation
-    // note. Extensions that DO import `compose:dynlink/linker` will
-    // surface the unresolved import from `instantiate_pre` below with
-    // wasmtime's own diagnostic — the follow-up landing (mirroring
-    // ducklink `69444225` for DotcmdInstance) restores the install via
-    // `datalink_dynlink_wasmos::install_host_imports` on a wasmos-
-    // native HostImports/SyncRuntime boundary.
-    let _ = dynlink_registry;
-    if crate::compose_dynlink::imports_linker(engine, component) {
-        eprintln!(
-            "[extension-runtime:{extension_name}] component imports \
-             compose:dynlink/linker but the wasmtime-shaped install \
-             retired in Path B follow-up #2; instantiation will fail \
-             until the wasmos-native install lands (see \
-             docs/path-b-closure-plan.md)."
-        );
-    }
-
-    // Path B follow-up #2 step 2 (2026-09-22): the store data is now the
-    // wasmos `SyncStoreState<ExtensionInnerState>` wrapper — WasiCtx +
-    // WasiHttpCtx + ResourceTable live inside; ducklink state on
-    // `.consumer`. `SyncStoreState::new` builds the wasi contexts from
-    // the portable `WasiEnvironment` description.
-    let ext_state = wasmos_runtime_wasmtime_v48::SyncStoreState::new(
-        Some(wasi),
-        ExtensionInnerState::new(services, callback_registry, extension_name.clone()),
-    )
-    .map_err(|e| {
-        wasmtime::Error::msg(format!("build ExtensionStoreState wrapper: {e:?}"))
-    })?;
-    let mut store = Store::new(engine, ext_state);
-
-    // ADR-0029 Phase 6.2.h.2 — wire the wasmos-migrated interfaces
-    // per-load. Session 2 covers Lifecycle only; future sessions add
-    // the other stateless-and-no-resource interfaces (Types, Encoding,
-    // Compression, FilesReg, Index, Collation) then face the resource-
-    // marshalling design decision. Non-blocking for the current call:
-    // if the component doesn't import lifecycle, the installer is a
-    // no-op (matches wasmos wire_host_imports policy).
-    install_wasmos_migrated_interfaces(engine, &mut linker, component)
-        .map_err(|e| wasmtime::Error::msg(format!("wasmos-native import wiring failed: {e}")))?;
-
-    // Instantiate via the linker to obtain the raw component instance, then build
-    // the typed base-world bindings from it. Retaining the raw instance lets a
-    // storage backend lazily build the storage-capable bindings later (the base
-    // world doesn't mandate storage-dispatch, so non-storage extensions still
-    // load here).
-    let instance_pre = linker.instantiate_pre(component)?;
-    let instance = instance_pre.instantiate(store.as_context_mut())?;
-    // Phase 6.2.j — the wit-bindgen typed dispatcher construction
-    // (`DuckdbExtension::new(store, &instance)?`) is gone. Every guest
-    // export dispatches through the wasmos sync bridge using `instance`
-    // directly; no typed dispatcher struct needed.
-
-    // ADR-0029 Phase 6.2.i.3 — migrate `load()` from wit-bindgen's
-    // typed dispatcher to the wasmos sync_export_bridge. First of
-    // ~68 callsites; the rest migrate in follow-up sessions per the
-    // Phase 6.2.i design brief.
+    // Build a `SyncRuntime` wrapping the caller's existing wasmtime
+    // `Engine` so we don't fork the process's cache-config, tuning, or
+    // engine identity. `WasmtimeV48Runtime::from_engine` + `SyncRuntime
+    // ::from_runtime` is the ADR §17 escape-hatch reversal — a wasmos
+    // adapter around an engine the consumer already owns. The
+    // ducklink-host `RuntimeConfig` (compile-cache root) plumbs
+    // through so an engine built from `ducklink_runtime_config()` and
+    // this SyncRuntime observe the same knobs.
     //
-    // Wire equivalence: `bindings.duckdb_extension_guest().call_load(
-    // store)` used to be a wit-bindgen macro-generated dispatcher
-    // that looked up the "load" export inside the
-    // `duckdb:extension/guest@5.0.0` interface, called it with no
-    // args, and lifted the returned `result<loadresult, duckerror>`
-    // to a typed Rust Result. The wasmos-native path does the same
-    // via `call_export` with the qualified interface name + a
-    // Value::Result match on the return.
-    //
-    // Version tag `@5.0.0` matches CONTRACT_MAJOR/MINOR — Phase
-    // 6.2.h.8 established that wasmtime's Linker + Instance export
-    // lookups match interface names verbatim including the version
-    // suffix.
-    let load_out = wasmos_runtime_wasmtime_v48::sync_export_bridge::call_export(
-        store.as_context_mut(),
-        &instance,
-        Some("duckdb:extension/guest@5.0.0"),
-        "load",
-        &[],
+    // `RuntimeConfig::default()` is used at the ducklink-runtime seam
+    // because this crate has no view into `ducklink_runtime_config()`
+    // (that lives in ducklink-host). The engine the caller passes in
+    // was already built with the cache — the config here is only
+    // consulted for capability-required checks + the epoch ticker,
+    // neither of which the extension load path exercises today. The
+    // knob-level engine tuning stays exactly what the caller set.
+    // `RuntimeConfig` here only feeds the wasmos-side capability/limits
+    // machinery — the wasmtime `Config` on the caller-supplied engine has
+    // already been set by the host. We disable `consume_fuel` because the
+    // ducklink host builds engines WITHOUT fuel-decrement (the trusted-
+    // tier codegen), and a wasmos-side `consume_fuel = true` default would
+    // otherwise try to seed a per-store fuel counter at instantiation and
+    // trap ("fuel is not configured in this store"). See commit `28a0663d`
+    // (portable `with_consume_fuel(bool)` knob) — this is exactly the
+    // "trusted runner: opt out of fuel" case that knob was added for.
+    let wasmos_runtime = wasmos_runtime_wasmtime_v48::WasmtimeV48Runtime::from_engine(
+        engine.clone(),
+        wasmos_runtime_api::RuntimeConfig::default().with_consume_fuel(false),
     )
     .map_err(|e| {
         wasmtime::Error::msg(format!(
-            "extension component '{extension_name}' load() dispatch failed: {e}"
+            "build wasmos WasmtimeV48Runtime from caller engine: {e:?}"
         ))
     })?;
+    let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::from_runtime(wasmos_runtime)
+        .map_err(|e| wasmtime::Error::msg(format!("build SyncRuntime for extension load: {e:?}")))?;
+
+    // Wrap the caller-provided wasmtime `Component` in a wasmos
+    // `CompiledComponent` handle without re-compiling. `WasmtimeCompiled
+    // Component` is the LTS-adapter concrete backing of the
+    // `CompiledComponentImpl` trait; both are `pub`, so we build one
+    // directly against the existing component. Zero engine work.
+    let compiled = wasmos_runtime_api::CompiledComponent::from_impl(std::sync::Arc::new(
+        wasmos_runtime_wasmtime_v48::WasmtimeCompiledComponent {
+            inner: component.clone(),
+            name: extension_name.clone(),
+            engine: engine.clone(),
+        },
+    ));
+
+    // ── Host imports on the wasmos-native path ──────────────────────
+    //
+    // `SharedExtensionState = Arc<Mutex<ExtensionInnerState>>` — the
+    // 27 wasmos-native handlers each hold a clone of this Arc; the
+    // returned `ExtensionInstance` also retains it so the
+    // `with_inner_state` drainer funnel reads back exactly the state
+    // the handlers wrote. Mutex is briefly locked per-call, matching
+    // Phase 6.2.d.2's design.
+    let shared_state: crate::extension_wasmos::SharedExtensionState = std::sync::Arc::new(
+        Mutex::new(ExtensionInnerState::new(services, callback_registry, extension_name.clone())),
+    );
+    let host_imports_raw = crate::extension_wasmos::install_extension_imports_stateful(
+        wasmos_runtime_api::HostImports::new(),
+        shared_state.clone(),
+    );
+    // The `install_XXX_imports` functions in `extension_wasmos` register
+    // each `duckdb:extension/*` interface under its BARE name (no version
+    // tag) and, for five of them, using SNAKE_CASE (`macro_ext`,
+    // `types_ext`, `arrow_ext`, `table_stream`, `runtime_ext`) rather
+    // than the WIT-canonical KEBAB-case. Real @5.0.0 components import
+    // the fully-qualified, kebab-cased form (e.g.
+    // `duckdb:extension/runtime@5.0.0`), and wasmos does verbatim
+    // interface-name matching — so a direct pass-through leaves every
+    // real extension failing with "matching implementation was not found
+    // in the linker" (surfaces immediately on `pintest_a`, which imports
+    // `duckdb:extension/runtime@5.0.0`).
+    //
+    // Rebuild the set with the canonical names: kebab-cased local part
+    // plus the `@5.0.0` version tag. Every registered interface is
+    // aliased; non-`duckdb:extension/*` interfaces (e.g. WASI, which
+    // isn't in this set) pass through unchanged (safety net — there are
+    // none today).
+    //
+    // The wasmos-side API gap (install fns emitting the wrong names) is
+    // recorded in the step 4 report so it can be corrected at
+    // `extension_wasmos.rs` in a follow-up pass; canonicalising here
+    // keeps the load path shipping without waiting on that refactor.
+    let mut host_imports = wasmos_runtime_api::HostImports::new();
+    for (iface, handler) in host_imports_raw.iter() {
+        let canonical =
+            if let Some(local) = iface.strip_prefix("duckdb:extension/") {
+                let local_kebab: String = local.replace('_', "-");
+                format!("duckdb:extension/{local_kebab}@5.0.0")
+            } else {
+                iface.to_string()
+            };
+        host_imports = host_imports.register(canonical, handler.clone());
+    }
+
+    // `compose:dynlink/linker@0.1.0` — install iff the component
+    // imports it AND the caller supplied a backend (ducklink-host's
+    // shared `dotcmd_wasmos_provider_registry`). Mirrors ducklink
+    // `69444225` for DotcmdInstance; keeps the ~unused-path allocation
+    // out for extensions that don't import the linker.
+    let imported_names = compiled.imported_instance_names();
+    let imports_dynlink = imported_names
+        .iter()
+        .any(|n| n == "compose:dynlink/linker@0.1.0");
+    if imports_dynlink {
+        if let Some(backend) = dynlink_backend.as_ref() {
+            host_imports = datalink_dynlink_wasmos::install_host_imports(host_imports, backend.clone());
+        } else {
+            eprintln!(
+                "[extension-runtime:{extension_name}] component imports \
+                 compose:dynlink/linker@0.1.0 but no wasmos-native ResidentBackend \
+                 was supplied to load_component_with_dynlink; instantiation will \
+                 fail with an unresolved import."
+            );
+        }
+    }
+
+    // ── Instantiate on the wasmos-native path ───────────────────────
+    //
+    // The `ExecutionContext` carries WASI (from the portable
+    // `WasiEnvironment` description the caller built) + the assembled
+    // `HostImports`. No `consumer_state` — the 27 handlers pull state
+    // through their captured `SharedExtensionState` clone, so the
+    // wasmos-native path doesn't need `HostCallContext::consumer_state`
+    // populated. WASI is cloned because `ExecutionContext::with_wasi`
+    // consumes it; the caller retains the original.
+    let ctx = wasmos_runtime_api::ExecutionContext::new()
+        .with_wasi(wasi.clone())
+        .with_host_imports(host_imports);
+    let mut sync_inst = sync_rt.instantiate(&compiled, ctx).map_err(|e| {
+        wasmtime::Error::msg(format!(
+            "instantiate extension component '{extension_name}': {e:?}"
+        ))
+    })?;
+
+    // ── Guest `load()` dispatch ─────────────────────────────────────
+    //
+    // Wire equivalence to the wit-bindgen `bindings.duckdb_extension_
+    // guest().call_load(store)` dispatch retired in Phase 6.2.i.3:
+    // look up `load` inside `duckdb:extension/guest@5.0.0` and drive
+    // it with no args, lift the returned `result<loadresult, duckerror>`
+    // to a Rust Result.
+    //
+    // `call_export` (not the reentrant sibling) is used here because
+    // the extension-manager driver invokes this loader synchronously
+    // from an OS thread that is not itself inside a tokio runtime, so
+    // wasmos's private tokio can `block_on` the async instantiation
+    // safely. The dispatch_* methods on `ExtensionInstance` — reached
+    // from a host handler that IS running on another SyncInstance's
+    // tokio (a core-execution export firing a scalar callback into
+    // this extension) — dispatch through `call_bridge_export` which
+    // uses the reentrant-safe primitive.
+    // `call_export` (async via the SyncRuntime's private tokio) rather
+    // than `call_export_reentrant` (sync `Func::call`): wasmos's
+    // `Runtime::instantiate` puts the store into async-required mode,
+    // and same-store sync `Func::call` post-instantiation fails with
+    // "store configuration requires that *_async functions are used
+    // instead" on a `WasmtimeV48Runtime::from_engine`-wrapped engine —
+    // even one whose `wasm_component_model_async(false)` explicitly
+    // trades away async instantiate. `call_export` sidesteps that by
+    // driving the guest's `load()` through the async path itself. The
+    // caller invokes `load_component_with_dynlink` from an OS thread
+    // that is not itself inside a tokio runtime (ExtensionManager
+    // spawns a fresh thread for the load), so the private tokio's
+    // `block_on` is legal here. See the deliverable's wasmos-API-gap
+    // note; the resolution belongs on wasmos's side (fold `from_engine`
+    // into `Runtime::instantiate` so post-instantiate sync reentry is
+    // supported symmetrically with `SyncRuntime::new`-managed engines).
+    let load_out = sync_inst
+        .call_export("duckdb:extension/guest@5.0.0#load", &[])
+        .map_err(|e| {
+            wasmtime::Error::msg(format!(
+                "extension component '{extension_name}' load() dispatch failed: {e}"
+            ))
+        })?;
     if load_out.len() != 1 {
         return Err(wasmtime::Error::msg(format!(
             "extension component '{extension_name}' load() returned {} values, expected 1",
@@ -6579,5 +6525,5 @@ pub fn load_component_with_dynlink(
         }
     }
 
-    Ok(ExtensionInstance::new(store, instance))
+    Ok(ExtensionInstance::new(sync_inst, shared_state))
 }

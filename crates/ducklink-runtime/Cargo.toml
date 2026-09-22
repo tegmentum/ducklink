@@ -50,12 +50,21 @@ wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", tag = "v
 # handler dispatch one interface at a time (Session-2 migrates the
 # first interface: Lifecycle). Same rev as wasmos-runtime-api so the
 # API shapes agree; keeps in lockstep with future bumps.
-wasmos-runtime-wasmtime-v48 = { git = "https://github.com/tegmentum/wasmos.git", tag = "v0.3.2" }
+wasmos-runtime-wasmtime-v48 = { git = "https://github.com/tegmentum/wasmos.git", tag = "v0.3.2", features = ["sync-facade"] }
 # The shared store-generic compose:dynlink/linker host machinery + the
 # ResidentBackend (instantiate-once-and-reuse provider lifecycle). ducklink's
 # compose_dynlink module is now a thin adapter over this; the resolve/invoke
 # bridge + bindings live here, shared with the other wasm-component hosts.
 datalink-dynlink = { git = "https://github.com/tegmentum/datalink.git", tag = "v0.2.0" }
+# Path B follow-up #2 step 4 (2026-09-22) — wasmos-native flavour of the
+# compose:dynlink/linker host. Used by the extension load path to install the
+# linker interface on a `wasmos_runtime_api::HostImports` builder for any
+# component that imports `compose:dynlink/linker@0.1.0`, restoring the
+# capability that was degraded when `impl_compose_dynlink_host!` retired on
+# ExtensionStoreState (commit 0afb98b0). Mirrors ducklink-host's dot-command
+# integration (commit 69444225); both paths share `dotcmd_wasmos_provider_
+# registry()` at the host site, so operators keep one DUCKLINK_PROVIDERS spec.
+datalink-dynlink-wasmos = { git = "https://github.com/tegmentum/datalink.git", tag = "v0.2.0" }
 # `PendingKind::iter()` is derived via `EnumIter` so `PendingKind::all()` stays
 # in lockstep with the enum without a hand-maintained mirror array or a
 # hardcoded variant-count assert. `strum` is stable-Rust (no nightly required)

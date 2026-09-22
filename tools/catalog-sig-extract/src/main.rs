@@ -32,12 +32,11 @@ use anyhow::{anyhow, Context, Result};
 use ducklink_runtime::reg;
 use ducklink_runtime::{
     load_component_with_dynlink, CallbackRegistry, ConfigError, ExtensionServices, LogField,
-    LogLevel, PendingRegistrationsData, ProviderRegistry,
+    LogLevel, PendingRegistrationsData,
 };
 use serde_json::{json, Map, Value};
 use wasmtime::component::Component;
 use wasmtime::{Config, Engine};
-use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 
 /// Map a neutral `reg::LogicalType` to the DuckDB SQL type name the native
 /// extension registers it as. MIRRORS `src/reg_duckdb.rs`'s
@@ -154,22 +153,30 @@ fn extract_functions(
     let component = Component::from_file(engine, path)
         .map_err(anyhow::Error::from)
         .with_context(|| format!("loading component at {}", path.display()))?;
-    let wasi: WasiCtx = WasiCtxBuilder::new().inherit_env().inherit_stdio().build();
+    // Path B follow-up #2 step 2 (2026-09-22): the loader now consumes the
+    // portable `WasiEnvironment` (not a wasmtime-shaped `WasiCtx`).
+    let wasi_env = wasmos_runtime_api::WasiEnvironment::default()
+        .inherit_env()
+        .inherit_stdin()
+        .inherit_stdout()
+        .inherit_stderr();
     let callbacks = Arc::new(RwLock::new(CallbackRegistry::new()));
-    // Supply an EMPTY compose:dynlink provider registry so components that import
-    // `compose:dynlink/linker@0.1.0` (e.g. mlkmeans, spatialproj) still
-    // instantiate — they only register their functions at load() time and do not
-    // call the provider during load, so an empty registry is enough to introspect
-    // their signatures. Components that don't import the linker are unaffected.
-    let dynlink_registry = ProviderRegistry::new(engine.clone());
+    // Path B follow-up #2 step 4 (2026-09-22): the loader's `dynlink_backend`
+    // parameter is now the wasmos-native `datalink_dynlink_wasmos::
+    // ResidentBackend`. We pass `None` here — this signature-extraction tool
+    // only drives `load()`, and none of the linker-importing extensions
+    // (mlkmeans, spatialproj) call into a provider during load. A component
+    // that does import the linker fails to instantiate here with an
+    // unresolved-import error; that failure would already have been visible
+    // pre-flip through the empty `ProviderRegistry` the tool used to build.
     let mut instance = load_component_with_dynlink(
         engine,
         &component,
-        wasi,
+        &wasi_env,
         Box::new(NoopServices),
         callbacks,
         name.to_string(),
-        Some(dynlink_registry),
+        None,
     )
     .map_err(anyhow::Error::from)
     .context("running component load()")?;

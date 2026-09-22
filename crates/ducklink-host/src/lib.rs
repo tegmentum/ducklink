@@ -6171,12 +6171,17 @@ impl ExtensionManager {
         let catalog_snapshot = self.catalog_snapshot.clone();
         let sibling = self.sibling.clone();
         let extension_name = sanitized.clone();
-        // The shared compose:dynlink provider registry (populated from
-        // DUCKLINK_PROVIDERS). Cloned into the load thread; the bridge is built
-        // there. A component that imports compose:dynlink/linker (e.g.
-        // mlkmeans) resolves the one resident pylon through it; every other
-        // extension ignores it (the imports_linker gate in load_component).
-        let dynlink_registry = dynlink_provider_registry(&engine).clone();
+        // Path B follow-up #2 step 4 (2026-09-22): the extension load path
+        // migrated to the wasmos-native compose:dynlink install (mirroring
+        // DotcmdInstance's `69444225`), so we hand it the wasmos-flavoured
+        // `ResidentBackend` from the shared registry
+        // (`dotcmd_wasmos_provider_registry`) — dot-commands and extensions
+        // now consume the same `DUCKLINK_PROVIDERS`-populated backend.
+        // A component that imports compose:dynlink/linker (e.g. mlkmeans)
+        // resolves the one resident pylon through it; every other extension
+        // ignores it (the `imported_instance_names` gate inside
+        // `load_component_with_dynlink`).
+        let dynlink_backend = dotcmd_wasmos_provider_registry().backend.clone();
         // Log the human version AND the authoritative content-addressed contract
         // identity (the witcanon digest, short hex). The digest is what
         // catalog-verify enforces; the version is the runtime-observable proxy.
@@ -6267,7 +6272,7 @@ impl ExtensionManager {
                 }),
                 callback_registry,
                 extension_name.clone(),
-                Some(dynlink_registry),
+                Some(dynlink_backend),
             )
             .map(|instance| (instance, imports_query))
             .map_err(|e| anyhow::anyhow!("{e}"))
