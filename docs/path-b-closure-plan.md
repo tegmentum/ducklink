@@ -211,45 +211,48 @@ none is a single-session migration.
 
 ### Blocker 1 — `DotcmdInstance` + `compose_dynlink` linker integration
 
-Current shape (`crates/ducklink-host/src/lib.rs:3757`):
-```rust
-struct DotcmdInstance {
-    store: Store<DotcmdState>,
-    instance: wasmtime::component::Instance,
-}
-```
+**Status (2026-09-22): DOTCMD PATH RESOLVED (`6944422`).**
+DotcmdInstance's SyncInstance migration (`bc39d9f`) is complete;
+the follow-up commit `6944422` restores `compose:dynlink/linker`
+support via a process-global wasmos-native ProviderRegistry
+(`dotcmd_wasmos_provider_registry` in
+`crates/ducklink-host/src/lib.rs`) — a sibling of the
+wasmtime-shaped `dynlink_provider_registry` — populated from the
+same `DUCKLINK_PROVIDERS` env spec. `DotcmdRegistry::load_one`
+now calls `datalink_dynlink_wasmos::install_host_imports` when
+the component imports the interface; the previous graceful
+`bail!` is gone. `datalink-dynlink-wasmos` promoted to a regular
+dep in `crates/ducklink-host/Cargo.toml`, alongside `bytes`,
+`tokio`, and `async-trait`; `cargo tree -p ducklink-host --depth 1
+| grep wasmtime` still shows only `wasmos-runtime-wasmtime-v48`.
 
-Uses `compose_dynlink::add_to_linker::<DotcmdState>(&mut linker)`
-from the wasmtime-shaped `datalink_dynlink` crate. The
-wasmos-native counterpart (`datalink_dynlink_wasmos::
-install_host_imports`) exists and takes a `HostImports` +
-`Arc<ProviderBackend>` — but with a DIFFERENT `ProviderRegistry`
-type than the wasmtime-shaped one that ducklink currently uses
-process-wide.
+Both registries coexist during the migration window — the
+wasmtime-shaped one still services `ExtensionStoreState` and
+`SubExtLoader` (Blocker 1b below); the wasmos-native one
+services the DotcmdInstance path only.
 
-**Concrete unblock condition (Phase 6.2.d.4, coordinated
-ducklink-runtime + ducklink-host migration):**
-1. Migrate ducklink's process-wide provider registry from
-   `datalink_dynlink::ProviderRegistry` (constructed with
-   `wasmtime::Engine`) to `datalink_dynlink_wasmos::ProviderRegistry`
-   (constructed with `Arc<dyn wasmos_runtime_api::Runtime>`).
-   Cascades through: `dynlink_provider_registry()` (lib.rs:3488),
-   `register_env_providers()`, `sub_ext::SubExtLoader`
-   (which currently uses the wasmtime `ProviderRegistry` and has
-   test call-sites like `sub_ext.rs:586,633` that construct
-   `Engine` directly).
-2. Migrate `ExtensionStoreState` in `ducklink-runtime` off the
-   `impl_compose_dynlink_host!` wasmtime-macro path onto the
-   wasmos `HostImports::register` path.
-3. Once both are on the wasmos path, DotcmdInstance rewrites to
-   `SyncInstance` + `HostImports::register(compose:dynlink/linker,
-   ResidentBackend::new(registry))` at instantiate time. The
-   `store` and `instance` fields disappear behind `SyncInstance`.
+**Concrete unblock condition (Blocker 1b — remaining
+ExtensionStoreState work in ducklink-runtime):**
+1. Migrate `ExtensionStoreState` in `ducklink-runtime/src/extension.rs`
+   off the `impl_compose_dynlink_host!(ExtensionStoreState, dynlink_bridge)`
+   wasmtime-macro path (line 1552) onto the wasmos
+   `HostImports::register` path — replacing the
+   `compose:dynlink/linker` linker-shaped host with the
+   `datalink_dynlink_wasmos::install_host_imports` shape used by
+   the DotcmdInstance path today.
+2. Retire the wasmtime-shaped process-wide
+   `dynlink_provider_registry()` (`crates/ducklink-host/src/lib.rs`)
+   in favour of the wasmos-native `dotcmd_wasmos_provider_registry()`
+   — one registry, two consumers. This is atomic with Blocker 2's
+   ExtensionManager migration (both consume the same engine
+   handle today).
+3. Cascade through `sub_ext::SubExtLoader` (`sub_ext.rs:586,633`)
+   — currently constructs `wasmtime::{Config, Engine}` directly.
 
-**Estimated scope:** 3-5 focused sessions. Cross-crate ordering
-matters — the ProviderRegistry migration is atomic (breaks all
-callers simultaneously), so it lands as one coordinated commit
-per ducklink-runtime + ducklink-host repo.
+**Estimated scope:** 3-4 focused sessions. The Blocker 1a
+DotcmdInstance work is done; the remainder now folds naturally
+into Blocker 2's ExtensionManager migration (both retire together
+once ExtensionStoreState is wasmos-native).
 
 ### Blocker 2 — `build_engine_for_driver` returns `wasmtime::Engine`
 
