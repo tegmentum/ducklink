@@ -10766,6 +10766,32 @@ fn run_query_on_core(
 // was an identity stub that had no callers post-Phase-6.2.m; retired
 // with the site-3 migration alongside the `cli_types` alias itself.
 
+/// Build the wasmos RuntimeConfig ducklink uses for every SyncRuntime
+/// construction site (core, CLI, standalone-shell, run_cli_inner).
+///
+/// Configures the on-disk compile cache under
+/// `~/.cache/ducklink/compile-cache` — wasmos wires this into a
+/// `wasmtime::Cache` internally so warm re-compilations of the same
+/// component hit the cached artefact instead of paying the full
+/// Cranelift compile cost (~7s cold for the DuckDB core wasm).
+/// The cache directory is created on first touch by wasmos.
+///
+/// Falls through to default `RuntimeConfig` (no cache) on systems
+/// where `dirs::cache_dir()` returns None. Ephemeral test runs +
+/// CI benefit from a real cache when the standard cache dir is
+/// available.
+fn ducklink_runtime_config() -> wasmos_runtime_api::RuntimeConfig {
+    let mut cfg = wasmos_runtime_api::RuntimeConfig::default();
+    if let Some(cache_dir) =
+        dirs::cache_dir().map(|d| d.join("ducklink").join("compile-cache"))
+    {
+        cfg = cfg.with_compile_cache(
+            wasmos_runtime_api::CompileCacheConfig::new(cache_dir),
+        );
+    }
+    cfg
+}
+
 fn instantiate_core(
     component_path: &Path,
     wasi_env: wasmos_runtime_api::WasiEnvironment,
@@ -10779,20 +10805,21 @@ fn instantiate_core(
     // requires. Reusing ducklink's minimal build_engine() failed
     // at store setup ("fuel is not configured in this store"); see
     // docs/path-b-closure-plan.md + wasmos runtime.rs's from_engine
-    // docstring for the constraint. The compile-cache loss is a
-    // known-partial retirement gap — a future arc could add a
-    // wasmtime::Cache handoff on wasmos RuntimeConfig, or ducklink
-    // migrates build_engine to align with wasmos's config.
+    // docstring for the constraint.
+    //
+    // Compile-cache restored (2026-09-22): wasmos-side
+    // RuntimeConfig::compile_cache field (wired to wasmtime::Cache
+    // in v48's build_engine) lets us keep ducklink's ~/.cache
+    // artefact cache under the wasmos-native path. Cold builds
+    // still cost ~7s; warm hits are milliseconds.
     let bytes = std::fs::read(component_path).with_context(|| {
         format!(
             "failed to read core component at {}",
             component_path.display()
         )
     })?;
-    let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::new(
-        wasmos_runtime_api::RuntimeConfig::default(),
-    )
-    .map_err(|e| anyhow::anyhow!("build SyncRuntime: {e:?}"))?;
+    let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::new(ducklink_runtime_config())
+        .map_err(|e| anyhow::anyhow!("build SyncRuntime: {e:?}"))?;
     let compiled = sync_rt
         .compile_component(
             wasmos_runtime_api::ComponentSource::Bytes {
@@ -12093,10 +12120,9 @@ impl CliHarness {
                 artifacts.cli_component.display()
             )
         })?;
-        let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::new(
-            wasmos_runtime_api::RuntimeConfig::default(),
-        )
-        .map_err(|e| anyhow::anyhow!("build CLI SyncRuntime: {e:?}"))?;
+        let sync_rt =
+            wasmos_runtime_wasmtime_v48::SyncRuntime::new(ducklink_runtime_config())
+                .map_err(|e| anyhow::anyhow!("build CLI SyncRuntime: {e:?}"))?;
         let compiled = sync_rt
             .compile_component(
                 wasmos_runtime_api::ComponentSource::Bytes {
@@ -12242,10 +12268,8 @@ pub fn run_shell_with_stdio(
             shell_component.display()
         )
     })?;
-    let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::new(
-        wasmos_runtime_api::RuntimeConfig::default(),
-    )
-    .map_err(|e| anyhow::anyhow!("build shell SyncRuntime: {e:?}"))?;
+    let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::new(ducklink_runtime_config())
+        .map_err(|e| anyhow::anyhow!("build shell SyncRuntime: {e:?}"))?;
     let compiled = sync_rt
         .compile_component(
             wasmos_runtime_api::ComponentSource::Bytes {
@@ -12430,10 +12454,8 @@ fn run_cli_inner(
             artifacts.cli_component.display()
         )
     })?;
-    let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::new(
-        wasmos_runtime_api::RuntimeConfig::default(),
-    )
-    .map_err(|e| anyhow::anyhow!("build CLI SyncRuntime: {e:?}"))?;
+    let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::new(ducklink_runtime_config())
+        .map_err(|e| anyhow::anyhow!("build CLI SyncRuntime: {e:?}"))?;
     let compiled = sync_rt
         .compile_component(
             wasmos_runtime_api::ComponentSource::Bytes {
