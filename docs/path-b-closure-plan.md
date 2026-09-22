@@ -170,15 +170,27 @@ trade away `wasm_component_model_async` / concurrency / streams
 
 **What remains for full Path B closure:** Phase 6 (wasmtime Cargo
 dep drop) is blocked on migrating three remaining consumer
-paths: CLI harness (`CliHarness`), ExtensionManager (uses
-`wasmtime::Result` for error interop), and engine builder
-(`build_engine_for_driver` returns `wasmtime::Engine`). The
-standalone-shell driver already migrated (`4f56c37`).
+paths: CLI harness (`CliHarness`), engine builder
+(`build_engine_for_driver` returns `wasmtime::Engine`), and
+`DotcmdInstance` (uses `wasmtime::component::Instance` +
+`Store<DotcmdState>` + compose_dynlink linker integration).
 
-Ducklink-host's wasmtime uses now sit at 52 lines (down from
-~110 at Slice 2 start; down from 68 immediately after Slice 3).
+The ExtensionManager `wasmtime::Result` interop closed in
+`0b0a302` — six functions migrated to `anyhow::Result`; the
+dead `trap_to_cli_string` helper retired. Uses in lib.rs drop
+from 44 → 24 after that cleanup.
+
+Ducklink-host's wasmtime uses now sit at **24 lines** (down from
+~110 at Slice 2 start — a **-78% reduction** across the arc):
+- 8 in the import `use wasmtime::…` lines (still needed by
+  CliHarness/DotcmdInstance/build_engine)
+- ~5 in doc comments (archaeological / historical)
+- ~5 in struct fields (CliHarness.instance, DotcmdInstance.instance)
+- ~6 in function bodies (CliHarness setup, DotcmdRegistry::load_one)
+
 Each remaining consumer is its own migration arc; none block
-another.
+another. Full Cargo dep drop still requires all three migrations
+to land together (imports become unused).
 
 Path Slices 1+2 (`aae7e12` + `d07469e`) remain valid prep for
 whichever path is chosen.
