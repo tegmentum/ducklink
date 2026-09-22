@@ -51,6 +51,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use compose_core::blobs::BlobStore;
 use compose_core::emit::EmitHandler;
@@ -58,7 +59,7 @@ use compose_core::events::EventCollector;
 use compose_core::host::SystemClock;
 use compose_core::types::PlanV1;
 
-use crate::ProviderRegistry;
+use datalink_dynlink_wasmos::ProviderRegistry;
 
 /// Canonical provider id under which a sub-extension's composed backend
 /// registers with the process-global `ProviderRegistry`. A bridge component
@@ -120,10 +121,22 @@ impl SubExtError {
 /// Owns the sub-ext ↔ (plan, bridge) maps and the compose-core CAS/cache
 /// roots. Lives inside `ExtensionManager` but is a self-contained,
 /// unit-testable unit — the constructor takes only what materialization
-/// needs (an engine-bound `ProviderRegistry` + two dirs), not the whole
-/// LOAD-path state.
+/// needs (a runtime-bound wasmos-native `ProviderRegistry`, a tokio
+/// runtime handle to `block_on` its async `register_provider`, and two
+/// dirs), not the whole LOAD-path state.
+///
+/// Path B follow-up #2 step 5 (2026-09-22): the registry field flipped
+/// from the wasmtime-shaped `datalink_dynlink::ProviderRegistry` onto
+/// `datalink_dynlink_wasmos::ProviderRegistry` so the extension +
+/// dot-command paths share ONE process-global registry (the wasmos-
+/// native one populated from `DUCKLINK_PROVIDERS`). The tokio handle is
+/// the same one that owns the registry (see
+/// `dotcmd_wasmos_provider_registry` in `lib.rs`) — reused here to run
+/// the async `register_provider` from `materialize_sub_ext_provider`'s
+/// synchronous call context (invoked from `ensure_extension_loaded`).
 pub struct SubExtLoader {
     registry: ProviderRegistry,
+    tokio_rt: Arc<tokio::runtime::Runtime>,
 
     /// `sub_ext -> plan.json path`. Populated from CLI/env/config; consulted
     /// on the first LOAD of the sub-ext to compose its provider bytes.
@@ -199,9 +212,15 @@ impl SubExtLoader {
     /// entries. Populate the public map fields (or use
     /// [`SubExtLoader::from_env`]) before calling
     /// [`SubExtLoader::materialize_sub_ext_provider`].
-    pub fn new(registry: ProviderRegistry) -> Self {
+    ///
+    /// The `tokio_rt` handle is used to `block_on` the async
+    /// `ProviderRegistry::register_provider` from a synchronous call
+    /// context. Pass the same runtime that owns `registry` (typically
+    /// `dotcmd_wasmos_provider_registry().tokio_rt.clone()`).
+    pub fn new(registry: ProviderRegistry, tokio_rt: Arc<tokio::runtime::Runtime>) -> Self {
         Self {
             registry,
+            tokio_rt,
             sub_ext_plan_paths: BTreeMap::new(),
             sub_ext_bridge_paths: BTreeMap::new(),
             sub_ext_derived_from: BTreeMap::new(),
@@ -219,8 +238,8 @@ impl SubExtLoader {
     /// optional `DUCKLINK_COMPOSE_BLOB_CAS` / `DUCKLINK_COMPOSE_CACHE`
     /// overrides for the CAS/cache dirs. Malformed entries are logged and
     /// skipped so a typo doesn't abort startup.
-    pub fn from_env(registry: ProviderRegistry) -> Self {
-        let mut this = Self::new(registry);
+    pub fn from_env(registry: ProviderRegistry, tokio_rt: Arc<tokio::runtime::Runtime>) -> Self {
+        let mut this = Self::new(registry, tokio_rt);
         this.sub_ext_plan_paths = parse_map_env("DUCKLINK_SUB_EXT_PLANS");
         this.sub_ext_bridge_paths = parse_map_env("DUCKLINK_SUB_EXT_BRIDGES");
         this.sub_ext_derived_from = parse_map_env("DUCKLINK_SUB_EXT_DERIVED")
@@ -302,7 +321,7 @@ impl SubExtLoader {
 
     /// Compose the sub-ext's plan, write the composed bytes to a stable
     /// file under `<blob_cas>/composed-providers/`, and register the file
-    /// under `sub_ext_provider_id(sub_ext)` in the shared
+    /// under `sub_ext_provider_id(sub_ext)` in the shared wasmos-native
     /// `ProviderRegistry`. Ported from
     /// `datafission::df-plugin-loader::UnifiedPluginLoader::materialize_sub_ext_provider`
     /// (`~/git/datafission/crates/df-plugin-loader/src/loader.rs:337`); the
@@ -310,9 +329,11 @@ impl SubExtLoader {
     ///   * `&mut self` instead of `&self` + `Mutex`-guarded fields
     ///     (ducklink already threads `Arc<Mutex<ExtensionManager>>`, so an
     ///     inner mutex would double-lock);
-    ///   * registration goes through this crate's `ProviderRegistry` handle
-    ///     (which owns the wasmtime engine) rather than
-    ///     `wasm_extension::register_provider_path`.
+    ///   * registration goes through this crate's wasmos-native
+    ///     `ProviderRegistry` handle (whose runtime owns the wasm engine)
+    ///     rather than `wasm_extension::register_provider_path`. The async
+    ///     `register_provider` is driven from this synchronous method via
+    ///     the retained `tokio_rt.block_on` handle.
     pub fn materialize_sub_ext_provider(&mut self, sub_ext: &str) -> Result<String, SubExtError> {
         let provider_id = sub_ext_provider_id(sub_ext);
 
@@ -363,12 +384,12 @@ impl SubExtLoader {
                     format!("prebuilt provider wasm not found at {}", prebuilt.display()),
                 ));
             }
-            self.registry
-                .register_provider(provider_id.clone(), &prebuilt)
-                .map_err(|reason| SubExtError::ProviderRegistration {
+            self.tokio_rt
+                .block_on(self.registry.register_provider(provider_id.clone(), &prebuilt))
+                .map_err(|e| SubExtError::ProviderRegistration {
                     id: provider_id.clone(),
                     path: prebuilt.clone(),
-                    reason,
+                    reason: e.to_string(),
                 })?;
             eprintln!(
                 "[sub-ext] '{sub_ext}' short-circuit: registered prebuilt monolith \
@@ -524,12 +545,15 @@ impl SubExtLoader {
             )
         })?;
 
-        self.registry
-            .register_provider(provider_id.clone(), &provider_path)
-            .map_err(|reason| SubExtError::ProviderRegistration {
+        self.tokio_rt
+            .block_on(
+                self.registry
+                    .register_provider(provider_id.clone(), &provider_path),
+            )
+            .map_err(|e| SubExtError::ProviderRegistration {
                 id: provider_id.clone(),
                 path: provider_path.clone(),
-                reason,
+                reason: e.to_string(),
             })?;
 
         self.materialized_sub_exts.insert(sub_ext.to_string());
@@ -581,10 +605,63 @@ mod tests {
         assert!(!is_zero_digest(&[0u8, 0, 1, 0]));
     }
 
+    /// Build a fresh wasmos-native `ProviderRegistry` + owning tokio
+    /// runtime for a single unit test. The wasmtime engine underneath is
+    /// created with default `RuntimeConfig`; a minimal valid component
+    /// blob is enough to compile through it because the resident
+    /// instance is materialised lazily on first `invoke`.
+    fn build_test_registry() -> (ProviderRegistry, Arc<tokio::runtime::Runtime>) {
+        use wasmos_runtime_api::{Runtime as WasmosRuntime, RuntimeConfig};
+        use wasmos_runtime_wasmtime_v48::WasmtimeV48Runtime;
+
+        let tokio_rt = Arc::new(
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("build test tokio runtime"),
+        );
+        let wasm_rt = WasmtimeV48Runtime::new(RuntimeConfig::default())
+            .map(Arc::new)
+            .expect("build test WasmtimeV48Runtime");
+        let rt_dyn: Arc<dyn WasmosRuntime> = wasm_rt;
+        let registry = ProviderRegistry::new(rt_dyn);
+        (registry, tokio_rt)
+    }
+
+    /// Assert that `id` is registered in `registry` by driving a
+    /// `ResidentBackend::resolve_by_id` on a dedicated single-threaded
+    /// tokio runtime built for the check (must not be the same runtime
+    /// SubExtLoader used to `block_on` its registrations, so a fresh one
+    /// is spun up here per check).
+    fn assert_registered(registry: &ProviderRegistry, id: &str) {
+        use datalink_dynlink_wasmos::ProviderBackend as _;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("build assert-registered tokio runtime");
+        let backend = datalink_dynlink_wasmos::ResidentBackend::new(registry.clone());
+        rt.block_on(backend.resolve_by_id(id))
+            .unwrap_or_else(|e| panic!("provider {id:?} not registered: {e}"));
+    }
+
+    /// Assert that `id` is NOT registered in `registry` (used to prove
+    /// an aliased sub-ext never registered its own provider id).
+    fn assert_not_registered(registry: &ProviderRegistry, id: &str) {
+        use datalink_dynlink_wasmos::ProviderBackend as _;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("build assert-not-registered tokio runtime");
+        let backend = datalink_dynlink_wasmos::ResidentBackend::new(registry.clone());
+        let result = rt.block_on(backend.resolve_by_id(id));
+        assert!(
+            result.is_err(),
+            "provider {id:?} unexpectedly registered (expected absent)"
+        );
+    }
+
     #[test]
     fn prebuilt_shortcut_registers_wasm_and_skips_compose() {
-        use wasmtime::{Config, Engine};
-
         // A minimal valid WebAssembly component (magic + component version).
         // Enough for `Component::from_binary` to succeed at registration
         // time; the resolve-by-id path never fires in this unit test so
@@ -597,11 +674,8 @@ mod tests {
         let prebuilt = tmp.path().join("postgis-composed.wasm");
         std::fs::write(&prebuilt, &component_bytes).unwrap();
 
-        let mut cfg = Config::new();
-        cfg.wasm_component_model(true);
-        let engine = Engine::new(&cfg).unwrap();
-        let registry = ProviderRegistry::new(engine);
-        let mut loader = SubExtLoader::new(registry.clone());
+        let (registry, tokio_rt) = build_test_registry();
+        let mut loader = SubExtLoader::new(registry.clone(), tokio_rt);
         // Point the CAS at the tempdir so the shortcut's `blobs.put` write
         // (added to keep the mixed-mode chain's compose invariant intact)
         // doesn't pollute the working tree with a `.compose/` dir.
@@ -624,14 +698,16 @@ mod tests {
             id
         );
 
-        // Provider is registered (compile-time only, no resident instance).
-        assert_eq!(registry.resident_count(&id), 0);
+        // Provider is registered (compile-time only). The
+        // wasmos-native ResidentBackend materialises the instance
+        // lazily on first `invoke`; `resolve_by_id` only checks that
+        // the id has a compiled component behind it, without
+        // instantiating.
+        assert_registered(&registry, &id);
     }
 
     #[test]
     fn shim_alias_recurses_to_upstream_and_shares_provider_id() {
-        use wasmtime::{Config, Engine};
-
         let component_bytes: Vec<u8> = vec![
             0x00, 0x61, 0x73, 0x6d, // \0asm
             0x0d, 0x00, 0x01, 0x00, // component version
@@ -640,11 +716,8 @@ mod tests {
         let prebuilt = tmp.path().join("postgis-core-composed.wasm");
         std::fs::write(&prebuilt, &component_bytes).unwrap();
 
-        let mut cfg = Config::new();
-        cfg.wasm_component_model(true);
-        let engine = Engine::new(&cfg).unwrap();
-        let registry = ProviderRegistry::new(engine);
-        let mut loader = SubExtLoader::new(registry.clone());
+        let (registry, tokio_rt) = build_test_registry();
+        let mut loader = SubExtLoader::new(registry.clone(), tokio_rt);
         loader.blob_cas_path = tmp.path().join("blobs");
 
         // postgis_core has a real prebuilt; postgis_topology and
@@ -681,9 +754,9 @@ mod tests {
         // Registry has exactly ONE registration under
         // `postgis_core-composed`. Neither `postgis_topology-composed`
         // nor `postgis_3d-composed` was ever registered.
-        assert_eq!(registry.resident_count("postgis_core-composed"), 0);
-        assert_eq!(registry.resident_count("postgis_topology-composed"), 0);
-        assert_eq!(registry.resident_count("postgis_3d-composed"), 0);
+        assert_registered(&registry, "postgis_core-composed");
+        assert_not_registered(&registry, "postgis_topology-composed");
+        assert_not_registered(&registry, "postgis_3d-composed");
     }
 
     #[test]

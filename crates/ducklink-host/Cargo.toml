@@ -102,12 +102,11 @@ wasmos-runtime-wasmtime-v48 = { path = "../../../wasmos/runtime/wasmtime/v48", f
 # dep so DotcmdRegistry::load_one can install the
 # `compose:dynlink/linker` host imports on the wasmos-native path via
 # `datalink_dynlink_wasmos::install_host_imports`. A process-global
-# wasmos-native ProviderRegistry (dotcmd_wasmos_provider_registry())
-# lives alongside the wasmtime-shaped `dynlink_provider_registry()` —
-# dot-command components go through the wasmos-native one;
-# ExtensionManager still consumes the wasmtime-shaped one until
-# ExtensionStoreState migrates. See docs/path-b-closure-plan.md
-# Blocker 1.
+# wasmos-native ProviderRegistry (`dotcmd_wasmos_provider_registry()`)
+# is now the SOLE compose:dynlink provider registry consumed by
+# ducklink-host — dot-commands, the extension load path, and
+# `SubExtLoader` all resolve through it. The sibling wasmtime-shaped
+# `dynlink_provider_registry()` retired in step 5 (2026-09-22).
 datalink-dynlink-wasmos = { git = "https://github.com/tegmentum/datalink.git", tag = "v0.2.0" }
 # Async runtime + bytes/async-trait are needed at library level too
 # (were dev-only until 2026-09-22): datalink_dynlink_wasmos's

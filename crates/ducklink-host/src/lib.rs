@@ -235,13 +235,15 @@ use ducklink_runtime::{
 // wrapper.
 use ducklink_runtime::{ComponentHandle as Component, EngineHandle as Engine};
 
-/// The `compose:dynlink/linker` host implementation still lives in
-/// `ducklink-runtime`. Re-exported for external consumers; the
-/// ducklink-host DotcmdInstance path no longer uses it directly
-/// (retired 2026-09-22 alongside the wasmos-native SyncInstance
-/// migration — dot-command components that import the linker are
-/// gated in `DotcmdRegistry::load_one`).
-pub use ducklink_runtime::compose_dynlink::{ProviderPreopen, ProviderRegistry};
+// Path B follow-up #2 step 5 (2026-09-22): the wasmtime-shaped
+// `compose:dynlink` re-exports (`ProviderPreopen`, `ProviderRegistry`)
+// are retired. Every consumer — DotcmdInstance (step 4), the extension
+// load path (step 4), and `sub_ext::SubExtLoader` (this step) — now
+// runs off the wasmos-native `datalink_dynlink_wasmos::ProviderRegistry`
+// (populated by `dotcmd_wasmos_provider_registry` from
+// `DUCKLINK_PROVIDERS`). External consumers that still need the
+// wasmtime-shaped shim can reach it through
+// `ducklink_runtime::compose_dynlink::*` directly.
 // ADR-0029 Phase 6.2.d.1: compose_dynlink_test_support module removed.
 //
 // The DynState re-export is gone (DynState was deleted in ducklink-runtime
@@ -3464,48 +3466,32 @@ struct DotcmdState {
 // tracked with the joint compose_dynlink migration in
 // `docs/path-b-closure-plan.md`.
 
-/// Process-global shared provider registry for the dot-command dlopen path.
-/// Built once against the host engine; a pylon-shaped provider registered
-/// here is instantiated once and shared across every dot-command guest.
-fn dotcmd_provider_registry(engine: &Engine) -> &'static ProviderRegistry {
-    dynlink_provider_registry(engine)
-}
-
-/// THE process-global shared `compose:dynlink` provider registry, used by
-/// BOTH the dot-command path and the extension load path (so one resident
-/// provider — e.g. the warmed ~38 MB pylon — serves every guest, across both
-/// flavors). Built once against the host engine and populated from
-/// `DUCKLINK_PROVIDERS` (see [`register_env_providers`]) on first use.
-fn dynlink_provider_registry(engine: &Engine) -> &'static ProviderRegistry {
-    static REG: OnceLock<ProviderRegistry> = OnceLock::new();
-    REG.get_or_init(|| {
-        let registry = ProviderRegistry::new(engine.clone());
-        register_env_providers(&registry);
-        registry
-    })
-}
-
-/// Handle wrapping the wasmos-native `compose:dynlink` machinery kept as
-/// a sibling of the wasmtime-shaped [`dynlink_provider_registry`].
+/// Handle wrapping the process-global wasmos-native `compose:dynlink`
+/// machinery — THE single provider registry consumed by every
+/// ducklink-host path that resolves resident providers today
+/// (`DotcmdInstance` since `69444225`, the extension load path since
+/// step 4, and `sub_ext::SubExtLoader` since step 5).
 ///
 /// Owns its own private tokio runtime + a [`WasmtimeV48Runtime`] whose
-/// engine is INDEPENDENT of ducklink's `ExtensionManager` engine —
-/// dot-commands under the wasmos-native path build their own
-/// per-component `SyncRuntime` anyway, and provider instantiation runs
-/// on the registry's runtime rather than the guest's, so the two engines
-/// don't need to coincide. Path B follow-up (2026-09-22): both
-/// registries coexist during the migration; retire this one alongside
-/// the wasmtime-shaped registry when `ExtensionStoreState` migrates
-/// (`docs/path-b-closure-plan.md` Blocker 1).
+/// engine is INDEPENDENT of `ExtensionManager`'s wasmtime engine —
+/// each guest builds its own per-component `SyncRuntime` anyway, and
+/// provider instantiation runs on the registry's runtime rather than
+/// the guest's, so the two engines do not need to coincide. Path B
+/// follow-up #2 step 5 (2026-09-22): the sibling wasmtime-shaped
+/// `dynlink_provider_registry()` retired alongside `SubExtLoader`'s
+/// flip onto this handle — now the sole `compose:dynlink` provider
+/// registry the host owns.
 struct DotcmdWasmosProviderHandle {
     /// The wasmos-native ResidentBackend the DotcmdInstance install
     /// path clones into `install_host_imports`. Clone-cheap (Arc
     /// internal state).
     backend: std::sync::Arc<datalink_dynlink_wasmos::ResidentBackend>,
-    /// Retained so a future load path can `block_on` an async
-    /// registration mutation (e.g. `register_digest`); currently only
-    /// touched at first-init from `dotcmd_wasmos_provider_registry`.
-    #[allow(dead_code)]
+    /// The tokio runtime used to `block_on` this registry's async
+    /// registration mutations (e.g. `register_provider`). Cloned into
+    /// `SubExtLoader` so its synchronous `materialize_sub_ext_provider`
+    /// can drive the async `register_provider` from the LOAD-path call
+    /// context; also touched at first-init to seed the registry from
+    /// `DUCKLINK_PROVIDERS`.
     tokio_rt: std::sync::Arc<tokio::runtime::Runtime>,
     /// Retained: keeps the runtime alive as long as the registry does
     /// (compiled components own an `Arc` back to the engine indirectly
@@ -3516,13 +3502,12 @@ struct DotcmdWasmosProviderHandle {
 }
 
 /// Process-global wasmos-native `compose:dynlink/linker` provider
-/// registry — the sibling of [`dynlink_provider_registry`] that
-/// DotcmdInstance's wasmos-native install path consumes.
+/// registry — consumed by DotcmdInstance's wasmos-native install path,
+/// the extension load path, and `SubExtLoader::materialize_sub_ext_provider`.
 ///
-/// Lazily built on first use; provider IDs come from the same
+/// Lazily built on first use; provider IDs come from the
 /// `DUCKLINK_PROVIDERS` env var (parsed by
-/// [`register_env_providers_wasmos`]) so operators do not have to
-/// duplicate their spec while the two registries coexist.
+/// [`register_env_providers_wasmos`]).
 fn dotcmd_wasmos_provider_registry() -> &'static DotcmdWasmosProviderHandle {
     use datalink_dynlink_wasmos::{ProviderRegistry as WasmosProviderRegistry, ResidentBackend};
     use std::sync::Arc as StdArc;
@@ -3557,12 +3542,24 @@ fn dotcmd_wasmos_provider_registry() -> &'static DotcmdWasmosProviderHandle {
     })
 }
 
-/// Wasmos-native mirror of [`register_env_providers`] against the
-/// wasmos-flavored [`datalink_dynlink_wasmos::ProviderRegistry`].
+/// Register `compose:dynlink` providers declared in the
+/// `DUCKLINK_PROVIDERS` environment variable into the wasmos-native
+/// [`datalink_dynlink_wasmos::ProviderRegistry`]. Mirrors
+/// `DUCKLINK_AUTOLOAD`'s env-list config style.
 ///
-/// Same `DUCKLINK_PROVIDERS` spec (comma-separated `id=path[:preopens]`
-/// entries) so operators do not have to duplicate config across the
-/// two registries during the coexistence window.
+/// Format (comma-separated entries; preopens are `;`-separated
+/// `guest=host` pairs after a `:`):
+///
+/// ```text
+/// DUCKLINK_PROVIDERS=pylon=/abs/pylon-endpoint-numpy.component.wasm:/lib=/abs/cpython/Lib;/app=/abs/pylib
+/// ```
+///
+/// Each entry is `id=wasm-path[:preopens]`. Preopens default to
+/// read-only, matching the previous wasmtime-shaped seeding path
+/// retired in step 5.
+///
+/// Registration only COMPILES the provider; the resident instance is
+/// materialized lazily on first resolve and then shared.
 async fn register_env_providers_wasmos(
     registry: &datalink_dynlink_wasmos::ProviderRegistry,
 ) {
@@ -3573,7 +3570,10 @@ async fn register_env_providers_wasmos(
         _ => return,
     };
     for entry in spec.split(',').map(str::trim).filter(|e| !e.is_empty()) {
-        // Same shape as register_env_providers (wasmtime-side).
+        // Split id=path[:preopens]. The id/path boundary is the FIRST
+        // '='; the path/preopens boundary is the FIRST ':' AFTER the
+        // path start (paths are absolute on this platform so the
+        // leading '/' is unambiguous).
         let (id, rest) = match entry.split_once('=') {
             Some(p) => p,
             None => {
@@ -3617,69 +3617,6 @@ async fn register_env_providers_wasmos(
             Err(e) => eprintln!(
                 "[compose-dynlink/wasmos] failed to register provider '{id}': {e:?}"
             ),
-        }
-    }
-}
-
-/// Register `compose:dynlink` providers declared in the `DUCKLINK_PROVIDERS`
-/// environment variable into `registry`. This mirrors `DUCKLINK_AUTOLOAD`'s
-/// env-list config style.
-///
-/// Format (comma-separated entries; preopens are `;`-separated `guest=host`
-/// pairs after a `:`):
-///
-/// ```text
-/// DUCKLINK_PROVIDERS=pylon=/abs/pylon-endpoint-numpy.component.wasm:/lib=/abs/cpython/Lib;/app=/abs/pylib
-/// ```
-///
-/// Each entry is `id=wasm-path[:preopens]`. A pylon provider needs
-/// `/lib` (the CPython `Lib` dir incl. bundled numpy) and `/app` (the
-/// dispatcher `pylib` dir) preopened into its OWN store. A provider with no
-/// preopens (e.g. an echo provider) is written as just `id=path`.
-///
-/// Registration only COMPILES the provider; the resident instance is
-/// materialized lazily on first resolve and then shared.
-fn register_env_providers(registry: &ProviderRegistry) {
-    let spec = match std::env::var("DUCKLINK_PROVIDERS") {
-        Ok(s) if !s.trim().is_empty() => s,
-        _ => return,
-    };
-    for entry in spec.split(',').map(str::trim).filter(|e| !e.is_empty()) {
-        // Split id=path[:preopens]. The id/path boundary is the FIRST '='; the
-        // path/preopens boundary is the FIRST ':' AFTER the path start (paths
-        // are absolute on this platform so the leading '/' is unambiguous).
-        let (id, rest) = match entry.split_once('=') {
-            Some(p) => p,
-            None => {
-                eprintln!("[compose-dynlink] DUCKLINK_PROVIDERS: skipping malformed entry '{entry}' (expected id=path)");
-                continue;
-            }
-        };
-        let (path, preopen_spec) = match rest.split_once(":/") {
-            Some((p, rest)) => (p, Some(format!("/{rest}"))),
-            None => (rest, None),
-        };
-        let mut preopens = Vec::new();
-        if let Some(po_spec) = preopen_spec {
-            for pair in po_spec.split(';').map(str::trim).filter(|p| !p.is_empty()) {
-                match pair.split_once('=') {
-                    Some((guest, host)) => {
-                        preopens.push(ProviderPreopen::new(host.trim(), guest.trim()))
-                    }
-                    None => eprintln!(
-                        "[compose-dynlink] DUCKLINK_PROVIDERS: provider '{id}': skipping malformed preopen '{pair}' (expected guest=host)"
-                    ),
-                }
-            }
-        }
-        match registry.register_provider_with_preopens(id, path.trim(), preopens.clone()) {
-            Ok(()) => eprintln!(
-                "[compose-dynlink] registered provider '{id}' from {} ({} preopen{})",
-                path.trim(),
-                preopens.len(),
-                if preopens.len() == 1 { "" } else { "s" }
-            ),
-            Err(e) => eprintln!("[compose-dynlink] failed to register provider '{id}': {e}"),
         }
     }
 }
@@ -3975,13 +3912,11 @@ impl DotcmdRegistry {
     ) -> anyhow::Result<(DotcmdInstance, Vec<(String, u64, String, String)>)> {
         // Path B follow-up (2026-09-22): wasmos-native construction
         // mirrors CliHarness + shell driver. `compose:dynlink/linker`
-        // support is restored via the wasmos-native process-global
-        // provider registry (`dotcmd_wasmos_provider_registry()`) —
-        // a sibling of the wasmtime-shaped `dynlink_provider_registry`,
-        // populated from the same `DUCKLINK_PROVIDERS` env spec so
-        // operators keep one config. Both registries coexist until
-        // ExtensionStoreState migrates and the wasmtime one retires
-        // (see docs/path-b-closure-plan.md Blocker 1).
+        // support is served by the process-global wasmos-native
+        // provider registry (`dotcmd_wasmos_provider_registry()`)
+        // populated from `DUCKLINK_PROVIDERS`. Step 5 retired the
+        // sibling wasmtime-shaped registry, so this handle is now the
+        // sole provider registry every host path consumes.
         let bytes = std::fs::read(path)
             .with_context(|| format!("read dot-command component at {}", path.display()))?;
         let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::new(ducklink_runtime_config())
@@ -4461,12 +4396,20 @@ impl ExtensionManager {
             })
             .unwrap_or_default();
         // Phase D: the sub-ext loader shares the process-global
-        // `ProviderRegistry` (built lazily against `engine`) so a composed
-        // provider registered here on first LOAD resolves through the same
-        // registry as the `DUCKLINK_PROVIDERS`-declared ones and every
-        // bridge component sees it.
-        let sub_ext_loader =
-            sub_ext::SubExtLoader::from_env(dynlink_provider_registry(&engine).clone());
+        // wasmos-native `ProviderRegistry` (populated on first use from
+        // `DUCKLINK_PROVIDERS`) so a composed provider registered here
+        // on first LOAD resolves through the SAME backend
+        // `install_host_imports` hands to the extension load path — one
+        // resident provider serves every guest across every consumer
+        // (dot-commands, extension bridges, sub-ext bridges). The
+        // registry's owning tokio runtime is cloned in so
+        // `materialize_sub_ext_provider` can `block_on` the async
+        // `register_provider` from its synchronous call context.
+        let dynlink_handle = dotcmd_wasmos_provider_registry();
+        let sub_ext_loader = sub_ext::SubExtLoader::from_env(
+            dynlink_handle.backend.registry().clone(),
+            dynlink_handle.tokio_rt.clone(),
+        );
         Self {
             engine,
             core: None,

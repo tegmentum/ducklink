@@ -10,26 +10,30 @@
 //!   * the composed bytes are materialized to
 //!     `<cas>/composed-providers/postgis_core-composed.wasm`,
 //!   * the composed provider is now registered in the shared
-//!     `ProviderRegistry` (the same registry `LOAD` consults for a bridge
-//!     that imports `compose:dynlink/linker.resolve-by-id("postgis_core-composed")`),
+//!     wasmos-native `ProviderRegistry` (the same registry `LOAD`
+//!     consults for a bridge that imports
+//!     `compose:dynlink/linker.resolve-by-id("postgis_core-composed")`),
 //!   * a second call is a no-op (idempotence guard), and
 //!   * `has_bridge(...)` correctly reports which sub-exts should take the
 //!     bridge branch in `ensure_extension_loaded`.
 //!
-//! Mirrors the shape of `tests/compose_dynlink_dlopen.rs` (same registry
-//! + same engine wiring) so it fails alongside that test when the
-//! `compose:dynlink` plumbing regresses. The bridge wasm is a
-//! placeholder (a minimal component so `.exists()` succeeds if the
-//! caller ever runs the ensure-load side, and no more) — Phase D's
-//! contract is registry population, not bridge instantiation, which
-//! `compose_dynlink_dlopen.rs` already covers end-to-end.
+//! Path B follow-up #2 step 5 (2026-09-22): the fixture flipped off the
+//! wasmtime-shaped `datalink_dynlink::ProviderRegistry` onto the
+//! wasmos-native `datalink_dynlink_wasmos::ProviderRegistry` alongside
+//! `SubExtLoader` itself. The build shape now mirrors
+//! `tests/compose_dynlink_dlopen.rs` (a `WasmtimeV48Runtime` + a
+//! locally-owned tokio runtime that both the loader and the
+//! `resolve_by_id` verification calls drive).
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use compose_core::blobs::BlobStore;
 use compose_core::types::{ComponentSpec, PlanV1, Policy};
-use ducklink_host::{sub_ext_provider_id, ProviderRegistry, SubExtLoader};
-use wasmtime::{Config, Engine};
+use datalink_dynlink_wasmos::{ProviderBackend as _, ProviderRegistry, ResidentBackend};
+use ducklink_host::{sub_ext_provider_id, SubExtLoader};
+use wasmos_runtime_api::{Runtime as WasmosRuntime, RuntimeConfig};
+use wasmos_runtime_wasmtime_v48::WasmtimeV48Runtime;
 
 /// Minimal valid WebAssembly component (magic + component version).
 /// Same fixture the compose-core tests use for plan composition.
@@ -40,10 +44,37 @@ fn minimal_component_bytes() -> Vec<u8> {
     ]
 }
 
-fn test_engine() -> Engine {
-    let mut config = Config::new();
-    config.wasm_component_model(true);
-    Engine::new(&config).expect("engine")
+/// Build a fresh wasmos-native ProviderRegistry backed by a
+/// WasmtimeV48Runtime, plus the tokio runtime handle that owns its
+/// async registrations. Mirrors `dotcmd_wasmos_provider_registry()` in
+/// ducklink-host but scoped to a single test.
+fn test_registry() -> (ProviderRegistry, Arc<tokio::runtime::Runtime>) {
+    let tokio_rt = Arc::new(
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("build test tokio runtime"),
+    );
+    let wasm_rt = WasmtimeV48Runtime::new(RuntimeConfig::default())
+        .map(Arc::new)
+        .expect("build test WasmtimeV48Runtime");
+    let rt_dyn: Arc<dyn WasmosRuntime> = wasm_rt;
+    let registry = ProviderRegistry::new(rt_dyn);
+    (registry, tokio_rt)
+}
+
+/// Assert that `id` is registered in `registry`. Uses a dedicated
+/// single-threaded tokio runtime (NOT the loader's own) so we can
+/// `block_on` a `resolve_by_id` against the wasmos-native
+/// ResidentBackend without re-entering the loader's runtime.
+fn assert_registered(registry: &ProviderRegistry, id: &str) {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("build assert-registered tokio runtime");
+    let backend = ResidentBackend::new(registry.clone());
+    rt.block_on(backend.resolve_by_id(id))
+        .unwrap_or_else(|e| panic!("provider {id:?} not registered: {e}"));
 }
 
 #[test]
@@ -90,11 +121,12 @@ fn materialize_sub_ext_provider_composes_registers_and_is_idempotent() {
     let bridge_path = workdir.path().join("postgis_core_bridge.wasm");
     std::fs::write(&bridge_path, minimal_component_bytes()).unwrap();
 
-    // 4. Build the shared engine + provider registry (the same wiring
-    //    ExtensionManager uses at runtime) and seed the SubExtLoader.
-    let engine = test_engine();
-    let registry = ProviderRegistry::new(engine.clone());
-    let mut loader = SubExtLoader::new(registry.clone());
+    // 4. Build the shared wasmos-native provider registry (the same
+    //    wiring ExtensionManager uses at runtime — see
+    //    `dotcmd_wasmos_provider_registry` in ducklink-host) and seed
+    //    the SubExtLoader with its tokio runtime handle.
+    let (registry, tokio_rt) = test_registry();
+    let mut loader = SubExtLoader::new(registry.clone(), tokio_rt);
     loader.blob_cas_path = cas.clone();
     loader.compose_cache_path = cache.clone();
     loader
@@ -141,23 +173,18 @@ fn materialize_sub_ext_provider_composes_registers_and_is_idempotent() {
         .expect("idempotent materialize");
     assert_eq!(provider_id_again, provider_id);
 
-    // 9. Provider is now resolvable by any bridge that plugs it.
-    //    resident_count starts at 0 (materialization only *registers* +
-    //    compiles the provider; instantiation is lazy on first
-    //    resolve-by-id call from a bridge). Non-zero would indicate an
-    //    unwanted eager instantiation.
-    assert_eq!(
-        registry.resident_count(&provider_id),
-        0,
-        "provider must be registered but NOT yet instantiated after materialize"
-    );
+    // 9. Provider is now resolvable by any bridge that plugs it. The
+    //    wasmos-native ResidentBackend materialises the resident
+    //    instance lazily on first `invoke`; `resolve_by_id` only proves
+    //    the id has a compiled component behind it, without
+    //    instantiating.
+    assert_registered(&registry, &provider_id);
 }
 
 #[test]
 fn materialize_sub_ext_provider_reports_missing_plan() {
-    let engine = test_engine();
-    let registry = ProviderRegistry::new(engine.clone());
-    let mut loader = SubExtLoader::new(registry);
+    let (registry, tokio_rt) = test_registry();
+    let mut loader = SubExtLoader::new(registry, tokio_rt);
     // No plan registered → PlanMissing error, no partial materialization.
     let err = loader
         .materialize_sub_ext_provider("unknown_ext")
@@ -173,9 +200,8 @@ fn materialize_sub_ext_provider_reports_missing_plan() {
 
 #[test]
 fn has_bridge_and_bridge_path_wire_the_load_time_branch() {
-    let engine = test_engine();
-    let registry = ProviderRegistry::new(engine);
-    let mut loader = SubExtLoader::new(registry);
+    let (registry, tokio_rt) = test_registry();
+    let mut loader = SubExtLoader::new(registry, tokio_rt);
     let bridge_path = PathBuf::from("/tmp/postgis_core_bridge.wasm");
     loader
         .sub_ext_bridge_paths
@@ -196,9 +222,8 @@ fn prebuilt_only_config_routes_through_sub_ext_branch() {
     // true for that sub-ext so LOAD takes the sub-ext branch instead of
     // the flat resolver, and `bridge_path` must fall back to the prebuilt
     // wasm so the .expect() in ExtensionManager doesn't panic.
-    let engine = test_engine();
-    let registry = ProviderRegistry::new(engine);
-    let mut loader = SubExtLoader::new(registry);
+    let (registry, tokio_rt) = test_registry();
+    let mut loader = SubExtLoader::new(registry, tokio_rt);
     let prebuilt = PathBuf::from("/tmp/postgis-monolith-provider.wasm");
     loader
         .sub_ext_prebuilt_paths
@@ -260,9 +285,8 @@ fn mixed_mode_prebuilt_upstream_seeds_cas_for_derived_plan() {
     )
     .unwrap();
 
-    let engine = test_engine();
-    let registry = ProviderRegistry::new(engine);
-    let mut loader = SubExtLoader::new(registry);
+    let (registry, tokio_rt) = test_registry();
+    let mut loader = SubExtLoader::new(registry, tokio_rt);
     loader.blob_cas_path = cas.clone();
     loader.compose_cache_path = cache;
     loader
