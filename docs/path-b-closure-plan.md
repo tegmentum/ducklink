@@ -64,11 +64,51 @@ bang commit.
 | 2+3+4 | Combined arc — split into 5 Path 2 slices below           | 5 sessions | HIGH        | IN PROGRESS 2026-09-22 |
 | 2+3+4.1 | `CoreState` accessor trait (helper interface layer)     | ~2 hrs    | LOW          | ✅ 2026-09-22 (aae7e12) |
 | 2+3+4.2 | Migrate 25 handler sites onto `CoreState` trait         | ~1 hr     | LOW          | ✅ 2026-09-22 (d07469e) |
-| 2+3+4.3 | Swap `CoreExecution` to `SyncInstance`; migrate to `HostImports::register_sync`; flip consumer_state box `SyncStoreState<CoreInnerState>` → `CoreInnerState` | ~4-5 hrs | HIGH | PENDING |
-| 2+3+4.4 | Retire escape-hatch helpers + `primary_nested_exec` ambient reentry via `HostCallContext::reentry().call_export_sync()` | ~4-5 hrs | MEDIUM | PENDING |
-| 2+3+4.5 | Retire `SyncStoreState<CoreInnerState>` wrap; `CoreInnerState` boxes directly | ~2 hrs | LOW | PENDING |
-| 5     | `primary_nested_exec` retirement (ExtensionServices break) | 3-5 days | ECOSYSTEM    | PARTIAL 2026-09-22 — wasmos primitive `ReentryCapability::call_export_sync` shipped (wasmos 12af8721); consumer-side application blocked on Phase 2+3+4 OR wasmos-side BridgeCtx reentry extension |
+| 2+3+4.3 | Swap `CoreExecution` to `SyncInstance`; migrate to `HostImports::register_sync`; flip consumer_state box; retire `primary_nested_exec` TLS ← must fuse with Phase 5 | ~2-3 wks | HIGH | BLOCKED — see fusion note |
+| 2+3+4.4 | (fused into 2+3+4.3 per fusion note)                    |            |             | N/A |
+| 2+3+4.5 | Retire `SyncStoreState<CoreInnerState>` wrap; `CoreInnerState` boxes directly | ~2 hrs | LOW | PENDING (after 2+3+4.3) |
+| 5     | `primary_nested_exec` retirement (ExtensionServices break) | 3-5 days | ECOSYSTEM    | FUSED into 2+3+4.3 per fusion note; wasmos primitive `ReentryCapability::call_export_sync` shipped (wasmos 12af8721) |
 | 6     | Drop direct wasmtime Cargo deps                          | 0.5 day   | LOW          | PENDING (blocked on 1-5) |
+
+**Fusion note (2026-09-22 discovery):** Slice 2+3+4.3 originally
+scoped to keep `primary_nested_exec`'s raw-pointer TLS pattern
+intact. Investigation this session revealed that pattern cannot
+survive the `CoreExecution → SyncInstance` swap because:
+
+1. `SyncInstance::call_export` uses `block_on` internally; a
+   nested `sync_inst.call_export` from inside a callback on the
+   tokio executor thread deadlocks (the exact problem
+   `ReentryCapability::call_export_sync` was added to solve).
+2. `ReentryCapability<'a>` and `HostCallContext<'a>` are both
+   lifetime-bound; neither can be stashed in TLS the way
+   `PrimaryReentry { store: *mut, instance: *const }` currently is.
+3. Therefore reentry MUST reach the callback's `ctx` on-stack —
+   which requires `ExtensionServices::nested_exec` to receive
+   `ctx: &mut HostCallContext<'_>` as a parameter, i.e. the
+   Phase 5 semver-major trait break.
+
+**Consequence:** Slice 2+3+4.3 = Slice 2+3+4.4 = Phase 5, all
+one atomic surgery. Total ~2-3 weeks focused ducklink-team work
+plus 1-2 weeks ecosystem coordination for third-party extensions
+using `ExtensionServices`. Not viable as a single-session slice.
+
+**Escape hatches considered and rejected:**
+- Add unsafe raw-store accessors to wasmos SyncInstance
+  (violates "no APIs added solely for one consumer" per memory).
+- Keep dual-shape state (SyncInstance + raw Store side-by-side)
+  transitionally (bifurcation is ugly, still leaves wasmtime
+  dep alive, doesn't retire the unsafe pattern).
+- TLS-stash HostCallContext pointer with lifetime laundering
+  (matches today's unsafe pattern but wasmos's async reentry
+  boundary is stricter than wasmtime's — the inner async fn
+  driving `block_on` holds &mut Store<AdapterHostState>
+  exclusively; a nested access via a laundered ctx pointer
+  would race the outer borrow at the wasmtime-side, not just
+  at the type-system level).
+
+**Path forward:** either bank Path 2 Slices 1+2 as delivered
+prep + revert to Phase 5 planning, OR resume with a dedicated
+2-3 week arc treating 2+3+4.3+4.4+Phase-5 as one landing.
 
 **Total realistic scope:** 3-4 weeks focused ducklink-team work.
 Phase 5 adds 1-2 weeks ecosystem lag for extension-author
