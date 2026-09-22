@@ -64,7 +64,7 @@ bang commit.
 | 2     | 5 store-construction sites → SyncRuntime                 | 2-3 days  | HIGH         | PENDING (blocked on 1e) |
 | 3     | Host-import registrations → HostImports::register_sync   | 2-3 days  | MEDIUM       | PENDING (blocked on 2) |
 | 4     | Guest-export dispatch → SyncInstance::call_export        | 1-2 days  | MEDIUM       | PENDING (blocked on 1e + 2) |
-| 5     | `primary_nested_exec` retirement (ExtensionServices break) | 3-5 days | ECOSYSTEM    | PENDING (blocked on 1-4) |
+| 5     | `primary_nested_exec` retirement (ExtensionServices break) | 3-5 days | ECOSYSTEM    | PARTIAL 2026-09-22 — wasmos primitive `ReentryCapability::call_export_sync` shipped (wasmos 12af8721); consumer-side application blocked on Phase 2+3+4 OR wasmos-side BridgeCtx reentry extension |
 | 6     | Drop direct wasmtime Cargo deps                          | 0.5 day   | LOW          | PENDING (blocked on 1-5) |
 
 **Total realistic scope:** 3-4 weeks focused ducklink-team work.
