@@ -1,12 +1,41 @@
 # Ducklink Path B closure plan
 
-**Status:** Phase 1 preparatory sub-slices landed 2026-09-21
-(commits `fd879cc`, `9ff6bf5`, `73ea896`); Phase 1 type-swap
-itself still pending. This is the execution plan for closing out
-Path B for ducklink-host — retiring every direct `wasmtime::*`
-type from ducklink-host source files, retiring `unsafe fn
-primary_nested_exec`, and dropping the direct `wasmtime` Cargo
-dep. Complements the migration-recipe
+**Status (2026-09-22): PARTIAL.** All Path B closure phases
+through CliHarness migration have landed. Phase 6 (wasmtime
+Cargo dep drop) is blocked on three cross-crate migrations
+documented at the bottom of the phase table.
+
+- Slice 3 atomic surgery landed (`ad3156a`): CoreExecution flipped
+  to wasmos-native SyncInstance; `primary_nested_exec` rewired
+  onto Phase 6.24's cross-instance sync reentry primitive.
+- Standalone-shell driver migrated (`4f56c37`).
+- ExtensionManager `wasmtime::Result` error interop retired to
+  `anyhow::Result` (`0b0a302`).
+- CliHarness + run_cli_inner + wire_cli_bridged_host_imports +
+  dispatch_cli_run all migrated (`1ac637c`).
+- Slice 3 external-consumer regression fixed (`39ac622`,
+  wasmos `88d45bc1`) — `SyncInstance::call_export_reentrant`
+  primitive prevents nested-tokio panics for consumers embedding
+  ducklink inside their own SyncRuntime.
+- **Phase 5 retired from the plan** — Phase 6.24 (wasmos
+  cross-instance sync reentry primitive) makes the semver-major
+  `ExtensionServices` trait break unnecessary.
+- Phase 6 blockers documented (`b45bfe8`): DotcmdInstance /
+  compose_dynlink, `build_engine_for_driver`,
+  `wasmtime::Cache::from_file`. Each is a multi-session
+  cross-crate arc. Total estimated further work: 8-15 focused
+  sessions across ducklink-runtime + ducklink-host + wasmos.
+
+`wasmtime::` count in `crates/ducklink-host/src/lib.rs`: **19**
+(down from ~110 at Slice 2 start). Breakdown: 2 real-code
+imports, 3 real-code type/method sites, ~14 archaeological
+comments preserved.
+
+This is the execution plan for closing out Path B for
+ducklink-host — retiring every direct `wasmtime::*` type from
+ducklink-host source files, retiring `unsafe fn
+primary_nested_exec` (DONE), and dropping the direct `wasmtime`
+Cargo dep (PENDING). Complements the migration-recipe
 (`docs/wasmos-migration-recipe.md`) which tracks per-consumer
 state; this doc lays out the ordered execution path.
 
@@ -68,7 +97,7 @@ bang commit.
 | 2+3+4.4 | (merged into 2+3+4.3 — see arc note)                    |            |             | N/A |
 | 2+3+4.5 | Retire `SyncStoreState<CoreInnerState>` wrap from CoreExecution path | ~2 hrs | LOW | ✅ 2026-09-22 (`a79c6f6` initial; fully retired in `4f56c37` after shell-driver follow-up migration) |
 | 5     | `ExtensionServices` semver-major trait break — NO LONGER NEEDED | — | — | RETIRED (Phase 6.24 makes ctx-threading unnecessary — nested_exec keeps its `&mut self, sql` signature, internally holds a `SyncCrossInstanceHandle` and dispatches through it) |
-| 6     | Drop direct wasmtime Cargo deps                          | multi-arc | MEDIUM | PENDING — blocked on CLI harness (`CliHarness`), standalone-shell driver (`run_standalone_shell`), ExtensionManager, and engine builder (`build_engine_for_driver`) migrations. Not a small follow-up. |
+| 6     | Drop direct wasmtime Cargo deps                          | multi-arc | MEDIUM | BLOCKED — CliHarness ✅ (`1ac637c`), standalone-shell ✅ (`4f56c37`). Remaining: DotcmdInstance/compose_dynlink migration (Phase 6.2.d.4 in ducklink-runtime, est. 3-5 sessions), ExtensionManager Engine cascade via `build_engine_for_driver` (est. 5-8 sessions), `wasmtime::Cache::from_file` wasmos gap (needs `RuntimeConfig` cache primitive). Full details: agent commit `b45bfe8`. |
 
 **Fusion note (2026-09-22 discovery):** Slice 2+3+4.3 originally
 scoped to keep `primary_nested_exec`'s raw-pointer TLS pattern
@@ -463,12 +492,25 @@ call sites reach.
 
 ## Phase 5 — `primary_nested_exec` retirement (cross-crate)
 
-**Goal:** retire `unsafe fn primary_nested_exec` +
+**Status: RETIRED (2026-09-22).** Phase 6.24 (wasmos
+`SyncCrossInstanceHandle::call_export_via_store`, wasmos commit
+`daeaed79`) supersedes this phase. `primary_nested_exec` now
+dispatches through the wasmos-native primitive with no
+`ExtensionServices` trait break needed — `nested_exec` keeps its
+`&mut self, sql` signature. See the fusion note above and Slice
+3's landing (`ad3156a`) for the final shape.
+
+The design description below is preserved for archaeology — it
+was the plan before Phase 6.24 discovered the cross-instance
+sync reentry primitive could work without ctx-threading. Do not
+implement.
+
+**Goal (RETIRED):** retire `unsafe fn primary_nested_exec` +
 `PrimaryReentryGuard` + `PRIMARY_STORE_REENTRY` TLS. Replace with
 `HostCallContext::reentry()?.call_export(...)` inside the
 callback-dispatch chain.
 
-**Cross-crate scope:**
+**Cross-crate scope (RETIRED):**
 
 1. **ducklink-runtime — SEMVER-MAJOR trait break.**
    `pub trait ExtensionServices` at `extension.rs:533` gets a
