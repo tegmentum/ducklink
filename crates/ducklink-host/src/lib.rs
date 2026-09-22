@@ -461,9 +461,6 @@ impl WasiHttpView for CoreStoreState {
     }
 }
 
-impl wasmtime::component::HasData for CoreStoreState {
-    type Data<'a> = &'a mut CoreStoreState;
-}
 
 // The bindgen-era `impl core_host_loader::Host for CoreStoreState`
 // block that used to sit here is retired under Phase 2e (site 2)
@@ -3349,9 +3346,6 @@ impl WasiHttpView for DotcmdState {
             hooks: Default::default(),
         }
     }
-}
-impl wasmtime::component::HasData for DotcmdState {
-    type Data<'a> = &'a mut DotcmdState;
 }
 impl DotcmdState {
     /// Expose the dynlink bridge for the linker Host trait impl. Only ever
@@ -6567,9 +6561,6 @@ impl WasiHttpView for HostState {
     }
 }
 
-impl wasmtime::component::HasData for HostState {
-    type Data<'a> = &'a mut HostState;
-}
 
 impl HostState {
     fn alloc_resource_id(&mut self) -> u32 {
