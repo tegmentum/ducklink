@@ -20,11 +20,13 @@ documented at the bottom of the phase table.
 - **Phase 5 retired from the plan** — Phase 6.24 (wasmos
   cross-instance sync reentry primitive) makes the semver-major
   `ExtensionServices` trait break unnecessary.
-- Phase 6 blockers documented (`b45bfe8`): DotcmdInstance /
-  compose_dynlink, `build_engine_for_driver`,
-  `wasmtime::Cache::from_file`. Each is a multi-session
-  cross-crate arc. Total estimated further work: 8-15 focused
-  sessions across ducklink-runtime + ducklink-host + wasmos.
+- Phase 6 blockers documented (`b45bfe8`) — two remaining after
+  `39a5525` restored the compile cache on wasmos-native paths:
+  DotcmdInstance / compose_dynlink migration in ducklink-runtime
+  (Phase 6.2.d.4, est. 3-5 sessions), and ExtensionManager Engine
+  cascade via `build_engine_for_driver` (est. 5-8 sessions).
+  Total estimated further work: 8-13 focused sessions across
+  ducklink-runtime + ducklink-host.
 
 `wasmtime::` count in `crates/ducklink-host/src/lib.rs`: **19**
 (down from ~110 at Slice 2 start). Breakdown: 2 real-code
@@ -97,7 +99,7 @@ bang commit.
 | 2+3+4.4 | (merged into 2+3+4.3 — see arc note)                    |            |             | N/A |
 | 2+3+4.5 | Retire `SyncStoreState<CoreInnerState>` wrap from CoreExecution path | ~2 hrs | LOW | ✅ 2026-09-22 (`a79c6f6` initial; fully retired in `4f56c37` after shell-driver follow-up migration) |
 | 5     | `ExtensionServices` semver-major trait break — NO LONGER NEEDED | — | — | RETIRED (Phase 6.24 makes ctx-threading unnecessary — nested_exec keeps its `&mut self, sql` signature, internally holds a `SyncCrossInstanceHandle` and dispatches through it) |
-| 6     | Drop direct wasmtime Cargo deps                          | multi-arc | MEDIUM | BLOCKED — CliHarness ✅ (`1ac637c`), standalone-shell ✅ (`4f56c37`). Remaining: DotcmdInstance/compose_dynlink migration (Phase 6.2.d.4 in ducklink-runtime, est. 3-5 sessions), ExtensionManager Engine cascade via `build_engine_for_driver` (est. 5-8 sessions), `wasmtime::Cache::from_file` wasmos gap (needs `RuntimeConfig` cache primitive). Full details: agent commit `b45bfe8`. |
+| 6     | Drop direct wasmtime Cargo deps                          | multi-arc | MEDIUM | BLOCKED — CliHarness ✅ (`1ac637c`), standalone-shell ✅ (`4f56c37`), compile-cache restored on wasmos-native paths ✅ (`39a5525`). Remaining: DotcmdInstance/compose_dynlink migration (Phase 6.2.d.4 in ducklink-runtime, est. 3-5 sessions), ExtensionManager Engine cascade via `build_engine_for_driver` (est. 5-8 sessions). Full details: agent commit `b45bfe8`. |
 
 **Fusion note (2026-09-22 discovery):** Slice 2+3+4.3 originally
 scoped to keep `primary_nested_exec`'s raw-pointer TLS pattern
