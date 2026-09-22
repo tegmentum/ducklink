@@ -2204,6 +2204,128 @@ fn tvm_kind_to_core(k: core_tvm_types::RegionKind) -> tvm_core::RegionKind {
         W::CodeCache => C::CodeCache,
     }
 }
+/// Path B Slice 1 (2026-09-22) — shared accessor trait so handlers
+/// don't hard-code the outer store shape. Under the current
+/// escape-hatch bridge, `state.consumer.<field>` reaches through
+/// `SyncStoreState<CoreInnerState>` to the ducklink slice; under
+/// the wasmos-native flow (future Slice 3), consumer_state boxes
+/// `CoreInnerState` directly and there is no `.consumer.` layer.
+/// Handlers call `state.extension_manager()` etc. and both shapes
+/// work.
+///
+/// Only exposes the surface handlers actually reach — not a broad
+/// wrapping of every ducklink field.
+pub(crate) trait CoreState {
+    fn extension_manager(&self) -> &Arc<Mutex<ExtensionManager>>;
+    fn tvm(&mut self) -> &mut tvm_core::RegionDirectory<tvm_core::VecBackedRegion>;
+    fn drain_pending_registrations_for_replay(
+        &mut self,
+    ) -> ducklink_runtime::PendingRegistrationsData;
+    fn tvm_register(
+        &mut self,
+        region_id: u16,
+        th: tvm_core::Handle,
+    ) -> core_tvm_types::Handle;
+    fn tvm_resolve(
+        &mut self,
+        ptr: core_tvm_types::Handle,
+        free: bool,
+    ) -> Result<tvm_core::Handle, core_tvm_types::TvmError>;
+    fn set_replay_archive(
+        &mut self,
+        archive: Arc<Mutex<ducklink_runtime::PendingRegistrationsData>>,
+    );
+    fn replay_archive_is_some(&self) -> bool;
+    fn is_sibling(&self) -> bool;
+    fn set_is_sibling(&mut self, v: bool);
+}
+
+impl CoreState for CoreInnerState {
+    fn extension_manager(&self) -> &Arc<Mutex<ExtensionManager>> {
+        &self.extension_manager
+    }
+    fn tvm(&mut self) -> &mut tvm_core::RegionDirectory<tvm_core::VecBackedRegion> {
+        &mut self.tvm
+    }
+    fn drain_pending_registrations_for_replay(
+        &mut self,
+    ) -> ducklink_runtime::PendingRegistrationsData {
+        CoreInnerState::drain_pending_registrations_for_replay(self)
+    }
+    fn tvm_register(
+        &mut self,
+        region_id: u16,
+        th: tvm_core::Handle,
+    ) -> core_tvm_types::Handle {
+        CoreInnerState::tvm_register(self, region_id, th)
+    }
+    fn tvm_resolve(
+        &mut self,
+        ptr: core_tvm_types::Handle,
+        free: bool,
+    ) -> Result<tvm_core::Handle, core_tvm_types::TvmError> {
+        CoreInnerState::tvm_resolve(self, ptr, free)
+    }
+    fn set_replay_archive(
+        &mut self,
+        archive: Arc<Mutex<ducklink_runtime::PendingRegistrationsData>>,
+    ) {
+        self.replay_archive = Some(archive);
+    }
+    fn replay_archive_is_some(&self) -> bool {
+        self.replay_archive.is_some()
+    }
+    fn is_sibling(&self) -> bool {
+        self.is_sibling
+    }
+    fn set_is_sibling(&mut self, v: bool) {
+        self.is_sibling = v;
+    }
+}
+
+impl CoreState for wasmos_runtime_wasmtime_v48::SyncStoreState<CoreInnerState> {
+    fn extension_manager(&self) -> &Arc<Mutex<ExtensionManager>> {
+        &self.consumer.extension_manager
+    }
+    fn tvm(&mut self) -> &mut tvm_core::RegionDirectory<tvm_core::VecBackedRegion> {
+        &mut self.consumer.tvm
+    }
+    fn drain_pending_registrations_for_replay(
+        &mut self,
+    ) -> ducklink_runtime::PendingRegistrationsData {
+        self.consumer.drain_pending_registrations_for_replay()
+    }
+    fn tvm_register(
+        &mut self,
+        region_id: u16,
+        th: tvm_core::Handle,
+    ) -> core_tvm_types::Handle {
+        self.consumer.tvm_register(region_id, th)
+    }
+    fn tvm_resolve(
+        &mut self,
+        ptr: core_tvm_types::Handle,
+        free: bool,
+    ) -> Result<tvm_core::Handle, core_tvm_types::TvmError> {
+        self.consumer.tvm_resolve(ptr, free)
+    }
+    fn set_replay_archive(
+        &mut self,
+        archive: Arc<Mutex<ducklink_runtime::PendingRegistrationsData>>,
+    ) {
+        self.consumer.replay_archive = Some(archive);
+    }
+    fn replay_archive_is_some(&self) -> bool {
+        self.consumer.replay_archive.is_some()
+    }
+    fn is_sibling(&self) -> bool {
+        self.consumer.is_sibling
+    }
+    fn set_is_sibling(&mut self, v: bool) {
+        self.consumer.is_sibling = v;
+    }
+}
+
 impl CoreInnerState {
     /// FU4 sibling/primary drain-and-archive protocol.
     ///
