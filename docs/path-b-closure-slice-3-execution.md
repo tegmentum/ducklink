@@ -180,13 +180,25 @@ pub(crate) fn call_bridge_export(
 }
 ```
 
-Similarly for `resource_drop_handle` at ~line 2990 — needs a
-wasmos-native equivalent for `ResourceAny::resource_drop`. If
-wasmos doesn't expose one on `SyncInstance` yet, this is a small
-wasmos-side addition (task 27b if it materialises). Interim:
-keep the escape-hatch call via `sync_inst.as_async_mut()` +
-tokio_runtime.block_on, but this leaks wasmtime types back in.
-**Verification required** before executing this step.
+For `resource_drop_handle` at ~line 2990, wasmos now exposes
+`SyncInstance::resource_drop(store_id, handle_id)` (wasmos
+commit `9a7c61ea`). If `CoreResourceHandle` carries the
+wasmos-native `(store_id, handle_id)` fields:
+
+```rust
+// AFTER
+pub(crate) fn resource_drop_handle(
+    &mut self,
+    handle: CoreResourceHandle,
+) -> Result<(), wasmos_runtime_api::RuntimeError> {
+    self.sync_inst.resource_drop(handle.store_id, handle.handle_id)
+}
+```
+
+Return type changes from `wasmtime::Result<()>` to
+`Result<(), RuntimeError>` — one small consumer-side adjustment
+at the ~5 drop sites in `lib.rs` + consumer files (grep for
+`resource_drop_handle`).
 
 ### 5. Free helper functions (`call_export_on_resource_core`
 etc.) — RETIRE
@@ -498,18 +510,22 @@ and Phase 6 (Cargo dep drop) remain as follow-up cleanup.
 1. `PrimaryReentry.connection: wasmtime::component::ResourceAny`
    — required by `SyncCrossInstanceHandle`'s reliance on
    `ExportResourceTable`. Retiring this needs either a wasmos-side
-   extension to accept `Value::Resource` directly, or a
-   ducklink-side conversion via `AdapterHostState.peek_resource`
-   (if exposed).
+   extension to accept `Value::Resource` directly in
+   `SyncCrossInstanceHandle::call_export_sync`, or a ducklink-side
+   conversion via a future wasmos accessor on
+   `AdapterHostState.peek_resource`.
 2. `CoreResourceHandle` retains a wasmtime-typed field in the
-   dual-field shape. Same underlying constraint.
-3. `resource_drop_handle` — needs a wasmos-native drop primitive
-   or `sync_inst.as_async_mut()` + block_on. Verify wasmos side
-   before executing step 4's retirement.
+   dual-field shape (for the cross-instance dispatch path only).
+   Same underlying constraint as gap #1.
+3. ~~`resource_drop_handle` needs a wasmos-native drop primitive~~
+   **CLOSED 2026-09-22** (wasmos `9a7c61ea`). Use
+   `sync_inst.resource_drop(store_id, handle_id)`.
 
-These gaps are documented in the plan doc; do not block Slice 3
-from landing. Final wasmtime dep drop (Phase 6) requires
-resolving them.
+Gaps #1 + #2 survive Slice 3 as internal uses of
+`wasmtime::component::ResourceAny` on the cross-instance dispatch
+path only. Final wasmtime dep drop (Phase 6) requires
+resolving them via a small wasmos-side extension to
+`SyncCrossInstanceHandle`.
 
 ## Verification checklist
 
