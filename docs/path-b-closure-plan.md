@@ -64,11 +64,11 @@ bang commit.
 | 2+3+4 | Combined arc — split into 5 Path 2 slices below           | 5 sessions | HIGH        | IN PROGRESS 2026-09-22 |
 | 2+3+4.1 | `CoreState` accessor trait (helper interface layer)     | ~2 hrs    | LOW          | ✅ 2026-09-22 (aae7e12) |
 | 2+3+4.2 | Migrate 25 handler sites onto `CoreState` trait         | ~1 hr     | LOW          | ✅ 2026-09-22 (d07469e) |
-| 2+3+4.3 | Swap `CoreExecution` to `SyncInstance`; migrate to `HostImports::register_sync`; flip consumer_state box; rewire `primary_nested_exec` onto wasmos Phase 6.24 primitive | ~1-2 wks | HIGH | UNBLOCKED 2026-09-22 — Phase 6.24 shipped (wasmos `d25b2e67`) |
+| 2+3+4.3 | Swap `CoreExecution` to `SyncInstance`; migrate to `HostImports::register_sync`; flip consumer_state box; rewire `primary_nested_exec` onto wasmos Phase 6.24 primitive | ~1-2 wks | HIGH | ✅ 2026-09-22 (`ad3156a`) |
 | 2+3+4.4 | (merged into 2+3+4.3 — see arc note)                    |            |             | N/A |
-| 2+3+4.5 | Retire `SyncStoreState<CoreInnerState>` wrap; `CoreInnerState` boxes directly | ~2 hrs | LOW | PENDING (after 2+3+4.3) |
+| 2+3+4.5 | Retire `SyncStoreState<CoreInnerState>` wrap from CoreExecution path | ~2 hrs | LOW | ✅ 2026-09-22 (`a79c6f6` — alias retained for shell driver path) |
 | 5     | `ExtensionServices` semver-major trait break — NO LONGER NEEDED | — | — | RETIRED (Phase 6.24 makes ctx-threading unnecessary — nested_exec keeps its `&mut self, sql` signature, internally holds a `SyncCrossInstanceHandle` and dispatches through it) |
-| 6     | Drop direct wasmtime Cargo deps                          | 0.5 day   | LOW          | PENDING (blocked on 2+3+4.3, 2+3+4.5) |
+| 6     | Drop direct wasmtime Cargo deps                          | multi-arc | MEDIUM | PENDING — blocked on CLI harness (`CliHarness`), standalone-shell driver (`run_standalone_shell`), ExtensionManager, and engine builder (`build_engine_for_driver`) migrations. Not a small follow-up. |
 
 **Fusion note (2026-09-22 discovery):** Slice 2+3+4.3 originally
 scoped to keep `primary_nested_exec`'s raw-pointer TLS pattern
@@ -131,12 +131,10 @@ C. **Accept Path B partial.** Retire wasmtime Cargo dep and
    currently types on `Store<CoreStoreState>`.
 
 **Path forward — Path (A) executed:** wasmos Phase 6.24 shipped
-2026-09-22 as three commits:
-
-- `958d5d66` — design doc `phase-6-24-cross-instance-sync-reentry.md`
-- `d25b2e67` — `SyncCrossInstanceHandle` + `SyncInstance::cross_instance_reentry_handle`
-  in the v48 adapter + integration tests
-- `c66c7a5d` — state-of-the-abstraction Phase 6.24 entry
+2026-09-22 as seven commits (design doc, primitive
+implementation, tests, state-of-the-abstraction entry, follow-up
+`SyncInstance::resource_drop` and `call_export_via_store`
+primitives).
 
 **Bonus finding**: cross-instance sync reentry works under the
 default `RuntimeConfig` (`allow_host_callback_reentry = false`)
@@ -147,13 +145,38 @@ not the source's. Consumers using the primitive don't have to
 trade away `wasm_component_model_async` / concurrency / streams
 / futures / component-model threading.
 
-**Ducklink-side rewire (Slice 2+3+4.3):** `primary_nested_exec`'s
-raw pointer fields swap to `SyncCrossInstanceHandle` (also `Copy`,
-also TLS-stashable). Extension's `nested_exec` keeps its
-`&mut self, sql` signature — no ctx-threading, no
-`ExtensionServices` semver break. Phase 5 retires from the plan.
-Total remaining ducklink work: ~1-2 focused sessions for the
-atomic swap + Slice 2+3+4.5 cleanup + Phase 6 Cargo drop.
+**Ducklink-side rewire (Slice 2+3+4.3, 2+3+4.5) — LANDED
+2026-09-22:**
+
+- `ad3156a` — Slice 3 atomic surgery. CoreExecution flipped to
+  `sync_inst: SyncInstance`. instantiate_core rewritten via
+  `SyncRuntime::from_runtime`. 5 host imports migrated to
+  `HostImports::register_sync`. 16 handler downcasts flipped
+  onto `<CoreInnerState>`. Escape-hatch free functions retired
+  their `sync_export_bridge` dispatch, now go through
+  `sync_inst.call_export("iface#method", args)`. CoreResourceHandle
+  changed from newtype-around-`wasmtime::ResourceAny` to a
+  two-`u64` (store_id, handle_id) struct. All 8+ resource-holding
+  state types (ConnectionEntry, StreamEntry, PreparedEntry,
+  AppenderEntry, SiblingSlot, DriverCoreState, `current_connection`,
+  etc.) carry CoreResourceHandle. PrimaryReentry uses
+  `SyncCrossInstanceHandle` + `CoreResourceHandle`.
+  primary_nested_exec dispatches through
+  `handle.call_export_via_store(...)`. resource_drop_handle uses
+  `sync_inst.resource_drop(store_id, handle_id)`.
+- `a79c6f6` — Slice 2+3+4.5 partial. CoreStoreState alias retired
+  from the CoreExecution path (documented as shell-driver-only).
+  Handler error-message strings tidied to name CoreInnerState.
+
+**What remains for full Path B closure:** Phase 6 (wasmtime Cargo
+dep drop) is blocked on migrating four separate consumer paths:
+CLI harness (`CliHarness`), standalone-shell driver
+(`run_standalone_shell`), ExtensionManager (uses `wasmtime::Result`
+for error interop), and engine builder (`build_engine_for_driver`
+returns `wasmtime::Engine`). Not a small follow-up — each of
+those has its own migration story. Slice 3's CoreExecution
+retirement is complete; the remaining wasmtime uses are outside
+CoreExecution's surface.
 
 Path Slices 1+2 (`aae7e12` + `d07469e`) remain valid prep for
 whichever path is chosen.
