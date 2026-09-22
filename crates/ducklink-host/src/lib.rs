@@ -406,13 +406,17 @@ use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 // `&str`. Retained here as a doc pointer for future readers looking
 // for the old alias.
 
-struct CoreStoreState {
-    table: ResourceTable,
-    wasi: WasiCtx,
-    /// wasi:http host context (see the module-level `add_wasi_http_to_linker`
-    /// import). Unused today by the core component itself; kept here so the
-    /// `WasiHttpView` impl below has a store-owned `WasiHttpCtx` to project.
-    wasi_http: WasiHttpCtx,
+/// Path B Phase 1 substep 5 (2026-09-21) — the ducklink-only slice
+/// of the core store's per-instance state. Held inside
+/// [`CoreStoreState::inner`]; will move onto
+/// `SyncStoreState<CoreInnerState>` at the next Path B slice
+/// (retires the local `WasiView` / `WasiHttpView` impls).
+///
+/// Every host-callback dispatch reaches here via
+/// `ctx.consumer_state::<CoreStoreState>()` on today's shape and
+/// through `SyncStoreState::consumer_from_ctx::<CoreInnerState>()`
+/// after the wrapper flip.
+struct CoreInnerState {
     extension_manager: Arc<Mutex<ExtensionManager>>,
     // Tiered Virtual Memory: host-owned regions back DuckDB's >4 GiB spill tier.
     tvm: tvm_core::RegionDirectory<tvm_core::VecBackedRegion>,
@@ -440,6 +444,17 @@ struct CoreStoreState {
     /// primary stores drain the shared [`ExtensionManager`] as before and
     /// append the drained batch into `replay_archive` (when present).
     is_sibling: bool,
+}
+
+struct CoreStoreState {
+    table: ResourceTable,
+    wasi: WasiCtx,
+    /// wasi:http host context (see the module-level `add_wasi_http_to_linker`
+    /// import). Unused today by the core component itself; kept here so the
+    /// `WasiHttpView` impl below has a store-owned `WasiHttpCtx` to project.
+    wasi_http: WasiHttpCtx,
+    /// Ducklink-only per-instance state. See [`CoreInnerState`].
+    inner: CoreInnerState,
 }
 
 impl WasiView for CoreStoreState {
@@ -509,8 +524,7 @@ impl wasmos_runtime_api::SyncHostCall for CoreHostExtensionLoaderHost {
                          consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state
-                    .extension_manager
+                let mut manager = state.inner.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let loaded = match manager.ensure_extension_loaded(&name) {
@@ -589,7 +603,7 @@ impl wasmos_runtime_api::SyncHostCall for ExtensionLoaderHooksHost {
                 // after the drain's `Arc<Mutex<>>` handles are
                 // released, so a callback fired downstream can't
                 // re-enter either mutex through a side-effect.
-                let native_pending = state.drain_pending_registrations_for_replay();
+                let native_pending = state.inner.drain_pending_registrations_for_replay();
                 Ok(vec![native_pending_registrations_to_value(native_pending)])
             }
             other => Err(RuntimeError::msg(format!(
@@ -1139,8 +1153,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-scalar: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state
-                    .extension_manager
+                let mut manager = state.inner.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -1176,8 +1189,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-scalar-batch-col: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state
-                    .extension_manager
+                let mut manager = state.inner.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -1209,8 +1221,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-table: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state
-                    .extension_manager
+                let mut manager = state.inner.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -1243,8 +1254,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-aggregate-col: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state
-                    .extension_manager
+                let mut manager = state.inner.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -1274,8 +1284,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-cast-col: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state
-                    .extension_manager
+                let mut manager = state.inner.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let mut ext_out: Vec<ducklink_runtime::extension::Duckvalue> =
@@ -1324,8 +1333,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-pragma: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state
-                    .extension_manager
+                let mut manager = state.inner.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -1357,8 +1365,7 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-cast: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let mut manager = state
-                    .extension_manager
+                let mut manager = state.inner.extension_manager
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -2219,7 +2226,7 @@ fn tvm_kind_to_core(k: core_tvm_types::RegionKind) -> tvm_core::RegionKind {
         W::CodeCache => C::CodeCache,
     }
 }
-impl CoreStoreState {
+impl CoreInnerState {
     /// FU4 sibling/primary drain-and-archive protocol.
     ///
     /// Sibling stores serve the shared archive (a snapshot of every
@@ -2357,8 +2364,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                 // coalesces those holes so a region's footprint
                 // tracks the live set, not the cumulative spill
                 // volume. Bump's dealloc is a no-op.
-                let r = state
-                    .tvm
+                let r = state.inner.tvm
                     .create_region_with(
                         tvm_kind_to_core(kind),
                         capacity,
@@ -2396,7 +2402,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                         "tvm-manager destroy-region: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                match state.tvm.destroy_region(region_id).map_err(tvm_err_to_wit) {
+                match state.inner.tvm.destroy_region(region_id).map_err(tvm_err_to_wit) {
                     Ok(()) => Ok(vec![Value::Result(Ok(None))]),
                     Err(bindgen_err) => Ok(vec![Value::Result(Err(Some(Box::new(
                         bindgen_tvm_error_to_value(bindgen_err),
@@ -2417,9 +2423,9 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                         "tvm-manager alloc: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                match state.tvm.alloc(region_id, size).map_err(tvm_err_to_wit) {
+                match state.inner.tvm.alloc(region_id, size).map_err(tvm_err_to_wit) {
                     Ok(th) => {
-                        let handle = state.tvm_register(region_id, th);
+                        let handle = state.inner.tvm_register(region_id, th);
                         Ok(vec![Value::Result(Ok(Some(Box::new(pack_tvm_handle(
                             handle,
                         )))))])
@@ -2443,7 +2449,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                         "tvm-manager dealloc: consumer_state<CoreStoreState> unavailable",
                     )
                 })?;
-                let th = match state.tvm_resolve(handle, true) {
+                let th = match state.inner.tvm_resolve(handle, true) {
                     Ok(th) => th,
                     Err(bindgen_err) => {
                         return Ok(vec![Value::Result(Err(Some(Box::new(
@@ -2451,7 +2457,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                         ))))])
                     }
                 };
-                match state.tvm.dealloc(th).map_err(tvm_err_to_wit) {
+                match state.inner.tvm.dealloc(th).map_err(tvm_err_to_wit) {
                     Ok(()) => Ok(vec![Value::Result(Ok(None))]),
                     Err(bindgen_err) => Ok(vec![Value::Result(Err(Some(Box::new(
                         bindgen_tvm_error_to_value(bindgen_err),
@@ -2576,7 +2582,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                 let state = ctx.consumer_state::<CoreStoreState>().ok_or_else(|| {
                     RuntimeError::msg("tvm-bytes read: consumer_state<CoreStoreState> unavailable")
                 })?;
-                let th = match state.tvm_resolve(handle, false) {
+                let th = match state.inner.tvm_resolve(handle, false) {
                     Ok(th) => th,
                     Err(bindgen_err) => {
                         return Ok(vec![Value::Result(Err(Some(Box::new(
@@ -2584,7 +2590,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                         ))))])
                     }
                 };
-                match state.tvm.region_slice_at(th, len).map_err(tvm_err_to_wit) {
+                match state.inner.tvm.region_slice_at(th, len).map_err(tvm_err_to_wit) {
                     Ok(slice) => {
                         let buf = slice.to_vec();
                         if tvm_debug() {
@@ -2642,7 +2648,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                     RuntimeError::msg("tvm-bytes write: consumer_state<CoreStoreState> unavailable")
                 })?;
                 let len = data.len() as u64;
-                let th = match state.tvm_resolve(handle, false) {
+                let th = match state.inner.tvm_resolve(handle, false) {
                     Ok(th) => th,
                     Err(bindgen_err) => {
                         return Ok(vec![Value::Result(Err(Some(Box::new(
@@ -2650,7 +2656,7 @@ impl wasmos_runtime_api::SyncHostCall for TvmBytesHost {
                         ))))])
                     }
                 };
-                match state.tvm.write(th, &data).map_err(tvm_err_to_wit) {
+                match state.inner.tvm.write(th, &data).map_err(tvm_err_to_wit) {
                     Ok(()) => {
                         if tvm_debug() {
                             let t = TVM_BYTES_WRITTEN
@@ -3175,8 +3181,8 @@ impl CoreExecution {
         is_sibling: bool,
     ) {
         let data = self.store.data_mut();
-        data.replay_archive = Some(archive);
-        data.is_sibling = is_sibling;
+        data.inner.replay_archive = Some(archive);
+        data.inner.is_sibling = is_sibling;
     }
 
     // Phase 2e wedge #7d + #9 (2026-09-17) — every bindgen-typed
@@ -10767,17 +10773,19 @@ fn instantiate_core(
             table: ResourceTable::new(),
             wasi: wasi_ctx,
             wasi_http: WasiHttpCtx::new(),
-            extension_manager,
-            tvm: tvm_core::RegionDirectory::new(),
-            tvm_slots: std::collections::HashMap::new(),
             // Phase 4 follow-up (FU4): defaults — a primary caller wires the
             // shared archive via `CoreExecution::attach_replay_archive(archive,
             // false)` once its `SiblingState` exists; `sibling_ensure_slot`
             // does the same with `is_sibling = true` on the sibling store.
             // Test paths that never wire a SiblingState keep both defaults,
             // reproducing the pre-FU4 behaviour (plain drain, no archive).
-            replay_archive: None,
-            is_sibling: false,
+            inner: CoreInnerState {
+                extension_manager,
+                tvm: tvm_core::RegionDirectory::new(),
+                tvm_slots: std::collections::HashMap::new(),
+                replay_archive: None,
+                is_sibling: false,
+            },
         },
     );
 
@@ -12170,15 +12178,17 @@ pub fn run_shell_with_stdio(
             table: ResourceTable::new(),
             wasi: shell_wasi,
             wasi_http: WasiHttpCtx::new(),
-            extension_manager: extension_manager.clone(),
-            tvm: tvm_core::RegionDirectory::new(),
-            tvm_slots: std::collections::HashMap::new(),
             // Phase 4 follow-up (FU4): the standalone-shell driver never
             // constructs a SiblingState, so the archive stays disabled.
             // `is_sibling = false` keeps the shell's core on the historical
             // drain path (identical pre-FU4 behaviour).
-            replay_archive: None,
-            is_sibling: false,
+            inner: CoreInnerState {
+                extension_manager: extension_manager.clone(),
+                tvm: tvm_core::RegionDirectory::new(),
+                tvm_slots: std::collections::HashMap::new(),
+                replay_archive: None,
+                is_sibling: false,
+            },
         },
     );
     let instance = linker.instantiate(store.as_context_mut(), &component)?;
@@ -15661,7 +15671,7 @@ mod tests {
             let mut c = primary_core.lock().unwrap();
             let data: &mut CoreStoreState = c.store.data_mut();
             assert!(
-                data.replay_archive.is_some(),
+                data.inner.replay_archive.is_some(),
                 "primary CoreStoreState must have `replay_archive = Some(...)` \
                  after `attach_replay_archive` — FU4 wiring"
             );
@@ -15712,7 +15722,7 @@ mod tests {
             let sibling_core_guard = slot.core.lock().unwrap_or_else(|e| e.into_inner());
             let data = sibling_core_guard.store.data();
             assert!(
-                data.is_sibling,
+                data.inner.is_sibling,
                 "sibling CoreStoreState must have `is_sibling = true` \
                  after `attach_replay_archive(_, true)` — FU4 wiring"
             );
