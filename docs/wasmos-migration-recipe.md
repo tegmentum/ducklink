@@ -761,10 +761,34 @@ can compile.
      binds the WIT interface + name.
 
    Together these three cover the full `with:` shape. No new
-   wasmos-side API is needed; what remains is consumer
-   adoption of `#[host_iface(sync)]` in place of the current
-   Vec<Value>-passthrough `SyncHostCall::call` — a
-   consumer-side migration, not a wasmos-side blocker.
+   wasmos-side API is needed.
+
+   ✅ **CONSUMER ADOPTION LANDED (2026-09-21)** — all three
+   ducklink-family consumers migrated their host handlers off
+   the Vec<Value>-passthrough `SyncHostCall::call` pattern
+   onto typed `#[host_iface(sync)]` dispatch:
+
+   - ducklink `driver_exec.rs::DriverExecHost` (commit
+     `1161813`) — `#[derive(HostResourceType)]` on
+     `DriverConnection`; typed args (`Resource<DriverConnection>`,
+     `String`); typed returns (`Result<Resource<T>, String>`,
+     `Result<u64, String>`).
+   - icd-10 `wit_host.rs::WitDriverExecHost` (commit
+     `10419a8`) — same shape with `GuestConnHandle` marker.
+   - icd-9 `wit_host.rs::WitDriverExecHost` (commit
+     `789ad1b`) — same shape.
+
+   Net across the three consumers: ~350 lines of hand-written
+   `match method` dispatch + manual arg pattern-matching
+   retired; ~225 lines of typed-dispatch replacements added.
+   Signatures now read like the WIT surface (`open(path:
+   String) -> Result<Resource<Connection>, String>`).
+
+   Only nested-container returns (`list<list<string>>` in
+   connection.query) keep the manual
+   `Value::Result(Value::List(Value::List(...)))` construction
+   via `RuntimeResult<Value>` passthrough — the macro's
+   classifier doesn't auto-lift nested containers yet.
 6. **Primary-store reentry TLS.** `unsafe fn primary_nested_exec`
    stashes `*mut Store<CoreStoreState>` +
    `*const wasmtime::component::Instance` in a TLS to
@@ -859,12 +883,14 @@ can compile.
   `primary_nested_exec` migration off the sync escape hatch
   is now fully unblocked at the wasmos side.
 - ~~`with:` map equivalent on `wasmos_runtime_api::HostImports`
-  registration~~ ✅ VERIFIED (2026-09-17). Covered by three
-  already-shipped features: `p2::add_to_linker_sync` (WASI
-  interface remap), `ResourceTable` Phase 1b (native-type
+  registration~~ ✅ FULLY CLOSED (2026-09-21). Covered by
+  three already-shipped features: `p2::add_to_linker_sync`
+  (WASI interface remap), `ResourceTable` Phase 1b (native-type
   storage), and `#[host_iface(sync)]` + `#[derive(HostResourceType)]`
   (compile-time typed dispatch). Consumer adoption of the last
-  pair is a separate consumer-side migration wedge.
+  pair landed at ducklink `1161813`, icd-10 `10419a8`, icd-9
+  `789ad1b` — all three ducklink-family host handlers now use
+  typed `#[host_iface(sync)]` dispatch.
 - ~~**Wasmos-native `WasiView` hook.**~~ ✅ PARTIALLY
   LANDED (2026-09-17). wasmos ships
   `wasmos_runtime_wasmtime_v48::SyncStoreState<T>` (wasmos
