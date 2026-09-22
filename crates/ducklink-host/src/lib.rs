@@ -10577,7 +10577,6 @@ fn sibling_ensure_slot(sibling: &SiblingState, primary_path: &str) -> Result<Sib
         ),
     };
     let mut core_exec = instantiate_core(
-        &sibling.engine,
         &sibling.core_component_path,
         wasi,
         sibling_manager.clone(),
@@ -10775,25 +10774,22 @@ fn trap_to_cli_string(err: wasmtime::Error) -> String {
 // with the site-3 migration alongside the `cli_types` alias itself.
 
 fn instantiate_core(
-    _engine: &Engine,
     component_path: &Path,
     wasi_env: wasmos_runtime_api::WasiEnvironment,
     extension_manager: Arc<Mutex<ExtensionManager>>,
 ) -> Result<CoreExecution> {
-    // Path B closure Slice 3: wasmos-native construction. Build a
-    // fresh SyncRuntime rather than wrapping ducklink's engine —
-    // wasmos configures wasmtime with consume_fuel, epoch_interruption,
-    // wasm_gc, wasm_threads, allocation_strategy, etc. that its own
-    // instantiate flow depends on. Ducklink's build_engine() is
-    // deliberately minimal and doesn't match; passing it to
-    // WasmtimeV48Runtime::from_engine causes wasmos to fail with
-    // "fuel is not configured in this store" or similar at store
-    // setup. The compile cache loss vs ducklink's engine is a
-    // known-partial retirement gap (documented in
-    // docs/path-b-closure-plan.md) — a future arc could add a
-    // `wasmtime::Cache` handoff on wasmos RuntimeConfig, or ducklink
+    // Path B closure Slice 3: wasmos-native construction. The
+    // wasmtime engine argument that used to sit here is retired —
+    // wasmos's SyncRuntime::new configures its own engine with the
+    // wasm-config knobs (consume_fuel, epoch_interruption, wasm_gc,
+    // wasm_threads, allocation_strategy) that its instantiate flow
+    // requires. Reusing ducklink's minimal build_engine() failed
+    // at store setup ("fuel is not configured in this store"); see
+    // docs/path-b-closure-plan.md + wasmos runtime.rs's from_engine
+    // docstring for the constraint. The compile-cache loss is a
+    // known-partial retirement gap — a future arc could add a
+    // wasmtime::Cache handoff on wasmos RuntimeConfig, or ducklink
     // migrates build_engine to align with wasmos's config.
-    let _ = _engine;
     let bytes = std::fs::read(component_path).with_context(|| {
         format!(
             "failed to read core component at {}",
@@ -11129,7 +11125,6 @@ pub(crate) fn open_driver_core_with_bootstrap(
     let core_env = build_wasi_env_inherit(&[String::from("duckdb-core")], preopens);
     let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
     let core_exec = instantiate_core(
-        engine,
         &artifacts.core_component,
         core_env,
         extension_manager.clone(),
@@ -11998,7 +11993,6 @@ impl CliHarness {
 
         let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let core_exec = instantiate_core(
-            &engine,
             &artifacts.core_component,
             core_env,
             extension_manager.clone(),
@@ -12180,7 +12174,6 @@ pub fn run_shell_with_stdio(
     // (config/logging/live-query) for extension LOADs; the SHELL runs queries.
     let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
     let core_exec = instantiate_core(
-        &engine,
         &artifacts.core_component,
         core_env,
         extension_manager.clone(),
@@ -12311,7 +12304,6 @@ fn run_cli_inner(
 
     let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
     let core_exec = instantiate_core(
-        &engine,
         &artifacts.core_component,
         core_env,
         extension_manager.clone(),
@@ -13782,7 +13774,7 @@ mod tests {
         let artifacts = ComponentArtifacts::resolve_default()?;
         let wasi = build_wasi_env_inherit(&[String::from("duckdb-core")], &[]);
         let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
-        let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
+        let mut core = instantiate_core(&artifacts.core_component, wasi, manager)?;
 
         let conn = call_database_returning_resource_on_core(
             &mut core,
@@ -13857,7 +13849,7 @@ mod tests {
         let artifacts = ComponentArtifacts::resolve_default()?;
         let wasi = build_wasi_env_inherit(&[String::from("duckdb-core")], &[]);
         let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
-        let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
+        let mut core = instantiate_core(&artifacts.core_component, wasi, manager)?;
 
         use wasmos_runtime_api::Value;
         let conn = call_database_returning_resource_on_core(
@@ -13948,7 +13940,7 @@ mod tests {
         let artifacts = ComponentArtifacts::resolve_default()?;
         let wasi = build_wasi_env_inherit(&[String::from("duckdb-core")], &[]);
         let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
-        let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
+        let mut core = instantiate_core(&artifacts.core_component, wasi, manager)?;
 
         use wasmos_runtime_api::Value;
         let conn = call_database_returning_resource_on_core(
@@ -14019,7 +14011,7 @@ mod tests {
         use wasmos_runtime_api::Value;
         // Default: external access enabled, read_csv works.
         let wasi = build_wasi_env_inherit(&[String::from("duckdb-core")], &preopens);
-        let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager.clone())?;
+        let mut core = instantiate_core(&artifacts.core_component, wasi, manager.clone())?;
         let conn = call_database_returning_resource_on_core(
             &mut core,
             "open",
@@ -14036,7 +14028,7 @@ mod tests {
 
         // Opt-in hardening: enable_external_access=false blocks read_csv.
         let wasi = build_wasi_env_inherit(&[String::from("duckdb-core")], &preopens);
-        let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
+        let mut core = instantiate_core(&artifacts.core_component, wasi, manager)?;
         let opts_arg = Value::List(vec![Value::Tuple(vec![
             Value::String("enable_external_access".to_string()),
             Value::String("false".to_string()),
@@ -14067,7 +14059,7 @@ mod tests {
         use wasmos_runtime_api::Value;
         // A valid option is applied to the connection.
         let wasi = build_wasi_env_inherit(&[String::from("duckdb-core")], &[]);
-        let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager.clone())?;
+        let mut core = instantiate_core(&artifacts.core_component, wasi, manager.clone())?;
         // default_order defaults to ASC; setting it at open time should stick.
         let options_arg = Value::List(vec![Value::Tuple(vec![
             Value::String("default_order".to_string()),
@@ -14105,7 +14097,7 @@ mod tests {
 
         // An invalid value for a known option fails the open.
         let wasi = build_wasi_env_inherit(&[String::from("duckdb-core")], &[]);
-        let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)?;
+        let mut core = instantiate_core(&artifacts.core_component, wasi, manager)?;
         let bad_arg = Value::List(vec![Value::Tuple(vec![
             Value::String("access_mode".to_string()),
             Value::String("definitely_not_a_mode".to_string()),
@@ -15168,7 +15160,6 @@ mod tests {
             build_wasi_env_inherit(&[String::from("duckdb-core-primary-throwaway")], &[]);
         let primary_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let primary_core = Arc::new(Mutex::new(instantiate_core(
-            &engine,
             &artifacts.core_component,
             primary_wasi,
             primary_manager,
@@ -15381,7 +15372,7 @@ mod tests {
         let wasi = build_wasi_env_inherit(&[String::from("duckdb-core-optA")], &preopens);
         let extension_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let primary_core_exec =
-            instantiate_core(&engine, &artifacts.core_component, wasi, extension_manager)?;
+            instantiate_core(&artifacts.core_component, wasi, extension_manager)?;
         let primary_core = Arc::new(Mutex::new(primary_core_exec));
 
         // Open a file-backed connection on the PRIMARY. The nested_exec write
@@ -15522,7 +15513,6 @@ mod tests {
             build_wasi_env_inherit(&[String::from("duckdb-core-primary-shared")], &[]);
         let primary_manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
         let primary_core = Arc::new(Mutex::new(instantiate_core(
-            &engine,
             &artifacts.core_component,
             primary_wasi,
             primary_manager.clone(),

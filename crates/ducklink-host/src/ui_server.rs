@@ -55,7 +55,7 @@ pub fn serve_ui(
     let engine = build_engine()?;
     let wasi = build_wasi_env_inherit(&[String::from("duckdb-ui")], preopen_refs);
     let manager = Arc::new(Mutex::new(ExtensionManager::new(engine.clone())));
-    let mut core = instantiate_core(&engine, &artifacts.core_component, wasi, manager)
+    let mut core = instantiate_core(&artifacts.core_component, wasi, manager)
         .context("failed to instantiate the core component")?;
 
     let db_arg = match db {
