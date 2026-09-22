@@ -48,25 +48,38 @@ state; this doc lays out the ordered execution path.
 
 Six phases in strict dependency order. Each phase is a coherent
 unit — a partial commit inside a phase leaves the tree broken.
+Phase 1 is further split into five substeps (1a-1e) to reflect the
+2026-09-21 execution reality: three preparatory sub-slices and one
+structural sub-slice landed before the type-swap itself, so
+progress accumulates in committable chunks instead of one big-
+bang commit.
 
-| Phase | Deliverable                                              | Scope     | Cascade risk | Depends on |
-|-------|----------------------------------------------------------|-----------|--------------|------------|
-| 1     | CoreExecution: swap store + instance types               | 1-2 days  | HIGH         | (prereqs)  |
-| 2     | 5 store-construction sites → SyncRuntime                 | 2-3 days  | HIGH         | 1          |
-| 3     | Host-import registrations → HostImports::register_sync   | 2-3 days  | MEDIUM       | 2          |
-| 4     | Guest-export dispatch → SyncInstance::call_export        | 1-2 days  | MEDIUM       | 1, 2       |
-| 5     | `primary_nested_exec` retirement (ExtensionServices break) | 3-5 days | ECOSYSTEM    | 1-4        |
-| 6     | Drop direct wasmtime Cargo deps                          | 0.5 day   | LOW          | 1-5        |
+| Phase | Deliverable                                              | Scope     | Cascade risk | Status |
+|-------|----------------------------------------------------------|-----------|--------------|--------|
+| 1a    | Encapsulate escape-hatch bridge in CoreExecution methods | 0.5 day   | LOW          | ✅ 2026-09-21 (fd879cc + 9ff6bf5 + 73ea896) |
+| 1b    | Retire dead HasData impls                                 | 0.1 day   | LOW          | ✅ 2026-09-21 (00d5c51) |
+| 1c    | Wasmos gap: `Instance::consumer_state_mut`                | 0.5 day   | LOW          | ✅ 2026-09-21 (wasmos d05cb2a3) |
+| 1d    | Extract `CoreInnerState` from `CoreStoreState`            | 0.5 day   | MEDIUM       | ✅ 2026-09-21 (7c41ce8) |
+| 1e    | Flip `CoreStoreState` → `SyncStoreState<CoreInnerState>`  | 1 day     | MEDIUM       | PENDING (needs WasiEnvironment pipe support on wasmos side) |
+| 2     | 5 store-construction sites → SyncRuntime                 | 2-3 days  | HIGH         | PENDING (blocked on 1e) |
+| 3     | Host-import registrations → HostImports::register_sync   | 2-3 days  | MEDIUM       | PENDING (blocked on 2) |
+| 4     | Guest-export dispatch → SyncInstance::call_export        | 1-2 days  | MEDIUM       | PENDING (blocked on 1e + 2) |
+| 5     | `primary_nested_exec` retirement (ExtensionServices break) | 3-5 days | ECOSYSTEM    | PENDING (blocked on 1-4) |
+| 6     | Drop direct wasmtime Cargo deps                          | 0.5 day   | LOW          | PENDING (blocked on 1-5) |
 
 **Total realistic scope:** 3-4 weeks focused ducklink-team work.
 Phase 5 adds 1-2 weeks ecosystem lag for extension-author
-coordination.
+coordination (semver-major `ExtensionServices` trait break in
+`ducklink-runtime` cascades to downstream community extensions).
 
-**Alternative pragmatic scope:** Phases 1-4 only. Ducklink keeps
-`unsafe fn primary_nested_exec` (defensible pattern following
-wasmtime's own reentry precedent) and keeps the direct wasmtime
-Cargo dep but consumer files no longer name wasmtime types
-directly. ~6-10 days.
+**Alternative pragmatic scope:** Phases 1-4 + 6 only. Ducklink
+keeps `unsafe fn primary_nested_exec` (defensible pattern
+following wasmtime's own reentry precedent) but retires the
+direct wasmtime Cargo dep. ~6-10 days.
+
+**One-session cap:** three to five substeps of Phase 1 fit a
+focused single session; the full plan across all six phases is
+multi-session by construction (Phase 5 alone dominates calendar).
 
 ---
 
