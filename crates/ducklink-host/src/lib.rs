@@ -8919,17 +8919,10 @@ impl HostState {
         let capability_arg =
             Value::List(requested_caps.iter().map(capabilitykind_to_value).collect());
         let ret = match self.with_core(|core| {
-            use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
-                call_export_with_resources, ExportResourceTable,
-            };
-            let mut resources = ExportResourceTable::new();
-            call_export_with_resources(
-                core.store.as_context_mut(),
-                &core.instance,
-                Some(DATABASE_IFACE),
+            core.call_bridge_export(
+                DATABASE_IFACE,
                 "register-extension",
                 &[Value::String(name.clone()), capability_arg.clone()],
-                &mut resources,
             )
         }) {
             Ok(ret) => ret,
@@ -8978,20 +8971,7 @@ impl HostState {
     fn list_registered_extensions(&mut self) -> Vec<cli_native::ExtensionInfo> {
         use wasmos_runtime_api::Value;
         let ret = self
-            .with_core(|core| {
-                use wasmos_runtime_wasmtime_v48::sync_export_bridge::{
-                    call_export_with_resources, ExportResourceTable,
-                };
-                let mut resources = ExportResourceTable::new();
-                call_export_with_resources(
-                    core.store.as_context_mut(),
-                    &core.instance,
-                    Some(DATABASE_IFACE),
-                    "list-registered-extensions",
-                    &[],
-                    &mut resources,
-                )
-            })
+            .with_core(|core| core.call_bridge_export(DATABASE_IFACE, "list-registered-extensions", &[]))
             .expect("failed to list registered extensions");
         match ret.as_slice() {
             [Value::List(items)] => items
