@@ -3485,6 +3485,142 @@ fn dynlink_provider_registry(engine: &Engine) -> &'static ProviderRegistry {
     })
 }
 
+/// Handle wrapping the wasmos-native `compose:dynlink` machinery kept as
+/// a sibling of the wasmtime-shaped [`dynlink_provider_registry`].
+///
+/// Owns its own private tokio runtime + a [`WasmtimeV48Runtime`] whose
+/// engine is INDEPENDENT of ducklink's `ExtensionManager` engine —
+/// dot-commands under the wasmos-native path build their own
+/// per-component `SyncRuntime` anyway, and provider instantiation runs
+/// on the registry's runtime rather than the guest's, so the two engines
+/// don't need to coincide. Path B follow-up (2026-09-22): both
+/// registries coexist during the migration; retire this one alongside
+/// the wasmtime-shaped registry when `ExtensionStoreState` migrates
+/// (`docs/path-b-closure-plan.md` Blocker 1).
+struct DotcmdWasmosProviderHandle {
+    /// The wasmos-native ResidentBackend the DotcmdInstance install
+    /// path clones into `install_host_imports`. Clone-cheap (Arc
+    /// internal state).
+    backend: std::sync::Arc<datalink_dynlink_wasmos::ResidentBackend>,
+    /// Retained so a future load path can `block_on` an async
+    /// registration mutation (e.g. `register_digest`); currently only
+    /// touched at first-init from `dotcmd_wasmos_provider_registry`.
+    #[allow(dead_code)]
+    tokio_rt: std::sync::Arc<tokio::runtime::Runtime>,
+    /// Retained: keeps the runtime alive as long as the registry does
+    /// (compiled components own an `Arc` back to the engine indirectly
+    /// through the wasmos-runtime-api CompiledComponent). Not read
+    /// after init.
+    #[allow(dead_code)]
+    runtime: std::sync::Arc<dyn wasmos_runtime_api::Runtime>,
+}
+
+/// Process-global wasmos-native `compose:dynlink/linker` provider
+/// registry — the sibling of [`dynlink_provider_registry`] that
+/// DotcmdInstance's wasmos-native install path consumes.
+///
+/// Lazily built on first use; provider IDs come from the same
+/// `DUCKLINK_PROVIDERS` env var (parsed by
+/// [`register_env_providers_wasmos`]) so operators do not have to
+/// duplicate their spec while the two registries coexist.
+fn dotcmd_wasmos_provider_registry() -> &'static DotcmdWasmosProviderHandle {
+    use datalink_dynlink_wasmos::{ProviderRegistry as WasmosProviderRegistry, ResidentBackend};
+    use std::sync::Arc as StdArc;
+    use wasmos_runtime_api::Runtime as WasmosRuntime;
+    use wasmos_runtime_wasmtime_v48::WasmtimeV48Runtime;
+
+    static HANDLE: OnceLock<DotcmdWasmosProviderHandle> = OnceLock::new();
+    HANDLE.get_or_init(|| {
+        // A single-threaded runtime is enough — we only ever `block_on`
+        // async registrations here; the resident provider's per-invoke
+        // work runs on the guest SyncInstance's tokio runtime instead.
+        let tokio_rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("build DotcmdWasmosProviderHandle tokio runtime");
+        let tokio_rt = StdArc::new(tokio_rt);
+
+        let runtime = WasmtimeV48Runtime::new(ducklink_runtime_config())
+            .map(StdArc::new)
+            .expect("build wasmos-native WasmtimeV48Runtime for dotcmd provider registry");
+        let runtime_dyn: StdArc<dyn WasmosRuntime> = runtime.clone();
+
+        let registry = WasmosProviderRegistry::new(runtime_dyn.clone());
+        tokio_rt.block_on(register_env_providers_wasmos(&registry));
+        let backend = StdArc::new(ResidentBackend::new(registry));
+
+        DotcmdWasmosProviderHandle {
+            backend,
+            tokio_rt,
+            runtime: runtime_dyn,
+        }
+    })
+}
+
+/// Wasmos-native mirror of [`register_env_providers`] against the
+/// wasmos-flavored [`datalink_dynlink_wasmos::ProviderRegistry`].
+///
+/// Same `DUCKLINK_PROVIDERS` spec (comma-separated `id=path[:preopens]`
+/// entries) so operators do not have to duplicate config across the
+/// two registries during the coexistence window.
+async fn register_env_providers_wasmos(
+    registry: &datalink_dynlink_wasmos::ProviderRegistry,
+) {
+    use datalink_dynlink_wasmos::ProviderPreopen as WasmosProviderPreopen;
+
+    let spec = match std::env::var("DUCKLINK_PROVIDERS") {
+        Ok(s) if !s.trim().is_empty() => s,
+        _ => return,
+    };
+    for entry in spec.split(',').map(str::trim).filter(|e| !e.is_empty()) {
+        // Same shape as register_env_providers (wasmtime-side).
+        let (id, rest) = match entry.split_once('=') {
+            Some(p) => p,
+            None => {
+                eprintln!(
+                    "[compose-dynlink/wasmos] DUCKLINK_PROVIDERS: skipping malformed entry '{entry}' (expected id=path)"
+                );
+                continue;
+            }
+        };
+        let (path, preopen_spec) = match rest.split_once(":/") {
+            Some((p, rest)) => (p, Some(format!("/{rest}"))),
+            None => (rest, None),
+        };
+        let mut preopens = Vec::new();
+        if let Some(po_spec) = preopen_spec {
+            for pair in po_spec.split(';').map(str::trim).filter(|p| !p.is_empty()) {
+                match pair.split_once('=') {
+                    Some((guest, host)) => {
+                        // Match wasmtime-side default (read-only).
+                        preopens.push(WasmosProviderPreopen::read_only(
+                            host.trim(),
+                            guest.trim(),
+                        ))
+                    }
+                    None => eprintln!(
+                        "[compose-dynlink/wasmos] DUCKLINK_PROVIDERS: provider '{id}': skipping malformed preopen '{pair}' (expected guest=host)"
+                    ),
+                }
+            }
+        }
+        match registry
+            .register_provider_with_preopens(id, path.trim(), preopens.clone())
+            .await
+        {
+            Ok(()) => eprintln!(
+                "[compose-dynlink/wasmos] registered provider '{id}' from {} ({} preopen{})",
+                path.trim(),
+                preopens.len(),
+                if preopens.len() == 1 { "" } else { "s" }
+            ),
+            Err(e) => eprintln!(
+                "[compose-dynlink/wasmos] failed to register provider '{id}': {e:?}"
+            ),
+        }
+    }
+}
+
 /// Register `compose:dynlink` providers declared in the `DUCKLINK_PROVIDERS`
 /// environment variable into `registry`. This mirrors `DUCKLINK_AUTOLOAD`'s
 /// env-list config style.
@@ -3838,14 +3974,14 @@ impl DotcmdRegistry {
         extension_manager: Arc<Mutex<ExtensionManager>>,
     ) -> anyhow::Result<(DotcmdInstance, Vec<(String, u64, String, String)>)> {
         // Path B follow-up (2026-09-22): wasmos-native construction
-        // mirrors CliHarness + shell driver. Compose_dynlink support
-        // for dot-commands is temporarily degraded — components that
-        // import `compose:dynlink/linker` are skipped with a warning
-        // (the wasmos-native install path needs a
-        // datalink_dynlink_wasmos-flavoured provider registry
-        // alongside ducklink's existing wasmtime-shaped one). Retiring
-        // this gap is tracked with the joint compose_dynlink migration
-        // in docs/path-b-closure-plan.md.
+        // mirrors CliHarness + shell driver. `compose:dynlink/linker`
+        // support is restored via the wasmos-native process-global
+        // provider registry (`dotcmd_wasmos_provider_registry()`) —
+        // a sibling of the wasmtime-shaped `dynlink_provider_registry`,
+        // populated from the same `DUCKLINK_PROVIDERS` env spec so
+        // operators keep one config. Both registries coexist until
+        // ExtensionStoreState migrates and the wasmtime one retires
+        // (see docs/path-b-closure-plan.md Blocker 1).
         let bytes = std::fs::read(path)
             .with_context(|| format!("read dot-command component at {}", path.display()))?;
         let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::new(ducklink_runtime_config())
@@ -3860,24 +3996,27 @@ impl DotcmdRegistry {
             )
             .map_err(|e| anyhow::anyhow!("compile dot-command component: {e:?}"))?;
 
-        // compose:dynlink/linker gate — currently unsupported on the
-        // wasmos-native path. Bail out cleanly so `DotcmdRegistry::load`
-        // can log-and-skip without failing the whole registry load.
-        let imports = compiled.imported_instance_names();
-        if imports.iter().any(|n| n == "compose:dynlink/linker") {
-            anyhow::bail!(
-                "compose:dynlink/linker not yet supported on the wasmos-native \
-                 dot-command path (component: {})",
-                path.display()
-            );
-        }
-
         // Install `duckdb:dotcmd/spi@0.2.0` through wasmos-native
         // HostImports::register_sync. SpiHost captures its Arc handles
         // by value so no consumer_state is needed for the SPI itself.
         let spi_host = crate::dotcmd_wasmos::SpiHost::new(core.clone(), current_connection.clone());
-        let imports_builder = wasmos_runtime_api::HostImports::new()
+        let mut imports_builder = wasmos_runtime_api::HostImports::new()
             .register_sync("duckdb:dotcmd/spi@0.2.0", spi_host);
+
+        // Install `compose:dynlink/linker@0.1.0` iff the component
+        // imports it. `install_host_imports` is a no-op at guest
+        // dispatch time for components that never call the linker —
+        // but keeping the install conditional avoids materializing
+        // the process-global provider registry (a WasmtimeV48Runtime
+        // + tokio runtime pair) for dot-commands that don't need it.
+        let imports = compiled.imported_instance_names();
+        if imports.iter().any(|n| n == "compose:dynlink/linker@0.1.0") {
+            let handle = dotcmd_wasmos_provider_registry();
+            imports_builder = datalink_dynlink_wasmos::install_host_imports(
+                imports_builder,
+                handle.backend.clone(),
+            );
+        }
 
         // Retained fields on DotcmdState: extension_manager only (see
         // the struct's docstring for the field-set rationale).

@@ -98,22 +98,33 @@ wasmos-runtime-select = { path = "../../../wasmos/runtime/selector", features = 
 # wasmtime types (see `docs/wasmos-migration-recipe.md`) need this
 # in addition to the select facade.
 wasmos-runtime-wasmtime-v48 = { path = "../../../wasmos/runtime/wasmtime/v48", features = ["sync-facade"] }
-
-[dev-dependencies]
-tempfile = "3"
-# ADR-0029 Phase 6.2.d.1 dev-deps: the DynState-migration integration
-# test (tests/compose_dynlink_dlopen.rs) drives datalink-dynlink-wasmos
-# through the wasmos runtime abstraction end-to-end. Pinned to
-# wasmos main tip at the time of the migration; bump when the abstraction
-# grows. datalink-dynlink-wasmos is a peer-repo git dep at the datalink
-# main rev that ships it (6fbb890+).
+# Path B follow-up (2026-09-22): promoted from dev-deps to a regular
+# dep so DotcmdRegistry::load_one can install the
+# `compose:dynlink/linker` host imports on the wasmos-native path via
+# `datalink_dynlink_wasmos::install_host_imports`. A process-global
+# wasmos-native ProviderRegistry (dotcmd_wasmos_provider_registry())
+# lives alongside the wasmtime-shaped `dynlink_provider_registry()` —
+# dot-command components go through the wasmos-native one;
+# ExtensionManager still consumes the wasmtime-shaped one until
+# ExtensionStoreState migrates. See docs/path-b-closure-plan.md
+# Blocker 1.
 datalink-dynlink-wasmos = { git = "https://github.com/tegmentum/datalink.git", tag = "v0.2.0" }
-# wasmos-runtime-api + wasmos-runtime-select moved to regular deps
-# above (local path) so production code and tests share one source
-# of truth during the Phase-2+ direct-wasmtime → wasmos migration.
+# Async runtime + bytes/async-trait are needed at library level too
+# (were dev-only until 2026-09-22): datalink_dynlink_wasmos's
+# `ProviderRegistry::register_provider_with_preopens` is `async fn`
+# so DotcmdRegistry populates the wasmos-native registry from
+# DUCKLINK_PROVIDERS through a process-owned tokio runtime, and the
+# ResidentBackend's `Bytes` payload type on the invoke path crosses
+# our lib surface too.
 async-trait = "0.1"
 bytes = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[dev-dependencies]
+tempfile = "3"
+# wasmos-runtime-api + wasmos-runtime-select moved to regular deps
+# above (local path) so production code and tests share one source
+# of truth during the Phase-2+ direct-wasmtime → wasmos migration.
 arrow-ipc = { version = "53", default-features = false }
 arrow-array = { version = "53", default-features = false }
 # PoC for the nested-exec Direction-1 §6 wasmtime re-entrancy experiment:
