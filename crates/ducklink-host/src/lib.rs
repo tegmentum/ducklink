@@ -10849,7 +10849,14 @@ fn run_query_on_core(
 /// CI benefit from a real cache when the standard cache dir is
 /// available.
 fn ducklink_runtime_config() -> wasmos_runtime_api::RuntimeConfig {
-    let mut cfg = wasmos_runtime_api::RuntimeConfig::default();
+    // wasm-exceptions: DuckDB's wasm build uses `-fwasm-exceptions` (see
+    // the pre-Path-B `ducklink-host::build_engine` and its relocation
+    // to `ducklink_runtime::build_engine`, both of which set
+    // `wasm_exceptions(true)`). Wasmos defaults it to false, so without
+    // this knob the engine rejects the core wasm at parse with the
+    // generic "failed to parse WebAssembly module" — invisible until an
+    // integration test exercises the load path.
+    let mut cfg = wasmos_runtime_api::RuntimeConfig::default().with_wasm_exceptions(true);
     if let Some(cache_dir) =
         dirs::cache_dir().map(|d| d.join("ducklink").join("compile-cache"))
     {
