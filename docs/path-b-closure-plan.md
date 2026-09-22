@@ -7,6 +7,45 @@ Ducklink-host no longer holds `wasmtime`, `wasmtime-wasi`, or
 `cargo tree -p ducklink-host --depth 1 | grep wasmtime` (prints
 only the wasmos adapter `wasmos-runtime-wasmtime-v48`).
 
+**Follow-up (2026-09-22): DEEPER TYPE-LEVEL CLOSURE — the
+ExtensionManager migration arc is FULLY COMPLETE.** Path B was
+recorded closed at `0960423` for the Cargo-dep level. The
+follow-up arc retires the wasmtime types INSIDE
+`ducklink-runtime`'s ExtensionManager as well — no more
+wasmtime-shaped `Store<T>` / `Instance` / `WasiView` / `HasData`
+/ `AsContextMut` inside the extension-load pipeline. The
+wasmos-side gap that blocked the arc closed as
+`c7fdc6c2` (RuntimeConfig::sync_dispatch). Landings (six steps +
+Option B macro retirement + wasmos gap #2 + ducklink flip),
+chronological:
+
+- `8abf1184` — Step 1: extract `ExtensionInnerState` (arc begin).
+- `0afb98b0` — Option B: retire `impl_compose_dynlink_host!`
+  macro for `ExtensionStoreState`.
+- `c137b578` — Step 2: flip
+  `SyncStoreState<ExtensionInnerState>` (wasmtime imports
+  25 → 14; `WasiView` / `HasData` impls retired).
+- `09474e3`  — Step 3: encapsulate `ExtensionInstance` (147 raw
+  store / instance accesses → 3).
+- `46fb1ba6` — Step 4: `SyncRuntime` + `HostImports` +
+  `compose:dynlink` restore + Step 6 field flip (wasmtime
+  imports 2 → 2; `AsContextMut` + `Store` retired).
+- `a43901bd` — Step 4.1: canonical `@5.0.0` install names +
+  kebab-case consistent between register + load sites;
+  load-site workaround removed.
+- `34eb1988` — Step 5: retire wasmtime-shaped
+  `dynlink_provider_registry()`; migrate `SubExtLoader`.
+- `d9f72e5d` — Ducklink flip: `sync_dispatch` +
+  `call_export_reentrant` on the extension-load path (paired
+  with wasmos `c7fdc6c2`).
+
+Blocker 2 in the "What remains" section below (ExtensionManager
+`wasmtime::Engine` cascade) is retired at the type level as of
+this arc. The Cargo-dep-level closure at `0960423` stands
+unchanged; this deeper pass eliminates the wasmtime-typed
+INTERNALS the earlier closure only encapsulated behind
+ducklink-runtime re-exports.
+
 - Slice 3 atomic surgery landed (`ad3156a`): CoreExecution flipped
   to wasmos-native SyncInstance; `primary_nested_exec` rewired
   onto Phase 6.24's cross-instance sync reentry primitive.
