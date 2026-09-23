@@ -10856,7 +10856,25 @@ fn ducklink_runtime_config() -> wasmos_runtime_api::RuntimeConfig {
     // this knob the engine rejects the core wasm at parse with the
     // generic "failed to parse WebAssembly module" — invisible until an
     // integration test exercises the load path.
-    let mut cfg = wasmos_runtime_api::RuntimeConfig::default().with_wasm_exceptions(true);
+    //
+    // sync-dispatch: every SyncRuntime constructed off this config
+    // dispatches through `call_export_reentrant` when a host callback
+    // fires (see the CoreExecution + DotcmdInstance dispatch sites).
+    // Without `sync_dispatch(true)`, wasmos's default
+    // `add_to_linker_async` + `func_new_async` wiring taints the
+    // resulting InstancePre with `Asyncness::Yes`; the store's
+    // `async_required` flag then flips true at instantiate and every
+    // sync `Func::call` from within a host callback fails with "store
+    // configuration requires that *_async functions are used instead".
+    // The paired wasmos fix (call_wasi_command uses `sync::Command`
+    // when sync_dispatch is on) means the outer `call_wasi_command`
+    // path no longer wraps its dispatch in `tokio.block_on`, so
+    // wasmtime-wasi's `in_tokio` helper inside a nested callback
+    // reaches for a fresh runtime instead of colliding with the
+    // outer one.
+    let mut cfg = wasmos_runtime_api::RuntimeConfig::default()
+        .with_wasm_exceptions(true)
+        .with_sync_dispatch(true);
     if let Some(cache_dir) =
         dirs::cache_dir().map(|d| d.join("ducklink").join("compile-cache"))
     {
