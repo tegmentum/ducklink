@@ -77,6 +77,76 @@ ducklink-runtime re-exports.
 imports, 3 real-code type/method sites, ~14 archaeological
 comments preserved.
 
+**Follow-up (2026-09-22): pre-existing test failures unblocked
+— all 30 now pass.** The earlier session's 30 pre-existing
+test failures documented under "Testing strategy" (baseline
+128 passing / 30 env-blocked; also referenced in Phase 1's
+"30 known env failures" note) are now GREEN. Test count flips
+from 128 passed / 30 failed → **158 passed / 0 failed** on
+the ducklink-host suite. Two ducklink-side fixes + two
+wasmos-side landings close the gap:
+
+- **`2ba7844` — `fix(ducklink-host): enable wasm_exceptions on
+  the shared RuntimeConfig`.** `ducklink_runtime_config()` now
+  calls `.with_wasm_exceptions(true)`. The pre-Path-B
+  `build_engine` set `wasm_exceptions(true)` explicitly on the
+  wasmtime `Config`; the flag survived to
+  `ducklink_runtime::build_engine` but was NOT threaded
+  through when Path B Slice-3 moved every `SyncRuntime`
+  construction site to the shared wasmos config helper.
+  DuckDB's core wasm is compiled with `-fwasm-exceptions`, so
+  without the flag the engine rejects the core wasm at parse
+  with a generic "failed to parse WebAssembly module" — the
+  wasm-parse failure masqueraded as an env issue in the
+  30-failure baseline.
+
+- **`99b96b4` — `feat(ducklink-host): opt into wasmos
+  sync_dispatch for all SyncRuntime sites`.**
+  `ducklink_runtime_config()` now also carries
+  `.with_sync_dispatch(true)`. Every host handler ducklink
+  registers already uses `register_sync` (5 registration
+  sites), matching the sharpened contract landed on the
+  wasmos side (see wasmos `dd8c05ad`); every same-instance
+  dispatch site already uses `call_export_reentrant`, which
+  needs `async_required = false` on the store. The
+  `CliHarness` flow through `call_wasi_command` now runs on
+  the sync wasi:cli binding, so a wasm-triggered
+  wasmtime-wasi callback can call `Handle::try_current() →
+  Err` and start its own tokio runtime for its I/O work
+  without tripping wasmtime's fiber-context requirement.
+
+**Wasmos-side pair (see wasmos state-of-the-abstraction
+"sync_dispatch — finishing the story"):**
+
+- `dd8c05ad` — wasmos `WasmtimeInstance` gains
+  `command_sync` / `proxy_sync`; sync `wasi:cli` binding used
+  when `sync_dispatch` is on; `poll_sync_handler`
+  (`now_or_never` + loud panic on Pending) replaces
+  `futures::executor::block_on` in host-import
+  `func_new` / resource-drop wires; contract sharpens to
+  "sync_dispatch requires `register_sync` handlers".
+- `ed37c974` — wasmos `wire_host_imports` dedupes host
+  resource-type discriminants across interfaces (WIT `use`
+  semantics), fixing wasmtime's "matching implementation was
+  not found in the linker" rejection on multi-interface
+  extensions. Root cause of the 8 ducklink-host tests that
+  exercised custom cast / logical-type / macro /
+  replacement-scan registration.
+
+**Rebuilt wasm artifacts** (2026-09-22): reproduced with
+`wasi-sdk` 34 at
+`$WASI_SDK_PATH=/Users/zacharywhitley/.tegmentum/wsvm/34`;
+`ducklink_core.wasm` via `scripts/rebuild-core-wasm.sh`;
+`ducklink_cli.wasm` via `cargo component build -p ducklink-cli
+--target wasm32-wasip2 --release`; `sample_extension` via
+`cargo component build -p sample-extension-component --release
+--target wasm32-wasip1`. Rebuilt artifacts satisfy the
+`ducklink_core.wasm` prereq the earlier "30 env-blocked"
+baseline was waiting on; combined with the two ducklink-side
+fixes + two wasmos-side landings above, every previously
+env-blocked test now passes on a machine with the rebuilt
+artifacts and the wasi-sdk 34 toolchain available.
+
 This is the execution plan for closing out Path B for
 ducklink-host — retiring every direct `wasmtime::*` type from
 ducklink-host source files, retiring `unsafe fn
