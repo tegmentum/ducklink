@@ -43,7 +43,7 @@ datalink-contract = { git = "https://github.com/tegmentum/datalink.git", tag = "
 # (a later phase), this dep continues to serve as the underlying opaque
 # handle vocabulary; when the whole crate migrates, the bridge module
 # retires.
-wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", rev = "6ecb68e9" }
+wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", rev = "ce39bfe3" }
 # ADR-0029 Phase 6.2.h.2 — the v48 adapter's `sync_bridge` module
 # is the SyncHostCall → wasmtime::component::Linker<S> bridge that
 # lets us swap wit-bindgen `add_to_linker` calls for wasmos-native
@@ -57,7 +57,7 @@ wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", rev = "6
 # without the workspace-level [patch] block (npi, clia) fail feature
 # selection at `cargo check`. Bump the rev when a wasmos release
 # ≥ 0.3.3 lands.
-wasmos-runtime-wasmtime-v48 = { git = "https://github.com/tegmentum/wasmos.git", rev = "6ecb68e9", features = ["sync-facade"] }
+wasmos-runtime-wasmtime-v48 = { git = "https://github.com/tegmentum/wasmos.git", rev = "ce39bfe3", features = ["sync-facade"] }
 # The shared store-generic compose:dynlink/linker host machinery + the
 # ResidentBackend (instantiate-once-and-reuse provider lifecycle). ducklink's
 # compose_dynlink module is now a thin adapter over this; the resolve/invoke
