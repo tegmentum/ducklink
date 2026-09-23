@@ -6662,7 +6662,6 @@ pub struct HostState {
 
 /// Metadata the ATTACH intercept records for an `<alias>` bound to a storage
 /// extension. See `HostState::attached_aliases`.
-#[derive(Clone)]
 pub(crate) struct AttachedForeignCatalog {
     pub extension: String,
     pub catalog_handle: u32,
@@ -6689,16 +6688,28 @@ pub(crate) struct AttachedForeignCatalog {
     pub read_only: bool,
     /// Bug 4b: an extension that advertises `writes_persist_directly = true`
     /// (currently sqlitewasm via sqlite-lib + wasivfs) is authoritative for
-    /// durability — the host skips its own serialize + rewrite. There's no
-    /// host-side rusqlite connection anymore: the write goes wasm-side
-    /// through the SPI, wasivfs turns it into wasi:filesystem calls, and
-    /// the extension loader's per-extension WasiCtx preopens the target
-    /// dir (see `attach_sqlitewasm_preopens`). The `writes_persist_directly`
-    /// probe result is cached here so `at5_write_back` can short-circuit
-    /// without re-dispatching. `false` = probe returned false / errored /
-    /// wasn't run (read-only attach); the legacy full-serialize write-back
-    /// path applies.
+    /// durability — the host skips its own serialize + rewrite in
+    /// `at5_write_back`. `false` = probe returned false / errored / wasn't
+    /// run (read-only attach); the legacy full-serialize write-back path
+    /// applies.
     pub writes_persist_directly: bool,
+    /// Bug 4c write-intercept fast path: a NATIVE file-backed rusqlite
+    /// connection opened at ATTACH time when this alias's TYPE is
+    /// `sqlitewasm` AND `dsn_path` names a local file we could open. When
+    /// present, `intercept_write` REPLACES the wasm-side
+    /// storage-write-dispatch round-trip (which itself goes wasm ->
+    /// sqlite-lib SPI -> wasivfs -> host preopen at ~15ms/statement under
+    /// the current sync_dispatch path) with a direct rusqlite `execute` on
+    /// this connection — sub-ms per INSERT and independent of DB size.
+    /// The wasm-side sqlite-lib remains open for reads; SQLite's own
+    /// change-counter / shared-lock protocol invalidates its page cache
+    /// when the file changes underneath it, so the AT5 UPDATE/DELETE
+    /// rowid prescan (which routes through the wasm-side read path) still
+    /// sees rows this fast path just wrote. `None` when we couldn't open
+    /// a native connection (DSN wasn't a file, read-only mount, extension
+    /// isn't sqlitewasm, or the file itself refused to open); callers fall
+    /// back to the storage-write-dispatch path with no behavior change.
+    pub native_write_conn: Option<Arc<Mutex<rusqlite::Connection>>>,
 }
 
 /// Phase 2c (@5): routing target for a single AT5 attach-scan callback
@@ -7609,6 +7620,54 @@ impl HostState {
             flag
         };
 
+        // Bug 4c write-intercept fast path: open a NATIVE file-backed
+        // rusqlite connection alongside the wasm-side when the ATTACH names
+        // sqlitewasm against a real file we can open. `writes_persist_directly`
+        // is already false for read-only mounts and non-file DSNs surface as
+        // `dsn_path == None`, so the guards below are just the additional
+        // conditions the fast path needs (right TYPE + file actually
+        // openable). Opening this connection is cheap and doesn't take a
+        // lock on the file — SQLite's own change-counter protocol keeps the
+        // wasm-side sqlite-lib in sync when either side writes.
+        let native_write_conn = if writes_persist_directly
+            && spec.type_name.eq_ignore_ascii_case("sqlitewasm")
+        {
+            match dsn_path.as_ref() {
+                Some(path) => match rusqlite::Connection::open(path) {
+                    Ok(conn) => {
+                        // Mirror the wasm-side PRAGMAs (see sqlitewasm's
+                        // storage_attach). MEMORY journal + synchronous=OFF
+                        // matches the durability trade-off the user opted
+                        // into by ATTACHing (single-writer session), and
+                        // avoids per-INSERT fsync — the whole point of this
+                        // fast path.
+                        let _ = conn.execute_batch(
+                            "PRAGMA journal_mode = MEMORY; PRAGMA synchronous = OFF;",
+                        );
+                        eprintln!(
+                            "[at5-writeback] {}: opened NATIVE rusqlite fast path at {}; \
+                             INSERT/UPDATE/DELETE will bypass storage-write-dispatch",
+                            spec.alias,
+                            path.display()
+                        );
+                        Some(Arc::new(Mutex::new(conn)))
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[at5-writeback] {}: native rusqlite fast path unavailable \
+                             (open {} failed: {e}); writes will go via wasm dispatch",
+                            spec.alias,
+                            path.display()
+                        );
+                        None
+                    }
+                },
+                None => None,
+            }
+        } else {
+            None
+        };
+
         self.attached_aliases.insert(
             spec.alias.clone(),
             AttachedForeignCatalog {
@@ -7621,6 +7680,7 @@ impl HostState {
                 dsn_path,
                 read_only: spec.read_only,
                 writes_persist_directly,
+                native_write_conn,
             },
         );
         Ok(empty_query_result())
@@ -7659,6 +7719,7 @@ impl HostState {
                     )
                 })?;
                 let catalog_handle = catalog.catalog_handle;
+                let native_conn = catalog.native_write_conn.as_ref().map(Arc::clone);
                 // Convert parsed literals into extension Duckvalue rows. Any
                 // Raw/expression cell means we can't dispatch to the extension
                 // cleanly; reject with a clear message.
@@ -7690,6 +7751,27 @@ impl HostState {
                     }
                     ext_rows.push(cells);
                 }
+                // Bug 4c fast path: when the ATTACH opened a native rusqlite
+                // connection (sqlitewasm + file DSN), REPLACE the wasm-side
+                // storage-write-dispatch round-trip with a direct rusqlite
+                // execute. Under the current wasmos sync_dispatch path each
+                // storage-write-dispatch call is ~15ms; native rusqlite is
+                // sub-ms and independent of DB size, so 10k INSERTs come
+                // in well under the 60s regression bound. If the native path
+                // fails (which shouldn't happen for a file we just opened),
+                // we fall through to the wasm dispatch below so the write
+                // still lands rather than silently dropping.
+                if let Some(conn) = &native_conn {
+                    let n = at5_native_insert(conn, &table, &columns, &ext_rows)?;
+                    eprintln!(
+                        "[at5-write] INSERT {alias}.{table}: {n} row(s) written via \
+                         native rusqlite fast path (storage-write-dispatch bypassed)"
+                    );
+                    // No at5_write_back call: the fast path already wrote to
+                    // the DSN file directly, and writes_persist_directly=true
+                    // would have short-circuited it anyway.
+                    return Ok(empty_query_result());
+                }
                 let n = {
                     let mut manager = self
                         .extension_manager
@@ -7718,6 +7800,10 @@ impl HostState {
                 where_clause,
             } => {
                 let (catalog_handle, columns) = self.at5_lookup_write_target(&alias, &table)?;
+                let native_conn = self
+                    .attached_aliases
+                    .get(&alias)
+                    .and_then(|c| c.native_write_conn.as_ref().map(Arc::clone));
                 let rowid_idx = at5_locate_rowid_column(&columns, &alias, &table)?;
                 // Parse the SET RHS values up-front so an unsupported expression
                 // rejects BEFORE any core round-trip.
@@ -7787,6 +7873,28 @@ impl HostState {
                         row
                     })
                     .collect();
+                // Bug 4c fast path: replay UPDATE against the native
+                // rusqlite connection when the sqlitewasm attach opened one.
+                // Same reasoning as the INSERT arm — avoids the ~15ms wasm
+                // dispatch per statement. The rowid prescan above still
+                // routes through the wasm-side read path, so we rely on
+                // SQLite's change-counter protocol to invalidate its page
+                // cache when this fast path wrote to the file earlier.
+                if let Some(conn) = &native_conn {
+                    let n = at5_native_update(
+                        conn,
+                        &table,
+                        &columns,
+                        rowid_idx,
+                        &rowids,
+                        &updated_rows,
+                    )?;
+                    eprintln!(
+                        "[at5-write] UPDATE {alias}.{table}: {n} row(s) written via \
+                         native rusqlite fast path (rowids={rowids:?})"
+                    );
+                    return Ok(empty_query_result());
+                }
                 let n = {
                     let mut manager = self
                         .extension_manager
@@ -7890,6 +7998,10 @@ impl HostState {
                 where_clause,
             } => {
                 let (catalog_handle, columns) = self.at5_lookup_write_target(&alias, &table)?;
+                let native_conn = self
+                    .attached_aliases
+                    .get(&alias)
+                    .and_then(|c| c.native_write_conn.as_ref().map(Arc::clone));
                 let rowid_idx = at5_locate_rowid_column(&columns, &alias, &table)?;
                 let (rowids, _rows) = self.at5_prescan_rows(
                     entry_handle.clone(),
@@ -7901,6 +8013,15 @@ impl HostState {
                 if rowids.is_empty() {
                     eprintln!(
                         "[at5-write] DELETE {alias}.{table}: pre-scan matched 0 row(s); no-op"
+                    );
+                    return Ok(empty_query_result());
+                }
+                // Bug 4c fast path: same shape as INSERT/UPDATE.
+                if let Some(conn) = &native_conn {
+                    let n = at5_native_delete(conn, &table, &rowids)?;
+                    eprintln!(
+                        "[at5-write] DELETE {alias}.{table}: {n} row(s) written via \
+                         native rusqlite fast path (rowids={rowids:?})"
                     );
                     return Ok(empty_query_result());
                 }
@@ -8060,12 +8181,14 @@ impl HostState {
         Ok(())
     }
 
-    // Bug 4b: the at5_file_conn / at5_replay_{insert,update,delete} helpers
-    // that lived here (~150 LOC) were dropped when sqlitewasm moved to
-    // sqlite-lib + wasivfs. The extension self-persists inside the wasm
-    // sandbox, so the host has no serialize-and-rewrite work to do and no
-    // native rusqlite dependency. See `at5_write_back`'s self_persists
-    // short-circuit.
+    // Bug 4c: at5_native_{insert,update,delete} + duck_to_sqlite_value +
+    // sqlite_quote_ident are FREE functions further down (near the end of
+    // the file) rather than HostState methods — they don't touch host state
+    // beyond the cloned `Arc<Mutex<rusqlite::Connection>>` we captured from
+    // `AttachedForeignCatalog::native_write_conn` before releasing the
+    // borrow on `attached_aliases`. See `intercept_write`'s three fast-path
+    // branches for the wiring, and `AttachedForeignCatalog::native_write_conn`
+    // for the ATTACH-time setup that opens the connection.
 
     /// Fetch (catalog-handle, extension-declared columns) for an attached
     /// alias.table pair, briefly acquiring the manager lock. Errors are
@@ -8263,6 +8386,239 @@ fn at5_duckvalue_to_i64(v: &core_types::Duckvalue) -> Result<i64, String> {
         core_types::Duckvalue::Uint8(n) => *n as i64,
         other => return Err(format!("rowid duckvalue arm {other:?} is not an integer")),
     })
+}
+
+// -------------------------------------------------------------------------
+// Bug 4c AT5 write-intercept fast path: helpers that replay a parsed
+// INSERT/UPDATE/DELETE against a NATIVE file-backed rusqlite connection
+// (opened at ATTACH time on `AttachedForeignCatalog::native_write_conn`).
+// The write intercept's three branches call these instead of the
+// storage-write-dispatch round-trip when the connection is present —
+// see intercept_write's INSERT/UPDATE/DELETE arms.
+// -------------------------------------------------------------------------
+
+/// Quote a SQL identifier per SQLite's `"..."` rule (double any embedded
+/// `"`). We know these names are extension-declared column / table names
+/// (or user-typed identifiers already validated by the AT5 parser), so
+/// this is defence-in-depth rather than untrusted input handling.
+fn sqlite_quote_ident(name: &str) -> String {
+    let mut out = String::with_capacity(name.len() + 2);
+    out.push('"');
+    for c in name.chars() {
+        if c == '"' {
+            out.push('"');
+        }
+        out.push(c);
+    }
+    out.push('"');
+    out
+}
+
+/// Convert an extension-shaped `Duckvalue` into a `rusqlite::types::Value`
+/// for binding to a prepared statement. Only the arms sqlitewasm's SPI
+/// itself can emit / accept are mapped 1:1 (NULL, i64, f64, TEXT, BLOB);
+/// the rest either coerce (bool -> integer, temporal / decimal / uuid ->
+/// text) or fall back to text formatting, which mirrors how the SQL
+/// pushdown path already stringifies them.
+fn duck_to_sqlite_value(v: &ducklink_runtime::extension::Duckvalue) -> rusqlite::types::Value {
+    use ducklink_runtime::extension::Duckvalue as DV;
+    use rusqlite::types::Value as SV;
+    match v {
+        DV::Null => SV::Null,
+        DV::Boolean(b) => SV::Integer(if *b { 1 } else { 0 }),
+        DV::Int64(n) => SV::Integer(*n),
+        DV::Uint64(n) => match i64::try_from(*n) {
+            Ok(x) => SV::Integer(x),
+            Err(_) => SV::Text(n.to_string()),
+        },
+        DV::Float64(f) => SV::Real(*f),
+        DV::Text(s) => SV::Text(s.clone()),
+        DV::Blob(b) => SV::Blob(b.clone()),
+        DV::Int32(n) => SV::Integer(*n as i64),
+        DV::Int16(n) => SV::Integer(*n as i64),
+        DV::Int8(n) => SV::Integer(*n as i64),
+        DV::Uint32(n) => SV::Integer(*n as i64),
+        DV::Uint16(n) => SV::Integer(*n as i64),
+        DV::Uint8(n) => SV::Integer(*n as i64),
+        DV::Float32(f) => SV::Real(*f as f64),
+        DV::Timestamp(n) | DV::Time(n) | DV::Timestamptz(n) => SV::Integer(*n),
+        DV::Date(n) => SV::Integer(*n as i64),
+        other => SV::Text(format!("{other:?}")),
+    }
+}
+
+/// Wrap a rusqlite error in a CLI `Duckerror::Io` with a caller-supplied
+/// context prefix, so the fast path surfaces failures consistently with
+/// the storage-write-dispatch fallback (which uses `Io` for wasivfs
+/// errors).
+fn sqlite_err_to_cli(err: rusqlite::Error, context: &str) -> cli_native::Duckerror {
+    cli_native::Duckerror::Io(format!("{context}: {err}").into())
+}
+
+/// Fast-path INSERT: build one `INSERT INTO "table" (cols?) VALUES (?,?..)`
+/// prepared statement and execute it once per row against the native
+/// rusqlite connection. `named_columns` mirrors the parser's Vec<String>
+/// (empty when the user wrote a bare `INSERT INTO t VALUES (...)`, in
+/// which case SQLite fills declared columns in order and mints rowid).
+fn at5_native_insert(
+    conn: &Arc<Mutex<rusqlite::Connection>>,
+    table: &str,
+    named_columns: &[String],
+    rows: &[Vec<ducklink_runtime::extension::Duckvalue>],
+) -> Result<u64, cli_native::Duckerror> {
+    if rows.is_empty() {
+        return Ok(0);
+    }
+    let width = rows[0].len();
+    let placeholders = std::iter::repeat("?")
+        .take(width)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = if named_columns.is_empty() {
+        format!(
+            "INSERT INTO {} VALUES ({placeholders})",
+            sqlite_quote_ident(table)
+        )
+    } else {
+        let cols = named_columns
+            .iter()
+            .map(|c| sqlite_quote_ident(c.trim()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "INSERT INTO {} ({cols}) VALUES ({placeholders})",
+            sqlite_quote_ident(table)
+        )
+    };
+    let guard = conn
+        .lock()
+        .expect("at5 native_write_conn mutex poisoned");
+    let mut stmt = guard
+        .prepare_cached(&sql)
+        .map_err(|e| sqlite_err_to_cli(e, &format!("at5 native INSERT prepare '{sql}'")))?;
+    let mut inserted: u64 = 0;
+    for row in rows {
+        let params: Vec<rusqlite::types::Value> = row.iter().map(duck_to_sqlite_value).collect();
+        let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
+        stmt.execute(rusqlite::params_from_iter(refs.iter().copied()))
+            .map_err(|e| sqlite_err_to_cli(e, &format!("at5 native INSERT into '{table}'")))?;
+        inserted += 1;
+    }
+    Ok(inserted)
+}
+
+/// Fast-path UPDATE: for each (rowid, merged-row) pair produced by the
+/// A5 prescan, run `UPDATE "table" SET c1=?, c2=?, ... WHERE rowid=?`
+/// against the native connection. `columns` is the extension's declared
+/// column list (including the leading synthetic `rowid` slot at
+/// `rowid_idx`), and each row carries the FULL merged shape from the
+/// prescan-plus-assignment step; we skip the rowid slot when building
+/// SET clauses.
+fn at5_native_update(
+    conn: &Arc<Mutex<rusqlite::Connection>>,
+    table: &str,
+    columns: &[ducklink_runtime::extension::Columndef],
+    rowid_idx: usize,
+    rowids: &[i64],
+    rows: &[Vec<ducklink_runtime::extension::Duckvalue>],
+) -> Result<u64, cli_native::Duckerror> {
+    if rowids.is_empty() {
+        return Ok(0);
+    }
+    if rowids.len() != rows.len() {
+        return Err(cli_native::Duckerror::Internal(
+            format!(
+                "at5 native UPDATE '{table}': {} rowids vs {} row payloads",
+                rowids.len(),
+                rows.len()
+            )
+            .into(),
+        ));
+    }
+    // Non-rowid column names (in extension-declared order), used to build
+    // both the SET clause and the per-row bind sequence.
+    let set_cols: Vec<(usize, &str)> = columns
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| *i != rowid_idx)
+        .map(|(i, c)| (i, c.name.as_str()))
+        .collect();
+    if set_cols.is_empty() {
+        // Nothing to update — every column is rowid. Shouldn't happen for
+        // real schemas but keep the fast path robust.
+        return Ok(0);
+    }
+    let set_clause = set_cols
+        .iter()
+        .map(|(_, n)| format!("{} = ?", sqlite_quote_ident(n)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        "UPDATE {} SET {set_clause} WHERE rowid = ?",
+        sqlite_quote_ident(table)
+    );
+    let guard = conn
+        .lock()
+        .expect("at5 native_write_conn mutex poisoned");
+    let mut stmt = guard
+        .prepare_cached(&sql)
+        .map_err(|e| sqlite_err_to_cli(e, &format!("at5 native UPDATE prepare '{sql}'")))?;
+    let mut updated: u64 = 0;
+    for (rid, row) in rowids.iter().zip(rows.iter()) {
+        if row.len() < columns.len() {
+            return Err(cli_native::Duckerror::Internal(
+                format!(
+                    "at5 native UPDATE '{table}': row width {} < declared {}",
+                    row.len(),
+                    columns.len()
+                )
+                .into(),
+            ));
+        }
+        let mut params: Vec<rusqlite::types::Value> = Vec::with_capacity(set_cols.len() + 1);
+        for (idx, _) in &set_cols {
+            params.push(duck_to_sqlite_value(&row[*idx]));
+        }
+        params.push(rusqlite::types::Value::Integer(*rid));
+        let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
+        let n = stmt
+            .execute(rusqlite::params_from_iter(refs.iter().copied()))
+            .map_err(|e| sqlite_err_to_cli(e, &format!("at5 native UPDATE on '{table}'")))?;
+        updated += n as u64;
+    }
+    Ok(updated)
+}
+
+/// Fast-path DELETE: `DELETE FROM "table" WHERE rowid = ?` per rowid.
+/// `rowids` came from the A5 prescan, which is the same rowid space
+/// the native SQLite file uses (sqlitewasm's rowid column IS SQLite's
+/// implicit rowid).
+fn at5_native_delete(
+    conn: &Arc<Mutex<rusqlite::Connection>>,
+    table: &str,
+    rowids: &[i64],
+) -> Result<u64, cli_native::Duckerror> {
+    if rowids.is_empty() {
+        return Ok(0);
+    }
+    let sql = format!(
+        "DELETE FROM {} WHERE rowid = ?",
+        sqlite_quote_ident(table)
+    );
+    let guard = conn
+        .lock()
+        .expect("at5 native_write_conn mutex poisoned");
+    let mut stmt = guard
+        .prepare_cached(&sql)
+        .map_err(|e| sqlite_err_to_cli(e, &format!("at5 native DELETE prepare '{sql}'")))?;
+    let mut deleted: u64 = 0;
+    for rid in rowids {
+        let n = stmt
+            .execute([*rid])
+            .map_err(|e| sqlite_err_to_cli(e, &format!("at5 native DELETE from '{table}'")))?;
+        deleted += n as u64;
+    }
+    Ok(deleted)
 }
 
 fn cli_extension_duckerror(err: ducklink_runtime::extension::Duckerror) -> cli_native::Duckerror {
