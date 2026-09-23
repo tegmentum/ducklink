@@ -43,14 +43,21 @@ datalink-contract = { git = "https://github.com/tegmentum/datalink.git", tag = "
 # (a later phase), this dep continues to serve as the underlying opaque
 # handle vocabulary; when the whole crate migrates, the bridge module
 # retires.
-wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", tag = "v0.3.2" }
+wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", rev = "6ecb68e9" }
 # ADR-0029 Phase 6.2.h.2 — the v48 adapter's `sync_bridge` module
 # is the SyncHostCall → wasmtime::component::Linker<S> bridge that
 # lets us swap wit-bindgen `add_to_linker` calls for wasmos-native
 # handler dispatch one interface at a time (Session-2 migrates the
 # first interface: Lifecycle). Same rev as wasmos-runtime-api so the
 # API shapes agree; keeps in lockstep with future bumps.
-wasmos-runtime-wasmtime-v48 = { git = "https://github.com/tegmentum/wasmos.git", tag = "v0.3.2", features = ["sync-facade"] }
+#
+# Pinned to wasmos origin/main @ 29939b22 (2026-09-22) — the newest
+# published tag (v0.3.2) predates the `sync-facade` feature on the
+# v48 adapter, so downstream consumers that path-dep ducklink-host
+# without the workspace-level [patch] block (npi, clia) fail feature
+# selection at `cargo check`. Bump the rev when a wasmos release
+# ≥ 0.3.3 lands.
+wasmos-runtime-wasmtime-v48 = { git = "https://github.com/tegmentum/wasmos.git", rev = "6ecb68e9", features = ["sync-facade"] }
 # The shared store-generic compose:dynlink/linker host machinery + the
 # ResidentBackend (instantiate-once-and-reuse provider lifecycle). ducklink's
 # compose_dynlink module is now a thin adapter over this; the resolve/invoke
