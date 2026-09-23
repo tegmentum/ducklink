@@ -3531,7 +3531,21 @@ fn dotcmd_wasmos_provider_registry() -> &'static DotcmdWasmosProviderHandle {
         let runtime_dyn: StdArc<dyn WasmosRuntime> = runtime.clone();
 
         let registry = WasmosProviderRegistry::new(runtime_dyn.clone());
-        tokio_rt.block_on(register_env_providers_wasmos(&registry));
+        // `tokio_rt.block_on(...)` panics with
+        // `Cannot start a runtime from within a runtime.` when the
+        // caller's thread is already driving another tokio runtime
+        // (any `#[tokio::test]` callsite hits this). Spawn a fresh
+        // OS thread — always outside any tokio scheduler — so
+        // block_on is unconditionally safe. `std::thread::scope`
+        // joins before returning so no `tokio_rt` reference escapes
+        // the initialisation.
+        let registry_ref = &registry;
+        let tokio_ref = &*tokio_rt;
+        std::thread::scope(|s| {
+            s.spawn(move || {
+                tokio_ref.block_on(register_env_providers_wasmos(registry_ref));
+            });
+        });
         let backend = StdArc::new(ResidentBackend::new(registry));
 
         DotcmdWasmosProviderHandle {
