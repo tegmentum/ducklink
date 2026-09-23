@@ -14958,13 +14958,25 @@ mod tests {
     // cross crate boundaries, so keeping the test would leave the
     // downstream refs dangling.)
 
+    /// Present-and-non-empty check. `Path::exists()` returns true for
+    /// a 0-byte file, which the test scaffolding used to mistake for
+    /// a real build artifact — the `git commit` upstream left empty
+    /// placeholders under `artifacts/extensions/` (LFS-style pointer
+    /// stand-ins) so `exists()` said yes and the actual
+    /// `cargo component build` fallback never ran. Symptom: sample-
+    /// extension load fails at instantiate because the component
+    /// bytes are zero. Guard on size too to force a rebuild.
+    fn artifact_is_populated(path: &Path) -> bool {
+        fs::metadata(path).map(|m| m.len() > 0).unwrap_or(false)
+    }
+
     fn ensure_sample_extension_artifact() -> Result<PathBuf> {
         let workspace = workspace_root();
         let target_artifact =
             workspace.join("target/wasm32-wasip1/release/sample_extension_component.wasm");
-        if !target_artifact.exists() {
+        if !artifact_is_populated(&target_artifact) {
             let prebuilt = workspace.join("artifacts/extensions/sample_extension.wasm");
-            if prebuilt.exists() {
+            if artifact_is_populated(&prebuilt) {
                 if let Some(parent) = target_artifact.parent() {
                     fs::create_dir_all(parent)
                         .with_context(|| format!("failed to create {}", parent.display()))?;
@@ -14979,6 +14991,22 @@ mod tests {
             } else {
                 build_sample_extension(&workspace)?;
             }
+        }
+        // Sanity-check the target artifact ended up populated. A
+        // successful `cargo component build` should always produce a
+        // non-empty component; if it doesn't, fail loudly here rather
+        // than propagating an empty-bytes wasm downstream to the load
+        // path (which surfaces as an opaque instantiate error).
+        if !artifact_is_populated(&target_artifact) {
+            anyhow::bail!(
+                "sample extension artifact at {} is empty after the ensure/build \
+                 step — `cargo component build -p sample-extension-component \
+                 --release --target wasm32-wasip1` did not produce a non-empty \
+                 file. Check that the sample-extension-component crate builds \
+                 (e.g. `cargo component --version`, WASI_SDK availability, \
+                 target install).",
+                target_artifact.display()
+            );
         }
         let extensions_dir = workspace.join("artifacts/extensions");
         fs::create_dir_all(&extensions_dir)
