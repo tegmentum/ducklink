@@ -133,6 +133,9 @@ wasmos-side landings close the gap:
   exercised custom cast / logical-type / macro /
   replacement-scan registration.
 
+`datalink-dynlink-wasmos` aligned with the same contract in
+`0032272` (test coverage in `03aee3b4`).
+
 **Rebuilt wasm artifacts** (2026-09-22): reproduced with
 `wasi-sdk` 34 at
 `$WASI_SDK_PATH=/Users/zacharywhitley/.tegmentum/wsvm/34`;
