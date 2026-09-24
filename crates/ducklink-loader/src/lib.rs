@@ -46,6 +46,7 @@ impl HooksGuest for Component {
             tables: Vec::new(),
             aggregates: Vec::new(),
             macros: Vec::new(),
+            table_macros: Vec::new(),
             replacement_scans: Vec::new(),
             logical_types: Vec::new(),
             casts: Vec::new(),
