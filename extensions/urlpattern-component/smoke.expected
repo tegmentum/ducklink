@@ -1,9 +1,0 @@
-# urlpattern extension smoke golden (csv mode: header line per SELECT).
-match
-true
-nomatch
-false
-groups
-"{""pathname"":{""id"":""123""}}"
-bad
-NULL

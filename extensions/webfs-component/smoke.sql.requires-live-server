@@ -1,3 +1,0 @@
--- webfs needs a live HTTP server; see the httpfs M2 test recipe
-LOAD webfs;
-SELECT * FROM read_csv('http://127.0.0.1:8099/test.csv');
