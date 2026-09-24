@@ -31,15 +31,17 @@ use wasmtime::Engine;
 pub use wasmtime::component::Component as ComponentHandle;
 pub use wasmtime::Engine as EngineHandle;
 
-/// Re-exports of the wasmtime-wasi + wasmtime-wasi-http types
-/// ducklink-host still names in its extension-load-thread WasiCtx
-/// construction path. Consumers reach these through
-/// `ducklink_runtime::wasi::WasiCtxBuilder` etc. instead of
-/// importing `wasmtime_wasi` directly.
-pub mod wasi {
-    pub use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
-    pub use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxBuilder};
-}
+// `pub mod wasi { pub use wasmtime_wasi::… }` re-export retired
+// 2026-09-24. Consumers that need raw `wasmtime_wasi::WasiCtx`
+// now go through the wasmos escape hatch:
+//     wasmos_runtime_wasmtime_v48::wasi::build_wasi_ctx(&env)
+// which takes a portable `wasmos_runtime_api::WasiEnvironment` and
+// returns a `WasiCtx` pre-configured with every knob the adapter's
+// own `Runtime::instantiate` path applies. Consumers that only need
+// the portable env stay on `wasmos_runtime_api::WasiEnvironment` and
+// never touch wasmtime-wasi. See
+// `docs/design/wasmos-api-redesign/walkthrough-p1-wasi-capability.md`
+// in the wasmos repo for the migration walkthrough.
 
 /// Build the wasmtime `Engine` ducklink uses for extension loading
 /// + the CoreExecution/sibling paths. Wraps the previous

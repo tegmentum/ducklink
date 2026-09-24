@@ -391,9 +391,10 @@ pub use replicate::{run_backup, run_restore, ReplicaState, S3Target};
 // shared Cloudflare R2 extension-distribution bucket (reuses `sigv4`).
 pub mod publish;
 pub use publish::{plan_publish, print_dry_run, run_publish, PlanInputs, PublishPlan};
-use ducklink_runtime::wasi::{
-    FsPerms, MemoryInputPipe, MemoryOutputPipe, WasiCtx, WasiCtxBuilder,
-};
+// wasmtime-wasi re-exports (FsPerms / MemoryInput/OutputPipe / WasiCtx /
+// WasiCtxBuilder) retired 2026-09-24 — every remaining consumer moved off
+// them onto the wasmos WasiEnvironment shape. Design:
+// `docs/design/wasmos-api-redesign/walkthrough-p1-wasi-capability.md`.
 // wasmtime_wasi::p2 + wasmtime_wasi::WasiCtxView + WasiView imports
 // retired 2026-09-22 — every remaining wasmtime-wasi consumer in this
 // file uses only pipes / FsPerms / WasiCtx types. WasiHttpCtx +
@@ -12413,21 +12414,13 @@ impl CliHarness {
             .collect();
 
         let args_vec: Vec<String> = args.iter().map(|s| s.as_ref().to_owned()).collect();
-        let stdin = MemoryInputPipe::new("");
-        let stdout = MemoryOutputPipe::new(64 * 1024);
-        let stderr = MemoryOutputPipe::new(64 * 1024);
-        let stdout_clone = stdout.clone();
-        let stderr_clone = stderr.clone();
 
-        // Path B follow-up (2026-09-22): CliHarness now runs on the
-        // wasmos-native path. The CLI component's WASI env is built as
-        // a wasmos WasiEnvironment with the same args + preopens the
-        // pre-migration WasiCtx received; stdout/stderr writes accumulate
-        // in the `capture_stdout` / `capture_stderr` Arc<Mutex<Vec<u8>>>
-        // buffers that CliHarness::stdout() + ::stderr() read back.
-        // Stdin is closed (the pre-migration MemoryInputPipe was
-        // constructed empty).
-        let _ = stdin; // MemoryInputPipe carried nothing; stdin closed under wasmos.
+        // Path B follow-up (2026-09-22 / 2026-09-24 cleanup): CliHarness
+        // runs on the wasmos-native path. The CLI component's WASI env is
+        // built as a wasmos WasiEnvironment; stdout/stderr writes
+        // accumulate in `capture_stdout` / `capture_stderr` buffers that
+        // CliHarness::stdout() + ::stderr() read back. Stdin is empty
+        // (matches the pre-migration `MemoryInputPipe::new("")` shape).
         let capture_stdout = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let capture_stderr = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let mut cli_wasi = build_wasi_env_inherit(&args_vec, &preopen_refs);
@@ -12436,10 +12429,6 @@ impl CliHarness {
         cli_wasi.inherit_stdout = false;
         cli_wasi.inherit_stderr = false;
         cli_wasi.inherit_stdin = false;
-        // Keep the two MemoryOutputPipe clones alive for the deprecated
-        // shape until callers migrate off; they read from the same
-        // capture buffers under the hood via `stdout()` / `stderr()`.
-        let _ = (stdout_clone, stderr_clone);
         // Path B Phase 1e: the core-side environment stays inherit-style.
         let core_env = build_wasi_env_inherit(&[String::from("duckdb-core")], &preopen_refs);
 
