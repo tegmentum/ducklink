@@ -74,7 +74,7 @@ datalink-policy = { git = "https://github.com/tegmentum/datalink.git", tag = "v0
 # and pushes the 10k-INSERT stress regression well under its 60s budget.
 # See `AttachedForeignCatalog::native_write_conn` + `intercept_write` for
 # the wiring.
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 # ADR-0029 Phase 6.2.d.3 — moved from dev-deps to a regular dep so
 # `src/dotcmd_wasmos.rs` can register the `duckdb:dotcmd/spi` handler
