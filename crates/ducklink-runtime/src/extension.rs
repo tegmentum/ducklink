@@ -6469,38 +6469,24 @@ pub fn load_component_with_dynlink(
     // reentrant dispatch through `call_bridge_export` for every
     // subsequent `dispatch_*` call on the returned `ExtensionInstance`
     // — one dispatch shape for load + all export re-entries.
-    let load_out = sync_inst
-        .call_export_reentrant("duckdb:extension/guest@5.0.0#load", &[])
+    //
+    // Priority 3 typed dispatch (wasmos:084a37584 + follow-up):
+    // `load()` returns `result<loadresult, duckerror>`, and the loader
+    // treats both payload sides as opaque `Value`s (loadresult carries
+    // a version marker; duckerror is only used for formatting). Using
+    // `Result<Value, Value>` as the typed Ret keeps the opaque
+    // treatment while retiring the manual `Vec<Value>` slice-match.
+    let load_out: (Result<wasmos_runtime_api::Value, wasmos_runtime_api::Value>,) = sync_inst
+        .call_typed_export_reentrant("duckdb:extension/guest@5.0.0#load", ())
         .map_err(|e| {
             wasmtime::Error::msg(format!(
                 "extension component '{extension_name}' load() dispatch failed: {e}"
             ))
         })?;
-    if load_out.len() != 1 {
+    if let Err(payload) = load_out.0 {
         return Err(wasmtime::Error::msg(format!(
-            "extension component '{extension_name}' load() returned {} values, expected 1",
-            load_out.len()
+            "extension component '{extension_name}' returned error from load(): {payload:?}"
         )));
-    }
-    match &load_out[0] {
-        // Ok(loadresult) — success. The loadresult value is
-        // opaque to the loader (it carries a version marker + any
-        // additive fields), so we don't decode further here.
-        wasmos_runtime_api::Value::Result(Ok(_)) => {}
-        // Err(duckerror) — guest signalled a load failure. Preserve
-        // the wit-bindgen counterpart's error message shape by
-        // formatting the wasmos-native Duckerror value.
-        wasmos_runtime_api::Value::Result(Err(payload)) => {
-            return Err(wasmtime::Error::msg(format!(
-                "extension component '{extension_name}' returned error from load(): {payload:?}"
-            )));
-        }
-        other => {
-            return Err(wasmtime::Error::msg(format!(
-                "extension component '{extension_name}' load() returned unexpected \
-                 non-Result value: {other:?}"
-            )));
-        }
     }
 
     Ok(ExtensionInstance::new(sync_inst, shared_state))
