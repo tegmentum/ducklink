@@ -11,6 +11,26 @@ This repository contains a pair of WebAssembly components that wrap the DuckDB C
 
 Both components are intended to run in preview2-capable runtimes such as `wasmtime 16.0+`.
 
+## Repository split with `wasmos/ducklink` (2026-09-24)
+
+Wasm-side crates + WIT contracts were extracted into
+`wasmos/ducklink/` (the ducklink submodule of the
+[wasmos](https://github.com/tegmentum/wasmos) meta-repo) as of
+2026-09-24. This repo retains the **native side**:
+
+- `crates/ducklink-runtime/` — runtime bookkeeping.
+- `crates/ducklink-host/` — the wasmtime-based host runner.
+- `crates/storage-boundary-test/`,
+  `crates/table-stream-boundary-test/` — native test rigs.
+- `tools/catalog-sig-extract/` — signature-extraction tooling.
+- `native-extension/ducklink/` — native cdylib extension.
+
+**Wasm-side crates live in `wasmos/ducklink/` now.** External
+consumers who need a WASM extension crate should path-dep
+`wasmos/ducklink/<crate>`, not `ducklink/<crate>`. There are
+no Rust deps crossing the split — only shared WIT interfaces.
+The two repos evolve in parallel over the WIT contract.
+
 > **Documentation:** a Docusaurus site organizing these docs lives in
 > [`website/`](website/). Build it with `cd website && npm install && npm run build`,
 > or run it locally with `cd website && npm start`.
