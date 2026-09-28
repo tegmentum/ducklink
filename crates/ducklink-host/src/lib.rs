@@ -11793,17 +11793,62 @@ pub fn workspace_root() -> PathBuf {
 }
 
 fn locate_component(filename: &str) -> Result<PathBuf> {
-    let root = workspace_root().join("target/wasm32-wasip2");
+    // SLICE-INT-followup-3 hygiene (2026-09-28):
+    // - Honour per-file env overrides so a consumer can point
+    //   at absolute paths for either wasm independently. The
+    //   ducklink core + cli wasms are typically built out of
+    //   DIFFERENT sibling workspaces (`~/git/duckdb-wasm/` for
+    //   the core, `~/git/wasmos/ducklink/` for the cli) so
+    //   a single-dir override doesn't fit -- but a per-file
+    //   pair does. `DUCKLINK_CORE_COMPONENT` +
+    //   `DUCKLINK_CLI_COMPONENT` are the env var names.
+    // - Otherwise walk both `wasm32-wasip2` and `wasm32-wasip1`
+    //   candidate roots under this workspace's target dir.
+    //   `cargo component build --target wasm32-wasip2` writes
+    //   the finished component wasm under `target/wasm32-
+    //   wasip1/` (the core module is a wasip1 binary wrapped
+    //   as a wasip2 component); older cargo-component versions
+    //   put it under `wasm32-wasip2/`. Cover both.
+    let env_var = match filename {
+        "ducklink_core.wasm" => Some("DUCKLINK_CORE_COMPONENT"),
+        "ducklink_cli.wasm" => Some("DUCKLINK_CLI_COMPONENT"),
+        _ => None,
+    };
+    if let Some(env_name) = env_var {
+        if let Some(v) = std::env::var_os(env_name) {
+            let p = PathBuf::from(&v);
+            if p.exists() {
+                return Ok(p);
+            }
+            anyhow::bail!(
+                "{} points at {} but the file does not exist",
+                env_name,
+                p.display()
+            );
+        }
+    }
+    let root = workspace_root().join("target");
     let candidates = [
-        root.join("release").join(filename),
-        root.join("debug").join(filename),
+        root.join("wasm32-wasip2/release").join(filename),
+        root.join("wasm32-wasip2/debug").join(filename),
+        root.join("wasm32-wasip1/release").join(filename),
+        root.join("wasm32-wasip1/debug").join(filename),
     ];
     for path in candidates {
         if path.exists() {
             return Ok(path);
         }
     }
-    anyhow::bail!("component artifact {filename} not found in wasm32-wasip2 target directory")
+    let hint = match env_var {
+        Some(env_name) => format!(" (or set {env_name}=<absolute path> to override)"),
+        None => String::new(),
+    };
+    anyhow::bail!(
+        "component artifact {filename} not found in \
+         target/wasm32-wasip{{1,2}}/{{release,debug}}/ under {}{}",
+        workspace_root().display(),
+        hint,
+    )
 }
 
 #[derive(Clone, Debug)]
