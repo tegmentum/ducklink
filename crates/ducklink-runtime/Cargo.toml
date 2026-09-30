@@ -57,7 +57,7 @@ wasmos-runtime-api = { git = "https://github.com/tegmentum/wasmos.git", rev = "c
 # without the workspace-level [patch] block (npi, clia) fail feature
 # selection at `cargo check`. Bump the rev when a wasmos release
 # ≥ 0.3.3 lands.
-wasmos-runtime-wasmtime-v48 = { git = "https://github.com/tegmentum/wasmos.git", rev = "ce39bfe3", features = ["sync-facade"] }
+wasmos-runtime-wasmtime-v48 = { git = "https://github.com/tegmentum/wasmos.git", rev = "ce39bfe3", features = ["sync-facade", "wasmos-facade-authorized"] }
 # The shared store-generic compose:dynlink/linker host machinery + the
 # ResidentBackend (instantiate-once-and-reuse provider lifecycle). ducklink's
 # compose_dynlink module is now a thin adapter over this; the resolve/invoke
