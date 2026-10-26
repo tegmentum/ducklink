@@ -23,7 +23,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use wasmos_runtime_api::{
     CompileOptions, CompiledComponent, ComponentSource, ExecutionContext, RuntimeConfig, Value,
     WasiEnvironment,

@@ -385,7 +385,10 @@ impl SubExtLoader {
                 ));
             }
             self.tokio_rt
-                .block_on(self.registry.register_provider(provider_id.clone(), &prebuilt))
+                .block_on(
+                    self.registry
+                        .register_provider(provider_id.clone(), &prebuilt),
+                )
                 .map_err(|e| SubExtError::ProviderRegistration {
                     id: provider_id.clone(),
                     path: prebuilt.clone(),

@@ -504,7 +504,8 @@ impl wasmos_runtime_api::SyncHostCall for CoreHostExtensionLoaderHost {
                          consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
-                let mut manager = state.extension_manager()
+                let mut manager = state
+                    .extension_manager()
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let loaded = match manager.ensure_extension_loaded(&name) {
@@ -1133,7 +1134,8 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-scalar: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
-                let mut manager = state.extension_manager()
+                let mut manager = state
+                    .extension_manager()
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -1169,7 +1171,8 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-scalar-batch-col: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
-                let mut manager = state.extension_manager()
+                let mut manager = state
+                    .extension_manager()
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -1201,7 +1204,8 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-table: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
-                let mut manager = state.extension_manager()
+                let mut manager = state
+                    .extension_manager()
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -1234,7 +1238,8 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-aggregate-col: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
-                let mut manager = state.extension_manager()
+                let mut manager = state
+                    .extension_manager()
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -1264,7 +1269,8 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-cast-col: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
-                let mut manager = state.extension_manager()
+                let mut manager = state
+                    .extension_manager()
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let mut ext_out: Vec<ducklink_runtime::extension::Duckvalue> =
@@ -1313,7 +1319,8 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-pragma: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
-                let mut manager = state.extension_manager()
+                let mut manager = state
+                    .extension_manager()
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -1345,7 +1352,8 @@ impl wasmos_runtime_api::SyncHostCall for CallbackDispatchHost {
                         "callback-dispatch call-cast: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
-                let mut manager = state.extension_manager()
+                let mut manager = state
+                    .extension_manager()
                     .lock()
                     .expect("extension manager mutex poisoned");
                 let outcome = manager
@@ -2223,11 +2231,7 @@ pub(crate) trait CoreState {
     fn drain_pending_registrations_for_replay(
         &mut self,
     ) -> ducklink_runtime::PendingRegistrationsData;
-    fn tvm_register(
-        &mut self,
-        region_id: u16,
-        th: tvm_core::Handle,
-    ) -> core_tvm_types::Handle;
+    fn tvm_register(&mut self, region_id: u16, th: tvm_core::Handle) -> core_tvm_types::Handle;
     fn tvm_resolve(
         &mut self,
         ptr: core_tvm_types::Handle,
@@ -2254,11 +2258,7 @@ impl CoreState for CoreInnerState {
     ) -> ducklink_runtime::PendingRegistrationsData {
         CoreInnerState::drain_pending_registrations_for_replay(self)
     }
-    fn tvm_register(
-        &mut self,
-        region_id: u16,
-        th: tvm_core::Handle,
-    ) -> core_tvm_types::Handle {
+    fn tvm_register(&mut self, region_id: u16, th: tvm_core::Handle) -> core_tvm_types::Handle {
         CoreInnerState::tvm_register(self, region_id, th)
     }
     fn tvm_resolve(
@@ -2297,11 +2297,7 @@ impl CoreState for wasmos_runtime_wasmtime_v48::SyncStoreState<CoreInnerState> {
     ) -> ducklink_runtime::PendingRegistrationsData {
         self.consumer.drain_pending_registrations_for_replay()
     }
-    fn tvm_register(
-        &mut self,
-        region_id: u16,
-        th: tvm_core::Handle,
-    ) -> core_tvm_types::Handle {
+    fn tvm_register(&mut self, region_id: u16, th: tvm_core::Handle) -> core_tvm_types::Handle {
         self.consumer.tvm_register(region_id, th)
     }
     fn tvm_resolve(
@@ -2466,7 +2462,8 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                 // coalesces those holes so a region's footprint
                 // tracks the live set, not the cumulative spill
                 // volume. Bump's dealloc is a no-op.
-                let r = state.tvm()
+                let r = state
+                    .tvm()
                     .create_region_with(
                         tvm_kind_to_core(kind),
                         capacity,
@@ -2504,7 +2501,11 @@ impl wasmos_runtime_api::SyncHostCall for TvmManagerHost {
                         "tvm-manager destroy-region: consumer_state<CoreInnerState> unavailable",
                     )
                 })?;
-                match state.tvm().destroy_region(region_id).map_err(tvm_err_to_wit) {
+                match state
+                    .tvm()
+                    .destroy_region(region_id)
+                    .map_err(tvm_err_to_wit)
+                {
                     Ok(()) => Ok(vec![Value::Result(Ok(None))]),
                     Err(bindgen_err) => Ok(vec![Value::Result(Err(Some(Box::new(
                         bindgen_tvm_error_to_value(bindgen_err),
@@ -2917,9 +2918,7 @@ impl CoreResourceHandle {
         }
     }
 
-    pub(crate) fn from_value(
-        v: &wasmos_runtime_api::Value,
-    ) -> Option<Self> {
+    pub(crate) fn from_value(v: &wasmos_runtime_api::Value) -> Option<Self> {
         match v {
             wasmos_runtime_api::Value::Resource {
                 store_id,
@@ -2944,8 +2943,7 @@ impl CoreExecution {
         input_handle: Option<CoreResourceHandle>,
         other_args: &[wasmos_runtime_api::Value],
         err_kind: ExecuteErrKind,
-    ) -> Result<Result<CoreResourceHandle, DatabaseVerbErr>, wasmos_runtime_api::RuntimeError>
-    {
+    ) -> Result<Result<CoreResourceHandle, DatabaseVerbErr>, wasmos_runtime_api::RuntimeError> {
         call_database_returning_resource_on_core(self, method, input_handle, other_args, err_kind)
     }
 
@@ -2955,8 +2953,10 @@ impl CoreExecution {
         &mut self,
         conn_handle: CoreResourceHandle,
         sql: &str,
-    ) -> Result<Result<cli_native::QueryResult, cli_native::Duckerror>, wasmos_runtime_api::RuntimeError>
-    {
+    ) -> Result<
+        Result<cli_native::QueryResult, cli_native::Duckerror>,
+        wasmos_runtime_api::RuntimeError,
+    > {
         call_database_execute_on_core(self, conn_handle, sql)
     }
 
@@ -3575,9 +3575,7 @@ fn dotcmd_wasmos_provider_registry() -> &'static DotcmdWasmosProviderHandle {
 ///
 /// Registration only COMPILES the provider; the resident instance is
 /// materialized lazily on first resolve and then shared.
-async fn register_env_providers_wasmos(
-    registry: &datalink_dynlink_wasmos::ProviderRegistry,
-) {
+async fn register_env_providers_wasmos(registry: &datalink_dynlink_wasmos::ProviderRegistry) {
     use datalink_dynlink_wasmos::ProviderPreopen as WasmosProviderPreopen;
 
     let spec = match std::env::var("DUCKLINK_PROVIDERS") {
@@ -3629,9 +3627,9 @@ async fn register_env_providers_wasmos(
                 preopens.len(),
                 if preopens.len() == 1 { "" } else { "s" }
             ),
-            Err(e) => eprintln!(
-                "[compose-dynlink/wasmos] failed to register provider '{id}': {e:?}"
-            ),
+            Err(e) => {
+                eprintln!("[compose-dynlink/wasmos] failed to register provider '{id}': {e:?}")
+            }
         }
     }
 }
@@ -6244,11 +6242,7 @@ impl ExtensionManager {
                     return Err(err);
                 }
             },
-            Err(err) => {
-                return Err(anyhow::anyhow!(
-                    "extension loader thread panicked: {err:?}"
-                ))
-            }
+            Err(err) => return Err(anyhow::anyhow!("extension loader thread panicked: {err:?}")),
         };
         // PERF GATE: enable the CLI-boundary catalog-snapshot refresh ONLY when a
         // query-importing component is loaded (the re-entrancy fallback that lets
@@ -7276,7 +7270,11 @@ impl HostState {
     /// `call_execute` wrapper for a query whose rows we need. Returns
     /// each row as `Vec<String>` (stringified via `spi_value_text`, so
     /// NULL becomes "").
-    fn run_prefix_query(&self, conn: CoreResourceHandle, sql: &str) -> Result<Vec<Vec<String>>, String> {
+    fn run_prefix_query(
+        &self,
+        conn: CoreResourceHandle,
+        sql: &str,
+    ) -> Result<Vec<Vec<String>>, String> {
         let res = call_database_execute(self, conn, sql);
         match res {
             Ok(Ok(qr)) => Ok(qr
@@ -7644,44 +7642,43 @@ impl HostState {
         // openable). Opening this connection is cheap and doesn't take a
         // lock on the file — SQLite's own change-counter protocol keeps the
         // wasm-side sqlite-lib in sync when either side writes.
-        let native_write_conn = if writes_persist_directly
-            && spec.type_name.eq_ignore_ascii_case("sqlitewasm")
-        {
-            match dsn_path.as_ref() {
-                Some(path) => match rusqlite::Connection::open(path) {
-                    Ok(conn) => {
-                        // Mirror the wasm-side PRAGMAs (see sqlitewasm's
-                        // storage_attach). MEMORY journal + synchronous=OFF
-                        // matches the durability trade-off the user opted
-                        // into by ATTACHing (single-writer session), and
-                        // avoids per-INSERT fsync — the whole point of this
-                        // fast path.
-                        let _ = conn.execute_batch(
-                            "PRAGMA journal_mode = MEMORY; PRAGMA synchronous = OFF;",
-                        );
-                        eprintln!(
-                            "[at5-writeback] {}: opened NATIVE rusqlite fast path at {}; \
+        let native_write_conn =
+            if writes_persist_directly && spec.type_name.eq_ignore_ascii_case("sqlitewasm") {
+                match dsn_path.as_ref() {
+                    Some(path) => match rusqlite::Connection::open(path) {
+                        Ok(conn) => {
+                            // Mirror the wasm-side PRAGMAs (see sqlitewasm's
+                            // storage_attach). MEMORY journal + synchronous=OFF
+                            // matches the durability trade-off the user opted
+                            // into by ATTACHing (single-writer session), and
+                            // avoids per-INSERT fsync — the whole point of this
+                            // fast path.
+                            let _ = conn.execute_batch(
+                                "PRAGMA journal_mode = MEMORY; PRAGMA synchronous = OFF;",
+                            );
+                            eprintln!(
+                                "[at5-writeback] {}: opened NATIVE rusqlite fast path at {}; \
                              INSERT/UPDATE/DELETE will bypass storage-write-dispatch",
-                            spec.alias,
-                            path.display()
-                        );
-                        Some(Arc::new(Mutex::new(conn)))
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "[at5-writeback] {}: native rusqlite fast path unavailable \
+                                spec.alias,
+                                path.display()
+                            );
+                            Some(Arc::new(Mutex::new(conn)))
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "[at5-writeback] {}: native rusqlite fast path unavailable \
                              (open {} failed: {e}); writes will go via wasm dispatch",
-                            spec.alias,
-                            path.display()
-                        );
-                        None
-                    }
-                },
-                None => None,
-            }
-        } else {
-            None
-        };
+                                spec.alias,
+                                path.display()
+                            );
+                            None
+                        }
+                    },
+                    None => None,
+                }
+            } else {
+                None
+            };
 
         self.attached_aliases.insert(
             spec.alias.clone(),
@@ -8505,16 +8502,15 @@ fn at5_native_insert(
             sqlite_quote_ident(table)
         )
     };
-    let guard = conn
-        .lock()
-        .expect("at5 native_write_conn mutex poisoned");
+    let guard = conn.lock().expect("at5 native_write_conn mutex poisoned");
     let mut stmt = guard
         .prepare_cached(&sql)
         .map_err(|e| sqlite_err_to_cli(e, &format!("at5 native INSERT prepare '{sql}'")))?;
     let mut inserted: u64 = 0;
     for row in rows {
         let params: Vec<rusqlite::types::Value> = row.iter().map(duck_to_sqlite_value).collect();
-        let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
+        let refs: Vec<&dyn rusqlite::ToSql> =
+            params.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
         stmt.execute(rusqlite::params_from_iter(refs.iter().copied()))
             .map_err(|e| sqlite_err_to_cli(e, &format!("at5 native INSERT into '{table}'")))?;
         inserted += 1;
@@ -8572,9 +8568,7 @@ fn at5_native_update(
         "UPDATE {} SET {set_clause} WHERE rowid = ?",
         sqlite_quote_ident(table)
     );
-    let guard = conn
-        .lock()
-        .expect("at5 native_write_conn mutex poisoned");
+    let guard = conn.lock().expect("at5 native_write_conn mutex poisoned");
     let mut stmt = guard
         .prepare_cached(&sql)
         .map_err(|e| sqlite_err_to_cli(e, &format!("at5 native UPDATE prepare '{sql}'")))?;
@@ -8595,7 +8589,8 @@ fn at5_native_update(
             params.push(duck_to_sqlite_value(&row[*idx]));
         }
         params.push(rusqlite::types::Value::Integer(*rid));
-        let refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
+        let refs: Vec<&dyn rusqlite::ToSql> =
+            params.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
         let n = stmt
             .execute(rusqlite::params_from_iter(refs.iter().copied()))
             .map_err(|e| sqlite_err_to_cli(e, &format!("at5 native UPDATE on '{table}'")))?;
@@ -8616,13 +8611,8 @@ fn at5_native_delete(
     if rowids.is_empty() {
         return Ok(0);
     }
-    let sql = format!(
-        "DELETE FROM {} WHERE rowid = ?",
-        sqlite_quote_ident(table)
-    );
-    let guard = conn
-        .lock()
-        .expect("at5 native_write_conn mutex poisoned");
+    let sql = format!("DELETE FROM {} WHERE rowid = ?", sqlite_quote_ident(table));
+    let guard = conn.lock().expect("at5 native_write_conn mutex poisoned");
     let mut stmt = guard
         .prepare_cached(&sql)
         .map_err(|e| sqlite_err_to_cli(e, &format!("at5 native DELETE prepare '{sql}'")))?;
@@ -9498,7 +9488,9 @@ impl HostState {
     fn list_registered_extensions(&mut self) -> Vec<cli_native::ExtensionInfo> {
         use wasmos_runtime_api::Value;
         let ret = self
-            .with_core(|core| core.call_bridge_export(DATABASE_IFACE, "list-registered-extensions", &[]))
+            .with_core(|core| {
+                core.call_bridge_export(DATABASE_IFACE, "list-registered-extensions", &[])
+            })
             .expect("failed to list registered extensions");
         match ret.as_slice() {
             [Value::List(items)] => items
@@ -10491,11 +10483,7 @@ fn call_config_get_option<T>(
     use wasmos_runtime_api::Value;
     let ret = services
         .with_core(|core| {
-            core.call_bridge_export(
-                CONFIG_IFACE,
-                method,
-                &[Value::String(path.to_string())],
-            )
+            core.call_bridge_export(CONFIG_IFACE, method, &[Value::String(path.to_string())])
         })
         .map_err(core_trap_to_config_error)?;
     let inner = match ret.as_slice() {
@@ -11011,12 +10999,9 @@ fn sibling_ensure_slot(sibling: &SiblingState, primary_path: &str) -> Result<Sib
             false,
         ),
     };
-    let mut core_exec = instantiate_core(
-        &sibling.core_component_path,
-        wasi,
-        sibling_manager.clone(),
-    )
-    .map_err(|e| format!("nested-exec: sibling instantiate_core: {e}"))?;
+    let mut core_exec =
+        instantiate_core(&sibling.core_component_path, wasi, sibling_manager.clone())
+            .map_err(|e| format!("nested-exec: sibling instantiate_core: {e}"))?;
     // Phase 4 follow-up (FU4): wire this sibling store to the shared replay
     // archive so its post-LOAD `get_pending_registrations` returns the
     // primary's accumulated registrations instead of an empty drain. Wiring
@@ -11246,12 +11231,8 @@ fn ducklink_runtime_config() -> wasmos_runtime_api::RuntimeConfig {
     let mut cfg = wasmos_runtime_api::RuntimeConfig::default()
         .with_wasm_exceptions(true)
         .with_sync_dispatch(true);
-    if let Some(cache_dir) =
-        dirs::cache_dir().map(|d| d.join("ducklink").join("compile-cache"))
-    {
-        cfg = cfg.with_compile_cache(
-            wasmos_runtime_api::CompileCacheConfig::new(cache_dir),
-        );
+    if let Some(cache_dir) = dirs::cache_dir().map(|d| d.join("ducklink").join("compile-cache")) {
+        cfg = cfg.with_compile_cache(wasmos_runtime_api::CompileCacheConfig::new(cache_dir));
     }
     cfg
 }
@@ -11742,8 +11723,7 @@ fn cli_extract_rows_affected(qr: &cli_native::QueryResult) -> Option<u64> {
 // `build_engine()?` and don't have to spell out the runtime
 // crate at each site.
 fn build_engine() -> Result<Engine> {
-    ducklink_runtime::build_engine()
-        .map_err(|e| anyhow::anyhow!("build wasmtime engine: {e}"))
+    ducklink_runtime::build_engine().map_err(|e| anyhow::anyhow!("build wasmtime engine: {e}"))
 }
 
 // build_wasi_ctx_with_pipes + build_wasi_ctx_inherit retired
@@ -12562,9 +12542,8 @@ impl CliHarness {
                 artifacts.cli_component.display()
             )
         })?;
-        let sync_rt =
-            wasmos_runtime_wasmtime_v48::SyncRuntime::new(ducklink_runtime_config())
-                .map_err(|e| anyhow::anyhow!("build CLI SyncRuntime: {e:?}"))?;
+        let sync_rt = wasmos_runtime_wasmtime_v48::SyncRuntime::new(ducklink_runtime_config())
+            .map_err(|e| anyhow::anyhow!("build CLI SyncRuntime: {e:?}"))?;
         let compiled = sync_rt
             .compile_component(
                 wasmos_runtime_api::ComponentSource::Bytes {
@@ -16684,10 +16663,7 @@ fn attach_cache_env_preopens(env: &mut wasmos_runtime_api::WasiEnvironment) {
 /// ATTACH time. No dynamic preopens — wasmtime preopens are static per
 /// WasiCtx — so an operator with DBs outside cwd sets
 /// DUCKLINK_SQLITEWASM_DATADIR before LOAD sqlitewasm.
-fn attach_sqlitewasm_preopens(
-    env: &mut wasmos_runtime_api::WasiEnvironment,
-    extension_name: &str,
-) {
+fn attach_sqlitewasm_preopens(env: &mut wasmos_runtime_api::WasiEnvironment, extension_name: &str) {
     if extension_name != "sqlitewasm" {
         return;
     }

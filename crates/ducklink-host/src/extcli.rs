@@ -24,9 +24,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, bail, Context, Result};
 use serde_json::Value;
 
-use crate::resolver::{
-    self, render_reasoning, ContentRef, Env, ProviderKind, ResolvePolicy,
-};
+use crate::resolver::{self, render_reasoning, ContentRef, Env, ProviderKind, ResolvePolicy};
 
 // ---------------------------------------------------------------------------
 // Help

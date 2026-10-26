@@ -68,13 +68,13 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use ducklink_runtime::EngineHandle as Engine;
 use wasmos_runtime_api::{
-    CompileOptions, ComponentSource, ExecutionContext, HostCallContext, HostImports,
+    host_iface, CompileOptions, ComponentSource, ExecutionContext, HostCallContext, HostImports,
     HostResourceType, Preopen, Resource, ResourceTable as WasmosResourceTable, RuntimeConfig,
-    RuntimeError, RuntimeResult, WasiEnvironment, host_iface,
+    RuntimeError, RuntimeResult, WasiEnvironment,
 };
 use wasmos_runtime_wasmtime_v48::SyncRuntime;
-use ducklink_runtime::EngineHandle as Engine;
 
 use crate::{
     build_engine_for_driver, driver_core_exec, driver_core_query, open_driver_core,
@@ -418,7 +418,10 @@ fn build_driver_wasi_env(args: &[String], preopens: &[(&Path, &str)]) -> WasiEnv
         .inherit_stderr()
         .with_network();
     for (host, guest) in preopens {
-        env = env.with_preopen(Preopen::read_write(host.to_path_buf(), (*guest).to_string()));
+        env = env.with_preopen(Preopen::read_write(
+            host.to_path_buf(),
+            (*guest).to_string(),
+        ));
     }
     env
 }

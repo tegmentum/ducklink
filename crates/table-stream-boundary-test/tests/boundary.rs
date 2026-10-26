@@ -66,6 +66,10 @@ macro_rules! unreachable_import {
 // ---- types (marker trait: no functions) ----
 impl ext::types::Host for State {}
 
+// ---- column-types (marker trait: no functions; added at the WIT 5.0.0 bump
+// as the columnar sibling to types) ----
+impl ext::column_types::Host for State {}
+
 // ---- logging ----
 impl ext::logging::Host for State {
     fn log(&mut self, _level: ext::types::Loglevel, _message: String, _target: Option<String>) {

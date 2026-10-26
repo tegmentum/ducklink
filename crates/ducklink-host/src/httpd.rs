@@ -811,7 +811,11 @@ struct Rows {
 }
 
 /// Run SQL with no parameters via `execute`.
-fn db_query(core: &mut CoreExecution, conn: &CoreResourceHandle, sql: &str) -> Result<Rows, String> {
+fn db_query(
+    core: &mut CoreExecution,
+    conn: &CoreResourceHandle,
+    sql: &str,
+) -> Result<Rows, String> {
     match core.execute_on_handle(*conn, sql) {
         Ok(Ok(r)) => Ok(Rows {
             cols: r.columns.into_iter().map(|c| c.name.to_string()).collect(),
@@ -1035,7 +1039,11 @@ fn clamp_status(s: i64) -> u16 {
 // Routes-table bootstrap
 // ---------------------------------------------------------------------------
 
-fn init_routes_table(core: &mut CoreExecution, conn: &CoreResourceHandle, table: &str) -> Result<()> {
+fn init_routes_table(
+    core: &mut CoreExecution,
+    conn: &CoreResourceHandle,
+    table: &str,
+) -> Result<()> {
     if !is_safe_ident(table) {
         anyhow::bail!("bad routes table name");
     }

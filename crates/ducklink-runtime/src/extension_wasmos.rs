@@ -47,9 +47,7 @@ use wasmos_runtime_api::{
     RuntimeResult, SyncHostCall, SyncHostCallAdapter, WitEnum, WitFlags, WitVariant,
 };
 
-use crate::extension::{
-    ExtensionInnerState, PendingOptimizer, PendingParser, PendingSetting,
-};
+use crate::extension::{ExtensionInnerState, PendingOptimizer, PendingParser, PendingSetting};
 
 /// Shared handle to `ExtensionStoreState` used by state-touching
 /// wasmos-native interface handlers. Matches the SharedTvmHost
