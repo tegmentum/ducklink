@@ -43,9 +43,11 @@ isbn-core = { path = "../../../datalink/extensions/isbn-core" }
 luhn-core = { path = "../../../datalink/extensions/luhn-core" }
 creditcard-core = { path = "../../../datalink/extensions/creditcard-core" }
 
-# DuckDB C Extension API. Pinned to the community-extensions CI's DuckDB version.
-duckdb = { version = "1.10504.0", optional = true, default-features = false }
-libduckdb-sys = { version = "1.10504.0", features = ["loadable-extension"], optional = true }
+# DuckDB C Extension API. Pinned to the community-extensions CI's DuckDB version
+# (v2.0.0 LTS "Cinnamon Teal"). Stays on C API v1 — see the ducklink/Cargo.toml
+# comment for the rationale.
+duckdb = { version = "1.20000.0", optional = true, default-features = false }
+libduckdb-sys = { version = "1.20000.0", features = ["loadable-extension"], optional = true }
 
 [profile.release]
 lto = true
