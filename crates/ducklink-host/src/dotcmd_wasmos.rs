@@ -51,7 +51,7 @@
 use std::sync::{Arc, Mutex};
 
 use wasmos_runtime_api::{
-    host_iface, HostCallContext, HostImports, RuntimeResult, SyncHostCall, SyncHostCallAdapter,
+    host_iface, HostCallContext, HostImports, RuntimeResult, SyncHostCall,
 };
 
 use crate::{spi_edit, CoreExecution};
@@ -150,10 +150,7 @@ pub fn install_spi_imports(
     current_connection: Arc<Mutex<Option<crate::CoreResourceHandle>>>,
 ) -> HostImports {
     let host = SpiHost::new(core, current_connection);
-    imports.register(
-        "duckdb:dotcmd/spi",
-        Arc::new(SyncHostCallAdapter::new(host)) as Arc<dyn wasmos_runtime_api::HostCall>,
-    )
+    imports.register_sync("duckdb:dotcmd/spi", host)
 }
 
 // Silence unused-import warning: SyncHostCall is only reached

@@ -11228,9 +11228,7 @@ fn ducklink_runtime_config() -> wasmos_runtime_api::RuntimeConfig {
     // wasmtime-wasi's `in_tokio` helper inside a nested callback
     // reaches for a fresh runtime instead of colliding with the
     // outer one.
-    let mut cfg = wasmos_runtime_api::RuntimeConfig::default()
-        .with_wasm_exceptions(true)
-        .with_sync_dispatch(true);
+    let mut cfg = wasmos_runtime_api::RuntimeConfig::default().with_wasm_exceptions(true);
     if let Some(cache_dir) = dirs::cache_dir().map(|d| d.join("ducklink").join("compile-cache")) {
         cfg = cfg.with_compile_cache(wasmos_runtime_api::CompileCacheConfig::new(cache_dir));
     }

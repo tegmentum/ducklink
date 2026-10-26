@@ -6444,9 +6444,7 @@ pub fn load_component_with_dynlink(
     // sync-linker `futures::executor::block_on` is a single-poll no-op.
     let wasmos_runtime = wasmos_runtime_wasmtime_v48::WasmtimeV48Runtime::from_engine(
         engine.clone(),
-        wasmos_runtime_api::RuntimeConfig::default()
-            .with_consume_fuel(false)
-            .with_sync_dispatch(true),
+        wasmos_runtime_api::RuntimeConfig::default().with_consume_fuel(false),
     )
     .map_err(|e| {
         wasmtime::Error::msg(format!(
