@@ -43,3 +43,10 @@ wkg.lock
 # wit-bindgen stale output: real bindings are generated inline via
 # wasmtime::component::bindgen!() in the test files, not from this file.
 crates/storage-boundary-test/src/bindings.rs
+
+# Local sibling checkouts of wasmos + datalink, pinned to the tags the
+# submodule's Cargo.toml [patch] expects (v0.3.2 and v0.2.0). Set up as
+# `git worktree add` from the sibling repos; never meant to be committed
+# into the super-repo. Required for `cargo check/build` inside the submodule.
+/native-extension/wasmos/
+/native-extension/datalink/
